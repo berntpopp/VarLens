@@ -67,7 +67,7 @@ const nullishNumberArray = () =>
 
 /** Schema for a single typed column filter */
 const ColumnFilterSchema = z.object({
-  operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'like', 'in']),
+  operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'like', 'in', 'is_null', 'not_null']),
   value: z.union([z.string(), z.number(), z.array(z.string())]),
   includeEmpty: z.boolean().optional()
 })
@@ -489,10 +489,15 @@ export const DatabaseCreateSchema = z.object({
 })
 
 /**
- * Schema for database rekey (new encryption key)
+ * Schema for database rekey (new encryption key).
+ *
+ * Non-empty: `PRAGMA rekey` with an empty key DECRYPTS the database. Removing
+ * encryption is not a feature — the UI only offers "Change Password..." for an
+ * encrypted database and requires a password — so an empty value is rejected
+ * here rather than silently writing the file out in plaintext.
  */
 export const DatabaseRekeySchema = z.object({
-  newPassword: z.string().max(256)
+  newPassword: z.string().min(1).max(256)
 })
 
 /**
@@ -514,7 +519,7 @@ export const DatabaseDeletePlaintextBackupSchema = z.object({
 /**
  * Schema for setting a recovery passphrase on the current database's managed
  * key. Non-empty -- an empty recovery passphrase would be a silent no-op
- * footgun (unlike `DatabaseRekeySchema`, which allows an empty string today).
+ * footgun.
  */
 export const DatabaseSetRecoveryPassphraseSchema = z.object({
   passphrase: z.string().min(1).max(256)

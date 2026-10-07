@@ -259,6 +259,27 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
     expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
   })
 
+  // BatchAnnotationKey contract (src/shared/types/api.ts): the per-case path
+  // MUST carry variantId. Without it the main process matches per-case
+  // annotations by coordinates alone, so a row shows the annotation of any
+  // other variant row of the case that shares its chr:pos:ref:alt.
+  it('sends each row id as variantId on the per-case path', async () => {
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
+
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    await result.loadAnnotationsBatch(1, [
+      { id: 11, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
+      { id: 12, chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
+    ])
+
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 },
+      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C', variantId: 12 }
+    ])
+  })
+
   it('populates cache from batch response', async () => {
     const batchResult = {
       'chr1:100:A:G': { global: { starred: 1 }, perCase: null }
@@ -313,7 +334,10 @@ describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
     const [result, appInstance] = withSetup(() => useAnnotations())
     app = appInstance
 
-    await result.loadGlobalAnnotationsBatch([{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
+    // Cohort rows carry no per-case variant id; an `id` on the row is not one.
+    await result.loadGlobalAnnotationsBatch([
+      { id: 7, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ] as never)
 
     expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
       { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
@@ -360,6 +384,94 @@ describe('stale-request guard (annotation generation)', () => {
     // The stale result must NOT have been written to the cache
     expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
   })
+
+  function deferBatchGet(): (v: Record<string, unknown>) => void {
+    let resolveBatch!: (v: Record<string, unknown>) => void
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveBatch = resolve
+      })
+    )
+    return resolveBatch
+  }
+
+  it('invalidateGlobalAnnotationGeneration discards an in-flight global batch', async () => {
+    const resolveBatch = deferBatchGet()
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    const batchPromise = result.loadGlobalAnnotationsBatch([
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
+    // The cohort table paged before the batch resolved.
+    result.invalidateGlobalAnnotationGeneration()
+    resolveBatch({ 'chr1:100:A:G': { global: { starred: 1 }, perCase: null } })
+    await batchPromise
+
+    expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
+    expect(result.isLoading('chr1', 100, 'A', 'G')).toBe(false)
+  })
+
+  it('each view only invalidates its own batches', async () => {
+    const [result, appInstance] = withSetup(() => useAnnotations())
+    app = appInstance
+
+    // A case-table page change must not drop the cohort table's batch ...
+    let resolveBatch = deferBatchGet()
+    let batchPromise = result.loadGlobalAnnotationsBatch([
+      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+    ])
+    result.invalidateAnnotationGeneration()
+    resolveBatch({ 'chr1:100:A:G': { global: { starred: 1 }, perCase: null } })
+    await batchPromise
+    expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeDefined()
+
+    // ... nor a cohort-table page change the case table's.
+    resolveBatch = deferBatchGet()
+    batchPromise = result.loadAnnotationsBatch(1, [
+      { id: 2, chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
+    ])
+    result.invalidateGlobalAnnotationGeneration()
+    resolveBatch({ 'chr2:200:C:T': { global: null, perCase: { starred: 1 } } })
+    await batchPromise
+    expect(result.getAnnotations('chr2', 200, 'C', 'T')).toBeDefined()
+  })
+
+  // A newer page that shows a row again skips it as "in flight"; if the batch
+  // carrying it were then discarded wholesale, that row would never be loaded.
+  it.each(['case', 'global'] as const)(
+    'a discarded %s batch still delivers rows the new page asked for',
+    async (scope) => {
+      const resolveBatch = deferBatchGet()
+      const [result, appInstance] = withSetup(() => useAnnotations())
+      app = appInstance
+      const rowA = { id: 1, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
+      const rowB = { id: 2, chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
+      const load = (rows: (typeof rowA)[]): Promise<void> =>
+        scope === 'case'
+          ? result.loadAnnotationsBatch(1, rows)
+          : result.loadGlobalAnnotationsBatch(rows)
+      const invalidate =
+        scope === 'case'
+          ? result.invalidateAnnotationGeneration
+          : result.invalidateGlobalAnnotationGeneration
+
+      const first = load([rowA, rowB])
+      // New page: row A is still visible, row B is gone.
+      invalidate()
+      await load([rowA])
+      expect(window.api.annotations.batchGet).toHaveBeenCalledTimes(1)
+
+      resolveBatch({
+        'chr1:100:A:G': { global: null, perCase: null },
+        'chr2:200:C:T': { global: null, perCase: null }
+      })
+      await first
+
+      expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeDefined()
+      expect(result.getAnnotations('chr2', 200, 'C', 'T')).toBeUndefined()
+    }
+  )
 
   it('applies results when generation has not advanced', async () => {
     window.api.annotations.batchGet = vi

@@ -18,6 +18,17 @@ export const DATABASE_CONFIG = {
   ANALYSIS_LIMIT: 400,
   /** Batch insert size for variant imports */
   BATCH_INSERT_SIZE: 10_000,
+  /**
+   * Byte budget of one import batch (64 MiB of source data). A batch is
+   * flushed at BATCH_INSERT_SIZE rows or at this many bytes, whichever comes
+   * first. Typical records are 1-5 KB, so a full 10,000-row batch is 10-50 MB
+   * and never reaches it; it only bites on pathologically large records.
+   * Equal to the VCF line cap, so the worst case is one maximal line plus
+   * the budget.
+   */
+  BATCH_INSERT_MAX_BYTES: 64 * 1024 * 1024,
+  /** Largest batch size (rows) an import worker accepts in its start message. */
+  BATCH_INSERT_MAX_ROWS: 50_000,
   /** API cache TTL in days */
   CACHE_TTL_DAYS: 30,
   /** Interval between periodic API cache cleanup runs (ms) — 6 hours */

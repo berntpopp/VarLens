@@ -3,8 +3,14 @@
  * Replaces the old Record<string, string> with operator-aware filters.
  */
 
-/** Operators for column filters */
-export type ColumnFilterOperator = '=' | '!=' | '<' | '>' | '<=' | '>=' | 'like' | 'in'
+/**
+ * Operators for column filters.
+ *
+ * `is_null` / `not_null` test for a missing value and ignore `value` (send
+ * `''`); their SQL comes from `shared/filters/column-null-check.ts`.
+ */
+export type ColumnFilterOperator =
+  '=' | '!=' | '<' | '>' | '<=' | '>=' | 'like' | 'in' | 'is_null' | 'not_null'
 
 /** A single typed column filter */
 export interface ColumnFilter {

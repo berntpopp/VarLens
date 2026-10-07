@@ -1,7 +1,9 @@
-import { Worker } from 'node:worker_threads'
+import { Worker, type ResourceLimits } from 'node:worker_threads'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { mainLogger } from '../../services/MainLogger'
+import { importWorkerResourceLimits } from '../../workers/import-worker-limits'
+import { describeWorkerCrash } from '../import-worker-errors'
 import type {
   PostgresImportWorkerStartMessage,
   PostgresImportWorkerOutboundMessage,
@@ -23,6 +25,8 @@ export interface PostgresImportWorkerClientOptions {
   workerFactory?: () => Worker
   /** Override path lookup for tests. */
   workerPathCandidates?: readonly string[]
+  /** Heap limits for the default worker. Default: sized from physical memory. */
+  resourceLimits?: ResourceLimits
 }
 
 export class PostgresImportWorkerClient {
@@ -30,6 +34,7 @@ export class PostgresImportWorkerClient {
   private readonly workerPath: string | null
   private readonly workerPathCandidates: readonly string[]
   private readonly workerFactory?: () => Worker
+  private readonly resourceLimits: ResourceLimits
 
   constructor(options: PostgresImportWorkerClientOptions = {}) {
     this.workerPathCandidates = options.workerPathCandidates ?? [
@@ -40,6 +45,7 @@ export class PostgresImportWorkerClient {
     ]
     this.workerPath = this.workerPathCandidates.find((candidate) => existsSync(candidate)) ?? null
     this.workerFactory = options.workerFactory
+    this.resourceLimits = options.resourceLimits ?? importWorkerResourceLimits()
   }
 
   start(message: PostgresImportWorkerStartMessage, callbacks: PostgresImportWorkerCallbacks): void {
@@ -54,7 +60,7 @@ export class PostgresImportWorkerClient {
           `Postgres import worker bundle not found. Checked: ${this.workerPathCandidates.join(', ')}`
         )
       }
-      this.worker = new Worker(this.workerPath)
+      this.worker = new Worker(this.workerPath, { resourceLimits: this.resourceLimits })
     }
 
     this.worker.on('message', (msg: PostgresImportWorkerOutboundMessage) => {
@@ -84,8 +90,16 @@ export class PostgresImportWorkerClient {
     })
 
     this.worker.on('error', (err: Error) => {
-      mainLogger.error(`Postgres import worker error: ${err.message}`, 'PostgresImportWorkerClient')
-      callbacks.onError({ type: 'error', message: err.message })
+      // A worker stopped at its heap limit becomes a typed RESOURCE_LIMIT
+      // failure. Its connection is gone, so PostgreSQL rolls back the open
+      // transaction; a provisional case stays hidden (`importing`) and is
+      // removed by recoverInterruptedImports at the start of the next import.
+      const crash = describeWorkerCrash(err)
+      mainLogger.error(
+        `Postgres import worker error: ${crash.message}`,
+        'PostgresImportWorkerClient'
+      )
+      callbacks.onError({ type: 'error', ...crash })
       this.worker = null
     })
 

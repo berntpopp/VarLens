@@ -1,7 +1,11 @@
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
+import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
 import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
-import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
+import {
+  assertValidColumnFilterValues,
+  NUMERIC_COLUMN_FILTER_KEYS
+} from '../../shared/filters/column-filter-validation'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -192,6 +196,9 @@ function translateColumnFilter(
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false
 
+  if (isNullCheckOperator(operator)) {
+    return buildNullCheckSql(col, operator, NUMERIC_COLUMN_FILTER_KEYS.has(column), 'sqlite')
+  }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return null
     const ph = value.map(() => '?').join(', ')
@@ -204,12 +211,23 @@ function translateColumnFilter(
     return `${col} LIKE ? COLLATE NOCASE`
   }
   if ((operator === '=' || operator === '!=') && !Array.isArray(value)) {
-    params.push(value)
+    params.push(bindComparisonValue(column, value))
     return `${col} ${operator} ?`
   }
   if (['<', '>', '<=', '>='].includes(operator) && !Array.isArray(value)) {
-    params.push(value)
+    params.push(bindComparisonValue(column, value))
     return nullBranch ? `(${col} IS NULL OR ${col} ${operator} ?)` : `${col} ${operator} ?`
   }
   return null
+}
+
+/**
+ * Text columns get a text parameter. better-sqlite3 binds every JS number as a
+ * REAL, which SQLite renders as `'7.0'` before comparing it with a TEXT
+ * column — so an unconverted `chr = 7` could never match the stored `'7'`.
+ * Numeric columns keep the caller's value: SQLite applies the column's numeric
+ * affinity to a text parameter such as `'20'`.
+ */
+function bindComparisonValue(column: string, value: string | number): string | number {
+  return NUMERIC_COLUMN_FILTER_KEYS.has(column) ? value : String(value)
 }

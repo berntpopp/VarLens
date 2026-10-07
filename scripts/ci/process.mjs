@@ -32,7 +32,9 @@ const HOST_ENV = [
   'NO_PROXY',
   'http_proxy',
   'https_proxy',
-  'no_proxy'
+  'no_proxy',
+  // Location only: where the gate keeps large disposable files (scratch.mjs).
+  'VARLENS_CI_SCRATCH_DIR'
 ]
 export function gateEnvironment(source = process.env, overrides = {}) {
   return {
@@ -42,6 +44,22 @@ export function gateEnvironment(source = process.env, overrides = {}) {
     CI: '1',
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     ...overrides
+  }
+}
+/**
+ * Abort on termination signals for as long as cleanup may still run. The
+ * listeners stay installed after the first signal: `make` forwards SIGTERM to
+ * a child that the terminating cgroup has already signalled, and a process
+ * without a handler would die before removing its disposable resources.
+ */
+export function signalAbort(signals = process) {
+  const controller = new AbortController()
+  const names = ['SIGINT', 'SIGTERM', 'SIGHUP']
+  const abort = () => controller.abort(new Error('Preflight aborted by signal'))
+  for (const name of names) signals.on(name, abort)
+  return {
+    signal: controller.signal,
+    dispose: () => names.forEach((name) => signals.removeListener(name, abort))
   }
 }
 export function git(args, { cwd = process.cwd(), env = process.env } = {}) {

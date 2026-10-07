@@ -24,15 +24,20 @@ describe('translateAst', () => {
     })
   })
 
-  it('translates is:null to column filter', () => {
-    const ast: DslNode = {
+  it('translates is:null / is:notnull to dedicated null-check operators', () => {
+    // Never `= ''`: both backends coerce that to `= 0` on a numeric column.
+    const rule = (operator: 'is:null' | 'is:notnull'): DslNode => ({
       type: 'rule',
       column: 'gnomad_af',
-      operator: 'is:null',
+      operator,
       value: null
-    }
-    const result = translateAst(ast)
-    expect(result.columnFilters.gnomad_af).toBeDefined()
+    })
+    expect(translateAst(rule('is:null')).columnFilters).toEqual({
+      gnomad_af: { operator: 'is_null', value: '' }
+    })
+    expect(translateAst(rule('is:notnull')).columnFilters).toEqual({
+      gnomad_af: { operator: 'not_null', value: '' }
+    })
   })
 
   it('translates AND group to merged column filters', () => {

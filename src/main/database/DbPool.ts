@@ -18,6 +18,7 @@ import { resolve } from 'path'
 import os from 'os'
 import type { DbTask } from '../../shared/types/db-task'
 import { DATABASE_CONFIG } from '../../shared/config'
+import { fromTransportableWorkerError } from './worker-error-codec'
 
 // Use require() to load piscina — avoids Vite's static import analysis
 // which cannot resolve Node.js-only modules during test transforms
@@ -128,7 +129,11 @@ export class DbPool {
     this.inFlight.add(result)
     const forget = (): void => void this.inFlight.delete(result)
     result.then(forget, forget)
-    return result as Promise<T>
+    // Restore typed errors (user-facing filter errors, NotFoundError, …) that
+    // the worker encoded for the structured-clone hop.
+    return (result as Promise<T>).catch((error: unknown) => {
+      throw fromTransportableWorkerError(error)
+    })
   }
 
   /**

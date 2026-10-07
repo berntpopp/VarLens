@@ -24,6 +24,8 @@ import { PanelRepository } from './PanelRepository'
 import { CohortService } from './cohort'
 import { AnalysisGroupRepository } from './AnalysisGroupRepository'
 import { ShortlistService } from './ShortlistService'
+import { VariantFilterBuilder } from './VariantFilterBuilder'
+import { VariantSearchService } from './VariantSearchService'
 
 export function createRepositories(db: DatabaseType) {
   const kysely = createKysely(db)
@@ -43,7 +45,13 @@ export function createRepositories(db: DatabaseType) {
   const panels = new PanelRepository(db, kysely)
   const cohort = new CohortService(db)
   const analysisGroups = new AnalysisGroupRepository(db, kysely)
-  const shortlistService = new ShortlistService(db, filterPresets)
+  const shortlistService = new ShortlistService(db, filterPresets, {
+    // Same filter pipeline (including FTS search) as the case variant table.
+    filterBuilder: new VariantFilterBuilder(db, kysely, new VariantSearchService(db, kysely)),
+    cases,
+    variants,
+    panels
+  })
 
   return {
     kysely,

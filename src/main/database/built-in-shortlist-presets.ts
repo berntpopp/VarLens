@@ -7,21 +7,18 @@
  * module's `combine()` step; `clinvarPinTop` / `pinStarredTop` pin
  * classes of rows above the score-driven ordering.
  *
- * `baseFilters` / `perTypeOverrides` only reference filter fields that
- * the Stage-1 shortlist query actually forwards through
- * `queryVariantsByType` → `buildBaseWhere`. That set currently covers
- * `consequences`, `funcs`, `clinvars`, `maxGnomadAf`, `minCadd`,
- * `geneSymbol`, `columnFilters`.
+ * `baseFilters` / `perTypeOverrides` are a `FilterState` snapshot. The
+ * Stage-1 shortlist query maps it to the case-view `VariantFilter`
+ * (`toShortlistVariantFilter`) and runs it through the same filter pipeline
+ * as the variant table on both backends, so every case-view filter —
+ * including `inheritanceModes`, `activePanelIds`, `searchQuery` and
+ * `starredOnly` — restricts the shortlist.
  *
- * Phase-1 limitation: `inheritanceModes` are NOT yet forwarded by the
- * shortlist pipeline. The inheritance-mode SQL lives in the Kysely-based
- * `VariantFilterBuilder` (which also needs `analysis_group_id` context
- * for trio modes), and porting it into the raw-SQL `buildBaseWhere`
- * helper used by the shortlist query is a follow-up wave. Until then,
- * any preset that tries to gate on inheritance will silently match every
- * consequence row — so the "Recessive candidates" preset intentionally
- * relies on `consequences` + `maxGnomadAf` only, plus a narrower
- * `variantTypeScope`. See the preset's JSDoc below.
+ * The seeded "Recessive candidates" preset predates that (inheritance modes
+ * used to be ignored on SQLite) and gates on `consequences` + `maxGnomadAf`
+ * plus a narrower `variantTypeScope` only. Its stored definition is left
+ * unchanged: adding an inheritance filter to it would alter the results of a
+ * preset users already rely on.
  *
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md
  * (§5 built-in presets)

@@ -23,6 +23,8 @@
  *     calling this function (see checkGenomeBuildOrThrow below).
  */
 import { createInterface } from 'node:readline'
+import { DATABASE_CONFIG } from '../../../shared/config'
+import { createBoundedBatcher } from '../../import/bounded-batcher'
 
 import { createCappedLineStream } from '../../import/stream-utils'
 import { parseVcfHeader, parseVcfHeaderFromLines } from '../../import/vcf/vcf-header-parser'
@@ -84,9 +86,16 @@ export async function importAdditionalFileToCase(
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
 
-  let batch: Array<Record<string, unknown>> = []
   let totalInserted = 0
   let totalSkipped = 0
+  const batch = createBoundedBatcher<Record<string, unknown>, void>({
+    maxRows: APPEND_BATCH_SIZE,
+    maxBytes: DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES,
+    flush: (rows) => {
+      statements.insertBatch(caseId, rows)
+      totalInserted += rows.length
+    }
+  })
   const errors: string[] = []
   const isCancelled = (): boolean => signal?.aborted === true
 
@@ -120,6 +129,9 @@ export async function importAdditionalFileToCase(
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
         }
 
+        // Set while parsing, acted on after: a failed insert must fail the
+        // import, not be reported as an unparseable line.
+        let full = false
         try {
           const record = parseVcfLine(
             line,
@@ -164,21 +176,7 @@ export async function importAdditionalFileToCase(
           }
 
           for (const variant of mapped) {
-            batch.push(variant as unknown as Record<string, unknown>)
-          }
-
-          if (batch.length >= APPEND_BATCH_SIZE) {
-            statements.insertBatch(caseId, batch)
-            totalInserted += batch.length
-            batch = []
-
-            callbacks.onProgress?.({
-              phase: 'inserting',
-              count: totalInserted,
-              elapsed: Date.now() - startTime,
-              skipped: totalSkipped
-            })
-            if (isCancelled()) throw new Error('Import cancelled by user')
+            full = batch.add(variant as unknown as Record<string, unknown>, line.length) || full
           }
         } catch (lineError) {
           if (isCancelled()) {
@@ -194,13 +192,23 @@ export async function importAdditionalFileToCase(
             )
           }
         }
+
+        if (full) {
+          batch.flush()
+          callbacks.onProgress?.({
+            phase: 'inserting',
+            count: totalInserted,
+            elapsed: Date.now() - startTime,
+            skipped: totalSkipped
+          })
+          if (isCancelled()) throw new Error('Import cancelled by user')
+        }
       }
 
       // Flush remaining batch
-      if (batch.length > 0) {
+      if (batch.rows > 0) {
         if (isCancelled()) throw new Error('Import cancelled by user')
-        statements.insertBatch(caseId, batch)
-        totalInserted += batch.length
+        batch.flush()
       }
       if (isCancelled()) throw new Error('Import cancelled by user')
       appendDb.exec('COMMIT')

@@ -333,8 +333,8 @@ describe('useAnnotations characterization', () => {
   // ── Loads (both scopes) ─────────────────────────────────────────
 
   const BATCH = [
-    { chr: V[0], pos: V[1], ref: V[2], alt: V[3], extra: 'dropped' },
-    { chr: V2[0], pos: V2[1], ref: V2[2], alt: V2[3] }
+    { id: VARIANT_ID, chr: V[0], pos: V[1], ref: V[2], alt: V[3], extra: 'dropped' },
+    { id: 22, chr: V2[0], pos: V2[1], ref: V2[2], alt: V2[3] }
   ]
 
   const LOADS: Record<
@@ -403,7 +403,9 @@ describe('useAnnotations characterization', () => {
     const triggersBeforeSettle = triggers
 
     if (outcome === 'generationInvalidated') {
-      a.invalidateAnnotationGeneration()
+      // Each table invalidates its own generation (case table / cohort table).
+      if (scope === 'case') a.invalidateAnnotationGeneration()
+      else a.invalidateGlobalAnnotationGeneration()
       pending.resolve(load.value)
     } else {
       await settle(outcome, pending, load.value)

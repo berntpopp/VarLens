@@ -90,7 +90,7 @@ export const SQLITE_CAPABILITIES: StorageCapabilities = {
 
 export class SqliteStorageSession implements StorageSession {
   readonly capabilities = SQLITE_CAPABILITIES
-  readonly workspace: WorkspaceRef
+  workspace: WorkspaceRef
 
   private readonly databaseService: DatabaseService
   private readonly dbPool: DbPool | null
@@ -173,8 +173,16 @@ export class SqliteStorageSession implements StorageSession {
    * with the writer thread stopped and the read pool suspended — re-key on the
    * main connection. Reads and writes issued meanwhile wait and then run
    * against the new key; on failure they run against the unchanged old one.
+   *
+   * An empty password is refused: it would decrypt the database, which is not
+   * a supported operation (the IPC schema rejects it too).
    */
   async rekey(newPassword: string): Promise<void> {
+    if (newPassword === '') {
+      throw new DatabaseError(
+        'The new database password must not be empty; removing encryption is not supported.'
+      )
+    }
     this.assertNoActiveDatabaseWork()
 
     await this.writeExecutor.runExclusive(async () => {
@@ -188,6 +196,10 @@ export class SqliteStorageSession implements StorageSession {
         // Always: the session must never be left without a working pool. The
         // key is the new one only if the re-key succeeded.
         this.dbPool?.resume(this.databaseService.getEncryptionKey())
+        // A plaintext database that was just given a password is encrypted now.
+        if (this.workspace.kind === 'sqlite') {
+          this.workspace = { ...this.workspace, encrypted: this.databaseService.isEncrypted() }
+        }
       }
     })
   }

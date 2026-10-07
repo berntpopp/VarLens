@@ -10,6 +10,7 @@ import {
 import type { RawVariantRow } from '../types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
+import { setRecordBytes } from '../bounded-batcher'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -21,16 +22,20 @@ interface FieldMapperOptions {
   dictionaries: DataDictionaries
   /** Dynamic column indices resolved from header. Falls back to this.cols. */
   columnIndices?: ColumnIndices
+  /** Source size of the next input record, when the JSON budget tracks it. */
+  takeRecordBytes?: () => number
 }
 
 export class FieldMapper extends Transform {
   private dictionaries: DataDictionaries
   private cols: ColumnIndices
+  private readonly takeRecordBytes?: () => number
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
     this.dictionaries = options.dictionaries
     this.cols = options.columnIndices ?? COLUMN_INDICES
+    this.takeRecordBytes = options.takeRecordBytes
   }
 
   _transform(
@@ -39,6 +44,7 @@ export class FieldMapper extends Transform {
     callback: TransformCallback
   ): void {
     try {
+      const recordBytes = this.takeRecordBytes?.()
       const row = chunk.value
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0
       const semantics = canonicalizeTranscriptSemantics(
@@ -135,6 +141,7 @@ export class FieldMapper extends Transform {
       if (transcripts.length > 0) {
         output._transcripts = transcripts
       }
+      if (recordBytes !== undefined) setRecordBytes(output, recordBytes)
       this.push(output)
       callback()
     } catch (error) {
@@ -277,7 +284,8 @@ export class FieldMapper extends Transform {
 
 export function createFieldMapper(
   dictionaries: DataDictionaries,
-  columnIndices?: ColumnIndices
+  columnIndices?: ColumnIndices,
+  takeRecordBytes?: () => number
 ): FieldMapper {
-  return new FieldMapper({ dictionaries, columnIndices })
+  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes })
 }

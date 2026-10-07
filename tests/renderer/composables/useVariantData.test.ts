@@ -377,7 +377,9 @@ describe('useVariantData', () => {
           chr: mockVariant.chr,
           pos: mockVariant.pos,
           ref: mockVariant.ref,
-          alt: mockVariant.alt
+          alt: mockVariant.alt,
+          // Per-case keys bind the lookup to the row (BatchAnnotationKey contract).
+          variantId: mockVariant.id
         }
       ])
     })

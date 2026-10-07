@@ -6,8 +6,12 @@
  * mirroring the worker's bracket-transaction trigger-defer pattern so the
  * code path under test matches what the worker actually runs.
  *
+ * Self-sufficient: the suite creates and migrates its own throwaway schema
+ * in whatever database `VARLENS_PG_URL` points at (a fresh, empty database is
+ * fine) and drops it afterwards. It never touches `public`.
+ *
  * Setup:
- *   make pg-reset && make pg-up
+ *   make pg-up
  *   make rebuild-node
  *   VARLENS_RUN_POSTGRES_E2E=1 npx vitest run \
  *     --project main tests/main/storage/postgres-vcf-import-repository.copy.test.ts
@@ -17,7 +21,8 @@
  * they always run, even with the env var unset.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { Client } from 'pg'
+import { Client, Pool } from 'pg'
+import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -25,6 +30,8 @@ import {
   PostgresVcfImportRepository,
   type PostgresVcfImportRequest
 } from '../../../src/main/storage/postgres/PostgresVcfImportRepository'
+import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import {
   VARIANT_COPY_COLUMNS,
   VARIANT_SV_COPY_COLUMNS,
@@ -39,7 +46,9 @@ const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
   process.env.VARLENS_PG_URL ??
   'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
-const PG_SCHEMA = process.env.VARLENS_PG_SCHEMA ?? 'public'
+// Own schema per run: the suite used to assume a migrated `public` schema and
+// failed on a fresh database with `relation "public.cases" does not exist`.
+const PG_SCHEMA = `vt_vcf_copy_${randomBytes(4).toString('hex')}`
 
 // ---------------------------------------------------------------------------
 // Static regression guards — no DB needed; run unconditionally.
@@ -152,16 +161,19 @@ describe.skipIf(!RUN)('PostgresVcfImportRepository — COPY path (integration)',
   beforeAll(async () => {
     control = new Client({ connectionString: PG_URL })
     await control.connect()
-  })
+    await control.query(`CREATE SCHEMA "${PG_SCHEMA}"`)
+    const pool = new Pool({ connectionString: PG_URL, max: 2 })
+    try {
+      await new PostgresMigrationRunner(pool, PG_SCHEMA, POSTGRES_MIGRATIONS).migrate()
+    } finally {
+      await pool.end()
+    }
+  }, 180_000)
 
   afterAll(async () => {
-    if (createdCaseNames.length > 0) {
-      await control.query(`DELETE FROM "${PG_SCHEMA}"."cases" WHERE name = ANY($1::text[])`, [
-        createdCaseNames
-      ])
-    }
+    await control.query(`DROP SCHEMA IF EXISTS "${PG_SCHEMA}" CASCADE`)
     await control.end()
-  })
+  }, 120_000)
 
   afterEach(async () => {
     if (createdCaseNames.length > 0) {

@@ -18,17 +18,22 @@ export function containerScope({ signal, signals = process } = {}) {
 
   function close() {
     closing ??= (async () => {
-      signal?.removeEventListener('abort', interrupted)
-      signals.removeListener('SIGINT', interrupted)
-      signals.removeListener('SIGTERM', interrupted)
-      signals.removeListener('SIGHUP', interrupted)
       const errors = []
-      for (const remove of cleanup.reverse()) {
-        try {
-          await remove()
-        } catch (error) {
-          errors.push(error)
+      try {
+        for (const remove of cleanup.reverse()) {
+          try {
+            await remove()
+          } catch (error) {
+            errors.push(error)
+          }
         }
+      } finally {
+        // Unsubscribe only now: a repeated signal during removal must still be
+        // handled, or the default action kills the process mid-cleanup.
+        signal?.removeEventListener('abort', interrupted)
+        signals.removeListener('SIGINT', interrupted)
+        signals.removeListener('SIGTERM', interrupted)
+        signals.removeListener('SIGHUP', interrupted)
       }
       if (errors.length) throw new AggregateError(errors, 'Owned container resource cleanup failed')
     })()

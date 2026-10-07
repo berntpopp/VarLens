@@ -43,8 +43,9 @@ function mapOperator(dslOp: DslOperator): ColumnFilter['operator'] | null {
     case '$':
       return 'like' // Translated to '%value' suffix
     case 'is:null':
+      return 'is_null'
     case 'is:notnull':
-      return '=' // Special handling below
+      return 'not_null'
     default:
       return null
   }
@@ -59,12 +60,13 @@ function isNumericColumn(columnKey: string): boolean {
 function translateRule(rule: DslFilterRule, result: TranslationResult): void {
   const { column, operator, value } = rule
 
+  // Dedicated operators: `= ''` would be coerced to `= 0` on numeric columns.
   if (operator === 'is:null') {
-    result.columnFilters[column] = { operator: '=', value: '' }
+    result.columnFilters[column] = { operator: 'is_null', value: '' }
     return
   }
   if (operator === 'is:notnull') {
-    result.columnFilters[column] = { operator: '!=', value: '' }
+    result.columnFilters[column] = { operator: 'not_null', value: '' }
     return
   }
 

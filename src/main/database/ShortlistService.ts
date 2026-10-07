@@ -7,7 +7,9 @@
  *
  *   Stage 1 — candidate generation
  *     For each variant type in scope, merges `baseFilters` with any
- *     `perTypeOverrides[type]` and runs `queryVariantsByType()` under a
+ *     `perTypeOverrides[type]`, maps the result to the case-view
+ *     `VariantFilter`, resolves an active gene panel, and runs
+ *     `queryVariantsByType()` (the case-view filter pipeline) under a
  *     `topN * 4` safety cap. Per-type errors are collected and, if any
  *     type failed, the whole shortlist aborts with `ShortlistQueryError`
  *     — never a silent scope reduction (spec §7 boundary 1).
@@ -40,7 +42,20 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { mainLogger } from '../services/MainLogger'
 import { DatabaseError, NotFoundError } from './errors'
 import type { FilterPresetRepository } from './FilterPresetRepository'
-import { queryVariantsByType } from './shortlist-query'
+import {
+  queryVariantsByType,
+  toShortlistVariantFilter,
+  type ShortlistQuerySource
+} from './shortlist-query'
+import type { CaseRepository } from './CaseRepository'
+import type { GeneReferenceDb } from './GeneReferenceDb'
+import {
+  resolvePanelIntervalsInPlace,
+  type PanelAwareFilter,
+  type PanelResolutionRepositories
+} from './panel-interval-resolution'
+import type { VariantFilterBuilder } from './VariantFilterBuilder'
+import type { VariantFilter } from '../../shared/types/database'
 import { scoreRow, compareScoredRows } from '../services/scoring'
 import { ShortlistConfigSchema } from '../../shared/types/ipc-schemas'
 import type {
@@ -53,6 +68,11 @@ import type {
 } from '../../shared/types/shortlist'
 import type { FilterPreset } from '../../shared/types/filter-presets'
 import type { FilterState } from '../../shared/types/filters'
+import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
+import {
+  DEFAULT_PANEL_GENOME_BUILD,
+  PanelRegionsUnavailableError
+} from '../../shared/filters/panel-intervals'
 
 /**
  * Discriminated union for the shortlist request. `presetId` is the
@@ -81,6 +101,32 @@ export class ShortlistQueryError extends DatabaseError {
     this.queryErrors = queryErrors
     Object.setPrototypeOf(this, ShortlistQueryError.prototype)
   }
+}
+
+/**
+ * Abort a shortlist whose Stage-1 queries failed (shared by both backends).
+ *
+ * A filter the backend refused to run — an active gene panel without regions
+ * for the case's build, or a non-numeric value on a numeric column — is
+ * rethrown as-is: it already carries the message meant for the user and fails
+ * every variant type identically. Anything else is aggregated into a
+ * {@link ShortlistQueryError}.
+ */
+export function throwShortlistQueryErrors(
+  queryErrors: Array<{ type: VariantTypeKey; error: Error }>,
+  logLabel: string
+): never {
+  const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
+  mainLogger.warn(`${logLabel} query errors: ${detail}`, 'shortlist.service')
+  const refusedFilter = queryErrors.find(
+    ({ error }) =>
+      error instanceof PanelRegionsUnavailableError || error instanceof ColumnFilterValueError
+  )
+  if (refusedFilter !== undefined) throw refusedFilter.error
+  throw new ShortlistQueryError(
+    `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
+    queryErrors
+  )
 }
 
 /** Narrow an unknown thrown value into a real `Error` instance. */
@@ -118,17 +164,37 @@ export function normalizeTieBreakerKey(key: string): string {
   return `${typeKey}_${column}`
 }
 
+/** Repositories the Stage-1 query reads through (all on the same connection). */
+export interface ShortlistStage1Dependencies extends PanelResolutionRepositories {
+  filterBuilder: VariantFilterBuilder
+  cases: Pick<CaseRepository, 'getCase'>
+}
+
+/**
+ * Supplies the gene reference database for gene-panel filters. Consulted only
+ * when a shortlist actually has an active panel.
+ */
+export type GeneReferenceProvider = () => GeneReferenceDb | null
+
 export class ShortlistService {
   constructor(
     private readonly db: DatabaseType,
-    private readonly presetRepo: FilterPresetRepository
+    private readonly presetRepo: FilterPresetRepository,
+    private readonly stage1: ShortlistStage1Dependencies
   ) {}
 
   /**
    * Run the full two-stage shortlist pipeline and return a ranked
    * `ShortlistResult`. See class-level JSDoc for pipeline details.
+   *
+   * @param getGeneReference Required so no caller can run a panel-filtered
+   *   shortlist without one: an active panel that cannot be resolved fails
+   *   the shortlist instead of being dropped.
    */
-  getShortlist(params: GetShortlistParams): ShortlistResult {
+  getShortlist(
+    params: GetShortlistParams,
+    getGeneReference: GeneReferenceProvider
+  ): ShortlistResult {
     const started = Date.now()
     const { config: resolvedConfig, presetUsed } = this.resolveConfig(params)
 
@@ -164,21 +230,15 @@ export class ShortlistService {
           ...config.baseFilters,
           ...(config.perTypeOverrides?.[type] ?? {})
         }
-        const rows = queryVariantsByType(this.db, params.caseId, type, mergedFilters, perTypeLimit)
-        candidates.push(...rows)
+        const filter = toShortlistVariantFilter(params.caseId, type, mergedFilters)
+        this.resolvePanel(filter, getGeneReference)
+        candidates.push(...queryVariantsByType(this.stage1Source, filter, perTypeLimit))
       } catch (e) {
         queryErrors.push({ type, error: toError(e) })
       }
     }
 
-    if (queryErrors.length > 0) {
-      const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
-      mainLogger.warn(`shortlist query errors: ${detail}`, 'shortlist.service')
-      throw new ShortlistQueryError(
-        `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
-        queryErrors
-      )
-    }
+    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'shortlist')
 
     const totalCandidates = candidates.length
 
@@ -267,6 +327,29 @@ export class ShortlistService {
       )
     }
     return { config: parsed.data as ShortlistConfig, presetUsed: preset }
+  }
+
+  private get stage1Source(): ShortlistQuerySource {
+    return { db: this.db, filterBuilder: this.stage1.filterBuilder }
+  }
+
+  /**
+   * Turn the filter's active gene panel into `panel_intervals` for the genome
+   * build of the case — the same resolver, and therefore the same regions and
+   * the same errors, as the case variant table.
+   */
+  private resolvePanel(filter: VariantFilter, getGeneReference: GeneReferenceProvider): void {
+    if ((filter.active_panel_ids?.length ?? 0) === 0) return
+    const panelFilter = filter as VariantFilter & PanelAwareFilter
+    panelFilter.genome_build =
+      this.stage1.cases.getCase(filter.case_id)?.genome_build ?? DEFAULT_PANEL_GENOME_BUILD
+    resolvePanelIntervalsInPlace(
+      panelFilter,
+      this.stage1,
+      getGeneReference(),
+      this.db,
+      filter.case_id
+    )
   }
 
   /**

@@ -10,6 +10,15 @@ interface JsonToken {
   value?: string
 }
 
+export interface JsonRecordBudgetOptions {
+  /**
+   * Queue each completed record's byte count for {@link
+   * JsonRecordBudgetTransform.takeRecordBytes}. Only enable it when a mapper
+   * drains the queue, one take per record.
+   */
+  trackRecordBytes?: boolean
+}
+
 export class JsonRecordLimitError extends Error {
   constructor(message: string) {
     super(message)
@@ -30,9 +39,23 @@ export class JsonRecordBudgetTransform extends Transform {
   private recordTokens = 0
   private recordContainerEntries = 0
   private readonly containers: Array<'array' | 'object'> = []
+  private readonly completedRecordBytes: number[] | null
 
-  constructor() {
+  constructor(options: JsonRecordBudgetOptions = {}) {
     super({ objectMode: true })
+    this.completedRecordBytes = options.trackRecordBytes === true ? [] : null
+  }
+
+  /**
+   * Byte count of the oldest record not yet taken. streamArray emits records
+   * in the order this transform completes them, so a mapper that takes once
+   * per input chunk reads the size of exactly that chunk — no re-measuring.
+   */
+  readonly takeRecordBytes = (): number => this.completedRecordBytes?.shift() ?? 0
+
+  private endRecord(): void {
+    this.inRecord = false
+    this.completedRecordBytes?.push(this.recordBytes)
   }
 
   override _transform(token: JsonToken, _encoding: BufferEncoding, callback: TransformCallback) {
@@ -107,7 +130,7 @@ export class JsonRecordBudgetTransform extends Transform {
       this.depth -= 1
       this.containers.pop()
       if (this.depth < 0) throw new JsonRecordLimitError('Malformed JSON token nesting')
-      if (this.inRecord && this.depth === 1) this.inRecord = false
+      if (this.inRecord && this.depth === 1) this.endRecord()
       return
     }
 
@@ -120,7 +143,7 @@ export class JsonRecordBudgetTransform extends Transform {
         token.name === 'trueValue' ||
         token.name === 'falseValue')
     ) {
-      this.inRecord = false
+      this.endRecord()
     }
   }
 }
@@ -137,6 +160,8 @@ function isJsonValueStart(tokenName: string): boolean {
   )
 }
 
-export function createJsonRecordBudget(): JsonRecordBudgetTransform {
-  return new JsonRecordBudgetTransform()
+export function createJsonRecordBudget(
+  options: JsonRecordBudgetOptions = {}
+): JsonRecordBudgetTransform {
+  return new JsonRecordBudgetTransform(options)
 }

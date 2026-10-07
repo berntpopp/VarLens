@@ -213,6 +213,8 @@ export interface VariantFilter {
   consider_phasing?: boolean
   /** Filter by variant type discriminator: snv, indel, sv, cnv, str. If 'snv', includes both 'snv' and 'indel'. */
   variant_type?: string
+  /** Match `variant_type` exactly: 'snv' then excludes 'indel' (shortlist scores each type separately). */
+  exact_variant_type?: boolean
 }
 
 /**

@@ -21,8 +21,15 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
-import { queryVariantsByType } from '../../../src/main/database/shortlist-query'
+import { createRepositories } from '../../../src/main/database/createRepositories'
+import {
+  queryVariantsByType,
+  toShortlistVariantFilter
+} from '../../../src/main/database/shortlist-query'
+import { VariantFilterBuilder } from '../../../src/main/database/VariantFilterBuilder'
+import { VariantSearchService } from '../../../src/main/database/VariantSearchService'
 import type { FilterState } from '../../../src/shared/types/filters'
+import type { ShortlistCandidate, VariantTypeKey } from '../../../src/shared/types/shortlist'
 
 function insertCase(db: DatabaseType, caseId: number, name: string): void {
   db.prepare(
@@ -76,10 +83,28 @@ function seedMinimalCase(db: DatabaseType, caseId: number): void {
 describe('queryVariantsByType()', () => {
   let db: DatabaseType
 
+  let filterBuilder: VariantFilterBuilder
+
+  /** Stage-1 query for one type, as ShortlistService runs it (no panel active). */
+  function query(
+    caseId: number,
+    variantType: VariantTypeKey,
+    filters: Partial<FilterState>,
+    limit: number
+  ): ShortlistCandidate[] {
+    return queryVariantsByType(
+      { db, filterBuilder },
+      toShortlistVariantFilter(caseId, variantType, filters),
+      limit
+    )
+  }
+
   beforeEach(() => {
     db = new Database(':memory:')
     initializeSchema(db)
     runMigrations(db)
+    const { kysely } = createRepositories(db)
+    filterBuilder = new VariantFilterBuilder(db, kysely, new VariantSearchService(db, kysely))
     seedMinimalCase(db, 1)
   })
 
@@ -88,7 +113,7 @@ describe('queryVariantsByType()', () => {
   })
 
   it('returns SNV rows matching Variant shape + is_starred', () => {
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 100)
     expect(rows).toHaveLength(1)
     expect(rows[0].variant_type).toBe('snv')
     expect(rows[0].id).toBe(1)
@@ -97,7 +122,7 @@ describe('queryVariantsByType()', () => {
   })
 
   it('flattens SV extension columns into sv_* aliases', () => {
-    const rows = queryVariantsByType(db, 1, 'sv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'sv', {} as Partial<FilterState>, 100)
     expect(rows).toHaveLength(1)
     expect(rows[0].sv_vaf).toBe(0.45)
     expect(rows[0].sv_is_precise).toBe(1)
@@ -108,14 +133,14 @@ describe('queryVariantsByType()', () => {
   })
 
   it('flattens CNV extension columns into cnv_* aliases', () => {
-    const rows = queryVariantsByType(db, 1, 'cnv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'cnv', {} as Partial<FilterState>, 100)
     expect(rows).toHaveLength(1)
     expect(rows[0].cnv_copy_number).toBe(0)
     expect(rows[0].cnv_copy_number_quality).toBe(95)
   })
 
   it('flattens STR extension columns into str_* aliases', () => {
-    const rows = queryVariantsByType(db, 1, 'str', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'str', {} as Partial<FilterState>, 100)
     expect(rows).toHaveLength(1)
     expect(rows[0].str_status).toBe('pathologic')
     expect(rows[0].str_disease).toBe('Huntington disease')
@@ -123,11 +148,12 @@ describe('queryVariantsByType()', () => {
   })
 
   it('leaves extension columns null for wrong-type rows', () => {
-    const snvRows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
-    // SNV rows should not carry extension aliases (the column is absent from SELECT list).
-    expect(snvRows[0].sv_vaf).toBeUndefined()
-    expect(snvRows[0].cnv_copy_number).toBeUndefined()
-    expect(snvRows[0].str_status).toBeUndefined()
+    const snvRows = query(1, 'snv', {} as Partial<FilterState>, 100)
+    // Explicit null, as on PostgreSQL: both backends flatten rows through
+    // the same toShortlistCandidate.
+    expect(snvRows[0].sv_vaf).toBeNull()
+    expect(snvRows[0].cnv_copy_number).toBeNull()
+    expect(snvRows[0].str_status).toBeNull()
   })
 
   it('populates is_starred from case_variant_annotations', () => {
@@ -135,7 +161,7 @@ describe('queryVariantsByType()', () => {
       `INSERT INTO case_variant_annotations (case_id, variant_id, starred, created_at, updated_at)
        VALUES (1, 1, 1, ?, ?)`
     ).run(Date.now(), Date.now())
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 100)
     expect(rows[0].is_starred).toBe(true)
   })
 
@@ -144,7 +170,7 @@ describe('queryVariantsByType()', () => {
       `INSERT INTO case_variant_annotations (case_id, variant_id, starred, created_at, updated_at)
        VALUES (1, 1, 0, ?, ?)`
     ).run(Date.now(), Date.now())
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 100)
     expect(rows[0].is_starred).toBe(false)
   })
 
@@ -155,7 +181,7 @@ describe('queryVariantsByType()', () => {
          VALUES (?, 1, 'snv', '1', ?, 'A', 'T')`
       ).run(i, i * 100)
     }
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 5)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 5)
     expect(rows).toHaveLength(5)
   })
 
@@ -167,23 +193,11 @@ describe('queryVariantsByType()', () => {
        VALUES (?, 1, 'snv', '5', 5000, 'A', 'T', 'TP53', 'LOW')`
     ).run(5)
 
-    const matched = queryVariantsByType(
-      db,
-      1,
-      'snv',
-      { consequences: ['HIGH'] } as Partial<FilterState>,
-      100
-    )
+    const matched = query(1, 'snv', { consequences: ['HIGH'] } as Partial<FilterState>, 100)
     expect(matched).toHaveLength(1)
     expect(matched[0].consequence).toBe('HIGH')
 
-    const empty = queryVariantsByType(
-      db,
-      1,
-      'snv',
-      { consequences: ['MODIFIER'] } as Partial<FilterState>,
-      100
-    )
+    const empty = query(1, 'snv', { consequences: ['MODIFIER'] } as Partial<FilterState>, 100)
     expect(empty).toHaveLength(0)
   })
 
@@ -195,13 +209,7 @@ describe('queryVariantsByType()', () => {
        VALUES (?, 1, 'snv', '6', 6000, 'A', 'T', 'COMMON', 'MODERATE', 0.2)`
     ).run(6)
 
-    const rare = queryVariantsByType(
-      db,
-      1,
-      'snv',
-      { maxGnomadAf: 0.01 } as Partial<FilterState>,
-      100
-    )
+    const rare = query(1, 'snv', { maxGnomadAf: 0.01 } as Partial<FilterState>, 100)
     expect(rare).toHaveLength(1)
     expect(rare[0].gene_symbol).toBe('BRCA1')
   })
@@ -214,28 +222,28 @@ describe('queryVariantsByType()', () => {
        VALUES (?, 2, 'snv', '1', 1000, 'A', 'T', 'BRCA1')`
     ).run(99)
 
-    const case1Rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const case1Rows = query(1, 'snv', {} as Partial<FilterState>, 100)
     expect(case1Rows).toHaveLength(1)
     expect(case1Rows[0].id).toBe(1)
 
-    const case2Rows = queryVariantsByType(db, 2, 'snv', {} as Partial<FilterState>, 100)
+    const case2Rows = query(2, 'snv', {} as Partial<FilterState>, 100)
     expect(case2Rows).toHaveLength(1)
     expect(case2Rows[0].id).toBe(99)
   })
 
   it('scopes results to the requested variant_type (no cross-type leakage)', () => {
     // SNV query must not surface the SV, CNV, STR rows seeded above.
-    const snvRows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const snvRows = query(1, 'snv', {} as Partial<FilterState>, 100)
     expect(snvRows).toHaveLength(1)
     expect(snvRows[0].variant_type).toBe('snv')
 
-    const svRows = queryVariantsByType(db, 1, 'sv', {} as Partial<FilterState>, 100)
+    const svRows = query(1, 'sv', {} as Partial<FilterState>, 100)
     expect(svRows).toHaveLength(1)
     expect(svRows[0].variant_type).toBe('sv')
   })
 
   it('structural row shape matches ShortlistCandidate contract', () => {
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 100)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 100)
     const row = rows[0]
     // Required Variant fields
     expect(row).toHaveProperty('id')
@@ -262,7 +270,7 @@ describe('queryVariantsByType()', () => {
          VALUES (?, 1, 'snv', '1', ?, 'A', 'T', 'MODERATE')`
       ).run(i, i * 100)
     }
-    const rows = queryVariantsByType(db, 1, 'snv', {} as Partial<FilterState>, 5)
+    const rows = query(1, 'snv', {} as Partial<FilterState>, 5)
     expect(rows).toHaveLength(5)
     const ids = rows.map((r) => r.id)
     // Deterministic lowest-5 IDs: existing id=1 (BRCA1) + ids 10-13.
@@ -271,27 +279,68 @@ describe('queryVariantsByType()', () => {
     expect([...ids].sort((a, b) => a - b)).toEqual(ids)
   })
 
-  it('inheritanceModes in FilterState is NOT forwarded to Stage-1 (documented gap)', () => {
-    // The shortlist pipeline currently has no inheritance-mode plumbing —
-    // the logic lives in the Kysely-based VariantFilterBuilder and depends
-    // on analysis_group_id context that the shortlist service does not
-    // carry. This test locks in the Phase-1 behaviour: passing
-    // `inheritanceModes` is a silent no-op. When a future wave adds the
-    // plumbing, this test will need to be rewritten to assert actual
-    // filtering semantics instead.
-    //
-    // The fixture seeds a single HIGH SNV with gt_num=NULL. Passing
-    // inheritanceModes=['homozygous'] would (if honoured) exclude it
-    // because gt_num is not '1/1' / '1|1'. Since the field is dropped at
-    // the baseInput projection, the row still surfaces.
-    const rows = queryVariantsByType(
-      db,
-      1,
-      'snv',
-      { inheritanceModes: ['homozygous'] } as Partial<FilterState>,
-      100
-    )
-    expect(rows).toHaveLength(1)
-    expect(rows[0].id).toBe(1)
+  it('snv scope is exact: indel rows are not swept in as on the variant table', () => {
+    db.prepare(
+      `INSERT INTO variants (id, case_id, variant_type, chr, pos, ref, alt)
+       VALUES (40, 1, 'indel', '1', 1500, 'AT', 'A')`
+    ).run()
+    expect(query(1, 'snv', {}, 100).map((r) => r.id)).toEqual([1])
+    expect(query(1, 'indel', {}, 100).map((r) => r.id)).toEqual([40])
+  })
+
+  describe('filters the SQLite shortlist used to ignore', () => {
+    beforeEach(() => {
+      // id 1 (seed): BRCA1, chr1:1000, gt_num NULL.
+      db.prepare(
+        `INSERT INTO variants (id, case_id, variant_type, chr, pos, ref, alt, gene_symbol, gt_num)
+         VALUES (50, 1, 'snv', '1', 50000, 'C', 'G', 'TP53', '1/1'),
+                (51, 1, 'snv', '2', 1000, 'C', 'G', 'EGFR', '0/1')`
+      ).run()
+    })
+
+    const ids = (filters: Partial<FilterState>): number[] =>
+      query(1, 'snv', filters, 100).map((r) => r.id)
+
+    it('inheritanceModes restrict by genotype', () => {
+      expect(ids({ inheritanceModes: ['homozygous'] })).toEqual([50])
+      expect(ids({ inheritanceModes: ['heterozygous'] })).toEqual([51])
+    })
+
+    it('searchQuery restricts through full-text search', () => {
+      expect(ids({ searchQuery: 'TP53' })).toEqual([50])
+      expect(ids({ searchQuery: '' })).toEqual([1, 50, 51])
+    })
+
+    it('starredOnly restricts to variants starred in the case', () => {
+      db.prepare(
+        `INSERT INTO case_variant_annotations (case_id, variant_id, starred, created_at, updated_at)
+         VALUES (1, 51, 1, ?, ?)`
+      ).run(Date.now(), Date.now())
+      const rows = query(1, 'snv', { starredOnly: true }, 100)
+      expect(rows.map((r) => r.id)).toEqual([51])
+      expect(rows[0].is_starred).toBe(true)
+    })
+
+    it('resolved panel regions restrict by overlap, small and large interval sets alike', () => {
+      const region = { chr: '1', start: 40_000, end: 60_000 }
+      const run = (intervals: Array<{ chr: string; start: number; end: number }>): number[] =>
+        queryVariantsByType(
+          { db, filterBuilder },
+          { ...toShortlistVariantFilter(1, 'snv', {}), panel_intervals: intervals },
+          100
+        ).map((r) => r.id)
+
+      expect(run([region])).toEqual([50])
+      // >= 50 intervals switches the builder to its temp table.
+      const padding = Array.from({ length: 60 }, (_, i) => ({
+        chr: '20',
+        start: i * 10 + 1,
+        end: i * 10 + 5
+      }))
+      expect(run([...padding, region])).toEqual([50])
+      expect(
+        db.prepare("SELECT name FROM sqlite_temp_master WHERE name = '_panel_intervals'").all()
+      ).toEqual([])
+    })
   })
 })

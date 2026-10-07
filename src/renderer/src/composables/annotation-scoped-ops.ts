@@ -13,7 +13,11 @@
 
 import { logService } from '../services/LogService'
 import type { WindowAPI } from '../../../shared/types/api'
-import type { GlobalAnnotationUpdates, PerCaseAnnotationUpdates } from '../../../shared/types/api'
+import type {
+  BatchAnnotationKey,
+  GlobalAnnotationUpdates,
+  PerCaseAnnotationUpdates
+} from '../../../shared/types/api'
 import type {
   VariantAnnotation,
   CaseVariantAnnotation
@@ -24,14 +28,22 @@ import {
   annotationCache,
   beginAnnotationRequest,
   cacheSet,
+  cacheSetGlobalSlot,
+  dropCacheOfClosedDatabase,
+  getAnnotationCacheEpoch,
   getAnnotationGeneration,
   hasDbSwitchedSince,
-  isCachedOrLoading,
+  isKeyLoading,
   isTrackedCase,
+  markAwaited,
+  needsLoad,
   setLoading,
+  takeAwaited,
   triggerAnnotationCache,
+  unloadedSlotOf,
   variantKey,
   type AnnotationCache,
+  type AnnotationSlot,
   type VariantCoords
 } from './annotation-cache'
 
@@ -56,12 +68,6 @@ interface MutationPlan {
   updates: AnnotationUpdates
   /** On failure: re-apply these fields, or restore the whole previous slot. */
   rollback: SlotPatch | 'restore-previous'
-  /**
-   * Whether watchers are notified after a failed write: only when an entry
-   * was cached, always, or never. Preserved per operation as it was before
-   * the per-scope implementations were merged.
-   */
-  notifyOnFailure: 'if-cached' | 'always' | 'never'
   /** Log prefix, e.g. `Failed to toggle star: `. */
   failureMessage: string
 }
@@ -85,6 +91,26 @@ function scopeQualifier(scope: AnnotationLoadScope): string {
 function isResponseStale(scope: AnnotationLoadScope, requestDbPath: string | null): boolean {
   if (hasDbSwitchedSince(requestDbPath)) return true
   return scope.kind === 'case' && !isTrackedCase(scope.caseId)
+}
+
+/**
+ * True when a write settled after its database or case was left. The write
+ * must then not touch the cache — and if the cache still holds the old
+ * database (nothing has queried the new one yet), it is emptied so the
+ * write's optimistic value is not served any longer.
+ */
+function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): boolean {
+  if (!isResponseStale(scope, requestDbPath)) return false
+  dropCacheOfClosedDatabase()
+  return true
+}
+
+function slotOf(scope: AnnotationLoadScope): AnnotationSlot {
+  return scope.kind === 'case' ? 'perCase' : 'global'
+}
+
+function otherSlot(slot: AnnotationSlot): AnnotationSlot {
+  return slot === 'perCase' ? 'global' : 'perCase'
 }
 
 function readSlot(entry: AnnotationCache, scope: AnnotationLoadScope): SlotValue | null {
@@ -136,7 +162,6 @@ function toggleStarPlan(scope: AnnotationWriteScope, previous: SlotValue | null)
     optimistic: { starred: wasStarred ? 0 : 1 },
     updates: { starred: !wasStarred },
     rollback: { starred: wasStarred ? 1 : 0 },
-    notifyOnFailure: scope.kind === 'case' ? 'if-cached' : 'always',
     failureMessage: `Failed to toggle ${scopeQualifier(scope)}star: `
   }
 }
@@ -150,7 +175,6 @@ function acmgPlan(
     optimistic: { acmg_classification: classification },
     updates: { acmg_classification: classification },
     rollback: { acmg_classification: previous?.acmg_classification ?? null },
-    notifyOnFailure: 'always',
     failureMessage: `Failed to set ${scopeQualifier(scope)}ACMG classification: `
   }
 }
@@ -165,7 +189,6 @@ function commentPlan(
       optimistic: { per_case_comment: comment },
       updates: { per_case_comment: comment },
       rollback: { per_case_comment: current?.perCase?.per_case_comment ?? null },
-      notifyOnFailure: 'always',
       failureMessage: 'Failed to upsert per-case comment: '
     }
   }
@@ -173,7 +196,6 @@ function commentPlan(
     optimistic: { global_comment: comment },
     updates: { global_comment: comment },
     rollback: { global_comment: current?.global?.global_comment ?? null },
-    notifyOnFailure: 'always',
     failureMessage: 'Failed to upsert global comment: '
   }
 }
@@ -192,7 +214,6 @@ function acmgWithEvidencePlan(
       user_name: userName
     },
     rollback: 'restore-previous',
-    notifyOnFailure: 'never',
     failureMessage: `Failed to set ${scopeQualifier(scope)}ACMG classification with evidence: `
   }
 }
@@ -218,6 +239,7 @@ async function mutate(
 ): Promise<void> {
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
+  const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
   const current = annotationCache.value.get(key)
   const previous = (current ? readSlot(current, scope) : null) ?? null
@@ -231,14 +253,27 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    if (isResponseStale(scope, dbPath)) return
-    cacheSet(key, mergeServerSlot(current, scope, updated))
+    if (leftScope(scope, dbPath)) return
+    // Merge into what the cache holds now. If the cache was rebuilt while the
+    // write was in flight (case switch), `current` belongs to the old scope:
+    // update the entry the new scope loaded, and never recreate one from it.
+    const live = annotationCache.value.get(key)
+    if (epoch !== getAnnotationCacheEpoch() && !live) return
+    // The write confirms its own slot; the other one stays as (un)loaded as it was.
+    const written = slotOf(scope)
+    const unloaded = live ? unloadedSlotOf(key) : otherSlot(written)
+    cacheSet(
+      key,
+      mergeServerSlot(live, scope, updated),
+      unloaded === written ? undefined : unloaded
+    )
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
+    if (leftScope(scope, dbPath)) return
+    // Every failed write rolls back and notifies, so no view keeps showing the
+    // optimistic value of a write that never landed.
     if (current) rollBackSlot(current, scope, plan, previous)
-    if (plan.notifyOnFailure === 'always' || (plan.notifyOnFailure === 'if-cached' && current)) {
-      triggerAnnotationCache()
-    }
+    triggerAnnotationCache()
   }
 }
 
@@ -254,6 +289,12 @@ async function fetchEntry(
   return { global, perCase: null }
 }
 
+/** Cache a load result: a per-case load fills both slots, a global load only its own. */
+function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationCache): void {
+  if (scope.kind === 'case') cacheSet(key, entry)
+  else cacheSetGlobalSlot(key, entry.global)
+}
+
 /** Load annotations for one variant (call on row visible or expand). */
 async function load(
   api: WindowAPI | undefined,
@@ -263,13 +304,13 @@ async function load(
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
   const key = variantKey(coords)
-  if (isCachedOrLoading(key)) return
+  if (!needsLoad(key, scope.kind)) return
 
-  setLoading(key, true)
+  setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
     if (isResponseStale(scope, dbPath)) return
-    cacheSet(key, entry)
+    storeLoaded(key, scope, entry)
   } catch (error) {
     logService.error(
       `Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error),
@@ -280,33 +321,56 @@ async function load(
   }
 }
 
+/** A row to batch-load: per-case rows also carry their `variants.id`. */
+export type BatchLoadVariant = VariantCoords & { id?: number }
+
+/**
+ * The key sent to `annotations:batchGet`. Per-case keys MUST carry `variantId`
+ * (`BatchAnnotationKey` in shared/types/api.ts): without it the server matches
+ * per-case annotations by coordinates alone, so a row would show the annotation
+ * of another variant row of the same case that shares its chr:pos:ref:alt.
+ */
+function batchKey(scope: AnnotationLoadScope, v: BatchLoadVariant): BatchAnnotationKey {
+  const key: BatchAnnotationKey = { chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }
+  if (scope.kind === 'case' && typeof v.id === 'number') key.variantId = v.id
+  return key
+}
+
 /** Bulk load annotations for visible variants. */
 async function loadBatch(
   api: WindowAPI | undefined,
   scope: AnnotationLoadScope,
-  variants: VariantCoords[]
+  variants: BatchLoadVariant[]
 ): Promise<void> {
   if (!api) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
   // Captured at call time — used to detect results from a prior page.
-  const generation = getAnnotationGeneration()
+  const generation = getAnnotationGeneration(scope.kind)
 
   // Filter out cached AND in-flight keys to prevent duplicate IPC calls
-  const uncached = variants
-    .filter((v) => !isCachedOrLoading(variantKey(v)))
-    .map((v) => ({ chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }))
+  const uncached: BatchAnnotationKey[] = []
+  for (const v of variants) {
+    const key = variantKey(v)
+    if (needsLoad(key, scope.kind)) uncached.push(batchKey(scope, v))
+    // Already in flight: rely on that request, even if its batch is later
+    // found to belong to a previous page.
+    else if (isKeyLoading(key)) markAwaited(scope.kind, key)
+  }
   if (uncached.length === 0) return
 
   // Mark all keys as in-flight before the IPC call
-  for (const vk of uncached) setLoading(variantKey(vk), true)
+  for (const vk of uncached) setLoading(variantKey(vk), true, scope.kind)
 
   try {
     const results = unwrapIpcResult(await api.annotations.batchGet(scopeCaseId(scope), uncached))
-    // Only per-case batches are discarded when the user paged meanwhile.
-    if (scope.kind === 'case' && generation !== getAnnotationGeneration()) return
     if (isResponseStale(scope, dbPath)) return
+    // When this scope's table paged meanwhile the batch is discarded, except
+    // for the rows the current page is still waiting for.
+    const fromPriorPage = generation !== getAnnotationGeneration(scope.kind)
     for (const [key, value] of Object.entries(results)) {
-      cacheSet(key, value as AnnotationCache)
+      const awaited = takeAwaited(scope.kind, key)
+      if (fromPriorPage && !awaited) continue
+      storeLoaded(key, scope, value as AnnotationCache)
     }
   } catch (error) {
     logService.warn(
@@ -329,7 +393,7 @@ export function createScopedAnnotationOps(
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),
-    loadBatch: (scope: AnnotationLoadScope, variants: VariantCoords[]) =>
+    loadBatch: (scope: AnnotationLoadScope, variants: BatchLoadVariant[]) =>
       loadBatch(api, scope, variants),
     toggleStar: (scope: AnnotationWriteScope, coords: VariantCoords) =>
       mutate(api, scope, coords, (_current, previous) => toggleStarPlan(scope, previous)),

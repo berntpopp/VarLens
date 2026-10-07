@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
 import { createInterface } from 'node:readline'
+import { setRecordBytes } from '../import/bounded-batcher'
 import { createCappedLineStream } from '../import/stream-utils'
 import { detectCaller } from '../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
@@ -75,7 +76,11 @@ export async function* streamMappedVcfRows(
           callerName
         )
         for (const variant of mapped) {
-          if (passesPostMappingFilters(variant, filters)) yield variant
+          if (!passesPostMappingFilters(variant, filters)) continue
+          // Charge every variant split from this line the whole line, so the
+          // worker can bound its batches by source bytes.
+          setRecordBytes(variant, line.length)
+          yield variant
         }
       } catch (error) {
         if (error instanceof VcfResourceLimitError) throw error

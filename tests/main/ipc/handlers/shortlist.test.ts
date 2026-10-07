@@ -112,7 +112,11 @@ describe('variants:shortlist handler', () => {
 
     const result = await invokeHandler('variants:shortlist', { caseId: 1, presetId: 7 })
 
-    expect(service.getShortlist).toHaveBeenCalledWith({ caseId: 1, presetId: 7 })
+    // Second argument: the gene reference provider for panel-filtered shortlists.
+    expect(service.getShortlist).toHaveBeenCalledWith(
+      { caseId: 1, presetId: 7 },
+      expect.any(Function)
+    )
     expect(isIpcError(result)).toBe(false)
     expect(result).toMatchObject({
       rows: [],
@@ -159,7 +163,10 @@ describe('variants:shortlist handler', () => {
     await invokeHandler('variants:shortlist', ok)
 
     expect(service.getShortlist).toHaveBeenCalledTimes(1)
-    expect(service.getShortlist).toHaveBeenCalledWith(expect.objectContaining({ caseId: 2 }))
+    expect(service.getShortlist).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 2 }),
+      expect.any(Function)
+    )
   })
 
   it('rejects topN > 500 at the Zod boundary', async () => {

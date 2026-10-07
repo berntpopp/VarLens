@@ -9,6 +9,7 @@ import {
   mergeOverlappingIntervals
 } from '../../../src/main/database/PanelRepository'
 import { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
+import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
 
 describe('PanelRepository.computeIntervals', () => {
   let caseDb: InstanceType<typeof Database>
@@ -155,12 +156,15 @@ describe('PanelRepository.computeIntervals', () => {
     expect(intervals).toHaveLength(1)
   })
 
-  it('silently skips genes when assembly has no coordinates', () => {
+  it('throws instead of returning "no restriction" when no gene has coordinates for the assembly', () => {
     const panel = repo.createPanel({ name: 'WrongAssembly', source: 'manual' })
     repo.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
 
-    const intervals = repo.computeIntervals([panel.id], 'FAKE_ASSEMBLY', 0, geneRefDb)
-    expect(intervals).toEqual([])
+    // An empty result means "no restriction" to every caller, so a panel WITH
+    // genes that resolves to nothing must not be reported as empty.
+    expect(() => repo.computeIntervals([panel.id], 'FAKE_ASSEMBLY', 0, geneRefDb)).toThrow(
+      PanelRegionsUnavailableError
+    )
   })
 
   // ── Multiple panels (union) ─────────────────────────────────

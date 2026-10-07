@@ -218,7 +218,13 @@ export class SqliteImportExecutor implements StorageImportExecutor {
           onError: (msg) => {
             if (msg.fileIndex === -1) {
               this.workerClient = null
-              reject(new Error(msg.error))
+              reject(
+                workerErrorToError({
+                  message: msg.error,
+                  code: msg.errorCode,
+                  userMessage: msg.userMessage
+                })
+              )
             }
           }
         })

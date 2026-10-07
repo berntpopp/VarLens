@@ -3,12 +3,13 @@ import type { Pool } from 'pg'
 import { DatabaseError, NotFoundError } from '../../database/errors'
 import {
   normalizeTieBreakerKey,
-  ShortlistQueryError,
+  throwShortlistQueryErrors,
   type GetShortlistParams
 } from '../../database/ShortlistService'
+import { toShortlistCandidate, toShortlistVariantFilter } from '../../database/shortlist-query'
 import { ShortlistConfigSchema } from '../../../shared/types/ipc-schemas'
 import type { FilterPreset } from '../../../shared/types/filter-presets'
-import type { VariantFilter, Variant } from '../../../shared/types/database'
+import type { Variant } from '../../../shared/types/database'
 import type { FilterState } from '../../../shared/types/filters'
 import type {
   ScoredCandidate,
@@ -19,7 +20,6 @@ import type {
   VariantTypeKey
 } from '../../../shared/types/shortlist'
 import { compareScoredRows, scoreRow } from '../../services/scoring'
-import { mainLogger } from '../../services/MainLogger'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresVariantReadRepository } from './PostgresVariantReadRepository'
 import { quoteIdentifier } from './identifiers'
@@ -34,65 +34,6 @@ interface PostgresShortlistServiceOptions {
 function toError(value: unknown): Error {
   if (value instanceof Error) return value
   return new Error(typeof value === 'string' ? value : JSON.stringify(value))
-}
-
-function toOptionalNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  const numberValue = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(numberValue) ? numberValue : null
-}
-
-function mapFilters(
-  caseId: number,
-  variantType: VariantTypeKey,
-  filters: Partial<FilterState>
-): VariantFilter {
-  return {
-    case_id: caseId,
-    variant_type: variantType,
-    exact_variant_type: true,
-    gene_symbol:
-      filters.geneSymbol !== undefined && filters.geneSymbol !== ''
-        ? filters.geneSymbol
-        : undefined,
-    search_query:
-      filters.searchQuery !== undefined && filters.searchQuery !== ''
-        ? filters.searchQuery
-        : undefined,
-    consequences: filters.consequences,
-    funcs: filters.funcs,
-    clinvars: filters.clinvars,
-    gnomad_af_max: filters.maxGnomadAf ?? undefined,
-    cadd_min: filters.minCadd ?? undefined,
-    starred_only: filters.starredOnly,
-    has_comment: filters.hasCommentOnly,
-    acmg_classifications: filters.acmgClassifications,
-    tag_ids: filters.tagIds,
-    annotation_scope: filters.annotationScope,
-    active_panel_ids: filters.activePanelIds,
-    panel_padding_bp: filters.panelPaddingBp,
-    max_internal_af: filters.maxInternalAf ?? undefined,
-    inheritance_modes: filters.inheritanceModes,
-    analysis_group_id: filters.analysisGroupId ?? undefined,
-    consider_phasing: filters.considerPhasing,
-    column_filters: filters.columnFilters
-  } as VariantFilter
-}
-
-function toCandidate(row: Variant, isStarred: boolean): ShortlistCandidate {
-  const source = row as Variant & Record<string, unknown>
-  return {
-    ...row,
-    sv_is_precise: toOptionalNumber(source._sv_is_precise) as 0 | 1 | null,
-    sv_vaf: toOptionalNumber(source._sv_vaf),
-    sv_support: toOptionalNumber(source._sv_support),
-    cnv_copy_number: toOptionalNumber(source._cnv_copy_number),
-    cnv_copy_number_quality: toOptionalNumber(source._cnv_gq),
-    str_status: (source._str_status as ShortlistCandidate['str_status']) ?? null,
-    str_disease: (source._str_disease as string | null | undefined) ?? null,
-    str_alt_copies: (source._str_alt_copies as string | null | undefined) ?? null,
-    is_starred: isStarred
-  }
 }
 
 export class PostgresShortlistService {
@@ -128,7 +69,7 @@ export class PostgresShortlistService {
           ...(config.perTypeOverrides?.[type] ?? {})
         }
         const result = await this.options.variants.queryVariants(
-          mapFilters(params.caseId, type, mergedFilters),
+          toShortlistVariantFilter(params.caseId, type, mergedFilters),
           perTypeLimit,
           0,
           [{ key: 'id', order: 'asc' }],
@@ -143,14 +84,7 @@ export class PostgresShortlistService {
       }
     }
 
-    if (queryErrors.length > 0) {
-      const detail = queryErrors.map((e) => `${e.type}: ${e.error.message}`).join('; ')
-      mainLogger.warn(`postgres shortlist query errors: ${detail}`, 'shortlist.service')
-      throw new ShortlistQueryError(
-        `Shortlist query failed for ${queryErrors.map((e) => e.type).join(', ')}`,
-        queryErrors
-      )
-    }
+    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     const candidates = await this.hydrateCandidates(params.caseId, [...rowsById.values()])
     const scored: ScoredCandidate[] = candidates.map((row) => ({
@@ -238,6 +172,6 @@ export class PostgresShortlistService {
       result.rows.map((row) => [Number(row.variant_id), Number(row.starred) === 1])
     )
 
-    return rows.map((row) => toCandidate(row, starredById.get(row.id) === true))
+    return rows.map((row) => toShortlistCandidate(row, starredById.get(row.id) === true))
   }
 }

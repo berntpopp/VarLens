@@ -13,6 +13,7 @@ vi.mock('../../../src/main/database/geneReferenceLoader', () => ({
 import { PostgresPanelIntervalResolver } from '../../../src/main/storage/postgres/postgres-panel-interval-resolver'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from '../../../src/main/storage/postgres/postgres-variant-columns'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../src/shared/filters/column-filter-validation'
+import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
 
 function sqlOf(call: unknown[]): string {
   return String(call[0]).replace(/\s+/g, ' ')
@@ -114,7 +115,7 @@ describe('PostgresPanelIntervalResolver', () => {
     })
   })
 
-  it('applies no restriction when the panel yields no regions (same as SQLite)', async () => {
+  it('applies no restriction when the active panel has no genes (same as SQLite)', async () => {
     const query = vi
       .fn()
       .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh38', chr: '7' }] })
@@ -125,6 +126,31 @@ describe('PostgresPanelIntervalResolver', () => {
       case_id: 1
     })
     expect(geneReferenceMocks.getCoordinatesForGenes).not.toHaveBeenCalled()
+  })
+
+  it('rejects with a typed error when the panel has genes but none has coordinates for the build', async () => {
+    geneReferenceMocks.getCoordinatesForGenes.mockReturnValue(new Map())
+    const caseQuery = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh37', chr: '7' }] })
+      .mockResolvedValueOnce({ rows: [{ hgnc_id: 'HGNC:1100' }, { hgnc_id: 'HGNC:1101' }] })
+
+    const resolver = new PostgresPanelIntervalResolver({ query: caseQuery } as never, 'public')
+    const rejection = resolver.resolveCaseFilter({ case_id: 1, active_panel_ids: [3] })
+    await expect(rejection).rejects.toBeInstanceOf(PanelRegionsUnavailableError)
+    await expect(rejection).rejects.toMatchObject({ geneCount: 2, genomeBuild: 'GRCh37' })
+
+    const cohortQuery = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ chr: '7' }] })
+      .mockResolvedValueOnce({ rows: [{ hgnc_id: 'HGNC:1100' }] })
+    const cohortResolver = new PostgresPanelIntervalResolver(
+      { query: cohortQuery } as never,
+      'public'
+    )
+    await expect(
+      cohortResolver.resolveCohortParams({ active_panel_ids: [3], genome_build: 'GRCh37' })
+    ).rejects.toBeInstanceOf(PanelRegionsUnavailableError)
   })
 
   it('propagates a resolution failure instead of returning a wider or narrower filter', async () => {

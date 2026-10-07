@@ -6,18 +6,11 @@
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { createInterface } from 'node:readline'
-import { compose, type Readable } from 'node:stream'
-import { parser } from 'stream-json'
-import { pick } from 'stream-json/filters/pick.js'
-import { streamArray } from 'stream-json/streamers/stream-array.js'
 
-import type { DataDictionaries } from '../import/types'
+import { DATABASE_CONFIG } from '../../shared/config'
+import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
-import { createFieldMapper } from '../import/transforms/FieldMapper'
-import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
-import { resolveColumnIndices } from '../import/config/fieldMapping'
-import { createDecompressedStream, createCappedLineStream } from '../import/stream-utils'
-import { createJsonRecordBudget } from '../import/json-resource-budget'
+import { createCappedLineStream } from '../import/stream-utils'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import {
   parseVcfLine,
@@ -35,6 +28,9 @@ import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
 
 export { DROP_INDEXES, RECREATE_INDEXES } from './import-index-sql'
+
+import { createMapperPipeline } from './import-mapper-pipeline'
+export { createMapperPipeline, parseHeader } from './import-mapper-pipeline'
 
 export function prepareStatements(db: DatabaseType) {
   const insertVariantStmt = db.prepare(`
@@ -275,9 +271,41 @@ export function prepareStatements(db: DatabaseType) {
   }
 }
 
+type ImportStatements = ReturnType<typeof prepareStatements>
+type MappedRow = Record<string, unknown>
+
+/** Overrides for the batch limits; production callers leave it unset. */
+export interface ImportBatchLimits {
+  maxBatchBytes?: number
+}
+
+/**
+ * The SQLite import batch: flushed at `batchSize` rows or at
+ * BATCH_INSERT_MAX_BYTES of source data, whichever comes first.
+ */
+function createInsertBatcher(
+  stmts: ImportStatements,
+  caseId: number,
+  batchSize: number,
+  onProgress: (count: number) => void,
+  limits: ImportBatchLimits = {}
+) {
+  let inserted = 0
+  const batcher = createBoundedBatcher<MappedRow, void>({
+    maxRows: batchSize,
+    maxBytes: limits.maxBatchBytes ?? DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES,
+    flush: (rows) => {
+      stmts.insertBatch(caseId, rows)
+      inserted += rows.length
+      onProgress(inserted)
+    }
+  })
+  return { add: batcher.add, flush: batcher.flush, inserted: () => inserted }
+}
+
 /**
  * Stream a JSON/columnar/object file and insert variants in bounded batches.
- * Memory usage is proportional to batchSize, not file size.
+ * Memory usage is proportional to the batch limits, not file size.
  *
  * Returns the total number of variants inserted.
  */
@@ -286,14 +314,13 @@ export async function streamInsertJson(
   formatInfo: FormatInfo,
   caseId: number,
   batchSize: number,
-  stmts: ReturnType<typeof prepareStatements>,
+  stmts: ImportStatements,
   isCancelled: () => boolean,
-  onProgress: (count: number) => void
+  onProgress: (count: number) => void,
+  limits?: ImportBatchLimits
 ): Promise<number> {
   const mapperStream = await createMapperPipeline(filePath, formatInfo)
-
-  let batch: Array<Record<string, unknown>> = []
-  let totalInserted = 0
+  const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {
     for await (const chunk of mapperStream) {
@@ -302,33 +329,22 @@ export async function streamInsertJson(
         break
       }
 
-      if (chunk !== null) {
-        batch.push(chunk as Record<string, unknown>)
-
-        if (batch.length >= batchSize) {
-          stmts.insertBatch(caseId, batch)
-          totalInserted += batch.length
-          batch = []
-          onProgress(totalInserted)
-        }
+      if (chunk !== null && batch.add(chunk as MappedRow, getRecordBytes(chunk as object))) {
+        batch.flush()
       }
     }
   } finally {
     // Flush remaining items
-    if (batch.length > 0 && !isCancelled()) {
-      stmts.insertBatch(caseId, batch)
-      totalInserted += batch.length
-      onProgress(totalInserted)
-    }
+    if (!isCancelled()) batch.flush()
   }
 
-  return totalInserted
+  return batch.inserted()
 }
 
 /**
  * Stream a VCF file and insert variants in bounded batches.
  * Uses readline + header parser + line parser + mapper.
- * Memory usage is proportional to batchSize, not file size.
+ * Memory usage is proportional to the batch limits, not file size.
  *
  * Returns the total number of variants inserted.
  */
@@ -337,11 +353,12 @@ export async function streamInsertVcf(
   formatInfo: FormatInfo,
   caseId: number,
   batchSize: number,
-  stmts: ReturnType<typeof prepareStatements>,
+  stmts: ImportStatements,
   isCancelled: () => boolean,
   vcfSelectedSamples: string[] | undefined,
   onProgress: (count: number) => void,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  limits?: ImportBatchLimits
 ): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
@@ -367,9 +384,7 @@ export async function streamInsertVcf(
   let activeSample = ''
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
-
-  let batch: Array<Record<string, unknown>> = []
-  let totalInserted = 0
+  const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {
     for await (const line of rl) {
@@ -400,7 +415,9 @@ export async function streamInsertVcf(
         callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
       }
 
-      // Parse the data line
+      // Parse the data line. `full` is acted on after the try: a failed
+      // insert must fail the import, not be logged as an unparseable line.
+      let full = false
       try {
         const record = parseVcfLine(line, header.samples, onSkip, activeSampleColumn ?? undefined)
         if (record === null) continue // Skip truncated/corrupt lines
@@ -412,15 +429,10 @@ export async function streamInsertVcf(
           callerName
         )
 
+        // Every variant split from one line is charged the whole line: each
+        // may retain that line's INFO payload.
         for (const variant of mapped) {
-          batch.push(variant as unknown as Record<string, unknown>)
-
-          if (batch.length >= batchSize) {
-            stmts.insertBatch(caseId, batch)
-            totalInserted += batch.length
-            batch = []
-            onProgress(totalInserted)
-          }
+          full = batch.add(variant as unknown as MappedRow, line.length) || full
         }
       } catch (e) {
         if (e instanceof VcfResourceLimitError) throw e
@@ -429,171 +441,14 @@ export async function streamInsertVcf(
           e instanceof Error ? e.message : String(e)
         )
       }
+      if (full) batch.flush()
     }
   } finally {
     // Flush remaining items
-    if (batch.length > 0 && !isCancelled()) {
-      stmts.insertBatch(caseId, batch)
-      totalInserted += batch.length
-      onProgress(totalInserted)
-    }
+    if (!isCancelled()) batch.flush()
     // Ensure stream resources are released
     stream.destroy()
   }
 
-  return totalInserted
-}
-
-/**
- * Create a readable stream that outputs mapped variant objects.
- * Pipes: decompress → parse → pick → streamArray → format mapper.
- *
- * Output: plain Record<string, unknown> objects (not { key, value } wrappers),
- * because the mapper transforms consume the streamArray wrapper.
- */
-export async function createMapperPipeline(
-  filePath: string,
-  formatInfo: FormatInfo
-): Promise<Readable> {
-  switch (formatInfo.format) {
-    case 'simple': {
-      const stream = compose(
-        createDecompressedStream(filePath),
-        parser.asStream(),
-        pick.asStream({ filter: 'variants' }),
-        createJsonRecordBudget(),
-        streamArray.asStream(),
-        createObjectFormatMapper()
-      )
-      return stream
-    }
-
-    case 'object': {
-      const samplePath = `samples.${formatInfo.caseKey}.variants`
-      const stream = compose(
-        createDecompressedStream(filePath),
-        parser.asStream(),
-        pick.asStream({ filter: samplePath }),
-        createJsonRecordBudget(),
-        streamArray.asStream(),
-        createObjectFormatMapper()
-      )
-      return stream
-    }
-
-    case 'columnar': {
-      const wrapped = formatInfo.wrapped !== false
-      const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
-      const dataPath = wrapped ? `${formatInfo.caseKey}.data` : 'data'
-
-      const { dictionaries, columnIndices } = await parseHeader(filePath, headerPath)
-      const fieldMapper = createFieldMapper(dictionaries, columnIndices)
-
-      const stream = compose(
-        createDecompressedStream(filePath),
-        parser.asStream(),
-        pick.asStream({ filter: dataPath }),
-        createJsonRecordBudget(),
-        streamArray.asStream(),
-        fieldMapper
-      )
-      return stream
-    }
-  }
-
-  throw new Error(`Unsupported format: ${String((formatInfo as FormatInfo).format)}`)
-}
-
-/**
- * Parse columnar header to extract data dictionaries and column indices.
- */
-export async function parseHeader(
-  filePath: string,
-  headerPath: string
-): Promise<{
-  dictionaries: DataDictionaries
-  columnIndices: ReturnType<typeof resolveColumnIndices>
-}> {
-  return new Promise((resolve, reject) => {
-    const dictionaries: DataDictionaries = {
-      gene: {},
-      impact: {},
-      transcript: {},
-      hpoSimScore: {},
-      moi: {}
-    }
-
-    const headerItems: { id: string }[] = []
-    const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'MoI'])
-    let resolved = false
-
-    const stream = compose(
-      createDecompressedStream(filePath),
-      parser.asStream(),
-      pick.asStream({ filter: headerPath }),
-      createJsonRecordBudget(),
-      streamArray.asStream()
-    )
-
-    const cleanup = (): void => {
-      stream.destroy()
-    }
-
-    stream.on('data', (data: { key: number; value: Record<string, unknown> }) => {
-      if (resolved) return
-
-      const headerItem = data.value
-      const fieldId = headerItem.id as string
-
-      headerItems[data.key] = { id: fieldId }
-
-      const hasField: boolean = fieldsToExtract.has(fieldId)
-      if (
-        hasField &&
-        headerItem.dataDictionary !== undefined &&
-        headerItem.dataDictionary !== null
-      ) {
-        const rawDict = headerItem.dataDictionary as Record<string, unknown>
-
-        switch (fieldId) {
-          case 'Gene':
-            dictionaries.gene = rawDict as Record<string, string>
-            break
-          case 'Transcript':
-            dictionaries.transcript = rawDict as Record<string, string>
-            break
-          case 'HpoSimScore':
-            dictionaries.hpoSimScore = rawDict as Record<string, number>
-            break
-          case 'MoI':
-            for (const [key, value] of Object.entries(rawDict)) {
-              const isArray: boolean = Array.isArray(value)
-              if (isArray && (value as unknown[]).length > 0) {
-                const abbrevs = (value as { abbreviation?: string }[])
-                  .map((obj) => obj.abbreviation)
-                  .filter(Boolean)
-                dictionaries.moi[key] = abbrevs.join(', ')
-              } else {
-                dictionaries.moi[key] = ''
-              }
-            }
-            break
-        }
-      }
-    })
-
-    stream.on('end', () => {
-      if (resolved) return
-      resolved = true
-      cleanup()
-      resolve({ dictionaries, columnIndices: resolveColumnIndices(headerItems) })
-    })
-
-    stream.on('error', (err: Error) => {
-      if (resolved) return
-      resolved = true
-      cleanup()
-      reject(err)
-    })
-  })
+  return batch.inserted()
 }

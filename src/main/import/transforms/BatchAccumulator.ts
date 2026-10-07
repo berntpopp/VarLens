@@ -1,6 +1,8 @@
 import { Transform, TransformCallback } from 'node:stream'
 import type { Variant } from '../../database/types'
 import type { ProgressCallback } from '../types'
+import { DATABASE_CONFIG } from '../../../shared/config'
+import { createBoundedBatcher, getRecordBytes, type BoundedBatcher } from '../bounded-batcher'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -9,6 +11,8 @@ export type FlushFn = (caseId: number, batch: MappedVariant[]) => void
 interface BatchAccumulatorOptions {
   caseId: number
   batchSize: number
+  /** Byte budget per batch; defaults to DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES. */
+  maxBatchBytes?: number
   flushFn: FlushFn
   onProgress?: ProgressCallback
   startTime: number
@@ -16,24 +20,32 @@ interface BatchAccumulatorOptions {
 }
 
 export class BatchAccumulator extends Transform {
-  private batch: MappedVariant[] = []
+  private readonly batcher: BoundedBatcher<MappedVariant, void>
   private totalInserted = 0
   private skipped = 0
-  private readonly caseId: number
-  private readonly batchSize: number
-  private readonly flushFn: FlushFn
   private readonly onProgress?: ProgressCallback
   private readonly startTime: number
   private readonly isCancelled?: () => boolean
 
   constructor(options: BatchAccumulatorOptions) {
     super({ objectMode: true })
-    this.caseId = options.caseId
-    this.batchSize = options.batchSize
-    this.flushFn = options.flushFn
     this.onProgress = options.onProgress
     this.startTime = options.startTime
     this.isCancelled = options.isCancelled
+    this.batcher = createBoundedBatcher<MappedVariant, void>({
+      maxRows: options.batchSize,
+      maxBytes: options.maxBatchBytes ?? DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES,
+      flush: (batch) => {
+        options.flushFn(options.caseId, batch)
+        this.totalInserted += batch.length
+        this.onProgress?.({
+          phase: 'inserting',
+          count: this.totalInserted,
+          elapsed: Date.now() - this.startTime,
+          skipped: this.skipped
+        })
+      }
+    })
   }
 
   _transform(
@@ -54,39 +66,15 @@ export class BatchAccumulator extends Transform {
       return
     }
 
-    this.batch.push(chunk)
-
-    if (this.batch.length >= this.batchSize) {
-      this.flushBatch()
-    }
+    if (this.batcher.add(chunk, getRecordBytes(chunk))) this.batcher.flush()
 
     callback()
   }
 
   _flush(callback: TransformCallback): void {
     // Insert any remaining variants
-    if (this.batch.length > 0) {
-      this.flushBatch()
-    }
+    this.batcher.flush()
     callback()
-  }
-
-  private flushBatch(): void {
-    if (this.batch.length === 0) return
-
-    this.flushFn(this.caseId, this.batch)
-    this.totalInserted += this.batch.length
-
-    if (this.onProgress) {
-      this.onProgress({
-        phase: 'inserting',
-        count: this.totalInserted,
-        elapsed: Date.now() - this.startTime,
-        skipped: this.skipped
-      })
-    }
-
-    this.batch = []
   }
 
   get inserted(): number {

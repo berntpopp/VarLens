@@ -9,6 +9,7 @@
  * now reject such a filter with the same error.
  */
 import type { ColumnFiltersParam } from '../types/column-filters'
+import { isNullCheckOperator } from './column-null-check'
 
 /**
  * Column-filter keys whose column holds numbers.
@@ -78,17 +79,20 @@ export class ColumnFilterValueError extends Error {
  * Whether a filter value can be compared with a numeric column. Uses the same
  * `Number()` coercion both backends apply to string values, so anything that
  * passes is bound as the same number on SQLite and PostgreSQL.
+ *
+ * A blank string is NOT a number even though `Number('')` is `0`: accepting it
+ * turned "no value" into `= 0`. "Has no value" is the `is_null` operator.
  */
 function isNumericFilterValue(value: unknown): boolean {
   if (typeof value === 'number') return Number.isFinite(value)
-  if (typeof value === 'string') return Number.isFinite(Number(value))
+  if (typeof value === 'string') return value.trim() !== '' && Number.isFinite(Number(value))
   return false
 }
 
 /**
  * Reject comparison (`= != < > <= >=`) and `in` filters on numeric columns
  * whose value is not a finite number. `like` filters are textual by design and
- * pass through untouched, as do filters on text columns and unknown keys
+ * pass through untouched, null checks have no value, as do filters on text columns and unknown keys
  * (each backend decides separately whether a key is filterable at all).
  *
  * @throws {ColumnFilterValueError} for the first offending filter.
@@ -99,7 +103,8 @@ export function assertValidColumnFilterValues(filters: ColumnFiltersParam | unde
   for (const [column, filter] of Object.entries(filters)) {
     if (filter === undefined || !NUMERIC_COLUMN_FILTER_KEYS.has(column)) continue
     const { operator, value } = filter
-    if (operator === 'like') continue
+    // Null checks carry no value to validate.
+    if (operator === 'like' || isNullCheckOperator(operator)) continue
 
     const values = Array.isArray(value) ? value : [value]
     for (const item of values) {

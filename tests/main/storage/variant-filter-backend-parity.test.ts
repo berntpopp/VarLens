@@ -44,10 +44,13 @@ import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migr
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { PostgresExportRepository } from '../../../src/main/storage/postgres/PostgresExportRepository'
+import { PostgresShortlistService } from '../../../src/main/storage/postgres/PostgresShortlistService'
 import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
 import { dispatchTask } from '../../../src/main/workers/db-worker-dispatch'
 import type { CohortSearchParams } from '../../../src/shared/types/cohort'
 import type { VariantFilter } from '../../../src/shared/types/database'
+import type { FilterState } from '../../../src/shared/types/filters'
+import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import {
   A,
   B,
@@ -323,6 +326,57 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     }
   }
 
+  /** Shortlist Stage 1 on both backends (ad-hoc config, every candidate kept). */
+  function shortlistPaths(
+    caseIndex: number,
+    baseFilters: Partial<FilterState>
+  ): Record<string, Promise<Outcome>> {
+    const configFor = (panelId: number, emptyPanelId: number): ShortlistConfig => ({
+      variantTypeScope: ['snv', 'cnv'],
+      baseFilters: {
+        ...baseFilters,
+        ...(baseFilters.activePanelIds !== undefined
+          ? {
+              activePanelIds: baseFilters.activePanelIds.map((id) =>
+                id === 1 ? panelId : emptyPanelId
+              )
+            }
+          : {})
+      },
+      topN: 100,
+      rankConfig: {
+        weights: { impact: 1, pathogenicity: 1, rarity: 1, clinvar: 1, phenotype: 0 },
+        pinStarredTop: true
+      }
+    })
+    return {
+      'desktop shortlist': outcome(() =>
+        sqlite.shortlistService
+          .getShortlist(
+            {
+              caseId: sqliteCaseIds[caseIndex],
+              adHocConfig: configFor(sqlitePanelId, sqliteEmptyPanelId)
+            },
+            () => geneRef as unknown as GeneReferenceDb
+          )
+          .rows.map(keyOf)
+      ),
+      'web shortlist': outcome(async () => {
+        const service = new PostgresShortlistService({
+          pool,
+          schema,
+          filterPresets: { getPreset: async () => null },
+          variants: new PostgresVariantReadRepository(pool, schema)
+        })
+        const result = await service.getShortlist({
+          caseId: pgCaseIds[caseIndex],
+          adHocConfig: configFor(pgPanelId, pgEmptyPanelId)
+        })
+        return result.rows.map(keyOf)
+      })
+    }
+  }
+
   async function expectAll(
     paths: Record<string, Promise<Outcome>>,
     expected: Outcome | { errorMatching: RegExp }
@@ -372,10 +426,28 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     )
   }, 120_000)
 
-  it('a panel with no resolvable regions applies no restriction on every path', async () => {
+  it('a panel WITHOUT genes applies no restriction on every path', async () => {
     const emptyPanel = { active_panel_ids: [2], panel_padding_bp: 5000 }
     await expectAll(casePaths(1, emptyPanel), ok(Object.values(B)))
     await expectAll(cohortPaths({ ...emptyPanel, genome_build: 'GRCh37' }), ok(Object.values(C)))
+    // Together with a panel that does resolve, only the resolved regions restrict.
+    const both = { active_panel_ids: [1, 2], panel_padding_bp: 5000 }
+    await expectAll(casePaths(1, both), ok([B.sharedHom, B.padding]))
+  }, 120_000)
+
+  it('a panel whose genes have no coordinates for the build is refused on every path', async () => {
+    // No silent "no restriction": the user would see every variant while
+    // believing the panel is active.
+    geneRef.getCoordinatesForGenes.mockImplementation(() => new Map())
+    const refused = (build: string): { errorMatching: RegExp } => ({
+      errorMatching: new RegExp(
+        `^Active gene panel resolves to no genomic regions: none of its 1 gene\\(s\\) has coordinates for genome build ${build}$`
+      )
+    })
+    await expectAll(casePaths(0, PANEL), refused('GRCh38'))
+    await expectAll(casePaths(2, PANEL), refused('GRCh37'))
+    await expectAll(cohortPaths({ ...PANEL, genome_build: 'GRCh38' }), refused('GRCh38'))
+    await expectAll(cohortPaths({ ...PANEL, genome_build: 'GRCh37' }), refused('GRCh37'))
   }, 120_000)
 
   it('a failing region resolution fails every path instead of widening or narrowing', async () => {
@@ -467,6 +539,176 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
         `UPDATE "${schema}".cohort_variant_summary SET cohort_frequency = 1.0 WHERE ${where}`
       )
     }
+  }, 120_000)
+
+  // ── Numeric-looking value on a text column ────────────────────────────────
+
+  it('a number compared with a text column matches the stored text on every path', async () => {
+    // The DSL sends `gene_symbol = 5` style values as numbers.
+    await expectAll(
+      cohortPaths({ genome_build: 'GRCh38', column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({
+        genome_build: 'GRCh38',
+        column_filters: { chr: { operator: '=', value: '8' } }
+      }),
+      ok([A.otherChr])
+    )
+  }, 120_000)
+
+  // ── Bare chr / pos column filters ─────────────────────────────────────────
+
+  it('bare chr and pos column filters select the same rows on every path', async () => {
+    const chr7 = A_ALL.filter((v) => v.chr === '7')
+    const grch38 = { genome_build: 'GRCh38' }
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: '=', value: '7' } } }),
+      ok(chr7)
+    )
+    // A number against the text column `chr` (the DSL sends `chr = 8` as a number).
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({ ...grch38, column_filters: { chr: { operator: '=', value: 8 } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: 'in', value: ['8'] } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({ ...grch38, column_filters: { chr: { operator: '=', value: '8' } } }),
+      ok([A.otherChr])
+    )
+    for (const value of [150_000, '150000']) {
+      await expectAll(
+        casePaths(0, { column_filters: { pos: { operator: '=', value } } }),
+        ok([A.inGene, A.otherChr])
+      )
+      await expectAll(
+        cohortPaths({ ...grch38, column_filters: { pos: { operator: '=', value } } }),
+        ok([A.inGene, A.otherChr])
+      )
+    }
+    await expectAll(
+      casePaths(0, { column_filters: { pos: { operator: 'in', value: [90_000, 300_000] } } }),
+      ok([A.spanningCnv, A.symbolOnly])
+    )
+    await expectAll(
+      casePaths(0, {
+        column_filters: {
+          chr: { operator: '=', value: '7' },
+          pos: { operator: '>', value: 205_000 }
+        }
+      }),
+      ok([A.afterEnd, A.symbolOnly])
+    )
+    await expectAll(
+      cohortPaths({
+        ...grch38,
+        column_filters: {
+          chr: { operator: '=', value: '7' },
+          pos: { operator: '>', value: 205_000 }
+        }
+      }),
+      ok([A.afterEnd, A.symbolOnly])
+    )
+  }, 120_000)
+
+  // ── Null checks (DSL is:null / is:notnull) ────────────────────────────────
+
+  it('null-check column filters mean "no value", never zero, on every path', async () => {
+    const isNull = { operator: 'is_null' as const, value: '' }
+    const notNull = { operator: 'not_null' as const, value: '' }
+    const unscored = [C.inGrch37Gene, C.grch38Position]
+    const grch37 = { genome_build: 'GRCh37' }
+
+    await expectAll(casePaths(2, { column_filters: { cadd: isNull } }), ok(unscored))
+    await expectAll(casePaths(2, { column_filters: { cadd: notNull } }), ok([C.zeroScores]))
+    await expectAll(casePaths(2, { column_filters: { gnomad_af: isNull } }), ok(unscored))
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { cadd_phred: isNull } }),
+      ok(unscored)
+    )
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { cadd_phred: notNull } }),
+      ok([C.zeroScores])
+    )
+    await expectAll(cohortPaths({ ...grch37, column_filters: { gnomad_af: isNull } }), ok(unscored))
+
+    // Text column: every case-A variant without a gene symbol.
+    const noGene = A_ALL.filter((v) => v.gene_symbol === null)
+    const withGene = A_ALL.filter((v) => v.gene_symbol !== null)
+    await expectAll(casePaths(0, { column_filters: { gene_symbol: isNull } }), ok(noGene))
+    await expectAll(casePaths(0, { column_filters: { gene_symbol: notNull } }), ok(withGene))
+    await expectAll(
+      cohortPaths({ ...grch37, column_filters: { gene_symbol: notNull } }),
+      ok(Object.values(C))
+    )
+
+    // Extension column: no fixture variant has a variant_cnv row.
+    const cnvs = A_ALL.filter((v) => v.variant_type === 'cnv')
+    const cnvType = { variant_type: 'cnv' }
+    await expectAll(
+      casePaths(0, { ...cnvType, column_filters: { 'cnv.copy_number': isNull } }),
+      ok(cnvs)
+    )
+    await expectAll(
+      casePaths(0, { ...cnvType, column_filters: { 'cnv.copy_number': notNull } }),
+      ok([])
+    )
+  }, 120_000)
+
+  // ── Shortlist ─────────────────────────────────────────────────────────────
+
+  it('shortlist candidates honour panel, inheritance, search and starred filters on both backends', async () => {
+    const shortlistable = A_ALL // case A holds only snv + cnv rows
+    await expectAll(shortlistPaths(0, {}), ok(shortlistable))
+
+    await expectAll(shortlistPaths(0, { activePanelIds: [1], panelPaddingBp: 5000 }), ok(PANEL_A))
+    await expectAll(
+      shortlistPaths(0, { activePanelIds: [1], panelPaddingBp: 0 }),
+      ok([A.inGene, A.spanningCnv])
+    )
+    await expectAll(shortlistPaths(0, { activePanelIds: [2] }), ok(shortlistable))
+
+    await expectAll(shortlistPaths(1, { inheritanceModes: ['homozygous'] }), ok([B.sharedHom]))
+    await expectAll(
+      shortlistPaths(1, { inheritanceModes: ['heterozygous'] }),
+      ok([B.padding, B.unrelated])
+    )
+
+    await expectAll(shortlistPaths(0, { searchQuery: 'OTHER' }), ok([A.otherChr]))
+
+    const star = `INSERT INTO case_variant_annotations (case_id, variant_id, starred, created_at, updated_at)`
+    const where = `chr = '${A.otherChr.chr}' AND pos = ${A.otherChr.pos}`
+    sqlite.db.exec(
+      `${star} SELECT case_id, id, 1, 0, 0 FROM variants WHERE case_id = ${sqliteCaseIds[0]} AND ${where}`
+    )
+    await pool.query(
+      `${star} SELECT case_id, id, 1, 0, 0 FROM "${schema}".variants WHERE case_id = $1 AND ${where}`.replace(
+        'INTO case_variant_annotations',
+        `INTO "${schema}".case_variant_annotations`
+      ),
+      [pgCaseIds[0]]
+    )
+    try {
+      await expectAll(shortlistPaths(0, { starredOnly: true }), ok([A.otherChr]))
+    } finally {
+      sqlite.db.exec('DELETE FROM case_variant_annotations')
+      await pool.query(`DELETE FROM "${schema}".case_variant_annotations`)
+    }
+  }, 120_000)
+
+  it('shortlist refuses a panel without regions for the build on both backends', async () => {
+    geneRef.getCoordinatesForGenes.mockImplementation(() => new Map())
+    await expectAll(shortlistPaths(0, { activePanelIds: [1] }), {
+      errorMatching: /^Active gene panel resolves to no genomic regions/
+    })
   }, 120_000)
 
   // ── Invalid numeric filter value ──────────────────────────────────────────

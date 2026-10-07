@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { PostgresShortlistService } from '../../../src/main/storage/postgres/PostgresShortlistService'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import type { Variant } from '../../../src/shared/types/database'
+import { ShortlistQueryError } from '../../../src/main/database/ShortlistService'
+import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
 
 const CONFIG: ShortlistConfig = {
   variantTypeScope: ['snv'],
@@ -101,5 +103,23 @@ describe('PostgresShortlistService', () => {
       is_starred: true,
       rank_starred_pinned: true
     })
+  })
+
+  it('rethrows a refused panel filter as-is and aggregates other failures', async () => {
+    const make = (error: Error): PostgresShortlistService =>
+      new PostgresShortlistService({
+        pool: { query: vi.fn() } as never,
+        schema: 'public',
+        filterPresets: { getPreset: vi.fn() },
+        variants: { queryVariants: vi.fn().mockRejectedValue(error) } as never
+      })
+
+    const refused = new PanelRegionsUnavailableError(3, 'GRCh37')
+    await expect(make(refused).getShortlist({ caseId: 1, adHocConfig: CONFIG })).rejects.toBe(
+      refused
+    )
+    await expect(
+      make(new Error('connection lost')).getShortlist({ caseId: 1, adHocConfig: CONFIG })
+    ).rejects.toBeInstanceOf(ShortlistQueryError)
   })
 })

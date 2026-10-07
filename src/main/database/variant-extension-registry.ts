@@ -12,6 +12,8 @@
  * stay main-side because they are only ever called from the query builders.
  */
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
+import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
+import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
 import {
   VARIANT_EXTENSION_REGISTRY,
   resolveExtensionColumnKey,
@@ -19,6 +21,11 @@ import {
 } from '../../shared/types/variant-extension-registry-data'
 
 export * from '../../shared/types/variant-extension-registry-data'
+
+/** Whether a dotted extension key (`cnv.copy_number`) names a numeric column. */
+function isNumericKey(dottedKey: string): boolean {
+  return NUMERIC_COLUMN_FILTER_KEYS.has(dottedKey)
+}
 
 // ── Extension filter → JOIN + WHERE clause builder ────────────
 
@@ -104,7 +111,7 @@ export function buildExtensionJoinClauses(
     joinSet.add(resolved.typeKey)
     typesSeen.add(resolved.typeKey)
     const col = `${resolved.def.joinAlias}.${resolved.column}`
-    const clause = translateExtensionFilter(col, filter, params)
+    const clause = translateExtensionFilter(col, filter, params, isNumericKey(key))
     if (clause !== null) whereFragments.push(clause)
   }
 
@@ -226,7 +233,8 @@ export function buildExtensionExistsClauses(
     const innerConditions: string[] = []
     for (const { column, filter } of filters) {
       const col = `${alias}.${column}`
-      const clause = translateExtensionFilter(col, filter, params)
+      const numeric = isNumericKey(`${typeKey}.${column}`)
+      const clause = translateExtensionFilter(col, filter, params, numeric)
       if (clause !== null) innerConditions.push(clause)
     }
     if (innerConditions.length === 0) continue
@@ -261,11 +269,14 @@ export function buildExtensionExistsClauses(
 function translateExtensionFilter(
   col: string,
   filter: ColumnFilter,
-  params: (string | number)[]
+  params: (string | number)[],
+  numeric: boolean
 ): string | null {
   const { operator, value, includeEmpty } = filter
   // Extensions default to EXCLUDE NULLs (opposite of base filters).
   const nullBranch = includeEmpty === true
+
+  if (isNullCheckOperator(operator)) return buildNullCheckSql(col, operator, numeric, 'sqlite')
 
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return null

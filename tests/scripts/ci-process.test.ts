@@ -1,10 +1,11 @@
+import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 // @ts-expect-error Repository CLI modules are tested directly.
-import { gateEnvironment, runCommand } from '../../scripts/ci/process.mjs'
+import { gateEnvironment, runCommand, signalAbort } from '../../scripts/ci/process.mjs'
 describe('isolated gate processes', () => {
   it('allowlists host plumbing and strips injected modes, Git routing and credentials', () => {
     const env = gateEnvironment({
@@ -38,6 +39,21 @@ describe('isolated gate processes', () => {
       'RANDOM_SECRET'
     ])
       expect(env).not.toHaveProperty(key)
+  })
+  it('keeps handling repeated termination signals until cleanup has finished', () => {
+    const signals = new EventEmitter()
+    const termination = signalAbort(signals)
+    expect(termination.signal.aborted).toBe(false)
+    signals.emit('SIGTERM')
+    expect(termination.signal.aborted).toBe(true)
+    expect(String(termination.signal.reason)).toMatch(/aborted by signal/)
+    // A process without a listener dies on the second signal, before its
+    // finally block removes disposable containers, networks and scratch data.
+    for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) expect(signals.listenerCount(name)).toBe(1)
+    signals.emit('SIGTERM')
+    signals.emit('SIGINT')
+    termination.dispose()
+    for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) expect(signals.listenerCount(name)).toBe(0)
   })
   it('propagates nonzero exits and terminates aborted children', async () => {
     await expect(
