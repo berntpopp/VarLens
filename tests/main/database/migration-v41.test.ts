@@ -153,6 +153,32 @@ describe('Migration v41: annotation severity ranks', () => {
     expect(search('RENAMED')).toHaveLength(1)
   })
 
+  it('a failure mid-way leaves nothing half done, and the next start completes it', () => {
+    rollBackToV40(db)
+    insertLegacyRows(db)
+    const triggers = (): unknown[] =>
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all()
+    const before = triggers()
+
+    // The process dies on the UPDATE, after the search trigger was suspended.
+    const exec = db.exec.bind(db)
+    db.exec = ((sql: string) => {
+      if (/UPDATE variants/.test(sql)) throw new Error('simulated crash')
+      return exec(sql)
+    }) as typeof db.exec
+    expect(() => runMigrations(db)).toThrow('simulated crash')
+    db.exec = exec
+
+    // Still v40, with its search trigger, and no partial ranks.
+    expect(db.pragma('user_version', { simple: true })).toBe(40)
+    expect(triggers()).toEqual(before)
+
+    runMigrations(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(41)
+    expect(triggers()).toEqual(before)
+    expect(ranks(db)).toEqual(EXPECTED)
+  })
+
   it('flags a populated cohort summary stale, and leaves an empty one current', () => {
     const stale = (): unknown =>
       (

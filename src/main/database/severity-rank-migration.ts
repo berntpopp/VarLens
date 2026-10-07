@@ -106,13 +106,20 @@ export function backfillVariantSeverityRanks(db: Database.Database): void {
   if (trigger !== undefined) db.exec(trigger.sql)
 }
 
+/**
+ * One transaction: the columns, the suspended search trigger, the update and
+ * the stale flag commit together or not at all. A process that dies mid-way
+ * leaves the database at v40 as it was, and the next start runs this again.
+ */
 export function migrateSeverityRanks(db: Database.Database): void {
-  if (hasTable(db, 'variants')) {
-    addRankColumns(db, 'variants')
-    backfillVariantSeverityRanks(db)
-  }
-  if (!hasTable(db, 'cohort_variant_summary')) return
-  addRankColumns(db, 'cohort_variant_summary')
-  const populated = db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
-  if (populated && hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
+  db.transaction(() => {
+    if (hasTable(db, 'variants')) {
+      addRankColumns(db, 'variants')
+      backfillVariantSeverityRanks(db)
+    }
+    if (!hasTable(db, 'cohort_variant_summary')) return
+    addRankColumns(db, 'cohort_variant_summary')
+    const populated = db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
+    if (populated && hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
+  })()
 }

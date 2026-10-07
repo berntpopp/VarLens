@@ -28,11 +28,11 @@ import {
   remainingRowCovers,
   removalAffectsSummary,
   sameSummaryColumns,
-  storedRanks,
   summaryColumnsOverWindow,
   transcriptOrderBy,
   type CarrierRanks
 } from '../../../shared/sql/cohort-representative'
+import { impactRankCaseSql } from '../../../shared/config/severity.config'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
@@ -55,10 +55,23 @@ const HOM = "('1/1','1|1')"
 const KEY_PARTITION = (v: string, c: string): string =>
   `${v}.pos, ${v}.chr COLLATE "C", ${v}.ref COLLATE "C", ${v}.alt COLLATE "C", ${v}.variant_type COLLATE "C", ${c}.genome_build COLLATE "C"`
 
-/** The severity ranks of a variant row `alias` of schema `tbl`. */
+/** The ClinVar rank of variant row `alias` from the `clinvar_severity` lookup (0 = unknown). */
+export function clinvarLookupRankSql(alias: string, lookupTable: string): string {
+  return `COALESCE((SELECT cs.rank FROM ${lookupTable} cs WHERE cs.raw = ${alias}.clinvar), 0)`
+}
+
+/**
+ * The severity ranks of variant row `alias`: the stored rank, or, for a row
+ * the background backfill has not reached yet (migration 0025 adds the
+ * columns as NULL), the same rank computed on the fly. Every reader of a
+ * variant row's rank goes through this, so results do not depend on how far
+ * the backfill is.
+ */
 export function carrierRanks(alias: string, tbl: Tbl): CarrierRanks {
-  void tbl
-  return storedRanks(alias)
+  return {
+    impact: `COALESCE(${alias}.impact_rank, ${impactRankCaseSql(`${alias}.consequence`)})`,
+    clinvar: `COALESCE(${alias}.clinvar_rank, ${clinvarLookupRankSql(alias, tbl('clinvar_severity'))})`
+  }
 }
 
 /**

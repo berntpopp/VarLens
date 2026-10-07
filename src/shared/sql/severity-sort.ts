@@ -19,20 +19,30 @@ const SEVERITY_RANK_COLUMNS: Readonly<Record<string, string>> = {
   clinvar: 'clinvar_rank'
 }
 
+/** SQL for the two ranks of a row, where they are not plain stored columns. */
+export interface SeverityRankSql {
+  impact: string
+  clinvar: string
+}
+
 /**
  * ORDER BY terms (with direction) for a sort on `sortKey`, or null when the
  * key is not a severity column. `alias` qualifies the rank column ('' for
  * none); `textColumn` is the already whitelisted reference to the raw column.
+ * `ranks` replaces the stored columns where a rank may still be missing
+ * (PostgreSQL variant rows before the backfill reaches them).
  */
 export function severitySortTerms(
   sortKey: string,
   alias: string,
   textColumn: string,
-  direction: 'asc' | 'desc'
+  direction: 'asc' | 'desc',
+  ranks?: SeverityRankSql
 ): string[] | null {
   const rankColumn = SEVERITY_RANK_COLUMNS[sortKey]
   if (rankColumn === undefined) return null
-  const rank = alias === '' ? rankColumn : `${alias}.${rankColumn}`
+  const stored = alias === '' ? rankColumn : `${alias}.${rankColumn}`
+  const rank = ranks === undefined ? stored : sortKey === 'clinvar' ? ranks.clinvar : ranks.impact
   const dir = direction === 'desc' ? 'DESC' : 'ASC'
   return [`NULLIF(${rank}, 0) ${dir} NULLS LAST`, `${textColumn} ${dir} NULLS LAST`]
 }

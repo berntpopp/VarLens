@@ -34,6 +34,7 @@ import { mainLogger } from '../../services/MainLogger'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
+import { scheduleSeverityRankBackfill } from './severity-rank-backfill-job'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
 /** A background rebuild of a large cohort may legitimately run this long. */
@@ -85,6 +86,8 @@ interface FreshnessProbe {
   gene_summary_missing: boolean
   is_stale: boolean
   total_cases: number
+  /** Variant rows from before migration 0025 still lack stored severity ranks. */
+  rank_backfill_pending: boolean
 }
 
 /** The summary must be rebuilt before it can be trusted (see prepareCohortRead). */
@@ -106,6 +109,7 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
     gene_summary_missing: boolean
     is_stale: boolean
     total_cases: string
+    rank_backfill_pending: boolean | null
   }>(
     `SELECT
        (s.last_rebuilt_at IS NULL) AS never_rebuilt,
@@ -115,7 +119,9 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
                      WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
        ${summaryIsStaleSql(tbl, 's')} AS is_stale,
-       (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases
+       (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases,
+       (SELECT b.completed_at IS NULL FROM ${tbl('severity_rank_backfill')} b
+         WHERE b.id = 1) AS rank_backfill_pending
      FROM ${tbl('cohort_summary_state')} s
      WHERE s.id = 1`
   )
@@ -127,7 +133,8 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
     summary_present: row.summary_present,
     gene_summary_missing: row.gene_summary_missing,
     is_stale: row.is_stale,
-    total_cases: Number(row.total_cases)
+    total_cases: Number(row.total_cases),
+    rank_backfill_pending: row.rank_backfill_pending === true
   }
 }
 
@@ -232,6 +239,7 @@ export async function prepareCohortRead(
   // The per-gene aggregates (cohort-gene-summary-sql.ts) are part of the same
   // summary: variants with a gene but no gene rows means they were never
   // filled (migration 0023 fills them; this covers a partial restore).
+  if (probe.rank_backfill_pending) scheduleSeverityRankBackfill(scope)
   const bootstrap = needsBootstrap(probe)
   const needsRebuild = bootstrap || probe.is_stale
   if (!needsRebuild) return {}
@@ -268,6 +276,7 @@ export async function checkCohortReadFreshness(
     return {}
   }
   if (probe === null) return {}
+  if (probe.rank_backfill_pending) scheduleSeverityRankBackfill(scope)
   if (!needsBootstrap(probe) && !probe.is_stale) return {}
   scheduleBackgroundRebuild(scope)
   return { warnings: { staleSummary: true } }

@@ -1,7 +1,8 @@
 /**
- * Migration 0025 (#469) against a real PostgreSQL: the severity rank columns,
- * the backfill of rows imported before the ranks existed, and the stale flag
- * that makes the summary pick its representative again.
+ * Migration 0025 (#469) against a real PostgreSQL: the severity rank columns
+ * are added without rewriting the variants table, readers compute a missing
+ * rank on the fly, rows imported before are backfilled in the background in
+ * resumable batches, and the stale flag makes the summary rebuild.
  *
  * Gated by VARLENS_RUN_POSTGRES_E2E=1. Requires `make pg-up`.
  */
@@ -13,7 +14,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clinvarRank, impactRank } from '../../../src/shared/config/severity.config'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
-import { backfillSeverityRanks } from '../../../src/main/storage/postgres/migrations/severity-rank-backfill'
+import { fillClinvarSeverityLookup } from '../../../src/main/storage/postgres/migrations/severity-rank-backfill'
+import { carrierRanks } from '../../../src/main/storage/postgres/cohort-summary-representative-sql'
+import { prepareCohortRead } from '../../../src/main/storage/postgres/cohort-read-freshness'
+import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
+import {
+  awaitSeverityRankBackfill,
+  runSeverityRankBackfillBatch
+} from '../../../src/main/storage/postgres/severity-rank-backfill-job'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -92,13 +101,62 @@ describe.skipIf(!RUN)('migration 0025: annotation severity ranks (#469)', () => 
     clinvar_rank: clinvarRank(clinvar)
   }))
 
-  it('backfills legacy rows with the ranks an import would have written', async () => {
+  const storedRanks = async (): Promise<unknown[]> =>
+    (
+      await probe.query(
+        `SELECT impact_rank, clinvar_rank FROM "${schema}".variants_all ORDER BY pos`
+      )
+    ).rows
+  const backfillState = async (): Promise<unknown> =>
+    (
+      await probe.query(
+        `SELECT next_id::int, max_id::int, completed_at IS NOT NULL AS done
+           FROM "${schema}".severity_rank_backfill WHERE id = 1`
+      )
+    ).rows[0]
+  /** The ranks every reader sees, backfilled or not. */
+  const effectiveRanks = async (): Promise<unknown[]> => {
+    const ranksOf = carrierRanks('v', (table) => `"${schema}"."${table}"`)
+    return (
+      await probe.query(
+        `SELECT v.consequence, v.clinvar, ${ranksOf.impact} AS impact_rank,
+                ${ranksOf.clinvar} AS clinvar_rank
+           FROM "${schema}".variants v ORDER BY v.pos`
+      )
+    ).rows
+  }
+
+  it('adds the columns without rewriting or updating the variants table', async () => {
+    await seedLegacy()
+    const storage = async (): Promise<unknown> =>
+      (
+        await probe.query(
+          `SELECT c.relfilenode, (SELECT array_agg(xmin::text ORDER BY id)
+                                    FROM "${schema}".variants_all) AS row_versions
+             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = $1 AND c.relname = 'variants_all'`,
+          [schema]
+        )
+      ).rows[0]
+    const before = await storage()
+
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    // Same file, same row versions: a catalogue change only.
+    expect(await storage()).toEqual(before)
+    expect(await storedRanks()).toEqual(
+      LEGACY.map(() => ({ impact_rank: null, clinvar_rank: null }))
+    )
+    const maxId = (await probe.query(`SELECT MAX(id)::int AS id FROM "${schema}".variants_all`))
+      .rows[0].id
+    expect(await backfillState()).toEqual({ next_id: 0, max_id: maxId, done: false })
+  }, 60_000)
+
+  it('readers get the right ranks before any row is backfilled', async () => {
     await seedLegacy()
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 
-    // The view exposes the columns too: the summary reads through it.
-    expect(await ranks('variants')).toEqual(expectedRanks)
-    expect(await ranks('variants_all')).toEqual(expectedRanks)
+    expect(await effectiveRanks()).toEqual(expectedRanks)
     // Not all zero, or the comparison above would prove nothing.
     expect(expectedRanks.slice(0, 5)).toEqual([
       expect.objectContaining({ impact_rank: 4, clinvar_rank: 15 }),
@@ -107,81 +165,124 @@ describe.skipIf(!RUN)('migration 0025: annotation severity ranks (#469)', () => 
       expect.objectContaining({ impact_rank: 1, clinvar_rank: 11 }),
       expect.objectContaining({ impact_rank: 4, clinvar_rank: 3 })
     ])
+    // The lookup holds exactly the stored strings that have a rank.
+    const lookup = await probe.query(
+      `SELECT raw, rank FROM "${schema}".clinvar_severity ORDER BY raw COLLATE "C"`
+    )
+    expect(lookup.rows).toEqual(
+      LEGACY.map(([, clinvar]) => clinvar)
+        .filter((clinvar): clinvar is string => clinvar !== null && clinvarRank(clinvar) > 0)
+        .sort()
+        .map((raw) => ({ raw, rank: clinvarRank(raw) }))
+    )
+
+    // A summary rebuilt now, and the case view sorted by impact, are already right.
+    const client = await pool.connect()
+    try {
+      await new PostgresCohortSummaryRepository().rebuild({ schema, client: client as never })
+    } finally {
+      client.release()
+    }
+    const summary = await probe.query(
+      `SELECT consequence, clinvar, impact_rank, clinvar_rank
+         FROM "${schema}".cohort_variant_summary ORDER BY pos`
+    )
+    expect(summary.rows).toEqual(expectedRanks)
+    const sorted = await new PostgresVariantReadRepository(pool, schema).queryVariants(
+      { case_id: 1 },
+      50,
+      0,
+      [{ key: 'consequence', order: 'desc' }]
+    )
+    expect(
+      sorted.data
+        .slice(0, 3)
+        .map((variant) => variant.consequence)
+        .sort()
+    ).toEqual([' high ', 'HIGH', 'HIGH'])
   }, 60_000)
 
-  it('run again it updates no row, and corrects a row whose rank is wrong', async () => {
+  it('backfills in resumable id-range batches, each its own transaction', async () => {
     await seedLegacy()
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    const scope = { pool, schema }
+    const maxId = LEGACY.length
+
+    // One batch of four ids: four rows done, progress recorded, not complete.
+    expect(await runSeverityRankBackfillBatch(scope, 4)).toEqual({ nextId: 4, maxId, done: false })
+    expect(
+      (await storedRanks()).filter((row) => (row as { impact_rank: unknown }).impact_rank !== null)
+    ).toHaveLength(4)
+    expect(await backfillState()).toEqual({ next_id: 4, max_id: maxId, done: false })
+    expect(await effectiveRanks()).toEqual(expectedRanks)
+
+    // A new process resumes from the recorded id.
+    let progress = await runSeverityRankBackfillBatch(scope, 4)
+    while (progress !== null && !progress.done)
+      progress = await runSeverityRankBackfillBatch(scope, 4)
+    expect(await backfillState()).toEqual({ next_id: maxId, max_id: maxId, done: true })
+    expect(await ranks('variants_all')).toEqual(expectedRanks)
+
+    // Complete: another call writes nothing.
     const versions = async (): Promise<unknown[]> =>
       (await probe.query(`SELECT id, xmin::text FROM "${schema}".variants_all ORDER BY id`)).rows
     const before = await versions()
-    const rerun = async (): Promise<void> => {
-      await probe.query('BEGIN')
-      await backfillSeverityRanks(probe, schema)
-      await probe.query('COMMIT')
-    }
-
-    await rerun()
+    expect(await runSeverityRankBackfillBatch(scope, 4)).toMatchObject({ done: true })
     expect(await versions()).toEqual(before)
-    expect(await ranks()).toEqual(expectedRanks)
-
-    await probe.query(
-      `UPDATE "${schema}".variants_all SET impact_rank = 0, clinvar_rank = 9 WHERE pos = 100`
-    )
-    await rerun()
-    expect(await ranks()).toEqual(expectedRanks)
   }, 60_000)
 
-  it('keeps every row, index and generated column through the rewrite', async () => {
+  it('a cohort read starts the backfill in the background and it completes', async () => {
     await seedLegacy()
-    const snapshot = async (): Promise<unknown> => ({
-      rows: (
-        await probe.query(
-          `SELECT id, case_id, chr, pos, ref, alt, consequence, clinvar, gt_num, coord_hash,
-                  search_document::text AS search_document
-             FROM "${schema}".variants_all ORDER BY id`
-        )
-      ).rows,
-      indexes: (
-        await probe.query(
-          `SELECT indexname, indexdef FROM pg_indexes
-            WHERE schemaname = $1 AND tablename = 'variants_all' ORDER BY indexname`,
-          [schema]
-        )
-      ).rows
-    })
-    const before = await snapshot()
-
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 
-    expect(await snapshot()).toEqual(before)
-    // A case that is still importing stays hidden behind the redefined view.
-    await probe.query(`UPDATE "${schema}".cases_all SET import_status = 'importing'`)
-    expect(await ranks('variants')).toEqual([])
+    await prepareCohortRead({ pool, schema })
+    await awaitSeverityRankBackfill(schema)
+
+    expect(await backfillState()).toMatchObject({ done: true })
     expect(await ranks('variants_all')).toEqual(expectedRanks)
   }, 60_000)
 
-  it('adds NOT NULL rank columns defaulting to 0 to variants and the summary', async () => {
+  it('rows imported after the migration are never touched by the backfill', async () => {
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    // An empty table has nothing to backfill.
+    expect(await backfillState()).toEqual({ next_id: 0, max_id: 0, done: true })
+  }, 60_000)
+
+  it('refreshing the lookup again changes nothing', async () => {
+    await seedLegacy()
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    const lookup = async (): Promise<unknown[]> =>
+      (await probe.query(`SELECT raw, rank FROM "${schema}".clinvar_severity ORDER BY raw`)).rows
+    const before = await lookup()
+    await fillClinvarSeverityLookup(probe, schema)
+    expect(await lookup()).toEqual(before)
+  }, 60_000)
+
+  it('adds nullable rank columns to variants and NOT NULL ones to the summary', async () => {
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
     const columns = await probe.query(
       `SELECT table_name, column_name, data_type, is_nullable, column_default
          FROM information_schema.columns
         WHERE table_schema = $1 AND column_name IN ('impact_rank', 'clinvar_rank')
-          AND table_name IN ('variants_all', 'cohort_variant_summary')
+          AND table_name IN ('variants_all', 'variants', 'cohort_variant_summary')
         ORDER BY table_name, column_name`,
       [schema]
     )
-    expect(columns.rows).toEqual(
-      ['cohort_variant_summary', 'variants_all'].flatMap((table) =>
-        ['clinvar_rank', 'impact_rank'].map((column) => ({
-          table_name: table,
-          column_name: column,
-          data_type: 'smallint',
-          is_nullable: 'NO',
-          column_default: '0'
-        }))
-      )
-    )
+    const column = (table: string, name: string, nullable: boolean): unknown => ({
+      table_name: table,
+      column_name: name,
+      data_type: 'smallint',
+      is_nullable: nullable ? 'YES' : 'NO',
+      column_default: nullable ? null : '0'
+    })
+    expect(columns.rows).toEqual([
+      column('cohort_variant_summary', 'clinvar_rank', false),
+      column('cohort_variant_summary', 'impact_rank', false),
+      column('variants', 'clinvar_rank', true),
+      column('variants', 'impact_rank', true),
+      column('variants_all', 'clinvar_rank', true),
+      column('variants_all', 'impact_rank', true)
+    ])
   }, 60_000)
 
   it('flags a populated summary stale without calling it never rebuilt', async () => {

@@ -28,6 +28,7 @@ import {
   chrRankSql,
   type ResolvedVariantSort
 } from '../../../shared/sql/chromosome-order'
+import type { SeverityRankSql } from '../../../shared/sql/severity-sort'
 import type { SortItem, VariantFilter } from '../../../shared/types/database'
 
 export interface PostgresOrderTerm {
@@ -75,7 +76,8 @@ function parseTerm(term: string): PostgresOrderTerm {
 
 export function buildPostgresVariantOrderTerms(
   sortBy: SortItem[] | undefined,
-  sortColumns: Readonly<Record<string, string>>
+  sortColumns: Readonly<Record<string, string>>,
+  ranks?: SeverityRankSql
 ): PostgresOrderTerm[] {
   const resolved: ResolvedVariantSort[] = []
   for (const sort of sortBy ?? []) {
@@ -85,7 +87,7 @@ export function buildPostgresVariantOrderTerms(
   // Natural chromosome order shared with the SQLite sink; direction is
   // normalised inside buildVariantOrderTerms (S7). `v.id` is the unique
   // tiebreaker (and the last column of idx_variants_case_chr_rank).
-  const terms = buildVariantOrderTerms(resolved, 'v', 'postgres').map(parseTerm)
+  const terms = buildVariantOrderTerms(resolved, 'v', 'postgres', ranks).map(parseTerm)
   if (!terms.some((term) => term.sql === 'v.id')) {
     terms.push({ sql: 'v.id', direction: 'ASC', nullsLast: false })
   }

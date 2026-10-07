@@ -19,7 +19,7 @@
  * Changing the expression means a new migration on both backends that rebuilds
  * those indexes; otherwise ORDER BY no longer matches them and falls back to a sort.
  */
-import { severitySortTerms } from './severity-sort'
+import { severitySortTerms, type SeverityRankSql } from './severity-sort'
 
 /** Rank shared by every contig that is not 1..22, X, Y or MT. */
 export const OTHER_CONTIG_RANK = 100
@@ -137,12 +137,13 @@ export interface ResolvedVariantSort {
 export function buildVariantOrderTerms(
   sorts: ResolvedVariantSort[],
   alias: string,
-  dialect: SqlDialect = 'sqlite'
+  dialect: SqlDialect = 'sqlite',
+  ranks?: SeverityRankSql
 ): string[] {
   if (sorts.length === 0) return genomicVariantOrderTerms(alias, dialect)
   const hasPosSort = sorts.some((s) => s.key === 'pos')
   return sorts.flatMap((s) => {
-    const bySeverity = severitySortTerms(s.key, alias, s.column, s.order)
+    const bySeverity = severitySortTerms(s.key, alias, s.column, s.order, ranks)
     if (bySeverity !== null) return bySeverity
     if (s.key !== 'chr') return [`${s.column} ${s.order === 'desc' ? 'DESC' : 'ASC'} NULLS LAST`]
     const terms = chromosomeOrderTerms(s.column, s.order, dialect)

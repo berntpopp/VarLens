@@ -1,3 +1,4 @@
+import { carrierRanks } from './cohort-summary-representative-sql'
 import type { Pool } from 'pg'
 
 import { BASE_SORTABLE_COLUMNS } from '../../database/VariantFilterBuilder'
@@ -254,7 +255,13 @@ export function buildPostgresVariantQueryParts(
   addPostgresClinicalVariantFilters(filter, { schemaName, addParam, addWhere })
   addPostgresColumnFilters(filter, addParam, addWhere)
 
-  const orderTerms = buildPostgresVariantOrderTerms(sortBy, POSTGRES_BASE_SORT_COLUMNS)
+  // Impact and ClinVar sort by severity rank; a row the 0025 backfill has not
+  // reached yet gets its rank computed on the fly (carrierRanks).
+  const orderTerms = buildPostgresVariantOrderTerms(
+    sortBy,
+    POSTGRES_BASE_SORT_COLUMNS,
+    carrierRanks('v', (table) => `${schemaName}."${table}"`)
+  )
   return {
     fromAndWhereSql: `FROM ${schemaName}."variants" v
       ${joins.join('\n')}
