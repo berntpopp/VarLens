@@ -7,6 +7,7 @@ import {
   PostgresCohortSummaryRepository,
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
+import { lockSummaryForWrite } from './cohort-summary-lock'
 
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
 type CohortSummaryMaintenance = Pick<PostgresCohortSummaryRepository, 'removeColumnMetas'>
@@ -162,6 +163,10 @@ export class PostgresCaseLifecycleRepository {
         )
       }
 
+      // One writer of the derived cohort tables at a time; an import that is
+      // publishing finishes within seconds, so wait for it rather than fail.
+      await client.query('SET LOCAL lock_timeout = 0')
+      await lockSummaryForWrite(client, this.schema)
       await this.applyCaseScopedMaintenance(client, caseId)
       await client.query(
         `UPDATE ${this.tbl('cases_all')}

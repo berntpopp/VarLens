@@ -5,7 +5,7 @@
  * Mirrors the SQLite source of truth in src/shared/sql/cohort-summary-rebuild.ts
  * and src/main/database/CohortSummaryService.ts:
  *
- *   - rebuild(): TRUNCATE + INSERT from the deduped CTE (Pass-2 #4 — duplicate
+ *   - rebuild(): DELETE + INSERT from the deduped CTE (Pass-2 #4 — duplicate
  *     per-case rows count once). has_star/has_comment/acmg_best are derived
  *     from variant_annotations + case_variant_annotations at insertion time
  *     (Pass-9 #8 — otherwise every rebuild would reset the flags to false).
@@ -132,7 +132,10 @@ export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
-    await client.query(`TRUNCATE ${tbl('cohort_variant_summary')}`)
+    // DELETE, not TRUNCATE: TRUNCATE takes ACCESS EXCLUSIVE and blocks every
+    // cohort reader until the rebuild commits. With DELETE, readers keep the
+    // previous rows (MVCC) and autovacuum reclaims the old versions.
+    await client.query(`DELETE FROM ${tbl('cohort_variant_summary')}`)
 
     // Deduped CTE + flag-bearing projection. Mirrors SQLite
     // src/main/database/CohortSummaryService.ts and the deduped pattern in

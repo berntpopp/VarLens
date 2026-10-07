@@ -30,6 +30,7 @@ import {
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
+import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
@@ -198,7 +199,10 @@ function clientConfigFromMessage(message: PostgresClientConfig): ClientConfig {
     application_name: message.application_name,
     connectionTimeoutMillis: message.connectionTimeoutMillis,
     statement_timeout: message.statement_timeout,
-    query_timeout: message.query_timeout,
+    // No client-side query timeout: publication steps and the wait for the
+    // summary write lock are legitimately long, and the server-side limits
+    // are lifted for this session anyway (relaxImportSessionLimits).
+    query_timeout: 0,
     lock_timeout: message.lock_timeout,
     idle_in_transaction_session_timeout: message.idle_in_transaction_session_timeout,
     keepAlive: message.keepAlive,
@@ -372,6 +376,9 @@ export async function runImport(
             [totalInserted, caseId]
           )
           if (totalInserted > 0) {
+            await profilePhase('pub-lock-wait', () =>
+              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
+            )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(
                 client as unknown as Pick<PoolClient, 'query'>,
@@ -507,6 +514,9 @@ export async function runImport(
         writeVariants
       )
 
+      await profilePhase('pub-lock-wait', () =>
+        lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
+      )
       await rebuildVariantFrequencyForCase(
         client as unknown as Pick<PoolClient, 'query'>,
         start.schema,
@@ -762,6 +772,9 @@ export async function runImport(
             await client.query(
               `UPDATE ${quoteIdentifier(start.schema)}."cases_all" SET variant_count = $1 WHERE id = $2`,
               [totalVariantCount, caseId]
+            )
+            await profilePhase('pub-lock-wait', () =>
+              lockSummaryForWrite(client as unknown as Pick<PoolClient, 'query'>, start.schema)
             )
             await profilePhase('pub-variant-frequency', () =>
               rebuildVariantFrequencyForCase(

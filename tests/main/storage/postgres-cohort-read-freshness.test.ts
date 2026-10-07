@@ -19,9 +19,12 @@ import { randomBytes } from 'node:crypto'
 import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import { lockSummaryForWrite } from '../../../src/main/storage/postgres/cohort-summary-lock'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import {
+  awaitBackgroundRebuild,
   prepareCohortRead,
   readCohortSummaryStatus
 } from '../../../src/main/storage/postgres/cohort-read-freshness'
@@ -174,6 +177,121 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
       } else {
         process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = previous
       }
+    }
+  }, 60_000)
+
+  async function lastRebuiltAt(): Promise<Date | null> {
+    const res = await probe.query<{ last_rebuilt_at: Date | null }>(
+      `SELECT last_rebuilt_at FROM "${schema}".cohort_summary_state WHERE id = 1`
+    )
+    return res.rows[0].last_rebuilt_at
+  }
+
+  it('serves a summary maintained by imports without ever rebuilding it', async () => {
+    // What an import does: publish the case and add it to the summary
+    // incrementally. On a database that never had a full rebuild this used to
+    // force a TRUNCATE + rebuild on the first cohort read.
+    const caseA = await seedCase('incremental-a')
+    await seedVariant(caseA, '5', 500)
+    const client = await pool.connect()
+    try {
+      await new PostgresCohortSummaryRepository().incrementalAdd({
+        schema,
+        client: client as never,
+        caseId: caseA
+      })
+    } finally {
+      client.release()
+    }
+    expect(await summaryRowCount()).toBe(1)
+
+    const result = await prepareCohortRead({ pool, schema })
+
+    expect(result.warnings).toBeUndefined()
+    expect(await lastRebuiltAt()).toBeNull()
+    expect(await summaryRowCount()).toBe(1)
+  }, 60_000)
+
+  it('rebuilds a never-rebuilt summary that a migration flagged stale', async () => {
+    const caseA = await seedCase('seeded-stale-a')
+    await seedVariant(caseA, '6', 600)
+    await seedVariant(caseA, '6', 601)
+    // A partial summary plus the stale flag the 0010 seed sets on existing data.
+    const client = await pool.connect()
+    try {
+      await new PostgresCohortSummaryRepository().incrementalAdd({
+        schema,
+        client: client as never,
+        caseId: caseA
+      })
+    } finally {
+      client.release()
+    }
+    await probe.query(`DELETE FROM "${schema}".cohort_variant_summary WHERE pos = 601`)
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state
+         SET is_stale = true, stale_reason = 'migration_initial_existing_data', stale_at = now()
+       WHERE id = 1`
+    )
+
+    const result = await prepareCohortRead({ pool, schema })
+
+    expect(result.warnings).toBeUndefined()
+    expect(await summaryRowCount()).toBe(2)
+    expect(await isStale()).toBe(false)
+    expect(await lastRebuiltAt()).not.toBeNull()
+  }, 60_000)
+
+  it('does not wait for a publishing import: serves current rows and rebuilds afterwards', async () => {
+    const caseA = await seedCase('busy-a')
+    await seedVariant(caseA, '7', 700)
+    await prepareCohortRead({ pool, schema })
+    await seedVariant(caseA, '7', 701)
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state
+         SET is_stale = true, stale_reason = 'test', stale_at = now() WHERE id = 1`
+    )
+
+    // An import in its publication step holds the summary write lock.
+    const publisher = new Client({ connectionString: PG_URL })
+    await publisher.connect()
+    try {
+      await publisher.query('BEGIN')
+      await lockSummaryForWrite(publisher, schema)
+
+      const started = Date.now()
+      const result = await prepareCohortRead({ pool, schema })
+      const waitedMs = Date.now() - started
+
+      expect(result.warnings).toEqual({ staleSummary: true })
+      expect(waitedMs).toBeLessThan(2000)
+      // Readers still see the previous rows while the rebuild waits its turn.
+      expect(await summaryRowCount()).toBe(1)
+    } finally {
+      await publisher.query('COMMIT')
+      await publisher.end()
+    }
+
+    await awaitBackgroundRebuild(schema)
+    expect(await isStale()).toBe(false)
+    expect(await summaryRowCount()).toBe(2)
+  }, 60_000)
+
+  it('keeps the previous rows visible to other sessions while a rebuild runs', async () => {
+    const caseA = await seedCase('visible-a')
+    await seedVariant(caseA, '8', 800)
+    await prepareCohortRead({ pool, schema })
+
+    const rebuilder = await pool.connect()
+    try {
+      await rebuilder.query('BEGIN')
+      await new PostgresCohortSummaryRepository().rebuild({ schema, client: rebuilder as never })
+      // Uncommitted rebuild in progress: a reader must neither block nor see an empty table.
+      await probe.query("SET lock_timeout = '1s'")
+      expect(await summaryRowCount()).toBe(1)
+      await rebuilder.query('COMMIT')
+    } finally {
+      rebuilder.release()
     }
   }, 60_000)
 })
