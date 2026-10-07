@@ -11,6 +11,7 @@ import { DATABASE_CONFIG } from '../../shared/config'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
+  UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL,
   REBUILD_GENE_BURDEN_SQL,
   UPDATE_META_SQL
 } from '../../shared/sql/cohort-summary-rebuild'
@@ -105,6 +106,9 @@ port.on('message', (msg: RebuildWorkerRequest) => {
       // per-variant cohort summary table. Typically 60-80 % of rebuild time.
       emitPhase('variant_summary')
       db!.exec(REBUILD_VARIANT_SUMMARY_SQL)
+      // Part of the same phase: fold per-case stars/comments/ACMG calls into
+      // the flags, as CohortSummaryService.rebuild() does.
+      db!.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
 
       // Phase 2/3 — smaller INSERT-SELECT rebuilding the gene-level burden
       // summary table. Typically ~20 % of rebuild time.

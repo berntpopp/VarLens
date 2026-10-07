@@ -13,6 +13,7 @@ import { rebuildAllFtsIndexes } from '../database/fts-trigger-management'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
+  UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL,
   REBUILD_GENE_BURDEN_SQL,
   UPDATE_META_SQL,
   CHECK_TABLE_EXISTS_SQL
@@ -128,6 +129,9 @@ export function rebuildCohortSummary(db: DatabaseType): void {
 
     db.transaction(() => {
       db.exec(REBUILD_VARIANT_SUMMARY_SQL)
+      // Per-case stars/comments/ACMG calls feed the same flags the annotation
+      // triggers maintain; without this a rebuild silently clears them.
+      db.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
       db.exec(REBUILD_GENE_BURDEN_SQL)
       db.exec(UPDATE_META_SQL)
     })()
