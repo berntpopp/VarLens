@@ -239,7 +239,8 @@ function extensionFilters(
 
 /**
  * WHERE fragments for the extension column filters: per extension table one
- * `EXISTS` over the visible carrier rows of the summary row, plus the variant
+ * `EXISTS` over the visible carrier rows of the summary row (same coordinate,
+ * variant type AND genome build: the summary has one row per build), plus the variant
  * type itself when only one table is filtered (it lets the planner use the
  * type index). Range filters exclude rows without a value unless the filter
  * asks for them — a missing extension row means "not of this type".
@@ -271,6 +272,8 @@ function extensionExistsConditions(
     conditions.push(`EXISTS (
         SELECT 1
         FROM ${tbl('variants')} ext_v
+        JOIN ${tbl('cases')} ext_c
+          ON ext_c.id = ext_v.case_id AND ext_c.genome_build = cvs.genome_build
         JOIN ${tbl(table)} ${alias} ON ${alias}.variant_id = ext_v.id
         WHERE ext_v.chr = cvs.chr
           AND ext_v.pos = cvs.pos

@@ -187,6 +187,7 @@ export interface BuildExtensionExistsResult {
  * ```
  * EXISTS (
  *   SELECT 1 FROM variants v
+ *   JOIN cases vc ON vc.id = v.case_id AND vc.genome_build IS cvs.genome_build
  *   JOIN <ext_table> <alias> ON <alias>.variant_id = v.id
  *   WHERE v.chr = cvs.chr AND v.pos = cvs.pos AND v.ref = cvs.ref
  *     AND v.alt = cvs.alt AND v.variant_type = cvs.variant_type
@@ -234,6 +235,7 @@ export function buildExtensionExistsClauses(
       `EXISTS (
         SELECT 1 FROM variants v
         JOIN cases vc ON vc.id = v.case_id AND vc.import_status = 'ready'
+          AND vc.genome_build IS ${cvsAlias}.genome_build
         JOIN ${def.table} ${alias} ON ${alias}.${def.variantIdColumn} = v.id
         WHERE v.chr = ${cvsAlias}.chr
           AND v.pos = ${cvsAlias}.pos

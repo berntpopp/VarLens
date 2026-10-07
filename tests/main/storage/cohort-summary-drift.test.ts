@@ -732,6 +732,44 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     expect(exportedModifier).toEqual([])
   }, 120_000)
 
+  it('an extension filter stays inside the genome build of the summary row (#469 review)', async () => {
+    // One coordinate carried on GRCh38 (support 20) and on GRCh37 (support 2):
+    // two summary rows. The carrier probe used to match on the coordinate only.
+    for (const [name, build, support] of [
+      ['build-38', 'GRCh38', 20],
+      ['build-37', 'GRCh37', 2]
+    ] as const) {
+      const caseId = await seedCase(name, build)
+      const variantId = await seedVariant({
+        caseId,
+        chr: '7',
+        pos: 1000,
+        ref: 'N',
+        alt: '<DEL>',
+        variantType: 'sv',
+        geneSymbol: name,
+        gtNum: '0/1'
+      })
+      await probe.query(
+        `INSERT INTO "${schema}".variant_sv (variant_id, support) VALUES ($1, $2)`,
+        [variantId, support]
+      )
+      await inTransaction((client) =>
+        repo.incrementalAdd({ schema, client: client as never, caseId })
+      )
+    }
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const genes = async (operator: '>' | '<', value: number): Promise<Array<string | null>> =>
+      (await cohort.queryVariants({ column_filters: { 'sv.support': { operator, value } } })).data
+        .map((variant) => variant.gene_symbol)
+        .sort()
+
+    expect((await cohort.queryVariants({})).data).toHaveLength(2)
+    expect(await genes('>', 10)).toEqual(['build-38'])
+    expect(await genes('<', 10)).toEqual(['build-37'])
+    expect(await genes('>', 100)).toEqual([])
+  }, 120_000)
+
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {
     // 1. Seed N cases + variants. Mix of shared/distinct coordinates, het/hom
     //    genotypes, and an annotated variant so the snapshot exercises every
