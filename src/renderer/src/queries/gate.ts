@@ -5,7 +5,12 @@
  * answer changes.
  */
 import type { WindowAPI } from '../../../shared/types/api'
-import { currentCanUseFeature, type CapabilityPath } from '../utils/backend-capabilities'
+import { logService } from '../services/LogService'
+import {
+  currentCanUseFeature,
+  getCurrentUnsupportedReasonSync,
+  type CapabilityPath
+} from '../utils/backend-capabilities'
 
 function currentApi(): WindowAPI | undefined {
   return typeof window === 'undefined' ? undefined : window.api
@@ -24,11 +29,17 @@ export function queryApi(): WindowAPI {
 
 /**
  * Await a query's current load. An explicit `refresh()` ignores the query's
- * `enabled` option, so the same gate is checked here.
+ * `enabled` option, so the same gate is checked here; a blocked load is
+ * logged with its reason and skipped.
  */
 export async function loadIfAllowed(
   path: CapabilityPath,
   refresh: () => Promise<unknown>
 ): Promise<void> {
-  if (canQuery(path)) await refresh()
+  if (canQuery(path)) {
+    await refresh()
+    return
+  }
+  const reason = getCurrentUnsupportedReasonSync(path) ?? 'window.api is not available'
+  logService.warn(reason, 'backend-capabilities')
 }

@@ -86,6 +86,24 @@ describe('tags', () => {
       expect(tags.getTags()).toEqual([REVIEW, URGENT])
     })
 
+    it('refetches when another view showing tags mounts', async () => {
+      mount(useTags)
+      await flushPromises()
+      mount(useTags)
+      await flushPromises()
+
+      expect(api.list).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not fail a write that succeeded when the refetch after it fails', async () => {
+      api.create.mockResolvedValue(tag(3, 'Benign'))
+      const tags = mount(useTags)
+      await tags.loadTags()
+      api.list.mockRejectedValue(new Error('offline'))
+
+      await expect(tags.createTag('Benign', '#4CAF50')).resolves.toEqual(tag(3, 'Benign'))
+    })
+
     it('shows a created tag once the write has returned', async () => {
       const created = tag(3, 'Benign')
       api.create.mockResolvedValue(created)
@@ -200,8 +218,10 @@ describe('tags', () => {
       expect(variant.variantTags.value).toEqual([REVIEW, URGENT])
       expect(api.assignVariantTag).toHaveBeenCalledWith(1, 10, 1)
 
+      api.getVariantTags.mockResolvedValue([REVIEW, URGENT])
       write.resolve()
       await pending
+      await flushPromises()
       expect(variant.variantTags.value).toEqual([REVIEW, URGENT])
     })
 
@@ -212,19 +232,51 @@ describe('tags', () => {
 
       await expect(variant.removeTag(1)).rejects.toThrow('read-only')
       expect(variant.variantTags.value).toEqual([REVIEW])
+      await flushPromises()
+      expect(variant.variantTags.value).toEqual([REVIEW])
     })
 
     it('keeps the optimistic tags when a read that started earlier lands afterwards', async () => {
       const slowRead = deferred<Tag[]>()
+      const write = deferred<void>()
       api.getVariantTags.mockReturnValueOnce(slowRead.promise)
+      api.assignVariantTag.mockReturnValue(write.promise)
       const variant = mountVariant()
       await flushPromises()
 
+      const pending = variant.assignTag(URGENT)
+      slowRead.resolve([REVIEW])
+      await flushPromises()
+      expect(variant.variantTags.value).toEqual([URGENT])
+
+      write.resolve()
+      await pending
+    })
+
+    it("shows the server's tags after a write made before the first read finished", async () => {
+      // The optimistic value is built from what is known; the tags the variant
+      // already had only arrive with the refetch that follows the write.
+      api.getVariantTags.mockReturnValueOnce(new Promise<Tag[]>(() => {}))
+      const variant = mountVariant()
+      await flushPromises()
+      api.getVariantTags.mockResolvedValue([REVIEW, URGENT])
+
       await variant.assignTag(URGENT)
-      slowRead.resolve([])
       await flushPromises()
 
-      expect(variant.variantTags.value).toEqual([URGENT])
+      expect(variant.variantTags.value).toEqual([REVIEW, URGENT])
+    })
+
+    it("refetches the variant's tags when the view moves back to it", async () => {
+      const variantId = ref(10)
+      mountVariant(ref(1), variantId)
+      await flushPromises()
+      variantId.value = 11
+      await flushPromises()
+      variantId.value = 10
+      await flushPromises()
+
+      expect(api.getVariantTags.mock.calls.map(([, id]) => id)).toEqual([10, 11, 10])
     })
 
     it('leaves a database opened meanwhile untouched when a write fails late', async () => {

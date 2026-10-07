@@ -381,3 +381,18 @@ PR opens as a draft.
   switch.
 - **`@pinia/colada` is a dev dependency**, like `vue` and `pinia`: the
   renderer is bundled by Vite and nothing is resolved at runtime.
+
+## 12. What the review of the implementation changed
+
+An independent review of the diff found one regression and several smaller
+defects; all but one are fixed on the branch.
+
+| Finding | Resolution |
+|---|---|
+| The database overview renames and deletes tags without telling the cache; it used to heal because tags were refetched on every mount | It now writes through `useTags`, which invalidates. |
+| Tags were no longer refetched when a tag view mounts or moves to another variant, which is how another user's edits used to show up in the web workspace | The two tag queries set `staleTime: 0`: refetch on mount and on variant change, as before. This is the one exception to the global default. |
+| A tag assigned before the variant's tags had loaded left the entry incomplete | After every optimistic write settles, the variant's tags are refetched (the documented `onSettled` pattern). |
+| Tag create, update and delete rejected when the refetch after a successful write failed | The refetch no longer fails the write; the failure is logged by the cache. |
+| `data-changed` refetched cohort data for the old set of cases, then again for the new set | Everything is marked stale, the case-id list is refetched first, and what is still mounted and stale is refetched after consumers have moved to the new scope. |
+| A blocked `load*` no longer logged why | `loadIfAllowed` logs the reason. |
+| On a case switch `filterOptions` is the empty default until the new case's options load; before, the previous case's options stayed | Left as is: showing nothing is the stricter behaviour, and the interaction gates are identical to the base commit. |

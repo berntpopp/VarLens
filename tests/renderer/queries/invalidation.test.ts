@@ -62,6 +62,60 @@ describe('invalidateServerData', () => {
     })
   })
 
+  describe('data-changed with a cohort mounted', () => {
+    it('refetches the cohort scope first, so cohort data is loaded once, for the new cases', async () => {
+      const pinia = createQueryPinia()
+      const caseIds = vi.fn().mockResolvedValueOnce([1, 2]).mockResolvedValue([1, 2, 3])
+      const typesPresent = vi.fn(async (ids: number[]) => ids.join(','))
+      const host = withQueries(() => {
+        const ids = useQuery(() => ({ key: queryKeys.caseIds(), query: caseIds }))
+        const types = useQuery(() => {
+          const scope = (ids.data.value as number[] | undefined) ?? []
+          return {
+            key: queryKeys.typesPresent({ caseIds: scope }),
+            query: () => typesPresent(scope),
+            enabled: scope.length > 0
+          }
+        })
+        return { types }
+      }, pinia)
+      hosts.push(host)
+      await flushPromises()
+      expect(typesPresent.mock.calls).toEqual([[[1, 2]]])
+
+      await invalidateServerData('data-changed')
+      await flushPromises()
+
+      expect(typesPresent.mock.calls).toEqual([[[1, 2]], [[1, 2, 3]]])
+      expect(host.result.types.data.value).toBe('1,2,3')
+    })
+
+    it('still refetches cohort data when the set of cases did not change', async () => {
+      const pinia = createQueryPinia()
+      const caseIds = vi.fn().mockResolvedValue([1, 2])
+      const typesPresent = vi.fn().mockResolvedValue('types')
+      const host = withQueries(() => {
+        useQuery(() => ({ key: queryKeys.caseIds(), query: caseIds }))
+        useQuery(() => ({ key: queryKeys.typesPresent({ caseIds: [1, 2] }), query: typesPresent }))
+      }, pinia)
+      hosts.push(host)
+      await flushPromises()
+
+      await invalidateServerData('data-changed')
+      await flushPromises()
+
+      expect(typesPresent).toHaveBeenCalledTimes(2)
+    })
+
+    it('resolves even when a refetch fails', async () => {
+      const query = vi.fn().mockResolvedValueOnce('old').mockRejectedValue(new Error('offline'))
+      mountTags(query)
+      await flushPromises()
+
+      await expect(invalidateServerData('data-changed')).resolves.toBeUndefined()
+    })
+  })
+
   describe('database-switch', () => {
     it('re-keys mounted queries to the new database and never shows the old data', async () => {
       const query = vi.fn().mockResolvedValueOnce('database A').mockResolvedValue('database B')
