@@ -149,6 +149,8 @@ describe('import worker session guards', () => {
       stmts.insertCase.run('kept', '/kept', 1, Date.now(), 'GRCh38').lastInsertRowid
     )
     stmts.insertBatch(keptId, [{ chr: '1', pos: 1, ref: 'A', alt: 'T' }])
+    // `kept` finished importing; only `partial` below is an interrupted import.
+    dead.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(keptId)
     dead.exec(DROP_FTS_TRIGGERS)
     dead.exec(DROP_INDEXES)
     const partialId = Number(

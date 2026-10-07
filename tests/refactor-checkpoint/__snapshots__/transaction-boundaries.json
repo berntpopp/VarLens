@@ -103,6 +103,11 @@
       "assignedTo": "insertBatch"
     },
     {
+      "file": "src/main/workers/import-recovery.ts",
+      "callerFunction": "discardInterruptedImports",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/workers/import-worker.ts",
       "callerFunction": "<anonymous>",
       "assignedTo": null

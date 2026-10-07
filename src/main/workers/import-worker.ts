@@ -31,6 +31,7 @@ import {
   streamInsertJson,
   streamInsertVcf
 } from './import-pipeline'
+import { discardInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { VariantFrequencyService } from '../database/VariantFrequencyService'
@@ -70,20 +71,25 @@ export async function runImportSession(
     // session is a bulk load relative to what is stored (import-index-sql.ts).
     db.exec(DROP_FTS_TRIGGERS)
     ftsFinalizationState.ftsTriggersDropped = true
+
+    // Recovery, before anything is counted or dropped: what interrupted
+    // imports left behind goes (import-recovery.ts) — the case a dead worker
+    // was filling, named by the main process, and every case that was never
+    // published. The session end rebuilds FTS and indexes.
+    discardInterruptedImports(
+      db,
+      msg.discardCaseIds ?? [],
+      (caseId) => void stmts.deleteCase.run(caseId),
+      frequencies
+    )
+
     const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
     if (!keepsIndexesForSession(storedCases, msg.files.length)) db.exec(DROP_INDEXES)
 
-    // Recovery: a previous worker died mid-file (heap limit) and could not
-    // run its own cleanup. Its frequencies were never counted, so the rows
-    // are simply removed; the session end rebuilds FTS and indexes.
-    for (const partialCaseId of msg.discardCaseIds ?? []) {
-      stmts.deleteCase.run(partialCaseId)
-    }
-
     // The cohort summary stays exact after every file instead of going stale
     // for the session (cohort-summary-case-add.ts). A crashed worker may have
-    // committed a file's contribution before dying, so a recovery session
-    // rebuilds once first.
+    // published its file before dying, so a recovery session rebuilds once
+    // first.
     const workerDb = db
     const summary = openImportSummarySession(workerDb, {
       forceRebuild: (msg.discardCaseIds ?? []).length > 0,
