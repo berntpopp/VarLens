@@ -34,6 +34,7 @@ import {
   removeCaseFromGeneSummary
 } from './cohort-gene-summary-sql'
 import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
+import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 
 interface ScopedClient {
   schema: string
@@ -124,9 +125,6 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
     FROM deduped
     GROUP BY chr, pos, ref, alt, variant_type, genome_build
   )`
-
-/** Session-local scratch table holding one case's per-coordinate aggregate. */
-const CASE_AGG_TABLE = '"_varlens_case_summary_delta"'
 
 export class PostgresCohortSummaryRepository {
   async rebuild({ schema, client }: ScopedClient): Promise<void> {
@@ -229,19 +227,13 @@ export class PostgresCohortSummaryRepository {
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
-    // The case's per-coordinate aggregate goes into a temporary table that is
-    // ANALYZEd before use. A case that was just imported has no planner
-    // statistics: PostgreSQL would estimate one row for it and join the
-    // annotation flags with a nested loop that rescans them per variant.
-    // With real statistics the upsert below is planned for what it is.
-    await client.query(`DROP TABLE IF EXISTS pg_temp.${CASE_AGG_TABLE}`)
-    await client.query(
-      `CREATE TEMP TABLE ${CASE_AGG_TABLE} AS
-       ${SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional)}
-       SELECT * FROM per_case`,
-      [caseId]
-    )
-    await client.query(`ANALYZE pg_temp.${CASE_AGG_TABLE}`)
+    // Staged and ANALYZEd first so the upsert is planned with real row counts
+    // (cohort-case-aggregate-sql.ts).
+    await stageCaseAggregate({
+      client,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional),
+      caseId
+    })
 
     await client.query(
       `
@@ -272,7 +264,7 @@ export class PostgresCohortSummaryRepository {
         has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
     `
     )
-    await client.query(`DROP TABLE pg_temp.${CASE_AGG_TABLE}`)
+    await dropCaseAggregate(client)
     await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
 
     // C1 lifecycle: incremental maintenance records its time but never touches

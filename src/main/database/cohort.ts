@@ -213,12 +213,11 @@ export class CohortService {
     const sortOrder = params.sort_order ?? 'desc'
 
     // Total case count across builds (the `total_cases` column of every row)
-    const totalCasesResult = this.db
-      .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
-      .get() as {
-      count: number
-    }
-    const totalCases = totalCasesResult.count
+    const totalCases = (
+      this.db.prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'").get() as {
+        count: number
+      }
+    ).count
 
     if (totalCases === 0) {
       return { data: [], total_count: 0 }
@@ -359,22 +358,20 @@ export class CohortService {
    */
   getCohortSummary(): CohortSummary {
     // Total cases
-    const totalCasesResult = this.db
-      .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
-      .get() as {
-      count: number
-    }
-    const totalCases = totalCasesResult.count
+    const totalCases = (
+      this.db.prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'").get() as {
+        count: number
+      }
+    ).count
 
     // Total variant observations of ready cases
-    const totalVariantsResult = this.db
-      .prepare(
-        "SELECT COUNT(*) as count FROM variants v JOIN cases c ON c.id = v.case_id WHERE c.import_status = 'ready'"
-      )
-      .get() as {
-      count: number
-    }
-    const totalVariants = totalVariantsResult.count
+    const totalVariants = (
+      this.db
+        .prepare(
+          "SELECT COUNT(*) as count FROM variants v JOIN cases c ON c.id = v.case_id WHERE c.import_status = 'ready'"
+        )
+        .get() as { count: number }
+    ).count
 
     // Unique variants: distinct (chr, pos, ref, alt), from the maintained exact counter.
     const uniqueVariants = readUniqueVariantCount(this.db)
@@ -484,8 +481,7 @@ export class CohortService {
    */
   getGeneBurden(): GeneBurden[] {
     const sql = `
-      SELECT gene_symbol, variant_count, unique_variant_count,
-        affected_case_count,
+      SELECT gene_symbol, variant_count, unique_variant_count, affected_case_count,
         (SELECT COUNT(*) FROM cases WHERE import_status = 'ready') AS total_cases
       FROM gene_burden_summary
       ORDER BY affected_case_count DESC, variant_count DESC
