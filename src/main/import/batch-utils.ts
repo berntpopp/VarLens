@@ -1,5 +1,6 @@
 import { basename } from 'path'
 import type { DatabaseService } from '../database/DatabaseService'
+import { deriveCaseName, legacyCaseName, resolveCaseName } from '../../shared/utils/case-name'
 
 export interface DuplicateCheckItem {
   filePath: string
@@ -16,25 +17,18 @@ export function extractFileName(filePath: string): string {
 }
 
 /**
- * Extract case name from file name (strip extensions and optional user text)
+ * Extract case name from file name (strip extensions and optional user text).
+ * The rule itself lives in src/shared/utils/case-name.ts.
  */
 export function extractCaseName(fileName: string, stripText?: string): string {
-  let name = fileName
-  if (name.endsWith('.gz') === true) {
-    name = name.slice(0, -3)
-  }
-  if (name.endsWith('.json') === true) {
-    name = name.slice(0, -5)
-  }
-  if (stripText !== undefined && stripText !== '') {
-    name = name.split(stripText).join('').trim()
-  }
-  return name
+  return deriveCaseName(fileName, stripText)
 }
 
 /**
  * The duplicate rule shared by every runtime (desktop SQLite, desktop/web
- * Postgres): a file is a duplicate when its derived case name already exists.
+ * Postgres): a file is a duplicate when its derived case name already exists,
+ * or when a case imported before `.vcf` was stripped exists under the legacy
+ * name (then `caseName` is that existing name; see {@link resolveCaseName}).
  */
 export function buildDuplicateReport(
   files: ReadonlyArray<{ filePath: string; fileName: string }>,
@@ -43,8 +37,9 @@ export function buildDuplicateReport(
 ): { files: DuplicateCheckItem[]; duplicateCount: number } {
   let duplicateCount = 0
   const report = files.map(({ filePath, fileName }) => {
-    const caseName = extractCaseName(fileName, stripText)
-    const isDuplicate = existingNames.has(caseName)
+    const { caseName, isDuplicate } = resolveCaseName(fileName, stripText, (name) =>
+      existingNames.has(name)
+    )
     if (isDuplicate) duplicateCount++
     return { filePath, fileName, caseName, isDuplicate }
   })
@@ -61,8 +56,12 @@ export function checkDuplicates(
 ): { files: DuplicateCheckItem[]; duplicateCount: number } {
   const files = filePaths.map((filePath) => ({ filePath, fileName: extractFileName(filePath) }))
   // Single batched query instead of N individual lookups
-  const existingNames = db.cases.getExistingCaseNames(
-    files.map((f) => extractCaseName(f.fileName, stripText))
-  )
+  // (legacy names included, so cases imported before `.vcf` was stripped match)
+  const candidates = new Set<string>()
+  for (const f of files) {
+    candidates.add(deriveCaseName(f.fileName, stripText))
+    candidates.add(legacyCaseName(f.fileName, stripText))
+  }
+  const existingNames = db.cases.getExistingCaseNames([...candidates])
   return buildDuplicateReport(files, existingNames, stripText)
 }

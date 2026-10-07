@@ -12,16 +12,13 @@
  * `jobs:cancel` or the legacy cancel call); each file is a nested
  * `import_single` job through `startImport`.
  */
-import {
-  buildDuplicateReport,
-  extractCaseName,
-  type DuplicateCheckItem
-} from '../../import/batch-utils'
+import { buildDuplicateReport, type DuplicateCheckItem } from '../../import/batch-utils'
 import { jobRunner } from '../../services/jobs/runner'
 import type { StorageSession } from '../../storage/session'
 import type { StorageWriteTask } from '../../storage/write-executor'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import type { BatchProgress, BatchResult, DuplicateChoice } from '../../../shared/types/api'
+import { resolveCaseName } from '../../../shared/utils/case-name'
 import { cancelImport, startImport } from './import-logic'
 
 /** One file of a batch: what the caller sent, where it is readable, its name. */
@@ -100,7 +97,10 @@ export async function runSessionBatchImport(params: {
         break
       }
       const file = files[index]
-      const caseName = extractCaseName(file.fileName, params.stripText)
+      // A case imported before `.vcf` was stripped resolves to its existing name.
+      const { caseName } = resolveCaseName(file.fileName, params.stripText, (name) =>
+        existingIds.has(name)
+      )
       const base = { filePath: file.inputPath, fileName: file.fileName, caseName }
       params.ctx?.reportProgress(index, files.length, file.fileName)
       const existingId = existingIds.get(caseName)

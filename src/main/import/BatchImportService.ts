@@ -1,8 +1,8 @@
-import { basename } from 'path'
 import { DatabaseService } from '../database/DatabaseService'
 import { ImportService } from './ImportService'
 import { NotFoundError } from '../database/errors'
 import type { BatchImportOptions } from './types'
+import { extractCaseName, extractFileName } from './batch-utils'
 
 export interface BatchFileDetail {
   filePath: string
@@ -55,8 +55,8 @@ export class BatchImportService {
     let duplicateCount = 0
 
     for (const filePath of filePaths) {
-      const fileName = this.extractFileName(filePath)
-      const caseName = this.extractCaseName(fileName, stripText)
+      const fileName = extractFileName(filePath)
+      const caseName = extractCaseName(fileName, stripText)
 
       let isDuplicate = false
       try {
@@ -95,7 +95,7 @@ export class BatchImportService {
       if (options.signal?.aborted === true) {
         result.cancelled = true
         for (let j = i; j < filePaths.length; j++) {
-          const fileName = this.extractFileName(filePaths[j])
+          const fileName = extractFileName(filePaths[j])
           result.details.push({
             filePath: filePaths[j],
             fileName,
@@ -108,8 +108,8 @@ export class BatchImportService {
       }
 
       const filePath = filePaths[i]
-      const fileName = this.extractFileName(filePath)
-      const caseName = this.extractCaseName(fileName, options.stripText)
+      const fileName = extractFileName(filePath)
+      const caseName = extractCaseName(fileName, options.stripText)
 
       // Emit batch progress
       const overallPercent = Math.round((i / filePaths.length) * 100)
@@ -182,29 +182,5 @@ export class BatchImportService {
     }
 
     return result
-  }
-
-  /**
-   * Extract file name from path
-   */
-  private extractFileName(filePath: string): string {
-    return basename(filePath) || 'unknown'
-  }
-
-  /**
-   * Extract case name from file name (strip extensions and optional user text)
-   */
-  private extractCaseName(fileName: string, stripText?: string): string {
-    let name = fileName
-    if (name.endsWith('.gz') === true) {
-      name = name.slice(0, -3)
-    }
-    if (name.endsWith('.json') === true) {
-      name = name.slice(0, -5)
-    }
-    if (stripText !== undefined && stripText !== '') {
-      name = name.split(stripText).join('').trim()
-    }
-    return name
   }
 }

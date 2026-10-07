@@ -65,6 +65,52 @@ describe('runSessionBatchImport', () => {
     expect(result.succeeded).toBe(1)
   })
 
+  it('names VCF cases without the inner extension', async () => {
+    const { session, importSingleFile } = fakeSession([])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz'), file('SIM-0002.vcf')],
+      duplicateStrategy: 'skip',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(result.details.map((d) => d.caseName)).toEqual(['SIM-0001', 'SIM-0002'])
+    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual([
+      'SIM-0001',
+      'SIM-0002'
+    ])
+  })
+
+  it('skips a file whose case was imported before ".vcf" was stripped from names', async () => {
+    const { session, importSingleFile } = fakeSession([{ id: 7, name: 'SIM-0001.vcf' }])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz')],
+      duplicateStrategy: 'skip',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(result).toMatchObject({ succeeded: 0, skipped: 1 })
+    expect(result.details[0]).toMatchObject({ caseName: 'SIM-0001.vcf', status: 'skipped' })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
+  it('overwrite replaces such a legacy-named case in place instead of adding a twin', async () => {
+    const { session, writeExecute, importSingleFile } = fakeSession([
+      { id: 7, name: 'SIM-0001.vcf' }
+    ])
+    const result = await runSessionBatchImport({
+      files: [file('SIM-0001.vcf.gz')],
+      duplicateStrategy: 'overwrite',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(writeExecute).toHaveBeenCalledWith({ type: 'cases:delete', params: [7] })
+    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual(['SIM-0001.vcf'])
+    expect(result.succeeded).toBe(1)
+  })
+
   it('stops at the next file once cancelled', async () => {
     const { session } = fakeSession([])
     const controller = new AbortController()
@@ -99,5 +145,22 @@ describe('buildDuplicateReport', () => {
       ],
       duplicateCount: 1
     })
+  })
+
+  it('detects a case imported before ".vcf" was stripped as a duplicate of the same file', () => {
+    const report = buildDuplicateReport(
+      [
+        { filePath: '/a/X.vcf.gz', fileName: 'X.vcf.gz' },
+        { filePath: '/a/Y.vcf.gz', fileName: 'Y.vcf.gz' },
+        { filePath: '/a/Z.vcf', fileName: 'Z.vcf' }
+      ],
+      new Set(['X.vcf', 'Z'])
+    )
+    expect(report.duplicateCount).toBe(2)
+    expect(report.files.map((f) => [f.caseName, f.isDuplicate])).toEqual([
+      ['X.vcf', true],
+      ['Y', false],
+      ['Z', true]
+    ])
   })
 })

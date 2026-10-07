@@ -45,6 +45,32 @@ describe('checkDuplicateFiles', () => {
     )
   })
 
+  it('asks the DB for the pre-".vcf"-stripping name too and reports that case as the duplicate', () => {
+    const asked: string[][] = []
+    const db = {
+      cases: {
+        getExistingCaseNames: (names: string[]) => {
+          asked.push(names)
+          return new Set(names.filter((name) => name === 'SIM-0001.vcf'))
+        }
+      }
+    } as unknown as DatabaseService
+
+    const result = logic.checkDuplicateFiles(
+      () => db,
+      ['/data/SIM-0001.vcf.gz', '/data/SIM-0002.vcf.gz']
+    )
+
+    expect(asked[0]).toEqual(
+      expect.arrayContaining(['SIM-0001', 'SIM-0001.vcf', 'SIM-0002', 'SIM-0002.vcf'])
+    )
+    expect(result.duplicateCount).toBe(1)
+    expect(result.files.map((f) => [f.caseName, f.isDuplicate])).toEqual([
+      ['SIM-0001.vcf', true],
+      ['SIM-0002', false]
+    ])
+  })
+
   it('preserves the legitimate outcome: a real DB lookup with no duplicates returns an empty result', () => {
     const workingDb = {
       cases: {

@@ -99,6 +99,7 @@ import BatchSummaryPhase from './batch-import/BatchSummaryPhase.vue'
 import BatchZipPasswordPhase from './batch-import/BatchZipPasswordPhase.vue'
 import { mdiClose } from '@mdi/js'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { deriveCaseName } from '../../../shared/utils/case-name'
 
 type Phase = 'idle' | 'review' | 'importing' | 'summary' | 'zip-password'
 
@@ -148,25 +149,14 @@ let cleanupProgress: (() => void) | null = null
 let activeBatchRunId: string | null = null
 
 /**
- * Derive case name from file name (mirrors backend logic for live preview)
- */
-const deriveCaseName = (fileName: string, strip: string): string => {
-  let name = fileName
-  if (name.endsWith('.gz') === true) name = name.slice(0, -3)
-  if (name.endsWith('.json') === true) name = name.slice(0, -5)
-  if (strip !== '') {
-    name = name.split(strip).join('').trim()
-  }
-  return name
-}
-
-/**
- * Computed review files with live case name preview
+ * Computed review files with live case name preview (same rule as the
+ * backend). A duplicate keeps the existing case's name from the last check:
+ * it can be a legacy name such as "X.vcf" that the rule no longer derives.
  */
 const reviewFiles = computed(() =>
   duplicateCheckFiles.value.map((file) => ({
     ...file,
-    caseName: deriveCaseName(file.fileName, stripText.value)
+    caseName: file.isDuplicate ? file.caseName : deriveCaseName(file.fileName, stripText.value)
   }))
 )
 
