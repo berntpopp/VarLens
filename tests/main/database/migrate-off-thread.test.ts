@@ -65,11 +65,11 @@ describe('migrateSqliteOffThread', () => {
 
     const result = await migrateSqliteOffThread(path)
 
-    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 40 })
+    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 41 })
     expect(indexExists(path)).toBe(true)
     // The main-thread open now finds a current schema.
     const service = new DatabaseService(path)
-    expect(service.database.pragma('user_version', { simple: true })).toBe(40)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(41)
     service.close()
   })
 
@@ -79,7 +79,7 @@ describe('migrateSqliteOffThread', () => {
 
     const result = await migrateSqliteOffThread(path, KEY)
 
-    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 40 })
+    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 41 })
     expect(indexExists(path, KEY)).toBe(true)
   })
 
@@ -97,7 +97,7 @@ describe('migrateSqliteOffThread', () => {
   it('creates a new database file with the standard page size', async () => {
     const path = join(dir, 'fresh.db')
     const result = await migrateSqliteOffThread(path)
-    expect(result).toMatchObject({ ran: true, fromVersion: 0, toVersion: 40 })
+    expect(result).toMatchObject({ ran: true, fromVersion: 0, toVersion: 41 })
     const db = new Database(path, { readonly: true })
     expect(db.pragma('page_size', { simple: true })).toBe(8192)
     db.close()

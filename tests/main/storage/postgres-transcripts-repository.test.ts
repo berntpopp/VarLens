@@ -144,7 +144,8 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       10,
       expect.stringContaining('UPDATE "case_schema".variants'),
-      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'stop_gained', 'c.1A>G', 'p.M1V', 0.8, 'AD']
+      // … and the impact rank that goes with the stored impact (#469).
+      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'stop_gained', 'c.1A>G', 'p.M1V', 0.8, 'AD', 4]
     )
     expect(query).toHaveBeenNthCalledWith(
       11,
@@ -195,7 +196,7 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       6,
       expect.stringContaining('UPDATE "case_schema".variants'),
-      [9, 'NM_LEGACY.1', 'LEGACY', null, 'stop_gained', null, null, null, null]
+      [9, 'NM_LEGACY.1', 'LEGACY', null, 'stop_gained', null, null, null, null, 0]
     )
   })
 
@@ -271,7 +272,7 @@ describe('PostgresTranscriptsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       7,
       expect.stringContaining('UPDATE "case_schema".variants'),
-      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD']
+      [9, 'NM_000059.4', 'BRCA2', 'HIGH', 'missense_variant', 'c.1A>G', 'p.M1V', 0.8, 'AD', 4]
     )
     expect(query).toHaveBeenNthCalledWith(
       8,
