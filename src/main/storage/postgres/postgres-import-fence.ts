@@ -84,7 +84,19 @@ export class ImportSupersededError extends AppError {
   }
 }
 
-const FENCE_KEYS_SQL = "hashtext($1), hashtext('varlens-import-fence')"
+/**
+ * One advisory-lock call on the fence of schema `$1`. The key is the fence's
+ * own class and the schema's namespace oid, so two workspaces of one database
+ * can never share a fence (a hash of the schema name could collide). A schema
+ * that does not exist yields no row: nothing is locked, a worker is refused,
+ * and recovery's next statements fail on the missing schema.
+ */
+function fenceLockSql(lockFunction: string): string {
+  return (
+    `SELECT ${lockFunction}(hashtext('varlens-import-fence'), n.oid::int4) AS locked` +
+    ` FROM pg_namespace n WHERE n.nspname = $1`
+  )
+}
 const LOCK_NOT_AVAILABLE = '55P03'
 
 const GENERATION_KEY = 'import_generation'
@@ -164,10 +176,9 @@ export async function beginFencedImportTransaction(
 ): Promise<void> {
   await client.query('BEGIN')
   try {
-    const lock = await client.query(
-      `SELECT pg_try_advisory_xact_lock_shared(${FENCE_KEYS_SQL}) AS locked`,
-      [fence.schema]
-    )
+    const lock = await client.query(fenceLockSql('pg_try_advisory_xact_lock_shared'), [
+      fence.schema
+    ])
     if ((lock.rows[0] as { locked?: unknown } | undefined)?.locked !== true) {
       throw new ImportSupersededError(
         `Import superseded: interrupted-import recovery is running for ${fence.schema}`
@@ -218,7 +229,7 @@ async function tryTakeExclusiveFence(
   await client.query('BEGIN')
   try {
     await client.query(`SELECT set_config('lock_timeout', $1, true)`, [`${waitMs}ms`])
-    await client.query(`SELECT pg_advisory_lock(${FENCE_KEYS_SQL})`, [schema])
+    await client.query(fenceLockSql('pg_advisory_lock'), [schema])
     await client.query('COMMIT')
     return true
   } catch (error) {
@@ -258,15 +269,15 @@ export async function markImportConnection(client: Queryable, schema: string): P
  */
 async function terminateFenceHolders(client: Queryable, schema: string): Promise<void> {
   // Two-key advisory locks are stored as (classid, objid) with objsubid = 2,
-  // per database: the same schema name in another database is another fence.
+  // per database; objid is this schema's namespace oid.
   await client.query(
     `SELECT pg_terminate_backend(a.pid)
        FROM pg_namespace n
        JOIN pg_locks l
          ON l.locktype = 'advisory' AND l.granted AND l.mode = 'ShareLock' AND l.objsubid = 2
         AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
-        AND l.classid = hashtext($1)::oid
-        AND l.objid = hashtext('varlens-import-fence')::oid
+        AND l.classid = hashtext('varlens-import-fence')::oid
+        AND l.objid = n.oid
        JOIN pg_stat_activity a ON a.pid = l.pid
       WHERE n.nspname = $1
         AND a.datname = current_database()
@@ -294,8 +305,7 @@ export async function withExclusiveImportFence<T>(
 ): Promise<T> {
   const waitMs = options.waitMs ?? IMPORT_FENCE_WAIT_MS
   const attempts = options.attempts ?? IMPORT_FENCE_ATTEMPTS
-  const release = (): Promise<unknown> =>
-    client.query(`SELECT pg_advisory_unlock(${FENCE_KEYS_SQL})`, [schema])
+  const release = (): Promise<unknown> => client.query(fenceLockSql('pg_advisory_unlock'), [schema])
   let held = false
   try {
     for (let attempt = 1; attempt <= attempts && !held; attempt += 1) {

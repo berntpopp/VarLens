@@ -64,7 +64,7 @@ describe('beginFencedImportTransaction', () => {
     expect(texts).toHaveLength(3)
     expect(texts[0]).toBe('BEGIN')
     expect(texts[1]).toContain(
-      "pg_try_advisory_xact_lock_shared(hashtext($1), hashtext('varlens-import-fence'))"
+      "pg_try_advisory_xact_lock_shared(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1"
     )
     expect(client.query.mock.calls[1][1]).toEqual(['ws'])
     expect(texts[2]).toContain(`FROM "ws"."database_settings" WHERE key = 'import_generation'`)
@@ -135,10 +135,10 @@ describe('withExclusiveImportFence', () => {
     expect(texts.map((text) => text.replace(/\s+/g, ' ').trim())).toEqual([
       'BEGIN',
       "SELECT set_config('lock_timeout', $1, true)",
-      "SELECT pg_advisory_lock(hashtext($1), hashtext('varlens-import-fence'))",
+      "SELECT pg_advisory_lock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1",
       'COMMIT',
       `INSERT INTO "ws"."database_settings" AS s (key, value) VALUES ('import_generation', '1') ON CONFLICT (key) DO UPDATE SET value = (s.value::bigint + 1)::text RETURNING value AS generation`,
-      "SELECT pg_advisory_unlock(hashtext($1), hashtext('varlens-import-fence'))"
+      "SELECT pg_advisory_unlock(hashtext('varlens-import-fence'), n.oid::int4) AS locked FROM pg_namespace n WHERE n.nspname = $1"
     ])
     expect(client.query.mock.calls[1][1]).toEqual(['30000ms'])
   })
@@ -187,6 +187,9 @@ describe('withExclusiveImportFence', () => {
     await withExclusiveImportFence(client, 'ws', async () => undefined, { waitMs: 50 })
 
     const terminate = texts.find((text) => text.includes('pg_terminate_backend')) ?? ''
+    // The fence of exactly this schema: keyed by its namespace oid.
+    expect(terminate).toContain("l.classid = hashtext('varlens-import-fence')::oid")
+    expect(terminate).toContain('l.objid = n.oid')
     expect(terminate).toContain('JOIN pg_stat_activity a ON a.pid = l.pid')
     expect(terminate).toContain('a.datname = current_database()')
     expect(terminate).toContain('a.usename = current_user')

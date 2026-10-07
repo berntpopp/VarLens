@@ -49,7 +49,8 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
       `SELECT pid, mode, granted FROM pg_locks
         WHERE locktype = 'advisory' AND objsubid = 2
           AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-          AND classid = hashtext($1)::oid AND objid = hashtext('varlens-import-fence')::oid
+          AND classid = hashtext('varlens-import-fence')::oid
+          AND objid = (SELECT oid FROM pg_namespace WHERE nspname = $1)
         ORDER BY pid`,
       [schema]
     )
@@ -137,6 +138,29 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
     await expect(beginFencedImportTransaction(worker, fence)).rejects.toMatchObject(SUPERSEDED)
     await beginFencedImportTransaction(worker, { schema, generation: nextGeneration })
     await worker.query('COMMIT')
+  }, 60_000)
+
+  it('keys the fence by the schema itself, so two workspaces can never share one', async () => {
+    const repo = new PostgresVcfImportRepository(schema)
+    const owner = await connect()
+    const generation = await repo.recoverInterruptedImports(owner as never)
+    const worker = await connect()
+    await beginFencedImportTransaction(worker, { schema, generation })
+
+    const held = await probe.query<{ objid: string; namespace: string }>(
+      `SELECT l.objid::text AS objid,
+              (SELECT oid::text FROM pg_namespace WHERE nspname = $2) AS namespace
+         FROM pg_locks l WHERE l.pid = $1 AND l.locktype = 'advisory'`,
+      [await backendPid(worker), schema]
+    )
+    expect(held.rows).toHaveLength(1)
+    expect(held.rows[0].objid).toBe(held.rows[0].namespace)
+    await worker.query('COMMIT')
+
+    // A schema that does not exist has no fence: the transaction is refused.
+    await expect(
+      beginFencedImportTransaction(worker, { schema: `${schema}_missing`, generation })
+    ).rejects.toMatchObject(SUPERSEDED)
   }, 60_000)
 
   it('schedule 3: a worker transaction that starts while recovery holds the fence is refused without writing', async () => {
