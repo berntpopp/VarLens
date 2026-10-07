@@ -31,7 +31,7 @@
           <v-list-item
             :prepend-icon="mdiFileImportOutline"
             title="Import Data"
-            subtitle="Single file (VCF, JSON, batch)"
+            subtitle="One or many files (VCF, JSON, folder, ZIP)"
             @click="$emit('import-click')"
           />
         </v-list>
