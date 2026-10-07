@@ -27,11 +27,18 @@ class FakeWorker {
     this.callbacks = cb
   })
   cancel = vi.fn()
-  complete(caseId: number): void {
+  complete(caseId: number, unrankedClinvar?: string[]): void {
     this.callbacks?.onComplete({
       type: 'complete',
       mode: 'single-file',
-      result: { caseId, variantCount: 7, skipped: 0, errors: [], elapsed: 5 }
+      result: {
+        caseId,
+        variantCount: 7,
+        skipped: 0,
+        errors: [],
+        elapsed: 5,
+        ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
+      }
     })
   }
 }
@@ -70,6 +77,21 @@ function setup(lockFree = true) {
 const isRecovery = (text: string): boolean => text.includes("import_status = 'importing'")
 
 describe('PostgresImportExecutor.openBatch', () => {
+  it('hands on the ClinVar values the worker could not rank (#469)', async () => {
+    const { executor, workers } = setup()
+    const batch = await executor.openBatch()
+
+    const odd = batch.importFile({ filePath: '/stage/a.vcf.gz', caseName: 'A' })
+    const plain = batch.importFile({ filePath: '/stage/b.vcf.gz', caseName: 'B' })
+    await vi.waitFor(() => expect(workers).toHaveLength(2))
+    workers[0].complete(11, ['totally_made_up_term'])
+    workers[1].complete(12)
+
+    expect((await odd).unrankedClinvar).toEqual(['totally_made_up_term'])
+    expect('unrankedClinvar' in (await plain)).toBe(false)
+    await batch.close()
+  })
+
   it('takes the workspace lock and recovers interrupted imports once, before any worker', async () => {
     const { executor, sql, workers } = setup()
 

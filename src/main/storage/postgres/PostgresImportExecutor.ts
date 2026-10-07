@@ -322,7 +322,10 @@ export class PostgresImportExecutor implements StorageImportExecutor {
             files: msg.result.files,
             skipped: msg.result.skipped,
             errors: msg.result.errors,
-            elapsed
+            elapsed,
+            ...(msg.result.unrankedClinvar !== undefined
+              ? { unrankedClinvar: msg.result.unrankedClinvar }
+              : {})
           })
         },
         onError: (msg) => {
