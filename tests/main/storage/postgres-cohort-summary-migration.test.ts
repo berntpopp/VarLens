@@ -81,6 +81,50 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
     expect(indexNames).not.toContain('idx_cvs_cohort_freq')
   }, 60_000)
 
+  it('leaves free space on the counter tables so their updates stay heap-only (0024)', async () => {
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    const res = await probe.query<{ relname: string; reloptions: string[] | null }>(
+      `SELECT c.relname, c.reloptions
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = ANY($2)`,
+      [schema, ['variant_frequency', 'cohort_gene_variant_summary', 'cohort_gene_summary']]
+    )
+    const fillfactor = new Map(
+      res.rows.map((row) => [
+        row.relname,
+        (row.reloptions ?? []).find((option) => option.startsWith('fillfactor='))
+      ])
+    )
+    expect(fillfactor.get('variant_frequency')).toBe('fillfactor=85')
+    expect(fillfactor.get('cohort_gene_variant_summary')).toBe('fillfactor=85')
+    expect(fillfactor.get('cohort_gene_summary')).toBe('fillfactor=50')
+
+    // A counter bump on a freshly written row is a heap-only update.
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_gene_summary
+         (gene_symbol, variant_count, unique_variant_count, affected_case_count)
+       SELECT 'GENE' || g, 1, 1, 1 FROM generate_series(1, 2000) g`
+    )
+    await probe.query(
+      `UPDATE "${schema}".cohort_gene_summary SET variant_count = variant_count + 1`
+    )
+    await probe.query('SELECT pg_stat_force_next_flush()')
+    const stats = await probe.query<{ n_tup_upd: string; n_tup_hot_upd: string }>(
+      `SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_xact_user_tables
+        WHERE schemaname = $1 AND relname = 'cohort_gene_summary'`,
+      [schema]
+    )
+    void stats
+    const flushed = await probe.query<{ n_tup_upd: string; n_tup_hot_upd: string }>(
+      `SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables
+        WHERE schemaname = $1 AND relname = 'cohort_gene_summary'`,
+      [schema]
+    )
+    expect(Number(flushed.rows[0].n_tup_upd)).toBe(2000)
+    expect(Number(flushed.rows[0].n_tup_hot_upd)).toBeGreaterThan(1900)
+  }, 60_000)
+
   it('seeds cohort_summary_state with is_stale=false on a fresh schema (no variants)', async () => {
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 
