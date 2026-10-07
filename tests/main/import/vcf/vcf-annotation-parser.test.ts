@@ -172,6 +172,19 @@ describe('vcf-annotation-parser', () => {
       expect(result.impact).toBe('HIGH')
     })
 
+    it.each([
+      ['MODERATE', 'LOW'],
+      ['LOW', 'MODIFIER'],
+      ['MODIFIER', 'modifier'],
+      ['MODIFIER', 'UNKNOWN']
+    ])('selects %s over %s by the shared impact ranks (#469)', (stronger, weaker) => {
+      const csq = (impact: string, transcript: string): string =>
+        `G|some_variant|${impact}|GENE1|E1|Transcript|${transcript}|||||c.1A>G|p.X1Y||||||||||||||`
+      const info = new Map([['CSQ', `${csq(weaker, 'T1')},${csq(stronger, 'T2')}`]])
+
+      expect(parseAnnotation(info, header, 'G').transcript).toBe('T2')
+    })
+
     it('disambiguates multi-allelic deletions via ALLELE_NUM when both use "-" notation', () => {
       // REF=CAT, ALT=C,CA — a two-deletion multi-allelic site. VEP emits "-" for
       // BOTH deletion ALTs, so the Allele-string heuristic alone cannot tell them
