@@ -4,9 +4,8 @@ import type { SelectedCaseInput } from './useAppState'
 import type { BatchResult, WindowAPI } from '../../../shared/types/api'
 import type { useImportStatusStore } from '../stores/importStatusStore'
 import type AppDialogHostType from '../components/AppDialogHost.vue'
-import { useVariantColumnMeta } from './useVariantColumnMeta'
+import { invalidateServerData } from '../queries/invalidation'
 import { useLiveDataSignal } from './useLiveDataSignal'
-import { isWebRuntime } from '../utils/runtime-mode'
 import { leadingTrailingThrottle } from '../utils/leadingTrailingThrottle'
 
 /** At most one in-place refresh per interval while a batch keeps finishing files. */
@@ -46,7 +45,6 @@ export function useShellLifecycle({
 }: UseShellLifecycleOptions) {
   let cleanupBatchImportComplete: (() => void) | null = null
   let cleanupBatchFileComplete: (() => void) | null = null
-  const variantColumnMeta = useVariantColumnMeta()
   const { notifyDataAdded } = useLiveDataSignal()
 
   // Cases become visible one by one during a batch. Refresh what is on screen
@@ -69,7 +67,7 @@ export function useShellLifecycle({
   }
 
   const handleImportComplete = async (result: SelectedCaseInput): Promise<void> => {
-    if (isWebRuntime()) variantColumnMeta.invalidateAll()
+    void invalidateServerData('data-changed')
     incrementDataGeneration()
     await caseListRef.value?.refreshCases()
     selectCase(result)
@@ -79,7 +77,7 @@ export function useShellLifecycle({
   const handleBatchImportComplete = (): Promise<unknown> | unknown => {
     // The full refresh below supersedes any in-place refresh still pending.
     liveRefresh.cancel()
-    if (isWebRuntime()) variantColumnMeta.invalidateAll()
+    void invalidateServerData('data-changed')
     incrementDataGeneration()
     return caseListRef.value?.refreshCases()
   }

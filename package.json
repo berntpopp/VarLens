@@ -62,6 +62,7 @@
     "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@mdi/js": "^7.4.47",
+    "@pinia/colada": "1.4.7",
     "@playwright/test": "^1.63.0",
     "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^9.6.0",

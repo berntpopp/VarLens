@@ -6,6 +6,11 @@ import {
   useShellLifecycle
 } from '../../../src/renderer/src/composables/useShellLifecycle'
 import { useLiveDataSignal } from '../../../src/renderer/src/composables/useLiveDataSignal'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
+
+vi.mock('../../../src/renderer/src/queries/invalidation', () => ({
+  invalidateServerData: vi.fn().mockResolvedValue(undefined)
+}))
 
 describe('useShellLifecycle', () => {
   it('bumps data generation and refreshes cases on batch import completion', async () => {
@@ -34,6 +39,26 @@ describe('useShellLifecycle', () => {
 
     expect(incrementDataGeneration).toHaveBeenCalledTimes(1)
     expect(refreshCases).toHaveBeenCalledTimes(1)
+    expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
+  })
+
+  it('invalidates server data when a single import completes', async () => {
+    const lifecycle = useShellLifecycle({
+      api: undefined,
+      currentDatabasePath: ref(null),
+      currentDatabaseName: ref('VarLens'),
+      incrementDataGeneration: vi.fn(),
+      resetForDatabaseSwitch: vi.fn(),
+      clearMetadataCache: vi.fn(),
+      selectCase: vi.fn(),
+      caseListRef: ref({ refreshCases: vi.fn(), selectCase: vi.fn() }),
+      dialogHostRef: ref(null),
+      importStore: {} as never
+    })
+
+    await lifecycle.handleImportComplete({ caseId: 3, caseName: 'c' })
+
+    expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('data-changed')
   })
 
   it('wires batch import completion through the lifecycle listener', () => {

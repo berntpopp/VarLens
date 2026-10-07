@@ -6,6 +6,7 @@ export type CapabilityPath =
   | 'variants.query'
   | 'variants.filterOptions'
   | 'variants.columnMeta'
+  | 'variants.typesPresent'
   | 'variants.panelFilters'
   | 'variants.tagFilters'
   | 'variants.commentFilters'
@@ -32,6 +33,7 @@ export const LABELS: Record<CapabilityPath, string> = {
   'variants.query': 'variant browsing',
   'variants.filterOptions': 'variant filter options',
   'variants.columnMeta': 'variant column metadata',
+  'variants.typesPresent': 'variant type detection',
   'variants.panelFilters': 'panel filters',
   'variants.tagFilters': 'tag filters',
   'variants.commentFilters': 'comment filters',

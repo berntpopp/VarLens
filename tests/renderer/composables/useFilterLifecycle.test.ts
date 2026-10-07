@@ -187,7 +187,7 @@ describe('useFilterLifecycle', () => {
 
       expect(onCaseSwitch).toHaveBeenCalled()
       expect(onFiltersUpdate).toHaveBeenCalledWith({})
-      expect(loadFilterOptions).toHaveBeenCalledWith(2)
+      expect(loadFilterOptions).toHaveBeenCalledTimes(1)
       // Filters should be reset
       expect(result.filters.value.searchQuery).toBe('')
     })

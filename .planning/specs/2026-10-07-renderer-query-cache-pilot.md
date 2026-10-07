@@ -1,9 +1,9 @@
 # Renderer query cache pilot (Pinia Colada)
 
 - **Issue:** #193, steps 2 and 3. Step 1 shipped in PR #465 (v0.76.3).
-- **Status:** revision 2. Approved to implement on 2026-10-07 after an external
+- **Status:** revision 3, implemented. Approved on 2026-10-07 after an external
   review (Codex, `gpt-6-astra`, effort xhigh); section 10 lists what the review
-  changed.
+  changed and section 11 what changed while implementing.
 - **Branch / worktree:** `feat/renderer-colada-pilot` in `VarLens-wt/colada-pilot`, based on `c7ed3149`.
 
 ## 1. Goal
@@ -77,11 +77,12 @@ New directory `src/renderer/src/queries/`, one responsibility per file:
 | `client.ts` | Install Pinia Colada with the global defaults; `isRetryableError`. |
 | `keys.ts` | The key factory. The only place a key is written. |
 | `invalidation.ts` | `invalidateServerData(event)`, the one invalidation entry point. |
-| `use-queries.ts` | `useQueries`: one `useQuery` per item of a reactive list (Colada has none). |
+| `gate.ts` | `canQuery(path)` (API present and capability on, fail-closed), `queryApi()`, `loadIfAllowed()`. |
 | `column-meta.ts`, `filter-options.ts`, `tags.ts`, `filter-presets.ts`, `cases.ts` | Per domain: `defineQueryOptions` (key, query function, capability gate). No Vue component state. |
 
-The four existing composables stay as thin facades over these modules, so
-their callers keep working.
+The existing composables stay as thin facades over these modules, so their
+callers keep working. Every failed query is logged in one place (a query-hooks
+plugin in `client.ts`); the facades no longer log.
 
 ### 4.2 Global defaults
 
@@ -134,11 +135,11 @@ queries on invalidation, the `enabled` gate and (in step 4) focus and
 reconnect refetch. There is no imperative "fetch by key" helper.
 
 - **Tag list, preset list, case ids, types present:** one `useQuery` each.
-- **Filter options, tags of the shown variant:** the facade keeps a ref for
-  the current target (`loadFilterOptions(caseId)` and
-  `loadVariantTags(caseId, variantId)` set it) and one `useQuery` keyed by it.
-- **Column metadata:** `useQueries` over the columns of the visible sections.
-  A column that leaves the list is released and collected normally.
+- **Filter options, tags of a variant:** one `useQuery` keyed by the case id
+  (and variant id) the consumer passes in as a ref or getter.
+- **Column metadata:** each column's control is its own small component
+  (`ExtensionColumnControl.vue`) with its own `useQuery`. No "many queries"
+  helper is needed.
 
 From the library, not from our code: one request per key however many callers
 ask at once, a late response dropped when a newer request or an invalidation
@@ -148,6 +149,11 @@ An invalidation that cancels a request in flight makes the caller's promise
 resolve with an empty pending state, not reject (confirmed by running the
 library). The facades' `load*` functions therefore return `void` and callers
 read the reactive result, as they do today.
+
+When the scope of `ExtensionColumnFilters` changes, the previous scope's type
+sections stay until the new ones have loaded (the documented
+`placeholderData` pattern), so sections the user has open do not collapse.
+Column metadata is never carried over.
 
 ### 4.5 Capability gates
 
@@ -206,10 +212,11 @@ Signatures and semantics stay as they are.
   list and the per-variant tag entries and await the refetch. This replaces
   three hand-written in-place cache edits.
 - **Variant tags** (assign, remove, set): optimistic, through one shared
-  helper that follows the documented pattern: capture the key and the root,
-  cancel reads on that key, write the optimistic value, run the IPC call, and
-  on failure roll back only if the cache still holds our value. If the root
-  changed while the call was running, nothing is written.
+  helper that follows the documented pattern: fix the key, cancel reads on
+  that key, write the optimistic value, run the IPC call, and on failure roll
+  back only if the cache still holds our value. The key is fixed when the
+  write starts, so a write that settles after a database switch can only
+  reach the previous database's entry, which nothing reads.
 
 `useMutation` is not adopted in the pilot. The callers await plain async
 functions; wrapping them adds lines without removing any.
@@ -219,29 +226,30 @@ The nine-line error-formatting block repeated across `useTags.ts` and
 
 ### 4.8 Public shapes
 
-| Composable | Kept | Removed |
+| Composable | Kept | Changed or removed |
 |---|---|---|
-| `useFilterOptionsCache` | `filterOptions` (read-only, same empty default), `loadFilterOptions`, `loadFilterOptionsAndTags` | `invalidateFilterOptionsCache` (zero callers; also dropped from `filter-types.ts` and `useFilterState`) |
+| `useFilterOptionsCache` | `filterOptions` (read-only, same empty default), `loadFilterOptions` | Takes the case-id ref; `loadFilterOptions` no longer takes a case id (it was always the current one). `invalidateFilterOptionsCache` (zero callers) and `loadFilterOptionsAndTags` are gone. |
 | `useFilterPresetStore` | everything it returns today; the test reset helper, narrowed to the active-preset UI state | module export `invalidateFilterPresets` |
-| `useTags` | everything a component uses, `TAG_COLORS` | `resetTagCaches`; `loadVariantTagsBatch`, `hasTag`, `toggleVariantTag`, `setVariantTags` if they still have no caller when the code is written |
-| `useVariantColumnMeta` | — | replaced, see below |
+| `useTags` | the tag list and its create, update, delete, usage count; `TAG_COLORS` | `resetTagCaches`; members without a caller (`loadVariantTagsBatch`, `hasTag`, `toggleVariantTag`, `setVariantTags`, `isLoadingTags`) |
+| `useVariantTags` (new) | — | The per-variant half of `useTags`: `variantTags`, `isLoading`, `assignTag`, `removeTag` for the case and variant passed in. |
+| `useVariantColumnMeta` | — | Deleted; components use `typesPresentQuery` and `columnMetaQuery` directly. |
 
 Kept behaviours: tag and filter-option reads log and swallow errors; preset
 reads reject; preset mutations resolve after the list has refreshed.
 
-**`useVariantColumnMeta` and `ExtensionColumnFilters.vue`.** Of the two options
-in the brief, the pilot takes the second. The composable becomes declarative:
-`useVariantColumnMeta(scope, columnKeys)` returns `typesPresent`, the metadata
-per column and the set of failed columns, all read from the query cache.
-`ExtensionColumnFilters` is its only consumer; its local `metaMap`,
-`failedKeys`, `pendingKeys`, `dataKey` and the `cacheEpoch` watch are deleted.
-A failed column still fetches once and is not retried on re-render. Props,
-emits and template stay the same.
+Component changes, all in `<script>` unless noted:
 
-**`CohortFilterBar.vue`** reads the case ids from the `case-ids` query in place
-of its mount-time `loadCohortCaseIds()`.
-
-No other component changes.
+- **`ExtensionColumnFilters.vue`**: its local `metaMap`, `failedKeys`,
+  `pendingKeys`, `dataKey` and the `cacheEpoch` watch are deleted. The template
+  renders one `ExtensionColumnControl` per column. A failed column still
+  fetches once and is not retried on re-render. Props and emits are unchanged.
+- **`ExtensionColumnControl.vue`** (new): label, the control for the column
+  kind, and the column's metadata query.
+- **`CohortFilterBar.vue`**: reads the case ids from the `case-ids` query in
+  place of its mount-time `loadCohortCaseIds()`.
+- **`TagsSection.vue`**: uses `useVariantTags(caseId, variantId)`; its manual
+  load-on-mount and load-on-change watchers are gone. Template unchanged.
+- **`FilterToolbar.vue`**: two calls drop the case-id argument.
 
 ### 4.9 Case and cohort parity
 
@@ -265,7 +273,6 @@ component with Pinia and Pinia Colada installed.
 - `isRetryableError`: the five listed codes are never retryable, for both
   `SerializableError` and `Error`.
 - Shallow storage: a nested result is not reactive.
-- `useQueries`: one query per item; a removed item is released and collected.
 - Capability gate: no fetch while the capability document is missing or the
   flag is off, including through `load*`; fetches once it turns on.
 - Invalidation: `database-switch` is idempotent and never removes an entry
@@ -353,3 +360,24 @@ PR opens as a draft.
 | Existing gates do not measure the invalidation cost | Stated; a refetch-count test is added (4.6). |
 | Preset test-reset helper still needed for UI state | Kept, narrowed (4.8). |
 | Dependency change needs `preflight-full --clean-install` | Section 9. |
+
+## 11. What changed while implementing
+
+- **No `useQueries` helper.** Each column control owns its query, which is the
+  idiomatic shape and needs no helper.
+- **Column metadata now loads when its section is first opened**, not for
+  every section up front. Vuetify renders an expansion panel's content on
+  first open, and the query lives in that content. This asks for less (no
+  metadata for sections nobody opens) at the cost of the bounds appearing a
+  moment after a section opens. Adding `eager` to the panel text restores the
+  old timing.
+- **`useTags` was split** into the list (`useTags`) and one variant's tags
+  (`useVariantTags`), so `TagsSection.vue` changed in its script. Keeping the
+  old imperative `loadVariantTags(caseId, variantId)` shape would have needed
+  a placeholder query in every consumer of the tag list.
+- **The optimistic-write helper has no database check.** Rolling back only
+  when the cache still holds the optimistic value already makes a late
+  failure harmless; a test covers a write that fails or succeeds after a
+  switch.
+- **`@pinia/colada` is a dev dependency**, like `vue` and `pinia`: the
+  renderer is bundled by Vite and nothing is resolved at runtime.

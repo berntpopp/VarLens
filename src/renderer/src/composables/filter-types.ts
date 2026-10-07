@@ -37,7 +37,7 @@ export interface ExportResult {
 export interface UseFilterStateReturn {
   // State
   filters: Ref<FilterState>
-  filterOptions: Ref<FilterOptions>
+  filterOptions: Readonly<Ref<FilterOptions>>
   geneSymbolSuggestions: Ref<string[]>
   loadingSuggestions: Ref<boolean>
   selectedImpactPresets: Ref<string[]>
@@ -66,8 +66,7 @@ export interface UseFilterStateReturn {
   handleGeneClear: () => void
   searchGeneSymbols: (query: string) => Promise<void>
   emitFilters: () => void
-  loadFilterOptions: (caseId: number) => Promise<void>
-  invalidateFilterOptionsCache: () => void
+  loadFilterOptions: () => Promise<void>
   resetForCaseSwitch: () => void
   setInitialSearch: (search: string) => void
   exportToExcel: (

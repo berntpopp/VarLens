@@ -4,8 +4,9 @@
  *
  * Deleting a case cascades its rows away in the database, but the renderer's
  * per-case caches (metadata, comments, metrics) would otherwise keep the
- * deleted id until the next database switch. Every delete here evicts once the
- * IPC call *settles*:
+ * deleted id until the next database switch, and query-cache data that spans
+ * cases (cohort scope, column metadata) would still count it. Every delete
+ * here evicts and invalidates once the IPC call *settles*:
  *   - success → the case is gone, nothing may still hold its id;
  *   - failure → callers roll the case back into the list, so its entries are
  *     dropped and the next read reloads them instead of trusting state from
@@ -18,6 +19,7 @@
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { useApiService } from './useApiService'
 import { useCaseMetadata } from './useCaseMetadata'
+import { invalidateServerData } from '../queries/invalidation'
 
 export function useCaseDeletion() {
   const { api } = useApiService()
@@ -33,6 +35,7 @@ export function useCaseDeletion() {
       unwrapIpcResult(await requireApi().cases.delete(caseId))
     } finally {
       invalidateCase(caseId)
+      void invalidateServerData('data-changed')
     }
   }
 
@@ -42,6 +45,7 @@ export function useCaseDeletion() {
       return unwrapIpcResult(await requireApi().cases.deleteBatch([...caseIds]))
     } finally {
       caseIds.forEach(invalidateCase)
+      void invalidateServerData('data-changed')
     }
   }
 
@@ -51,6 +55,7 @@ export function useCaseDeletion() {
       return unwrapIpcResult(await requireApi().cases.deleteAll())
     } finally {
       invalidateAllCases()
+      void invalidateServerData('data-changed')
     }
   }
 

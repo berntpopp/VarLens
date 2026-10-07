@@ -141,12 +141,8 @@ export function useFilterState(
     useGeneAutocomplete(api, caseIdRef, filters)
 
   // Filter options cache
-  const {
-    filterOptions,
-    loadFilterOptions: loadFilterOptionsInternal,
-    loadFilterOptionsAndTags: loadFilterOptionsAndTagsInternal,
-    invalidateFilterOptionsCache
-  } = useFilterOptionsCache(api)
+  const { filterOptions, loadFilterOptions: loadFilterOptionsInternal } =
+    useFilterOptionsCache(caseIdRef)
 
   // Filter computed properties and manipulation
   const {
@@ -182,11 +178,11 @@ export function useFilterState(
   })
 
   // -------------------------------------------------------------------------
-  // 7. Public loadFilterOptions wraps loadFilterOptionsAndTags
+  // 7. Public loadFilterOptions also loads the tag list
   // -------------------------------------------------------------------------
 
-  const loadFilterOptionsPublic = async (caseId: number): Promise<void> => {
-    await loadFilterOptionsAndTagsInternal(caseId, loadTags)
+  const loadFilterOptionsPublic = async (): Promise<void> => {
+    await Promise.all([loadFilterOptionsInternal(), loadTags()])
   }
 
   // -------------------------------------------------------------------------
@@ -226,7 +222,6 @@ export function useFilterState(
     searchGeneSymbols,
     emitFilters,
     loadFilterOptions: loadFilterOptionsPublic,
-    invalidateFilterOptionsCache,
     resetForCaseSwitch,
     setInitialSearch,
     exportToExcel

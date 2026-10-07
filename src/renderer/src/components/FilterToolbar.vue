@@ -708,11 +708,11 @@ onMounted(async () => {
   const presetReason = await getCurrentUnsupportedReason('workflow.filterPresets')
   if (presetReason !== null) {
     warnUnsupported(presetReason)
-    await loadFilterOptions(props.caseId)
+    await loadFilterOptions()
     return
   }
 
-  await Promise.all([loadFilterOptions(props.caseId), loadPresets()])
+  await Promise.all([loadFilterOptions(), loadPresets()])
 })
 </script>
 

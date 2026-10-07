@@ -75,12 +75,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useTags } from '../composables/useTags'
+import { useVariantTags } from '../composables/useVariantTags'
 import { usePermissions } from '../composables/usePermissions'
 import type { Tag } from '../../../shared/types/database-entities'
 import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiPlus } from '@mdi/js'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 interface Props {
   /** Case ID for per-case tag assignments */
@@ -96,88 +98,46 @@ const emit = defineEmits<{
   changed: []
 }>()
 
+const { getTags } = useTags()
 const {
-  loadTags,
-  getTags,
-  loadVariantTags,
-  getVariantTags,
-  isVariantTagsLoading,
-  assignVariantTag,
-  removeVariantTag
-} = useTags()
+  variantTags: assignedTags,
+  isLoading,
+  assignTag,
+  removeTag: removeVariantTag
+} = useVariantTags(
+  () => props.caseId,
+  () => props.variantId
+)
 
 const menuOpen = ref(false)
-const loading = ref(false)
+const writing = ref(false)
+const loading = computed(() => isLoading.value || writing.value)
 
 // Available tags (all tags in the system)
 const availableTags = computed<Tag[]>(() => getTags())
 
-// Assigned tags for this variant
-const assignedTags = computed<Tag[]>(() => getVariantTags(props.caseId, props.variantId))
+const isTagAssigned = (tagId: number): boolean => assignedTags.value.some((t) => t.id === tagId)
 
-// Check if a tag is assigned
-const isTagAssigned = (tagId: number): boolean => {
-  return assignedTags.value.some((t) => t.id === tagId)
-}
-
-// Toggle tag assignment
-const toggleTag = async (tagId: number) => {
-  loading.value = true
+async function write(action: string, run: () => Promise<void>): Promise<void> {
+  writing.value = true
   try {
-    if (isTagAssigned(tagId)) {
-      await removeVariantTag(props.caseId, props.variantId, tagId)
-    } else {
-      await assignVariantTag(props.caseId, props.variantId, tagId)
-    }
+    await run()
     emit('changed')
   } catch (error) {
-    logService.error(
-      'Failed to toggle tag: ' + (error instanceof Error ? error.message : String(error)),
-      'tags'
-    )
+    logService.error(`Failed to ${action} tag: ${formatError(error)}`, 'tags')
   } finally {
-    loading.value = false
+    writing.value = false
   }
 }
 
-// Remove tag from variant
-const removeTag = async (tagId: number) => {
-  loading.value = true
-  try {
-    await removeVariantTag(props.caseId, props.variantId, tagId)
-    emit('changed')
-  } catch (error) {
-    logService.error(
-      'Failed to remove tag: ' + (error instanceof Error ? error.message : String(error)),
-      'tags'
-    )
-  } finally {
-    loading.value = false
-  }
-}
+const toggleTag = (tagId: number): Promise<void> =>
+  write('toggle', async () => {
+    const tag = availableTags.value.find((t) => t.id === tagId)
+    if (isTagAssigned(tagId)) await removeVariantTag(tagId)
+    else if (tag !== undefined) await assignTag(tag)
+  })
 
-// Watch for loading state from composable
-watch(
-  () => isVariantTagsLoading(props.caseId, props.variantId),
-  (isLoading) => {
-    loading.value = isLoading
-  }
-)
-
-// Load tags on mount and when variant changes
-onMounted(async () => {
-  await Promise.all([loadTags(), loadVariantTags(props.caseId, props.variantId)])
-})
-
-// Reload tags when variant changes
-watch(
-  () => [props.caseId, props.variantId],
-  async ([newCaseId, newVariantId]) => {
-    if (typeof newCaseId === 'number' && typeof newVariantId === 'number') {
-      await loadVariantTags(newCaseId, newVariantId)
-    }
-  }
-)
+const removeTag = (tagId: number): Promise<void> => write('remove', () => removeVariantTag(tagId))
 </script>
 
 <style scoped>
