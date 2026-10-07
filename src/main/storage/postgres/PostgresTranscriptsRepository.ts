@@ -153,25 +153,6 @@ export class PostgresTranscriptsRepository {
       (transcript.consequence as string | null | undefined) ?? null,
       (transcript.func as string | null | undefined) ?? null
     )
-    const coordResult = await client.query<{
-      chr: string
-      pos: number
-      ref: string
-      alt: string
-      variant_type: string
-      genome_build: string
-    }>(
-      `SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
-         FROM ${this.schemaName}.variants v
-         JOIN ${this.schemaName}.cases c ON c.id = v.case_id
-        WHERE v.id = $1`,
-      [variantId]
-    )
-    const coord = coordResult.rows[0]
-
-    // Summary lock protects against concurrent rebuilds and import publications
-    await lockSummaryForWrite(client, this.schema)
-
     // The per-gene cohort aggregates count this row under its gene: move it
     // when the selected transcript belongs to another gene.
     const geneScope = { schema: this.schema, client, variantId }
@@ -204,34 +185,6 @@ export class PostgresTranscriptsRepository {
       ]
     )
     if (geneChanges) await addVariantToGeneSummary(geneScope)
-
-    // Exact representative annotation upkeep in cohort_variant_summary (#461)
-    if (coord !== undefined) {
-      await client.query(
-        `UPDATE ${this.schemaName}."cohort_variant_summary" cvs
-            SET gene_symbol = sub.gene_symbol,
-                cdna = sub.cdna,
-                aa_change = sub.aa_change,
-                consequence = sub.consequence,
-                func = sub.func,
-                transcript = sub.transcript
-           FROM (
-             SELECT MAX(v.gene_symbol) AS gene_symbol,
-                    MAX(v.cdna) AS cdna,
-                    MAX(v.aa_change) AS aa_change,
-                    MAX(v.consequence) AS consequence,
-                    MAX(v.func) AS func,
-                    MAX(v.transcript) AS transcript
-               FROM ${this.schemaName}."variants" v
-               JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
-              WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
-                AND v.variant_type = $5 AND c.genome_build = $6
-           ) sub
-          WHERE cvs.chr = $1 AND cvs.pos = $2 AND cvs.ref = $3 AND cvs.alt = $4
-            AND cvs.variant_type = $5 AND cvs.genome_build = $6`,
-        [coord.chr, coord.pos, coord.ref, coord.alt, coord.variant_type, coord.genome_build]
-      )
-    }
   }
 
   private async connect(): Promise<PoolClient> {
