@@ -177,6 +177,39 @@ describe('withExclusiveImportFence', () => {
     expect(waits).toBe(2)
   })
 
+  it('only ever terminates import connections of this workspace, this database and this role', async () => {
+    let waits = 0
+    const { client, texts } = recordingClient((text) => {
+      if (text.includes('pg_advisory_lock(') && (waits += 1) === 1) lockTimeout()
+      return healthyFence(3)(text, undefined)
+    })
+
+    await withExclusiveImportFence(client, 'ws', async () => undefined, { waitMs: 50 })
+
+    const terminate = texts.find((text) => text.includes('pg_terminate_backend')) ?? ''
+    expect(terminate).toContain('JOIN pg_stat_activity a ON a.pid = l.pid')
+    expect(terminate).toContain('a.datname = current_database()')
+    expect(terminate).toContain('a.usename = current_user')
+    expect(terminate).toContain("' varlens-import:' || n.oid")
+  })
+
+  it('still ends in the bounded conflict when a holder cannot be signalled', async () => {
+    const { client, texts } = recordingClient((text) => {
+      if (text.includes('pg_advisory_lock(')) lockTimeout()
+      if (text.includes('pg_terminate_backend')) {
+        throw Object.assign(new Error('permission denied to terminate process'), { code: '42501' })
+      }
+      return undefined
+    })
+
+    await expect(
+      withExclusiveImportFence(client, 'ws', vi.fn(), { waitMs: 50 })
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
+
+    expect(texts.filter((text) => text.includes('pg_advisory_lock('))).toHaveLength(3)
+    expect(texts.filter((text) => text.includes('pg_terminate_backend'))).toHaveLength(2)
+  })
+
   it('gives up with a busy conflict after the last attempt and changes nothing', async () => {
     const { client, texts } = recordingClient((text) =>
       text.includes('pg_advisory_lock(') ? lockTimeout() : undefined

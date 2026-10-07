@@ -39,7 +39,9 @@ export function answerHealthyFence<T extends object>(client: T): T {
       await inner('BEGIN')
     }
     if (text.includes('pg_try_advisory_xact_lock_shared')) return { rows: [{ locked: true }] }
-    if (text.includes('varlens-import-fence')) return { rows: [] }
+    if (text.includes('varlens-import-fence') || text.includes('varlens-import:')) {
+      return { rows: [] }
+    }
     if (text.includes("'import_generation'") && !text.startsWith('UPDATE')) {
       return { rows: [{ generation: '1', isolation: 'read committed' }] }
     }

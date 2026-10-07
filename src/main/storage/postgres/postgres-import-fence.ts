@@ -228,18 +228,51 @@ async function tryTakeExclusiveFence(
   }
 }
 
-/** End the backends that still hold the fence in shared mode in this database. */
+/** Suffix of `application_name` on an import connection of one workspace. */
+const IMPORT_CONNECTION_TAG_SQL = "' varlens-import:' || n.oid"
+
+/**
+ * Mark this connection as an import connection of the workspace: its
+ * `application_name` gets the suffix ` varlens-import:<schema oid>`. Recovery
+ * terminates only backends that carry it ({@link terminateFenceHolders}).
+ * Every import worker calls this once, after connecting.
+ */
+export async function markImportConnection(client: Queryable, schema: string): Promise<void> {
+  // application_name holds 63 bytes; the suffix needs at most 26.
+  await client.query(
+    `SELECT set_config('application_name',
+                       left(current_setting('application_name'), 36) || ${IMPORT_CONNECTION_TAG_SQL},
+                       false)
+       FROM pg_namespace n WHERE n.nspname = $1`,
+    [schema]
+  )
+}
+
+/**
+ * End the import backends of this workspace that still hold the fence in
+ * shared mode. Deliberately narrow: only a backend in this database, logged
+ * in as the current role (which may always signal its own backends) and
+ * marked by {@link markImportConnection} for this schema. Any other holder —
+ * an interactive session, another application, another role — is left alone
+ * and makes recovery end in its bounded CONFLICT instead.
+ */
 async function terminateFenceHolders(client: Queryable, schema: string): Promise<void> {
   // Two-key advisory locks are stored as (classid, objid) with objsubid = 2,
   // per database: the same schema name in another database is another fence.
   await client.query(
-    `SELECT pg_terminate_backend(pid)
-       FROM pg_locks
-      WHERE locktype = 'advisory' AND granted AND mode = 'ShareLock' AND objsubid = 2
-        AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-        AND classid = hashtext($1)::oid
-        AND objid = hashtext('varlens-import-fence')::oid
-        AND pid <> pg_backend_pid()`,
+    `SELECT pg_terminate_backend(a.pid)
+       FROM pg_namespace n
+       JOIN pg_locks l
+         ON l.locktype = 'advisory' AND l.granted AND l.mode = 'ShareLock' AND l.objsubid = 2
+        AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+        AND l.classid = hashtext($1)::oid
+        AND l.objid = hashtext('varlens-import-fence')::oid
+       JOIN pg_stat_activity a ON a.pid = l.pid
+      WHERE n.nspname = $1
+        AND a.datname = current_database()
+        AND a.usename = current_user
+        AND right(a.application_name, length(${IMPORT_CONNECTION_TAG_SQL})) = ${IMPORT_CONNECTION_TAG_SQL}
+        AND a.pid <> pg_backend_pid()`,
     [schema]
   )
 }
@@ -267,7 +300,11 @@ export async function withExclusiveImportFence<T>(
   try {
     for (let attempt = 1; attempt <= attempts && !held; attempt += 1) {
       held = await tryTakeExclusiveFence(client, schema, waitMs)
-      if (!held && attempt < attempts) await terminateFenceHolders(client, schema)
+      if (!held && attempt < attempts) {
+        // A holder that cannot be signalled must not turn the bounded
+        // conflict into a raw error: the next attempt decides.
+        await terminateFenceHolders(client, schema).catch(() => undefined)
+      }
     }
   } catch (error) {
     // The lock may have been granted before the failure (a failed COMMIT).

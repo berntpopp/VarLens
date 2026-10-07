@@ -38,6 +38,7 @@ import {
   beginFencedImportTransaction,
   ImportSupersededError,
   inFencedImportTransaction,
+  markImportConnection,
   type ImportFence
 } from '../storage/postgres/postgres-import-fence'
 import { DATABASE_CONFIG } from '../../shared/config'
@@ -201,6 +202,7 @@ export async function runImport(
     // renderer-default 30 s statement_timeout. Auto-commit (no BEGIN
     // required) and per-session, so it does not leak to other connections.
     await profilePhase('relax-session-limits', () => relaxImportSessionLimits(client))
+    await markImportConnection(client, start.schema)
     if (start.lease !== undefined) {
       await assertImportLeaseHeld(client, start.schema, start.lease.holderPid)
       fence = { schema: start.schema, generation: start.lease.generation }

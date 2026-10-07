@@ -17,6 +17,7 @@ import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migr
 import {
   beginFencedImportTransaction,
   IMPORT_FENCE_BUSY_MESSAGE,
+  markImportConnection,
   readImportGeneration
 } from '../../../src/main/storage/postgres/postgres-import-fence'
 import { PostgresVcfImportRepository } from '../../../src/main/storage/postgres/PostgresVcfImportRepository'
@@ -179,6 +180,7 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
     const owner = await connect()
     const generation = await repo.recoverInterruptedImports(owner as never)
     const orphan = await connect()
+    await markImportConnection(orphan, schema)
     const orphanPid = await backendPid(orphan)
     await beginFencedImportTransaction(orphan, { schema, generation })
 
@@ -189,6 +191,65 @@ describe.skipIf(!RUN)('import recovery fence — locks on a real instance', () =
       const alive = await probe.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [orphanPid])
       return alive.rows.length === 0
     })
+  }, 60_000)
+
+  it('never terminates a holder that is not an import connection of this workspace', async () => {
+    const repo = new PostgresVcfImportRepository(schema)
+    const owner = await connect()
+    const generation = await repo.recoverInterruptedImports(owner as never)
+    // Holds the fence, but is not marked as an import connection (an
+    // interactive session, another application).
+    const stranger = await connect()
+    const strangerPid = await backendPid(stranger)
+    await beginFencedImportTransaction(stranger, { schema, generation })
+
+    await expect(
+      repo.recoverInterruptedImports(owner as never, { waitMs: 100, attempts: 3 })
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
+
+    const alive = await probe.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [strangerPid])
+    expect(alive.rows).toHaveLength(1)
+    await stranger.query('ROLLBACK')
+  }, 60_000)
+
+  it('ends in the bounded conflict when the holder runs under another role', async (context) => {
+    const role = `varlens_fence_other_${randomBytes(4).toString('hex')}`
+    try {
+      await probe.query(`CREATE ROLE "${role}" LOGIN PASSWORD 'fence-test'`)
+    } catch (error) {
+      // Needs CREATEROLE; the mocked test covers the failing terminate call.
+      if ((error as { code?: string }).code === '42501') return context.skip()
+      throw error
+    }
+    try {
+      await probe.query(`GRANT USAGE ON SCHEMA "${schema}" TO "${role}"`)
+      await probe.query(`GRANT SELECT ON "${schema}"."database_settings" TO "${role}"`)
+      const repo = new PostgresVcfImportRepository(schema)
+      const owner = await connect()
+      const generation = await repo.recoverInterruptedImports(owner as never)
+      const url = new URL(PG_URL)
+      url.username = role
+      url.password = 'fence-test'
+      const other = new Client({ connectionString: url.toString() })
+      other.on('error', () => undefined)
+      await other.connect()
+      opened.push(other)
+      await markImportConnection(other, schema)
+      const otherPid = await backendPid(other)
+      await beginFencedImportTransaction(other, { schema, generation })
+
+      await expect(
+        repo.recoverInterruptedImports(owner as never, { waitMs: 100, attempts: 3 })
+      ).rejects.toMatchObject({ code: 'CONFLICT', message: IMPORT_FENCE_BUSY_MESSAGE })
+
+      const alive = await probe.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [otherPid])
+      expect(alive.rows).toHaveLength(1)
+      await other.query('ROLLBACK')
+      await other.end()
+    } finally {
+      await probe.query(`DROP OWNED BY "${role}"`)
+      await probe.query(`DROP ROLE "${role}"`)
+    }
   }, 60_000)
 
   it('gives up with a busy conflict when the fence cannot be taken, and holds nothing afterwards', async () => {
