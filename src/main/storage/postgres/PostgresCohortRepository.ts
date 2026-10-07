@@ -19,8 +19,8 @@ import {
   type CohortReadWarnings
 } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
-import { runNamed, runNamedDynamic } from './named-query'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
+import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
 import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-cohort-summary-query'
 import {
@@ -333,7 +333,7 @@ export class PostgresCohortRepository {
   async getSummary(): Promise<CohortSummary> {
     // The variant figures come from maintained aggregates, so reconcile them
     // first, like any other read of the cohort summary.
-    await prepareCohortRead({ pool: this.pool, schema: this.schema })
+    const { warnings } = await prepareCohortRead({ pool: this.pool, schema: this.schema })
     const totals = cohortVariantTotalsSql((table) => this.tbl(table))
     const result = await this.pool.query(
       `SELECT
@@ -389,7 +389,10 @@ export class PostgresCohortRepository {
         vus: toNumber(row.vus),
         likely_benign: toNumber(row.likely_benign),
         benign: toNumber(row.benign)
-      }
+      },
+      // The maintained figures (unique variants, genes) lag while the summary
+      // is being rebuilt: say so instead of presenting them as exact.
+      ...(warnings !== undefined ? { warnings } : {})
     }
   }
 
@@ -437,85 +440,22 @@ export class PostgresCohortRepository {
   }
 
   /**
-   * Cohort-view per-column metadata (C4 Step 2). Reads COUNT(DISTINCT)/MIN/MAX
-   * directly from the already-deduped `cohort_variant_summary` table — mirroring
-   * SQLite cohort.ts:getColumnMeta. Aggregating across `cohort_column_meta`
-   * would SUM per-case distinct counts and overcount (Pass-3 HIGH #3), so the
-   * cohort path reads the summary table, not the per-case meta cache.
+   * Cohort-view per-column metadata (C4 Step 2), read from the already-deduped
+   * `cohort_variant_summary` table like SQLite cohort.ts:getColumnMeta; see
+   * postgres-cohort-column-meta.ts for what is exact and what is capped.
+   * Aggregating across `cohort_column_meta` would SUM per-case distinct counts
+   * and overcount (Pass-3 HIGH #3), so the cohort path reads the summary table.
    */
   async getColumnMeta(): Promise<ColumnFilterMeta[]> {
     const version = await this.summaryVersion()
     if (this.columnMetaCache?.version === version) return this.columnMetaCache.meta
 
-    const meta: ColumnFilterMeta[] = []
-    const selectParts = COLUMN_META_KEYS.flatMap((key) => {
-      const sqlColumn = COLUMN_META_SUMMARY_COLUMNS[key]
-      const parts = [`COUNT(DISTINCT ${sqlColumn})::bigint AS cnt_${key}`]
-      if (NUMERIC_COLUMNS.has(key)) {
-        parts.push(`MIN(${sqlColumn}) AS min_${key}`, `MAX(${sqlColumn}) AS max_${key}`)
-      }
-      return parts
+    const meta = await readCohortColumnMeta(this.pool as Pool, this.schema, {
+      keys: COLUMN_META_KEYS,
+      expressions: COLUMN_META_SUMMARY_COLUMNS,
+      numericKeys: NUMERIC_COLUMNS,
+      from: this.summaryWithBuildTotals()
     })
-    const aggregateResult = await runNamed<Record<string, unknown>>(this.pool as Pool, {
-      name: 'cohort:column_meta_agg:v2',
-      text: `SELECT ${selectParts.join(', ')} FROM ${this.summaryWithBuildTotals()}`,
-      values: [],
-      schema: this.schema
-    })
-    const aggregateRow = (aggregateResult.rows[0] ?? {}) as Record<string, unknown>
-    const lowCardinalityColumns: Array<{ key: string; sqlColumn: string }> = []
-
-    for (const key of COLUMN_META_KEYS) {
-      const isNumeric = NUMERIC_COLUMNS.has(key)
-      const sqlColumn = COLUMN_META_SUMMARY_COLUMNS[key]
-      const entry: ColumnFilterMeta = {
-        key,
-        dataType: isNumeric ? 'numeric' : 'text',
-        distinctCount: toNumber(aggregateRow[`cnt_${key}`])
-      }
-      if (isNumeric) {
-        const min = toNullableNumber(aggregateRow[`min_${key}`])
-        const max = toNullableNumber(aggregateRow[`max_${key}`])
-        if (min !== null) entry.min = min
-        if (max !== null) entry.max = max
-      }
-      if (entry.distinctCount > 0 && entry.distinctCount <= 50) {
-        lowCardinalityColumns.push({ key, sqlColumn })
-      }
-      meta.push(entry)
-    }
-
-    if (lowCardinalityColumns.length > 0) {
-      const unionParts = lowCardinalityColumns
-        .map(
-          ({ key, sqlColumn }) =>
-            `SELECT '${key}' AS col_key, ${sqlColumn}::text AS value
-             FROM ${this.summaryWithBuildTotals()}
-             WHERE ${sqlColumn} IS NOT NULL
-             GROUP BY ${sqlColumn}`
-        )
-        .join('\nUNION ALL\n')
-      const valuesResult = await runNamedDynamic<{ col_key: string; value: unknown }>(
-        this.pool as Pool,
-        {
-          baseName: 'cohort:column_meta_values',
-          text: unionParts,
-          values: [],
-          schema: this.schema
-        }
-      )
-      const valuesByKey = new Map<string, string[]>()
-      for (const row of valuesResult.rows as Array<{ col_key: string; value: unknown }>) {
-        const values = valuesByKey.get(row.col_key) ?? []
-        values.push(String(row.value))
-        valuesByKey.set(row.col_key, values)
-      }
-      for (const entry of meta) {
-        const values = valuesByKey.get(entry.key)
-        if (values !== undefined) entry.distinctValues = values.sort()
-      }
-    }
-
     this.columnMetaCache = { version, meta }
     return meta
   }

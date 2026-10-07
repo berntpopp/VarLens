@@ -126,3 +126,45 @@ Use `VARLENS_PG_IMPORT_PROFILE=1` and compare per-phase ratios.
   regenerate with `npx tsx scripts/simulate-variants.ts --samples 100 --variants 60000 --formats vcf --out tests/.cache/sim-cohort`.
 - Wrap heavy runs: `systemd-run --user --scope -q -p MemoryMax=16G …`.
 - Run `make rebuild-node` after any `npm ci` (the web server and Vitest need the Node ABI).
+
+## Update 2026-10-07 (evening): publication speed, cheap defects, #460, #461
+
+Branch `perf/import-stage5-publication` (worktree `VarLens-wt/pub-speed`), based on `main`
+after #466/#467. Not pushed. PostgreSQL migration **0024** (`cohort_summary_maintenance`).
+
+Done:
+
+- Publication prepares outside the summary write lock (per-case aggregate, gene pairs,
+  column metadata); only the upserts are serialised. Work under the lock at 100 exomes:
+  4.6 s → 3.6 s per sample (0.77x), batch 518 s → 418 s on a loaded machine.
+- Fillfactor on `variant_frequency` / gene tables (heap-only counter updates 38% → 87%).
+- `cohort:getColumnMeta` 2.7 s → 0.9 s: distinct counts above 50 are reported as 51 on both
+  backends; value lists and min/max stay exact.
+- Web batch import is a job: `batch-import:start` answers with a job id, result by
+  `batch-import:complete` / `batch-import:failed` and `batch-import:status`; a reloaded page
+  follows the job snapshots.
+- Case-list refresh pages until every finished case is merged.
+- #461: representative annotation = NULL-ignoring MAX per column under `COLLATE "C"` on
+  rebuild, add, remove and transcript switch. #460: maintained
+  `cohort_summary_state.unique_variant_count`. Cross-backend parity test (f) is real.
+- Overview no longer blocks or throws on summary freshness; it returns `warnings.staleSummary`.
+
+Measured and decided against (numbers in the commit messages and the PR description):
+
+- **No summary index is unused.** Exercised by the real read paths on a 100-exome schema,
+  every one of the eight indexes is chosen by the planner. `idx_cvs_filters` serves the
+  ascending gnomAD sort (26 ms → 291 ms without it) and selective gnomAD filters (0 → 130 ms);
+  `idx_cvs_covering_common` the ascending consequence sort (81 → 314 ms) and consequence
+  filters (160 → 210 ms). Each index costs about 0.2–0.25 s of the 2.0 s summary upsert per
+  sample (PK only: 0.4 s). Dropping them is an owner decision, not a free win.
+- HOT updates of the summary are impossible while the carrier count is indexed (0 of 5.1 M
+  updates were heap-only). A counters side table (key + counts, PK + keyset index) would
+  halve the WAL of a publication (308k vs 610k records, 0.8 s vs 2.0 s) but every cohort
+  read would join it; it belongs with `variant_locus_stats` of the normalised model.
+- Ordering the upsert by key, dropping the flag assignments, splitting INSERT/UPDATE: no
+  change in work (610k WAL records each; split 550k).
+- Publishing several cases in one upsert: 32% fewer WAL records at 4 cases, 52% at 8; not
+  worth giving up one publication transaction per case.
+
+Still open: summary upsert (~1.5–2.0 s per sample) is the remaining serial cost; the 30 s
+pooled `query_timeout` for long maintenance statements; uploads are sequential.

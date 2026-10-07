@@ -61,6 +61,7 @@
       ref="cohortFilterBarRef"
       :total-count="totalCount"
       :cohort-summary="summary"
+      :summary-stale="summaryStale"
       :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
       :visible-columns="visibleHeaders.map((h) => h.key)"
       :exporting="exporting"

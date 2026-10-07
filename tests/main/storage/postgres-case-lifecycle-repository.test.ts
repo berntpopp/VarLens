@@ -89,7 +89,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(sql.at(-1)).toBe('COMMIT')
     const idx = (needle: string): number => sql.findIndex((s) => s.includes(needle))
     const flags = idx('v.case_id <> $1')
-    const subtract = idx('carrier_count = cvs.carrier_count - per_case.carrier_delta')
+    const subtract = idx('carrier_count = s.carrier_count - k.carrier_delta')
     const vfDecrement = idx('SET case_count = vf.case_count - 1')
     const flip = idx("SET import_status = 'deleting'")
     expect(flags).toBeGreaterThan(0)
@@ -103,8 +103,18 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(flip).toBeGreaterThan(geneSubtract)
     expect(sql[geneSubtract]).toMatch(/FROM "public"\."variants" v\s+WHERE v\.case_id = \$1/)
     expect(sql[geneSubtract]).toContain('DELETE FROM "public"."cohort_gene_variant_summary"')
-    // Zero-carrier cleanup is scoped to the case's coordinates.
-    expect(sql[idx('cvs.carrier_count <= 0')]).toContain('WHERE case_id = $1')
+    // Before the counters move, the rows whose representative annotation this
+    // case held are recomputed from the remaining carriers (#461).
+    const recompute = idx('keys AS MATERIALIZED')
+    expect(recompute).toBeGreaterThan(flags)
+    expect(subtract).toBeGreaterThan(recompute)
+    expect(sql[recompute]).toContain('AND v.case_id <> $1')
+    // Zero-carrier cleanup is scoped to the case's keys, and the same statement
+    // subtracts the coordinates that are gone from the unique-variant counter (#460).
+    const cleanup = idx('d.carrier_count <= 0')
+    expect(cleanup).toBeGreaterThan(subtract)
+    expect(sql[cleanup]).toContain('USING pg_temp."_varlens_case_summary_delta" k')
+    expect(sql[cleanup]).toContain('SET unique_variant_count = unique_variant_count - (')
     expect(summary.removeColumnMetas).toHaveBeenCalledWith(
       expect.objectContaining({ schema: 'public', caseId: 7 })
     )
@@ -227,7 +237,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
       if (sql.includes('FOR UPDATE')) {
         return { rows: [{ genome_build: 'GRCh38', import_status: 'ready', variant_count: 1 }] }
       }
-      if (sql.includes('per_case.carrier_delta')) throw boom
+      if (sql.includes('s.carrier_count - k.carrier_delta')) throw boom
       if (sql === 'ROLLBACK') throw new Error('rollback failed')
       return { rows: [] }
     })

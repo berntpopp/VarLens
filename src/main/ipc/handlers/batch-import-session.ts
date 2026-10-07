@@ -61,8 +61,7 @@ export async function checkSessionDuplicates(
   return buildDuplicateReport(files, existing, stripText)
 }
 
-/** Enqueue the batch as an `import_batch` job and wait for its result. */
-export async function startSessionBatchImport(params: {
+export interface SessionBatchParams {
   files: SessionBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText?: string
@@ -70,7 +69,21 @@ export async function startSessionBatchImport(params: {
   runId?: string
   session: StorageSession
   callbacks: SessionBatchCallbacks
-}): Promise<BatchResult> {
+}
+
+/** Enqueue the batch as an `import_batch` job and wait for its result. */
+export async function startSessionBatchImport(params: SessionBatchParams): Promise<BatchResult> {
+  return await enqueueSessionBatchImport(params).result
+}
+
+/**
+ * Enqueue the batch as an `import_batch` job and return at once. The caller
+ * owns `result`: it must be awaited or given a rejection handler.
+ */
+export function enqueueSessionBatchImport(params: SessionBatchParams): {
+  jobId: string
+  result: Promise<BatchResult>
+} {
   const handle = jobRunner.enqueue(
     'import_batch',
     {
@@ -83,7 +96,7 @@ export async function startSessionBatchImport(params: {
       return await runSessionBatchImport({ ...params, signal: ctx.signal, ctx })
     }
   )
-  return await handle.result
+  return { jobId: handle.id, result: handle.result }
 }
 
 /** How one file of a batch gets imported (sequential path or an open batch). */

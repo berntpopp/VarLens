@@ -111,7 +111,8 @@ export const batchImportManifest = {
   selectFiles: adapter('upload', { authz: 'analyst' }),
   selectFolder: adapter('upload', { authz: 'analyst' }),
   checkDuplicates: sharedRead({ authz: 'analyst' }),
-  start: sharedWrite(),
+  // Accepted with a job id; the result arrives by SSE (web client batch-import-run.ts).
+  start: adapter('sse', { authz: 'analyst' }),
   // Role >= analyst AND owner-checked, like import.cancel.
   cancel: sharedWrite(),
   onProgress: adapter('sse'),

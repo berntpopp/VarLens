@@ -7,7 +7,7 @@ import type {
   OverviewPhenotype
 } from '../../../shared/types/database-overview'
 import { cohortVariantTotalsSql } from './cohort-gene-summary-sql'
-import { prepareCohortRead } from './cohort-read-freshness'
+import { checkCohortReadFreshness } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
 
@@ -35,12 +35,16 @@ export class PostgresOverviewRepository {
   }
 
   async getOverview(): Promise<DatabaseOverview> {
-    if (typeof (this.pool as unknown as { connect?: unknown }).connect === 'function') {
-      await prepareCohortRead({
-        pool: this.pool as unknown as Pick<Pool, 'query' | 'connect'>,
-        schema: this.schema
-      })
-    }
+    // The landing page never waits for, or fails on, the cohort summary: a
+    // summary that needs a rebuild is refreshed in the background and the
+    // figures taken from it are flagged, as the cohort view does.
+    const { warnings } =
+      typeof (this.pool as unknown as { connect?: unknown }).connect === 'function'
+        ? await checkCohortReadFreshness({
+            pool: this.pool as unknown as Pick<Pool, 'query' | 'connect'>,
+            schema: this.schema
+          })
+        : {}
     // Maintained aggregates: none of the three reads a variant row.
     const totals = cohortVariantTotalsSql((table) => this.table(table))
     const [
@@ -127,7 +131,8 @@ export class PostgresOverviewRepository {
       cases: casesResult.rows.map((row) => this.toOverviewCase(row)),
       cohortGroups: cohortGroupsResult.rows.map((row) => this.toOverviewCohortGroup(row)),
       tags: [],
-      topPhenotypes: topPhenotypesResult.rows.map((row) => this.toOverviewPhenotype(row))
+      topPhenotypes: topPhenotypesResult.rows.map((row) => this.toOverviewPhenotype(row)),
+      ...(warnings !== undefined ? { warnings } : {})
     }
   }
 

@@ -43,4 +43,9 @@ export interface DatabaseOverview {
   cohortGroups: OverviewCohortGroup[]
   tags: OverviewTag[]
   topPhenotypes: OverviewPhenotype[]
+  /**
+   * Same-load read warnings, as on cohort reads. `staleSummary`: the variant
+   * figures of `summary` come from a cohort summary that is being rebuilt.
+   */
+  warnings?: { staleSummary?: boolean }
 }

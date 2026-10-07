@@ -69,8 +69,8 @@ class Session {
   }
 
   /**
-   * POST one RPC. Uses node:http rather than fetch because the batch-import
-   * call stays open for the whole batch and fetch gives up after 5 minutes.
+   * POST one RPC. Uses node:http rather than fetch: an older server holds the
+   * batch-import call open for the whole batch and fetch gives up after 5 minutes.
    */
   async invoke(domain, method, args = []) {
     const body = JSON.stringify({ args })
@@ -171,12 +171,24 @@ async function main() {
     }
   })()
 
-  const result = await session.invoke('batchImport', 'start', [
-    refs,
-    'skip',
-    undefined,
-    randomUUID()
-  ])
+  const runId = randomUUID()
+  let result = await session.invoke('batchImport', 'start', [refs, 'skip', undefined, runId])
+  // The server accepts the batch and answers with a job id; the result is
+  // read from the status call (a browser gets it by event). An older server
+  // held the request open and returned the result directly.
+  if (result?.accepted === true) {
+    for (;;) {
+      const status = await session.invoke('batchImport', 'status', [runId])
+      if (status?.state === 'completed') {
+        result = status.result
+        break
+      }
+      if (status?.state !== 'running') {
+        throw new Error(`Batch import ${status?.state}: ${JSON.stringify(status?.error ?? null)}`)
+      }
+      await new Promise((done) => setTimeout(done, 500))
+    }
+  }
   const totalMs = performance.now() - importStart
   polling = false
   await poller

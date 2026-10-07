@@ -9,6 +9,7 @@ import {
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from './cohort-summary-lock'
+import { removeCaseFromSummary } from './cohort-summary-representative-sql'
 
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
 type CohortSummaryMaintenance = Pick<PostgresCohortSummaryRepository, 'removeColumnMetas'>
@@ -257,38 +258,18 @@ export class PostgresCaseLifecycleRepository {
       deletedCaseId: caseId
     })
 
-    // Subtract carrier/het/hom together from the deduped per-case CTE (one
-    // carrier per coordinate per case — symmetric with incrementalAdd).
+    // Summary rows: recompute the representative annotation this case held,
+    // subtract carrier/het/hom together (one carrier per coordinate per case —
+    // symmetric with incrementalAdd), drop the rows that lost their last
+    // carrier and keep the unique-variant counter in step. Scoped to this
+    // case's coordinates (no full scan).
     const tbl = (t: string): string => this.tbl(t)
-    await client.query(
-      `
-      ${SCOPED_DEDUPED_AGG_SQL(tbl)}
-      UPDATE ${tbl('cohort_variant_summary')} cvs
-      SET carrier_count = cvs.carrier_count - per_case.carrier_delta,
-          het_count = cvs.het_count - per_case.het_delta,
-          hom_count = cvs.hom_count - per_case.hom_delta
-      FROM per_case
-      WHERE cvs.chr = per_case.chr AND cvs.pos = per_case.pos
-        AND cvs.ref = per_case.ref AND cvs.alt = per_case.alt
-        AND cvs.variant_type = per_case.variant_type
-        AND cvs.genome_build = per_case.genome_build
-      `,
-      [caseId]
-    )
-
-    // Zero-carrier cleanup scoped to this case's coordinates (no full scan).
-    await client.query(
-      `DELETE FROM ${tbl('cohort_variant_summary')} cvs
-        USING (
-          SELECT DISTINCT chr, pos, ref, alt, variant_type
-            FROM ${tbl('variants_all')} WHERE case_id = $1
-        ) touched
-        WHERE cvs.chr = touched.chr AND cvs.pos = touched.pos
-          AND cvs.ref = touched.ref AND cvs.alt = touched.alt
-          AND cvs.variant_type = touched.variant_type
-          AND cvs.carrier_count <= 0`,
-      [caseId]
-    )
+    await removeCaseFromSummary({
+      schema: this.schema,
+      client,
+      caseId,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
+    })
 
     // Per-gene aggregates: subtract the case while its rows are still visible.
     await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })

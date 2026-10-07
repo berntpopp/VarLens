@@ -90,6 +90,11 @@ export interface CohortSummary {
     likely_benign: number
     benign: number
   }
+  /**
+   * `staleSummary`: the cohort summary is being rebuilt, so the figures
+   * maintained with it (unique variants, genes with variants) may lag.
+   */
+  warnings?: { staleSummary?: boolean }
 }
 
 /**

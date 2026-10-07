@@ -18,11 +18,11 @@
         <v-progress-linear v-if="loading" indeterminate class="mb-4" />
 
         <template v-else-if="overview">
-          <OverviewStatsGrid :summary="overview.summary" />
+          <OverviewStatsGrid :summary="overview.summary" :summary-stale="summaryStale" />
 
-          <OverviewCohortSection :cohort-groups="overview.cohortGroups" @refresh="loadOverview" />
+          <OverviewCohortSection :cohort-groups="overview.cohortGroups" @refresh="loadOverview()" />
 
-          <OverviewTagsSection :tags="overview.tags" @refresh="loadOverview" />
+          <OverviewTagsSection :tags="overview.tags" @refresh="loadOverview()" />
 
           <OverviewPhenotypesSection :phenotypes="overview.topPhenotypes" />
         </template>
@@ -38,9 +38,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { DatabaseOverview } from '../../../shared/types/database-overview'
 import { useApiService } from '../composables/useApiService'
+import { watchSummaryFreshness } from '../composables/useSummaryFreshness'
 import OverviewStatsGrid from './database-overview/OverviewStatsGrid.vue'
 import OverviewCohortSection from './database-overview/OverviewCohortSection.vue'
 import OverviewTagsSection from './database-overview/OverviewTagsSection.vue'
@@ -62,7 +63,7 @@ async function getOverviewBlockReason(): Promise<string | null> {
 }
 
 /** Load overview data from the database IPC endpoint */
-async function loadOverview(): Promise<void> {
+async function loadOverview(options: { quiet?: boolean } = {}): Promise<void> {
   // Guard for browser dev mode (no preload)
   if (!api) {
     return
@@ -77,7 +78,8 @@ async function loadOverview(): Promise<void> {
     return
   }
 
-  loading.value = true
+  // A refresh after a rebuild swaps the figures in place, without the loader.
+  loading.value = options.quiet !== true
   try {
     const data = unwrapIpcResult(await api.database.getOverview())
     // Normalize: ensure new annotation fields have safe defaults
@@ -94,6 +96,10 @@ async function loadOverview(): Promise<void> {
       }
     }
     overview.value = data
+    // Figures from a cohort summary that is being rebuilt are marked, and
+    // reloaded when the rebuild is through (event on desktop, poll on web).
+    if (data.warnings?.staleSummary === true) freshness?.markStale()
+    freshness?.start()
   } catch (err) {
     logService.error(
       'Failed to load database overview: ' +
@@ -110,12 +116,25 @@ async function loadOverview(): Promise<void> {
   }
 }
 
+const freshness = api
+  ? watchSummaryFreshness({
+      cohortApi: api.cohort,
+      onFresh: () => {
+        if (isOpen.value) void loadOverview({ quiet: true })
+      }
+    })
+  : null
+const summaryStale = computed(() => freshness?.stale.value ?? false)
+
 // Load data when dialog opens
 watch(isOpen, async (open) => {
   if (open) {
     await loadOverview()
+  } else {
+    freshness?.stop()
   }
 })
+onBeforeUnmount(() => freshness?.stop())
 
 const show = (): void => {
   isOpen.value = true

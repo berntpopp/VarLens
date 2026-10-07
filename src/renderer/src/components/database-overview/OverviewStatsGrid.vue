@@ -30,6 +30,14 @@
           {{ summary.unique_variants.toLocaleString() }}
         </div>
         <div class="text-body-small text-medium-emphasis">Unique Variants</div>
+        <div
+          v-if="summaryStale"
+          class="text-body-small text-medium-emphasis"
+          role="status"
+          data-testid="summary-refreshing"
+        >
+          <v-icon size="x-small" :icon="mdiDatabaseSync" /> Being refreshed
+        </div>
       </v-card>
     </v-col>
     <v-col cols="3">
@@ -39,6 +47,14 @@
           {{ summary.genes_with_variants.toLocaleString() }}
         </div>
         <div class="text-body-small text-medium-emphasis">Genes with Variants</div>
+        <div
+          v-if="summaryStale"
+          class="text-body-small text-medium-emphasis"
+          role="status"
+          data-testid="summary-refreshing"
+        >
+          <v-icon size="x-small" :icon="mdiDatabaseSync" /> Being refreshed
+        </div>
       </v-card>
     </v-col>
   </v-row>
@@ -112,6 +128,7 @@ import type { CohortSummary } from '../../../../shared/types/cohort'
 import {
   mdiAccountGroup,
   mdiChartBar,
+  mdiDatabaseSync,
   mdiDna,
   mdiFingerprint,
   mdiSetNone,
@@ -121,6 +138,8 @@ import {
 
 const props = defineProps<{
   summary: CohortSummary
+  /** The cohort summary is being rebuilt: the figures taken from it may lag. */
+  summaryStale?: boolean
 }>()
 
 const totalAcmgClassified = computed(() => {
