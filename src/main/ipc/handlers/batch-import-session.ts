@@ -193,16 +193,11 @@ export async function runSessionBatchImport(params: {
       )
       result.succeeded++
       existingIds.set(caseName, imported.caseId)
+      const unranked =
+        imported.unrankedClinvar !== undefined ? { unrankedClinvar: imported.unrankedClinvar } : {}
       finish(
-        {
-          ...base,
-          status: 'success',
-          variantCount: imported.variantCount,
-          ...(imported.unrankedClinvar !== undefined
-            ? { unrankedClinvar: imported.unrankedClinvar }
-            : {})
-        },
-        { caseId: imported.caseId, variantCount: imported.variantCount }
+        { ...base, status: 'success', variantCount: imported.variantCount, ...unranked },
+        { caseId: imported.caseId, variantCount: imported.variantCount, ...unranked }
       )
     } catch (error) {
       if (signal.aborted) {

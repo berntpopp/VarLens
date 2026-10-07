@@ -42,6 +42,12 @@ import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/
 import { VcfHeaderBudget } from '../../import/vcf/vcf-header-limits'
 import { VcfResourceLimitError } from '../../import/vcf/vcf-resource-limits'
 import type { DatabaseService } from '../../database/DatabaseService'
+import { mainLogger } from '../../services/MainLogger'
+import {
+  resetUnrankedClinvar,
+  takeUnrankedClinvar,
+  unrankedClinvarLogLine
+} from '../../import/unranked-clinvar'
 import { openWorkerDatabase } from '../../workers/worker-db'
 import { prepareStatements } from '../../workers/import-pipeline'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
@@ -99,6 +105,7 @@ export async function importAdditionalFileToCase(
   const errors: string[] = []
   const isCancelled = (): boolean => signal?.aborted === true
 
+  resetUnrankedClinvar()
   try {
     appendDb.exec('BEGIN IMMEDIATE')
     try {
@@ -222,12 +229,18 @@ export async function importAdditionalFileToCase(
     appendDb.close()
   }
 
+  const unrankedClinvar = takeUnrankedClinvar()
+  if (unrankedClinvar !== undefined) {
+    mainLogger.warn(unrankedClinvarLogLine(filePath, unrankedClinvar), 'import')
+  }
+
   return {
     caseId,
     variantCount: totalInserted,
     skipped: totalSkipped,
     errors,
-    elapsed: Date.now() - startTime
+    elapsed: Date.now() - startTime,
+    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
   }
 }
 

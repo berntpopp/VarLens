@@ -252,6 +252,8 @@ export interface MultiFileImportResult {
   totalSkipped: number
   files: MultiFileImportFileResult[]
   elapsed: number
+  /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
 }
 
 export interface ImportAPI extends ImportDomainContract {

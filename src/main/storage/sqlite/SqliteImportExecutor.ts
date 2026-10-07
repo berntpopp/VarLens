@@ -324,7 +324,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       // per-file errors are surfaced in `result.files[].error` by startMultiFileImport,
       // not at the top level. The PG path (Task 11) follows the same convention.
       errors: [],
-      elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt
+      elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt,
+      ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
     }
   }
 

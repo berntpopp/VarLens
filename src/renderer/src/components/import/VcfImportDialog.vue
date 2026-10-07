@@ -246,6 +246,7 @@ import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { logService } from '../../services/LogService'
+import { logUnrankedClinvar } from '../../utils/unranked-clinvar'
 import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
 import ImportFilterOptions, { type ImportFilterState } from './ImportFilterOptions.vue'
 import ImportProgressView, { type FileStatusEntry } from './ImportProgressView.vue'
@@ -643,23 +644,20 @@ async function startImport(): Promise<void> {
     // Reconcile final per-file statuses with server results
     const serverResult = result as MultiFileImportResult
     for (const fileRes of serverResult.files) {
-      if (fileRes.error !== undefined) {
-        markFileStatus(fileRes.filePath, {
-          status: 'error',
-          error: fileRes.error,
-          variantCount: fileRes.variantCount
-        })
-      } else {
-        markFileStatus(fileRes.filePath, {
-          status: 'done',
-          variantCount: fileRes.variantCount
-        })
-      }
+      markFileStatus(fileRes.filePath, {
+        ...(fileRes.error !== undefined
+          ? { status: 'error', error: fileRes.error }
+          : { status: 'done' }),
+        variantCount: fileRes.variantCount
+      })
     }
 
     currentFile.value = null
     overallPercent.value = 100
     importResult.value = serverResult
+    logUnrankedClinvar([
+      { caseName: caseName.value.trim(), unrankedClinvar: serverResult.unrankedClinvar }
+    ])
     phase.value = 'summary'
 
     // Reset the shared store — the import is finished so the

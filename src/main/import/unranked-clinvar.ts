@@ -39,3 +39,14 @@ export function unrankedClinvarLogLine(importName: string, strings: readonly str
     `severity configuration and rank as unknown: ${shown.join(', ')}${more}`
   )
 }
+
+/**
+ * The unrecognised ClinVar values of several files as one list: each value
+ * once, in first-seen order; undefined when there are none.
+ */
+export function mergeUnrankedClinvar(
+  lists: ReadonlyArray<readonly string[] | undefined>
+): string[] | undefined {
+  const merged = [...new Set(lists.flatMap((list) => list ?? []))]
+  return merged.length === 0 ? undefined : merged
+}

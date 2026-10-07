@@ -20,6 +20,19 @@
       </div>
     </v-alert>
 
+    <!-- ClinVar values the severity configuration does not know (#469); the
+         same tonal warning as the batch import summary. -->
+    <v-alert
+      v-if="unrankedNotice !== null"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mb-4 text-body-small"
+      data-testid="unranked-clinvar"
+    >
+      <strong>{{ caseName }}:</strong> {{ unrankedNotice }}
+    </v-alert>
+
     <!-- Variant type breakdown -->
     <div class="text-caption text-medium-emphasis mb-2">VARIANT TYPE BREAKDOWN</div>
     <v-card variant="outlined" class="mb-4">
@@ -166,6 +179,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MultiFileImportResult } from '../../../../shared/types/api'
+import { unrankedClinvarSummary } from '../../utils/unranked-clinvar'
 import type { VcfPreviewResult } from '../../../../shared/types/import'
 import {
   mdiAlertCircle,
@@ -187,6 +201,12 @@ const emit = defineEmits<{
   'import-more': []
   close: []
 }>()
+
+const unrankedNotice = computed(() =>
+  props.result.unrankedClinvar !== undefined && props.result.unrankedClinvar.length > 0
+    ? unrankedClinvarSummary(props.result.unrankedClinvar)
+    : null
+)
 
 const hasErrors = computed(() => props.result.files.some((f) => f.error !== undefined))
 
