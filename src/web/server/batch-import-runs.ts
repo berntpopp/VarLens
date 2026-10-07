@@ -33,6 +33,7 @@ export interface BatchImportAccepted {
 
 interface TrackedRun {
   userId: number
+  runId: string
   status: Exclude<BatchImportRunStatus, { state: 'unknown' }>
   settledAt: number | null
 }
@@ -42,47 +43,62 @@ export const SETTLED_RUN_TTL_MS = 60 * 60 * 1000
 /** Upper bound on tracked runs; the oldest settled ones go first. */
 export const MAX_TRACKED_RUNS = 200
 
+const runKey = (userId: number, runId: string): string => `${userId}\u0000${runId}`
+
 export class BatchImportRuns {
   private readonly runs = new Map<string, TrackedRun>()
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  /** True while the run id is taken by a run that has not been pruned. */
-  has(runId: string): boolean {
+  /**
+   * True while this user has a tracked run with that id. Run ids are scoped
+   * to their user: another user's id is neither visible nor "in use", so no
+   * answer of the server reveals that it exists.
+   */
+  has(runId: string, userId: number): boolean {
     this.prune()
-    return this.runs.has(runId)
+    return this.runs.has(runKey(userId, runId))
   }
 
   start(runId: string, userId: number, jobId: string): void {
     this.prune()
-    this.runs.set(runId, { userId, status: { state: 'running', jobId }, settledAt: null })
+    this.runs.set(runKey(userId, runId), {
+      userId,
+      runId,
+      status: { state: 'running', jobId },
+      settledAt: null
+    })
   }
 
-  complete(runId: string, result: BatchResult): void {
-    this.settle(runId, (jobId) => ({ state: 'completed', jobId, result }))
+  complete(runId: string, userId: number, result: BatchResult): void {
+    this.settle(runKey(userId, runId), (jobId) => ({ state: 'completed', jobId, result }))
   }
 
-  fail(runId: string, error: SerializableError): void {
-    this.settle(runId, (jobId) => ({ state: 'failed', jobId, error }))
+  fail(runId: string, userId: number, error: SerializableError): void {
+    this.settle(runKey(userId, runId), (jobId) => ({ state: 'failed', jobId, error }))
   }
 
   /**
    * The run as its owner may see it. Somebody else's run and an unknown run
-   * look the same, so a run id cannot be probed.
+   * look the same, so a run id cannot be probed. An admin without a run of
+   * that id sees the one of whoever has it.
    */
   status(runId: string, viewer: { userId: number; isAdmin: boolean }): BatchImportRunStatus {
     this.prune()
-    const run = this.runs.get(runId)
-    if (run === undefined) return { state: 'unknown' }
-    if (run.userId !== viewer.userId && !viewer.isAdmin) return { state: 'unknown' }
-    return run.status
+    const own = this.runs.get(runKey(viewer.userId, runId))
+    if (own !== undefined) return own.status
+    if (!viewer.isAdmin) return { state: 'unknown' }
+    for (const run of this.runs.values()) {
+      if (run.runId === runId) return run.status
+    }
+    return { state: 'unknown' }
   }
 
   private settle(
-    runId: string,
+    key: string,
     next: (jobId: string) => Exclude<BatchImportRunStatus, { state: 'unknown' | 'running' }>
   ): void {
-    const run = this.runs.get(runId)
+    const run = this.runs.get(key)
     if (run === undefined) return
     run.status = next(run.status.jobId)
     run.settledAt = this.now()
@@ -90,16 +106,16 @@ export class BatchImportRuns {
 
   private prune(): void {
     const cutoff = this.now() - SETTLED_RUN_TTL_MS
-    for (const [runId, run] of this.runs) {
-      if (run.settledAt !== null && run.settledAt < cutoff) this.runs.delete(runId)
+    for (const [key, run] of this.runs) {
+      if (run.settledAt !== null && run.settledAt < cutoff) this.runs.delete(key)
     }
     if (this.runs.size <= MAX_TRACKED_RUNS) return
     const settled = [...this.runs.entries()]
       .filter(([, run]) => run.settledAt !== null)
       .sort((a, b) => (a[1].settledAt ?? 0) - (b[1].settledAt ?? 0))
-    for (const [runId] of settled) {
+    for (const [key] of settled) {
       if (this.runs.size <= MAX_TRACKED_RUNS) break
-      this.runs.delete(runId)
+      this.runs.delete(key)
     }
   }
 }

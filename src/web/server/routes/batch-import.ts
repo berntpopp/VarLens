@@ -91,9 +91,11 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
 
         const userId = request.session.user?.id
         const validRunId = parsedRunId.data
-        if (userId === undefined || batchImportRuns.has(validRunId)) {
+        // Only the caller's own runs count: a refusal never reveals that
+        // somebody else uses the id.
+        if (userId === undefined || batchImportRuns.has(validRunId, userId)) {
           reply.code(400)
-          return { error: 'invalid-run-id', message: 'runId is invalid or already in use' }
+          return { error: 'invalid-run-id', message: 'runId is invalid' }
         }
         // Not awaited: the request ends here, the job runs on. A refusal to
         // enqueue (an import is already running) still throws synchronously
@@ -108,10 +110,10 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
         })
         batchImportRuns.start(validRunId, userId, job.jobId)
         void job.result.then(
-          (result) => batchImportRuns.complete(validRunId, result),
+          (result) => batchImportRuns.complete(validRunId, userId, result),
           (error: unknown) => {
             const serialized = toSerializableWebError(error)
-            batchImportRuns.fail(validRunId, serialized)
+            batchImportRuns.fail(validRunId, userId, serialized)
             events.publish(userId, WEB_EVENT_BATCH_IMPORT_FAILED, {
               runId: validRunId,
               jobId: job.jobId,

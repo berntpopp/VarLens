@@ -210,6 +210,21 @@ describe('batch-import:start as a job', () => {
     expect(await start(alice, runId)).toMatchObject({ error: 'invalid-run-id' })
     expect(reply.code).toHaveBeenCalledWith(400)
   })
+
+  test('does not tell a user that somebody else uses a run id', async () => {
+    const { start, status, gate, reply } = await setup()
+    const runId = nextRunId()
+    await start(alice, runId)
+    gate.resolve(IMPORTED)
+    await settledStatus(status, runId)
+
+    // Bob reuses Alice's id: his request is judged on its own. (It fails on
+    // the upload ref, which is Alice's, not on the run id.)
+    const answer = (await start(bob, runId)) as { error?: string }
+    expect(answer.error).not.toBe('invalid-run-id')
+    expect(JSON.stringify(answer)).not.toContain('in use')
+    void reply
+  })
 })
 
 describe('batch-import:status security policy', () => {
@@ -227,19 +242,39 @@ describe('BatchImportRuns', () => {
   const result = { succeeded: 1, failed: 0, skipped: 0, cancelled: false, details: [] }
   const owner = { userId: 7, isAdmin: false }
 
+  test('a run id belongs to its user: another user can neither see nor collide with it', () => {
+    const runs = new BatchImportRuns(() => 0)
+    runs.start('shared-id', 7, 'job-alice')
+
+    // Not "in use" for anybody else, so a refusal cannot be used to probe ids.
+    expect(runs.has('shared-id', 8)).toBe(false)
+    expect(runs.has('shared-id', 7)).toBe(true)
+
+    runs.start('shared-id', 8, 'job-bob')
+    runs.complete('shared-id', 8, result)
+    expect(runs.status('shared-id', { userId: 7, isAdmin: false })).toEqual({
+      state: 'running',
+      jobId: 'job-alice'
+    })
+    expect(runs.status('shared-id', { userId: 8, isAdmin: false }).state).toBe('completed')
+    expect(runs.status('shared-id', { userId: 9, isAdmin: false })).toEqual({ state: 'unknown' })
+    // An admin follows a run by its id, their own first.
+    expect(runs.status('shared-id', { userId: 1, isAdmin: true }).state).toBe('running')
+  })
+
   test('forgets a settled run after its retention time, never a running one', () => {
     let now = 1_000
     const runs = new BatchImportRuns(() => now)
     runs.start('running', 7, 'job-a')
     runs.start('done', 7, 'job-b')
-    runs.complete('done', result)
+    runs.complete('done', 7, result)
 
     now += SETTLED_RUN_TTL_MS - 1
     expect(runs.status('done', owner).state).toBe('completed')
     now += 2
     expect(runs.status('done', owner)).toEqual({ state: 'unknown' })
     expect(runs.status('running', owner)).toEqual({ state: 'running', jobId: 'job-a' })
-    expect(runs.has('done')).toBe(false)
+    expect(runs.has('done', 7)).toBe(false)
   })
 
   test('bounds the number of settled runs it keeps', () => {
@@ -248,7 +283,7 @@ describe('BatchImportRuns', () => {
     for (let index = 0; index < 250; index++) {
       runs.start(`run-${index}`, 7, `job-${index}`)
       now += 1
-      runs.complete(`run-${index}`, result)
+      runs.complete(`run-${index}`, 7, result)
     }
     expect(runs.status('run-0', owner)).toEqual({ state: 'unknown' })
     expect(runs.status('run-249', owner).state).toBe('completed')
