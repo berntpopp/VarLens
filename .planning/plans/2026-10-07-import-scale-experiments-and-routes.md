@@ -1,10 +1,10 @@
 # Import scale: experiments and implementation routes (2026-10-07)
 
-Status: plan, not yet reviewed. Supersedes the "Remaining work" list in
-`2026-10-07-web-import-scale-handover.md` and stage 4 of the original plan. It will be
-updated once when the two inputs still outstanding arrive (independent Opus review;
-source-code check of seqr, VarFish, TileDB-VCF, OpenCGA), and then goes to Codex and Opus
-for a second adversarial pass before implementation of anything beyond sections 5 and 6.1.
+Status: revision 2. Reconciles the Codex review, the independent Opus review, the survey and
+the source-code check of other tools (section 6). Supersedes the "Remaining work" list in
+`2026-10-07-web-import-scale-handover.md` and stage 4 of the original plan. Goes to Codex and
+Opus for a second adversarial pass before anything beyond section 5 and Phase 1 (section 7.2)
+is implemented.
 
 ## 1. Goal and priorities
 
@@ -141,98 +141,143 @@ test first, and each is its own small PR.
 | C9 | Selected samples of one multi-sample VCF only refresh the UI after the whole loop | Per-sample completion event |
 | C10 | Internal allele frequency denominator: verify what counts as a case with a call at a site (no-call versus homozygous reference, capture kit). gnomAD had to recompute its denominator in v4.1 | Document the definition; test; change only with the owner's agreement |
 
-## 6. Experiments
+## 6. Reconciled findings (three reviews and a source-code check)
 
-Each experiment states the hypothesis, what is changed, the pass and kill criteria, and the
-effort. "Scratch" means a throwaway schema and an unmerged branch; nothing ships from an
-experiment.
+Inputs: Codex (`gpt-6-astra`, xhigh; code reading), an independent Opus reviewer (xhigh; code
+reading plus read-only catalog queries and `EXPLAIN` on a 54-case dev schema), a literature
+and documentation survey, and a source-code check of seqr, VarFish, VarFish worker,
+TileDB-VCF, OpenCGA, Hail, AFQuery and GEMINI at pinned commits. Nothing below was measured
+by running an import; expected effects are hypotheses until section 7 measures them.
 
-### 6.1 Route A experiments: keep per-sample rows, remove the cost (start now)
+Where all agree:
 
-| # | Hypothesis | Method | Pass | Kill | Effort |
-|---|---|---|---|---|---|
-| A1 | A few of the 12 + 4 indexes, the stored hash and search columns and the foreign keys account for most of the row-writing time and for its growth | 20- and 100-sample imports dropping one element at a time, then the cheapest combination that keeps every read in the matrix within target; perf attribution with `pg_stat_io`, WAL bytes per index | Row writing ≤ 1.5 s at sample 100 with the read matrix within target | No combination under 3 s without breaking a read | 1.5 days |
-| A2 | Full-text and trigram search on a deduplicated variant table is as fast for the user and removes two GIN indexes from the per-sample rows | Build the deduplicated search table (integer id, search document) and run the search rows of the matrix as a semi-join | Search count and page ≤ 2× today; measurable row-writing gain in A1's terms | Search slower than 2× at 100 samples | 1 day |
-| A3 | Counters split from the annotation and filter indexes cut the summary step by more than half without slowing any cohort read | Narrow `cohort_locus_stats` (six-part key, three counters, the carrier keyset index); annotation columns and their indexes stay on the wide table and are written only when the representative value changes; cohort reads join by key | Summary step ≤ 0.8 s; every cohort row of the matrix ≤ 1.5× today | Any default cohort sort or filter slower than 2× | 1.5 days |
-| A4 | Publishing K prepared cases in one merge transaction cuts serial time per sample roughly in proportion to shared variants | Group publication with a short maximum wait (K = 2, 4, 8), each case still becoming visible in its own event; failure isolation per case | Serial seconds per sample ≤ 50% of single-case at K = 4 | Per-case visibility delay above 2 s, or failure isolation not achievable | 2 days |
-| A5 | Append-only signed count deltas make publication constant-time; exact reads are base plus unmerged deltas | Imports write `(batch, key, het, hom)` delta rows and a manifest; a background job folds them in key order; cohort reads add unmerged deltas; deletes are negative deltas; backlog is bounded and import throttles when it is not | Serial work per sample ≤ 0.2 s; cohort matrix ≤ 1.5× today with a backlog of 50 cases; exact after any interleaving | Reads with a realistic backlog slower than 2×, or the representative-annotation rule cannot be kept exact under deletes | 3 days |
-| A6 | Per-batch setup and JSON row-at-a-time inserts are avoidable | One session setup; larger byte-bounded COPY batches; JSON through the VCF bulk writer; binary COPY measured last | JSON import within 1.3× of VCF for the same rows; VCF round trips per sample down by a factor of ten | No measurable gain for VCF (JSON part ships regardless) | 1.5 days |
-| A7 | Loading each batch of cases into a standalone table, building its indexes after the load and attaching it as a range partition removes index maintenance from the load and keeps old data physically stable | Range partitions of a few hundred cases; compare with A1's best | Row writing ≤ 1.0 s flat to 1,000 samples | Attach locking or planning time across many partitions breaks interactive reads | 3 days |
+- Do not ship the first normalised model or its view and trigger layer.
+- The per-sample row is not the problem. The cost is (1) cross-case structures maintained on
+  the per-sample table, (2) cohort counts maintained row by row under a serial lock, and
+  (3) cold data (every transcript, INFO) written per call.
+- Filter access paths must stay case-local. In PostgreSQL a predicate evaluated on a
+  deduplicated table and joined to one case's 60,000 calls plans as a hash join over the
+  whole dimension or as 60,000 probes for anything that is not selective (planner cost
+  157,015 against 20 for the case-local index-only count). seqr can do it only because a
+  ClickHouse dictionary probe is an order of magnitude cheaper, and it still keeps its two
+  coarsest flags in the fact's sort key.
+- Nobody maintains per-variant counts row by row on the import path. seqr sums signed rows
+  per project and regroups for global counts; TileDB-VCF appends partial counts; VarFish
+  refreshes a materialised view weekly and is slow on cohorts for exactly that reason (plus
+  one statement per case unioned together, JSON genotypes, and no cross-case index).
+- No inspected system satisfies all of our requirements. Arbitrary sub-cohorts exist only in
+  AFQuery (research code, per-variant carrier bitmaps).
 
-A3, A4 and A5 are alternatives for the same bottleneck and are compared on the same runs.
-A3 + A4 is the low-risk combination; A5 is the one that removes the serial step entirely.
+Verified from our own catalog and code (Opus review):
 
-### 6.2 Route B experiments: narrow integer fact, filters on a deduplicated variant table
+- `cohort_variant_summary`: 2,626,744 updates, 0 heap-only; indexes 334 MB against a 103 MB
+  heap. About ten WAL records per counter change.
+- About 140 of about 312 index bytes per call on the variant table are cross-case:
+  the coordinate-hash index 84 B (random inserts), the gene trigram GIN 24 B (0 scans), the
+  coordinate index 17 B, the full-text GIN 16 B, a BRIN with 0 scans. Every import touches
+  these across their whole extent; the case-prefixed indexes append locally.
+- `search_document` (98 B) and `coord_hash` (33 B) are 40% of the heap row and are computed
+  per row during COPY.
+- Transcripts cost about 208 B per call across four indexes, two of them prefix-redundant;
+  no filter reads them.
+- 60 transactions per exome (1,000-row batches, an id reservation and two COPYs each).
+- The summary lock is a polling try-lock (25–250 ms backoff, not FIFO); waiters hold a
+  transaction id while polling.
+- The simulated data is flattering: `cdna`, `aa_change`, `omim`, `moi` and `info_json` are
+  all NULL and there is one transcript per variant; the VEP fixtures average 565 B of INFO.
+  The dev container runs `wal_level=minimal`.
 
-Purpose: find out whether extensible filters can be fast *without* per-sample annotation
-rows. Only worth building if Route A cannot reach the targets, or if B is faster on reads.
+Where the reviews disagree, and how this plan resolves it:
 
-| # | Hypothesis | Method | Pass | Kill | Effort |
-|---|---|---|---|---|---|
-| B1 | With integer variant ids and a fact clustered by `(case_id, variant_id)`, a predicate evaluated on the variant table and joined to one case's 60,000 calls stays within 2× of today for selective *and* unselective predicates | Fact `(case_id, variant_id, per-call fields)`; every annotation and filter column once on the variant table with today's index set; force merge, hash and nested-loop plans to find the best; also the case's id set as a sorted integer array | Whole per-case matrix ≤ 2× today, warm and cold | Any common predicate above 3× with the best plan | 2 days |
-| B2 | A small generic prefilter on the fact (impact rank and a rarity bin, two or three bytes) closes the gap for the selective cases without making filters non-extensible | B1 plus the prefilter, used only as a first cut | Selective counts ≤ 1.5× today | No gain over B1 | 1 day |
-| B3 | Integer dictionary resolution (natural-key upsert returning ids, no hashing) writes a mostly-known exome in under a second | Staged writer v2: resolve only missing variant rows, then one COPY of narrow calls | Row writing ≤ 1.0 s at samples 81–100, flat to 1,000; parallel equals sequential; no deadlocks | Slower than A1's best | 3 days |
-| B4 | Sub-cohort and on-demand aggregation from the narrow fact is interactive | Counts for arbitrary case sets of 10, 100, 1,000 from the fact; compare with per-variant carrier bitmaps if `pg_roaringbitmap` is available for PostgreSQL 18 | Sub-cohort counts ≤ 1 s at the 10,000-sample read-scale schema | Above 5 s | 2 days |
+| Question | Positions | Resolution |
+|---|---|---|
+| Per-sample rows or narrow fact plus dimension join | Opus: keep rows with every filter column case-local. Code check: narrow fact joined to a dictionary, as seqr and OpenCGA do. Codex: either, as long as filters are case-local | Rows are the primary route (the planner evidence is ours; the join is proven only on ClickHouse). The join is measured once (experiment X1) so the decision rests on our numbers |
+| Exact visibility: fold then publish, or publish deltas and read base plus delta | Opus: a case becomes ready in the transaction that folds it, so readers never see deltas. Codex and the survey: delta log with base-plus-delta reads | Fold-then-ready first: it needs no change to any cohort read. Base-plus-delta only if the fold cannot keep visibility under 2 s |
+| Load into a standalone table and attach | Survey: yes. Opus: no, it breaks visible-on-commit and is unnecessary once the fact has only case-local indexes | Not planned; range partitions by case-id block for operability only |
+| Carrier bitmaps | Survey and code check: needed for arbitrary sub-cohorts. Opus: count ad hoc sets from per-case id arrays first; bitmaps only if large sets become routine | Per-case id arrays first (experiment X3), bitmaps as the follow-up |
+| Compressed per-case chunks or a columnar engine | Codex: the credible way to hit storage and speed together. Opus: only at 100,000 samples | Deferred; storage is no longer a target |
 
-### 6.3 Route C experiments: columnar or chunked storage (only if A and B both miss)
+## 7. The target design and the work to get there
 
-| # | Question | Method | Effort |
+### 7.1 Target (to be confirmed by measurement)
+
+One row per call stays, with every filterable column on it. What changes:
+
+- **Integer identities resolved at import**: `site_id` (build, chromosome, position, alleles,
+  type) and `variant_id` (site plus annotation payload). Everything cross-case moves onto
+  these ids.
+- **The per-sample table keeps only case-local indexes.** The coordinate-hash column and its
+  index, the full-text and trigram GIN indexes and the unused BRIN leave the fact.
+- **Search runs on the deduplicated `variant` table** (one search document per distinct
+  variant) and reaches a case as `variant_id = ANY(ids)`.
+- **Transcripts become transcript sets** shared between calls; a call references its set.
+- **Extension and INFO-derived filter columns** live in a registry-keyed `extra jsonb` on the
+  row, so a new filter column needs no schema change; typed columns stay typed.
+- **Cohort counts**: a narrow `site_stats` table (counts only, two indexes) written by a
+  single folder that takes every queued case in one transaction; a case becomes `ready` in
+  the transaction that folds it. The wide representative-annotation table changes only when
+  a site gains or loses a distinct annotation. Deletes and transcript switches enqueue
+  signed work instead of taking the lock.
+- **Sub-cohorts**: `case_calls` holds each case's site ids as an integer array; ad hoc case
+  sets are counted from it on demand; declared groups get folded counters.
+- **Import**: one narrow round trip to resolve ids (only novel variants upload their
+  payload), then one transaction and one COPY per file.
+- **SQLite**: the same tables; fold every K files.
+
+Expected, not measured: row writing ≤ 1 s and flat; publication 0.1–0.3 s per case amortised
+with no global lock held by importers; 10,000 exomes in roughly 1–1.5 hours; about 200 GB at
+10,000 exomes on simulated widths.
+
+### 7.2 Phase 1: on the current schema (no new model; starts now)
+
+Each item is an experiment first (pass and kill criteria), then a PR if it passes.
+
+| # | Change | Pass | Kill |
 |---|---|---|---|
-| C-1 | Does an immutable compressed per-case chunk with local filter vectors and bitmaps beat rows on both writes and reads? | Prototype one chunk format in PostgreSQL `BYTEA` with a vectorised reader in the server process | 1 week |
-| C-2 | Would DuckDB over Parquet (also usable on the desktop) or ClickHouse (server only) as the analytic store be simpler and faster? | Load the 1,000-sample set; run the read matrix; write down what exact delete, per-case publication, encryption and backup would need | 1 week |
+| P1 | Honest benchmark: protocol of section 3 plus real VEP-annotated exomes, `wal_level=replica`, lz4 WAL and TOAST compression, and the 10,000-sample read-scale schema | Baseline numbers reproduced within 15% on two days | none (prerequisite) |
+| P2 | Group publication: the lock holder folds every prepared case in one upsert (K up to 32), each case still reported individually; a failing group is bisected and retried singly | Work under the lock per case ≤ 50% of today at K = 4 and ≤ 25% at K = 16; visibility ≤ 2 s; parallel equals sequential | Failure isolation not achievable, or visibility above 2 s |
+| P3 | Counters split from the annotation and filter indexes (`site_stats`-shaped table on the current key), annotation rows written only when the representative value changes | Summary step ≤ 0.8 s single-case; every cohort row of the read matrix ≤ 1.5× today | A default cohort sort or filter slower than 2× |
+| P4 | Remove redundant indexes one at a time with `EXPLAIN` of every caller and the read matrix: two prefix-redundant transcript indexes and the unreferenced surrogate key, the BRIN, the gene trigram GIN, then the coordinate-hash index against the coordinate index | Row writing −20% or better at sample 100, flatter curve, no read regression | Any read in the matrix slower than 1.5× |
+| P5 | One transaction and one COPY per file; JSON through the same bulk writer | Round trips per file down tenfold; JSON within 1.3× of VCF | none for JSON; no VCF gain means drop the VCF part |
+| P6 | Blocking FIFO advisory lock on the worker's own connection; no transaction id held while waiting | No idle handoff in the profile; vacuum horizon not pinned by waiters | Pool-timeout problem reappears on any path |
 
-These are deliberately last: they add an engine or a custom format, and nothing measured so
-far says rows cannot meet the targets.
+P2 and P3 attack the measured bottleneck and combine. Expected together: serial work per case
+from about 3.5 s to well under 1 s.
 
-### 6.4 SQLite experiments (after the PostgreSQL route is chosen)
+### 7.3 Phase 2: the new model (after Gate 1)
+
+| # | Change | Proof before it ships |
+|---|---|---|
+| M1 | `site` and `variant` tables, id resolution round trip, cleaned row with `site_id`, `variant_id` and `extra`; search and transcripts on `variant` | Row writing ≤ 1 s flat to 1,000 samples; read matrix within targets; diff harness 0 differences |
+| M2 | `site_stats`, representative-annotation table, `variant_refs`, `case_calls`, fold queue and single folder; delete and transcript switch through the queue | Publication ≤ 0.3 s per case amortised; maintained equals rebuilt after random add, delete and switch sequences; crash schedules |
+| M3 | Range partitions by case-id block; online per-case conversion behind a `legacy ∪ new` view, gated by the harness | Conversion of the 1,000-sample set verified row by row; rollback tested |
+| M4 | Sub-cohorts: declared groups with folded counters, ad hoc sets counted from `case_calls` | Targets of section 1 on the 10,000-sample read-scale schema |
+| M5 | SQLite: same tables, fold every K files, search kept current per file | Batch time not above today's pre-upkeep figure; parity tests |
+
+### 7.4 Cross-check experiments (cheap, decide open disagreements)
 
 | # | Question | Method |
 |---|---|---|
-| S1 | Does the chosen counter design (A3/A5) remove the +21% batch cost of per-file upkeep? | Same benchmark as `sqlite-batch-import.perf.test.ts`, 20 and 100 files |
-| S2 | Can search stay current per file at acceptable cost (C6)? | FTS5 external-content table updated per file versus per batch |
-| S3 | `WITHOUT ROWID` and index order for the fact, deferred index creation | One change at a time, same harness |
+| X1 | Does a narrow integer fact joined to the variant table ever beat case-local rows in PostgreSQL? | The read matrix on a 100-sample schema, forcing merge, hash and nested-loop plans. Expected to confirm rows; one day |
+| X2 | How much of the 2.3 s → 5 s row-writing growth is the cross-case indexes? | P4's runs, per-index WAL and buffer attribution |
+| X3 | Are ad hoc sub-cohort counts from per-case id arrays interactive? | Case sets of 10, 100, 1,000 on the read-scale schema; then core `bit varying` popcount as the comparison |
+| X4 | What does realistic annotation do to every number? | Finalists re-run on the real VEP set |
 
-## 7. Implementation routes and decision gates
+### 7.5 Gates
 
-```
-            now ─────────────────────────────────────────────────────────────►
- Track 0    benchmark protocol + oracle (E0, E0b)
- Track C    correctness PRs C1…C10 (independent, small, each reviewed)
- Track A    A1 A2 A6 ──► A3 | A4 | A5 ──► A7 ──► Gate 1
- Track B                 B1 B2 (read-only prototypes, in parallel with A3–A5) ──► Gate 1
- Track C/S                                                    only after Gate 1
-```
+**Gate 1 (after Phase 1 and X1–X2).** With the measured table: if P2 + P3 + P4 + P5 bring the
+current schema to ≤ 1.5 s per sample sustained at 1,000 samples with the read matrix intact,
+they ship as they are and Phase 2 proceeds for the remaining gap and the sub-cohort
+capability. If Phase 1 misses badly, Phase 2 starts with M2 (the publication half) first.
 
-**Gate 1 (after A1–A6 and B1–B2; about one working week).** Decide the route with the
-measured table in hand:
+**Gate 2 (before any migration existing workspaces must run).** On one build: write targets
+at 1,000 samples and read targets at 10,000; the diff harness at 0 differences against the
+oracle; the concurrency and crash schedules of the correctness track passing; a Codex and an
+independent review with no blocker; a tested conversion and rollback.
 
-- **Route A ships** if the best A combination meets the write targets at 1,000 samples and
-  the read matrix at the 10,000-sample read-scale schema. Per-sample rows stay, so every
-  column remains filterable exactly as today. Expected shape: A1 + A2 + A6 for row writing,
-  A3 with A4 or A5 for publication, A7 if row writing still grows.
-- **Route B is added** if A meets the write targets but cohort or sub-cohort reads miss, or
-  if B1 shows dimension-side filtering is as fast as per-sample rows. Then B replaces the
-  per-sample annotation, behind the existing storage interfaces, proven by the diff harness.
-- **Route C is opened** only if both miss.
-
-**Gate 2 (before any switch-over or migration that existing workspaces must run).** The
-candidate has, on one build: targets met at 1,000 samples written and 10,000 read; the diff
-harness at 0 differences against the oracle; concurrency and crash schedules from the
-correctness track passing; an adversarial review by Codex and by an independent reviewer with
-no blocker; a tested conversion and rollback path.
-
-Shipping units, each a PR that leaves the product correct on its own:
-
-1. Benchmark protocol and artefacts (no product change).
-2. Correctness PRs C1–C10.
-3. JSON bulk path and batch-setup amortisation (A6).
-4. Index and search changes proven by A1/A2 (migration; reversible).
-5. Counter split (A3) with its migration.
-6. Grouped publication (A4) or delta publication (A5), behind `VARLENS_IMPORT_PUBLICATION`
-   with the current path as the rollback switch for one release.
-7. Partitioned bulk load (A7), if needed.
-8. SQLite counterparts (S1–S3).
-9. Route B, only after Gate 1 says so.
+Shipping units, each a PR that leaves the product correct on its own: the benchmark; the
+correctness PRs; P5; P4; P3; P2 (behind `VARLENS_IMPORT_PUBLICATION`, current path as the
+rollback switch for one release); P6; then M1–M5 in order.
 
 ## 8. What is explicitly not being done
 
@@ -240,7 +285,12 @@ Shipping units, each a PR that leaves the product correct on its own:
   harness, the conversion tooling and the measurements.
 - No dropping of summary indexes without a read-matrix result.
 - No approximate counts, no stale-but-labelled results as an end state.
-- No new database engine before Gate 1.
+- No new database engine, no compressed per-case chunks and no carrier bitmaps as a filter
+  mechanism before Gate 1.
+- No load-then-attach partitioning: it breaks visible-on-commit and is unnecessary once the
+  per-sample table has only case-local indexes.
+- No sha256 lookup keys, no hash partitioning, no further tuning of the per-row summary
+  upsert.
 - No release-affecting change without the full preflight and a hosted green build.
 
 ## 9. Risks
@@ -249,17 +299,17 @@ Shipping units, each a PR that leaves the product correct on its own:
 |---|---|
 | Simulated data hides real annotation diversity and INFO sizes | Dataset (c) in section 3; finalists re-measured on it |
 | Shared machine distorts timings | Protocol in section 3; alternating pairs; nothing concluded from a single run |
-| Delta publication (A5) makes reads depend on a backlog | Bounded backlog, import throttling, backlog size in the benchmark |
-| Grouped publication (A4) couples cases | Per-case savepoints; a failing case leaves its group and retries alone |
-| Partition count and attach locks (A7) | Batches of hundreds of cases, not one partition per case; lock analysis in the experiment |
+| Group publication (P2) couples cases | A failing group is bisected and retried singly; each case reported individually |
+| A single folder (M2) becomes the new serial point | It does set-based work over the union of queued cases, so cost per case falls as the queue grows; measured in M2 before anything ships |
+| `extra jsonb` filters are slower than typed columns | Typed columns stay typed; registry keys are measured in the read matrix (the extension-column row) |
 | A migration of existing workspaces at 10,000-sample scale | Every schema change is additive first, with a background conversion and a rollback switch |
 | Memory pressure on the development host (two out-of-memory session kills on 2026-10-07) | One heavy job at a time, capped; read-only work in parallel only |
 
-## 10. Open inputs that will change this plan
+## 10. Open inputs
 
-- Independent Opus review (running).
-- Source-code verification of how seqr, VarFish, TileDB-VCF and OpenCGA implement filters and
-  cohort counts (running).
-- The measurement agent's first results for A1, A3, A4/A5 and B1 on the 100-sample data
-  (running).
+- The measurement agent's first results on the 100-sample data (running); they are labelled
+  with the experiment ids of an earlier revision: A1 → P4/X2, A2 → search on the `variant`
+  table (M1), A3 → P3, A4 → P2, A5 → base-plus-delta fallback, A6 → P5, B1/B2 → X1,
+  B3 → M1, B4 → X3.
+- The second adversarial pass on this revision (Codex and Opus).
 - The owner's decision on the oracle (section 4) and on the frequency denominator (C10).
