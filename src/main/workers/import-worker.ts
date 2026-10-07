@@ -269,7 +269,7 @@ export async function runImportSession(
 
           // The file's rows are committed and it was not cancelled: merge it
           // into the cohort summary before anyone is told the file is done.
-          summary.addCase(caseId)
+          summary.addCase(caseId, totalFiles - fileIndex - 1)
           checkpointBetweenFiles(db)
 
           const elapsed = Date.now() - startTime

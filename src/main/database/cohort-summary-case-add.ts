@@ -23,7 +23,9 @@
  * leaves it behind, and both the next session and the app start
  * (`DatabaseService.needsStartupRebuild`) then rebuild. A summary that is
  * stale or interrupted at session start is rebuilt once before the first file.
- * Any failure falls back to the old behaviour: mark stale, rebuild at the end.
+ * Any failure falls back to the old behaviour: mark stale, rebuild at the end
+ * — and so does a session whose remaining files are cheaper to rebuild once
+ * than to merge one by one ({@link UpkeepPolicy}).
  *
  * Exactness is asserted against the full rebuild after every file by
  * `tests/main/workers/import-worker-summary-drift.test.ts`.
@@ -49,13 +51,44 @@ export interface ImportSummarySession {
   isExact(): boolean
   /** Delete a case about to be re-imported, removing its summary contribution. */
   replaceCase(caseId: number, deleteCase: () => void): void
-  /** Merge a fully imported, committed case into both summary tables. */
-  addCase(caseId: number): void
+  /**
+   * Merge a fully imported, committed case into both summary tables.
+   * `filesAfterThis`: files of the session still to come (see {@link UpkeepPolicy}).
+   */
+  addCase(caseId: number, filesAfterThis?: number): void
   /** Orderly session end: rebuild if upkeep was abandoned, ANALYZE, clear the marker. */
   finish(): void
 }
 
+/**
+ * When per-file upkeep stops paying for itself.
+ *
+ * Merging one file rewrites the summary pages its variants land on, which for
+ * exome-sized files is most of the table and of every index on it, so the cost
+ * per file grows with the summary (measured: 0.3 s at 60,000 rows, 0.85 s at
+ * 337,000, 1.7 s at 845,000 — about a third of the per-variant cost again for
+ * every summary row). One rebuild at the end costs about as much per variant
+ * in the database as a merge costs per imported variant. The remaining files
+ * are therefore cheaper to merge than to rebuild for exactly as long as
+ *
+ *     filesLeft * summaryRows <= costRatio * variantsInDatabase
+ *
+ * which holds for a few files into a large database (1 file into 100 exomes:
+ * 1.7 s instead of a 31 s rebuild) and fails for a long batch into a small or
+ * empty one — there the session falls back to the single rebuild at its end,
+ * so a batch is not slower than it was before per-file upkeep existed.
+ * Summaries below `minSummaryRows` are always merged: too cheap to matter.
+ */
+export interface UpkeepPolicy {
+  minSummaryRows: number
+  costRatio: number
+}
+
+export const DEFAULT_UPKEEP_POLICY: UpkeepPolicy = { minSummaryRows: 50_000, costRatio: 3 }
+
 export interface ImportSummarySessionOptions {
+  /** Defaults to {@link DEFAULT_UPKEEP_POLICY}. */
+  upkeepPolicy?: UpkeepPolicy
   /** Rebuild before the first file even if the summary claims to be current. */
   forceRebuild: boolean
   /** Full rebuild of both tables; must leave `is_stale = 0` on success. */
@@ -117,6 +150,14 @@ export function openImportSummarySession(
       db.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
   }
 
+  const policy = options.upkeepPolicy ?? DEFAULT_UPKEEP_POLICY
+  const rebuildIsCheaper = (s: NonNullable<typeof stmts>, filesLeft: number): boolean => {
+    const summaryRows = (s.countSummaryRows.get() as { c: number }).c
+    if (summaryRows < policy.minSummaryRows) return false
+    const variants = (s.countVariants.get() as { c: number }).c
+    return filesLeft * summaryRows > policy.costRatio * variants
+  }
+
   return {
     isExact: () => exact,
 
@@ -146,13 +187,24 @@ export function openImportSummarySession(
       deleteCase()
     },
 
-    addCase(caseId) {
+    addCase(caseId, filesAfterThis = 0) {
       if (!exact || !stmts) {
         db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
         return
       }
       const s = stmts
       try {
+        if (rebuildIsCheaper(s, filesAfterThis + 1)) {
+          // Not a failure: no warning. `finish` rebuilds once.
+          // The case is published together with the stale flag, so the
+          // rebuild at session end (ready cases only) includes it.
+          exact = false
+          db.transaction(() => {
+            db.exec(MARK_STALE_SQL)
+            s.markCaseReady.run(caseId)
+          })()
+          return
+        }
         db.transaction(() => {
           const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined
           if (row?.genome_build == null) throw new Error(`case ${caseId} has no genome build`)
@@ -199,6 +251,8 @@ function prepareAddStatements(db: DatabaseType) {
   return {
     caseBuild: db.prepare('SELECT genome_build FROM cases WHERE id = ?'),
     markCaseReady: db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?"),
+    countSummaryRows: db.prepare('SELECT COUNT(*) AS c FROM cohort_variant_summary'),
+    countVariants: db.prepare('SELECT COALESCE(SUM(variant_count), 0) AS c FROM cases'),
     captureGeneCoords: db.prepare(sql.CAPTURE_GENE_COORDS_SQL),
     countUnresolved: db.prepare(sql.COUNT_UNRESOLVED_GENE_COORDS_SQL),
     resolveGeneCoords: db.prepare(sql.RESOLVE_GENE_COORDS_SQL),
