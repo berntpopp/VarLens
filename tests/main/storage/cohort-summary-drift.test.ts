@@ -834,6 +834,58 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     expect(await genes('>', 100)).toEqual([])
   }, 120_000)
 
+  it('a rebuild in many small chunks gives the rows of a rebuild in one per chromosome (#469 review)', async () => {
+    // Variants on several chromosomes and positions, shared and not, two builds.
+    const cases = [
+      await seedCase('chunk-a'),
+      await seedCase('chunk-b'),
+      await seedCase('c37', 'GRCh37')
+    ]
+    for (const [index, caseId] of cases.entries()) {
+      for (const chr of ['1', '2', 'X', 'chrUn_KI270742v1']) {
+        for (const pos of [10, 20_000, 3_000_000 + index, 250_000_000]) {
+          await seedVariant({
+            caseId,
+            chr,
+            pos,
+            ref: 'A',
+            alt: 'T',
+            geneSymbol: `G${chr}`,
+            gtNum: '0/1'
+          })
+        }
+      }
+    }
+    await probe.query(`UPDATE "${schema}".cases_all SET variant_count = 16`)
+    const rebuiltWith = (rowsPerChunk?: number): Promise<unknown[]> =>
+      withClient(async (client) => {
+        await client.query('BEGIN')
+        try {
+          const statements: string[] = []
+          const query = client.query.bind(client)
+          const counting = {
+            query: (text: string, values?: unknown[]) => {
+              if (/INSERT INTO "[^"]+"\."cohort_variant_summary"/.test(text)) statements.push(text)
+              return query(text, values as never)
+            }
+          }
+          await repo.rebuild({ schema, client: counting as never, rowsPerChunk })
+          const rows = await snapshotSummary(client)
+          return [statements.length, rows]
+        } finally {
+          await client.query('ROLLBACK')
+        }
+      })
+
+    const [oneStatements, oneRows] = await rebuiltWith()
+    const [manyStatements, manyRows] = await rebuiltWith(1)
+    expect(oneStatements).toBe(4) // one per chromosome
+    expect(manyStatements).toBeGreaterThan(40)
+    // Per chromosome: three shared positions on two builds, three private ones.
+    expect(oneRows as unknown[]).toHaveLength(4 * (3 * 2 + 3))
+    expect(manyRows).toEqual(oneRows)
+  }, 120_000)
+
   it('rebuild + N incremental ops + rebuild = byte-identical', async () => {
     // 1. Seed N cases + variants. Mix of shared/distinct coordinates, het/hom
     //    genotypes, and an annotated variant so the snapshot exercises every

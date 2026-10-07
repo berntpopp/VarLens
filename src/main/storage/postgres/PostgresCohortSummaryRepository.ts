@@ -46,6 +46,11 @@ import {
 } from './cohort-unique-variants-sql'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import {
+  countVisibleVariantRows,
+  planRebuildChunks,
+  readChromosomeRanges
+} from './cohort-summary-rebuild-chunks'
+import {
   caseContributionCte,
   mergeRepresentativeAssignment,
   removeCaseFromSummary,
@@ -106,7 +111,18 @@ export const SCOPED_DEDUPED_AGG_SQL = (tbl: (t: string) => string, includeProvis
   caseContributionCte(tbl, includeProvisional)
 
 export class PostgresCohortSummaryRepository {
-  async rebuild({ schema, client }: ScopedClient): Promise<void> {
+  /**
+   * Rebuild the summary from the visible variants, one statement per chunk of
+   * the genome (./cohort-summary-rebuild-chunks.ts): no statement grows with
+   * the whole cohort, so none runs into the rebuild's statement timeout.
+   * Call inside a transaction that holds the summary write lock; readers keep
+   * the previous rows until it commits. `rowsPerChunk` is for tests.
+   */
+  async rebuild({
+    schema,
+    client,
+    rowsPerChunk
+  }: ScopedClient & { rowsPerChunk?: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
 
     // Requests left by writers that could not get the lock: this rebuild
@@ -118,17 +134,21 @@ export class PostgresCohortSummaryRepository {
     // previous rows (MVCC) and autovacuum reclaims the old versions.
     await client.query(`DELETE FROM ${tbl('cohort_variant_summary')}`)
 
-    // Deduped CTE + flag-bearing projection. Mirrors SQLite
-    // src/main/database/CohortSummaryService.ts and the deduped pattern in
-    // src/shared/sql/cohort-summary-rebuild.ts.
-    await client.query(`
+    const chunks = planRebuildChunks(
+      await readChromosomeRanges(client, tbl),
+      await countVisibleVariantRows(client, tbl),
+      rowsPerChunk
+    )
+    // A summary key never spans two chunks. The flag CTEs aggregate the
+    // annotation tables, which are tiny next to the variants.
+    const insertChunk = `
       INSERT INTO ${tbl('cohort_variant_summary')}
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
          gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
-      ${summaryRowsCte(tbl)},
+      ${summaryRowsCte(tbl, 'v.chr = $1 AND v.pos >= $2 AND v.pos < $3')},
       ${annotationFlagCtes(tbl)}
       SELECT
         a.chr, a.pos, a.end_pos, a.ref, a.alt, a.variant_type, a.genome_build,
@@ -140,8 +160,10 @@ export class PostgresCohortSummaryRepository {
         ${ANNOTATION_FLAG_COLUMNS},
         NULL AS cohort_frequency  -- unused: frequency is derived at read time
       FROM agg a
-      ${annotationFlagJoins('a')};
-    `)
+      ${annotationFlagJoins('a')}`
+    for (const chunk of chunks) {
+      await client.query(insertChunk, [chunk.chr, chunk.fromPos, chunk.toPos])
+    }
 
     // The per-gene aggregates share this table's lifecycle: same rebuild.
     await rebuildGeneSummary({ schema, client })
