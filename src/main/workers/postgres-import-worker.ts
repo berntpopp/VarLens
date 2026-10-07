@@ -34,6 +34,12 @@ import {
   acquireWorkspaceImportLock,
   assertImportLeaseHeld
 } from '../storage/postgres/postgres-import-lease'
+import {
+  beginFencedImportTransaction,
+  ImportSupersededError,
+  inFencedImportTransaction,
+  type ImportFence
+} from '../storage/postgres/postgres-import-fence'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
@@ -165,6 +171,12 @@ export async function runImport(
   let beganTransaction = false
   let provisionalImport: PostgresProvisionalImport | null = null
   let publicationCommitAttempted = false
+  // Set before the first write. Every transaction that changes import state
+  // starts through beginFenced / fenced (postgres-import-fence.ts).
+  let fence: ImportFence = { schema: start.schema, generation: Number.NaN }
+  const beginFenced = (): Promise<void> => beginFencedImportTransaction(client, fence)
+  const fenced = <T>(operation: () => Promise<T>): Promise<T> =>
+    inFencedImportTransaction(client, fence, operation)
   const isCancelled = (): boolean => cancelled || deps.isCancellationRequested?.() === true
   const throwIfCancelled = (): void => {
     if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
@@ -191,11 +203,13 @@ export async function runImport(
     await profilePhase('relax-session-limits', () => relaxImportSessionLimits(client))
     if (start.lease !== undefined) {
       await assertImportLeaseHeld(client, start.schema, start.lease.holderPid)
+      fence = { schema: start.schema, generation: start.lease.generation }
     } else {
       await acquireWorkspaceImportLock(client, start.schema)
-      await new PostgresVcfImportRepository(start.schema).recoverInterruptedImports(
-        client as unknown as Pick<PoolClient, 'query'>
-      )
+      const generation = await new PostgresVcfImportRepository(
+        start.schema
+      ).recoverInterruptedImports(client as unknown as Pick<PoolClient, 'query'>)
+      fence = { schema: start.schema, generation }
     }
 
     if (start.mode === 'single-file') {
@@ -230,14 +244,13 @@ export async function runImport(
           }
 
           const repo = new PostgresVcfImportRepository(start.schema)
-          provisionalImport = await repo.beginProvisionalImport(
-            client as unknown as Pick<PoolClient, 'query'>,
-            {
+          provisionalImport = await fenced(() =>
+            repo.beginProvisionalImport(client as unknown as Pick<PoolClient, 'query'>, {
               caseName: start.caseName,
               filePath,
               fileSize: vcfFileSize,
               genomeBuild
-            }
+            })
           )
           const caseId = provisionalImport.caseId
           // Single-file imports reject filters at the executor level, but pass
@@ -270,7 +283,7 @@ export async function runImport(
               variantType: 'snv-indel',
               ...splitVcfRows(rows)
             }
-            await client.query('BEGIN')
+            await beginFenced()
             beganTransaction = true
             await client.query('SET LOCAL synchronous_commit = OFF')
             const variantCount = await profilePhase('writeVcfFile', () =>
@@ -314,7 +327,7 @@ export async function runImport(
           // COPY. MVCC keeps the previous ready snapshot visible until this
           // transaction publishes the case and every derived structure
           // together.
-          await client.query('BEGIN')
+          await beginFenced()
           beganTransaction = true
           await client.query('SET LOCAL synchronous_commit = ON')
           await client.query(
@@ -370,7 +383,7 @@ export async function runImport(
       // JSON imports keep the standard transaction shape since the WGS-
       // class tuning (per-batch async commit) is VCF-specific.
       // -------------------------------------------------------------------
-      await client.query('BEGIN')
+      await beginFenced()
       beganTransaction = true
 
       const fileName = basename(filePath)
@@ -539,14 +552,13 @@ export async function runImport(
             }
             let fileCaseId: number
             if (caseId === 0) {
-              provisionalImport = await repo.beginProvisionalImport(
-                client as unknown as Pick<PoolClient, 'query'>,
-                {
+              provisionalImport = await fenced(() =>
+                repo.beginProvisionalImport(client as unknown as Pick<PoolClient, 'query'>, {
                   caseName: start.caseName,
                   filePath: fileSpec.filePath,
                   fileSize,
                   genomeBuild
-                }
+                })
               )
               currentFileProvisional = provisionalImport
               fileCaseId = provisionalImport.caseId
@@ -587,7 +599,7 @@ export async function runImport(
                 variantType: fileSpec.variantType,
                 ...splitVcfRows(rows)
               }
-              await client.query('BEGIN')
+              await beginFenced()
               beganTransaction = true
               await client.query('SET LOCAL synchronous_commit = OFF')
               const batchResult = await repo.writeVcfFile(
@@ -645,6 +657,9 @@ export async function runImport(
               `[postgres-import-worker] file ${i} (${fileSpec.filePath}) failed:`,
               err instanceof Error ? err.message : String(err)
             )
+            // A superseded operation fails as a whole: no next file, and its
+            // rows belong to the recovery that replaced it (outer handler).
+            if (err instanceof ImportSupersededError) throw err
             try {
               if (beganTransaction) await client.query('ROLLBACK')
               beganTransaction = false
@@ -653,8 +668,8 @@ export async function runImport(
                   client as unknown as Pick<PoolClient, 'query'>,
                   currentFileProvisional,
                   caseIdBeforeFile === 0
-                    ? undefined
-                    : { restoreReady: false, preserveNewCase: true }
+                    ? { fence }
+                    : { restoreReady: false, preserveNewCase: true, fence }
                 )
                 if (caseIdBeforeFile === 0) provisionalImport = null
               }
@@ -687,7 +702,7 @@ export async function runImport(
             throw new Error('PostgreSQL import lost its provisional operation state')
           }
           throwIfCancelled()
-          await client.query('BEGIN')
+          await beginFenced()
           beganTransaction = true
           // Force the final commit synchronous so the import only reports
           // success once the WAL is fsynced. Postgres flushes WAL up to this
@@ -770,7 +785,8 @@ export async function runImport(
         const repo = new PostgresVcfImportRepository(start.schema)
         await repo.cleanupProvisionalImport(
           client as unknown as Pick<PoolClient, 'query'>,
-          provisionalImport
+          provisionalImport,
+          { fence }
         )
         provisionalImport = null
       } catch (cleanupError) {

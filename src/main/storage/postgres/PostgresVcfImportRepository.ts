@@ -12,6 +12,12 @@ import {
   VARIANT_TRANSCRIPT_COPY_COLUMNS,
   toNumericId
 } from './postgres-import-columns'
+import {
+  inFencedImportTransaction,
+  withExclusiveImportFence,
+  type ExclusiveFenceOptions,
+  type ImportFence
+} from './postgres-import-fence'
 import { profilePhase, profileCount } from './postgres-import-profile'
 
 // ---------------------------------------------------------------------------
@@ -84,6 +90,12 @@ export interface PostgresProvisionalImport {
 interface ProvisionalCleanupOptions {
   restoreReady?: boolean
   preserveNewCase?: boolean
+  /**
+   * The operation the cleanup belongs to. A worker cleaning up its own case
+   * passes it, so every cleanup transaction is fenced; recovery passes none,
+   * because it holds the fence exclusively.
+   */
+  fence?: ImportFence
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +113,7 @@ function pickColumns<T extends string>(
   return out
 }
 
-async function inTransaction<T>(
+async function inUnfencedTransaction<T>(
   client: Pick<PoolClient, 'query'>,
   operation: () => Promise<T>
 ): Promise<T> {
@@ -128,7 +140,7 @@ async function inTransaction<T>(
 export class PostgresVcfImportRepository {
   private readonly schemaName: string
 
-  constructor(schema: string) {
+  constructor(private readonly schema: string) {
     this.schemaName = quoteIdentifier(schema)
   }
 
@@ -214,6 +226,13 @@ export class PostgresVcfImportRepository {
     provisional: PostgresProvisionalImport,
     options: ProvisionalCleanupOptions = {}
   ): Promise<void> {
+    const inTransaction = <T>(
+      queryable: Pick<PoolClient, 'query'>,
+      operation: () => Promise<T>
+    ): Promise<T> =>
+      options.fence === undefined
+        ? inUnfencedTransaction(queryable, operation)
+        : inFencedImportTransaction(queryable, options.fence, operation)
     while (true) {
       const deleted = await inTransaction(client, () =>
         client.query(
@@ -243,7 +262,32 @@ export class PostgresVcfImportRepository {
     })
   }
 
-  async recoverInterruptedImports(client: Pick<PoolClient, 'query'>): Promise<void> {
+  /**
+   * Remove what interrupted imports left behind, and supersede them: the
+   * import generation is advanced, so a worker of an older operation that is
+   * still running can no longer write. Returns the new generation.
+   *
+   * Holds the import fence exclusively (a session-level lock) for the whole
+   * pass. `client` must therefore be a connection the caller owns: the import
+   * worker's or the batch coordinator's. The fence is released before this
+   * returns; on an error the caller ends the connection.
+   */
+  async recoverInterruptedImports(
+    client: Pick<PoolClient, 'query'>,
+    options: ExclusiveFenceOptions = {}
+  ): Promise<number> {
+    return withExclusiveImportFence(
+      client,
+      this.schema,
+      async (generation) => {
+        await this.cleanupInterruptedImports(client)
+        return generation
+      },
+      options
+    )
+  }
+
+  private async cleanupInterruptedImports(client: Pick<PoolClient, 'query'>): Promise<void> {
     const result = await client.query(
       `SELECT id, import_variant_watermark, import_is_new
        FROM ${this.schemaName}."cases_all"

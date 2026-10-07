@@ -129,7 +129,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         try {
           const result = await this.runSingleFile(
             params,
-            { holderPid: lease.holderPid },
+            { holderPid: lease.holderPid, generation: lease.generation },
             (client) => {
               worker = client
               inFlight.add(client)

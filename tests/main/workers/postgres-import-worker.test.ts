@@ -36,7 +36,7 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
   }
 }))
 
-import { runImport } from '../../../src/main/workers/postgres-import-worker'
+import { runImportBehindHealthyFence as runImport } from './support/healthy-import-fence'
 import {
   POSTGRES_IMPORT_CANCELLATION_MESSAGE,
   type PostgresImportWorkerStartMessage
@@ -129,7 +129,7 @@ describe('postgres-import-worker runImport', () => {
           mode: 'single-file',
           caseName: 'leased',
           filePath: '/tmp/a.vcf',
-          lease: { holderPid: 4242 }
+          lease: { holderPid: 4242, generation: 1 }
         },
         (message) => messages.push(message)
       )
@@ -522,9 +522,10 @@ describe('postgres-import-worker runImport', () => {
     // Each production batch commits independently; failed current-file rows
     // are deleted in bounded cleanup transactions before bookkeeping.
     const beginCount = queries.filter((q) => q === 'BEGIN').length
-    // Two production batches, bounded failed-file cleanup, and one atomic
+    // The provisional case (its own fenced transaction), two production
+    // batches, bounded failed-file cleanup, and one atomic
     // bookkeeping/publication transaction.
-    expect(beginCount).toBe(5)
+    expect(beginCount).toBe(6)
     expect(queries.some((query) => query.includes('DELETE FROM "public"."variants_all"'))).toBe(
       true
     )
@@ -1226,7 +1227,8 @@ describe('postgres-import-worker — C3 import wiring', () => {
       const text = typeof sql === 'string' ? sql : sql.text
       if (text === 'COMMIT') {
         commitCount += 1
-        if (commitCount === 2) {
+        // Commits: the provisional case, the one row batch, the publication.
+        if (commitCount === 3) {
           queries.push(text)
           throw new Error('connection lost while publishing')
         }
