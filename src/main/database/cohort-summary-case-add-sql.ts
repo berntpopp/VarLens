@@ -6,16 +6,24 @@
  * probes into the summary tables, so it works while the import worker has the
  * other `variants` indexes dropped.
  */
+import { IMPORT_SESSION_OPEN_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { MAX_COLUMNS } from './cohort-summary-case-removal-sql'
+
+export { IMPORT_SESSION_OPEN_KEY }
 
 const HET = "('0/1','1/0','0|1','1|0')"
 const HOM = "('1/1','1|1')"
 
-/** Meta key: an import session is maintaining the summary incrementally. */
-export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
-
 export const SET_IMPORT_SESSION_OPEN_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+  VALUES ('${IMPORT_SESSION_OPEN_KEY}', '1')`
+
+/**
+ * Put the marker back if a full rebuild removed it (UPDATE_META_SQL); one
+ * primary-key probe when it is still there. `changes` tells which it was.
+ */
+export const KEEP_IMPORT_SESSION_OPEN_SQL = `
+  INSERT OR IGNORE INTO cohort_summary_meta (key, value)
   VALUES ('${IMPORT_SESSION_OPEN_KEY}', '1')`
 
 export const CLEAR_IMPORT_SESSION_OPEN_SQL = `

@@ -19,9 +19,10 @@
  *
  * State (`cohort_summary_meta`): `is_stale` stays 0 throughout — readers may
  * use the summary mid-session. `import_session_open` is set while a session
- * runs and cleared by {@link ImportSummarySession.finish}; a session that dies
- * leaves it behind, and both the next session and the app start
- * (`DatabaseService.needsStartupRebuild`) then rebuild. A summary that is
+ * runs and cleared by {@link ImportSummarySession.finish} or by any completed
+ * full rebuild (UPDATE_META_SQL); the session re-asserts it with every insert
+ * transaction. A session that dies leaves it behind, and both the next session
+ * and the app start (`DatabaseService.needsStartupRebuild`) then rebuild. A summary that is
  * stale or interrupted at session start is flagged stale and rebuilt once
  * before the first file; if that rebuild fails the flag stays and the session
  * is not exact.
@@ -58,6 +59,12 @@ export interface ImportSummarySession {
    * `filesAfterThis`: files of the session still to come (see {@link UpkeepPolicy}).
    */
   addCase(caseId: number, filesAfterThis?: number): void
+  /**
+   * Call inside every transaction that inserts variants. A full rebuild from
+   * outside the session clears the open-session marker; this puts it back
+   * together with the rows that rebuild did not see.
+   */
+  keepSessionOpen(): void
   /** Orderly session end: rebuild if upkeep was abandoned, ANALYZE, clear the marker. */
   finish(): void
 }
@@ -110,6 +117,7 @@ const NO_SUMMARY: ImportSummarySession = {
   isExact: () => false,
   replaceCase: (_caseId, deleteCase) => deleteCase(),
   addCase: () => undefined,
+  keepSessionOpen: () => undefined,
   finish: () => undefined
 }
 
@@ -237,6 +245,10 @@ export function openImportSummarySession(
       }
     },
 
+    keepSessionOpen() {
+      stmts?.keepSessionOpen.run()
+    },
+
     finish() {
       try {
         if (!exact) options.rebuild()
@@ -254,6 +266,7 @@ export function openImportSummarySession(
 
 function prepareAddStatements(db: DatabaseType) {
   return {
+    keepSessionOpen: db.prepare(sql.KEEP_IMPORT_SESSION_OPEN_SQL),
     caseBuild: db.prepare('SELECT genome_build FROM cases WHERE id = ?'),
     markCaseReady: db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?"),
     countSummaryRows: db.prepare('SELECT COUNT(*) AS c FROM cohort_variant_summary'),

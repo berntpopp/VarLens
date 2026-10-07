@@ -7,7 +7,10 @@ import type { WorkerMessage, MainMessage } from '../../shared/types/import-worke
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
 import { resolveBatchSize } from '../import/bounded-batcher'
-import { openImportSummarySession } from '../database/cohort-summary-case-add'
+import {
+  openImportSummarySession,
+  type ImportSummarySession
+} from '../database/cohort-summary-case-add'
 import {
   checkpointBetweenFiles,
   openWorkerDatabase,
@@ -55,7 +58,9 @@ export async function runImportSession(
     const batchSize = resolveBatchSize(msg.batchSize, DATABASE_CONFIG.BATCH_INSERT_SIZE)
     db = openWorkerDatabase(msg.dbPath, msg.encryptionKey)
 
-    const stmts = prepareStatements(db)
+    // Opened below, once the leftovers of a dead worker are gone.
+    let summarySession: ImportSummarySession | undefined
+    const stmts = prepareStatements(db, () => summarySession?.keepSessionOpen())
     // Internal allele-frequency upkeep runs here, on the worker connection
     // that already holds the write lock, instead of on the Electron main
     // thread after the worker finishes (audit 05 finding M-1).
@@ -85,6 +90,7 @@ export async function runImportSession(
       rebuild: () => rebuildCohortSummary(workerDb),
       onWarning: (warning) => console.warn(`[import-worker] ${warning}`)
     })
+    summarySession = summary
 
     const totalFiles = msg.files.length
     const importedInBatch = new Set<string>()

@@ -8,6 +8,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
+import { rebuildCohortSummaryCancellable } from '../../../src/main/workers/cancellable-summary-rebuild'
+import { rebuildCohortSummary } from '../../../src/main/workers/worker-db'
 import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
 import {
   openSummarySessionHarness,
@@ -67,6 +69,57 @@ describe('import worker: cohort summary recovery', () => {
     await h.run([])
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    expect(summaryMeta(h.db, 'import_session_open')).toBeUndefined()
+  })
+
+  describe('a session marker left by a dead worker', () => {
+    const rebuilds: Record<string, () => void | Promise<unknown>> = {
+      'main-process service': () => {
+        const service = new DatabaseService(h.dbPath)
+        try {
+          service.cohortSummary.rebuild()
+        } finally {
+          service.close()
+        }
+      },
+      'worker rebuild': () => rebuildCohortSummary(h.db),
+      'cancellable worker rebuild': () => rebuildCohortSummaryCancellable(h.db, () => false)
+    }
+
+    it.each(Object.keys(rebuilds))('is cleared by a completed full rebuild (%s)', async (name) => {
+      await h.run([h.file('A', [variantAt(100, 'AAA')])])
+      h.db.exec(MARK_SESSION_OPEN)
+      expect(needsStartupRebuild()).toBe(true)
+
+      await rebuilds[name]()
+
+      // Otherwise every app start rebuilds again until the next import.
+      expect(summaryMeta(h.db, 'import_session_open')).toBeUndefined()
+      expect(needsStartupRebuild()).toBe(false)
+    })
+  })
+
+  it('keeps its marker when a full rebuild runs while a file is being inserted', async () => {
+    await h.run([h.file('A', [variantAt(100, 'AAA')])])
+    const markerAfterBatch: Array<string | undefined> = []
+    let batches = 0
+
+    await h.run(
+      [h.file('B', [variantAt(100, 'AAA'), variantAt(200, 'BBB'), variantAt(300, 'CCC')])],
+      {
+        batchSize: 1,
+        onMessage: (m) => {
+          if (m.type !== 'progress' || m.phase !== 'inserting') return
+          markerAfterBatch.push(summaryMeta(h.db, 'import_session_open'))
+          // A rebuild from outside the session lands after the first row.
+          if (++batches === 1) rebuildCohortSummary(h.db)
+        }
+      }
+    )
+
+    // The rebuild cleared the marker; the session's next write restored it, so
+    // a crash from there on is still recognised as an unfinished session.
+    expect(markerAfterBatch).toEqual(['1', '1', '1'])
     expect(summaryMeta(h.db, 'import_session_open')).toBeUndefined()
   })
 })
