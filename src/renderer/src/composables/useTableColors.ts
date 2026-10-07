@@ -12,6 +12,8 @@
  * ```
  */
 
+import { clinvarColorToken } from '../../../shared/config/severity.config'
+
 export interface UseTableColorsReturn {
   getClinVarColor: (significance: string | null) => string
   getImpactColor: (impact: string | null) => string
@@ -20,25 +22,10 @@ export interface UseTableColorsReturn {
 
 export function useTableColors(): UseTableColorsReturn {
   /**
-   * Map ClinVar significance to Vuetify color
-   * Handles both underscore and space-separated variants
+   * Map ClinVar significance to a Vuetify color: the colour of its normalised
+   * category in the shared severity configuration, whatever the spelling.
    */
-  const getClinVarColor = (significance: string | null): string => {
-    if (significance === null || significance === '') return 'grey'
-
-    const lower = significance.toLowerCase()
-
-    // Check for pathogenic first (but exclude "likely benign" which contains "benign")
-    if (lower.includes('pathogenic') && !lower.includes('benign')) {
-      return lower.includes('likely') ? 'orange' : 'error'
-    }
-    if (lower.includes('conflicting')) return 'deep-purple'
-    if (lower.includes('uncertain') || lower.includes('vus')) return 'warning'
-    if (lower.includes('likely benign')) return 'light-green'
-    if (lower.includes('benign')) return 'success'
-
-    return 'grey'
-  }
+  const getClinVarColor = (significance: string | null): string => clinvarColorToken(significance)
 
   /**
    * Map variant impact (HIGH/MODERATE/LOW/MODIFIER) to Vuetify color

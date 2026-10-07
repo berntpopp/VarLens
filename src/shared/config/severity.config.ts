@@ -104,6 +104,9 @@ export function acmgLabelCaseSql(rankExpression: string): string {
  * 6 drug response, 7 histocompatibility, 255 other). The two aggregate
  * categories and `conflicting` can also be derived from components.
  *
+ * `color` is the chip colour token of the category in both views (grey =
+ * neutral), so every spelling of a category looks the same.
+ *
  * `axis`: `pathogenicity` categories classify the variant for Mendelian
  * disease; `other` ones are classifications of another kind (ClinVar reports
  * them next to the first, separated by `|`); `none` says nothing.
@@ -111,6 +114,7 @@ export function acmgLabelCaseSql(rankExpression: string): string {
 export const CLINVAR_CATEGORIES = [
   {
     id: 'pathogenic',
+    color: 'error',
     label: 'Pathogenic',
     rank: 15,
     axis: 'pathogenicity',
@@ -118,6 +122,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'pathogenic_likely_pathogenic',
+    color: 'orange',
     label: 'Pathogenic/Likely pathogenic',
     rank: 14,
     axis: 'pathogenicity',
@@ -125,6 +130,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'likely_pathogenic',
+    color: 'orange',
     label: 'Likely pathogenic',
     rank: 13,
     axis: 'pathogenicity',
@@ -132,6 +138,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'conflicting',
+    color: 'deep-purple',
     label: 'Conflicting classifications of pathogenicity',
     rank: 12,
     axis: 'pathogenicity',
@@ -147,6 +154,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'uncertain_significance',
+    color: 'warning',
     label: 'Uncertain significance',
     rank: 11,
     axis: 'pathogenicity',
@@ -165,15 +173,24 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'risk_factor',
+    color: 'grey',
     label: 'Risk factor',
     rank: 10,
     axis: 'other',
     terms: ['risk factor', 'established risk allele', 'likely risk allele']
   },
-  { id: 'association', label: 'Association', rank: 9, axis: 'other', terms: ['association'] },
-  { id: 'affects', label: 'Affects', rank: 8, axis: 'other', terms: ['affects'] },
+  {
+    id: 'association',
+    color: 'grey',
+    label: 'Association',
+    rank: 9,
+    axis: 'other',
+    terms: ['association']
+  },
+  { id: 'affects', color: 'grey', label: 'Affects', rank: 8, axis: 'other', terms: ['affects'] },
   {
     id: 'drug_response',
+    color: 'grey',
     label: 'Drug response',
     rank: 7,
     axis: 'other',
@@ -181,6 +198,7 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'other',
+    color: 'grey',
     label: 'Other',
     rank: 6,
     axis: 'other',
@@ -198,9 +216,17 @@ export const CLINVAR_CATEGORIES = [
       '255'
     ]
   },
-  { id: 'protective', label: 'Protective', rank: 5, axis: 'other', terms: ['protective'] },
+  {
+    id: 'protective',
+    color: 'grey',
+    label: 'Protective',
+    rank: 5,
+    axis: 'other',
+    terms: ['protective']
+  },
   {
     id: 'likely_benign',
+    color: 'light-green',
     label: 'Likely benign',
     rank: 4,
     axis: 'pathogenicity',
@@ -208,14 +234,23 @@ export const CLINVAR_CATEGORIES = [
   },
   {
     id: 'benign_likely_benign',
+    color: 'light-green',
     label: 'Benign/Likely benign',
     rank: 3,
     axis: 'pathogenicity',
     terms: []
   },
-  { id: 'benign', label: 'Benign', rank: 2, axis: 'pathogenicity', terms: ['benign', 'b', '2'] },
+  {
+    id: 'benign',
+    color: 'success',
+    label: 'Benign',
+    rank: 2,
+    axis: 'pathogenicity',
+    terms: ['benign', 'b', '2']
+  },
   {
     id: 'not_provided',
+    color: 'grey',
     label: 'Not provided',
     rank: 1,
     axis: 'none',
@@ -462,4 +497,26 @@ export function withOfferedValues<T extends { key: string; distinctValues?: stri
 ): T {
   if (meta.distinctValues === undefined || !isSeverityKey(meta.key)) return meta
   return { ...meta, distinctValues: offeredFilterValues(meta.key, meta.distinctValues) }
+}
+
+/** Colour token of a value that has no category. */
+export const NEUTRAL_SEVERITY_COLOR = 'grey'
+
+/**
+ * Chip colour token for a raw ClinVar string: its category's, so `LB`,
+ * `Likely_benign` and `likely benign` look alike; neutral when unknown.
+ */
+export function clinvarColorToken(raw: string | null | undefined): string {
+  const category = clinvarCategory(raw)
+  return category === null
+    ? NEUTRAL_SEVERITY_COLOR
+    : (CATEGORY_BY_ID.get(category)?.color ?? NEUTRAL_SEVERITY_COLOR)
+}
+
+/**
+ * How a raw ClinVar string is shown, in a table cell and in a filter option
+ * alike: as stored, with underscores as spaces.
+ */
+export function clinvarDisplayText(raw: string): string {
+  return raw.replace(/_/g, ' ')
 }

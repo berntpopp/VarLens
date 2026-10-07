@@ -11,6 +11,8 @@ import {
   UNKNOWN_SEVERITY_RANK,
   annotationSeverityRanks,
   clinvarCategory,
+  clinvarColorToken,
+  clinvarDisplayText,
   clinvarRank,
   clinvarRankForImport,
   offeredFilterValues,
@@ -322,5 +324,48 @@ describe('filter values of the severity columns', () => {
 
   it('leaves other columns alone', () => {
     expect(offeredFilterValues('func', ['b', 'a'])).toEqual(['b', 'a'])
+  })
+})
+
+describe('ClinVar chip colour follows the category, not the spelling', () => {
+  it.each([
+    ['Pathogenic', 'error'],
+    ['P', 'error'],
+    ['pathogenic|drug_response', 'error'],
+    ['Likely_pathogenic', 'orange'],
+    ['LP', 'orange'],
+    ['Pathogenic/Likely_pathogenic', 'orange'],
+    ['pathogenic&benign', 'deep-purple'],
+    ['Conflicting_classifications_of_pathogenicity', 'deep-purple'],
+    ['VUS', 'warning'],
+    ['Uncertain_significance', 'warning'],
+    ['Likely_benign', 'light-green'],
+    ['LB', 'light-green'],
+    ['Benign/Likely_benign', 'light-green'],
+    ['Benign', 'success'],
+    ['B', 'success'],
+    ['2', 'success'],
+    // neutral: other kinds of classification, no value, unknown text
+    ['drug_response', 'grey'],
+    ['not_provided', 'grey'],
+    ['totally_made_up_term', 'grey'],
+    ['', 'grey'],
+    [null, 'grey']
+  ])('%j is %s', (raw, color) => {
+    expect(clinvarColorToken(raw)).toBe(color)
+  })
+
+  it('gives every category a colour token', () => {
+    for (const category of CLINVAR_CATEGORIES) expect(category.color).toMatch(/^[a-z-]+$/)
+  })
+})
+
+describe('clinvarDisplayText', () => {
+  it('shows a raw string with spaces for underscores, otherwise unchanged', () => {
+    expect(clinvarDisplayText('totally_made_up_term')).toBe('totally made up term')
+    expect(clinvarDisplayText('Pathogenic/Likely_pathogenic|risk_factor')).toBe(
+      'Pathogenic/Likely pathogenic|risk factor'
+    )
+    expect(clinvarDisplayText('Likely pathogenic')).toBe('Likely pathogenic')
   })
 })

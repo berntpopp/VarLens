@@ -19,6 +19,7 @@ import {
   formatPosition,
   formatScientific
 } from '../../composables/useTableFormatters'
+import { clinvarDisplayText } from '../../../../shared/config/severity.config'
 import { getCaddColor, getClinVarColor, getImpactColor } from '../../composables/useTableColors'
 import { chipVNode, iconVNode } from './cell-vnodes'
 
@@ -191,14 +192,14 @@ export const ClinVarCell: FunctionalComponent<
   if (!hasText(props.significance)) return placeholder()
   const tooltip = { 'data-tooltip': props.significance, 'data-tooltip-location': TOOLTIP_TOP }
   const chip = (attrs?: Record<string, unknown>): VNode =>
-    chipVNode(props.significance!.replace(/_/g, ' '), {
+    chipVNode(clinvarDisplayText(props.significance!), {
       color: getClinVarColor(props.significance),
       size: 'small',
       label: true,
       attrs
     })
   if (!hasText(props.url)) return chip(tooltip)
-  const ariaLabel = `ClinVar: ${props.significance.replace(/_/g, ' ')} (opens in a new tab)`
+  const ariaLabel = `ClinVar: ${clinvarDisplayText(props.significance)} (opens in a new tab)`
   return h(
     'a',
     { class: 'external-link', ...tooltip, ...linkAttrs(emit as LinkEmit, props.url, ariaLabel) },
