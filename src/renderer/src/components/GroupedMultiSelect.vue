@@ -131,6 +131,7 @@
 </template>
 
 <script setup lang="ts">
+import { clinvarDisplayText } from '../../../shared/config/severity.config'
 import { ref, computed } from 'vue'
 import type { FilterGroupConfig, FilterGroup } from '../config/filterGroups'
 import { mdiChevronDown, mdiChevronUp, mdiDotsHorizontal, mdiFilterVariant } from '@mdi/js'
@@ -176,7 +177,7 @@ const otherItems = computed(() => {
     .filter((v) => !configuredValues.value.includes(v))
     .map((v) => ({
       value: v,
-      label: v.replace(/_/g, ' ') // Simple humanization
+      label: clinvarDisplayText(v) // same text as the table cell (underscores as spaces)
     }))
 })
 

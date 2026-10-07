@@ -59,6 +59,7 @@
         v-else-if="filterMode === 'categorical'"
         :column-title="headerColumn.title"
         :values="columnMeta?.distinctValues ?? []"
+        :format-value="formatOption"
         :initial-selected="categoricalInitialSelected"
         @apply="handleCategoricalApply"
         @clear="handleClear"
@@ -92,6 +93,7 @@ import type {
   ColumnFilterMode,
   ColumnFilterOperator
 } from '../../../../shared/types/column-filters'
+import { clinvarDisplayText } from '../../../../shared/config/severity.config'
 import NumericColumnFilter from './NumericColumnFilter.vue'
 import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
 import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
@@ -135,6 +137,10 @@ const props = withDefaults(defineProps<Props>(), {
   columnMeta: undefined,
   filterMode: 'text-suggest'
 })
+
+/** Filter options read like the table cell: ClinVar strings through its formatter. */
+const formatOption = (value: string): string =>
+  props.headerColumn.key === 'clinvar' ? clinvarDisplayText(value) : value
 
 /** 1-based sort priority index. Only shown when multiple columns are sorted. */
 const sortIndex = computed(() => {

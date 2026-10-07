@@ -20,7 +20,7 @@
         <v-checkbox
           v-for="val in filteredValues"
           :key="val"
-          :label="val"
+          :label="formatValue(val)"
           :model-value="selected.includes(val)"
           density="compact"
           hide-details
@@ -56,10 +56,13 @@ interface Props {
   values: string[]
   /** Pre-selected values */
   initialSelected?: string[]
+  /** How a value is shown (and searched); the stored value is what is filtered by. */
+  formatValue?: (value: string) => string
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialSelected: () => []
+  initialSelected: () => [],
+  formatValue: (value: string) => value
 })
 
 const emit = defineEmits<{
@@ -73,7 +76,7 @@ const selected = ref<string[]>([...props.initialSelected])
 const filteredValues = computed(() => {
   if (!searchText.value) return props.values
   const q = searchText.value.toLowerCase()
-  return props.values.filter((v) => v.toLowerCase().includes(q))
+  return props.values.filter((v) => props.formatValue(v).toLowerCase().includes(q))
 })
 
 function toggleValue(val: string, checked: boolean | null | undefined) {
