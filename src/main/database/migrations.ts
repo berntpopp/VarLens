@@ -1919,15 +1919,24 @@ export function runMigrations(db: Database.Database): void {
 
   // v40: add import_status to cases to support atomic publication and safe concurrent cohort reads (#460, #461)
   if (currentVersion < 40) {
-    const hasColumn = (
-      db.prepare("PRAGMA table_info('cases')").all() as Array<{ name: string }>
-    ).some((col) => col.name === 'import_status')
-    if (!hasColumn) {
-      db.exec("ALTER TABLE cases ADD COLUMN import_status TEXT NOT NULL DEFAULT 'ready'")
+    const hasCasesTable =
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cases'").get() !==
+      undefined
+    if (hasCasesTable) {
+      const caseColumns = (
+        db.prepare("PRAGMA table_info('cases')").all() as Array<{ name: string }>
+      ).map((col) => col.name)
+      if (!caseColumns.includes('import_status')) {
+        db.exec("ALTER TABLE cases ADD COLUMN import_status TEXT NOT NULL DEFAULT 'ready'")
+      }
+      if (caseColumns.includes('genome_build')) {
+        db.exec(
+          'CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status, genome_build)'
+        )
+      } else {
+        db.exec('CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status)')
+      }
     }
-    db.exec(
-      'CREATE INDEX IF NOT EXISTS idx_cases_import_status ON cases(import_status, genome_build)'
-    )
     db.exec('PRAGMA user_version = 40')
   }
 }
