@@ -379,4 +379,55 @@ describe('lease and worker', () => {
     ])
     expect(texts.some((text) => /INSERT|UPDATE|DELETE|COPY/.test(text))).toBe(false)
   })
+
+  it('reports a cleanup that recovery took over as the typed conflict, not as a cleanup failure', async () => {
+    // The file fails for its own reason; by then a new owner has recovered
+    // the workspace, so the worker's cleanup of its rows is refused.
+    let generation = 7
+    const { client } = recordingClient((text) => {
+      if (text.includes('pg_locks')) return { rows: [{ held: true }] }
+      if (text.startsWith('INSERT') && text.includes('"cases_all"')) return { rows: [{ id: '5' }] }
+      return healthyFence(generation)(text, undefined)
+    })
+    const messages: unknown[] = []
+
+    await runImport(
+      {
+        createClient: () => client as never,
+        detectFormat: async () => ({ format: 'vcf' }) as never,
+        // Fails before the first row.
+        createVcfMappedStream: async () =>
+          ({
+            [Symbol.asyncIterator]: () => ({
+              next: async () => {
+                generation = 8
+                throw new Error('unreadable file')
+              }
+            })
+          }) as never,
+        createMapperPipeline: async () => Readable.from([]),
+        statFile: () => ({ size: 0 })
+      },
+      {
+        type: 'start',
+        client: { connectionString: 'postgres://x' },
+        schema: 'ws',
+        mode: 'multi-file',
+        caseName: 'taken-over',
+        files: [
+          { filePath: '/tmp/a.vcf', variantType: 'snv-indel', annotationFormat: null, caller: null }
+        ],
+        lease: { holderPid: 4242, generation: 7 }
+      },
+      (message) => messages.push(message)
+    )
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        type: 'error',
+        code: 'CONFLICT',
+        message: expect.stringMatching(/superseded/i)
+      })
+    ])
+  })
 })

@@ -677,6 +677,8 @@ export async function runImport(
                 if (caseIdBeforeFile === 0) provisionalImport = null
               }
             } catch (rollbackErr) {
+              // Recovery took the rows over: the typed conflict, not a cleanup failure.
+              if (rollbackErr instanceof ImportSupersededError) throw rollbackErr
               console.warn(
                 `[postgres-import-worker] file ${i} ROLLBACK after error failed:`,
                 rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
