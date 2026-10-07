@@ -16,10 +16,22 @@ export function resetUnrankedClinvar(): void {
   takeUnrankedClinvarStrings()
 }
 
-/** The log line for this import, or null when every ClinVar string was ranked. */
-export function unrankedClinvarMessage(importName: string): string | null {
+/** How many distinct strings an import result carries at most. */
+const REPORTED = 50
+
+/**
+ * The distinct ClinVar strings this import could not rank (at most
+ * {@link REPORTED}), or undefined when all were ranked. Call once, when the
+ * import is done: it goes into the import result, so the import summary can
+ * show it, and into the log through {@link unrankedClinvarLogLine}.
+ */
+export function takeUnrankedClinvar(): string[] | undefined {
   const strings = takeUnrankedClinvarStrings()
-  if (strings.length === 0) return null
+  return strings.length === 0 ? undefined : strings.slice(0, REPORTED)
+}
+
+/** The log line for an import with unranked ClinVar strings. */
+export function unrankedClinvarLogLine(importName: string, strings: readonly string[]): string {
   const shown = strings.slice(0, SHOWN).map((value) => JSON.stringify(value))
   const more = strings.length > SHOWN ? ` and ${strings.length - SHOWN} more` : ''
   return (

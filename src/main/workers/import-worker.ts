@@ -1,4 +1,8 @@
-import { resetUnrankedClinvar, unrankedClinvarMessage } from '../import/unranked-clinvar'
+import {
+  resetUnrankedClinvar,
+  takeUnrankedClinvar,
+  unrankedClinvarLogLine
+} from '../import/unranked-clinvar'
 import { parentPort } from 'worker_threads'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
@@ -121,6 +125,7 @@ export async function runImportSession(
       error?: string
       errorCode?: string
       userMessage?: string
+      unrankedClinvar?: string[]
     }> = []
     let succeeded = 0
     let failed = 0
@@ -299,8 +304,12 @@ export async function runImportSession(
           published = true
           checkpointBetweenFiles(db)
           // Worker thread: no structured logger (documented console exception).
-          const unranked = unrankedClinvarMessage(file.caseName)
-          if (unranked !== null) console.warn(`[import-worker] ${unranked}`)
+          const unrankedClinvar = takeUnrankedClinvar()
+          if (unrankedClinvar !== undefined) {
+            console.warn(
+              `[import-worker] ${unrankedClinvarLogLine(file.caseName, unrankedClinvar)}`
+            )
+          }
 
           const elapsed = Date.now() - startTime
 
@@ -313,6 +322,7 @@ export async function runImportSession(
               variantCount,
               skipped: skipTracker.count,
               skipReasons: skipTracker.reasons,
+              ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
               elapsed
             }
           }
@@ -324,7 +334,8 @@ export async function runImportSession(
             fileName,
             caseName: file.caseName,
             status: 'success',
-            variantCount
+            variantCount,
+            ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
           })
           succeeded++
           importedInBatch.add(file.caseName)

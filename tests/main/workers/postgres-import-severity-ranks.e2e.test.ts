@@ -61,6 +61,8 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
     await probe.end()
   }, 60_000)
 
+  let lastUnranked: string[] | undefined
+
   async function importFile(
     caseName: string,
     filePath: string,
@@ -93,6 +95,7 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
     )
     const last = messages.at(-1)
     if (last?.type !== 'complete') throw new Error(`import failed: ${JSON.stringify(last)}`)
+    lastUnranked = last.result.unrankedClinvar
     const rows = await probe.query<RankedRow>(
       `SELECT consequence, clinvar, impact_rank, clinvar_rank
          FROM "${schema}".variants WHERE case_id = $1 ORDER BY id`,
@@ -179,5 +182,37 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
       },
       { consequence: null, clinvar: null, impact_rank: 0, clinvar_rank: 0 }
     ])
+  }, 120_000)
+
+  it('returns the ClinVar strings it could not rank with the import result', async () => {
+    const file = join(dir, 'odd.json')
+    writeFileSync(
+      file,
+      JSON.stringify({
+        variants: ['Pathogenic', 'totally_made_up_term', 'totally_made_up_term', 'LB'].map(
+          (clinvar, index) => ({
+            chr: 'chr2',
+            pos: 100 + index,
+            ref: 'A',
+            alt: 'G',
+            gt_num: '0/1',
+            consequence: 'HIGH',
+            clinvar
+          })
+        )
+      })
+    )
+    await importFile('ranks odd', file)
+    expect(lastUnranked).toEqual(['totally_made_up_term'])
+
+    // The next import starts clean: nothing is carried over.
+    writeFileSync(
+      file,
+      JSON.stringify({
+        variants: [{ chr: 'chr2', pos: 1, ref: 'A', alt: 'G', gt_num: '0/1', clinvar: 'Benign' }]
+      })
+    )
+    await importFile('ranks recognised', file)
+    expect(lastUnranked).toBeUndefined()
   }, 120_000)
 })

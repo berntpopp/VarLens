@@ -29,7 +29,11 @@ import {
 import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
-import { resetUnrankedClinvar, unrankedClinvarMessage } from '../import/unranked-clinvar'
+import {
+  resetUnrankedClinvar,
+  takeUnrankedClinvar,
+  unrankedClinvarLogLine
+} from '../import/unranked-clinvar'
 import { publishDerivedDataForImport } from './postgres-import-publication'
 import {
   acquireWorkspaceImportLock,
@@ -170,11 +174,12 @@ export async function runImport(
   // The worker is terminated when its final message arrives, so ClinVar
   // strings the import could not rank are reported just before it is sent.
   const post = (msg: PostgresImportWorkerOutboundMessage): void => {
-    if (msg.type === 'complete') {
-      const unranked = unrankedClinvarMessage(start.caseName ?? start.filePath ?? 'import')
-      if (unranked !== null) console.warn(`[postgres-import-worker] ${unranked}`)
-    }
-    postMessage(msg)
+    const unrankedClinvar = msg.type === 'complete' ? takeUnrankedClinvar() : undefined
+    if (msg.type !== 'complete' || unrankedClinvar === undefined) return postMessage(msg)
+    const name = start.caseName ?? start.filePath ?? 'import'
+    console.warn(`[postgres-import-worker] ${unrankedClinvarLogLine(name, unrankedClinvar)}`)
+    // With the result too: the log alone never reaches the user.
+    postMessage({ ...msg, result: { ...msg.result, unrankedClinvar } })
   }
   const startedAt = Date.now()
   let batchSize = POSTGRES_JSON_IMPORT_BATCH_SIZE

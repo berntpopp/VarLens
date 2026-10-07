@@ -104,7 +104,7 @@ type ImportOneFile = (
   file: SessionBatchFile,
   caseName: string,
   onProgress: (progress: NonNullable<BatchProgress['fileProgress']>) => void
-) => Promise<{ caseId: number; variantCount: number }>
+) => Promise<{ caseId: number; variantCount: number; unrankedClinvar?: string[] }>
 
 /**
  * Import the files of one batch. Exported for tests; production goes through
@@ -194,7 +194,14 @@ export async function runSessionBatchImport(params: {
       result.succeeded++
       existingIds.set(caseName, imported.caseId)
       finish(
-        { ...base, status: 'success', variantCount: imported.variantCount },
+        {
+          ...base,
+          status: 'success',
+          variantCount: imported.variantCount,
+          ...(imported.unrankedClinvar !== undefined
+            ? { unrankedClinvar: imported.unrankedClinvar }
+            : {})
+        },
         { caseId: imported.caseId, variantCount: imported.variantCount }
       )
     } catch (error) {

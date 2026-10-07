@@ -96,6 +96,8 @@ describe('SQLite import stores severity ranks (#469)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  let lastMessages: WorkerMessage[] = []
+
   async function importFiles(files: Array<Partial<FileRequest>>): Promise<void> {
     const messages: WorkerMessage[] = []
     await runImportSession(
@@ -103,6 +105,7 @@ describe('SQLite import stores severity ranks (#469)', () => {
       { postMessage: (message) => messages.push(message) },
       () => false
     )
+    lastMessages = messages
     const done = messages.find((message) => message.type === 'complete')
     if (done?.type !== 'complete') throw new Error('session did not complete')
     expect(done.results.details.map((detail) => detail.status)).toEqual(files.map(() => 'success'))
@@ -192,6 +195,19 @@ describe('SQLite import stores severity ranks (#469)', () => {
       expect(reports).toEqual([
         '[import-worker] Import "odd": 2 ClinVar significance value(s) are not in the severity ' +
           'configuration and rank as unknown: "reviewed: fine", "see notes"'
+      ])
+      // The same strings travel with the result, per file, so the import
+      // summary can show them: the log alone never reaches the user.
+      const done = lastMessages.find((message) => message.type === 'complete')
+      expect(done?.type === 'complete' && done.results.details).toMatchObject([
+        { caseName: 'odd', unrankedClinvar: ['reviewed: fine', 'see notes'] },
+        { caseName: 'ranked' }
+      ])
+      expect(done?.type === 'complete' && done.results.details[1].unrankedClinvar).toBeUndefined()
+      const fileDone = lastMessages.find((message) => message.type === 'file-complete')
+      expect(fileDone?.type === 'file-complete' && fileDone.result.unrankedClinvar).toEqual([
+        'reviewed: fine',
+        'see notes'
       ])
       // Unknown is rank 0: stored, displayed, never guessed.
       expect(rowsOf(db, 'odd').map((row) => row.clinvar_rank)).toEqual([15, 15, 0, 0, 0])

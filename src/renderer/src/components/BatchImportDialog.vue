@@ -82,6 +82,7 @@
 </template>
 
 <script setup lang="ts">
+import { logUnrankedClinvar } from '../utils/unranked-clinvar'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type {
   BatchProgressEvent,
@@ -305,6 +306,7 @@ const startImport = async (
 
     summary.value = result
     phase.value = 'summary'
+    logUnrankedClinvar(result.details)
     importStore.importComplete({
       succeeded: result.succeeded,
       failed: result.failed,

@@ -205,7 +205,8 @@ export class PostgresImportExecutor implements StorageImportExecutor {
       variantCount: result.variantCount,
       skipped: result.skipped,
       errors: result.errors,
-      elapsed: result.elapsed
+      elapsed: result.elapsed,
+      ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
     }
   }
 
@@ -289,6 +290,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
     skipped: number
     errors: string[]
     elapsed: number
+    unrankedClinvar?: string[]
   }> {
     const factory = this.options.workerClientFactory ?? (() => new PostgresImportWorkerClient())
     const client = factory()

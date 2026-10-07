@@ -123,6 +123,8 @@ export interface PostgresImportWorkerCompleteMessage {
     skipped: number
     errors: string[]
     elapsed: number
+    /** ClinVar values the severity configuration does not know (ranked as unknown). */
+    unrankedClinvar?: string[]
   }
 }
 

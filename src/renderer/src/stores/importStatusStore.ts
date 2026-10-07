@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { logUnrankedClinvar } from '../utils/unranked-clinvar'
 
 export type ImportPhase =
   'idle' | 'uploading' | 'importing' | 'finalizing' | 'complete' | 'error' | 'cancelled'
@@ -11,6 +12,7 @@ export interface ImportFileDetail {
   status: 'pending' | 'importing' | 'success' | 'failed' | 'skipped'
   variantCount?: number
   error?: string
+  unrankedClinvar?: string[]
 }
 
 export const useImportStatusStore = defineStore('importStatus', () => {
@@ -131,6 +133,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
   }): void {
     phase.value = result.cancelled ? 'cancelled' : 'complete'
     details.value = result.details
+    logUnrankedClinvar(result.details)
     overallPercent.value = 100
   }
 
