@@ -415,6 +415,42 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     expect(await snapshotSummary()).toEqual(await rebuiltSummary())
   }, 120_000)
 
+  it('a failed publication leaves the counter behind but flagged, and the rebuild recounts it (#460)', async () => {
+    const first = await seedCase('fail-a')
+    await seedVariant({ caseId: first, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await inTransaction((client) =>
+      repo.incrementalAdd({ schema, client: client as never, caseId: first })
+    )
+    await expectUniqueVariants(1)
+
+    // The import worker's fallback: the summary update of a second case fails
+    // inside its savepoint, the case is published anyway and the summary is
+    // marked stale in the same transaction.
+    const second = await seedCase('fail-b')
+    await seedVariant({ caseId: second, chr: '2', pos: 200, ref: 'C', alt: 'G' })
+    await seedVariant({ caseId: second, chr: '3', pos: 300, ref: 'G', alt: 'A' })
+    await inTransaction(async (client) => {
+      await client.query('SAVEPOINT cohort_summary')
+      await repo.incrementalAdd({ schema, client: client as never, caseId: second })
+      await client.query('ROLLBACK TO SAVEPOINT cohort_summary')
+      await repo.markStale({
+        schema,
+        client: client as never,
+        reason: `post_import_summary_failed_case_${second}`
+      })
+    })
+
+    // Not exact now (the rolled-back statement took its increment with it) …
+    expect(await uniqueVariants()).toEqual({ stored: 1, summary: 1, variants: 3 })
+    // … and never presented as exact: the summary says it is stale.
+    expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(true)
+
+    await prepareCohortRead({ pool, schema })
+    await awaitBackgroundRebuild(schema)
+    await expectUniqueVariants(3)
+    expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+  }, 120_000)
+
   async function rowAt100(): Promise<Record<string, unknown>> {
     const res = await probe.query(
       `SELECT gene_symbol, consequence, func, clinvar, cadd, transcript, cdna, carrier_count::int

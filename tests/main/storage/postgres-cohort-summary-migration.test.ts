@@ -100,29 +100,85 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
     expect(fillfactor.get('cohort_gene_variant_summary')).toBe('fillfactor=85')
     expect(fillfactor.get('cohort_gene_summary')).toBe('fillfactor=50')
 
-    // A counter bump on a freshly written row is a heap-only update.
-    await probe.query(
+    // A counter bump on a freshly written row is a heap-only update. The
+    // statistics of a session are flushed for certain when it ends, so the
+    // writes run on their own connection and the counters are then read with
+    // a bounded retry (the stats snapshot is per transaction).
+    const writer = new Client({ connectionString: PG_URL })
+    await writer.connect()
+    await writer.query(
       `INSERT INTO "${schema}".cohort_gene_summary
          (gene_symbol, variant_count, unique_variant_count, affected_case_count)
        SELECT 'GENE' || g, 1, 1, 1 FROM generate_series(1, 2000) g`
     )
-    await probe.query(
+    await writer.query(
       `UPDATE "${schema}".cohort_gene_summary SET variant_count = variant_count + 1`
     )
-    await probe.query('SELECT pg_stat_force_next_flush()')
-    const stats = await probe.query<{ n_tup_upd: string; n_tup_hot_upd: string }>(
-      `SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_xact_user_tables
-        WHERE schemaname = $1 AND relname = 'cohort_gene_summary'`,
-      [schema]
+    await writer.end()
+
+    let flushed = { n_tup_upd: 0, n_tup_hot_upd: 0 }
+    for (let attempt = 0; attempt < 100 && flushed.n_tup_upd < 2000; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100))
+      await probe.query('SELECT pg_stat_clear_snapshot()')
+      const stats = await probe.query<{ n_tup_upd: string; n_tup_hot_upd: string }>(
+        `SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables
+          WHERE schemaname = $1 AND relname = 'cohort_gene_summary'`,
+        [schema]
+      )
+      flushed = {
+        n_tup_upd: Number(stats.rows[0].n_tup_upd),
+        n_tup_hot_upd: Number(stats.rows[0].n_tup_hot_upd)
+      }
+    }
+    expect(flushed.n_tup_upd).toBe(2000)
+    expect(flushed.n_tup_hot_upd).toBeGreaterThan(1900)
+  }, 60_000)
+
+  it('backfills the unique-variant counter from the existing summary (0024, #460)', async () => {
+    const before0024 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0024')
+    await new PostgresMigrationRunner(pool, schema, before0024).migrate()
+    // Three distinct coordinates in five rows: one under two variant types,
+    // one under two genome builds.
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_variant_summary
+         (chr, pos, ref, alt, variant_type, genome_build, carrier_count, het_count, hom_count, variant_key)
+       VALUES ('1', 100, 'A', 'T', 'snv', 'GRCh38', 2, 2, 0, '1:100:A:T'),
+              ('1', 100, 'A', 'T', 'sv',  'GRCh38', 1, 1, 0, '1:100:A:T'),
+              ('2', 200, 'C', 'G', 'snv', 'GRCh38', 1, 1, 0, '2:200:C:G'),
+              ('2', 200, 'C', 'G', 'snv', 'GRCh37', 1, 0, 1, '2:200:C:G'),
+              ('3', 300, 'G', 'A', 'snv', 'GRCh38', 1, 1, 0, '3:300:G:A')`
     )
-    void stats
-    const flushed = await probe.query<{ n_tup_upd: string; n_tup_hot_upd: string }>(
-      `SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables
-        WHERE schemaname = $1 AND relname = 'cohort_gene_summary'`,
-      [schema]
+
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    const res = await probe.query<{ unique_variant_count: string }>(
+      `SELECT unique_variant_count FROM "${schema}".cohort_summary_state WHERE id = 1`
     )
-    expect(Number(flushed.rows[0].n_tup_upd)).toBe(2000)
-    expect(Number(flushed.rows[0].n_tup_hot_upd)).toBeGreaterThan(1900)
+    expect(Number(res.rows[0].unique_variant_count)).toBe(3)
+  }, 60_000)
+
+  it('does not flag an empty summary stale when upgrading (0024)', async () => {
+    const before0024 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0024')
+    await new PostgresMigrationRunner(pool, schema, before0024).migrate()
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state
+          SET is_stale = false, stale_reason = NULL, last_rebuilt_at = NULL WHERE id = 1`
+    )
+
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+
+    const res = await probe.query(
+      `SELECT is_stale, stale_reason, last_rebuilt_at, unique_variant_count::int AS unique_variant_count,
+              (SELECT COUNT(*)::int FROM "${schema}".cohort_summary_rebuild_requests) AS requests
+         FROM "${schema}".cohort_summary_state WHERE id = 1`
+    )
+    expect(res.rows[0]).toEqual({
+      is_stale: false,
+      stale_reason: null,
+      last_rebuilt_at: null,
+      unique_variant_count: 0,
+      requests: 0
+    })
   }, 60_000)
 
   it('flags an existing summary for a rebuild under the MAX-per-column rule (0024, #461)', async () => {
