@@ -148,13 +148,29 @@ depends on the summary being current, and uses the same staleness reconciliation
 ## 5. Case view parity
 
 The case view shows one row per carrier, so it has no representative. Sorting by impact or
-ClinVar was by string on both views; both now sort by the stored rank (unknown last), ties by
-the existing chromosome order. Filtering by exact stored string is unchanged on both views.
+ClinVar was by string on both views and both backends; all four now sort by the stored rank
+(`src/shared/sql/severity-sort.ts`, used by the two shared ORDER BY builders): descending is
+most severe first, unknown values and NULL last in both directions, equal ranks by the text and
+then the existing order. Filtering by exact stored string is unchanged on both views.
 
 ## 6. Cost
 
-Publication cost must stay flat (within 10 %): measured for one 60,000-variant case on a
-20-sample PostgreSQL schema, before and after; reported with the change.
+Measured on PostgreSQL 18, one schema of 21 simulated exomes (60,000 variants each, 1.26 million
+variant rows, 344,063 summary rows), the same data for both versions, median of 7 runs of
+publishing the 21st case onto the 20-case summary:
+
+| step | before (#461 rule) | after |
+| --- | --- | --- |
+| `prepareAdd` (the case's contribution) | 293 ms | 325 ms |
+| `incrementalAdd` (summary upsert) | 2,796 ms | 2,269 ms |
+| publication, both | 3,105 ms | 2,601 ms (-16 %) |
+| `incrementalRemove` of one case | 3,189 ms | 2,787 ms |
+| full `rebuild()` | 16.1 s | 21.6 s (+34 %) |
+
+Publication does not get slower. The full rebuild does: it sorts the carrier rows to pick one
+instead of hashing per-column maxima. It runs in the background after this migration and after
+a failed incremental step, not per import. The backfill of 0025 took 9 s for these 1.26 million
+rows (about 45 s expected for 6 million).
 
 ## Tests
 

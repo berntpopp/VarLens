@@ -286,6 +286,49 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
     expect(snapshotSummary(db())).toEqual(mainThread)
   })
 
+  it('both views sort impact and ClinVar by severity, not by text', () => {
+    // One case, so the case view and the cohort view list the same variants.
+    const levels: Array<[number, string | null, string | null]> = [
+      [1, 'MODIFIER', 'Uncertain significance'],
+      [2, 'HIGH', 'Benign'],
+      [3, null, null],
+      [4, 'LOW', 'Pathogenic'],
+      [5, 'MODERATE', 'Likely pathogenic'],
+      [6, 'custom_level', 'free text']
+    ]
+    const caseId = service.cases.createCase('sorted', '/tmp/sorted.json', 0, 'GRCh38')
+    service.variants.insertVariantsBatch(
+      caseId,
+      levels.map(
+        ([pos, consequence, clinvar]) =>
+          ({ chr: '1', pos, ref: 'A', alt: 'T', gt_num: '0/1', consequence, clinvar }) as never
+      )
+    )
+    service.cohortSummary.rebuild()
+    const caseView = (key: string, order: 'asc' | 'desc'): number[] =>
+      service.variants
+        .getVariants({ case_id: caseId }, 50, 0, [{ key, order }])
+        .data.map((variant) => variant.pos)
+    const cohortView = (key: string, order: 'asc' | 'desc'): number[] =>
+      service.cohort
+        .getCohortVariants({ sort_by: key, sort_order: order })
+        .data.map((variant) => variant.pos)
+
+    // Most severe first; unknown text and NULL last in both directions.
+    // As text, descending would start MODIFIER, MODERATE, LOW, HIGH.
+    const impactDesc = [2, 5, 4, 1, 6, 3]
+    const impactAsc = [1, 4, 5, 2, 6, 3]
+    // As text, 'Uncertain significance' would lead and 'Benign' close the list.
+    const clinvarDesc = [4, 5, 1, 2, 6, 3]
+    const clinvarAsc = [2, 1, 5, 4, 6, 3]
+    for (const view of [caseView, cohortView]) {
+      expect(view('consequence', 'desc')).toEqual(impactDesc)
+      expect(view('consequence', 'asc')).toEqual(impactAsc)
+      expect(view('clinvar', 'desc')).toEqual(clinvarDesc)
+      expect(view('clinvar', 'asc')).toEqual(clinvarAsc)
+    }
+  })
+
   it('a case with several rows at one variant counts once and offers its best row', () => {
     const caseId = addCarrier('multi', MODIFIER)
     service.variants.insertVariantsBatch(caseId, [

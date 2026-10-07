@@ -843,6 +843,62 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     await expectSameSummary('removing that case')
   }, 120_000)
 
+  it('(g) impact and ClinVar sort by severity on both backends, in both views (#469)', async () => {
+    // A case whose variants cover every impact level, an unknown one and NULL.
+    const levels: Array<[number, string | null, string | null]> = [
+      [1, 'MODIFIER', 'Uncertain_significance'],
+      [2, 'HIGH', 'Benign'],
+      [3, null, null],
+      [4, 'LOW', 'Pathogenic'],
+      [5, 'MODERATE', 'Likely_pathogenic'],
+      [6, 'custom_level', 'free text']
+    ]
+    const sorted: FixtureCase = {
+      name: 'parity-sorted',
+      genomeBuild: 'GRCh38',
+      variants: levels.map(([pos, consequence, clinvar]) =>
+        baseVariant({ chr: '9', pos, consequence, clinvar })
+      )
+    }
+    const sqliteCase = seedSqliteCase(sorted)
+    sqlite.cohortSummary.rebuild()
+    const pgCase = await seedPgCase(sorted)
+    const pgVariants = new PostgresVariantReadRepository(pool, schema)
+
+    // Most severe first; unknown text and NULL last in both directions. As
+    // text, descending impact would start MODIFIER, MODERATE, LOW, HIGH.
+    const expected: Array<[string, 'asc' | 'desc', number[]]> = [
+      ['consequence', 'desc', [2, 5, 4, 1, 6, 3]],
+      ['consequence', 'asc', [1, 4, 5, 2, 6, 3]],
+      ['clinvar', 'desc', [4, 5, 1, 2, 6, 3]],
+      ['clinvar', 'asc', [2, 1, 5, 4, 6, 3]]
+    ]
+    for (const [key, order, positions] of expected) {
+      const cohortParams = { column_filters: { chr: { operator: '=' as const, value: '9' } } }
+      const sort = { sort_by: key, sort_order: order }
+      const label = `${key} ${order}`
+      expect(
+        sqliteCohortRows({ ...cohortParams, ...sort }).map((v) => v.pos),
+        `SQLite cohort, ${label}`
+      ).toEqual(positions)
+      expect(
+        (await pgCohortRows({ ...cohortParams, ...sort })).map((v) => v.pos),
+        `PostgreSQL cohort, ${label}`
+      ).toEqual(positions)
+      expect(
+        sqlite.variants
+          .getVariants({ case_id: sqliteCase }, 50, 0, [{ key, order }])
+          .data.map((v) => v.pos),
+        `SQLite case view, ${label}`
+      ).toEqual(positions)
+      const pgPage = await pgVariants.queryVariants({ case_id: pgCase }, 50, 0, [{ key, order }])
+      expect(
+        pgPage.data.map((v) => Number(v.pos)),
+        `PostgreSQL case view, ${label}`
+      ).toEqual(positions)
+    }
+  }, 120_000)
+
   it('panel-interval with spanning SV/CNV: spanning row is included on both backends (Pass-9 #7)', async () => {
     // Insert a CNV with pos=1000, end_pos=5000 on both backends.
     const spanningCaseSqlite = sqlite.cases.createCase('span-sqlite', '/tmp/span.json', 0, 'GRCh38')
