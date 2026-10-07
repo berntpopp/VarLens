@@ -18,7 +18,7 @@
                 variant="text"
                 class="ml-2"
                 data-testid="carrier-load-retry"
-                @click="emit('retry')"
+                @click="refetch()"
               >
                 Retry
               </v-btn>
@@ -53,23 +53,33 @@
 </template>
 
 <script setup lang="ts">
-import type { CohortCarrier } from '../../../../shared/types/cohort'
+/**
+ * The carriers of one expanded cohort row. The list is a query owned by the
+ * row, so it follows the open database, is refetched when the case set
+ * changes, and a failed load is shown as such (with a retry), not as "no
+ * carriers".
+ */
+import { computed } from 'vue'
+import { useQuery } from '@pinia/colada'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import { mdiOpenInApp } from '@mdi/js'
+import { carriersQuery } from '../../queries/carriers'
 
 interface Props {
-  carriers: CohortCarrier[]
+  variant: CohortVariant
   colspan: number
-  /** The carrier load failed; `carriers` is empty for that reason, not because there are none. */
-  error?: boolean
 }
 
 interface Emits {
   (e: 'navigate-to-case', caseId: number): void
-  (e: 'retry'): void
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+const { data, status, refetch } = useQuery(() => carriersQuery(props.variant))
+const error = computed(() => status.value === 'error')
+const carriers = computed(() => (error.value ? [] : (data.value ?? [])))
 
 // Zygosity helper functions
 const isHomozygous = (gt: string): boolean => {

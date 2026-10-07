@@ -9,7 +9,6 @@
  * - In App.vue (root): call `createAppState()` and `provide(AppStateKey, ...)`
  * - In child components: call `useAppState()` which injects from the provider
  */
-import { useCarriers } from './useCarriers'
 import { invalidateServerData } from '../queries/invalidation'
 import { ref, computed, inject } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
@@ -207,7 +206,6 @@ export function createAppState(): AppStateReturn {
 
   function resetForDatabaseSwitch(): void {
     void invalidateServerData('database-switch')
-    useCarriers().reset()
     incrementDataGeneration()
     resetCaseContext()
     setActiveTab('case')

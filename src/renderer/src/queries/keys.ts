@@ -47,6 +47,10 @@ export const queryKeys = {
   proteinRoot: () => [...root(), 'protein'] as const,
   enrichment: (provider: 'vep' | 'myvariant' | 'spliceai', variant: string) =>
     [...root(), 'enrichment', provider, variant] as const,
+  carriersRoot: () => [...root(), 'carriers'] as const,
+  carriers: (variantKey: string) => [...root(), 'carriers', variantKey] as const,
+  panelResolutionRoot: () => [...root(), 'panel-resolution'] as const,
+  panelResolution: (request: string) => [...root(), 'panel-resolution', request] as const,
   metricDefinitions: () => [...root(), 'metric-definitions'] as const,
   caseComments: (caseId: number) => [...caseScope(caseId), 'comments'] as const,
   caseMetrics: (caseId: number) => [...caseScope(caseId), 'metrics'] as const,
