@@ -29,7 +29,7 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { ref, shallowRef, markRaw, computed, watch, onBeforeUnmount, type Ref } from 'vue'
+import { ref, shallowRef, markRaw, watch, onBeforeUnmount, type Ref } from 'vue'
 import { useFilterPresetStore } from './useFilterPresetStore'
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
@@ -50,16 +50,8 @@ export function useShortlistQuery(caseId: Ref<number>) {
   // just overwrites with the same data.
   void presetStore.loadPresets()
 
-  // `useFilterPresetStore` exposes `visiblePresets: ComputedRef<FilterPreset[]>`.
-  // Filter for shortlist presets — those whose filterJson carries a shortlist
-  // config. (`kind === 'shortlist'` is equivalent once Wave 2 is live, but
-  // `filterJson.shortlist != null` also works and is resilient to missing
-  // `kind` during partial rollouts.)
-  const shortlistPresets = computed(() =>
-    presetStore.visiblePresets.value.filter(
-      (p) => (p.filterJson as { shortlist?: unknown } | null | undefined)?.shortlist != null
-    )
-  )
+  // Shortlist presets only; the filter presets of the drawer are a separate list.
+  const shortlistPresets = presetStore.visibleShortlistPresets
 
   const selectedPresetId = ref<number | null>(null)
 

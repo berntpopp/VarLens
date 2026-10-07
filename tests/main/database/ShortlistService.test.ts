@@ -293,6 +293,36 @@ describe('ShortlistService', () => {
       expect(result.elapsedMs).toBeGreaterThanOrEqual(0)
     })
 
+    it('Tier 1 gates on impact and rarity: LOW/MODIFIER and common rows are excluded', () => {
+      const tier1 = db
+        .prepare(`SELECT id FROM filter_presets WHERE name = 'Tier 1 candidates'`)
+        .get() as { id: number }
+      const all = db
+        .prepare(`SELECT id, variant_type, consequence, gnomad_af FROM variants WHERE case_id = 1`)
+        .all() as {
+        id: number
+        variant_type: string
+        consequence: string | null
+        gnomad_af: number | null
+      }[]
+      // SV/CNV rows use the looser per-type AF override (0.01), all else 0.001.
+      const afMax = (type: string): number => (type === 'sv' || type === 'cnv' ? 0.01 : 0.001)
+      const expected = all
+        .filter((v) => v.consequence === 'HIGH' || v.consequence === 'MODERATE')
+        .filter((v) => v.gnomad_af === null || v.gnomad_af <= afMax(v.variant_type))
+        .map((v) => v.id)
+        .sort((a, b) => a - b)
+
+      const result = getShortlist({ caseId: 1, presetId: tier1.id })
+      const returned = result.rows.map((r) => r.id).sort((a, b) => a - b)
+
+      // The fixture must contain rows the preset has to drop, or this proves nothing.
+      expect(expected.length).toBeGreaterThan(0)
+      expect(expected.length).toBeLessThan(all.length)
+      expect(returned).toEqual(expected)
+      expect(result.totalCandidates).toBe(expected.length)
+    })
+
     it('throws NotFoundError when preset id does not exist', () => {
       expect(() => getShortlist({ caseId: 1, presetId: 999999 })).toThrow(/not found/i)
     })

@@ -173,6 +173,37 @@ describe('useFilterPresetStore', () => {
     expect(visiblePresets.value).toHaveLength(2)
   })
 
+  it('keeps shortlist presets out of the filter presets (they carry no filter fields)', async () => {
+    const tier1 = {
+      id: 9,
+      name: 'Tier 1 candidates',
+      description: 'Strict ranking',
+      filterJson: {
+        shortlist: {
+          topN: 50,
+          baseFilters: { consequences: ['HIGH', 'MODERATE'], maxGnomadAf: 0.001 }
+        }
+      },
+      isBuiltIn: true,
+      isVisible: true,
+      sortOrder: 0,
+      kind: 'shortlist',
+      createdAt: 0,
+      updatedAt: 0
+    } as unknown as FilterPreset
+    mockApi.list.mockResolvedValueOnce([...mockPresets, tier1])
+    const store = useFilterPresetStore()
+    await store.loadPresets()
+
+    // Offered as a filter chip it applied nothing, so the table showed every row.
+    expect(store.visiblePresets.value.map((p) => p.name)).toEqual(['Rare (1%)', 'HIGH Impact'])
+    expect(store.visibleShortlistPresets.value.map((p) => p.name)).toEqual(['Tier 1 candidates'])
+
+    // A stale active id (e.g. restored from a URL) must not count as a filter either.
+    store.togglePreset(9)
+    expect(store.getActiveFilterState()).toEqual({})
+  })
+
   it('togglePreset adds/removes preset id from active set', async () => {
     const { activePresetIds, togglePreset, loadPresets } = useFilterPresetStore()
     await loadPresets()

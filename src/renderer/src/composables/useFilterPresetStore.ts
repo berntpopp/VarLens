@@ -38,11 +38,27 @@ export function __resetFilterPresetStoreForTest(): void {
   activeByScope.cohort.value = new Set()
 }
 
+/** A ranking preset for the Shortlist tab (`kind` may be absent on old rows). */
+export function isShortlistPreset(preset: FilterPreset): boolean {
+  return (
+    preset.kind === 'shortlist' ||
+    (preset.filterJson as { shortlist?: unknown } | null | undefined)?.shortlist != null
+  )
+}
+
 export function useFilterPresetStore(scope: PresetScope = 'case') {
   const cache = useQueryCache()
   const { data, isLoading: loading, refresh } = useQuery(filterPresetsQuery)
   const presets = computed<FilterPreset[]>(() => data.value ?? [])
-  const visiblePresets = computed(() => presets.value.filter((p) => p.isVisible))
+  // Shortlist presets live in the same table but carry only a nested
+  // `shortlist` config, no filter fields: offered as a filter chip they
+  // applied nothing and the table showed every row. Keep the two lists apart.
+  const visiblePresets = computed(() =>
+    presets.value.filter((p) => p.isVisible && !isShortlistPreset(p))
+  )
+  const visibleShortlistPresets = computed(() =>
+    presets.value.filter((p) => p.isVisible && isShortlistPreset(p))
+  )
   const activePresetIds = activeByScope[scope]
 
   /** Resolves once the list is loaded; concurrent callers share one request. */
@@ -79,7 +95,9 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
    * Array fields are concatenated and deduplicated.
    */
   function getActiveFilterState(): Partial<FilterState> {
-    const active = presets.value.filter((p) => activePresetIds.value.has(p.id))
+    const active = presets.value.filter(
+      (p) => activePresetIds.value.has(p.id) && !isShortlistPreset(p)
+    )
     const merged: Partial<FilterState> = {}
 
     for (const preset of active) {
@@ -143,6 +161,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
   return {
     presets,
     visiblePresets,
+    visibleShortlistPresets,
     activePresetIds,
     loading,
     loadPresets,
