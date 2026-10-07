@@ -17,7 +17,11 @@ import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { VariantFrequencyService } from '../../database/VariantFrequencyService'
-import { rebuildCohortSummaryAfterAppend, type EmitCohortStale } from './cohort-summary-settle'
+import {
+  markCohortSummaryStaleBeforeAppend,
+  rebuildCohortSummaryAfterAppend,
+  type EmitCohortStale
+} from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
@@ -329,6 +333,8 @@ async function startMultiFileImportSqlite(
   // Without this bracket, the FTS `ai` trigger fires per row and the append
   // loop becomes O(n²) for large files (e.g. a Sniffles2 300k-SV VCF).
   if (files.length > 1) {
+    // Before the first appended row, not after the last (see the function).
+    markCohortSummaryStaleBeforeAppend(db)
     db.variants.beginBulkInsert()
   }
   try {
@@ -443,7 +449,8 @@ async function startMultiFileImportSqlite(
 
   // The worker merged the first file into the cohort summary; the appended
   // files went in behind its back, so the summary is out of date for this
-  // case. Flag it and rebuild before the import is reported done.
+  // case (flagged stale since before the first append). Rebuild before the
+  // import is reported done.
   if (files.length > 1) {
     await rebuildCohortSummaryAfterAppend(db, callbacks.onCohortStale)
   }

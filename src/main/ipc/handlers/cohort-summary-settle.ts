@@ -145,14 +145,12 @@ export async function settleCohortSummaryAfterImport(
 }
 
 /**
- * Rows were added to an existing case outside the import worker (multi-file
- * append), so the summary no longer matches the variants: flag it and rebuild.
+ * Rows are about to be added to an existing case outside the import worker
+ * (multi-file append). Flag the summary BEFORE the first row: each append
+ * commits on its own, and a crash after one of them must not leave variants
+ * outside a summary that claims to be current.
  */
-export async function rebuildCohortSummaryAfterAppend(
-  db: DatabaseService,
-  emit: EmitCohortStale | undefined,
-  rebuild?: RebuildCohortSummary
-): Promise<void> {
+export function markCohortSummaryStaleBeforeAppend(db: DatabaseService): void {
   try {
     db.cohortSummary.markStale()
   } catch (e) {
@@ -161,5 +159,18 @@ export async function rebuildCohortSummaryAfterAppend(
       'cohort'
     )
   }
+}
+
+/**
+ * Rows were added to an existing case outside the import worker (multi-file
+ * append), so the summary no longer matches the variants: rebuild it. The
+ * flag was set before the appends; it is set again here in case that failed.
+ */
+export async function rebuildCohortSummaryAfterAppend(
+  db: DatabaseService,
+  emit: EmitCohortStale | undefined,
+  rebuild?: RebuildCohortSummary
+): Promise<void> {
+  markCohortSummaryStaleBeforeAppend(db)
   await rebuildCohortSummaryAndNotify(db, emit, rebuild)
 }
