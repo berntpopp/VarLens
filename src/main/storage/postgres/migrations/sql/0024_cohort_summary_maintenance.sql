@@ -35,10 +35,17 @@ ALTER TABLE "__schema__"."cohort_gene_summary" SET (fillfactor = 50);
 -- columns, so the summary is flagged stale rather than rebuilt here: readers
 -- keep being served the current rows while a background rebuild replaces
 -- them (cohort-read-freshness.ts). An empty summary has nothing to correct.
+--
+-- A summary that was only ever maintained incrementally has no rebuild time,
+-- and "stale and never rebuilt" means "bootstrap: rebuild on the request, at
+-- any size" to the freshness check. This summary is populated and usable, so
+-- it gets a rebuild time: a large cohort is then refreshed in the background
+-- instead of blocking its first cohort read after the upgrade.
 UPDATE "__schema__"."cohort_summary_state"
    SET is_stale = true,
        stale_reason = 'migration_0024_representative_annotation',
-       stale_at = now()
+       stale_at = now(),
+       last_rebuilt_at = COALESCE(last_rebuilt_at, now())
  WHERE id = 1
    AND EXISTS (SELECT 1 FROM "__schema__"."cohort_variant_summary");
 

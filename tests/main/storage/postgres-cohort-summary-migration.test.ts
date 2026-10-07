@@ -129,7 +129,8 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
     const before0024 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0024')
     await new PostgresMigrationRunner(pool, schema, before0024).migrate()
     await probe.query(
-      `UPDATE "${schema}".cohort_summary_state SET is_stale = false, stale_reason = NULL WHERE id = 1`
+      `UPDATE "${schema}".cohort_summary_state
+          SET is_stale = false, stale_reason = NULL, last_rebuilt_at = NULL WHERE id = 1`
     )
     await probe.query(
       `INSERT INTO "${schema}".cohort_variant_summary
@@ -139,12 +140,20 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
 
     await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 
-    const res = await probe.query<{ is_stale: boolean; stale_reason: string | null }>(
-      `SELECT is_stale, stale_reason FROM "${schema}".cohort_summary_state WHERE id = 1`
+    const res = await probe.query<{
+      is_stale: boolean
+      stale_reason: string | null
+      rebuilt_before: boolean
+    }>(
+      `SELECT is_stale, stale_reason, last_rebuilt_at IS NOT NULL AS rebuilt_before
+         FROM "${schema}".cohort_summary_state WHERE id = 1`
     )
+    // Stale, but not "never rebuilt": that combination would rebuild a cohort
+    // of any size on its first read instead of in the background.
     expect(res.rows[0]).toEqual({
       is_stale: true,
-      stale_reason: 'migration_0024_representative_annotation'
+      stale_reason: 'migration_0024_representative_annotation',
+      rebuilt_before: true
     })
   }, 60_000)
 
