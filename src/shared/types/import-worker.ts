@@ -129,6 +129,14 @@ export type WorkerMessage =
       }
     }
   | {
+      /**
+       * The worker stopped merging files into the cohort summary and flagged
+       * it stale; it rebuilds once before `complete`. Sent at most once per
+       * session, before the `file-complete` of the first file the summary lacks.
+       */
+      type: 'summary-stale'
+    }
+  | {
       type: 'complete'
       results: {
         succeeded: number

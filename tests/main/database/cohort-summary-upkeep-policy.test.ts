@@ -18,6 +18,7 @@ describe('import summary session: merge per file or rebuild once', () => {
   let service: DatabaseService
   let rebuilds: number
   let warnings: string[]
+  let staleNotices: number
 
   const db = (): DatabaseService['database'] => service.database
 
@@ -25,6 +26,7 @@ describe('import summary session: merge per file or rebuild once', () => {
     service = new DatabaseService(':memory:')
     rebuilds = 0
     warnings = []
+    staleNotices = 0
   })
 
   afterEach(() => {
@@ -58,7 +60,8 @@ describe('import summary session: merge per file or rebuild once', () => {
         rebuilds++
         rebuildCohortSummary(db())
       },
-      onWarning: (warning) => warnings.push(warning)
+      onWarning: (warning) => warnings.push(warning),
+      onStale: () => staleNotices++
     })
     rebuilds = 0
     return session
@@ -82,6 +85,7 @@ describe('import summary session: merge per file or rebuild once', () => {
     session.finish()
     expect(rebuilds).toBe(0)
     expect(warnings).toEqual([])
+    expect(staleNotices).toBe(0)
   })
 
   it('falls back to one rebuild at the end for a long batch into a small cohort', () => {
@@ -97,12 +101,15 @@ describe('import summary session: merge per file or rebuild once', () => {
     expect(session.isExact()).toBe(false)
     expect(isCohortSummaryStale(db())).toBe(true)
     expect(rebuilds).toBe(0)
+    // Whoever shows the cohort must hear that it stopped following the import.
+    expect(staleNotices).toBe(1)
 
     // Once deferred, the session stays deferred — even for its last file.
     session.addCase(importCase('f-2', 2000, 40), 0)
     expect(session.isExact()).toBe(false)
 
     session.finish()
+    expect(staleNotices).toBe(1)
     expect(rebuilds).toBe(1)
     expect(isCohortSummaryStale(db())).toBe(false)
     expect(isExactNow()).toBe(true)

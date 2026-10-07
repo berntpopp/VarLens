@@ -124,6 +124,12 @@ export interface ImportSummarySessionOptions {
   /** Full rebuild of both tables; must leave `is_stale = 0` on success. */
   rebuild: () => void
   onWarning: (message: string) => void
+  /**
+   * The session stopped keeping the summary current (it is flagged stale until
+   * `finish` rebuilds). Called at most once, before the file that made it so
+   * is reported done.
+   */
+  onStale?: () => void
 }
 
 /** True when an import session did not reach its orderly end. */
@@ -151,8 +157,16 @@ export function openImportSummarySession(
   if (tables.c === 0) return NO_SUMMARY
 
   let exact = false
-  const degrade = (step: string, e: unknown): void => {
+  let staleAnnounced = false
+  /** Incremental upkeep is over for this session; say so once. */
+  const abandon = (): void => {
     exact = false
+    if (staleAnnounced) return
+    staleAnnounced = true
+    options.onStale?.()
+  }
+  const degrade = (step: string, e: unknown): void => {
+    abandon()
     options.onWarning(
       `Cohort summary upkeep failed (${step}); rebuilding at session end: ${message(e)}`
     )
@@ -175,6 +189,7 @@ export function openImportSummarySession(
     db.exec(sql.CASE_ADD_TEMP_TABLES_SQL)
     stmts = prepareAddStatements(db)
     exact = !isCohortSummaryStale(db)
+    if (!exact) abandon()
   } catch (e) {
     degrade('session start', e)
   }
@@ -191,7 +206,7 @@ export function openImportSummarySession(
     if (!stmts || stmts.keepSessionOpen.run().changes === 0) return
     db.exec(MARK_STALE_SQL)
     if (!exact) return
-    exact = false
+    abandon()
     options.onWarning(
       'Cohort summary was rebuilt outside the import session; rebuilding at session end'
     )
@@ -251,11 +266,11 @@ export function openImportSummarySession(
           // Not a failure: no warning. `finish` rebuilds once.
           // The case is published together with the stale flag, so the
           // rebuild at session end (ready cases only) includes it.
-          exact = false
           db.transaction(() => {
             db.exec(MARK_STALE_SQL)
             s.markCaseReady.run(caseId)
           })()
+          abandon()
           return
         }
         // IMMEDIATE: the staleness check below must not be a snapshot older
@@ -267,8 +282,8 @@ export function openImportSummarySession(
             // the summary while files are in flight): stop merging onto it.
             // The summary is already stale, so publishing the case here keeps
             // it in the rebuild at session end.
-            exact = false
             s.markCaseReady.run(caseId)
+            abandon()
             return
           }
           const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined

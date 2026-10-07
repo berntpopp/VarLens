@@ -120,6 +120,42 @@ describe('import worker: cohort summary recovery', () => {
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
   })
 
+  it('tells the main process when it stops keeping the summary current', async () => {
+    await h.run([h.file('A', [variantAt(100, 'AAA')])])
+    let rebuilt = false
+
+    const messages = await h.run(
+      [
+        h.file('B', [variantAt(100, 'AAA'), variantAt(200, 'BBB')]),
+        h.file('C', [variantAt(300, 'CCC')])
+      ],
+      {
+        batchSize: 1,
+        onMessage: (m) => {
+          if (rebuilt || m.type !== 'progress' || m.phase !== 'inserting') return
+          rebuilt = true
+          rebuildCohortSummary(h.db) // forces the session off incremental upkeep
+        }
+      }
+    )
+
+    const order = messages
+      .filter((m) => m.type === 'summary-stale' || m.type === 'file-complete')
+      .map((m) => (m.type === 'file-complete' ? `done:${m.result.caseName}` : m.type))
+    // Once, and before the first file whose carriers the summary lacks.
+    expect(order).toEqual(['summary-stale', 'done:B', 'done:C'])
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+  })
+
+  it('says nothing about staleness in a session that stays exact', async () => {
+    const messages = await h.run([
+      h.file('A', [variantAt(100, 'AAA')]),
+      h.file('B', [variantAt(100, 'AAA')])
+    ])
+    expect(messages.filter((m) => m.type === 'summary-stale')).toEqual([])
+  })
+
   it('keeps its marker when a full rebuild runs while a file is being inserted', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
     const markerAfterBatch: Array<string | undefined> = []

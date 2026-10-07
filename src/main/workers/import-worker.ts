@@ -88,7 +88,18 @@ export async function runImportSession(
     const summary = openImportSummarySession(workerDb, {
       forceRebuild: (msg.discardCaseIds ?? []).length > 0,
       rebuild: () => rebuildCohortSummary(workerDb),
-      onWarning: (warning) => console.warn(`[import-worker] ${warning}`)
+      onWarning: (warning) => console.warn(`[import-worker] ${warning}`),
+      onStale: () => {
+        // Best effort: the flag in the database is what counts.
+        try {
+          port.postMessage({ type: 'summary-stale' })
+        } catch (e) {
+          console.warn(
+            '[import-worker] Failed to report the stale cohort summary:',
+            e instanceof Error ? e.message : String(e)
+          )
+        }
+      }
     })
     summarySession = summary
 
