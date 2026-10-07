@@ -186,9 +186,11 @@ export async function runImportSession(
         const startTime = Date.now()
         let variantCount = 0
         const skipTracker = new ImportSkipTracker()
-        // What the case has contributed outside its own rows so far.
+        // What the case has contributed outside its own rows so far: nothing
+        // until it is published, then its frequencies (if counted) and its
+        // part of the cohort summary.
         let frequenciesCounted = false
-        let merged = false
+        let published = false
 
         try {
           // Emit parsing phase progress
@@ -281,20 +283,12 @@ export async function runImportSession(
             )
           }
 
-          try {
-            frequencies.updateFrequencies(caseId)
-            frequenciesCounted = true
-          } catch (e) {
-            console.warn(
-              '[import-worker] Failed to update variant frequencies:',
-              e instanceof Error ? e.message : String(e)
-            )
-          }
-
-          // The file's rows are committed and it was not cancelled: merge it
-          // into the cohort summary before anyone is told the file is done.
-          merged = true
-          summary.addCase(caseId, totalFiles - fileIndex - 1)
+          // The file's rows are committed and it was not cancelled: publish
+          // the case before anyone is told the file is done.
+          frequenciesCounted = publishCase(db, caseId, frequencies, () =>
+            summary.addCase(caseId, totalFiles - fileIndex - 1)
+          )
+          published = true
           checkpointBetweenFiles(db)
 
           const elapsed = Date.now() - startTime
@@ -336,7 +330,7 @@ export async function runImportSession(
             }
           }
           const deleteCase = (): void => void stmts.deleteCase.run(caseId)
-          if (merged) summary.replaceCase(caseId, deleteCase)
+          if (published) summary.replaceCase(caseId, deleteCase)
           else summary.discardCase(deleteCase)
           throw importError
         }
@@ -446,6 +440,39 @@ if (parentPort) {
       await runImportSession(msg, port, () => cancelled)
     }
   })
+}
+
+/**
+ * Publish an imported case in ONE transaction: its `variant_frequency` counts,
+ * its cohort-summary state (merged, or flagged stale) and the flip from
+ * 'provisional' to 'ready'. Readers divide the frequency counts by the number
+ * of ready cases, and crash recovery deletes a provisional case without
+ * touching either table — both rely on a provisional case having contributed
+ * nothing. A throw rolls all of it back. Returns whether the frequencies were
+ * counted (a failure there is logged, as before, and does not fail the file).
+ */
+function publishCase(
+  db: DatabaseType,
+  caseId: number,
+  frequencies: VariantFrequencyService,
+  publishInSummary: () => void
+): boolean {
+  return db
+    .transaction(() => {
+      let counted = false
+      try {
+        db.transaction(() => frequencies.updateFrequencies(caseId))()
+        counted = true
+      } catch (e) {
+        console.warn(
+          '[import-worker] Failed to update variant frequencies:',
+          e instanceof Error ? e.message : String(e)
+        )
+      }
+      publishInSummary()
+      return counted
+    })
+    .immediate()
 }
 
 /** Recreate the indexes dropped for the bulk insert (idempotent, best-effort). */

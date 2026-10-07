@@ -42,6 +42,13 @@
  * — and so does a session whose remaining files are cheaper to rebuild once
  * than to merge one by one ({@link UpkeepPolicy}).
  *
+ * Publication (`cases.import_status`, migration v40): the pipeline inserts a
+ * case 'provisional' and every reader sees 'ready' cases only. `addCase` flips
+ * it in the transaction that merges it — or, when there is no merge, in one
+ * that flags the summary stale — so a ready case is never missing from a
+ * summary that claims to be current, and a successfully imported case is never
+ * left provisional (`tests/main/database/cohort-summary-publication.test.ts`).
+ *
  * Exactness is asserted against the full rebuild after every file by
  * `tests/main/workers/import-worker-summary-drift.test.ts`.
  *
@@ -67,7 +74,14 @@ export interface ImportSummarySession {
   /** Delete a case about to be re-imported, removing its summary contribution. */
   replaceCase(caseId: number, deleteCase: () => void): void
   /**
-   * Merge a fully imported, committed case into both summary tables.
+   * Publish a fully imported, committed case: merge it into both summary
+   * tables and flip it from 'provisional' to 'ready' in one transaction. When
+   * the merge is not possible (upkeep abandoned, skipped by policy, or it
+   * throws) the case is published together with the stale flag instead, so
+   * the rebuild at session end — which reads ready cases only — includes it.
+   * Returns with the case ready, or throws with it still provisional (the
+   * caller then deletes it). Nests as a savepoint inside a caller's
+   * transaction, which must then be IMMEDIATE.
    * `filesAfterThis`: files of the session still to come (see {@link UpkeepPolicy}).
    */
   addCase(caseId: number, filesAfterThis?: number): void
@@ -139,22 +153,24 @@ export function isImportSessionOpen(db: DatabaseType): boolean {
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
-/** Pre-v13 database without summary tables: nothing to maintain. */
-const NO_SUMMARY: ImportSummarySession = {
+const MARK_CASE_READY_SQL = "UPDATE cases SET import_status = 'ready' WHERE id = ?"
+
+/** Pre-v13 database without summary tables: nothing to maintain, cases still publish. */
+const noSummarySession = (db: DatabaseType): ImportSummarySession => ({
   isExact: () => false,
   replaceCase: (_caseId, deleteCase) => deleteCase(),
-  addCase: () => undefined,
+  addCase: (caseId) => void db.prepare(MARK_CASE_READY_SQL).run(caseId),
   discardCase: (deleteCase) => deleteCase(),
   keepSessionOpen: () => undefined,
   finish: () => undefined
-}
+})
 
 export function openImportSummarySession(
   db: DatabaseType,
   options: ImportSummarySessionOptions
 ): ImportSummarySession {
   const tables = db.prepare(CHECK_TABLE_EXISTS_SQL).get() as { c: number }
-  if (tables.c === 0) return NO_SUMMARY
+  if (tables.c === 0) return noSummarySession(db)
 
   let exact = false
   let staleAnnounced = false
@@ -218,6 +234,18 @@ export function openImportSummarySession(
       db.exec(UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL)
   }
 
+  /**
+   * Publish a case the summary does not contain: the stale flag and the case
+   * become visible in the same transaction, so no reader ever sees a ready
+   * case missing from a summary that claims to be current.
+   */
+  const publishStale = (caseId: number): void => {
+    db.transaction(() => {
+      db.exec(MARK_STALE_SQL)
+      db.prepare(MARK_CASE_READY_SQL).run(caseId)
+    }).immediate()
+  }
+
   const policy = options.upkeepPolicy ?? DEFAULT_UPKEEP_POLICY
   const rebuildIsCheaper = (s: NonNullable<typeof stmts>, filesLeft: number): boolean => {
     const summaryRows = (s.countSummaryRows.get() as { c: number }).c
@@ -256,60 +284,56 @@ export function openImportSummarySession(
     },
 
     addCase(caseId, filesAfterThis = 0) {
-      if (!exact || !stmts) {
-        db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
-        return
-      }
-      const s = stmts
-      try {
-        if (rebuildIsCheaper(s, filesAfterThis + 1)) {
-          // Not a failure: no warning. `finish` rebuilds once.
-          // The case is published together with the stale flag, so the
-          // rebuild at session end (ready cases only) includes it.
-          db.transaction(() => {
-            db.exec(MARK_STALE_SQL)
-            s.markCaseReady.run(caseId)
-          })()
-          abandon()
-          return
-        }
-        // IMMEDIATE: the staleness check below must not be a snapshot older
-        // than the write lock.
-        db.transaction(() => {
-          keepSessionOpen()
-          if (isCohortSummaryStale(db)) {
-            // Flagged from outside the session (an edit that could not patch
-            // the summary while files are in flight): stop merging onto it.
-            // The summary is already stale, so publishing the case here keeps
-            // it in the rebuild at session end.
-            s.markCaseReady.run(caseId)
+      if (exact && stmts) {
+        const s = stmts
+        try {
+          if (rebuildIsCheaper(s, filesAfterThis + 1)) {
+            // Not a failure: no warning. `finish` rebuilds once.
+            publishStale(caseId)
             abandon()
             return
           }
-          const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined
-          if (row?.genome_build == null) throw new Error(`case ${caseId} has no genome build`)
-          const params = { caseId, build: row.genome_build }
-          db.exec('DELETE FROM temp.added_case_gene_coords')
-          // Gene pairs first: they are classified against the summary as it
-          // was before this case joined it.
-          s.captureGeneCoords.run(params)
-          if ((s.countUnresolved.get() as { c: number }).c > 0) {
-            db.exec(sql.ENSURE_COORD_INDEX_SQL)
-            s.resolveGeneCoords.run(params)
-          }
-          s.upsertGeneBurden.run({ build: params.build })
-          db.exec('DELETE FROM temp.added_case_coords')
-          s.captureCaseCoords.run(params)
-          countAddedCaseUniqueVariants(db) // before the new rows exist
-          s.incrementCarriers.run()
-          s.mergeVariantMaxima.run()
-          s.insertNewVariantSummary.run({ build: params.build })
-          applyPerCaseFlags()
-          s.markCaseReady.run(caseId)
-        }).immediate()
-      } catch (e) {
-        degrade('add case', e)
+          // IMMEDIATE: the staleness check below must not be a snapshot older
+          // than the write lock.
+          db.transaction(() => {
+            keepSessionOpen()
+            if (isCohortSummaryStale(db)) {
+              // Flagged from outside the session (an edit that could not patch
+              // the summary while files are in flight): stop merging onto it.
+              // Already stale, so the case is published as it is.
+              s.markCaseReady.run(caseId)
+              abandon()
+              return
+            }
+            const row = s.caseBuild.get(caseId) as { genome_build: string | null } | undefined
+            if (row?.genome_build == null) throw new Error(`case ${caseId} has no genome build`)
+            const params = { caseId, build: row.genome_build }
+            db.exec('DELETE FROM temp.added_case_gene_coords')
+            // Gene pairs first: they are classified against the summary as it
+            // was before this case joined it.
+            s.captureGeneCoords.run(params)
+            if ((s.countUnresolved.get() as { c: number }).c > 0) {
+              db.exec(sql.ENSURE_COORD_INDEX_SQL)
+              s.resolveGeneCoords.run(params)
+            }
+            s.upsertGeneBurden.run({ build: params.build })
+            db.exec('DELETE FROM temp.added_case_coords')
+            s.captureCaseCoords.run(params)
+            countAddedCaseUniqueVariants(db) // before the new rows exist
+            s.incrementCarriers.run()
+            s.mergeVariantMaxima.run()
+            s.insertNewVariantSummary.run({ build: params.build })
+            applyPerCaseFlags()
+            s.markCaseReady.run(caseId)
+          }).immediate()
+          return
+        } catch (e) {
+          degrade('add case', e)
+        }
       }
+      // No merge (abandoned earlier, or it just failed and rolled back): the
+      // imported case is still published. A throw here leaves it provisional.
+      publishStale(caseId)
     },
 
     discardCase(deleteCase) {
@@ -342,7 +366,7 @@ function prepareAddStatements(db: DatabaseType) {
   return {
     keepSessionOpen: db.prepare(sql.KEEP_IMPORT_SESSION_OPEN_SQL),
     caseBuild: db.prepare('SELECT genome_build FROM cases WHERE id = ?'),
-    markCaseReady: db.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?"),
+    markCaseReady: db.prepare(MARK_CASE_READY_SQL),
     countSummaryRows: db.prepare('SELECT COUNT(*) AS c FROM cohort_variant_summary'),
     countVariants: db.prepare('SELECT COALESCE(SUM(variant_count), 0) AS c FROM cases'),
     captureGeneCoords: db.prepare(sql.CAPTURE_GENE_COORDS_SQL),
