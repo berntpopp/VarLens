@@ -41,6 +41,12 @@ export const queryKeys = {
   tags: () => [...root(), 'tags'] as const,
   filterPresets: () => [...root(), 'filter-presets'] as const,
   caseIds: () => [...root(), 'case-ids'] as const,
+  transcripts: (variantId: number) => [...root(), 'variant', variantId, 'transcripts'] as const,
+  protein: (kind: 'mapping' | 'gene-structure' | 'domains' | 'structure', id: string) =>
+    [...root(), 'protein', kind, id] as const,
+  proteinRoot: () => [...root(), 'protein'] as const,
+  enrichment: (provider: 'vep' | 'myvariant' | 'spliceai', variant: string) =>
+    [...root(), 'enrichment', provider, variant] as const,
   metricDefinitions: () => [...root(), 'metric-definitions'] as const,
   caseComments: (caseId: number) => [...caseScope(caseId), 'comments'] as const,
   caseMetrics: (caseId: number) => [...caseScope(caseId), 'metrics'] as const,

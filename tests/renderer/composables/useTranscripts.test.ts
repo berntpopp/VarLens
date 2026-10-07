@@ -1,304 +1,207 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { ref } from 'vue'
-import { withSetup, flushPromises } from '../../utils/test-helpers'
-import { createMockApi } from '../../utils/mock-api'
+/**
+ * useTranscripts: one variant's transcripts, read from the query cache, and
+ * switching the selected transcript.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { ref, type Ref } from 'vue'
+import type { Pinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import { useTranscripts } from '@renderer/composables/useTranscripts'
 import type {
   TranscriptAnnotation,
   TranscriptInsertRow
 } from '../../../src/shared/types/transcript'
 import { ErrorCode } from '../../../src/shared/types/errors'
+import { invalidateServerData } from '../../../src/renderer/src/queries/invalidation'
+import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
+import { createQueryPinia, withQueries } from '../helpers/with-queries'
+
+vi.mock('../../../src/renderer/src/services/LogService', () => ({
+  logService: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
+}))
+
+const transcript = (variantId: number, id = `ENST${variantId}`): TranscriptAnnotation =>
+  ({
+    id: variantId,
+    variant_id: variantId,
+    transcript_id: id,
+    is_selected: 1
+  }) as TranscriptAnnotation
+
+const failure = { code: ErrorCode.DB_ERROR, message: 'boom', userMessage: 'Database busy' }
 
 describe('useTranscripts', () => {
-  let app: { unmount: () => void }
+  const list = vi.fn()
+  const switchApi = vi.fn()
+  const insertAndSwitchApi = vi.fn()
+  const hosts: Array<{ unmount: () => void }> = []
+  let pinia: Pinia
+
+  function mountTranscripts(variantId: Ref<number | null> = ref(10)) {
+    const host = withQueries(() => useTranscripts(variantId), pinia)
+    hosts.push(host)
+    return { ...host.result, variantId }
+  }
 
   beforeEach(() => {
-    window.api = createMockApi()
+    list.mockReset().mockImplementation(async (id: number) => [transcript(id)])
+    switchApi.mockReset().mockResolvedValue(undefined)
+    insertAndSwitchApi.mockReset().mockResolvedValue(undefined)
+    Object.assign(window, {
+      api: { transcripts: { list, switch: switchApi, insertAndSwitch: insertAndSwitchApi } }
+    })
+    pinia = createQueryPinia()
   })
 
-  afterEach(() => {
-    if (app) app.unmount()
-  })
+  afterEach(() => hosts.splice(0).forEach((host) => host.unmount()))
 
-  it('loads transcripts when variantId is provided on initialization', async () => {
-    const mockTranscripts: TranscriptAnnotation[] = [
-      {
-        id: 1,
-        variant_id: 10,
-        transcript_id: 'ENST000001',
-        gene_symbol: 'BRCA1',
-        is_selected: 1,
-        is_canonical: 1
-      }
-    ]
-    window.api.transcripts.list = vi.fn().mockResolvedValue(mockTranscripts)
-
-    const variantId = ref<number | null>(10)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
+  it('loads the transcripts of the variant', async () => {
+    const { transcripts, loading, error } = mountTranscripts()
+    expect(loading.value).toBe(true)
     await flushPromises()
 
-    expect(window.api.transcripts.list).toHaveBeenCalledWith(10)
-    expect(result.transcripts.value).toEqual(mockTranscripts)
-    expect(result.loading.value).toBe(false)
-    expect(result.error.value).toBeNull()
+    expect(list).toHaveBeenCalledExactlyOnceWith(10)
+    expect(transcripts.value).toEqual([transcript(10)])
+    expect(loading.value).toBe(false)
+    expect(error.value).toBeNull()
   })
 
-  it('clears transcripts when variantId changes to null', async () => {
-    const mockTranscripts: TranscriptAnnotation[] = [
-      {
-        id: 1,
-        variant_id: 10,
-        transcript_id: 'ENST000001',
-        gene_symbol: 'BRCA1',
-        is_selected: 1,
-        is_canonical: 1
-      }
-    ]
-    window.api.transcripts.list = vi.fn().mockResolvedValue(mockTranscripts)
-
-    const variantId = ref<number | null>(10)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
+  it('reads nothing and is not loading without a variant', async () => {
+    const { transcripts, loading, variantId } = mountTranscripts()
     await flushPromises()
-    expect(result.transcripts.value).toEqual(mockTranscripts)
 
     variantId.value = null
     await flushPromises()
-
-    expect(result.transcripts.value).toEqual([])
-    expect(result.loading.value).toBe(false)
-    expect(result.error.value).toBeNull()
+    expect(transcripts.value).toEqual([])
+    expect(loading.value).toBe(false)
+    expect(list).toHaveBeenCalledTimes(1)
   })
 
-  it('discards stale response when out-of-order resolution occurs (Finding F11)', async () => {
-    let resolveVariant1!: (value: TranscriptAnnotation[]) => void
-    let resolveVariant2!: (value: TranscriptAnnotation[]) => void
-
-    const promise1 = new Promise<TranscriptAnnotation[]>((resolve) => {
-      resolveVariant1 = resolve
-    })
-    const promise2 = new Promise<TranscriptAnnotation[]>((resolve) => {
-      resolveVariant2 = resolve
-    })
-
-    window.api.transcripts.list = vi.fn().mockImplementation((id: number) => {
-      if (id === 1) return promise1
-      if (id === 2) return promise2
-      return Promise.resolve([])
-    })
-
-    const variantId = ref<number | null>(1)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
-    // Request 1 is in flight
-    expect(result.loading.value).toBe(true)
-
-    // User rapidly switches to variant 2 before variant 1 resolves
-    variantId.value = 2
+  it('never shows the previous variant when its response arrives last', async () => {
+    let resolveFirst: (value: TranscriptAnnotation[]) => void = () => {}
+    list.mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+    const { transcripts, variantId } = mountTranscripts()
     await flushPromises()
 
-    expect(result.loading.value).toBe(true)
-
-    const transcripts1: TranscriptAnnotation[] = [
-      {
-        id: 1,
-        variant_id: 1,
-        transcript_id: 'ENST000001',
-        gene_symbol: 'GENE1',
-        is_selected: 1,
-        is_canonical: 1
-      }
-    ]
-    const transcripts2: TranscriptAnnotation[] = [
-      {
-        id: 2,
-        variant_id: 2,
-        transcript_id: 'ENST000002',
-        gene_symbol: 'GENE2',
-        is_selected: 1,
-        is_canonical: 1
-      }
-    ]
-
-    // Variant 1 resolves late (out of order)
-    resolveVariant1(transcripts1)
+    variantId.value = 20
+    await flushPromises()
+    resolveFirst([transcript(10)])
     await flushPromises()
 
-    // Stale variant 1 must be discarded and loading must remain true for variant 2
-    expect(result.transcripts.value).toEqual([])
-    expect(result.loading.value).toBe(true)
-
-    // Variant 2 resolves
-    resolveVariant2(transcripts2)
-    await flushPromises()
-
-    // Now variant 2 transcripts are populated and loading is complete
-    expect(result.transcripts.value).toEqual(transcripts2)
-    expect(result.loading.value).toBe(false)
+    expect(transcripts.value).toEqual([transcript(20)])
   })
 
-  it('discards stale error from superseded request', async () => {
-    let rejectVariant1!: (reason: unknown) => void
-    let resolveVariant2!: (value: TranscriptAnnotation[]) => void
-
-    const promise1 = new Promise<TranscriptAnnotation[]>((_, reject) => {
-      rejectVariant1 = reject
-    })
-    const promise2 = new Promise<TranscriptAnnotation[]>((resolve) => {
-      resolveVariant2 = resolve
-    })
-
-    window.api.transcripts.list = vi.fn().mockImplementation((id: number) => {
-      if (id === 1) return promise1
-      if (id === 2) return promise2
-      return Promise.resolve([])
-    })
-
-    const variantId = ref<number | null>(1)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
-    // Rapidly switch to variant 2
-    variantId.value = 2
+  it('does not show the error of a superseded request', async () => {
+    let rejectFirst: (reason: unknown) => void = () => {}
+    list.mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)))
+    const { transcripts, error, variantId } = mountTranscripts()
     await flushPromises()
 
-    // Variant 1 fails
-    rejectVariant1(new Error('Network error on variant 1'))
+    variantId.value = 20
+    await flushPromises()
+    rejectFirst(new Error('late failure'))
     await flushPromises()
 
-    expect(result.error.value).toBeNull()
-    expect(result.loading.value).toBe(true)
-
-    const transcripts2: TranscriptAnnotation[] = [
-      {
-        id: 2,
-        variant_id: 2,
-        transcript_id: 'ENST000002',
-        gene_symbol: 'GENE2',
-        is_selected: 1,
-        is_canonical: 1
-      }
-    ]
-    resolveVariant2(transcripts2)
-    await flushPromises()
-
-    expect(result.error.value).toBeNull()
-    expect(result.transcripts.value).toEqual(transcripts2)
-    expect(result.loading.value).toBe(false)
+    expect(error.value).toBeNull()
+    expect(transcripts.value).toEqual([transcript(20)])
   })
 
-  it('handles IPC errors gracefully on active variant', async () => {
-    window.api.transcripts.list = vi.fn().mockResolvedValue({
-      code: ErrorCode.DB_ERROR,
-      message: 'Database query failed',
-      userMessage: 'Failed to retrieve transcripts'
-    })
-
-    const variantId = ref<number | null>(5)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
+  it('reports a failed load and shows no transcripts', async () => {
+    list.mockResolvedValue(failure)
+    const { transcripts, loading, error } = mountTranscripts()
     await flushPromises()
 
-    expect(result.error.value).toBe('Failed to retrieve transcripts')
-    expect(result.transcripts.value).toEqual([])
-    expect(result.loading.value).toBe(false)
+    expect(transcripts.value).toEqual([])
+    expect(loading.value).toBe(false)
+    expect(error.value).toBe('Database busy')
   })
 
-  it('switches transcript and reloads updated transcripts', async () => {
-    const initialTranscripts: TranscriptAnnotation[] = [
-      {
-        id: 1,
-        variant_id: 10,
-        transcript_id: 'ENST000001',
-        gene_symbol: 'BRCA1',
-        is_selected: 1,
-        is_canonical: 1
-      },
-      {
-        id: 2,
-        variant_id: 10,
-        transcript_id: 'ENST000002',
-        gene_symbol: 'BRCA1',
-        is_selected: 0,
-        is_canonical: 0
-      }
-    ]
-    const updatedTranscripts: TranscriptAnnotation[] = [
-      {
-        id: 1,
-        variant_id: 10,
-        transcript_id: 'ENST000001',
-        gene_symbol: 'BRCA1',
-        is_selected: 0,
-        is_canonical: 1
-      },
-      {
-        id: 2,
-        variant_id: 10,
-        transcript_id: 'ENST000002',
-        gene_symbol: 'BRCA1',
-        is_selected: 1,
-        is_canonical: 0
-      }
-    ]
-
-    window.api.transcripts.list = vi
-      .fn()
-      .mockResolvedValueOnce(initialTranscripts)
-      .mockResolvedValueOnce(updatedTranscripts)
-    window.api.transcripts.switch = vi.fn().mockResolvedValue(undefined)
-
-    const variantId = ref<number | null>(10)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
+  it("does not show another database's transcripts for the same variant id", async () => {
+    const { transcripts } = mountTranscripts()
     await flushPromises()
-    expect(result.transcripts.value).toEqual(initialTranscripts)
+    list.mockResolvedValue([transcript(10, 'OTHER-DB')])
 
-    const ok = await result.switchTranscript('ENST000002')
-    expect(ok).toBe(true)
-    expect(window.api.transcripts.switch).toHaveBeenCalledWith(10, 'ENST000002')
-    expect(result.transcripts.value).toEqual(updatedTranscripts)
+    useDatabaseStore().revision++
+    await invalidateServerData('database-switch')
+    await flushPromises()
+
+    expect(transcripts.value).toEqual([transcript(10, 'OTHER-DB')])
   })
 
-  it('inserts and switches transcript', async () => {
-    const newTranscript: TranscriptInsertRow = {
-      transcript_id: 'ENST000099',
-      gene_symbol: 'BRCA1',
-      source: 'manual',
-      is_canonical: 0
-    }
-    const updatedTranscripts: TranscriptAnnotation[] = [
-      {
-        id: 3,
-        variant_id: 10,
-        transcript_id: 'ENST000099',
-        gene_symbol: 'BRCA1',
-        is_selected: 1,
-        is_canonical: 0
-      }
-    ]
-
-    window.api.transcripts.list = vi
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(updatedTranscripts)
-    window.api.transcripts.insertAndSwitch = vi.fn().mockResolvedValue(undefined)
-
-    const variantId = ref<number | null>(10)
-    const [result, appInstance] = withSetup(() => useTranscripts(variantId))
-    app = appInstance
-
+  it('refetches once after an import or a case delete', async () => {
+    mountTranscripts()
     await flushPromises()
+    list.mockClear()
 
-    const ok = await result.insertAndSwitch(newTranscript)
-    expect(ok).toBe(true)
-    expect(window.api.transcripts.insertAndSwitch).toHaveBeenCalledWith(10, newTranscript)
-    expect(result.transcripts.value).toEqual(updatedTranscripts)
+    await invalidateServerData('data-changed')
+    await flushPromises()
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('switching refetches the list before it resolves', async () => {
+    const { transcripts, switchTranscript } = mountTranscripts()
+    await flushPromises()
+    list.mockResolvedValue([transcript(10, 'ENST-NEW')])
+
+    await expect(switchTranscript('ENST-NEW')).resolves.toBe(true)
+    expect(switchApi).toHaveBeenCalledWith(10, 'ENST-NEW')
+    expect(transcripts.value).toEqual([transcript(10, 'ENST-NEW')])
+  })
+
+  it('insert-and-switch refetches the list before it resolves', async () => {
+    const row = { transcript_id: 'ENST-VEP' } as TranscriptInsertRow
+    const { transcripts, insertAndSwitch } = mountTranscripts()
+    await flushPromises()
+    list.mockResolvedValue([transcript(10), transcript(10, 'ENST-VEP')])
+
+    await expect(insertAndSwitch(row)).resolves.toBe(true)
+    expect(insertAndSwitchApi).toHaveBeenCalledWith(10, row)
+    expect(transcripts.value).toHaveLength(2)
+  })
+
+  it('a failed switch returns false, reports the error and leaves the list alone', async () => {
+    const { transcripts, error, switchTranscript, variantId } = mountTranscripts()
+    await flushPromises()
+    list.mockClear()
+    switchApi.mockResolvedValue(failure)
+
+    await expect(switchTranscript('ENST-NEW')).resolves.toBe(false)
+    expect(list).not.toHaveBeenCalled()
+    expect(transcripts.value).toEqual([transcript(10)])
+    expect(error.value).toBe('Database busy')
+
+    variantId.value = 20
+    await flushPromises()
+    expect(error.value).toBeNull()
+  })
+
+  it('a switch still succeeds when the refetch after it fails', async () => {
+    const { switchTranscript } = mountTranscripts()
+    await flushPromises()
+    list.mockResolvedValue(failure)
+
+    await expect(switchTranscript('ENST-NEW')).resolves.toBe(true)
+  })
+
+  it('does nothing without a variant', async () => {
+    const { switchTranscript } = mountTranscripts(ref(null))
+    await expect(switchTranscript('ENST-NEW')).resolves.toBe(false)
+    expect(switchApi).not.toHaveBeenCalled()
+  })
+
+  it('a switch that settles after the variant changed reports nothing on the new variant', async () => {
+    let failSwitch: (value: unknown) => void = () => {}
+    switchApi.mockImplementationOnce(() => new Promise((resolve) => (failSwitch = resolve)))
+    const { error, switchTranscript, variantId } = mountTranscripts()
+    await flushPromises()
+    const pending = switchTranscript('ENST-NEW')
+
+    variantId.value = 20
+    await flushPromises()
+    failSwitch(failure)
+
+    await expect(pending).resolves.toBe(false)
+    expect(error.value).toBeNull()
   })
 })

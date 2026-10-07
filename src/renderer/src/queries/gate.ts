@@ -4,8 +4,10 @@
  * loaded. Reads reactive state, so a query's options are recomputed when the
  * answer changes.
  */
+import type { CapabilityFeature } from '../../../shared/ipc/capability-features'
 import type { WindowAPI } from '../../../shared/types/api'
 import { logService } from '../services/LogService'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import {
   currentCanUseFeature,
   getCurrentUnsupportedReasonSync,
@@ -18,6 +20,11 @@ function currentApi(): WindowAPI | undefined {
 
 export function canQuery(path: CapabilityPath): boolean {
   return currentApi() !== undefined && currentCanUseFeature(path)
+}
+
+/** As `canQuery`, for a runtime feature of the capability document. */
+export function canQueryFeature(feature: CapabilityFeature): boolean {
+  return currentApi() !== undefined && useCapabilityStore().canUse(feature)
 }
 
 /** `window.api` for a query function; throws where there is none. */

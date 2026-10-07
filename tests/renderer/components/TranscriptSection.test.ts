@@ -16,6 +16,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createQueryPinia, queryPlugins } from '../helpers/with-queries'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -73,7 +74,7 @@ describe('TranscriptSection', () => {
         vepLoading: false,
         mode: 'case' as const
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, ...queryPlugins(createQueryPinia())] }
     })
     await flushPromises()
     await wrapper.vm.$nextTick()
@@ -88,7 +89,7 @@ describe('TranscriptSection', () => {
         vepLoading: false,
         mode: 'cohort' as const
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, ...queryPlugins(createQueryPinia())] }
     })
   }
 
