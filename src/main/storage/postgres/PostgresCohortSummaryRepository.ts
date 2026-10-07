@@ -29,7 +29,8 @@ import {
   annotationFlagJoins
 } from './cohort-summary-flags-sql'
 import {
-  addCaseToGeneSummary,
+  addPreparedCaseToGeneSummary,
+  prepareCaseGenePairs,
   rebuildGeneSummary,
   removeCaseFromGeneSummary
 } from './cohort-gene-summary-sql'
@@ -210,23 +211,24 @@ export class PostgresCohortSummaryRepository {
   }
 
   /**
-   * Add one case's variants to the summary. INSERT … SELECT from the deduped
-   * per-case CTE, ON CONFLICT bumping all three counters simultaneously
-   * (Pass-6 MED #3). Flags use OR semantics so an add never clears an existing
-   * annotation flag; on the INSERT (brand-new row) path the flags come from the
-   * same EXISTS expressions as rebuild().
+   * Compute one case's contribution to the summary and the gene aggregates
+   * into session-local temporary tables. Reads only the case's own rows and
+   * writes no shared table, so it needs no summary write lock: an import runs
+   * it before queueing for the lock and serialises only the upserts
+   * (`incrementalAdd` with `prepared: true`).
+   *
+   * The tables are ANALYZEd before use. A case that was just imported has no
+   * planner statistics: PostgreSQL would estimate one row for it and join the
+   * annotation flags with a nested loop that rescans them per variant. With
+   * real statistics the upserts are planned for what they are.
    */
-  async incrementalAdd({
+  async prepareAdd({
     schema,
     client,
     caseId,
     includeProvisional = false
-  }: ScopedClient & {
-    caseId: number
-    includeProvisional?: boolean
-  }): Promise<void> {
+  }: ScopedClient & { caseId: number; includeProvisional?: boolean }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
-
     // Staged and ANALYZEd first so the upsert is planned with real row counts
     // (cohort-case-aggregate-sql.ts).
     await stageCaseAggregate({
@@ -234,6 +236,33 @@ export class PostgresCohortSummaryRepository {
       aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl, includeProvisional),
       caseId
     })
+    await prepareCaseGenePairs({ schema, client, caseId, includeProvisional })
+  }
+
+  /**
+   * Add one case's variants to the summary. INSERT … SELECT from the prepared
+   * per-case aggregate, ON CONFLICT bumping all three counters simultaneously
+   * (Pass-6 MED #3). Flags use OR semantics so an add never clears an existing
+   * annotation flag; on the INSERT (brand-new row) path the flags come from the
+   * same EXISTS expressions as rebuild().
+   *
+   * Call inside a transaction that holds the summary write lock. With
+   * `prepared: true` the caller already ran `prepareAdd` on this connection
+   * (outside the lock); otherwise it runs here.
+   */
+  async incrementalAdd({
+    schema,
+    client,
+    caseId,
+    includeProvisional = false,
+    prepared = false
+  }: ScopedClient & {
+    caseId: number
+    includeProvisional?: boolean
+    prepared?: boolean
+  }): Promise<void> {
+    const tbl = (t: string): string => `"${schema}"."${t}"`
+    if (!prepared) await this.prepareAdd({ schema, client, caseId, includeProvisional })
 
     await client.query(
       `
@@ -265,7 +294,7 @@ export class PostgresCohortSummaryRepository {
     `
     )
     await dropCaseAggregate(client)
-    await addCaseToGeneSummary({ schema, client, caseId, includeProvisional })
+    await addPreparedCaseToGeneSummary({ schema, client })
 
     // C1 lifecycle: incremental maintenance records its time but never touches
     // is_stale — the summary stays valid (Pass-7 MED #4).

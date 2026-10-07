@@ -22,11 +22,14 @@ vi.mock('../../../src/main/storage/postgres/postgres-bulk-write', () => ({
 // post-loop SAVEPOINT block calls incrementalAdd /
 // refreshColumnMetas without standing up a real Postgres. Each test overrides
 // the mock implementations via the exported spies below.
-const incrementalAddSpy = vi.fn(async () => undefined)
+type SummaryScopeArg = { client: { query: (sql: string) => unknown } }
+const prepareAddSpy = vi.fn<(scope: SummaryScopeArg) => Promise<void>>(async () => undefined)
+const incrementalAddSpy = vi.fn<(scope: SummaryScopeArg) => Promise<void>>(async () => undefined)
 const refreshColumnMetasSpy = vi.fn(async () => undefined)
 const markStaleSpy = vi.fn(async () => undefined)
 vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', () => ({
   PostgresCohortSummaryRepository: class {
+    prepareAdd = prepareAddSpy
     incrementalAdd = incrementalAddSpy
     refreshColumnMetas = refreshColumnMetasSpy
     markStale = markStaleSpy
@@ -833,6 +836,7 @@ describe('postgres-import-worker runImport', () => {
 
 describe('postgres-import-worker — C3 import wiring', () => {
   beforeEach(() => {
+    prepareAddSpy.mockReset().mockResolvedValue(undefined)
     incrementalAddSpy.mockReset().mockResolvedValue(undefined)
     refreshColumnMetasSpy.mockReset().mockResolvedValue(undefined)
     markStaleSpy.mockReset().mockResolvedValue(undefined)
@@ -960,6 +964,65 @@ describe('postgres-import-worker — C3 import wiring', () => {
     expect(queries.lastIndexOf('COMMIT')).toBeGreaterThan(savepointIdx)
 
     expect(markStaleSpy).not.toHaveBeenCalled()
+  })
+
+  it('prepares the case before queueing for the summary write lock and upserts under it', async () => {
+    const queries: string[] = []
+    const client = makeClient(queries)
+    prepareAddSpy.mockImplementationOnce(async (scope) => {
+      await scope.client.query('-- prepareAdd')
+    })
+    refreshColumnMetasSpy.mockImplementationOnce(async (scope: never) => {
+      await (scope as { client: { query: (sql: string) => unknown } }).client.query(
+        '-- refreshColumnMetas'
+      )
+    })
+    incrementalAddSpy.mockImplementationOnce(async (scope) => {
+      await scope.client.query('-- incrementalAdd')
+    })
+    await runVcfSingleFile(client, [])
+
+    const lockIndex = queries.findIndex((query) => query.includes('pg_try_advisory_xact_lock'))
+    const index = (text: string): number => queries.indexOf(text)
+    expect(lockIndex).toBeGreaterThan(0)
+    // Lock-free: this case's aggregates and its column metadata.
+    expect(index('SAVEPOINT cohort_prepare')).toBeGreaterThan(-1)
+    expect(index('-- prepareAdd')).toBeGreaterThan(index('SAVEPOINT cohort_prepare'))
+    expect(index('-- refreshColumnMetas')).toBeGreaterThan(index('-- prepareAdd'))
+    expect(index('RELEASE SAVEPOINT cohort_prepare')).toBeLessThan(lockIndex)
+    // Serialised: only the upserts into the shared tables.
+    expect(queries.findIndex((query) => query.includes('"variant_frequency"'))).toBeGreaterThan(
+      lockIndex
+    )
+    expect(index('-- incrementalAdd')).toBeGreaterThan(lockIndex)
+    expect(incrementalAddSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 13, prepared: true, includeProvisional: true })
+    )
+    // Still one publication transaction.
+    const begin = queries.lastIndexOf('BEGIN')
+    expect(begin).toBeLessThan(index('SAVEPOINT cohort_prepare'))
+    expect(queries.slice(begin, queries.lastIndexOf('COMMIT'))).not.toContain('COMMIT')
+  })
+
+  it('publishes the case and marks the summary stale when preparing it fails', async () => {
+    prepareAddSpy.mockRejectedValueOnce(new Error('boom in prepareAdd'))
+    const queries: string[] = []
+    const client = makeClient(queries)
+    const messages: unknown[] = []
+    await runVcfSingleFile(client, messages)
+
+    expect(queries).toContain('ROLLBACK TO SAVEPOINT cohort_prepare')
+    // The frequency bookkeeping still runs, under the lock.
+    expect(queries.findIndex((query) => query.includes('"variant_frequency"'))).toBeGreaterThan(
+      queries.findIndex((query) => query.includes('pg_try_advisory_xact_lock'))
+    )
+    expect(incrementalAddSpy).not.toHaveBeenCalled()
+    expect(markStaleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'post_import_summary_failed_case_13' })
+    )
+    expect(queries.some((query) => query.includes("import_status = 'ready'"))).toBe(true)
+    expect(queries).toContain('COMMIT')
+    expect(messages).toContainEqual(expect.objectContaining({ type: 'complete' }))
   })
 
   it('keeps the provisional case hidden and publishes derived bookkeeping atomically', async () => {

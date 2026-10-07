@@ -160,15 +160,44 @@ interface CaseScope {
   caseId: number
 }
 
-/** Add one case's rows. `includeProvisional` reads a case that is being published. */
-export async function addCaseToGeneSummary({
+/** Session-local scratch table holding one case's (gene, coordinate) pairs. */
+const CASE_PAIRS_TABLE = 'pg_temp."_varlens_case_gene_pairs"'
+const PREPARED_PAIRS_CTE = `per_pair AS (
+    SELECT gene_symbol, chr, pos, ref, alt, row_count, carrier_delta, case_delta
+    FROM ${CASE_PAIRS_TABLE}
+  )`
+
+/**
+ * Compute what one case contributes, without writing a shared table. Reads
+ * only the case's own rows, so it needs no summary write lock: an import runs
+ * it before it queues for the lock and serialises only the upserts
+ * ({@link addPreparedCaseToGeneSummary}). The table is ANALYZEd so the upsert
+ * is planned with real row counts.
+ */
+export async function prepareCaseGenePairs({
   schema,
   client,
   caseId,
   includeProvisional = false
 }: CaseScope & { includeProvisional?: boolean }): Promise<void> {
   const tbl = schemaTbl(schema)
-  await client.query(addSql(tbl, casePairsCte(tbl, includeProvisional)), [caseId])
+  await client.query(`DROP TABLE IF EXISTS ${CASE_PAIRS_TABLE}`)
+  await client.query(
+    `CREATE TEMP TABLE "_varlens_case_gene_pairs" AS
+     WITH ${casePairsCte(tbl, includeProvisional)}
+     SELECT * FROM per_pair`,
+    [caseId]
+  )
+  await client.query(`ANALYZE ${CASE_PAIRS_TABLE}`)
+}
+
+/** Add the case prepared by {@link prepareCaseGenePairs}; needs the write lock. */
+export async function addPreparedCaseToGeneSummary({
+  schema,
+  client
+}: Omit<CaseScope, 'caseId'>): Promise<void> {
+  await client.query(addSql(schemaTbl(schema), PREPARED_PAIRS_CTE))
+  await client.query(`DROP TABLE ${CASE_PAIRS_TABLE}`)
 }
 
 /** Subtract one visible case's rows; call before the case is hidden or purged. */
