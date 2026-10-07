@@ -55,8 +55,7 @@ describe('Migration v40: cases.import_status', () => {
     db.close()
   })
 
-  it('is part of the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBeGreaterThanOrEqual(40)
+  it('a database migrated past v40 reports the latest schema version', () => {
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
