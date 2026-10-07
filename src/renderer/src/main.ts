@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { useCapabilityStore } from './stores/capabilityStore'
 import { installQueryCache } from './queries/client'
+import { installFocusRefetch } from './queries/focus-refetch'
 import vuetify from './plugins/vuetify'
 import router from './router'
 import { installOverlayEscapeGuard } from './utils/overlay-escape-guard'
@@ -32,6 +33,7 @@ async function bootstrap(): Promise<void> {
   // Load the per-session capability document before the shell renders: the
   // store fails closed, so gated UI never flashes an action it then refuses.
   await useCapabilityStore(pinia).load()
+  installFocusRefetch()
   app.use(router)
   app.use(vuetify)
   // Before the first overlay can open: Escape must never race Vuetify's

@@ -114,10 +114,12 @@ on the step 4 list and stays.
   `computeCapabilityDocument`: true for the web runtime, false for desktop.
   The renderer reads it from the capability store, never from
   `isWebRuntime()`.
-- The query client's `refetchOnWindowFocus` and `refetchOnReconnect` follow
-  the flag. With `staleTime: Infinity` a focus refetch would never fire, so
-  on focus or reconnect, when the flag is on, mounted entries are marked
-  stale and refetched (the `data-changed` path).
+- Nothing in the cache goes stale by time (`staleTime: Infinity`), so the
+  library's own `refetchOnWindowFocus` / `refetchOnReconnect` would never
+  fire; they stay off. `queries/focus-refetch.ts` listens instead and, when
+  the flag is on, sends `invalidateServerData('data-changed')`: mounted
+  entries are marked stale and refetched, the cohort scope first.
+- Focus refetches at most once per 30 seconds; a reconnect always refetches.
 - No retry plugin is installed. If one is added for web later it must use
   `isRetryableError()`.
 - Desktop behaviour does not change; a test pins that no query refetches on

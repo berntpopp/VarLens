@@ -17,6 +17,7 @@ import { makeDeps } from '../../web-gate/helpers/dispatcher-adapters'
 describe('computeCapabilityDocument', () => {
   it('enables every feature and blocks nothing on desktop', () => {
     const doc = computeCapabilityDocument({ runtime: 'desktop', role: 'admin', storage: null })
+    expect(doc.refetchOnFocus).toBe(false)
     expect(doc.blockedMethods).toEqual([])
     for (const feature of Object.keys(
       CAPABILITY_FEATURES
@@ -27,6 +28,7 @@ describe('computeCapabilityDocument', () => {
 
   it('blocks desktop-only and pending methods in web with the user-facing reason', () => {
     const doc = computeCapabilityDocument({ runtime: 'web', role: 'admin', storage: null })
+    expect(doc.refetchOnFocus).toBe(true)
     expect(doc.blockedMethods).toContain('database.open')
     expect(doc.blockedMethods).toContain('geneRef.update')
     expect(doc.blockedMethods).not.toContain('cases.list')
