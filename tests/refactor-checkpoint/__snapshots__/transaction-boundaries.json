@@ -14,6 +14,16 @@
     },
     {
       "file": "src/main/database/cohort-summary-case-add.ts",
+      "callerFunction": "discardCase",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/cohort-summary-case-add.ts",
+      "callerFunction": "publishStale",
+      "assignedTo": "publishStale"
+    },
+    {
+      "file": "src/main/database/cohort-summary-case-add.ts",
       "callerFunction": "replaceCase",
       "assignedTo": null
     },
@@ -91,6 +101,21 @@
       "file": "src/main/workers/import-pipeline.ts",
       "callerFunction": "prepareStatements",
       "assignedTo": "insertBatch"
+    },
+    {
+      "file": "src/main/workers/import-recovery.ts",
+      "callerFunction": "discardInterruptedImports",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/workers/import-worker.ts",
+      "callerFunction": "<anonymous>",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/workers/import-worker.ts",
+      "callerFunction": "publishCase",
+      "assignedTo": null
     },
     {
       "file": "src/main/workers/rebuild-summary-worker.ts",

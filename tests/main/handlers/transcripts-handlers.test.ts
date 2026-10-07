@@ -11,6 +11,45 @@ vi.mock('electron', () => ({
   }
 }))
 
+const safeEmit = vi.hoisted(() => vi.fn())
+vi.mock('../../../src/main/ipc/utils/safeEmit', () => ({ safeEmit }))
+
+describe('transcript switch during an import session (SQLite)', () => {
+  it('emits cohort:summaryRebuilt when the switch flagged the cohort summary stale', async () => {
+    safeEmit.mockClear()
+    const writeExecute = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true, cohortSummaryStale: true })
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const { registerTranscriptHandlers } =
+      await import('../../../src/main/ipc/handlers/transcripts')
+    registerTranscriptHandlers({
+      ipcMain: {
+        handle: (channel: string, handler: (...args: unknown[]) => Promise<unknown>) =>
+          handlers.set(channel, handler)
+      } as never,
+      getDbManager: (() => ({
+        getCurrentSession: () => ({
+          capabilities: { backend: 'sqlite' },
+          getWriteExecutor: () => ({ execute: writeExecute })
+        })
+      })) as never
+    })
+
+    // No import running: the summary was patched in place, nothing to say.
+    await handlers.get('transcripts:switch')!(undefined, 9, 'NM_000059.4')
+    expect(safeEmit).not.toHaveBeenCalled()
+
+    // An import session is open: the edit could only flag the summary.
+    await expect(handlers.get('transcripts:switch')!(undefined, 9, 'NM_000059.4')).resolves.toEqual(
+      { success: true }
+    )
+    expect(safeEmit).toHaveBeenCalledTimes(1)
+    expect(safeEmit).toHaveBeenCalledWith('cohort:summaryRebuilt', { is_stale: true })
+  })
+})
+
 describe('transcript PostgreSQL executor routing', () => {
   it('routes transcript reads and writes through the current Postgres session executors', async () => {
     const readExecute = vi.fn().mockResolvedValue([{ transcript_id: 'NM_000059.4' }])

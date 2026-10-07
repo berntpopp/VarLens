@@ -4,10 +4,15 @@
  *
  * The import worker keeps `cohort_variant_summary` / `gene_burden_summary`
  * exact after every file (cohort-summary-case-add.ts), so an import no longer
- * flags the cohort stale. Two things remain for the main process:
+ * flags the cohort stale. This holds for batch and single-file imports alike.
+ * What remains for the main process:
  *
  *  - metadata it cached from the summary must be dropped whenever a file's
  *    contribution lands;
+ *  - when the worker gives per-file upkeep up mid-batch (one rebuild at the
+ *    end is cheaper, or the summary was rewritten behind its back) the
+ *    renderer is told at once that the cohort is stale, and told again when it
+ *    is current;
  *  - if the summary is nevertheless out of date at the end (the worker's
  *    upkeep fell back and its own rebuild failed, the worker died, or rows
  *    were appended to a case behind the summary's back), the renderer is told
@@ -89,28 +94,84 @@ export async function rebuildCohortSummaryAndNotify(
   return true
 }
 
+/** What the renderer was told about staleness during one import. */
+export interface CohortStaleAnnouncer {
+  /** The summary went stale mid-import: tell the renderer, once. */
+  announce(): void
+  /** True once `announce` ran: the renderer is showing the cohort as stale. */
+  announced(): boolean
+}
+
+export function createCohortStaleAnnouncer(
+  emit: EmitCohortStale | undefined
+): CohortStaleAnnouncer {
+  let announced = false
+  return {
+    announce() {
+      if (announced) return
+      announced = true
+      emit?.({ is_stale: true })
+    },
+    announced: () => announced
+  }
+}
+
 /**
  * End of an import: drop cached metadata and, only if the summary really is
- * out of date, repair it. Emits nothing when the summary is current.
+ * out of date, repair it. Emits nothing when the summary is current and the
+ * renderer was never told otherwise; if it was told mid-import
+ * (`announcer`), it now hears that the summary is current again — after the
+ * worker's own rebuild or after the repair here.
  */
 export async function settleCohortSummaryAfterImport(
   db: DatabaseService,
   emit: EmitCohortStale | undefined,
-  rebuild?: RebuildCohortSummary
+  rebuild?: RebuildCohortSummary,
+  announcer?: CohortStaleAnnouncer
 ): Promise<void> {
   invalidateCohortReadCaches(db)
-  if (cohortSummaryNeedsRebuild(db)) await rebuildCohortSummaryAndNotify(db, emit, rebuild)
+  if (cohortSummaryNeedsRebuild(db)) {
+    // Not a second "stale" for a renderer that already shows the banner.
+    const notify: EmitCohortStale | undefined =
+      announcer?.announced() === true
+        ? (event) => {
+            if (event.is_stale && event.phase === undefined) return
+            emit?.(event)
+          }
+        : emit
+    await rebuildCohortSummaryAndNotify(db, notify, rebuild)
+  } else if (announcer?.announced() === true) {
+    emit?.({ is_stale: false })
+  }
 }
 
 /**
- * Rows were added to an existing case outside the import worker (multi-file
- * append), so the summary no longer matches the variants: flag it and rebuild.
+ * End of an import the SQLite worker ran alone (single file) — also a failed
+ * or cancelled one: {@link settleCohortSummaryAfterImport}, best effort. A
+ * database that was closed meanwhile must not replace the import's outcome.
  */
-export async function rebuildCohortSummaryAfterAppend(
-  db: DatabaseService,
+export async function settleAfterWorkerImport(
+  getDb: () => DatabaseService,
   emit: EmitCohortStale | undefined,
-  rebuild?: RebuildCohortSummary
+  announcer: CohortStaleAnnouncer
 ): Promise<void> {
+  try {
+    await settleCohortSummaryAfterImport(getDb(), emit, undefined, announcer)
+  } catch (e) {
+    mainLogger.warn(
+      `Failed to settle the cohort summary after import: ${formatErrorMessage(e, 'unknown error')}`,
+      'cohort'
+    )
+  }
+}
+
+/**
+ * Rows are about to be added to an existing case outside the import worker
+ * (multi-file append). Flag the summary BEFORE the first row: each append
+ * commits on its own, and a crash after one of them must not leave variants
+ * outside a summary that claims to be current.
+ */
+export function markCohortSummaryStaleBeforeAppend(db: DatabaseService): void {
   try {
     db.cohortSummary.markStale()
   } catch (e) {
@@ -119,5 +180,18 @@ export async function rebuildCohortSummaryAfterAppend(
       'cohort'
     )
   }
+}
+
+/**
+ * Rows were added to an existing case outside the import worker (multi-file
+ * append), so the summary no longer matches the variants: rebuild it. The
+ * flag was set before the appends; it is set again here in case that failed.
+ */
+export async function rebuildCohortSummaryAfterAppend(
+  db: DatabaseService,
+  emit: EmitCohortStale | undefined,
+  rebuild?: RebuildCohortSummary
+): Promise<void> {
+  markCohortSummaryStaleBeforeAppend(db)
   await rebuildCohortSummaryAndNotify(db, emit, rebuild)
 }

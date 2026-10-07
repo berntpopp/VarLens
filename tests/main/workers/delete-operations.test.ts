@@ -31,7 +31,9 @@ describe('delete-operations', () => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     db.exec(`
-      CREATE TABLE cases (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE cases (
+        id INTEGER PRIMARY KEY, name TEXT, import_status TEXT NOT NULL DEFAULT 'ready'
+      );
       CREATE TABLE variants (
         id INTEGER PRIMARY KEY,
         case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,

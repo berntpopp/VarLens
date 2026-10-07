@@ -13,7 +13,8 @@ export interface CasesTable {
   file_path: string
   file_size: number
   variant_count: number
-  import_status: Generated<'ready' | 'importing' | 'deleting'>
+  /** SQLite (v40): 'ready' | 'provisional'. PostgreSQL: 'ready' | 'importing' | 'deleting'. */
+  import_status: Generated<'ready' | 'provisional' | 'importing' | 'deleting'>
   import_variant_watermark: Generated<number>
   import_is_new: Generated<boolean>
   created_at: number

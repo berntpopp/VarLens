@@ -5,6 +5,39 @@ import type { MultiFileImportResult } from '../../../src/main/ipc/handlers/impor
 import type { StorageImportFileFilters } from '../../../src/main/storage/import-executor'
 
 describe('SqliteImportExecutor', () => {
+  it('forwards the worker summary-stale notice of a single-file import', async () => {
+    const start = vi.fn()
+    const executor = new SqliteImportExecutor({
+      getDatabaseService: () =>
+        ({
+          getPath: () => '/tmp/test.varlens',
+          getEncryptionKey: () => undefined,
+          cohort: { invalidateColumnMetaCache: vi.fn() }
+        }) as never,
+      createWorkerClient: () => ({ start, cancel: vi.fn() }) as never
+    })
+    const onSummaryStale = vi.fn()
+
+    const promise = executor.importSingleFile({
+      filePath: '/tmp/input.json',
+      caseName: 'Imported',
+      throttleMs: 100,
+      onSummaryStale
+    })
+    const callbacks = start.mock.calls[0][0]
+    expect(onSummaryStale).not.toHaveBeenCalled()
+
+    // The worker gave per-file upkeep up: the cohort lags from here on.
+    callbacks.onSummaryStale()
+    expect(onSummaryStale).toHaveBeenCalledTimes(1)
+
+    callbacks.onComplete({
+      type: 'complete',
+      results: { succeeded: 0, failed: 0, skipped: 0, cancelled: true, details: [] }
+    })
+    await promise
+  })
+
   it('delegates single-file import to the existing worker client shape', async () => {
     const start = vi.fn()
     const worker = {

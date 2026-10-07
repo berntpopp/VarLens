@@ -17,9 +17,9 @@ import {
   runGeneBurdenCompare,
   cancelGeneBurdenCompare,
   getSummaryStatus,
-  rebuildSummary,
-  triggerStartupRebuildIfNeeded as triggerStartupRebuildIfNeededLogic
+  rebuildSummary
 } from './cohort-logic'
+import { recoverInterruptedImportsAtStartup } from './import-interrupted-recovery'
 import type { CohortCallbacks } from './cohort-logic'
 
 // Schema for carriers query params
@@ -151,13 +151,14 @@ export function registerCohortHandlers({
 }
 
 /**
- * Spawn a worker thread to rebuild the cohort summary if the database
- * has variants but an empty summary table. Called once after handlers
- * are registered so the UI stays responsive during the rebuild.
+ * Startup housekeeping for a freshly opened database, off the main thread:
+ * discard imports that were interrupted (import-interrupted-recovery.ts), then
+ * rebuild the cohort summary in a worker if it is empty over existing
+ * variants or was left open by a dead import session.
  *
  * Notifies the renderer via `cohort:summaryRebuilt` before and after
  * the rebuild so the UI can show a progress indicator.
  */
 export function triggerStartupRebuildIfNeeded(db: DatabaseService): void {
-  triggerStartupRebuildIfNeededLogic(db, cohortCallbacks)
+  void recoverInterruptedImportsAtStartup(db, cohortCallbacks)
 }

@@ -25,12 +25,16 @@ export class PostgresMigrationRunner {
   async migrate(): Promise<PostgresMigrationResult> {
     const client: MigrationClient = await this.pool.connect()
     let transactionStarted = false
-    const rawClient = client as unknown as { query_timeout?: number }
-    const savedQueryTimeout = rawClient.query_timeout
     // Migrations can execute legitimately long backfills (e.g. migration 0023 backfill
     // of cohort_gene_summary on large cohorts). Lift the client-side query timeout
-    // so node-postgres does not abort migrations with "Query read timeout".
-    rawClient.query_timeout = 0
+    // so node-postgres does not abort migrations with "Query read timeout". pg arms
+    // that timer from `config.query_timeout || client.connectionParameters.query_timeout`
+    // (pg/lib/client.js); a property on the client itself is never read, and a
+    // per-query 0 falls through the `||` to the pool's value.
+    const timeouts = (client as unknown as { connectionParameters?: { query_timeout?: number } })
+      .connectionParameters
+    const savedQueryTimeout = timeouts?.query_timeout
+    if (timeouts !== undefined) timeouts.query_timeout = 0
 
     try {
       await client.query('BEGIN')
@@ -87,7 +91,7 @@ export class PostgresMigrationRunner {
       }
       throw error
     } finally {
-      rawClient.query_timeout = savedQueryTimeout
+      if (timeouts !== undefined) timeouts.query_timeout = savedQueryTimeout
       client.release()
     }
   }

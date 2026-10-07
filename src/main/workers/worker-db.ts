@@ -57,6 +57,25 @@ export function openWorkerDatabase(dbPath: string, encryptionKey?: string): Data
 }
 
 /**
+ * Bound the write-ahead log of an import session. The session disables the
+ * automatic checkpoint (see openWorkerDatabase), so without this the log keeps
+ * every page version of every file until the final TRUNCATE — about 3 GiB for
+ * 20 exomes, 3.5x the finished database. PASSIVE never waits for or blocks a
+ * reader; whatever a reader still pins is picked up after a later file, and
+ * once the log is fully checkpointed the next file overwrites it from the start.
+ */
+export function checkpointBetweenFiles(db: DatabaseType): void {
+  try {
+    db.pragma('wal_checkpoint(PASSIVE)')
+  } catch (e) {
+    console.warn(
+      '[worker-db] Failed to checkpoint between files:',
+      e instanceof Error ? e.message : String(e)
+    )
+  }
+}
+
+/**
  * Open a database in read-only mode (for export operations).
  */
 export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: string): DatabaseType {

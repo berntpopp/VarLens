@@ -24,8 +24,10 @@ import type { BatchFileComplete, BatchProgress, DuplicateChoice } from '../../..
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { BatchFileEventReporter } from './batch-import-file-events'
 import {
+  createCohortStaleAnnouncer,
   invalidateCohortReadCaches,
   settleCohortSummaryAfterImport,
+  type CohortStaleAnnouncer,
   type EmitCohortStale
 } from './cohort-summary-settle'
 
@@ -36,9 +38,10 @@ export interface BatchImportCallbacks {
   /** One file is done (imported, skipped or failed); an imported case is visible now. */
   onFileComplete?: (data: BatchFileComplete) => void
   /**
-   * The cohort summary is out of date and being rebuilt, then current again.
-   * Not part of a normal batch: the import worker keeps the summary exact
-   * after every file. Only fires when that upkeep failed.
+   * The cohort summary is out of date (`is_stale: true`, possibly with rebuild
+   * progress), then current again. Not part of a batch whose worker keeps the
+   * summary exact after every file: fires as soon as the worker gives that up
+   * (see `summary-stale` in import-worker.ts) or when its upkeep failed.
    */
   onCohortStale?: EmitCohortStale
 }
@@ -129,6 +132,7 @@ export async function startBatchImport(
   callbacks: BatchImportCallbacks
 ): Promise<BatchImportResult> {
   let db: DatabaseService | undefined
+  const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
   try {
     db = getDb()
 
@@ -151,7 +155,7 @@ export async function startBatchImport(
         workerClient = client
         ctx.registerCancel(() => client.cancel())
         try {
-          return await runBatchWorker(database, p.files, callbacks, client)
+          return await runBatchWorker(database, p.files, callbacks, client, stale)
         } finally {
           if (workerClient === client) workerClient = null
         }
@@ -161,7 +165,9 @@ export async function startBatchImport(
   } catch (error) {
     mainLogger.error(`batch-import:start error: ${error}`, 'import')
     // A worker that died mid-batch may have left the summary behind.
-    if (db !== undefined) await settleCohortSummaryAfterImport(db, callbacks.onCohortStale)
+    if (db !== undefined) {
+      await settleCohortSummaryAfterImport(db, callbacks.onCohortStale, undefined, stale)
+    }
     return {
       succeeded: 0,
       failed: filePaths.length,
@@ -189,7 +195,8 @@ function runBatchWorker(
   db: DatabaseService,
   files: FileImportRequest[],
   callbacks: BatchImportCallbacks,
-  client: ImportWorkerClient
+  client: ImportWorkerClient,
+  stale: CohortStaleAnnouncer
 ): Promise<BatchImportResult> {
   const fileEvents = new BatchFileEventReporter(files, (event) => {
     // An imported file changed the summary the cohort filter metadata is
@@ -222,6 +229,8 @@ function runBatchWorker(
       onFileComplete: (msg) => {
         fileEvents.imported(msg)
       },
+      // From here on a refreshed cohort view lacks the files still to come.
+      onSummaryStale: () => stale.announce(),
       onComplete: (msg) => {
         // Internal variant frequency counts and the cohort summary are
         // maintained inside the import worker (per case, on the worker's
@@ -258,11 +267,13 @@ function runBatchWorker(
         // Normally a no-op beyond dropping cached metadata. If the worker's
         // summary upkeep fell back and left the summary stale, the renderer
         // learns it here and the batch ends once the rebuild has run.
-        void settleCohortSummaryAfterImport(db, callbacks.onCohortStale).finally(() => {
-          // Notify renderer globally that import completed
-          callbacks.onComplete?.(batchResult)
-          resolve(batchResult)
-        })
+        void settleCohortSummaryAfterImport(db, callbacks.onCohortStale, undefined, stale).finally(
+          () => {
+            // Notify renderer globally that import completed
+            callbacks.onComplete?.(batchResult)
+            resolve(batchResult)
+          }
+        )
       },
       onError: (msg) => {
         if (msg.fileIndex === -1) {

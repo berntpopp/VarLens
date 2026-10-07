@@ -219,4 +219,51 @@ describe('PostgresMigrationRunner', () => {
     )
     expect(pool.client.release).toHaveBeenCalledTimes(1)
   })
+
+  describe('client-side query timeout', () => {
+    /**
+     * node-postgres arms its "Query read timeout" from
+     * `config.query_timeout || client.connectionParameters.query_timeout`
+     * (pg/lib/client.js) — the pool's 30 s. A property set on the client
+     * itself is never read.
+     */
+    function poolWithTimeout(failOn?: string) {
+      const seen: number[] = []
+      const client = {
+        connectionParameters: { query_timeout: 30_000 },
+        query: vi.fn(async (sql: string) => {
+          seen.push(client.connectionParameters.query_timeout)
+          if (failOn !== undefined && sql.includes(failOn)) throw new Error('migration failed')
+          if (sql.includes("current_setting('lock_timeout')")) {
+            return { rows: [{ lock_timeout: '5s' }] }
+          }
+          return { rows: [] }
+        }),
+        release: vi.fn()
+      }
+      return { pool: { query: vi.fn(), connect: vi.fn(async () => client) }, client, seen }
+    }
+
+    it('is lifted for every statement of a migration and restored on the pooled client', async () => {
+      const { pool, client, seen } = poolWithTimeout()
+
+      await new PostgresMigrationRunner(pool as never, 'app_schema', migrations).migrate()
+
+      // A long backfill (0023 on a large cohort) must not die after 30 s.
+      expect(seen.length).toBeGreaterThan(0)
+      expect(new Set(seen)).toEqual(new Set([0]))
+      expect(client.connectionParameters.query_timeout).toBe(30_000)
+      expect(client.release).toHaveBeenCalledTimes(1)
+    })
+
+    it('is restored after a failed migration too', async () => {
+      const { pool, client } = poolWithTimeout('"one"')
+
+      await expect(
+        new PostgresMigrationRunner(pool as never, 'app_schema', migrations).migrate()
+      ).rejects.toThrow(/migration failed/)
+
+      expect(client.connectionParameters.query_timeout).toBe(30_000)
+    })
+  })
 })

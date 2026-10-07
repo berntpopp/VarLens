@@ -19,6 +19,7 @@ export class DatabaseOverviewService extends BaseRepository {
         .selectFrom('cases as c')
         .leftJoin('case_metadata as cm', 'c.id', 'cm.case_id')
         .select(['c.id', 'c.name', 'c.variant_count', 'c.created_at', 'cm.affected_status'])
+        .where('c.import_status', '=', 'ready')
         .orderBy('c.created_at', 'desc')
     )
 

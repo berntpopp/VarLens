@@ -520,6 +520,23 @@ describe('DatabaseService', () => {
     })
   })
 
+  describe('hasInterruptedImports', () => {
+    it('is false for a database whose cases are all published', () => {
+      service.cases.createCase('done', '/done.json', 1)
+      expect(service.hasInterruptedImports()).toBe(false)
+    })
+
+    it('is true when an import left a provisional case behind', () => {
+      service.database
+        .prepare(
+          `INSERT INTO cases (name, file_path, file_size, variant_count, created_at, import_status)
+           VALUES ('dead', '/dead.json', 1, 0, 0, 'provisional')`
+        )
+        .run()
+      expect(service.hasInterruptedImports()).toBe(true)
+    })
+  })
+
   describe('needsStartupRebuild', () => {
     it('returns false when no variants exist', () => {
       expect(service.needsStartupRebuild()).toBe(false)

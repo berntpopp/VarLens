@@ -18,9 +18,12 @@ import type { CaseDeletePhase } from '../../shared/types/case-delete-job'
 import { createFTSTriggers } from '../database/schema'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
-import { openCaseSummaryRemoval } from '../database/cohort-summary-case-removal'
 import { rebuildCohortSummaryCancellable } from './cancellable-summary-rebuild'
-import { deleteCasesIncrementally, listAllCaseIds } from './delete-operations'
+import {
+  deleteCasesIncrementally,
+  listAllCaseIds,
+  openSummaryRemovalForDelete
+} from './delete-operations'
 import type { DeleteWorkerRequest, DeleteWorkerResponse } from './delete-worker-protocol'
 
 export type { DeleteWorkerRequest, DeleteWorkerResponse } from './delete-worker-protocol'
@@ -59,9 +62,9 @@ async function runDelete(msg: Extract<DeleteWorkerRequest, { type: 'start' }>): 
     // entries as its case cascades away (no global 'rebuild', audit D-1).
     db.exec(createFTSTriggers)
     // Single/batch deletes patch the cohort summary per case inside the
-    // delete transaction; delete-all and an already-stale summary fall back
-    // to one (cancellable) full rebuild at the end.
-    const summary = deletingAll ? null : openCaseSummaryRemoval(db)
+    // delete transaction; delete-all, an already-stale summary and an open
+    // import session fall back to one (cancellable) full rebuild at the end.
+    const summary = openSummaryRemovalForDelete(db, deletingAll)
     if (summary === null) markCohortSummaryStale(db)
 
     const result = await deleteCasesIncrementally(db, ids, {

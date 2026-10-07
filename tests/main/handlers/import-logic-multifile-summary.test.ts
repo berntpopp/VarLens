@@ -18,12 +18,15 @@ import { makeVariant } from '../../utils/make-variant'
 type Coord = [string, number, string, string]
 
 const appendPlan = new Map<string, Coord[]>()
+/** `is_stale` as each append found it, before it wrote anything. */
+const staleWhenAppending: boolean[] = []
 
 vi.mock('../../../src/main/ipc/handlers/import-logic-append', () => ({
   detectGenomeBuildFromFile: vi.fn(async () => null),
   importAdditionalFileToCase: vi.fn(
     async (caseId: number, filePath: string, _o: unknown, getDb: () => DatabaseService) => {
       const coords = appendPlan.get(filePath) ?? []
+      staleWhenAppending.push(getDb().cohortSummary.getStatus().is_stale)
       getDb().variants.insertVariantsBatch(caseId, coords.map(toVariant))
       return { caseId, variantCount: coords.length, skipped: 0, errors: [], elapsed: 0 }
     }
@@ -58,6 +61,7 @@ describe('SQLite multi-file import cohort summary', () => {
     dir = mkdtempSync(join(tmpdir(), 'varlens-mf-summary-'))
     db = new DatabaseService(join(dir, 'test.db'))
     appendPlan.clear()
+    staleWhenAppending.length = 0
     spawnRebuildWorker.mockReset()
   })
 
@@ -134,6 +138,24 @@ describe('SQLite multi-file import cohort summary', () => {
     expect(summaryRows(db)).toEqual(['1:100:A>G=1', '1:200:C>T=1'])
     expect(db.cohortSummary.getStatus().is_stale).toBe(false)
     expect(events).toEqual(['stale:true', 'stale:variants', 'stale:false'])
+  })
+
+  it('flags the summary stale before the first append, not after the last', async () => {
+    spawnRebuildWorker.mockImplementation(async () => db.cohortSummary.rebuild())
+
+    await runImport(
+      [
+        file('first.vcf', []),
+        file('sv.vcf', [['1', 200, 'C', 'T']]),
+        file('cnv.vcf', [['1', 300, 'G', 'A']])
+      ],
+      []
+    )
+
+    // A crash during or between the appends must not leave appended variants
+    // outside a summary that claims to be current.
+    expect(staleWhenAppending).toEqual([true, true])
+    expect(db.cohortSummary.getStatus().is_stale).toBe(false)
   })
 
   it('leaves the summary flagged stale, and says so, when the rebuild fails', async () => {

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 
 import { PostgresImportExecutor } from '../../../src/main/storage/postgres/PostgresImportExecutor'
@@ -149,5 +150,87 @@ describe('PostgresImportExecutor.openBatch', () => {
     expect(control.connect).not.toHaveBeenCalled()
     workers[0].complete(1)
     await run
+  })
+
+  describe('when the control connection is lost mid-batch', () => {
+    /** A control client that can emit `error`, as a pg Client does. */
+    function setupWithLiveControl() {
+      const control = Object.assign(new EventEmitter(), {
+        connect: vi.fn(async () => undefined),
+        query: vi.fn(async (text: string) => {
+          if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] }
+          if (text.includes('pg_backend_pid')) return { rows: [{ pid: 4242 }] }
+          return { rows: [] }
+        }),
+        end: vi.fn(async () => undefined)
+      })
+      const workers: FakeWorker[] = []
+      const executor = new PostgresImportExecutor({
+        schema: 'tenant',
+        clientConfig: CLIENT_CONFIG,
+        workerClientFactory: () => {
+          const worker = new FakeWorker()
+          workers.push(worker)
+          return worker as never
+        },
+        controlClientFactory: () => control as never
+      })
+      return { executor, control, workers }
+    }
+
+    /** What a worker posts after it was cancelled cooperatively. */
+    const completeCancelled = (worker: FakeWorker): void =>
+      worker.callbacks?.onComplete({
+        type: 'complete',
+        mode: 'single-file',
+        result: {
+          caseId: 0,
+          variantCount: 0,
+          skipped: 0,
+          errors: ['Import cancelled by user'],
+          elapsed: 0
+        }
+      })
+
+    it('fails the files in flight instead of reporting them imported as case 0', async () => {
+      const { executor, control, workers } = setupWithLiveControl()
+      const batch = await executor.openBatch()
+      const inFlight = batch.importFile({ filePath: '/stage/a.vcf.gz', caseName: 'A' })
+
+      control.emit('error', new Error('terminating connection due to administrator command'))
+      expect(workers[0].cancel).toHaveBeenCalledTimes(1)
+      completeCancelled(workers[0])
+
+      // The batch session counts whatever resolves as a success.
+      await expect(inFlight).rejects.toThrow(/control connection lost/)
+      await batch.close()
+    })
+
+    it('refuses files started afterwards', async () => {
+      const { executor, control, workers } = setupWithLiveControl()
+      const batch = await executor.openBatch()
+
+      control.emit('error', new Error('boom'))
+
+      await expect(
+        batch.importFile({ filePath: '/stage/b.vcf.gz', caseName: 'B' })
+      ).rejects.toThrow(/control connection lost/)
+      expect(workers).toHaveLength(0)
+      await batch.close()
+    })
+
+    it('close still ends the control client, so its workspace lock cannot outlive the batch', async () => {
+      const { executor, control } = setupWithLiveControl()
+      const batch = await executor.openBatch()
+      control.emit('error', new Error('boom'))
+      // pg can report one loss twice: again when the socket finally ends.
+      control.end.mockImplementation(async () => {
+        control.emit('error', new Error('Connection terminated unexpectedly'))
+      })
+
+      await expect(batch.close()).resolves.toBeUndefined()
+
+      expect(control.end).toHaveBeenCalledTimes(1)
+    })
   })
 })
