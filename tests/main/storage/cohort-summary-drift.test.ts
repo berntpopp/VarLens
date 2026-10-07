@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
+import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { PostgresTranscriptsRepository } from '../../../src/main/storage/postgres/PostgresTranscriptsRepository'
 
@@ -246,6 +247,81 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     return res.rows[0].id
   }
 
+  /** The maintained counter and what a count over the summary / the variants gives (#460). */
+  async function uniqueVariants(): Promise<{ stored: number; summary: number; variants: number }> {
+    const res = await probe.query<{ stored: number; summary: number; variants: number }>(
+      `SELECT (SELECT unique_variant_count::int FROM "${schema}".cohort_summary_state WHERE id = 1) AS stored,
+              (SELECT COUNT(*)::int FROM (SELECT 1 FROM "${schema}".cohort_variant_summary
+                                           GROUP BY chr, pos, ref, alt) s) AS summary,
+              (SELECT COUNT(*)::int FROM (SELECT 1 FROM "${schema}".variants
+                                           GROUP BY chr, pos, ref, alt) v) AS variants`
+    )
+    return res.rows[0]
+  }
+
+  async function expectUniqueVariants(expected: number): Promise<void> {
+    expect(await uniqueVariants()).toEqual({
+      stored: expected,
+      summary: expected,
+      variants: expected
+    })
+  }
+
+  it('keeps the unique-variant counter exact through imports, deletions and a rebuild (#460)', async () => {
+    const add = (caseId: number): Promise<void> =>
+      inTransaction((client) => repo.incrementalAdd({ schema, client: client as never, caseId }))
+    // The production path: hide (derived tables, under the lock), purge, drop.
+    const lifecycle = new PostgresCaseLifecycleRepository(pool, schema, repo)
+    const remove = async (caseId: number): Promise<void> => {
+      await lifecycle.deleteCase(caseId)
+    }
+    await expectUniqueVariants(0)
+
+    // Case A: 1:100 twice in the same case (duplicate rows), and 1:200 both as
+    // an SNV and as an SV: three rows of two types, two coordinates.
+    const a = await seedCase('uniq-a')
+    await seedVariant({ caseId: a, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await seedVariant({ caseId: a, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await seedVariant({ caseId: a, chr: '1', pos: 200, ref: 'C', alt: 'G' })
+    await seedVariant({ caseId: a, chr: '1', pos: 200, ref: 'C', alt: 'G', variantType: 'sv' })
+    await add(a)
+    await expectUniqueVariants(2)
+
+    // Case B, another genome build: 1:100 again (a second summary row for a
+    // known coordinate) and a new coordinate.
+    const b = await seedCase('uniq-b', 'GRCh37')
+    await seedVariant({ caseId: b, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await seedVariant({ caseId: b, chr: '3', pos: 300, ref: 'G', alt: 'A' })
+    await add(b)
+    await expectUniqueVariants(3)
+    const summaryRows = await probe.query(
+      `SELECT COUNT(*)::int AS n FROM "${schema}".cohort_variant_summary`
+    )
+    expect(summaryRows.rows[0].n).toBe(5) // the row count would overstate it
+
+    // Case C shares everything with A: no new coordinate.
+    const c = await seedCase('uniq-c')
+    await seedVariant({ caseId: c, chr: '1', pos: 100, ref: 'A', alt: 'T' })
+    await seedVariant({ caseId: c, chr: '1', pos: 200, ref: 'C', alt: 'G', variantType: 'sv' })
+    await add(c)
+    await expectUniqueVariants(3)
+
+    // Removing A drops the SNV row of 1:200 but the coordinate stays (SV row of C).
+    await remove(a)
+    await expectUniqueVariants(3)
+    // Removing B drops 3:300 entirely and one of the two rows of 1:100.
+    await remove(b)
+    await expectUniqueVariants(2)
+
+    // A rebuild recounts; from a deliberately wrong value too.
+    await probe.query(`UPDATE "${schema}".cohort_summary_state SET unique_variant_count = 99`)
+    await withClient((client) => repo.rebuild({ schema, client: client as never }))
+    await expectUniqueVariants(2)
+
+    await remove(c)
+    await expectUniqueVariants(0)
+  }, 120_000)
+
   async function rowAt100(): Promise<Record<string, unknown>> {
     const res = await probe.query(
       `SELECT gene_symbol, consequence, func, clinvar, cadd, transcript, cdna, carrier_count::int
@@ -333,7 +409,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
         await repo.incrementalRemove({ schema, client: client as never, caseId })
         await client.query(`DELETE FROM "${schema}".cases WHERE id = $1`, [caseId])
       })
-    await remove(third)
+    await new PostgresCaseLifecycleRepository(pool, schema, repo).deleteCase(third)
     expect(await rowAt100()).toMatchObject({
       gene_symbol: 'aBRCA',
       cadd: 32.5,

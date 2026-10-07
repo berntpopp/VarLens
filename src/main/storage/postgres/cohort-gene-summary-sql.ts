@@ -30,6 +30,8 @@
  */
 import type { PoolClient } from 'pg'
 
+import { uniqueVariantsSql } from './cohort-unique-variants-sql'
+
 type Queryable = Pick<PoolClient, 'query'>
 type Tbl = (table: string) => string
 
@@ -312,9 +314,8 @@ export function geneBurdenSql(tbl: Tbl): string {
  * The three cohort-wide variant figures without reading a variant row:
  *   total_variants       every publication stores the case's exact row count
  *                        in cases.variant_count
- *   unique_variants      distinct (chr, pos, ref, alt); the variant summary is
- *                        keyed by variant type and genome build as well, so
- *                        its row count would overstate it
+ *   unique_variants      distinct (chr, pos, ref, alt), from the maintained
+ *                        counter (cohort-unique-variants-sql.ts)
  *   genes_with_variants  distinct non-NULL gene symbols
  */
 export function cohortVariantTotalsSql(tbl: Tbl): {
@@ -324,9 +325,7 @@ export function cohortVariantTotalsSql(tbl: Tbl): {
 } {
   return {
     totalVariants: `SELECT COALESCE(SUM(variant_count), 0)::bigint FROM ${tbl('cases')}`,
-    uniqueVariants: `SELECT COUNT(*)::bigint FROM (
-        SELECT 1 FROM ${tbl('cohort_variant_summary')} GROUP BY chr, pos, ref, alt
-      ) unique_coordinates`,
+    uniqueVariants: uniqueVariantsSql(tbl),
     genesWithVariants: `SELECT COUNT(*)::bigint FROM ${tbl('cohort_gene_summary')}`
   }
 }

@@ -41,3 +41,19 @@ UPDATE "__schema__"."cohort_summary_state"
        stale_at = now()
  WHERE id = 1
    AND EXISTS (SELECT 1 FROM "__schema__"."cohort_variant_summary");
+
+-- Exact maintained unique-variant counter for the cohort and overview tiles
+-- (#460): the number of distinct (chr, pos, ref, alt) among the summary rows.
+-- Maintained by every writer of the summary in the same statement
+-- (cohort-unique-variants-sql.ts); populated here from the current rows, one
+-- aggregate over the summary (about 0.3 s per million rows).
+ALTER TABLE "__schema__"."cohort_summary_state"
+  ADD COLUMN IF NOT EXISTS unique_variant_count BIGINT NOT NULL DEFAULT 0;
+
+UPDATE "__schema__"."cohort_summary_state"
+   SET unique_variant_count = (
+         SELECT COUNT(*) FROM (
+           SELECT 1 FROM "__schema__"."cohort_variant_summary" GROUP BY chr, pos, ref, alt
+         ) unique_coordinates
+       )
+ WHERE id = 1;

@@ -22,6 +22,7 @@
 import type { PoolClient } from 'pg'
 
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
+import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
 type QueryClient = Pick<PoolClient, 'query'>
 type Tbl = (table: string) => string
@@ -151,7 +152,7 @@ export async function removeCaseFromSummary(args: {
      FROM pg_temp.${CASE_AGG_TABLE} k
      WHERE ${keyMatch('s', 'k')}`
   )
-  await client.query(`DELETE FROM ${tbl('cohort_variant_summary')} WHERE carrier_count <= 0`)
+  await dropEmptySummaryRows({ schema, client, touchedKeys: `pg_temp.${CASE_AGG_TABLE}` })
   await dropCaseAggregate(client)
 }
 

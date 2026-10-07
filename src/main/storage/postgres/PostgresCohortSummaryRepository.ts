@@ -35,6 +35,11 @@ import {
   removeCaseFromGeneSummary
 } from './cohort-gene-summary-sql'
 import { getCohortSummaryState, markCohortSummaryStale } from './cohort-summary-state-sql'
+import {
+  countAddedCoordinatesSql,
+  recountUniqueVariants,
+  UPSERT_RETURNING_SQL
+} from './cohort-unique-variants-sql'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import {
   maxSelectList,
@@ -164,6 +169,7 @@ export class PostgresCohortSummaryRepository {
 
     // The per-gene aggregates share this table's lifecycle: same rebuild.
     await rebuildGeneSummary({ schema, client })
+    await recountUniqueVariants({ schema, client })
 
     // C1 lifecycle (Pass-7 MED #4): a completed rebuild clears the staleness
     // flags and records the rebuild time. last_rebuilt_at maps back to epoch ms
@@ -229,8 +235,11 @@ export class PostgresCohortSummaryRepository {
     const tbl = (t: string): string => `"${schema}"."${t}"`
     if (!prepared) await this.prepareAdd({ schema, client, caseId, includeProvisional })
 
+    // One statement: the upsert, and from what it inserted the unique-variant
+    // counter (#460) plus the maintenance timestamp.
     await client.query(
       `
+      WITH upserted AS (
       INSERT INTO ${tbl('cohort_variant_summary')}
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
@@ -257,17 +266,14 @@ export class PostgresCohortSummaryRepository {
         ${mergeMaxAssignments('cohort_variant_summary')},
         -- Adds never clear annotation flags (OR semantics).
         has_star = cohort_variant_summary.has_star OR EXCLUDED.has_star,
-        has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment;
+        has_comment = cohort_variant_summary.has_comment OR EXCLUDED.has_comment
+      ${UPSERT_RETURNING_SQL}
+      )
+      ${countAddedCoordinatesSql(tbl)}
     `
     )
     await dropCaseAggregate(client)
     await addPreparedCaseToGeneSummary({ schema, client })
-
-    // C1 lifecycle: incremental maintenance records its time but never touches
-    // is_stale — the summary stays valid (Pass-7 MED #4).
-    await client.query(
-      `UPDATE ${tbl('cohort_summary_state')} SET last_incremental_at = now() WHERE id = 1`
-    )
   }
 
   /**

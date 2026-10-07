@@ -526,9 +526,10 @@ describe('PostgresCohortRepository', () => {
     expect(sql).toContain(
       '(SELECT COALESCE(SUM(variant_count), 0)::bigint FROM "public"."cases") AS total_variants'
     )
-    expect(sql).toContain(
-      'FROM "public"."cohort_variant_summary" GROUP BY chr, pos, ref, alt ) unique_coordinates) AS unique_variants'
-    )
+    // #460: the maintained counter, not a scan of the summary.
+    expect(sql).toContain('SELECT unique_variant_count FROM "public"."cohort_summary_state"')
+    expect(sql).toContain(')::bigint) AS unique_variants')
+    expect(sql).not.toContain('"cohort_variant_summary"')
     expect(sql).toContain(
       '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary") AS genes_with_variants'
     )
