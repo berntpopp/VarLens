@@ -5,9 +5,16 @@
  * Variant objects ready for the BatchAccumulator.
  */
 
-import type { VcfRawRecord, VcfHeader, VcfMappedVariant, InfoFieldMapping } from './types'
+import type {
+  AnnotationResult,
+  VcfRawRecord,
+  VcfHeader,
+  VcfMappedVariant,
+  InfoFieldMapping
+} from './types'
 import { splitAlleleForSample } from './vcf-allele-splitter'
 import { parseAnnotationsForAlleles } from './vcf-annotation-parser'
+import { isVepClinSigAlleleSpecific, normalizeVepClinSig } from './vep-clin-sig'
 import { parseGenotype } from './vcf-genotype-parser'
 import { applyInfoFieldRegistry } from './info-field-registry'
 import { detectVariantType } from './variant-type-detector'
@@ -135,7 +142,9 @@ export function mapVcfRecord(
         annotation.gnomadAf ?? (infoResult.mappedValues.get('gnomad_af') as number | null) ?? null,
       cadd: annotation.cadd ?? (infoResult.mappedValues.get('cadd') as number | null) ?? null,
       clinvar:
-        annotation.clinvar ?? (infoResult.mappedValues.get('clinvar') as string | null) ?? null,
+        annotation.clinvar ??
+        (infoResult.mappedValues.get('clinvar') as string | null) ??
+        vepClinSigFallback(annotation, header),
       gt_num: genotype.gt,
       func: annotation.consequence,
       qual: rec.qual,
@@ -237,4 +246,13 @@ function carriedAltAlleles(gt: string): Set<number> {
     if (Number.isSafeInteger(value) && value > 0) result.add(value)
   }
   return result
+}
+
+/**
+ * Last-resort `clinvar` source: VEP CSQ `CLIN_SIG`, only when the header
+ * proves it is allele-specific. Never overrides ClinVar_CLNSIG / INFO CLNSIG.
+ */
+function vepClinSigFallback(annotation: AnnotationResult, header: VcfHeader): string | null {
+  if (annotation.vepClinSig == null || !isVepClinSigAlleleSpecific(header)) return null
+  return normalizeVepClinSig(annotation.vepClinSig)
 }
