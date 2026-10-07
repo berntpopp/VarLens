@@ -401,6 +401,65 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.incrementalAdd/Remove —
     expect(row!.carrier_count).toBe(1)
   }, 60_000)
 
+  it('combines global and per-case annotations across every carrier of a variant', async () => {
+    // One coordinate carried by three cases, annotated in three different
+    // places: a global ACMG call, a per-case star on one carrier and a
+    // stronger per-case ACMG call plus comment on another.
+    const cases = [
+      await seedCase('multi-anno-a'),
+      await seedCase('multi-anno-b'),
+      await seedCase('multi-anno-c')
+    ]
+    const carriers: number[] = []
+    for (const caseId of cases) {
+      carriers.push(
+        await seedVariant({ caseId, chr: '7', pos: 700, ref: 'G', alt: 'A', gtNum: '0/1' })
+      )
+    }
+    // Same position, different allele: must not inherit anything.
+    await seedVariant({ caseId: cases[0], chr: '7', pos: 700, ref: 'G', alt: 'T', gtNum: '0/1' })
+    await probe.query(
+      `INSERT INTO "${schema}".variant_annotations
+         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('7', 700, 'G', 'A', NULL, 0, 'Likely benign', $1, $1)`,
+      [now]
+    )
+    await probe.query(
+      `INSERT INTO "${schema}".case_variant_annotations
+         (case_id, variant_id, per_case_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ($1, $2, NULL, 1, NULL, $5, $5),
+                ($3, $4, 'segregates', 0, 'Likely pathogenic', $5, $5)`,
+      [cases[1], carriers[1], cases[2], carriers[2], now]
+    )
+
+    const repo = new PostgresCohortSummaryRepository()
+    const readFlags = async (): Promise<
+      Array<{ alt: string; has_star: boolean; has_comment: boolean; acmg_best: string | null }>
+    > =>
+      (
+        await probe.query(
+          `SELECT alt, has_star, has_comment, acmg_best
+             FROM "${schema}".cohort_variant_summary WHERE chr = '7' ORDER BY alt`
+        )
+      ).rows
+    const expected = [
+      { alt: 'A', has_star: true, has_comment: true, acmg_best: 'Likely pathogenic' },
+      { alt: 'T', has_star: false, has_comment: false, acmg_best: null }
+    ]
+
+    await withClient((client) => repo.rebuild({ schema, client: client as never }))
+    expect(await readFlags()).toEqual(expected)
+
+    // The incremental path derives the same flags for brand-new rows.
+    await probe.query(`DELETE FROM "${schema}".cohort_variant_summary`)
+    await withClient(async (client) => {
+      for (const caseId of cases) {
+        await repo.incrementalAdd({ schema, client: client as never, caseId })
+      }
+    })
+    expect(await readFlags()).toEqual(expected)
+  }, 60_000)
+
   it('incrementalAdd preserves existing flags (OR semantics, no clear)', async () => {
     const caseA = await seedCase('add-flag-a')
     const caseB = await seedCase('add-flag-b')
