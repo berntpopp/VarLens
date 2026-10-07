@@ -22,7 +22,9 @@
  * runs and cleared by {@link ImportSummarySession.finish}; a session that dies
  * leaves it behind, and both the next session and the app start
  * (`DatabaseService.needsStartupRebuild`) then rebuild. A summary that is
- * stale or interrupted at session start is rebuilt once before the first file.
+ * stale or interrupted at session start is flagged stale and rebuilt once
+ * before the first file; if that rebuild fails the flag stays and the session
+ * is not exact.
  * Any failure falls back to the old behaviour: mark stale, rebuild at the end
  * — and so does a session whose remaining files are cheaper to rebuild once
  * than to merge one by one ({@link UpkeepPolicy}).
@@ -134,6 +136,9 @@ export function openImportSummarySession(
   let stmts: ReturnType<typeof prepareAddStatements> | undefined
   try {
     if (options.forceRebuild || isCohortSummaryStale(db) || isImportSessionOpen(db)) {
+      // Flag first: `rebuild` reports nothing, and only a rebuild that ran to
+      // its end clears the flag. A failed one must not pass for a current base.
+      db.exec(MARK_STALE_SQL)
       options.rebuild()
     }
     db.exec(sql.SET_IMPORT_SESSION_OPEN_SQL)
