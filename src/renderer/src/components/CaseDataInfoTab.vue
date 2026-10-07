@@ -117,6 +117,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useQuery } from '@pinia/colada'
 import ExternalIdsEditor from './case-data-info/ExternalIdsEditor.vue'
 import GeneListEditorDialog from './case-data-info/GeneListEditorDialog.vue'
 import PrefilteringSection from './case-data-info/PrefilteringSection.vue'
@@ -125,30 +126,14 @@ import { mdiChip, mdiFileImportOutline, mdiNoteTextOutline } from '@mdi/js'
 import { logService } from '../services/LogService'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
-import type { WindowAPI } from '../../../shared/types/api'
+import { caseDataInfoQuery } from '../queries/case-data-info'
+import { queryApi } from '../queries/gate'
+import { refetchAfterWrite } from '../queries/invalidation'
+import { queryKeys } from '../queries/keys'
 
 const props = defineProps<{
   caseId: number
 }>()
-
-interface DataInfo {
-  import_file_name: string | null
-  import_file_type: string | null
-  platform: string | null
-  platform_details: string | null
-  af_filter: string | null
-  gene_list_filter: string | null
-  region_filter: string | null
-  quality_filter: string | null
-  data_notes: string | null
-  gene_list_id: number | null
-  region_file_id: number | null
-}
-
-interface ExternalId {
-  id_type: string
-  id_value: string
-}
 
 interface GeneListItem {
   id: number
@@ -163,38 +148,35 @@ interface RegionFileItem {
   total_bases: number
 }
 
-interface CaseRequest {
-  caseId: number
-  generation: number
-}
+const DEFAULT_PLATFORMS = ['Exome', 'Genome', 'Targeted Panel']
 
-const loading = ref(true)
-const loadedCaseId = ref<number | null>(null)
-const dataInfo = ref<DataInfo | null>(null)
-const externalIds = ref<ExternalId[]>([])
+const { data: loaded, isPending: loading } = useQuery(() => caseDataInfoQuery(props.caseId))
 
+const dataInfo = computed(() => loaded.value?.dataInfo ?? null)
+const externalIds = computed(() => loaded.value?.externalIds ?? [])
+const idTypeSuggestions = computed(() => loaded.value?.idTypes ?? [])
+const platformSuggestions = computed(() =>
+  [...new Set([...DEFAULT_PLATFORMS, ...(loaded.value?.platforms ?? [])])].sort()
+)
+const geneLists = computed<GeneListItem[]>(() => loaded.value?.geneLists ?? [])
+const regionFiles = computed<RegionFileItem[]>(() => loaded.value?.regionFiles ?? [])
+
+// The edit form: filled once per case from the first result, then owned by
+// the user. A later refetch updates the lists above but never these fields.
+const formCaseId = ref<number | null>(null)
 const platform = ref<string | null>(null)
 const platformDetails = ref('')
 const afFilter = ref('')
 const qualityFilter = ref('')
 const dataNotes = ref('')
-
-// Suggestions from database
-const platformSuggestions = ref<string[]>(['Exome', 'Genome', 'Targeted Panel'])
-const idTypeSuggestions = ref<string[]>([])
-
-// Gene lists
-const geneLists = ref<GeneListItem[]>([])
 const selectedGeneListId = ref<number | null>(null)
+const selectedRegionFileId = ref<number | null>(null)
+
 const geneListDialog = ref(false)
 const editGeneListId = ref<number | null>(null)
-const geneListDialogRequest = ref<CaseRequest | null>(null)
-
-// Region files
-const regionFiles = ref<RegionFileItem[]>([])
-const selectedRegionFileId = ref<number | null>(null)
 const regionFileDialog = ref(false)
-const regionFileDialogRequest = ref<CaseRequest | null>(null)
+/** The case a child dialog was opened for; its result is ignored for any other. */
+const dialogCaseId = ref<number | null>(null)
 
 const geneListItems = computed(() =>
   geneLists.value.map((gl) => ({
@@ -210,107 +192,60 @@ const regionFileItems = computed(() =>
   }))
 )
 
-function getApi(): WindowAPI {
-  return window.api
-}
-
-const defaultPlatforms = ['Exome', 'Genome', 'Targeted Panel']
-let loadGeneration = 0
 let platformDebounce: ReturnType<typeof setTimeout> | null = null
 
-function resetLoadedState(): void {
-  loadedCaseId.value = null
-  dataInfo.value = null
-  externalIds.value = []
-  platform.value = null
-  platformDetails.value = ''
-  afFilter.value = ''
-  qualityFilter.value = ''
-  dataNotes.value = ''
-  platformSuggestions.value = [...defaultPlatforms]
-  idTypeSuggestions.value = []
-  geneLists.value = []
-  selectedGeneListId.value = null
-  geneListDialog.value = false
-  editGeneListId.value = null
-  geneListDialogRequest.value = null
-  regionFiles.value = []
-  selectedRegionFileId.value = null
-  regionFileDialog.value = false
-  regionFileDialogRequest.value = null
+function cancelPlatformDebounce(): void {
+  if (platformDebounce !== null) clearTimeout(platformDebounce)
+  platformDebounce = null
 }
 
-function isCurrentCaseRequest(caseId: number, generation: number): boolean {
-  return generation === loadGeneration && loadedCaseId.value === caseId && props.caseId === caseId
-}
-
-async function loadDataInfo(): Promise<void> {
-  const generation = ++loadGeneration
-  const caseId = props.caseId
-  if (platformDebounce !== null) {
-    clearTimeout(platformDebounce)
-    platformDebounce = null
-  }
-  resetLoadedState()
-  loading.value = true
-  try {
-    const api = getApi()
-    const [info, ids, platforms, idTypes, gLists, rFiles] = await Promise.all([
-      api.caseMetadata.getDataInfo(caseId),
-      api.caseMetadata.listExternalIds(caseId),
-      api.caseMetadata.distinctPlatforms(),
-      api.caseMetadata.distinctExternalIdTypes(),
-      api.geneLists.list(),
-      api.regionFiles.list()
-    ])
-    const nextDataInfo = unwrapIpcResult(info)
-    const nextExternalIds = unwrapIpcResult(ids) ?? []
-    const dbPlatforms = unwrapIpcResult(platforms) ?? []
-    const nextPlatforms = [...new Set([...defaultPlatforms, ...dbPlatforms])].sort()
-    const nextIdTypes = unwrapIpcResult(idTypes) ?? []
-    const nextGeneLists = unwrapIpcResult(gLists) ?? []
-    const nextRegionFiles = unwrapIpcResult(rFiles) ?? []
-
-    if (generation !== loadGeneration || props.caseId !== caseId) return
-    dataInfo.value = nextDataInfo
-    externalIds.value = nextExternalIds
-    platformSuggestions.value = nextPlatforms
-    idTypeSuggestions.value = nextIdTypes
-    geneLists.value = nextGeneLists
-    regionFiles.value = nextRegionFiles
-    platform.value = nextDataInfo?.platform ?? null
-    platformDetails.value = nextDataInfo?.platform_details ?? ''
-    afFilter.value = nextDataInfo?.af_filter ?? ''
-    qualityFilter.value = nextDataInfo?.quality_filter ?? ''
-    dataNotes.value = nextDataInfo?.data_notes ?? ''
-    selectedGeneListId.value = nextDataInfo?.gene_list_id ?? null
-    selectedRegionFileId.value = nextDataInfo?.region_file_id ?? null
-    loadedCaseId.value = caseId
-  } catch (e) {
-    if (generation === loadGeneration) {
-      logService.warn(
-        'Failed to load case data info: ' + formatErrorMessage(e, 'Unknown error'),
-        'case-data-info'
-      )
+watch(
+  [() => props.caseId, loaded],
+  ([caseId, result], [previousCaseId]) => {
+    if (caseId !== previousCaseId) {
+      cancelPlatformDebounce()
+      formCaseId.value = null
+      geneListDialog.value = false
+      editGeneListId.value = null
+      regionFileDialog.value = false
+      dialogCaseId.value = null
     }
-  } finally {
-    if (generation === loadGeneration) loading.value = false
-  }
+    if (formCaseId.value === caseId) return
+    const info = result?.dataInfo
+    platform.value = info?.platform ?? null
+    platformDetails.value = info?.platform_details ?? ''
+    afFilter.value = info?.af_filter ?? ''
+    qualityFilter.value = info?.quality_filter ?? ''
+    dataNotes.value = info?.data_notes ?? ''
+    selectedGeneListId.value = info?.gene_list_id ?? null
+    selectedRegionFileId.value = info?.region_file_id ?? null
+    if (result !== undefined) formCaseId.value = caseId
+  },
+  { immediate: true }
+)
+
+/** The form holds the current case's data; nothing may be written before. */
+function isFormReady(caseId: number = props.caseId): boolean {
+  return formCaseId.value === caseId && props.caseId === caseId
+}
+
+function warn(action: string, error: unknown): void {
+  logService.warn(
+    `Failed to ${action}: ${formatErrorMessage(error, 'Unknown error')}`,
+    'case-data-info'
+  )
 }
 
 async function save(): Promise<void> {
   const caseId = props.caseId
-  if (loadedCaseId.value !== caseId) return
+  if (!isFormReady(caseId)) return
   try {
     const platformVal =
       typeof platform.value === 'string' && platform.value.trim() !== ''
         ? platform.value.trim()
         : null
-    // wrapHandler resolves an IpcResult even on failure — a raw, discarded
-    // await here would swallow write failures silently (the catch below
-    // would never fire). Unwrap so a failure throws.
     unwrapIpcResult(
-      await getApi().caseMetadata.upsertDataInfo(caseId, {
+      await queryApi().caseMetadata.upsertDataInfo(caseId, {
         platform: platformVal,
         platform_details: platformDetails.value || null,
         af_filter: afFilter.value || null,
@@ -321,126 +256,86 @@ async function save(): Promise<void> {
       })
     )
   } catch (e) {
-    logService.warn(
-      'Failed to save case data info: ' + formatErrorMessage(e, 'Unknown error'),
-      'case-data-info'
-    )
+    warn('save case data info', e)
   }
 }
 
-async function addExternalId(idType: string, idValue: string): Promise<void> {
+/** Run an external-id write for the current case, then refetch its data. */
+async function writeExternalId(action: string, run: (caseId: number) => Promise<unknown>) {
   const caseId = props.caseId
-  const generation = loadGeneration
-  if (!isCurrentCaseRequest(caseId, generation)) return
+  if (!isFormReady(caseId)) return
+  const key = queryKeys.caseDataInfo(caseId)
   try {
-    const api = getApi().caseMetadata
-    // wrapHandler resolves an IpcResult even on failure — a raw, discarded
-    // await here would swallow write failures silently (the catch below
-    // would never fire, and the refresh calls below would still run).
-    unwrapIpcResult(await api.upsertExternalId(caseId, idType, idValue))
-    if (!isCurrentCaseRequest(caseId, generation)) return
-    const [ids, idTypes] = await Promise.all([
-      api.listExternalIds(caseId),
-      api.distinctExternalIdTypes()
-    ])
-    if (!isCurrentCaseRequest(caseId, generation)) return
-    externalIds.value = unwrapIpcResult(ids)
-    idTypeSuggestions.value = unwrapIpcResult(idTypes) ?? []
+    unwrapIpcResult(await run(caseId))
+    await refetchAfterWrite(key)
   } catch (e) {
-    logService.warn(
-      'Failed to add external ID: ' + formatErrorMessage(e, 'Unknown error'),
-      'case-data-info'
-    )
+    warn(action, e)
   }
 }
 
-async function deleteExternalId(idType: string): Promise<void> {
-  const caseId = props.caseId
-  const generation = loadGeneration
-  if (!isCurrentCaseRequest(caseId, generation)) return
-  try {
-    // wrapHandler resolves an IpcResult even on failure — unwrap so a
-    // failure throws BEFORE the optimistic UI removal below runs. Without
-    // this, a swallowed failure would still filter the row out of the UI
-    // while it remains in the database.
-    unwrapIpcResult(await getApi().caseMetadata.deleteExternalId(caseId, idType))
-    if (!isCurrentCaseRequest(caseId, generation)) return
-    externalIds.value = externalIds.value.filter((e) => e.id_type !== idType)
-  } catch (e) {
-    logService.warn(
-      'Failed to delete external ID: ' + formatErrorMessage(e, 'Unknown error'),
-      'case-data-info'
-    )
-  }
+function addExternalId(idType: string, idValue: string): Promise<void> {
+  return writeExternalId('add external ID', (caseId) =>
+    queryApi().caseMetadata.upsertExternalId(caseId, idType, idValue)
+  )
 }
 
-// Platform combobox: only save when a menu item is selected (not on every keystroke)
+function deleteExternalId(idType: string): Promise<void> {
+  return writeExternalId('delete external ID', (caseId) =>
+    queryApi().caseMetadata.deleteExternalId(caseId, idType)
+  )
+}
+
+// Platform combobox: debounced, so typing does not save on every keystroke.
 function onPlatformChange(): void {
-  // Debounce to avoid saving on every keystroke; immediate save on item selection
-  if (platformDebounce !== null) {
-    clearTimeout(platformDebounce)
-  }
-  const caseId = loadedCaseId.value
+  cancelPlatformDebounce()
+  const caseId = props.caseId
+  if (!isFormReady(caseId)) return
   platformDebounce = setTimeout(() => {
-    if (caseId === props.caseId) void save()
     platformDebounce = null
+    if (caseId === props.caseId) void save()
   }, 500)
 }
 
 function openGeneListEditor(): void {
-  if (loadedCaseId.value !== props.caseId) return
-  geneListDialogRequest.value = { caseId: props.caseId, generation: loadGeneration }
+  if (!isFormReady()) return
+  dialogCaseId.value = props.caseId
   editGeneListId.value = selectedGeneListId.value
   geneListDialog.value = true
 }
 
-async function onGeneListSaved(payload: {
-  listId: number
-  geneLists: GeneListItem[]
-}): Promise<void> {
-  const request = geneListDialogRequest.value
-  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
-  geneListDialogRequest.value = null
-  geneLists.value = payload.geneLists
-  selectedGeneListId.value = payload.listId
-  await save()
-}
-
-async function onGeneListDeleted(payload: { geneLists: GeneListItem[] }): Promise<void> {
-  const request = geneListDialogRequest.value
-  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
-  geneListDialogRequest.value = null
-  geneLists.value = payload.geneLists
-  selectedGeneListId.value = null
-  await save()
-}
-
 function openRegionFileImport(): void {
-  if (loadedCaseId.value !== props.caseId) return
-  regionFileDialogRequest.value = { caseId: props.caseId, generation: loadGeneration }
+  if (!isFormReady()) return
+  dialogCaseId.value = props.caseId
   regionFileDialog.value = true
 }
 
-async function onRegionFileImported(payload: {
-  regionFileId: number
-  regionFiles: RegionFileItem[]
-}): Promise<void> {
-  const request = regionFileDialogRequest.value
-  if (!request || !isCurrentCaseRequest(request.caseId, request.generation)) return
-  regionFileDialogRequest.value = null
-  regionFiles.value = payload.regionFiles
-  selectedRegionFileId.value = payload.regionFileId
+/**
+ * A child dialog changed the gene lists or region files: reload them, apply
+ * the selection it made and save. Ignored if the case changed meanwhile.
+ */
+async function applyDialogResult(select: () => void): Promise<void> {
+  const caseId = dialogCaseId.value
+  if (caseId === null || !isFormReady(caseId)) return
+  dialogCaseId.value = null
+  await refetchAfterWrite(queryKeys.caseDataInfo(caseId))
+  if (!isFormReady(caseId)) return
+  select()
   await save()
 }
 
-watch(() => props.caseId, loadDataInfo, { immediate: true })
+function onGeneListSaved(payload: { listId: number }): Promise<void> {
+  return applyDialogResult(() => (selectedGeneListId.value = payload.listId))
+}
 
-onBeforeUnmount(() => {
-  if (platformDebounce !== null) {
-    clearTimeout(platformDebounce)
-    platformDebounce = null
-  }
-})
+function onGeneListDeleted(): Promise<void> {
+  return applyDialogResult(() => (selectedGeneListId.value = null))
+}
+
+function onRegionFileImported(payload: { regionFileId: number }): Promise<void> {
+  return applyDialogResult(() => (selectedRegionFileId.value = payload.regionFileId))
+}
+
+onBeforeUnmount(cancelPlatformDebounce)
 
 // Exposed for component tests to assert loader/save/delete post-conditions
 // (dataInfo/externalIds/platformSuggestions/idTypeSuggestions, plus save(),

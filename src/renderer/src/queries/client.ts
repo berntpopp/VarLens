@@ -22,6 +22,13 @@ export const QUERY_DEFAULTS = {
   refetchOnReconnect: false
 } as const satisfies PiniaColadaOptions['queryOptions']
 
+/**
+ * For data people edit, in the web workspace several at once, with no event
+ * announcing another client's edit: refetched whenever a view showing it
+ * mounts or moves to another scope, as it was before the query cache.
+ */
+export const ALWAYS_STALE = 0
+
 /** Every failed query is logged here, once; consumers only read `error`. */
 const logFailedQueries = PiniaColadaQueryHooksPlugin({
   onError(error, entry) {

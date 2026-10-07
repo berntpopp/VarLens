@@ -41,6 +41,10 @@ export const queryKeys = {
   tags: () => [...root(), 'tags'] as const,
   filterPresets: () => [...root(), 'filter-presets'] as const,
   caseIds: () => [...root(), 'case-ids'] as const,
+  metricDefinitions: () => [...root(), 'metric-definitions'] as const,
+  caseComments: (caseId: number) => [...caseScope(caseId), 'comments'] as const,
+  caseMetrics: (caseId: number) => [...caseScope(caseId), 'metrics'] as const,
+  caseDataInfo: (caseId: number) => [...caseScope(caseId), 'data-info'] as const,
   filterOptions: (caseId: number) => [...caseScope(caseId), 'filter-options'] as const,
   variantTags: (caseId: number, variantId: number) =>
     [...caseScope(caseId), VARIANT_TAGS, variantId] as const,

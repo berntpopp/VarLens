@@ -2,16 +2,9 @@ import { defineQueryOptions, useQueryCache } from '@pinia/colada'
 
 import type { Tag } from '../../../shared/types/database-entities'
 import { unwrapIpcResult } from '../../../shared/types/errors'
+import { ALWAYS_STALE } from './client'
 import { canQuery, queryApi } from './gate'
 import { queryKeys } from './keys'
-
-/**
- * Tags are edited by people, in the web workspace by several at once, and no
- * event announces another client's edit. So unlike the rest of the cache they
- * are refetched whenever a view showing them mounts or moves to another
- * variant, as they were before the query cache.
- */
-const ALWAYS_STALE = 0
 
 /** Every tag of the open database. */
 export const tagListQuery = defineQueryOptions(() => ({

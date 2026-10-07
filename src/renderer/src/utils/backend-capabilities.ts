@@ -27,6 +27,8 @@ export type CapabilityPath =
   | 'workflow.tags'
   | 'workflow.annotations'
   | 'workflow.panels'
+  | 'workflow.caseComments'
+  | 'workflow.caseMetrics'
   | 'workflow.filterPresets'
 
 export const LABELS: Record<CapabilityPath, string> = {
@@ -54,6 +56,8 @@ export const LABELS: Record<CapabilityPath, string> = {
   'workflow.tags': 'tags',
   'workflow.annotations': 'annotations',
   'workflow.panels': 'panels',
+  'workflow.caseComments': 'case comments',
+  'workflow.caseMetrics': 'case metrics',
   'workflow.filterPresets': 'filter presets'
 }
 

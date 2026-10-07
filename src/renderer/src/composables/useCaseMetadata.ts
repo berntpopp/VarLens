@@ -7,11 +7,8 @@
 
 import { ref, shallowRef, triggerRef } from 'vue'
 import { logService } from '../services/LogService'
-import { useCaseComments } from './useCaseComments'
-import { useCaseMetrics } from './useCaseMetrics'
 import { useApiService } from './useApiService'
 import { LruMap } from '../../../shared/utils/lru-map'
-import { PER_CASE_CACHE_LIMIT } from './per-case-cache'
 import {
   mdiAccountAlert,
   mdiAccountCheck,
@@ -32,7 +29,7 @@ import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
-const MAX_METADATA_CACHE_SIZE = PER_CASE_CACHE_LIMIT
+const MAX_METADATA_CACHE_SIZE = 200
 
 // Cache full metadata by caseId — shallowRef avoids deep reactivity overhead
 // on the Map's values (FullCaseMetadata objects are never observed individually)
@@ -476,31 +473,24 @@ export function useCaseMetadata() {
     loadingStates.value.clear()
     triggerRef(loadingStates)
     cohortGroupsCache.value = []
-    useCaseComments().clearCache()
-    useCaseMetrics().clearCache()
   }
 
-  // Single entry point for evicting one case from EVERY per-case cache
-  // (metadata, comments, metrics) — call when a case is deleted. A new
-  // per-case cache must be added here and in invalidateAllCases().
+  // Evict one case's metadata — call when a case is deleted. Comments and
+  // metrics live in the query cache and follow `invalidateServerData`.
   function invalidateCase(caseId: number): void {
     metadataCache.value.delete(caseId)
     triggerCacheUpdate()
     loadingStates.value.delete(caseId)
     triggerRef(loadingStates)
-    useCaseComments().invalidateCase(caseId)
-    useCaseMetrics().invalidateCase(caseId)
   }
 
-  // Evict every case but keep the global catalogs (cohort groups, metric
-  // definitions) — call when all cases are deleted.
+  // Evict every case but keep the cohort groups — call when all cases are
+  // deleted.
   function invalidateAllCases(): void {
     metadataCache.value.clear()
     triggerRef(metadataCache)
     loadingStates.value.clear()
     triggerRef(loadingStates)
-    useCaseComments().clearCache()
-    useCaseMetrics().invalidateAllCases()
   }
 
   return {

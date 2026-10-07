@@ -136,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref } from 'vue'
 import {
   useCaseComments,
   COMMENT_CATEGORIES,
@@ -152,8 +152,13 @@ const props = defineProps<{
   caseId: number
 }>()
 
-const { loadComments, getComments, isLoading, createComment, updateComment, deleteComment } =
-  useCaseComments()
+const {
+  comments,
+  isLoading: loading,
+  createComment,
+  updateComment,
+  deleteComment
+} = useCaseComments(() => props.caseId)
 
 // New comment form
 const newCategory = ref<CommentCategory>('Clinical Note')
@@ -165,24 +170,11 @@ const editingId = ref<number | null>(null)
 const editContent = ref('')
 const isSaving = ref(false)
 
-// Computed
-const loading = computed(() => isLoading(props.caseId))
-const comments = computed(() => getComments(props.caseId))
-
-// Load on mount/caseId change
-watch(
-  () => props.caseId,
-  async (id) => {
-    if (id) await loadComments(id)
-  },
-  { immediate: true }
-)
-
 async function handleCreate(): Promise<void> {
   if (!newContent.value.trim()) return
   isCreating.value = true
   try {
-    await createComment(props.caseId, newCategory.value, newContent.value.trim())
+    await createComment(newCategory.value, newContent.value.trim())
     newContent.value = ''
   } catch (error) {
     logService.error(
@@ -213,7 +205,7 @@ async function handleUpdate(commentId: number): Promise<void> {
   if (!editContent.value.trim()) return
   isSaving.value = true
   try {
-    await updateComment(props.caseId, commentId, editContent.value.trim())
+    await updateComment(commentId, editContent.value.trim())
     editingId.value = null
     editContent.value = ''
   } catch (error) {
@@ -233,7 +225,7 @@ async function handleUpdate(commentId: number): Promise<void> {
 
 async function handleDelete(commentId: number): Promise<void> {
   try {
-    await deleteComment(props.caseId, commentId)
+    await deleteComment(commentId)
   } catch (error) {
     logService.error(
       'Failed to delete comment: ' +
