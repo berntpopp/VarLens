@@ -88,7 +88,9 @@ describe('web upload boundary', () => {
     expect(uploadStaging).toContain("const UPLOAD_REF_PREFIX = 'web-upload:'")
     expect(batchImport).toContain('resolveWebUploadRef')
     // ADR 0002: no web re-implementation of the batch loop or duplicate check.
-    expect(batchImport).toContain('startSessionBatchImport(')
+    // The web route enqueues the shared job and answers at once (no held request).
+    expect(batchImport).toContain('enqueueSessionBatchImport(')
+    expect(batchImport).not.toContain('await enqueueSessionBatchImport(')
     expect(batchImport).toContain('checkSessionDuplicates(')
     expect(batchImport).not.toContain('startImport(')
     expect(shared).toContain("'import_batch'")

@@ -90,3 +90,35 @@ export function withSession(
     }
   })
 }
+
+/**
+ * `batch-import:start` answers with a job id as soon as the batch is accepted.
+ * Start one and wait for its result through `batch-import:status`, as a client
+ * that missed the completion event would.
+ */
+export async function startBatchAndAwaitResult(
+  overrides: Record<string, { handle: (...args: never[]) => unknown }>,
+  args: unknown[],
+  request: unknown,
+  reply: unknown,
+  deps: DispatcherDeps
+): Promise<{ accepted: unknown; result: unknown }> {
+  const call = (key: string, callArgs: unknown[]): unknown =>
+    (overrides[key].handle as (...a: unknown[]) => unknown)(callArgs, request, reply, deps)
+  const accepted = (await call('batch-import:start', args)) as {
+    accepted?: boolean
+    runId?: string
+  }
+  if (accepted?.accepted !== true) return { accepted, result: accepted }
+  for (let attempt = 0; attempt < 2000; attempt++) {
+    const status = (await call('batch-import:status', [accepted.runId])) as {
+      state: string
+      result?: unknown
+      error?: unknown
+    }
+    if (status.state === 'completed') return { accepted, result: status.result }
+    if (status.state !== 'running') throw new Error(`batch run ${status.state}`)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error('batch run did not finish')
+}

@@ -8,6 +8,7 @@
 import type { WindowAPI } from '../../shared/types/api'
 import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
 import { isIpcError } from '../../shared/types/errors'
+import { startBatchImportRun } from './batch-import-run'
 import {
   exportCohortDownload,
   exportPanelBedDownload,
@@ -87,6 +88,12 @@ const importApi: Partial<WindowAPI['import']> = {
 }
 
 const batchImportApi: Partial<WindowAPI['batchImport']> = {
+  // Accepted at once with a job id; the result arrives by event (or status poll).
+  start: (filePaths, duplicateStrategy, stripText, runId) =>
+    startBatchImportRun([filePaths, duplicateStrategy, stripText, runId], {
+      invoke: httpInvoke,
+      subscribe: subscribeWebEvent
+    }),
   onProgress: (callback) => subscribeWebEvent('batch-import:progress', callback),
   onComplete: (callback) => subscribeWebEvent('batch-import:complete', callback),
   onFileComplete: (callback) => subscribeWebEvent('batch-import:fileComplete', callback),

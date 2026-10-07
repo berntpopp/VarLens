@@ -15,6 +15,12 @@ export function buildBatchImportOpenApiPaths(): Record<string, OpenApiPathItem> 
       response: BatchImportUnknownResponseSchema,
       forbiddenDescription
     }),
+    '/api/batch-import/status': dispatcherMethodOperation({
+      tag: 'batch-import',
+      summary: 'Report whether a batch import run is running, completed or failed, with its result',
+      body: BatchImportInvokeBodySchemas.status,
+      response: BatchImportUnknownResponseSchema
+    }),
     '/api/batch-import/inspectZip': dispatcherMethodOperation({
       tag: 'batch-import',
       summary: 'Report whether an uploaded ZIP archive has encrypted entries',

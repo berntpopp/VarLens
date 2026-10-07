@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { SelectedCaseInput } from './useAppState'
 import type { BatchResult, WindowAPI } from '../../../shared/types/api'
+import type { Job } from '../../../shared/types/jobs'
 import type { useImportStatusStore } from '../stores/importStatusStore'
 import type AppDialogHostType from '../components/AppDialogHost.vue'
 import { useVariantColumnMeta } from './useVariantColumnMeta'
@@ -46,6 +47,11 @@ export function useShellLifecycle({
 }: UseShellLifecycleOptions) {
   let cleanupBatchImportComplete: (() => void) | null = null
   let cleanupBatchFileComplete: (() => void) | null = null
+  let cleanupBatchJobFollower: (() => void) | null = null
+  /** Runs this page started and already finished (their job event comes later). */
+  const finishedOwnRuns = new Set<string>()
+  /** Files done per followed job, to tell a finished file from other progress. */
+  const followedJobProgress = new Map<string, number>()
   const variantColumnMeta = useVariantColumnMeta()
   const { notifyDataAdded } = useLiveDataSignal()
 
@@ -107,6 +113,34 @@ export function useShellLifecycle({
       // Consume ownership here, after accepting the event. ImportWizard uses
       // its own run ID, so listener order cannot suppress its terminal update.
       importStore.clearBatchRun(result.runId)
+      finishedOwnRuns.add(result.runId)
+      void handleBatchImportComplete()
+    })
+  }
+
+  // A batch import this page did not start: the page was reloaded while it
+  // ran (the job goes on in the background), or another window or user
+  // started it. Its per-run events are not ours, but its job snapshots are,
+  // so the case list and cohort still follow it file by file and reload once
+  // when it ends.
+  const registerBatchJobFollower = (): (() => void) | null => {
+    if (!api?.jobs?.onChanged) return null
+
+    return api.jobs.onChanged((job: Job) => {
+      if (job.kind !== 'import_batch') return
+      const runId = (job.params as { runId?: unknown } | undefined)?.runId
+      if (typeof runId === 'string') {
+        if (importStore.isCurrentBatchRun(runId) || finishedOwnRuns.has(runId)) return
+      }
+      if (job.status === 'queued' || job.status === 'running') {
+        const done = job.progress?.current ?? 0
+        if (done > (followedJobProgress.get(job.id) ?? 0)) {
+          followedJobProgress.set(job.id, done)
+          liveRefresh.call()
+        }
+        return
+      }
+      followedJobProgress.delete(job.id)
       void handleBatchImportComplete()
     })
   }
@@ -123,11 +157,13 @@ export function useShellLifecycle({
   onMounted(() => {
     cleanupBatchImportComplete = registerBatchImportCompletionListener()
     cleanupBatchFileComplete = registerBatchFileCompleteListener()
+    cleanupBatchJobFollower = registerBatchJobFollower()
   })
 
   onUnmounted(() => {
     cleanupBatchImportComplete?.()
     cleanupBatchFileComplete?.()
+    cleanupBatchJobFollower?.()
     liveRefresh.cancel()
   })
 
@@ -136,6 +172,7 @@ export function useShellLifecycle({
     handleImportComplete,
     handleBatchImportComplete,
     setupBatchImportCompletionListener: registerBatchImportCompletionListener,
-    setupBatchFileCompleteListener: registerBatchFileCompleteListener
+    setupBatchFileCompleteListener: registerBatchFileCompleteListener,
+    setupBatchJobFollower: registerBatchJobFollower
   }
 }

@@ -166,6 +166,8 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   // Encrypted-entry probe on the caller's own uploaded ZIP (P-08).
   'batch-import:inspectZip': read('analyst'),
   'batch-import:checkDuplicates': read('analyst'),
+  // Result of the caller's own batch (case and file names): audited like a read.
+  'batch-import:status': read('analyst'),
 
   // ── jobs ────────────────────────────────────────────────────────────────
   'jobs:get': readExempt(POLL),
