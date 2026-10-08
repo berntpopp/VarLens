@@ -25,6 +25,7 @@ jobs:
   rehearse:
     name: Rehearse Windows signing
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read # required to read another workflow run's artifacts

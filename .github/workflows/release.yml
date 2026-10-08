@@ -12,6 +12,7 @@ jobs:
   create-release:
     name: Create Draft Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
       actions: read # gh run list / gh api .../artifacts read another workflow's runs
@@ -163,6 +164,7 @@ jobs:
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GITLEAKS_VERSION: 8.30.1
     steps:
@@ -184,6 +186,7 @@ jobs:
     name: Promote Linux + macOS installers
     needs: [create-release, secrets-scan]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read # required to read another workflow run's artifacts
@@ -251,6 +254,7 @@ jobs:
     name: Sign Windows executables
     needs: [create-release, secrets-scan]
     runs-on: windows-latest
+    timeout-minutes: 40
     environment: release
     permissions:
       contents: read
@@ -512,6 +516,7 @@ jobs:
     name: Publish Release
     needs: [create-release, promote-unix, sign-windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
 
