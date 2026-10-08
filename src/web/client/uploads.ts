@@ -57,10 +57,6 @@ function ensureUploadCancelListener(): void {
 // Vite's `base` config materialises here at build time. The browser
 // loads the SPA from BASE_URL (e.g. `/varlens/`), so API calls have to
 
-async function uploadImportFile(file: File): Promise<UploadedFileRef> {
-  return await uploadImportFileWithProgress(file, 0, 1)
-}
-
 async function uploadImportFileWithProgress(
   file: File,
   fileIndex: number,
@@ -183,12 +179,21 @@ async function uploadImportFileWithProgress(
 }
 
 export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
-  if (files.length === 1) {
-    return [await uploadImportFile(files[0])]
-  }
   const uploaded: UploadedFileRef[] = []
-  for (let index = 0; index < files.length; index++) {
-    uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+  try {
+    for (let index = 0; index < files.length; index++) {
+      uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+    }
+  } catch (error) {
+    // Refused or cancelled part-way: nothing will import the files already
+    // staged, and left alone they count against the per-user cap for 24 h.
+    for (const { ref } of uploaded) {
+      void fetch(`${API_BASE}/import/upload?ref=${encodeURIComponent(ref)}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      }).catch(() => undefined)
+    }
+    throw error
   }
   return uploaded
 }

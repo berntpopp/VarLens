@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
 import {
   clearStagedUploads,
+  holdWebUploads,
   registerImportUploadRoutes,
   resolveWebUploadRef,
   stageExistingFileUpload
@@ -42,6 +43,13 @@ const upload = (userId: number, bytes: number): ReturnType<FastifyInstance['inje
       'x-test-user': String(userId)
     },
     payload: Buffer.alloc(bytes, 'x')
+  })
+
+const discard = (userId: number, ref: string): ReturnType<FastifyInstance['inject']> =>
+  app.inject({
+    method: 'DELETE',
+    url: `/api/import/upload?ref=${encodeURIComponent(ref)}`,
+    headers: { 'x-test-user': String(userId) }
   })
 
 beforeEach(async () => {
@@ -77,6 +85,43 @@ describe('per-user staged bytes cap (#498)', () => {
     expect(stagedDirs(7)).toHaveLength(2)
 
     expect((await upload(8, 6)).statusCode).toBe(200)
+  })
+
+  test('discarding the uploads of a refused selection frees the cap at once', async () => {
+    vi.stubEnv('VARLENS_WEB_MAX_STAGED_BYTES_PER_USER', '10')
+    const first = (await upload(7, 6)).json().ref as string
+    const second = (await upload(7, 4)).json().ref as string
+    const refused = await upload(7, 1)
+    expect(refused.statusCode).toBe(413)
+    expect(refused.json().message).toContain('were discarded')
+
+    expect((await discard(7, first)).statusCode).toBe(204)
+    expect((await discard(7, second)).statusCode).toBe(204)
+    // Idempotent: a ref that is already gone is not an error.
+    expect((await discard(7, first)).statusCode).toBe(204)
+
+    expect((await upload(7, 10)).statusCode).toBe(200)
+    await vi.waitFor(() => expect(stagedDirs(7)).toHaveLength(1))
+  })
+
+  test('discard leaves the uploads of other users and of a running import alone', async () => {
+    const ref = (await upload(7, 6)).json().ref as string
+
+    expect((await discard(8, ref)).statusCode).toBe(204)
+    expect(resolveWebUploadRef(ref, 7)).not.toBeNull()
+
+    const release = holdWebUploads([ref])
+    expect((await discard(7, ref)).statusCode).toBe(409)
+    expect(resolveWebUploadRef(ref, 7)).not.toBeNull()
+    release()
+  })
+
+  test('parallel uploads cannot together pass the cap', async () => {
+    vi.stubEnv('VARLENS_WEB_MAX_STAGED_BYTES_PER_USER', '10')
+    const codes = (await Promise.all([upload(7, 6), upload(7, 6), upload(7, 6)])).map(
+      (response) => response.statusCode
+    )
+    expect(codes.filter((code) => code === 200)).toHaveLength(1)
   })
 
   test('a single upload over the cap leaves nothing on disk', async () => {

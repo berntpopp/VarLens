@@ -263,6 +263,11 @@ export const HTTP_ROUTE_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
     'api_write import:upload (upload staging)',
     'analyst'
   ),
+  /** DELETE /api/import/upload — the caller drops their own staged, never-imported file. */
+  'http:import:discardUpload': writeExempt(
+    "Removes only the caller's own staged upload; no stored data changes.",
+    'analyst'
+  ),
   /** GET /api/download/:token — redeems a grant and streams the artifact. */
   'http:export:download': readAuditedByHandler(
     'api_read export:variants | export:cohort | panels:exportBed',
