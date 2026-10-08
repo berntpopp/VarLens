@@ -22,8 +22,6 @@ export interface AssociationConfig {
 }
 
 /**
- * Variant-level filters applied before association.
- *
  * Variant-level filters that select the sites of an association run. Every
  * field is applied to `variants` rows by both AssociationDataBuilders; a
  * filter that needs the cohort summary (ACMG class, cohort frequency) is not

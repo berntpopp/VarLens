@@ -128,15 +128,15 @@ describe('complete-site rule (#520)', () => {
     expect(ba.groupB_carrier_count).toBe(ab.groupA_carrier_count)
   })
 
-  it('a site no tested sample calls is excluded: no_called_alleles', () => {
-    // Neither sample has its covariate, so nobody is left to compute a frequency from.
+  it('when no sample has complete covariates, falls back to allIds for frequencies and Fisher still runs', () => {
+    // Neither sample has its covariate, but Fisher still counts every sample.
     const covariates = new Map([
       [1, [NaN]],
       [2, [NaN]]
     ])
     const [gene] = buildGeneContingencyData([row(1, '0/1')], [1], [2], covariates)
-    expect(gene.sites_excluded).toEqual({ ...NONE, no_called_alleles: 1 })
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[], []])
+    expect(gene.sites_excluded).toEqual(NONE)
+    expect(gene.samples.map((s) => s.dosages)).toEqual([[1], [0]])
   })
 
   it('a gene whose every site is excluded is reported, not tested', () => {

@@ -721,17 +721,15 @@ export const AssociationConfigSchema = z.object({
   primary_test: z.enum(['fisher', 'logistic_burden']),
   weight_scheme: z.enum(['uniform', 'beta_maf', 'beta_maf_cadd']),
   covariates: z.array(z.string()),
-  filters: z
-    .object({
-      gnomad_af_max: z.number().min(0).max(1).optional(),
-      cadd_min: z.number().min(0).max(DOMAIN_CONFIG.MAX_CADD_SCORE).optional(),
-      consequences: z.array(z.string()).optional(),
-      gene_list: z.array(z.string()).optional(),
-      // Parity fields with Paths 1/2 (FilterIpcParams subset)
-      clinvars: z.array(z.string()).optional(),
-      funcs: z.array(z.string()).optional(),
-      column_filters: z.record(z.string(), ColumnFilterSchema).optional()
-    }),
+  filters: z.object({
+    gnomad_af_max: z.number().min(0).max(1).optional(),
+    cadd_min: z.number().min(0).max(DOMAIN_CONFIG.MAX_CADD_SCORE).optional(),
+    consequences: z.array(z.string()).optional(),
+    gene_list: z.array(z.string()).optional(),
+    clinvars: z.array(z.string()).optional(),
+    funcs: z.array(z.string()).optional(),
+    column_filters: z.record(z.string(), ColumnFilterSchema).optional()
+  }),
   max_threads: z.number().int().min(1).max(64).default(4)
 })
 

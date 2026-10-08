@@ -161,7 +161,10 @@ export const mockApi: WindowAPI = {
       const startIndex = offset ?? 0
       const data = filtered.slice(startIndex, startIndex + limit)
 
-      return { data, total_count: filtered.length }
+      return {
+        data,
+        total_count: filtered.length
+      }
     },
     geneSymbols: async (caseId: number, query: string, limit = 50) => {
       const queryLower = query.toLowerCase()

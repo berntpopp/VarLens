@@ -256,10 +256,11 @@ export function buildGeneContingencyData(
   const allIds = [...groupA_ids, ...groupB_ids]
   const groupASet = new Set(groupA_ids)
   const testedIds = allIds.filter((id) => hasCompleteCovariates(covariateMap.get(id) ?? []))
+  const frequencyIds = testedIds.length > 0 ? testedIds : allIds
   const results: GeneContingencyData[] = []
   for (const [geneSymbol, variantMap] of groupRows(rows)) {
     // Frequencies and weights describe the samples the regression tests (burden.ts).
-    const { sites, sites_excluded } = eligibleSites(variantMap, allIds, testedIds)
+    const { sites, sites_excluded } = eligibleSites(variantMap, allIds, frequencyIds)
     results.push({
       gene_symbol: geneSymbol,
       ...carrierCounts(sites, groupA_ids, groupB_ids),

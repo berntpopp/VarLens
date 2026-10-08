@@ -90,6 +90,8 @@ Spec: `.planning/specs/2026-10-08-burden-test-eligible-sites.md`. Code:
   is a separate spec.
 - Burden test: autosomes only. chrX (phase 2 of the spec: sex, pseudoautosomal regions, male
   coding), chrY and MT are not tested.
+- Burden test: chromosome names must match exactly across cohorts; 'chr1' and '1' are treated as
+  two different sites.
 - Burden test: `1` and `0/1` rows of one case agree in dosage and count as one copy; the ploidy
   disagreement is not detected.
 - Cohort summary and carrier list: conflicting duplicate calls resolve to the highest dosage

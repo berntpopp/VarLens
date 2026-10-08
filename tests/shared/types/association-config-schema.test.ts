@@ -17,7 +17,7 @@ describe('AssociationConfigSchema', () => {
         max_internal_af: 0.1
       }
     })
-    // The two cohort-summary filters were accepted and then dropped: they are not accepted now.
+    // The two cohort-summary filters were accepted and then dropped: they are stripped now.
     expect(parsed.filters).toEqual({ gnomad_af_max: 0.01, clinvars: ['Pathogenic'] })
   })
 })
