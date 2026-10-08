@@ -63,14 +63,17 @@ jobs:
         if: steps.verified.outputs.valid != 'true'
         id: electron-ver
         run: |
-          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          {
+            echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
+            echo "node-abi=$(node -p 'process.versions.modules')"
+            echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
+          } >> "$GITHUB_OUTPUT"
       - name: Restore native ABI cache
         if: steps.verified.outputs.valid != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
       - name: Install dependencies
         if: steps.verified.outputs.valid != 'true'
         run: npm ci
