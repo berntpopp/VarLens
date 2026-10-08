@@ -129,6 +129,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0025',
     name: 'annotation_severity_ranks',
     fileName: '0025_annotation_severity_ranks.sql'
+  },
+  {
+    version: '0026',
+    name: 'summary_genotype_classes',
+    fileName: '0026_summary_genotype_classes.sql'
   }
 ]
 

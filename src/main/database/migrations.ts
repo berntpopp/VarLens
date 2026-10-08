@@ -17,7 +17,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 41
+export const LATEST_SQLITE_SCHEMA_VERSION = 42
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -65,6 +65,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 41
  * - 39: cohort_summary_meta.unique_variant_count — exact counter for the cohort tile (#460)
  * - 40: cases.import_status
  * - 41: impact_rank / clinvar_rank on variants and the cohort summary (#469)
+ * - 42: cohort summary het/hom counts follow the shared genotype classes (mirrors PG 0026)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1891,6 +1892,24 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 41) {
     migrateSeverityRanks(db)
     db.exec('PRAGMA user_version = 41')
+  }
+
+  // v42: a split multi-allelic genotype (`1/.`) counts as het
+  // (src/shared/utils/genotype.ts). The stored counts predate that: flag a
+  // populated summary stale, the app start rebuilds it.
+  if (currentVersion < 42) {
+    const summaryTables = db
+      .prepare(
+        "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cohort_variant_summary', 'cohort_summary_meta')"
+      )
+      .get() as { c: number }
+    if (
+      summaryTables.c === 2 &&
+      db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
+    ) {
+      db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
+    }
+    db.exec('PRAGMA user_version = 42')
   }
 }
 
