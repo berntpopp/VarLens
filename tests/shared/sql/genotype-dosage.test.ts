@@ -37,6 +37,12 @@ describe('GT_DOSAGE_SQL cross-check with gtToDosage', () => {
     ['1|.', 1],
     ['.|1', 1],
     ['0/.', null],
+    // Only the four approved partial spellings carry a dosage.
+    ['./2', null],
+    ['2/.', null],
+    ['1/./1', null],
+    ['./foo', null],
+    ['1/1/.', null],
     ['./.', null],
     ['.|.', null],
     ['.', null],

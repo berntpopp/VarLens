@@ -50,7 +50,7 @@ export function otherZygosityCount(row: {
  * - ./., .|., . → null (missing)
  * - Haploid: 0 → 0, 1 → 1
  * - Multi-allelic: counts non-zero alleles (e.g., 0/2 → 1, 2/2 → 2)
- * - Partly missing: the called ALT alleles (1/. → 1); without one, null (0/. → null)
+ * - Partly missing: 1 for the four het spellings (1/. ./1 1|. .|1), null for any other
  */
 export function gtToDosage(gt: string | null | undefined): number | null {
   if (gt == null) return null
@@ -75,10 +75,11 @@ export function gtToDosage(gt: string | null | undefined): number | null {
     case '.':
       return null
     default: {
+      // The partial spellings of the het class, and no other partial string.
+      if (genotypeZygosity(gt) === 'het') return 1
       const alleles = gt.split(/[/|]/)
-      const altCount = alleles.filter((a) => a !== '0' && a !== '.').length
-      if (alleles.some((a) => a === '.')) return altCount > 0 ? altCount : null
-      return altCount
+      if (alleles.some((a) => a === '.')) return null
+      return alleles.filter((a) => a !== '0').length
     }
   }
 }
