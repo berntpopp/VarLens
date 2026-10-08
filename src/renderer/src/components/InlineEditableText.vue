@@ -38,12 +38,15 @@ interface Props {
   loading?: boolean
   /** Display only (e.g. viewer role): no edit affordance. */
   readonly?: boolean
+  /** Saves the value; the editor stays open, text kept, unless it resolves true. */
+  save?: (value: string | null) => Promise<boolean>
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Click to add...',
   loading: false,
-  readonly: false
+  readonly: false,
+  save: undefined
 })
 
 const emit = defineEmits<{
@@ -62,9 +65,14 @@ const startEdit = () => {
   })
 }
 
-const saveEdit = () => {
+const saveEdit = async () => {
   const trimmed = editValue.value.trim()
-  emit('update:modelValue', trimmed.length > 0 ? trimmed : null)
+  const value = trimmed.length > 0 ? trimmed : null
+  if (props.save) {
+    if (!(await props.save(value))) return
+  } else {
+    emit('update:modelValue', value)
+  }
   isEditing.value = false
 }
 

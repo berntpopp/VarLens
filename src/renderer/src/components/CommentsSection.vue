@@ -18,12 +18,14 @@
           <v-icon size="small" :icon="mdiDelete" />
         </v-btn>
       </div>
+      <!-- Keyed by variant: an editor kept open by a failed save must not follow to the next one -->
       <InlineEditableText
+        :key="variantKey(variant)"
         :model-value="globalComment"
         placeholder="Add a global comment..."
         :loading="globalSaving"
         :readonly="!canWrite"
-        @update:model-value="handleGlobalSave"
+        :save="handleGlobalSave"
       />
       <div v-if="globalTimestamps" class="text-body-small text-muted mt-1">
         {{ formatTimestamp(globalTimestamps.created_at) }}
@@ -49,12 +51,14 @@
           <v-icon size="small" :icon="mdiDelete" />
         </v-btn>
       </div>
+      <!-- Keyed by variant: an editor kept open by a failed save must not follow to the next one -->
       <InlineEditableText
+        :key="variantKey(variant)"
         :model-value="perCaseComment"
         placeholder="Add a case-specific comment..."
         :loading="perCaseSaving"
         :readonly="!canWrite"
-        @update:model-value="handlePerCaseSave"
+        :save="handlePerCaseSave"
       />
       <div v-if="perCaseTimestamps" class="text-body-small text-muted mt-1">
         {{ formatTimestamp(perCaseTimestamps.created_at) }}
@@ -84,6 +88,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAnnotations } from '../composables/useAnnotations'
+import { variantKey } from '../composables/annotation-cache'
 import InlineEditableText from './InlineEditableText.vue'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
@@ -165,11 +170,11 @@ const perCaseTimestamps = computed(() => {
     : null
 })
 
-// Save handlers
-const handleGlobalSave = async (value: string | null) => {
+// Save handlers: resolve false when nothing was saved, so the editor keeps the text
+const handleGlobalSave = async (value: string | null): Promise<boolean> => {
   globalSaving.value = true
   try {
-    await upsertGlobalComment(
+    return await upsertGlobalComment(
       props.variant.chr,
       props.variant.pos,
       props.variant.ref,
@@ -181,25 +186,25 @@ const handleGlobalSave = async (value: string | null) => {
   }
 }
 
-const handlePerCaseSave = async (value: string | null) => {
-  if (props.caseId === null) return
+const handlePerCaseSave = async (value: string | null): Promise<boolean> => {
+  if (props.caseId === null) return false
 
   // For Variant type, we have id directly
   // For CohortVariant, we don't have a per-case variant ID - this shouldn't be called in cohort mode
   if (props.mode === 'cohort') {
     logService.warn('Per-case comment save called in cohort mode', 'comments')
-    return
+    return false
   }
 
   const variantId = (props.variant as Variant).id
   if (typeof variantId !== 'number') {
     logService.error('Variant ID not available for per-case comment', 'comments')
-    return
+    return false
   }
 
   perCaseSaving.value = true
   try {
-    await upsertPerCaseComment(
+    return await upsertPerCaseComment(
       props.caseId,
       variantId,
       props.variant.chr,
