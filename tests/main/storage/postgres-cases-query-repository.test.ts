@@ -67,6 +67,8 @@ describe('PostgresCasesQueryRepository', () => {
       ['%new%']
     )
     const rowsSql = String(pool.query.mock.calls[0]?.[0])
+    // Cases that tie on the sort column need a unique tiebreaker to page stably (#503).
+    expect(rowsSql).toMatch(/ORDER BY c\.\w+ (ASC|DESC), c\.id\s/)
     const groupBySql = rowsSql.slice(rowsSql.indexOf('GROUP BY'), rowsSql.indexOf('ORDER BY'))
     for (const projectedCaseColumn of [
       'c.id',

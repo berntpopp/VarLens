@@ -79,7 +79,7 @@ export class PostgresAuditLogRepository {
       `SELECT *
        FROM ${AUDIT_TABLE}
        ${whereSql}
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams
     )
