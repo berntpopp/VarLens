@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -70,5 +70,87 @@ describe('AcmgClassificationPanel confirm step', () => {
     const bar = wrapper.find('[data-testid="acmg-apply-bar"]')
     expect(bar.exists()).toBe(true)
     expect(bar.text()).toContain('PVS1')
+  })
+
+  describe('leaving with an unsaved draft', () => {
+    type Leave = { confirmLeave: () => Promise<boolean> | null }
+    const click = (id: string): void =>
+      document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!.click()
+
+    async function draftPanel(save?: () => Promise<boolean>) {
+      const wrapper = mount(AcmgClassificationPanel, {
+        props: { evidenceJson: null, variantData: null, save },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+      await wrapper.vm.$nextTick()
+      return wrapper
+    }
+
+    it('does not prompt without a draft', () => {
+      const wrapper = mountPanel()
+      expect((wrapper.vm as unknown as Leave).confirmLeave()).toBeNull()
+    })
+
+    it('Apply saves the draft, then lets the selection change', async () => {
+      const saved: string[] = []
+      const wrapper = await draftPanel(async () => {
+        saved.push('saved')
+        return true
+      })
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      expect(document.querySelector('[data-testid="acmg-leave-prompt"]')).not.toBeNull()
+
+      click('acmg-leave-apply')
+
+      expect(await leave).toBe(true)
+      expect(saved).toEqual(['saved'])
+      wrapper.unmount()
+    })
+
+    it('stays when the applied save fails', async () => {
+      const wrapper = await draftPanel(async () => false)
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      click('acmg-leave-apply')
+      expect(await leave).toBe(false)
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('Discard drops the draft and leaves', async () => {
+      const wrapper = await draftPanel()
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      click('acmg-leave-discard')
+      expect(await leave).toBe(true)
+      expect(wrapper.emitted('change')).toBeUndefined()
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('Cancel and Escape keep the draft and stay', async () => {
+      const wrapper = await draftPanel()
+      const viaButton = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      click('acmg-leave-cancel')
+      expect(await viaButton).toBe(false)
+
+      const viaEscape = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      const outer = vi.fn()
+      window.addEventListener('keydown', outer)
+      document
+        .querySelector('[data-testid="acmg-leave-prompt"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      window.removeEventListener('keydown', outer)
+      expect(await viaEscape).toBe(false)
+      // Escape must not also reach the details panel's and the table's own Escape handlers.
+      expect(outer).not.toHaveBeenCalled()
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
   })
 })

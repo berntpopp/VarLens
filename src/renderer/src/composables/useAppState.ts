@@ -10,7 +10,7 @@
  * - In child components: call `useAppState()` which injects from the provider
  */
 import { invalidateServerData } from '../queries/invalidation'
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, toRaw } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
@@ -74,6 +74,14 @@ export interface AppStateReturn {
   returnToCaseHome: () => void
   selectCase: (input: SelectedCaseInput) => void
 
+  /**
+   * The details panel registers the check for an unsaved ACMG draft: null when
+   * there is none, otherwise the user's answer to the prompt (true = leave).
+   */
+  setPanelLeaveGuard: (fn: (() => Promise<boolean> | null) | null) => void
+  /** Null when the open panel has no unsaved draft, else the prompt's answer (true = leave). */
+  confirmPanelLeave: () => Promise<boolean> | null
+
   // Snackbar
   setSnackbarHandler: (
     fn: (message: string, type: string, options?: Record<string, unknown>) => void
@@ -105,8 +113,48 @@ export function createAppState(): AppStateReturn {
   const caseCount = ref(0)
   const casesLoaded = ref(false)
 
+  // Everything that would move the open details panel off its variant (new
+  // selection, close, tab or case switch) waits for the unsaved-draft prompt.
+  let leaveGuard: (() => Promise<boolean> | null) | null = null
+  let leaving: Promise<boolean> | null = null
+  let leaveEpoch = 0
+
+  function setPanelLeaveGuard(fn: (() => Promise<boolean> | null) | null): void {
+    leaveGuard = fn
+  }
+
+  /** One prompt at a time: everything that asks while it is open shares its answer. */
+  function confirmPanelLeave(): Promise<boolean> | null {
+    if (leaving !== null) return leaving
+    const answer = panelOpenRaw.value ? (leaveGuard?.() ?? null) : null
+    if (answer === null) return null
+    const epoch = leaveEpoch
+    leaving = answer.then((leave) => {
+      // A database switch in between already closed the panel: drop what was held.
+      if (epoch !== leaveEpoch) return false
+      leaving = null
+      return leave
+    })
+    return leaving
+  }
+
+  function guardLeave(action: () => void): void {
+    const answer = confirmPanelLeave()
+    if (answer === null) action()
+    else void answer.then((leave) => leave && action())
+  }
+
+  function guarded<T>(source: Ref<T>): Ref<T> {
+    return computed({
+      get: () => source.value,
+      set: (value) => {
+        if (toRaw(value) !== toRaw(source.value)) guardLeave(() => (source.value = value))
+      }
+    })
+  }
+
   // Navigation
-  const activeTab = ref<'case' | 'cohort'>('case')
+  const activeTab = guarded(ref<'case' | 'cohort'>('case'))
   const sidebarOpen = ref(true)
 
   // Filters
@@ -117,8 +165,9 @@ export function createAppState(): AppStateReturn {
   const initialSearch = ref<string | undefined>(undefined)
 
   // Panel
-  const panelOpen = ref(false)
-  const selectedPanelVariant = ref<Variant | CohortVariant | null>(null)
+  const panelOpenRaw = ref(false)
+  const panelOpen = guarded(panelOpenRaw)
+  const selectedPanelVariant = guarded(ref<Variant | CohortVariant | null>(null))
 
   // Component refs (shared so App.vue and views can coordinate)
   const variantTableRef = ref<InstanceType<typeof VariantTable> | null>(null)
@@ -160,8 +209,18 @@ export function createAppState(): AppStateReturn {
     _importHandler?.()
   }
 
+  // A panel left open would pair the old case's variant with the new case id,
+  // so its annotation writes would land under the wrong case.
+  function setSelectedCaseId(id: number | null): void {
+    if (id !== selectedCaseId.value) {
+      panelOpenRaw.value = false
+      selectedPanelVariant.value = null
+    }
+    selectedCaseId.value = id
+  }
+
   function clearSelectedCase(): void {
-    selectedCaseId.value = null
+    guardLeave(() => setSelectedCaseId(null))
   }
 
   function setCaseCount(count: number): void {
@@ -195,13 +254,15 @@ export function createAppState(): AppStateReturn {
   }
 
   function resetCaseContext(): void {
-    clearSelectedCase()
-    selectedCaseName.value = ''
-    selectedVariantCount.value = 0
-    selectedCreatedAt.value = 0
-    resetCaseFilters()
-    filteredCount.value = 0
-    totalCount.value = 0
+    guardLeave(() => {
+      clearSelectedCase()
+      selectedCaseName.value = ''
+      selectedVariantCount.value = 0
+      selectedCreatedAt.value = 0
+      resetCaseFilters()
+      filteredCount.value = 0
+      totalCount.value = 0
+    })
   }
 
   /**
@@ -210,27 +271,34 @@ export function createAppState(): AppStateReturn {
    * the case tab there turned a direct load of `/cohort` into `/case`.
    */
   function resetForDatabaseSwitch(options: { keepView?: boolean } = {}): void {
+    // The old database's draft cannot be saved any more: close without asking.
+    panelOpenRaw.value = false
+    leaveEpoch++
+    leaving = null
     void invalidateServerData('database-switch')
     incrementDataGeneration()
     resetCaseContext()
     if (options.keepView !== true) setActiveTab('case')
-    panelOpen.value = false
     selectedPanelVariant.value = null
   }
 
   function returnToCaseHome(): void {
-    clearSelectedCase()
-    selectedCaseName.value = ''
-    setActiveTab('case')
-    openSidebar()
+    guardLeave(() => {
+      clearSelectedCase()
+      selectedCaseName.value = ''
+      setActiveTab('case')
+      openSidebar()
+    })
   }
 
   function selectCase(input: SelectedCaseInput): void {
-    selectedCaseId.value = input.caseId
-    selectedCaseName.value = input.caseName
-    selectedVariantCount.value = input.variantCount ?? 0
-    selectedCreatedAt.value = input.createdAt ?? 0
-    setActiveTab('case')
+    guardLeave(() => {
+      setSelectedCaseId(input.caseId)
+      selectedCaseName.value = input.caseName
+      selectedVariantCount.value = input.variantCount ?? 0
+      selectedCreatedAt.value = input.createdAt ?? 0
+      setActiveTab('case')
+    })
   }
 
   // Computed
@@ -282,6 +350,8 @@ export function createAppState(): AppStateReturn {
     resetForDatabaseSwitch,
     returnToCaseHome,
     selectCase,
+    setPanelLeaveGuard,
+    confirmPanelLeave,
 
     // Snackbar
     setSnackbarHandler,

@@ -147,11 +147,40 @@
         Apply classification
       </v-btn>
     </div>
+
+    <!-- Asked before the selection moves off a variant with an unsaved draft -->
+    <v-dialog
+      :model-value="leavePrompt"
+      max-width="420"
+      persistent
+      aria-labelledby="acmg-leave-title"
+      @keydown="onLeaveKeydown"
+    >
+      <v-card data-testid="acmg-leave-prompt">
+        <v-card-title id="acmg-leave-title">Unsaved ACMG changes</v-card-title>
+        <v-card-text>
+          {{ pendingSummary }} has not been applied. Apply it before leaving this variant?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn data-testid="acmg-leave-cancel" @click="answerLeave('cancel')">Cancel</v-btn>
+          <v-btn data-testid="acmg-leave-discard" @click="answerLeave('discard')">Discard</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            data-testid="acmg-leave-apply"
+            @click="answerLeave('apply')"
+          >
+            Apply
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { evidenceFingerprint, summarizeAcmgDraft } from '../utils/acmg/acmg-undo'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg/types'
@@ -363,6 +392,41 @@ function discardPending(): void {
   baselineJson = evidenceFingerprint(serialize())
 }
 
+const leavePrompt = ref(false)
+let resolveLeave: ((leave: boolean) => void) | null = null
+
+/** Null when nothing is unsaved; otherwise asks, and resolves true once it is safe to leave. */
+function confirmLeave(): Promise<boolean> | null {
+  emitChange() // notes typed but not blurred yet
+  if (pending.value === null) return null
+  leavePrompt.value = true
+  return new Promise((resolve) => (resolveLeave = resolve))
+}
+
+/** The draft is gone (state reloaded, panel removed): nothing left to ask about. */
+function settleLeave(leave: boolean): void {
+  leavePrompt.value = false
+  resolveLeave?.(leave)
+  resolveLeave = null
+}
+
+async function answerLeave(answer: 'apply' | 'discard' | 'cancel'): Promise<void> {
+  const resolve = resolveLeave
+  // Taken before the save: its evidence reload must not settle the prompt early.
+  resolveLeave = null
+  leavePrompt.value = false
+  if (answer === 'apply') await applyPending()
+  else if (answer === 'discard') discardPending()
+  resolve?.(pending.value === null)
+}
+
+function onLeaveKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  // Escape answers the prompt only; the panel and the tables also listen for it on window.
+  e.stopPropagation()
+  void answerLeave('cancel')
+}
+
 // Load state when evidence JSON or variant identity changes.
 // Watching variantData ensures we reset when switching between variants
 // that both have null evidence (where evidenceJson alone wouldn't trigger).
@@ -372,11 +436,14 @@ watch(
     pending.value = null
     loadState(props.evidenceJson)
     baselineJson = evidenceFingerprint(serialize())
+    settleLeave(true)
   },
   { immediate: true }
 )
 
-defineExpose({ applyPending, discardPending, pending })
+onBeforeUnmount(() => settleLeave(true))
+
+defineExpose({ applyPending, discardPending, pending, confirmLeave })
 </script>
 
 <style scoped>
