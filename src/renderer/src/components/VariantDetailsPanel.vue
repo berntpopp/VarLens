@@ -49,8 +49,11 @@
             @open-protein-view="openProteinView"
           />
 
-          <!-- Extension details for SV/CNV/STR variants -->
-          <ExtensionDetailsSection :variant="variant as unknown as Record<string, unknown>" />
+          <!-- Extension details for SV/CNV/STR variants (case mode only: cohort rows lack per-call SV fields like _sv_is_precise) -->
+          <ExtensionDetailsSection
+            v-if="mode === 'case'"
+            :variant="variant as unknown as Record<string, unknown>"
+          />
 
           <!-- Transcript Section (case + cohort mode) -->
           <TranscriptSection

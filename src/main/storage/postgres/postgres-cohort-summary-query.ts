@@ -105,7 +105,6 @@ function summarySelectList(totalCases: number): string {
       ${SUMMARY_FREQUENCY_SQL} AS cohort_frequency,
       cvs.het_count,
       cvs.hom_count,
-      cvs.variant_key,
       cvs.consequence,
       cvs.func,
       cvs.clinvar,
