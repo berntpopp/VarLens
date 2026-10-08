@@ -35,6 +35,7 @@ proxy. The container's internal port and healthcheck remain fixed at `8080`.
 | `VARLENS_ADMIN_PASSWORD_HASH` | first boot only | Optional one-shot Argon2id admin bootstrap hash. Plaintext bootstrap is refused. |
 | `VARLENS_ADMIN_DISPLAY_NAME` | first boot only | Optional display name for the bootstrap admin. |
 | `VARLENS_LOG_LEVEL` | no | Pino log level. Defaults to `info`. |
+| `VARLENS_WEB_TRUST_PROXY` | behind a proxy | Proxy hop count (e.g. `1`) or comma-separated proxy IPs/CIDRs whose `X-Forwarded-*` headers are trusted. Unset = none; the login rate limit is then keyed on the proxy's address for every user. |
 
 Bootstrap variables are intentionally one-shot. After an admin exists, the
 server logs that env-based rotation is ignored; password changes happen through

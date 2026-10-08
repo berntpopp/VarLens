@@ -36,6 +36,7 @@ import type { PostgresStorageSession } from '../main/storage/postgres/PostgresSt
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
 import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
+import { resolveTrustProxy } from './server/instance-settings'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { assertParityAtStartup } from './server/method-resolution'
@@ -129,6 +130,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // collide log correlation. Stating it explicitly means a future Fastify
     // default flip cannot silently re-enable header trust.
     requestIdHeader: false,
+    // Off unless the operator names the reverse proxy; then `request.ip` (login
+    // rate-limit key, request log) is the forwarded client, not the proxy.
+    trustProxy: resolveTrustProxy(process.env),
     logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info',
