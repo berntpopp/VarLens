@@ -311,7 +311,7 @@ describe('disposable CI containers', () => {
 
   it('rejects stale advisory metadata even if the scanner would pass', async () => {
     const { services, now } = fixture()
-    now.setUTCDate(now.getUTCDate() - 2)
+    now.setUTCDate(now.getUTCDate() - 3)
     // A separate clock simulates metadata from an earlier database download.
     const { scratch } = fixture()
     const stale = createContainerServices({
@@ -325,7 +325,7 @@ describe('disposable CI containers', () => {
       }),
       now: () => Date.parse('2026-10-06T12:00:00Z')
     })
-    await expect(stale.scanContainer('image', {})).rejects.toThrow(/24 hours/)
+    await expect(stale.scanContainer('image', {})).rejects.toThrow(/48 hours/)
     expect(services).toBeDefined()
   })
 

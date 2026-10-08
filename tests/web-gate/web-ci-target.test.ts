@@ -11,7 +11,7 @@ describe('web CI target wiring', () => {
     const makefile = readFileSync(resolve(ROOT, 'Makefile'), 'utf8')
 
     const commands = execFileSync('make', ['-n', 'web-ci'], { cwd: ROOT, encoding: 'utf8' })
-    expect(commands.match(/^npm run build:web$/gm)).toHaveLength(1)
+    expect(commands.match(/^VARLENS_WEB_BASE=\/ npm run build:web$/gm)).toHaveLength(1)
     expect(commands.match(/^npm run rebuild:node$/gm)).toHaveLength(1)
     expect(
       commands.match(/^npx vitest run --project web-gate tests\/web-gate\/integration$/gm)

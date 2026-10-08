@@ -147,7 +147,7 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     }
   })
 
-  test('keys native caches on runtime, Node ABI, os, arch, Electron and full lockfile without partial restores', () => {
+  test('keys native caches on runtime, Node ABI, os, arch, Electron and the native module version without partial restores', () => {
     // Task 7 (build.yml, web-ci.yml, publish-web.yml, docs.yml) and release.yml
     // (which must have none — it promotes build.yml's artifacts, it never
     // rebuilds) are all scanned. A per-file "at least one" minimum would be
@@ -176,9 +176,12 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
         expect(key, `${name}: native- key must pin the electron version`).toContain(
           'electron-ver.outputs.ver'
         )
-        expect(key, `${name}: native- key must pin the lockfile hash`).toContain(
-          "hashFiles('package-lock.json')"
+        // The module version, not the whole lockfile: every release bump
+        // rewrites the lockfile and used to force a cold compile on all runners.
+        expect(key, `${name}: native- key must pin the native module version`).toContain(
+          'electron-ver.outputs.mod'
         )
+        expect(key).not.toContain("hashFiles('package-lock.json')")
       }
 
       // A partial match would leave a wrong-ABI .node on disk. No fallback,

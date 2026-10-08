@@ -23,10 +23,12 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
       web: ${{ steps.filter.outputs.web }}
       docker: ${{ steps.filter.outputs.docker }}
+      full: ${{ steps.filter.outputs.full }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
@@ -41,6 +43,7 @@ jobs:
   workflows:
     name: Workflow and repository policy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
@@ -64,6 +67,7 @@ jobs:
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
@@ -96,6 +100,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
@@ -103,24 +108,15 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential git-restore-mtime
-
-      # Restore mtimes so TypeScript's --incremental cache stays warm across
-      # CI runs. actions/checkout rewrites mtimes to the checkout time,
-      # which normally invalidates .tsbuildinfo. See
-      # https://github.com/microsoft/TypeScript/issues/59152
-      - name: Restore git mtimes
-        run: git restore-mtime
-
       - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
         run: |
-          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          {
+            echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
+            echo "node-abi=$(node -p 'process.versions.modules')"
+            echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
+          } >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -132,7 +128,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
@@ -202,16 +198,15 @@ jobs:
     needs: [changes, checks]
     if: needs.changes.outputs.code == 'true' && github.event.pull_request.draft != true
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
+        # Windows and macOS legs only build and package; they run no tests. A PR
+        # that touches nothing but src/ and tests/ cannot break them in a way the
+        # Linux leg misses, so it packages Linux only. Main and manual runs
+        # always select `full`, so every release SHA still has all installers.
+        include: ${{ fromJSON(needs.changes.outputs.full == 'true' && '[{"os":"ubuntu-latest","platform":"linux"},{"os":"windows-latest","platform":"win"},{"os":"macos-latest","platform":"mac"}]' || '[{"os":"ubuntu-latest","platform":"linux"}]') }}
     # app-builder-lib's getCacheDirectory() (electronGet.js:34-57) only honours
     # ELECTRON_BUILDER_CACHE when it is an ABSOLUTE path (`path.parse(env).root`
     # must be truthy). `${{ github.workspace }}` is absolute on every runner
@@ -235,18 +230,15 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
-
       - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
         run: |
-          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          {
+            echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
+            echo "node-abi=$(node -p 'process.versions.modules')"
+            echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
+          } >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -258,7 +250,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
@@ -435,6 +427,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -461,17 +454,15 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
-
       - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash
         run: |
-          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")" >> "$GITHUB_OUTPUT"
-          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          {
+            echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
+            echo "node-abi=$(node -p 'process.versions.modules')"
+            echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
+          } >> "$GITHUB_OUTPUT"
 
       # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
       # postinstall restores a binary instead of compiling one. `.cache/native`
@@ -483,7 +474,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
         with:
           path: .cache/native
-          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
+          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
 
       - name: Install dependencies
         run: npm ci
@@ -498,12 +489,9 @@ jobs:
 
       # UI quality gates (audit 2026-10-06 §9): axe on 5 key states x light/dark
       # and Lighthouse desktop budgets against the root-mounted web build.
-      # Mirrors `make ui-gates-build ui-gates`.
+      # `make web-ci` above already built the root-mounted bundle they run against.
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-
-      - name: Build web bundle for UI gates
-        run: make ui-gates-build
 
       # Lighthouse launches its own Chrome (without Playwright's --no-sandbox);
       # Ubuntu 24.04 runners restrict unprivileged user namespaces via AppArmor,
@@ -527,6 +515,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docker == 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
@@ -553,8 +542,10 @@ jobs:
           tags: varlens-web-ci
           cache-from: |
             type=gha,scope=web-main
-            type=gha,scope=web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
-          cache-to: type=gha,mode=max,scope=web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
+            type=gha,scope=web-${{ github.ref_name }}
+          # PRs read main's layers and write none: a PR-scoped copy cost 23 s and
+          # ~150 MB per run, and pushed the repository over its 10 GB cache quota.
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=gha,mode=max,scope=web-{0}', github.ref_name) || '' }}
       - name: Runtime smoke against disposable PostgreSQL
         run: node scripts/ci/containers.mjs smoke varlens-web-ci
       - name: Trivy 0.70.0 critical fixed-vulnerability gate
@@ -566,6 +557,7 @@ jobs:
     needs: [changes, secrets-scan, workflows, checks, package, web-ci, docker]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0

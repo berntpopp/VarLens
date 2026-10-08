@@ -280,9 +280,10 @@ export function createContainerServices(dependencies = {}) {
         scanOptions
       )
       const updatedAt = JSON.parse(String(version.stdout)).VulnerabilityDB?.UpdatedAt
+      // Upstream publishes once every 24 h; a 24 h limit failed on every late publish.
       const age = now() - Date.parse(updatedAt)
-      if (!Number.isFinite(age) || age < -5 * 60_000 || age > 24 * 60 * 60_000) {
-        throw new Error('Trivy vulnerability database must be updated within the last 24 hours')
+      if (!Number.isFinite(age) || age < -5 * 60_000 || age > 48 * 60 * 60_000) {
+        throw new Error('Trivy vulnerability database must be updated within the last 48 hours')
       }
       await runTool(
         'trivy',
