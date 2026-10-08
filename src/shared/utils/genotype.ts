@@ -15,6 +15,13 @@ export const HOM_GENOTYPES = ['1/1', '1|1'] as const
 /** A haploid ALT call (male chrX/chrY, chrM): one copy, neither het nor hom. */
 export const HEMI_GENOTYPES = ['1'] as const
 
+/**
+ * An explicit reference call. A carrier genotype is one of the three classes
+ * above; anything that is neither (no-call, partly missing without an ALT,
+ * NULL, other text) says nothing about the allele: unknown.
+ */
+export const REF_GENOTYPES = ['0/0', '0|0', '0'] as const
+
 export type Zygosity = 'het' | 'hom' | 'hemi'
 
 const includes = (list: readonly string[], gt: string): boolean => list.includes(gt)

@@ -1,7 +1,8 @@
 import {
   HET_GT_SQL as HET,
   HOM_GT_SQL as HOM,
-  HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI
+  HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI,
+  notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
 import type { VariantFilter } from '../../../shared/types/database'
 
@@ -191,7 +192,7 @@ function addTrioInheritanceFilters(
                AND f.pos = p.pos
                AND f.ref = p.ref
                AND f.alt = p.alt
-               AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+               AND ${notReferenceGtSql('f.gt_num')}
               WHERE p.case_id = ${caseParam}
             )
             AND v.id NOT IN (
@@ -206,7 +207,7 @@ function addTrioInheritanceFilters(
                AND m.pos = p.pos
                AND m.ref = p.ref
                AND m.alt = p.alt
-               AND m.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+               AND ${notReferenceGtSql('m.gt_num')}
               WHERE p.case_id = ${caseParam}
             )
           )`)

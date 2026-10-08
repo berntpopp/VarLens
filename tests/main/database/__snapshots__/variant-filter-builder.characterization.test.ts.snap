@@ -1283,7 +1283,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1293,7 +1293,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ) OR (
@@ -1388,7 +1388,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1398,7 +1398,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ) OR (
@@ -1628,7 +1628,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1638,7 +1638,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ))",

@@ -1,12 +1,18 @@
 import { sql, type RawBuilder } from 'kysely'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
-import { HET_GT_SQL, HOM_GT_SQL, HOM_OR_HEMI_GT_SQL } from '../../../shared/sql/genotype-dosage'
+import {
+  HET_GT_SQL,
+  HOM_GT_SQL,
+  HOM_OR_HEMI_GT_SQL,
+  notReferenceGtSql
+} from '../../../shared/sql/genotype-dosage'
 
 // The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
 const HET = sql.raw(HET_GT_SQL)
 const HOM = sql.raw(HOM_GT_SQL)
 const HOM_OR_HEMI = sql.raw(HOM_OR_HEMI_GT_SQL)
+const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 /**
  * Inheritance-mode predicates for the case variant query.
@@ -51,7 +57,7 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
   return conditions
 }
 
-/** Het in proband, absent or ref in both parents. */
+/** Het in proband; neither parent has a row there other than an explicit reference call. */
 function deNovoCondition(cid: number, gid: number): SqlCondition {
   return sql`(
             variants.gt_num IN ${HET}
@@ -62,7 +68,7 @@ function deNovoCondition(cid: number, gid: number): SqlCondition {
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND ${PARENT_NOT_REFERENCE}
               WHERE p.case_id = ${cid}
             )
             AND variants.id NOT IN (
@@ -72,7 +78,7 @@ function deNovoCondition(cid: number, gid: number): SqlCondition {
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND ${PARENT_NOT_REFERENCE}
               WHERE p.case_id = ${cid}
             )
           )`

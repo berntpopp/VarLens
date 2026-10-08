@@ -259,6 +259,30 @@ describe('split genotypes in the trio filters on SQLite', () => {
     ])
     expect(matching('de_novo')).toEqual(['100>G'])
   })
+
+  const row = (pos: number, alt: string, gt: string | null): ReturnType<typeof makeVariant> =>
+    makeVariant({ pos, alt, gt_num: gt })
+
+  describe('de_novo and the call of a parent at the variant', () => {
+    const withFather = (gt: string | null | undefined): string[] => {
+      service.variants.insertVariantsBatch(probandId, [row(100, 'G', '1/.')])
+      service.variants.insertVariantsBatch(motherId, [row(100, 'G', '0/0')])
+      if (gt !== undefined) service.variants.insertVariantsBatch(fatherId, [row(100, 'G', gt)])
+      return matching('de_novo')
+    }
+
+    it.each([undefined, '0/0', '0|0', '0'])('reference or no row (%s): de novo', (gt) => {
+      expect(withFather(gt)).toEqual(['100>G'])
+    })
+
+    it.each(['./.', '.|.', '.', '0/.', '', null])('an uncalled father (%s): not shown', (gt) => {
+      expect(withFather(gt)).toEqual([])
+    })
+
+    it.each(['0/1', '1/.', '1/1', '1'])('a father who carries it (%s): not de novo', (gt) => {
+      expect(withFather(gt)).toEqual([])
+    })
+  })
 })
 
 describe('split genotypes merged by an import session', () => {

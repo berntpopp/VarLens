@@ -14,6 +14,8 @@ import { resolve } from 'node:path'
 import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { makeVariant } from '../../utils/make-variant'
+
 import { DatabaseService } from '../../../src/main/database'
 import { AssociationDataBuilder } from '../../../src/main/database/AssociationDataBuilder'
 import { VcfStrategy } from '../../../src/main/import/vcf/VcfStrategy'
@@ -303,6 +305,120 @@ describe.skipIf(!RUN)('migration 0026 — genotype classes of the cohort summary
     await setState(false, null)
     await migrate()
     expect(await state()).toEqual({ is_stale: false, stale_reason: null })
+  }, 60_000)
+})
+
+describe.skipIf(!RUN)('trio and duplicate-row inheritance filters on both backends', () => {
+  type Member = 'proband' | 'father' | 'mother'
+  type Row = [member: Member, pos: number, alt: string, gt: string | null]
+
+  let schema: string
+  let pool: Pool
+  let sqlite: DatabaseService
+  let sqliteGroup: number
+  let pgGroup: number
+  const sqliteIds = {} as Record<Member, number>
+  const pgIds = {} as Record<Member, number>
+
+  beforeEach(async () => {
+    schema = `varlens_test_trio_gt_${Date.now()}_${randomBytes(4).toString('hex')}`
+    pool = new Pool({ connectionString: PG_URL, max: 2 })
+    await pool.query(`CREATE SCHEMA "${schema}"`)
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    sqlite = new DatabaseService(':memory:')
+    sqliteGroup = sqlite.analysisGroups.createGroup('FAM', 'family').id
+    pgGroup = Number(
+      (
+        await pool.query<{ id: string }>(
+          `INSERT INTO "${schema}".analysis_groups (name) VALUES ('FAM') RETURNING id`
+        )
+      ).rows[0].id
+    )
+    for (const member of ['proband', 'father', 'mother'] as const) {
+      sqliteIds[member] = sqlite.cases.createCase(member, `/${member}.json`, 1)
+      sqlite.analysisGroups.addMember(sqliteGroup, sqliteIds[member], member, 'unknown')
+      pgIds[member] = Number(
+        (
+          await pool.query<{ id: string }>(
+            `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, genome_build)
+             VALUES ($1, '/x.json', 0, 0, 'GRCh38') RETURNING id`,
+            [member]
+          )
+        ).rows[0].id
+      )
+      await pool.query(
+        `INSERT INTO "${schema}".analysis_group_members (group_id, case_id, role)
+         VALUES ($1, $2, $3)`,
+        [pgGroup, pgIds[member], member]
+      )
+    }
+  }, 60_000)
+
+  afterEach(async () => {
+    sqlite?.close()
+    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    await pool.end()
+  }, 60_000)
+
+  /** The same rows in both databases: chr 1, ref A, gene BRCA1. */
+  async function seed(rows: Row[]): Promise<void> {
+    for (const [member, pos, alt, gt] of rows) {
+      sqlite.variants.insertVariantsBatch(sqliteIds[member], [
+        makeVariant({ pos, alt, gt_num: gt })
+      ])
+      await pool.query(
+        `INSERT INTO "${schema}".variants
+           (case_id, chr, pos, ref, alt, variant_type, gene_symbol, gt_num)
+         VALUES ($1, '1', $2, 'A', $3, 'snv', 'BRCA1', $4)`,
+        [pgIds[member], pos, alt, gt]
+      )
+    }
+  }
+
+  /** The proband rows a mode selects, asserted equal on both backends. */
+  async function matching(mode: string): Promise<string[]> {
+    const key = (v: { pos: number; alt: string }): string => `${v.pos}>${v.alt}`
+    const lite = sqlite.variants
+      .getVariants(
+        { case_id: sqliteIds.proband, inheritance_modes: [mode], analysis_group_id: sqliteGroup },
+        50,
+        0
+      )
+      .data.map(key)
+      .sort()
+    const pg = (
+      await new PostgresVariantReadRepository(pool, schema).queryVariants(
+        { case_id: pgIds.proband, inheritance_modes: [mode], analysis_group_id: pgGroup },
+        50,
+        0
+      )
+    ).data
+      .map(key)
+      .sort()
+    expect(pg, `${mode}: PostgreSQL = SQLite`).toEqual(lite)
+    return pg
+  }
+
+  it('de_novo: a split het neither parent carries; an inherited one is dropped', async () => {
+    await seed([
+      ['proband', 100, 'G', '1|.'],
+      ['proband', 100, 'T', '.|1'],
+      ['mother', 100, 'T', './1']
+    ])
+    expect(await matching('de_novo')).toEqual(['100>G'])
+  }, 60_000)
+
+  it('de_novo: every spelling of an uncalled parent withholds it, a reference call does not', async () => {
+    const uncalled = ['./.', '.|.', '.', '0/.', '', null]
+    const reference = ['0/0', '0|0', '0']
+    const rows: Row[] = []
+    ;[...uncalled, ...reference].forEach((gt, i) => {
+      const pos = 1000 + i
+      rows.push(['proband', pos, 'G', '1/.'], ['mother', pos, 'G', '0/0'], ['father', pos, 'G', gt])
+    })
+    await seed(rows)
+    // Positions 1006-1008 are the reference calls.
+    expect(await matching('de_novo')).toEqual(['1006>G', '1007>G', '1008>G'])
   }, 60_000)
 })
 
