@@ -10,6 +10,13 @@ describe('computeWeight', () => {
         expect(w).toBeCloseTo(ref.beta_1_25_weight, 8)
       })
     }
+
+    it('uses the minor allele frequency: p = 0.75 is weighted as 0.25 (#520)', () => {
+      expect(computeWeight('beta_maf', 0.75, null)).toBe(computeWeight('beta_maf', 0.25, null))
+      expect(computeWeight('beta_maf', 0.75, null)).toBeCloseTo(0.025084781938833345, 12)
+      // A fixed ALT allele (p = 1) has no minor allele: same weight as p = 0.
+      expect(computeWeight('beta_maf', 1, null)).toBe(computeWeight('beta_maf', 0, null))
+    })
   })
 
   describe('uniform', () => {
