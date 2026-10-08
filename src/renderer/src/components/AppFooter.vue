@@ -420,7 +420,8 @@ const openLicense = async (): Promise<void> => {
     rgb(var(--v-theme-primary)) 10%,
     rgb(var(--v-theme-background))
   ) !important;
-  border-top: 1px solid
+  /* Inset shadow, not a border: a border adds 1px that Vuetify's layout does not count */
+  box-shadow: inset 0 1px 0
     color-mix(in srgb, rgb(var(--v-theme-primary)) 22%, rgb(var(--v-theme-background))) !important;
 }
 

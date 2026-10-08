@@ -231,3 +231,14 @@ html::-webkit-scrollbar-thumb {
 .v-data-table__tr {
   contain: layout style paint;
 }
+
+/* Vuetify's grey-lighten-3 is a fixed light colour. Give the documented
+   "subtle background" class a dark-theme equivalent so it follows the theme. */
+.v-theme--warmDark .bg-grey-lighten-3 {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-on-surface)) 8%,
+    rgb(var(--v-theme-surface))
+  ) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
