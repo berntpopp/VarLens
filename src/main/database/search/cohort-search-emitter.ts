@@ -1,4 +1,5 @@
 import type { AstNode } from '../../../shared/utils/boolean-search'
+import { escapeLikePattern } from './search-clause-emitter'
 
 /**
  * Emit LIKE-based SQL from a boolean search AST.
@@ -41,9 +42,9 @@ export function emitTerm(term: string, params: (string | number)[]): string {
 
   // HGVS pattern: c.1234A>G or p.Val600Glu
   if (/^[cp]\./.test(term)) {
-    const searchPattern = `%${term}%`
+    const searchPattern = `%${escapeLikePattern(term)}%`
     params.push(searchPattern, searchPattern)
-    return '(cvs.cdna LIKE ? OR cvs.aa_change LIKE ?)'
+    return "(cvs.cdna LIKE ? ESCAPE '\\' OR cvs.aa_change LIKE ? ESCAPE '\\')"
   }
 
   // Default: LIKE-based search on gene_symbol, consequence, omim_mim_number

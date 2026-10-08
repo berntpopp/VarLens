@@ -72,16 +72,18 @@ export async function clearStagedUploads(): Promise<void> {
  * the import settles (success, failure or cancel). From then on the upload
  * lives UPLOAD_RELEASE_GRACE_MS instead of the 24 h staging TTL — not zero,
  * because a multi-sample VCF is imported with one call per sample on the same
- * ref. Values that are not known upload refs are ignored.
+ * ref. Pass `false` for an import that failed or was cancelled: the upload
+ * then keeps its staging TTL, so a retry with corrected options needs no
+ * second upload. Values that are not known upload refs are ignored.
  */
-export function holdWebUploads(refs: readonly unknown[]): () => void {
+export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) => void {
   const ids = refs.flatMap((ref) => {
     const id = typeof ref === 'string' ? parseWebUploadId(ref) : null
     return id !== null && stagedUploads.has(id) ? [id] : []
   })
   for (const id of ids) heldUploads.set(id, (heldUploads.get(id) ?? 0) + 1)
 
-  return () => {
+  return (imported = true) => {
     for (const id of ids) {
       const holds = (heldUploads.get(id) ?? 1) - 1
       if (holds > 0) {
@@ -90,7 +92,9 @@ export function holdWebUploads(refs: readonly unknown[]): () => void {
       }
       heldUploads.delete(id)
       const upload = stagedUploads.get(id)
-      if (upload !== undefined) upload.expiresAt = Date.now() + UPLOAD_RELEASE_GRACE_MS
+      if (upload !== undefined && imported) {
+        upload.expiresAt = Date.now() + UPLOAD_RELEASE_GRACE_MS
+      }
     }
     setTimeout(cleanupExpiredUploads, UPLOAD_RELEASE_GRACE_MS + 1).unref()
   }

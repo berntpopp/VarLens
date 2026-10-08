@@ -212,6 +212,41 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
     expect(await summaryRowCount()).toBe(1)
   }, 60_000)
 
+  it('a rebuild request on a never-rebuilt summary follows the size rule, not the bootstrap rule', async () => {
+    // A fresh install grown by imports only, then a transcript switch that
+    // could not get the lock. Above the sync limit that must not rebuild
+    // inside the read request.
+    const caseA = await seedCase('requested-a')
+    await seedVariant(caseA, '7', 700)
+    const client = await pool.connect()
+    try {
+      await new PostgresCohortSummaryRepository().incrementalAdd({
+        schema,
+        client: client as never,
+        caseId: caseA
+      })
+    } finally {
+      client.release()
+    }
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_summary_rebuild_requests (reason) VALUES ('transcript')`
+    )
+    const previous = process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+    process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = '0'
+    try {
+      const result = await prepareCohortRead({ pool, schema })
+      expect(result.warnings).toEqual({ staleSummary: true })
+    } finally {
+      if (previous === undefined) {
+        delete process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+      } else {
+        process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = previous
+      }
+      await awaitBackgroundRebuild(schema)
+    }
+    expect(await lastRebuiltAt()).not.toBeNull()
+  }, 60_000)
+
   it('rebuilds a never-rebuilt summary that a migration flagged stale', async () => {
     const caseA = await seedCase('seeded-stale-a')
     await seedVariant(caseA, '6', 600)

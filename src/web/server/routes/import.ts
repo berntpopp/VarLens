@@ -118,8 +118,9 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
         }
         const releaseUploads = holdWebUploads([validatedFilePath.data])
+        let imported = false
         try {
-          return await startImport(
+          const result = await startImport(
             resolved.path,
             validatedCaseName.data,
             normalizeImportVcfOptions(vcfOptions),
@@ -132,8 +133,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
               }
             }
           )
+          imported = true
+          return result
         } finally {
-          releaseUploads()
+          releaseUploads(imported)
           if (userId !== undefined) {
             events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }
@@ -220,6 +223,7 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           ...pathToRef.values(),
           (filters as { bedFile?: unknown } | null | undefined)?.bedFile
         ])
+        let imported = false
         try {
           const result = await startMultiFileImport(
             validatedCaseName.data,
@@ -239,12 +243,13 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
             undefined,
             normalizedFilters
           )
+          imported = result.files.every((file) => file.error === undefined)
           return {
             ...result,
             files: result.files.map((file) => replaceWebUploadPathWithRef(file, pathToRef))
           }
         } finally {
-          releaseUploads()
+          releaseUploads(imported)
           if (userId !== undefined) {
             events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }

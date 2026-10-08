@@ -69,34 +69,52 @@ describe('staged upload cleanup (#498)', () => {
     await expect(clearStagedUploads()).resolves.toBeUndefined()
   })
 
-  test.each(['success', 'failure'])(
-    'the staged directory is gone once its import settled (%s)',
-    async (outcome) => {
-      const upload = await stage()
-      const { deps, importSingleFile, reply } = makeDeps()
-      if (outcome === 'failure') importSingleFile.mockRejectedValue(new Error('import failed'))
-      const start = (): Promise<unknown> =>
-        Promise.resolve(
-          buildDispatcher(deps).overrides['import:start'].handle(
-            [upload.ref, 'Case A'],
-            REQUEST as never,
-            reply as never,
-            deps
-          )
-        ).catch(() => undefined)
+  /** Run `import:start` twice on one ref, as a multi-sample VCF import does. */
+  async function importTwice(upload: StagedUpload, fails: boolean): Promise<void> {
+    const { deps, importSingleFile, reply } = makeDeps()
+    if (fails) importSingleFile.mockRejectedValue(new Error('import failed'))
+    const start = (): Promise<unknown> =>
+      Promise.resolve(
+        buildDispatcher(deps).overrides['import:start'].handle(
+          [upload.ref, 'Case A'],
+          REQUEST as never,
+          reply as never,
+          deps
+        )
+      ).catch(() => undefined)
 
-      vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
-      await start()
-      // A multi-sample VCF is imported with one call per sample on the same ref.
-      await start()
-      expect(importSingleFile).toHaveBeenCalledTimes(2)
-      expect(existsSync(upload.storedPath)).toBe(true)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    await start()
+    await start()
+    expect(importSingleFile).toHaveBeenCalledTimes(2)
+    expect(existsSync(upload.storedPath)).toBe(true)
+  }
 
-      await passGrace()
-      await vi.waitFor(() => expect(existsSync(dirname(upload.storedPath))).toBe(false))
-      expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
-    }
-  )
+  test('the staged directory is gone once its import succeeded', async () => {
+    const upload = await stage()
+    await importTwice(upload, false)
+
+    await passGrace()
+    await vi.waitFor(() => expect(existsSync(dirname(upload.storedPath))).toBe(false))
+    expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
+  })
+
+  test('a failed import keeps the upload for a retry, until the staging TTL', async () => {
+    const upload = await stage()
+    await importTwice(upload, true)
+
+    // Fix the option and retry after more than the release grace: no second upload.
+    await vi.advanceTimersByTimeAsync(UPLOAD_RELEASE_GRACE_MS + 60_000)
+    expect(resolveWebUploadRef(upload.ref, 7)?.storedPath).toBe(upload.storedPath)
+    expect(existsSync(upload.storedPath)).toBe(true)
+
+    // Not for ever: like an upload nobody imported (its own sweep timer was
+    // set before the clock was faked; any later access sweeps as well).
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+    expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
+    vi.useRealTimers()
+    await vi.waitFor(() => expect(existsSync(dirname(upload.storedPath))).toBe(false))
+  })
 
   test('a batch import retires its uploads when the background job settles', async () => {
     const sourcePath = join(root, 'Case B.json')

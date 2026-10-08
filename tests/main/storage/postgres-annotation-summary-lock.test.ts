@@ -18,6 +18,7 @@ import {
   readCohortSummaryStatus
 } from '../../../src/main/storage/postgres/cohort-read-freshness'
 import { lockSummaryForWrite } from '../../../src/main/storage/postgres/cohort-summary-lock'
+import { summaryAwaitsRebuild } from '../../../src/main/storage/postgres/cohort-summary-state-sql'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 
@@ -74,7 +75,7 @@ describe.skipIf(!RUN)('annotation writes take the summary write lock (#503)', ()
 
   it('a star saved while a rebuild is in flight shows once the rebuild committed', async () => {
     await new PostgresCohortSummaryRepository().rebuild({ schema, client: holder as never })
-    const save = new PostgresAnnotationsRepository(pool, schema).upsertGlobalAnnotation(
+    const save = new PostgresAnnotationsRepository(pool, schema, 5_000).upsertGlobalAnnotation(
       '1',
       100,
       'A',
@@ -88,16 +89,74 @@ describe.skipIf(!RUN)('annotation writes take the summary write lock (#503)', ()
     expect(await hasStar()).toBe(true)
   }, 60_000)
 
-  it('a save does not wait out a long lock holder: it commits and asks for a rebuild', async () => {
+  async function pendingRequests(): Promise<number> {
+    const result = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM "${schema}".cohort_summary_rebuild_requests`
+    )
+    return result.rows[0].n
+  }
+
+  async function lastRebuiltAt(): Promise<number> {
+    return (await readCohortSummaryStatus({ pool, schema })).last_rebuilt_at
+  }
+
+  it('a save under a busy lock leaves the counts valid; a read then refreshes only the flags', async () => {
     const repository = new PostgresAnnotationsRepository(pool, schema, 100)
+    const rebuiltAt = await lastRebuiltAt()
 
     const saved = await repository.upsertPerCaseAnnotation(caseId, variantId, { starred: 1 })
 
     expect(saved.starred).toBe(1)
-    expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(true)
+    expect(await pendingRequests()).toBe(1)
+    // The counts are untouched by an annotation: incremental upkeep goes on.
+    expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+    expect(await summaryAwaitsRebuild({ schema, client: pool })).toBe(false)
+    // The lock is still busy: the read says so and leaves the request alone.
+    expect(await prepareCohortRead({ pool, schema })).toEqual({ warnings: { staleSummary: true } })
+    expect(await pendingRequests()).toBe(1)
+
     await holder.query('COMMIT')
-    await prepareCohortRead({ pool, schema })
+    expect(await prepareCohortRead({ pool, schema })).toEqual({})
+
     expect(await hasStar()).toBe(true)
+    expect(await pendingRequests()).toBe(0)
+    expect(await lastRebuiltAt()).toBe(rebuiltAt)
+  }, 60_000)
+
+  it('a save committed in the middle of a rebuild is in the flags when the rebuild commits', async () => {
+    const repository = new PostgresAnnotationsRepository(pool, schema, 100)
+    // Save after the rebuild wrote every summary row, before it finishes.
+    const rebuilding = {
+      query: async (text: string, values?: unknown[]) => {
+        if (text.includes('last_rebuilt_at = now()')) {
+          await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: 1 })
+        }
+        return holder.query(text, values)
+      }
+    }
+
+    await new PostgresCohortSummaryRepository().rebuild({ schema, client: rebuilding as never })
+    await holder.query('COMMIT')
+
+    expect(await hasStar()).toBe(true)
+    expect(await pendingRequests()).toBe(0)
+    expect((await readCohortSummaryStatus({ pool, schema })).is_stale).toBe(false)
+  }, 60_000)
+
+  it('a save after the rebuild served its requests is not lost and starts no second rebuild', async () => {
+    const repository = new PostgresAnnotationsRepository(pool, schema, 100)
+    await new PostgresCohortSummaryRepository().rebuild({ schema, client: holder as never })
+
+    await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: 1 })
+    await holder.query('COMMIT')
+    const rebuiltAt = await lastRebuiltAt()
+
+    expect(await hasStar()).toBe(false)
+    expect(await pendingRequests()).toBe(1)
+    expect(await prepareCohortRead({ pool, schema })).toEqual({})
+    expect(await hasStar()).toBe(true)
+    expect(await pendingRequests()).toBe(0)
+    expect(await lastRebuiltAt()).toBe(rebuiltAt)
   }, 60_000)
 
   it('still rejects a variant of another case while the lock is busy', async () => {

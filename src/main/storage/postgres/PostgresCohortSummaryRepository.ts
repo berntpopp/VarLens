@@ -23,6 +23,7 @@
  * The remaining methods are stubbed for the subsequent Sprint A tasks.
  */
 import type { PoolClient } from 'pg'
+import { refreshAnnotationFlags } from './cohort-annotation-flags-sql'
 import {
   ANNOTATION_FLAG_COLUMNS,
   annotationFlagCtes,
@@ -179,6 +180,10 @@ export class PostgresCohortSummaryRepository {
        SET is_stale = false, stale_reason = NULL, stale_at = NULL, last_rebuilt_at = now()
        WHERE id = 1`
     )
+
+    // Last: an annotation saved while the chunks above were written left an
+    // 'annotation' request instead of its flags (the lock was ours).
+    await refreshAnnotationFlags(client, schema)
   }
 
   /**

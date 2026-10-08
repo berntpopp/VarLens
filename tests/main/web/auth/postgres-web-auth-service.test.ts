@@ -477,6 +477,21 @@ describe('PostgresWebAuthService — authenticate', () => {
     }
   })
 
+  it('a dummy hash that failed once is computed again for the next unknown username', async () => {
+    const hash = vi
+      .spyOn(fakePasswordProvider, 'hashPassword')
+      .mockRejectedValueOnce(new Error('argon2: out of memory'))
+    try {
+      pool.enqueueResponse({ rows: [], rowCount: 0 })
+      await expect(svc.authenticate('ghost', 'pw')).rejects.toThrow('out of memory')
+
+      pool.enqueueResponse({ rows: [], rowCount: 0 })
+      expect(await svc.authenticate('ghost', 'pw')).toEqual({ success: false, user: null })
+    } finally {
+      hash.mockRestore()
+    }
+  })
+
   it('uses an atomic UPDATE+CASE on failed login (no read-modify-write race)', async () => {
     pool.enqueueResponse({
       rows: [pgUserRow({ failed_login_count: MAX_FAILED_ATTEMPTS - 1 })],

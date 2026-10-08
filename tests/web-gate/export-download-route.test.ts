@@ -315,6 +315,37 @@ describe('web export: prepare + signed download', () => {
   })
 
   test.each([['csv'], ['xlsx']])(
+    'a row source that fails mid-stream does not end as a complete download (%s)',
+    async (format) => {
+      // What an abandoned export stream does when its consumer resumes.
+      const wide = { chr: 'chr1', pos: 1, ref: 'A', alt: 'T', gene_symbol: 'X'.repeat(512) }
+      async function* failing(): AsyncGenerator<Row> {
+        for (let index = 0; index < 2000; index += 1) yield wide
+        throw new Error('Export stream abandoned: no row was read for 300000 ms')
+      }
+      const { app } = buildApp(() => failing())
+      openApp = app
+      const prepared = await prepare(app, { ...VARIANTS_REQUEST, format })
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const { port } = app.server.address() as AddressInfo
+
+      const outcome = await new Promise<{ status?: number; complete: boolean }>((resolve) => {
+        const req = httpRequest(
+          { host: '127.0.0.1', port, path: prepared.path!, headers: { 'x-test-user': 'analyst' } },
+          (res) => {
+            res.resume()
+            res.once('close', () => resolve({ status: res.statusCode, complete: res.complete }))
+          }
+        )
+        req.on('error', () => resolve({ complete: false }))
+        req.end()
+      })
+
+      expect(outcome.status === 200 && outcome.complete).toBe(false)
+    }
+  )
+
+  test.each([['csv'], ['xlsx']])(
     'client abort mid-stream releases the row source (%s)',
     async (format) => {
       const wide = { chr: 'chr1', pos: 1, ref: 'A', alt: 'T', gene_symbol: 'X'.repeat(512) }

@@ -308,6 +308,39 @@ describe('PostgresAnnotationsRepository', () => {
     expect(release).toHaveBeenCalledOnce()
   })
 
+  it.each([
+    ['upsertGlobalAnnotation', (r) => r.upsertGlobalAnnotation('1', 5, 'A', 'G', { starred: 1 })],
+    [
+      'upsertGlobalAnnotationWithAudit',
+      (r) => r.upsertGlobalAnnotationWithAudit('1', 5, 'A', 'G', { starred: 1 })
+    ],
+    ['deleteGlobalAnnotation', (r) => r.deleteGlobalAnnotation('1', 5, 'A', 'G')],
+    ['upsertPerCaseAnnotation', (r) => r.upsertPerCaseAnnotation(1, 2, { starred: 1 })],
+    [
+      'upsertPerCaseAnnotationWithAudit',
+      (r) => r.upsertPerCaseAnnotationWithAudit(1, 2, { starred: 1 })
+    ],
+    ['deletePerCaseAnnotation', (r) => r.deletePerCaseAnnotation(1, 2)]
+  ] as [string, (repository: PostgresAnnotationsRepository) => Promise<unknown>][])(
+    '%s: a failed rollback destroys the connection, which still holds the summary lock',
+    async (_name, write) => {
+      const release = vi.fn()
+      const rollbackFailure = new Error('rollback failed')
+      const query = vi.fn(async (sql: unknown) => {
+        if (sql === 'BEGIN') return { rows: [] }
+        if (sql === 'ROLLBACK') throw rollbackFailure
+        throw new Error('write failed')
+      })
+      const pool = { connect: vi.fn(async () => ({ query: summaryLockFree(query), release })) }
+
+      await expect(
+        write(new PostgresAnnotationsRepository(pool as never, 'public'))
+      ).rejects.toThrow('write failed')
+
+      expect(release).toHaveBeenCalledExactlyOnceWith(rollbackFailure)
+    }
+  )
+
   it('deletes global annotations by coordinates', async () => {
     const release = vi.fn()
     const query = vi

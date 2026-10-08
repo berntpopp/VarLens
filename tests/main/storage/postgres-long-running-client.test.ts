@@ -146,4 +146,51 @@ describe.skipIf(!RUN)('long-running work outlives the pool timeouts (#490)', () 
       await single.end()
     }
   }, 60_000)
+
+  it('a consumer that stops reading gives the connection back and fails when it resumes', async () => {
+    const { streamLongQuery } =
+      await import('../../../src/main/storage/postgres/long-running-client')
+    const single = new Pool({ connectionString: PG_URL, max: 1 })
+    const rows = streamLongQuery(single, 'SELECT g FROM generate_series(1, $1) g', [100_000], 200)
+    try {
+      expect((await rows.next()).done).toBe(false)
+
+      // A paused download: nobody pulls the next row.
+      await new Promise((resolve) => setTimeout(resolve, 600))
+
+      // max: 1, so this only answers once the stream's connection is gone.
+      const other = await Promise.race([
+        single.query('SELECT 1 AS ok'),
+        new Promise<'still held'>((resolve) => setTimeout(() => resolve('still held'), 2_000))
+      ])
+      expect(other).not.toBe('still held')
+      // Not a clean end: the consumer must not take the rows it got for all of them.
+      await expect(rows.next()).rejects.toThrow(/no row was read/)
+    } finally {
+      await rows.return(undefined)
+      await single.end()
+    }
+  }, 60_000)
+
+  it('a consumer that stops early leaves the connection usable and as it was', async () => {
+    const { streamLongQuery } =
+      await import('../../../src/main/storage/postgres/long-running-client')
+    const single = new Pool({ connectionString: PG_URL, max: 1, statement_timeout: 12_345 })
+    try {
+      for await (const row of streamLongQuery(
+        single,
+        'SELECT g FROM generate_series(1, $1) g',
+        [100_000]
+      )) {
+        expect(row).toEqual({ g: 1 })
+        break
+      }
+
+      const after = await single.query<{ statement_timeout: string }>('SHOW statement_timeout')
+      expect(after.rows[0].statement_timeout).toBe('12345ms')
+      expect(single.totalCount).toBe(1)
+    } finally {
+      await single.end()
+    }
+  }, 60_000)
 })

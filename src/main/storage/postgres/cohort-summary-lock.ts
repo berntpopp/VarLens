@@ -11,6 +11,18 @@
  *
  * Transaction-scoped advisory lock: released by COMMIT or ROLLBACK, so a
  * crashed or cancelled writer cannot leave it held.
+ *
+ * Lock order. PostgreSQL's deadlock detector does not see a writer polling
+ * for this lock, so no writer may wait for it while it holds a row lock that
+ * a holder of it can need:
+ *   - import publication and `hideCase`: their own `cases_all` row first, in
+ *     NO KEY UPDATE mode only, then this lock, then the derived tables;
+ *   - rebuild and flags refresh: this lock, then the derived tables;
+ *   - annotation save and transcript switch: this lock first (bounded wait,
+ *     or not at all), then their rows. An annotation's foreign key takes a
+ *     key-share lock on the case row, which NO KEY UPDATE does not block.
+ * So: never take a case row FOR UPDATE, and no other row lock at all, before
+ * waiting for this lock.
  */
 import type { PoolClient } from 'pg'
 

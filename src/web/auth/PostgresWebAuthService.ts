@@ -352,7 +352,14 @@ export class PostgresWebAuthService {
     // Unknown and locked accounts pay the same Argon2 verify as a wrong
     // password, so response time does not reveal which usernames exist.
     if ((sel.rowCount ?? 0) === 0) {
-      this.dummyHash ??= this.passwordProvider.hashPassword(randomBytes(16).toString('hex'))
+      // A failed hash is not kept: every later unknown username would fail
+      // with it while known ones work, which tells the two apart again.
+      this.dummyHash ??= this.passwordProvider
+        .hashPassword(randomBytes(16).toString('hex'))
+        .catch((error: unknown) => {
+          this.dummyHash = undefined
+          throw error
+        })
       await this.passwordProvider.verifyPassword(await this.dummyHash, password)
       return { success: false, user: null }
     }
