@@ -193,6 +193,9 @@ export function buildPostgresVariantQueryParts(
       `(vf.case_count IS NULL OR ${internalAfExpression} <= ${addParam(filter.max_internal_af)})`
     )
   }
+  if (filter.carrier_count_max !== undefined && filter.carrier_count_max >= 1) {
+    addWhere(`(vf.case_count IS NULL OR vf.case_count <= ${addParam(filter.carrier_count_max)})`)
+  }
 
   const searchQuery = filter.search_query ?? ''
   for (const token of searchTokens(searchQuery).filter((t) => HGVS_TOKEN.test(t))) {

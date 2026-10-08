@@ -458,3 +458,24 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     expect(off.parts.values).toEqual([])
   })
 })
+
+describe('PostgreSQL case view carrier cap (#455, no PostgreSQL required)', () => {
+  it('caps vf.case_count and keeps rows without a frequency row', () => {
+    const { fromAndWhereSql, params } = buildPostgresVariantQueryParts(
+      { case_id: 1, carrier_count_max: 3 },
+      '"public"'
+    )
+    expect(fromAndWhereSql).toContain('(vf.case_count IS NULL OR vf.case_count <= $2)')
+    expect(fromAndWhereSql).toContain('LEFT JOIN "public"."variant_frequency" vf')
+    expect(params).toEqual([1, 3])
+  })
+
+  it('ignores a cap below 1', () => {
+    const { fromAndWhereSql, params } = buildPostgresVariantQueryParts(
+      { case_id: 1, carrier_count_max: 0 },
+      '"public"'
+    )
+    expect(fromAndWhereSql).not.toContain('vf.case_count <=')
+    expect(params).toEqual([1])
+  })
+})
