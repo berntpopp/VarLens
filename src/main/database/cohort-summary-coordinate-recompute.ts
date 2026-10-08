@@ -24,6 +24,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
   MARK_STALE_SQL,
+  TOUCH_SUMMARY_CONTENT_SQL,
   geneBurdenInsertSql,
   perCaseAnnotationFlagsSql,
   variantSummaryInsertSql
@@ -61,6 +62,7 @@ export function recomputeSummaryCoordinate(db: DatabaseType, coordinate: Summary
   db.prepare(DELETE_COORDINATE_SQL).run(at)
   db.prepare(variantSummaryInsertSql(AT_COORDINATE)).run(at)
   db.prepare(perCaseAnnotationFlagsSql(AT_COORDINATE)).run(at)
+  db.exec(TOUCH_SUMMARY_CONTENT_SQL)
 }
 
 /** Recompute the gene-burden rows (all builds) of the given genes. */

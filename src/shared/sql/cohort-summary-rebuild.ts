@@ -166,6 +166,20 @@ export const RECOUNT_UNIQUE_VARIANTS_SQL = `
 export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
 
 /**
+ * Meta key of a token that changes whenever summary rows change in a way the
+ * cohort column metadata reads (a star or comment flag does not count). Every
+ * writer of such rows runs TOUCH_SUMMARY_CONTENT_SQL in its transaction; the
+ * per-connection metadata cache (CohortService.getColumnMeta) rescans the
+ * summary only when the token moved. Random, so no rebuild can repeat a value.
+ */
+export const SUMMARY_CONTENT_STAMP_KEY = 'content_stamp'
+
+export const TOUCH_SUMMARY_CONTENT_SQL = `
+  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+  VALUES ('${SUMMARY_CONTENT_STAMP_KEY}', lower(hex(randomblob(8))));
+`
+
+/**
  * Last step of every full rebuild, in its transaction.
  *
  * The rebuild made the summary match every variant committed so far, so it
@@ -178,7 +192,7 @@ export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('last_rebuilt_at', CAST(strftime('%s', 'now') AS TEXT));
-${RECOUNT_UNIQUE_VARIANTS_SQL}  DELETE FROM cohort_summary_meta WHERE key = '${IMPORT_SESSION_OPEN_KEY}';
+${RECOUNT_UNIQUE_VARIANTS_SQL}${TOUCH_SUMMARY_CONTENT_SQL}  DELETE FROM cohort_summary_meta WHERE key = '${IMPORT_SESSION_OPEN_KEY}';
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('is_stale', '0');
 `

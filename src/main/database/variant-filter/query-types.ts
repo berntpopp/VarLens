@@ -12,7 +12,7 @@ export type VariantQueryBuilder = SelectQueryBuilder<VarlensDatabase, any, Recor
 
 /** Options accepted by `VariantFilterBuilder.build()`. */
 export interface VariantFilterBuildOptions {
-  /** Compiled queries: no temp table, so >= 50 panel intervals bind as one JSON parameter. */
+  /** Compiled queries: no temp table, so panel intervals bind as one JSON parameter. */
   forceOrChain?: boolean
   /** Sort keys, used only to pre-compute the extension-table JOINs they need. */
   sortBy?: SortItem[]

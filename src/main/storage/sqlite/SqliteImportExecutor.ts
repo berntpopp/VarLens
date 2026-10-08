@@ -43,6 +43,8 @@ export interface MultiFileImportDelegateInput {
   files: StorageImportMultiFileParams['files']
   vcfOptions?: StorageImportMultiFileParams['vcfOptions']
   filters?: ImportFilters
+  /** The same filters before translation: the first file's worker loads the BED file itself. */
+  storageFilters?: StorageImportFileFilters
   callbacks: ImportCallbacks
 }
 
@@ -104,7 +106,11 @@ export class SqliteImportExecutor implements StorageImportExecutor {
         getSession,
         this.getDatabaseService,
         input.callbacks,
-        input.filters
+        input.filters,
+        input.storageFilters && {
+          ...input.storageFilters,
+          bedFile: input.storageFilters.bedFilePath
+        }
       )
     }
   }
@@ -314,6 +320,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       files: params.files,
       vcfOptions: params.vcfOptions,
       filters,
+      storageFilters: params.filters,
       callbacks
     })
 
