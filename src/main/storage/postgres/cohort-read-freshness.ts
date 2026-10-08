@@ -38,6 +38,7 @@ import {
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
+import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import { scheduleSeverityRankBackfill } from './severity-rank-backfill-job'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
@@ -153,6 +154,9 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
 async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<boolean> {
   const repository = new PostgresCohortSummaryRepository()
   const client = (await pool.connect()) as PoolClient
+  // Only the background path raises the server timeout, so only it outlives the client one.
+  const restoreQueryTimeout = wait ? liftClientQueryTimeout(client) : () => undefined
+  let rollbackFailure: Error | undefined
   try {
     await client.query('BEGIN')
     if (wait) {
@@ -167,14 +171,11 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
     await client.query('COMMIT')
     return true
   } catch (error) {
-    try {
-      await client.query('ROLLBACK')
-    } catch {
-      // ignore rollback failure; surface the original error below
-    }
+    rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
     throw error
   } finally {
-    client.release()
+    restoreQueryTimeout()
+    client.release(rollbackFailure)
   }
 }
 
