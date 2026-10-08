@@ -4,7 +4,12 @@ import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { registerIpcHandlers, destroyDbPool } from './ipc'
-import { initDatabaseManager, initDatabaseManagerSafe, closeDatabaseManager } from './database'
+import {
+  initDatabaseManager,
+  initDatabaseManagerSafe,
+  closeDatabaseManager,
+  getDatabaseManager
+} from './database'
 import { mainLogger } from './services/MainLogger'
 import { initAutoUpdater, scheduleUpdateChecks } from './services/AutoUpdater'
 import { APP_CONFIG } from '../shared/config'
@@ -14,7 +19,8 @@ import { isMainWindowNavigationAllowed } from './window-navigation-policy'
 import { createContentSecurityPolicyHeaderHandler } from './security/csp-header'
 import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 import { beginDatabaseStartup, completeDatabaseStartup } from './database/startup-gate'
-import { openDefaultDatabaseAfterWindow } from './startup-sequence'
+import { openDefaultDatabaseAfterWindow, startSqliteHousekeeping } from './startup-sequence'
+import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -285,6 +291,15 @@ if (gotTheLock !== true) {
       onSettled: () => {
         completeDatabaseStartup()
         markMilestone('database-ready')
+      },
+      // Best effort, off the main thread: a failure must not undo the open.
+      onOpened: () => {
+        try {
+          startSqliteHousekeeping(getDatabaseManager(), triggerStartupRebuildIfNeeded)
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error)
+          mainLogger.warn(`Startup housekeeping failed: ${msg}`, 'database')
+        }
       }
     })
 
