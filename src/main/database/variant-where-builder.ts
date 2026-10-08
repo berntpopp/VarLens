@@ -35,6 +35,7 @@ export interface BaseFilterInput {
   has_comment?: boolean
   acmg_classifications?: string[]
   carrier_count_min?: number
+  carrier_count_max?: number
   variant_type?: string
   genome_build?: string
   column_filters?: ColumnFiltersParam
@@ -118,6 +119,15 @@ export function buildBaseWhere(
   ) {
     conditions.push(`${q('carrier_count')} >= ?`)
     params.push(filters.carrier_count_min)
+  }
+  if (
+    isCohortSummaryScope &&
+    filters.carrier_count_max !== undefined &&
+    filters.carrier_count_max >= 1
+  ) {
+    // carrier_count is NOT NULL on the summary: no NULL branch.
+    conditions.push(`${q('carrier_count')} <= ?`)
+    params.push(filters.carrier_count_max)
   }
 
   // Impact and ClinVar match by normalised category (severity-filter.ts).

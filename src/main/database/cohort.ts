@@ -167,6 +167,7 @@ export class CohortService {
       has_comment: params.has_comment,
       acmg_classifications: params.acmg_classifications,
       carrier_count_min: params.carrier_count_min,
+      carrier_count_max: params.carrier_count_max,
       variant_type: params.variant_type,
       genome_build: params.genome_build,
       column_filters: remappedColumnFilters
