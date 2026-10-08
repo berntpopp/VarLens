@@ -32,7 +32,7 @@ export function registerProteinHandlers({ ipcMain, getDb }: HandlerDependencies)
   function getSharedCache(): ApiCache | null {
     if (!apiCache) {
       if (apiFixturesEnabled()) return null
-      apiCache = new ApiCache(getDb().database)
+      apiCache = new ApiCache(() => getDb().database)
     }
     return apiCache
   }

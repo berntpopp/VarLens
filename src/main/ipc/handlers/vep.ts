@@ -20,8 +20,7 @@ export function registerVepHandlers({ ipcMain, getDb }: HandlerDependencies): vo
   function getVepClient(): VepApiClient {
     if (!vepClient) {
       if (!apiFixturesEnabled()) {
-        const db = getDb().database
-        apiCache = new ApiCache(db)
+        apiCache = new ApiCache(() => getDb().database)
       }
       vepClient = new VepApiClient(apiCache)
     }
@@ -119,8 +118,7 @@ export function registerVepHandlers({ ipcMain, getDb }: HandlerDependencies): vo
           return { vepCount: 0, hpoCount: 0, totalBytes: 0 }
         }
         // Initialize cache to get stats
-        const db = getDb().database
-        apiCache = new ApiCache(db)
+        apiCache = new ApiCache(() => getDb().database)
       }
       return apiCache.getCacheStats()
     })

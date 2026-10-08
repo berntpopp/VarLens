@@ -24,8 +24,7 @@ let apiCache: ApiCache | null = null
 export function registerGnomadHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   function getGnomadClient(): GnomadApiClient {
     if (!gnomadClient) {
-      const db = getDb().database
-      apiCache = new ApiCache(db)
+      apiCache = new ApiCache(() => getDb().database)
       gnomadClient = new GnomadApiClient(apiCache)
     }
     return gnomadClient

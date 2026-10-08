@@ -18,8 +18,7 @@ let apiCache: ApiCache | null = null
 export function registerSpliceAIHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   function getSpliceAIClient(): SpliceAIApiClient {
     if (!spliceAIClient) {
-      const db = getDb().database
-      apiCache = new ApiCache(db)
+      apiCache = new ApiCache(() => getDb().database)
       spliceAIClient = new SpliceAIApiClient(apiCache)
     }
     return spliceAIClient
