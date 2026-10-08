@@ -166,4 +166,13 @@ describe('buildIpcParams', () => {
       expect(result.column_filters).not.toBe(columnFilters)
     })
   })
+
+  // #504: v-model.number leaves '' in an emptied number field
+  it('drops non-numeric numeric fields instead of sending them', () => {
+    const empty = '' as unknown as number
+    const params = buildIpcParams(
+      makeDefaultFilters({ minCadd: empty, maxGnomadAf: empty, maxInternalAf: empty })
+    )
+    expect(params).toEqual({})
+  })
 })

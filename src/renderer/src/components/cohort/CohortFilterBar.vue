@@ -149,9 +149,9 @@ import { mdiCommentText, mdiCommentTextOutline, mdiStar, mdiStarOutline } from '
 import {
   ACMG_FILTER_OPTIONS,
   applyPresetStateToFilters,
+  buildPresetFilterJson,
   isPresetDiverged
 } from '../../utils/filters'
-import { stripVueProxies } from '../../utils/stripVueProxies'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
@@ -295,11 +295,10 @@ async function handleSavePreset(data: { name: string; description: string | null
   savingPreset.value = true
   savePresetError.value = null
   try {
-    const plainFilters = stripVueProxies(filters.value)
     await savePreset({
       name: data.name,
       description: data.description,
-      filterJson: plainFilters
+      filterJson: buildPresetFilterJson(filters.value, selectedImpactPresets.value)
     })
     showSavePresetDialog.value = false
   } catch (e) {

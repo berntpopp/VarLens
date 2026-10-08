@@ -138,7 +138,11 @@ export function useVariantData(options: UseVariantDataOptions) {
       }
     },
     onSortChange: onSortUpdate,
-    filterKey,
+    // Header filters scope the request too (as in the cohort table); the reload
+    // watcher below stays on `filterKey` so header-filter typing stays debounced.
+    filterKey: computed(
+      () => filterKey.value + JSON.stringify(columnFilterState.columnFilters.value)
+    ),
     prefetchEnabled: active
   })
 

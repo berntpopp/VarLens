@@ -10,6 +10,7 @@ import { invalidateServerData } from '../../../src/renderer/src/queries/invalida
 import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
 import { createQueryPinia, withQueries } from '../helpers/with-queries'
 import type { FilterPreset } from '../../../src/shared/types/filter-presets'
+import { createFilterState } from '../../../src/shared/filters/filterDefaults'
 
 const mockPresets: FilterPreset[] = [
   {
@@ -244,6 +245,23 @@ describe('useFilterPresetStore', () => {
       expect(getActiveFilterState().maxInternalAf).toBeUndefined()
     }
   )
+
+  it('merges two user presets that were saved with explicit defaults (#504)', async () => {
+    const saved = (id: number, filterJson: FilterPreset['filterJson']): FilterPreset => ({
+      ...mockPresets[0],
+      id,
+      isBuiltIn: false,
+      filterJson: { ...createFilterState(), ...filterJson }
+    })
+    mockApi.list.mockResolvedValue([saved(10, { maxGnomadAf: 0.01 }), saved(11, { minCadd: 20 })])
+    const store = useFilterPresetStore()
+    await store.loadPresets()
+
+    store.togglePreset(10)
+    store.togglePreset(11)
+
+    expect(store.getActiveFilterState()).toEqual({ maxGnomadAf: 0.01, minCadd: 20 })
+  })
 
   it('keeps active presets separate for the case and cohort views (P0-3 isolation)', async () => {
     const caseStore = useFilterPresetStore('case')

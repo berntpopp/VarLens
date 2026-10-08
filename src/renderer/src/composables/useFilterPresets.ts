@@ -44,18 +44,20 @@ export function useFilterPresets(filters: Ref<FilterState>, onPresetsChange: () 
 
   // --- Preset -> filter sync ---
 
-  watch(selectedAfPreset, (value) => {
+  // Deselecting clears the field only while it still holds the preset's value,
+  // so a number typed over an active preset survives.
+  watch(selectedAfPreset, (value, old) => {
     if (value !== null) {
       filters.value.maxGnomadAf = value
-    } else {
+    } else if (filters.value.maxGnomadAf === old) {
       filters.value.maxGnomadAf = null
     }
   })
 
-  watch(selectedCaddPreset, (value) => {
+  watch(selectedCaddPreset, (value, old) => {
     if (value !== null) {
       filters.value.minCadd = value
-    } else {
+    } else if (filters.value.minCadd === old) {
       filters.value.minCadd = null
     }
   })
@@ -82,6 +84,8 @@ export function useFilterPresets(filters: Ref<FilterState>, onPresetsChange: () 
   watch(
     () => filters.value.minCadd,
     (value) => {
+      // An emptied v-model.number field holds '', which would pass `>= 0` checks
+      if (typeof value !== 'number') filters.value.minCadd = null
       if (value !== null) {
         const matching = caddPresets.find((p) => p.value === value)
         selectedCaddPreset.value = matching !== undefined ? matching.value : null

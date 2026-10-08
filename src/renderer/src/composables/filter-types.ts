@@ -2,7 +2,7 @@ import type { Ref, ComputedRef } from 'vue'
 import type { FilterOptions, VariantFilter } from '../../../shared/types/api'
 import type { Tag } from '../../../shared/types/database-entities'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
-import { FILTER_DEFAULTS } from '../../../shared/filters/filterDefaults'
+import { createFilterState } from '../../../shared/filters/filterDefaults'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
 export { buildVariantFilterFromState as buildFilterFromState } from '../utils/filters/filterSerialization'
 
@@ -78,22 +78,11 @@ export interface UseFilterStateReturn {
 }
 
 /**
- * Reset adapter-specific fields on a FilterState ref to their defaults.
+ * Reset every field on a FilterState ref to its default.
  *
  * Shared by useFilterComputed (clearAllFilters) and useFilterLifecycle
- * (resetForCaseSwitch) to avoid duplicating the field-by-field reset.
+ * (resetForCaseSwitch).
  */
 export function resetAdapterFields(filters: Ref<FilterState>): void {
-  filters.value.searchQuery = FILTER_DEFAULTS.searchQuery
-  filters.value.geneSymbol = FILTER_DEFAULTS.geneSymbol
-  filters.value.tagIds = []
-  filters.value.starredOnly = FILTER_DEFAULTS.starredOnly
-  filters.value.hasCommentOnly = FILTER_DEFAULTS.hasCommentOnly
-  filters.value.annotationScope = FILTER_DEFAULTS.annotationScope
-  filters.value.activePanelIds = []
-  filters.value.panelPaddingBp = FILTER_DEFAULTS.panelPaddingBp
-  filters.value.inheritanceModes = []
-  filters.value.analysisGroupId = FILTER_DEFAULTS.analysisGroupId
-  filters.value.considerPhasing = FILTER_DEFAULTS.considerPhasing
-  filters.value.columnFilters = { ...FILTER_DEFAULTS.columnFilters }
+  Object.assign(filters.value, createFilterState())
 }

@@ -9,7 +9,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { useFilterLifecycle } from '@renderer/composables/useFilterLifecycle'
-import { useFilterCore } from '@renderer/composables/useFilterCore'
 import type { FilterState } from '../../../src/shared/types/filters'
 import type { UseFilterLifecycleOptions } from '@renderer/composables/useFilterLifecycle'
 
@@ -40,7 +39,6 @@ function makeFilters(overrides: Partial<FilterState> = {}): FilterState {
 }
 
 function makeOptions(
-  core: ReturnType<typeof useFilterCore>,
   filtersRef: ReturnType<typeof ref<FilterState>>,
   caseIdRef: ReturnType<typeof ref<number>>,
   overrides: Partial<UseFilterLifecycleOptions> = {}
@@ -48,8 +46,6 @@ function makeOptions(
   return {
     caseIdRef,
     filters: filtersRef,
-    core,
-    syncCoreToFilters: vi.fn(),
     resetPresets: vi.fn(),
     onFiltersUpdate: vi.fn(),
     onCaseSwitch: vi.fn(),
@@ -72,16 +68,11 @@ describe('useFilterLifecycle', () => {
   describe('resetForCaseSwitch', () => {
     it('resets all adapter-specific fields', () => {
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters())
         const caseIdRef = ref(1)
-        const syncCoreToFilters = vi.fn()
         const resetPresets = vi.fn()
-        const opts = makeOptions(core, filters, caseIdRef, {
-          syncCoreToFilters,
-          resetPresets
-        })
-        return { ...useFilterLifecycle(opts), filters, syncCoreToFilters, resetPresets }
+        const opts = makeOptions(filters, caseIdRef, { resetPresets })
+        return { ...useFilterLifecycle(opts), filters, resetPresets }
       })
       app = appInstance
 
@@ -100,28 +91,25 @@ describe('useFilterLifecycle', () => {
       expect(result.filters.value.considerPhasing).toBe(false)
     })
 
-    it('calls core.reset and syncCoreToFilters', () => {
-      const syncCoreToFilters = vi.fn()
+    it('resets the shared drawer fields', () => {
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
-        const filters = ref(makeFilters())
+        const filters = ref(makeFilters({ clinvars: ['Pathogenic'], minCadd: 20 }))
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef, { syncCoreToFilters })
-        return { ...useFilterLifecycle(opts), syncCoreToFilters }
+        return { ...useFilterLifecycle(makeOptions(filters, caseIdRef)), filters }
       })
       app = appInstance
 
       result.resetForCaseSwitch()
-      expect(result.syncCoreToFilters).toHaveBeenCalled()
+      expect(result.filters.value.clinvars).toEqual([])
+      expect(result.filters.value.minCadd).toBeNull()
     })
 
     it('calls resetPresets', () => {
       const resetPresets = vi.fn()
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters())
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef, { resetPresets })
+        const opts = makeOptions(filters, caseIdRef, { resetPresets })
         return { ...useFilterLifecycle(opts), resetPresets }
       })
       app = appInstance
@@ -134,10 +122,9 @@ describe('useFilterLifecycle', () => {
   describe('setInitialSearch', () => {
     it('sets searchQuery from provided string', () => {
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters({ searchQuery: '' }))
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef)
+        const opts = makeOptions(filters, caseIdRef)
         return { ...useFilterLifecycle(opts), filters }
       })
       app = appInstance
@@ -148,10 +135,9 @@ describe('useFilterLifecycle', () => {
 
     it('does not set empty search', () => {
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters({ searchQuery: 'existing' }))
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef)
+        const opts = makeOptions(filters, caseIdRef)
         return { ...useFilterLifecycle(opts), filters }
       })
       app = appInstance
@@ -168,10 +154,9 @@ describe('useFilterLifecycle', () => {
       const loadFilterOptions = vi.fn().mockResolvedValue(undefined)
 
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters())
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef, {
+        const opts = makeOptions(filters, caseIdRef, {
           onFiltersUpdate,
           onCaseSwitch,
           loadFilterOptions
@@ -199,10 +184,9 @@ describe('useFilterLifecycle', () => {
       const loadFilterOptions = vi.fn().mockResolvedValue(undefined)
 
       const [, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters())
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef, {
+        const opts = makeOptions(filters, caseIdRef, {
           onCaseSwitch,
           loadFilterOptions
         })
@@ -221,10 +205,9 @@ describe('useFilterLifecycle', () => {
       const onCaseSwitch = vi.fn()
 
       const [result, appInstance] = withSetup(() => {
-        const core = useFilterCore()
         const filters = ref(makeFilters())
         const caseIdRef = ref(1)
-        const opts = makeOptions(core, filters, caseIdRef, { onCaseSwitch })
+        const opts = makeOptions(filters, caseIdRef, { onCaseSwitch })
         return { ...useFilterLifecycle(opts), caseIdRef }
       })
       app = appInstance

@@ -5,7 +5,6 @@
  * The public API (UseFilterStateReturn) is unchanged from the monolithic version.
  *
  * Sub-composables:
- * - useFilterCore — shared consequences, funcs, clinvars, numeric thresholds
  * - useFilterPresets — impact/AF/CADD preset chips with bidirectional sync
  * - useGeneAutocomplete — gene symbol suggestions via IPC
  * - useFilterOptionsCache — filter options loading with LRU cache
@@ -27,7 +26,6 @@ import {
 } from './filter-types'
 import { useFilterPresets } from './useFilterPresets'
 import { useFilterExport } from './useFilterExport'
-import { useFilterCore } from './useFilterCore'
 import { useGeneAutocomplete } from './useGeneAutocomplete'
 import { useFilterOptionsCache } from './useFilterOptionsCache'
 import { useFilterComputed } from './useFilterComputed'
@@ -55,10 +53,9 @@ export function useFilterState(
   const { onFiltersUpdate, onResetSort, onCaseSwitch } = options
 
   // -------------------------------------------------------------------------
-  // 1. Core, API, Tags
+  // 1. API, Tags
   // -------------------------------------------------------------------------
 
-  const core = useFilterCore()
   const { api } = useApiService()
   const { loadTags, getTags } = useTags()
 
@@ -67,21 +64,6 @@ export function useFilterState(
   // -------------------------------------------------------------------------
 
   const filters = ref<FilterState>(createFilterState())
-
-  // -------------------------------------------------------------------------
-  // 3. Helpers: syncCoreToFilters and resetAdapterFields
-  // -------------------------------------------------------------------------
-
-  /** Sync core state back to the filters ref. Call after any core mutation. */
-  function syncCoreToFilters(): void {
-    filters.value.consequences = core.consequences.value
-    filters.value.funcs = core.funcs.value
-    filters.value.clinvars = core.clinvars.value
-    filters.value.maxGnomadAf = core.gnomadAfMax.value
-    filters.value.minCadd = core.caddMin.value
-    filters.value.maxInternalAf = core.maxInternalAf.value
-    filters.value.acmgClassifications = core.acmgClassifications.value
-  }
 
   // -------------------------------------------------------------------------
   // 4. Presets (delegated to useFilterPresets)
@@ -114,16 +96,7 @@ export function useFilterState(
   watch(filterEmitKey, onStateChange)
 
   // URL `?f=` (case view): restore/serialise drawer filters + impact chips.
-  // Core refs mirror filters, so resync them after a restore.
-  useFilterUrlParam('case', filters, selectedImpactPresets, () => {
-    core.consequences.value = [...filters.value.consequences]
-    core.funcs.value = [...filters.value.funcs]
-    core.clinvars.value = [...filters.value.clinvars]
-    core.gnomadAfMax.value = filters.value.maxGnomadAf
-    core.caddMin.value = filters.value.minCadd
-    core.maxInternalAf.value = filters.value.maxInternalAf
-    core.acmgClassifications.value = [...filters.value.acmgClassifications]
-  })
+  useFilterUrlParam('case', filters, selectedImpactPresets)
 
   // Export state
   const exporting = ref(false)
@@ -157,8 +130,6 @@ export function useFilterState(
     filters,
     selectedImpactPresets,
     availableTags,
-    core,
-    syncCoreToFilters,
     resetPresets,
     onResetSort,
     selectedAfPreset,
@@ -169,8 +140,6 @@ export function useFilterState(
   const { resetForCaseSwitch, setInitialSearch } = useFilterLifecycle({
     caseIdRef,
     filters,
-    core,
-    syncCoreToFilters,
     resetPresets,
     onFiltersUpdate,
     onCaseSwitch,

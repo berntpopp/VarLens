@@ -9,7 +9,6 @@ import { watch, type Ref, type ComputedRef } from 'vue'
 import type { VariantFilter } from '../../../shared/types/api'
 import type { FilterState } from '../../../shared/types/filters'
 import { resetAdapterFields } from './filter-types'
-import type { FilterCoreReturn } from './useFilterCore'
 
 /**
  * Options for useFilterLifecycle
@@ -19,10 +18,6 @@ export interface UseFilterLifecycleOptions {
   caseIdRef: Ref<number> | ComputedRef<number>
   /** Reactive filter state */
   filters: Ref<FilterState>
-  /** Core filter composable (for reset) */
-  core: FilterCoreReturn
-  /** Sync core state back to filters ref */
-  syncCoreToFilters: () => void
   /** Reset presets to defaults */
   resetPresets: () => void
   /** Callback when filters update */
@@ -62,8 +57,6 @@ export function useFilterLifecycle(options: UseFilterLifecycleOptions): UseFilte
   const {
     caseIdRef,
     filters,
-    core,
-    syncCoreToFilters,
     resetPresets,
     onFiltersUpdate,
     onCaseSwitch,
@@ -75,11 +68,6 @@ export function useFilterLifecycle(options: UseFilterLifecycleOptions): UseFilte
    * Reset all filters for a case switch (without triggering sort reset)
    */
   const resetForCaseSwitch = (): void => {
-    // Reset shared fields via core, then sync back to filters object
-    core.reset()
-    syncCoreToFilters()
-
-    // Reset adapter-specific fields
     resetAdapterFields(filters)
     resetPresets()
   }

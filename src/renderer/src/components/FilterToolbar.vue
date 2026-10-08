@@ -166,8 +166,12 @@ import type { VariantFilter } from '../../../shared/types/api'
 import type { ColumnFilter, ColumnFiltersParam } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
-import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
-import { stripVueProxies } from '../utils/stripVueProxies'
+import {
+  ACMG_FILTER_OPTIONS,
+  applyPresetStateToFilters,
+  buildPresetFilterJson,
+  isPresetDiverged
+} from '../utils/filters'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { usePermissions } from '../composables/usePermissions'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
@@ -457,11 +461,10 @@ async function handleSavePreset(data: { name: string; description: string | null
   savingPreset.value = true
   savePresetError.value = null
   try {
-    const plainFilters = stripVueProxies(filters.value)
     await savePreset({
       name: data.name,
       description: data.description,
-      filterJson: plainFilters
+      filterJson: buildPresetFilterJson(filters.value, selectedImpactPresets.value)
     })
     showSavePresetDialog.value = false
   } catch (e) {
