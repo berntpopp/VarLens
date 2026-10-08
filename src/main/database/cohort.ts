@@ -28,6 +28,7 @@ import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
+import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -269,7 +270,8 @@ export class CohortService {
         ${COHORT_FREQUENCY_SQL} AS cohort_frequency,
         cvs.het_count,
         cvs.hom_count,
-        cvs.variant_key,
+        cvs.variant_type,
+        cvs.genome_build,
         cvs.consequence,
         cvs.func,
         cvs.clinvar,
@@ -294,6 +296,8 @@ export class CohortService {
     const bound: unknown[] = [...paramsArray, limit, seeking ? 0 : offset]
     if (seeking && keyset !== null) bound.push(keyset.seekBindings)
     const results = stmt.all(...bound) as CohortVariant[]
+    // Built here, not read: the stored variant_key is the four-field form (#503).
+    for (const row of results) row.variant_key = cohortVariantKey(row)
     const paging = keyset?.finalize(results as unknown as Array<Record<string, unknown>>, limit)
 
     return {

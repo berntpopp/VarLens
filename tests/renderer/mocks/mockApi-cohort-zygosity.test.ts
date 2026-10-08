@@ -1,3 +1,6 @@
+import type { CohortVariant } from '../../../src/shared/types/cohort'
+import { cohortVariantKey } from '../../../src/shared/utils/cohort-variant-key'
+
 /**
  * The dev-mode mock aggregates the cohort itself; its het/hom counts must use
  * the shared genotype classes, like both real backends.
@@ -24,5 +27,17 @@ describe('mock cohort het/hom counts', () => {
     } finally {
       mockVariants.splice(-2)
     }
+  })
+})
+
+describe('mock cohort row identity', () => {
+  it('keys every row by the six fields and keeps the genome builds apart', async () => {
+    const { mockApi } = await import('../../../src/renderer/src/mocks/mockApi')
+    const { data } = (await mockApi.cohort.getVariants({ limit: 1000 } as never)) as unknown as {
+      data: CohortVariant[]
+    }
+    expect(new Set(data.map((row) => row.genome_build))).toEqual(new Set(['GRCh37', 'GRCh38']))
+    for (const row of data) expect(row.variant_key).toBe(cohortVariantKey(row))
+    expect(new Set(data.map((row) => row.variant_key)).size).toBe(data.length)
   })
 })

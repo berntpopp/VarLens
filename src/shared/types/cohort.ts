@@ -28,15 +28,7 @@ export interface CohortVariantIdentity {
 /**
  * Aggregated variant across all cases in the cohort
  */
-export interface CohortVariant {
-  /** Chromosome */
-  chr: string
-  /** Genomic position */
-  pos: number
-  /** Reference allele */
-  ref: string
-  /** Alternate allele */
-  alt: string
+export interface CohortVariant extends CohortVariantIdentity {
   /** Gene symbol (nullable) */
   gene_symbol: string | null
   /** cDNA HGVS notation (nullable) */
@@ -53,7 +45,7 @@ export interface CohortVariant {
   het_count: number
   /** Number of homozygous carriers */
   hom_count: number
-  /** Composite key for stable v-data-table tracking: "chr:pos:ref:alt" */
+  /** Opaque row key, built at read time by `cohortVariantKey`; never parse it */
   variant_key: string
 
   // Annotation columns (aggregated: MAX value across carriers)

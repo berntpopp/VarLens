@@ -10,8 +10,11 @@ import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
+import { mockCohortIdentity } from './cohortIdentityMock'
+import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { genotypeZygosity } from '../../../shared/utils/genotype'
+import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -375,30 +378,11 @@ export const mockApi: WindowAPI = {
   },
 
   cohort: {
-    getVariants: async (params?: {
-      search_term?: string
-      sort_by?: string
-      sort_order?: 'asc' | 'desc'
-      limit?: number
-      offset?: number
-      // Extended filter parameters
-      gene_symbol?: string
-      consequences?: string[]
-      funcs?: string[]
-      clinvars?: string[]
-      gnomad_af_max?: number
-      cadd_min?: number
-      max_internal_af?: number
-      carrier_count_min?: number
-    }) => {
-      // Aggregate variants by (chr, pos, ref, alt)
+    getVariants: async (params?: CohortSearchParams) => {
+      // Aggregate variants by the six-field cohort identity
       const variantMap = new Map<
         string,
-        {
-          chr: string
-          pos: number
-          ref: string
-          alt: string
+        ReturnType<typeof mockCohortIdentity> & {
           gene_symbol: string | null
           cdna: string | null
           aa_change: string | null
@@ -414,13 +398,11 @@ export const mockApi: WindowAPI = {
       >()
 
       for (const v of variants) {
-        const key = `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+        const identity = mockCohortIdentity(v, cases)
+        const key = cohortVariantKey(identity)
         if (!variantMap.has(key)) {
           variantMap.set(key, {
-            chr: v.chr,
-            pos: v.pos,
-            ref: v.ref,
-            alt: v.alt,
+            ...identity,
             gene_symbol: v.gene_symbol ?? null,
             cdna: v.cdna ?? null,
             aa_change: v.aa_change ?? null,
@@ -462,6 +444,8 @@ export const mockApi: WindowAPI = {
           pos: v.pos,
           ref: v.ref,
           alt: v.alt,
+          variant_type: v.variant_type,
+          genome_build: v.genome_build,
           gene_symbol: v.gene_symbol,
           cdna: v.cdna,
           aa_change: v.aa_change,
@@ -519,7 +503,7 @@ export const mockApi: WindowAPI = {
       if (params?.clinvars !== undefined && params.clinvars.length > 0) {
         cohortVariants = cohortVariants.filter(
           (v) =>
-            v.clinvar !== null && params.clinvars!.some((clinvar) => v.clinvar!.includes(clinvar))
+            v.clinvar !== null && params.clinvars!.some((clinvar: string) => v.clinvar!.includes(clinvar))
         )
       }
 

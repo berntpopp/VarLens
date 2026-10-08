@@ -95,6 +95,8 @@ function summarySelectList(totalCases: number): string {
       cvs.pos,
       cvs.ref,
       cvs.alt,
+      cvs.variant_type,
+      cvs.genome_build,
       cvs.gene_symbol,
       cvs.cdna,
       cvs.aa_change,

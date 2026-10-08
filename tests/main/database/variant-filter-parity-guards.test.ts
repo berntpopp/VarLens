@@ -4,8 +4,8 @@
  * comparison lives in tests/main/storage/variant-filter-backend-parity.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 const geneRef = vi.hoisted(() => ({ getCoordinatesForGenes: vi.fn() }))
+
 
 vi.mock('../../../src/main/database/geneReferenceLoader', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/main/database/geneReferenceLoader')>()),
@@ -33,6 +33,11 @@ import { buildSummaryQueryParts } from '../../../src/main/storage/postgres/postg
 import { dispatchTask } from '../../../src/main/workers/db-worker-dispatch'
 import type { ColumnFiltersParam } from '../../../src/shared/types/column-filters'
 
+/** `chr:pos:ref:alt` of a cohort row; its variant_key is opaque (#503). */
+const coord = (row: unknown): string => {
+  const { chr, pos, ref, alt } = row as { chr: string; pos: number; ref: string; alt: string }
+  return `${chr}:${pos}:${ref}:${alt}`
+}
 const GENE = { hgncId: 'HGNC:90001', symbol: 'PARITY1' }
 
 function variant(chr: string, pos: number, over: Record<string, unknown> = {}): never {
@@ -116,7 +121,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     ) as { data: Array<{ variant_key: string }> }
 
     // 7:150000:A:C belongs to the GRCh37 case and must not leak in.
-    expect(result.data.map((row) => row.variant_key).sort()).toEqual([
+    expect(result.data.map(coord).sort()).toEqual([
       '7:150000:A:T',
       '7:202000:A:T',
       '7:90000:A:<DEL>'
@@ -205,7 +210,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
           () => sqlite,
           () => null
         )) as { data: Array<{ variant_key: string }> }
-        return result.data.map((row) => row.variant_key).sort()
+        return result.data.map(coord).sort()
       }
 
       expect(await keys('GRCh37')).toEqual([])
@@ -218,7 +223,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
         expect(prepared).not.toHaveProperty('active_panel_ids')
         return new CohortService(sqlite.db)
           .getCohortVariants(prepared)
-          .data.map((row) => row.variant_key)
+          .data.map(coord)
           .sort()
       }
       const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }

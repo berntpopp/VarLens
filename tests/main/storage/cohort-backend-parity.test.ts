@@ -667,7 +667,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     expect(sqlite.cohort.getCohortSummary().unique_variants).toBe(3)
     // The cohort filter impact = HIGH finds the variant again.
     expect(
-      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map((v) => v.variant_key)
+      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map(variantKey)
     ).toEqual(['1:100:A:T'])
 
     // Transcript switches on the new carrier. At 1:100 it becomes HIGH too and
@@ -805,9 +805,9 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       }
     ])
     const highOnPg = await pgCohort.queryVariants({ consequences: ['HIGH'] })
-    expect(highOnPg.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+    expect(highOnPg.data.map(variantKey)).toEqual(['1:100:A:T'])
     expect(
-      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map((v) => v.variant_key)
+      sqlite.cohort.getCohortVariants({ consequences: ['HIGH'] }).data.map(variantKey)
     ).toEqual(['1:100:A:T'])
 
     // 2. Transcript switches on the new carrier: one that does not change the

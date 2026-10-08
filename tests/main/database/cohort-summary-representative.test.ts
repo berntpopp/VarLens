@@ -151,7 +151,7 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
       carrier_count: 3
     })
     const filtered = service.cohort.getCohortVariants({ consequences: ['HIGH'] })
-    expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+    expect(filtered.data.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`)).toEqual(['1:100:A:T'])
     expect(service.cohort.getCohortVariants({ consequences: ['MODIFIER'] }).data).toEqual([])
   })
 
@@ -191,7 +191,7 @@ describe('cohort summary representative: the most severe carrier row (#469)', ()
       clinvar_rank: 15
     })
     for (const filter of [{ clinvars: ['Pathogenic'] }, { consequences: ['HIGH'] }]) {
-      expect(service.cohort.getCohortVariants(filter).data.map((v) => v.variant_key)).toEqual([
+      expect(service.cohort.getCohortVariants(filter).data.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`)).toEqual([
         '1:100:A:T'
       ])
     }

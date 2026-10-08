@@ -9,6 +9,7 @@ import type {
   CohortVariant,
   GeneBurden
 } from '../../../shared/types/cohort'
+import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
 import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
 import {
   prepareCohortRead,
@@ -426,17 +427,18 @@ export class PostgresCohortRepository {
   }
 
   private toCohortVariant(row: Record<string, unknown>, fallbackTotalCases: number): CohortVariant {
-    const chr = String(row.chr ?? '')
-    const pos = toNumber(row.pos)
-    const ref = String(row.ref ?? '')
-    const alt = String(row.alt ?? '')
+    const identity = {
+      chr: String(row.chr ?? ''),
+      pos: toNumber(row.pos),
+      ref: String(row.ref ?? ''),
+      alt: String(row.alt ?? ''),
+      variant_type: String(row.variant_type ?? ''),
+      genome_build: String(row.genome_build ?? '')
+    }
     const totalCases = toNumber(row.total_cases) || fallbackTotalCases
 
     return {
-      chr,
-      pos,
-      ref,
-      alt,
+      ...identity,
       gene_symbol:
         row.gene_symbol === null || row.gene_symbol === undefined ? null : String(row.gene_symbol),
       cdna: row.cdna === null || row.cdna === undefined ? null : String(row.cdna),
@@ -447,10 +449,8 @@ export class PostgresCohortRepository {
       cohort_frequency: toNullableNumber(row.cohort_frequency) ?? 0,
       het_count: toNumber(row.het_count),
       hom_count: toNumber(row.hom_count),
-      variant_key:
-        row.variant_key === null || row.variant_key === undefined
-          ? `${chr}:${pos}:${ref}:${alt}`
-          : String(row.variant_key),
+      // Built here, not read: the stored variant_key is the four-field form (#503).
+      variant_key: cohortVariantKey(identity),
       consequence:
         row.consequence === null || row.consequence === undefined ? null : String(row.consequence),
       func: row.func === null || row.func === undefined ? null : String(row.func),

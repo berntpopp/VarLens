@@ -315,17 +315,17 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
             params: [structuredClone(withPanels(base, sqlitePanels()))]
           } as never
         ) as { data: Array<{ variant_key: string }> }
-        return result.data.map((row) => row.variant_key)
+        return result.data.map((row) => keyOf(row as never))
       }),
       'web cohort': outcome(async () => {
         const repo = new PostgresCohortRepository(pool, schema)
-        return (await repo.queryVariants(pgParams())).data.map((row) => row.variant_key)
+        return (await repo.queryVariants(pgParams())).data.map((row) => keyOf(row as never))
       }),
       'web cohort live': outcome(async () => {
         const repo = new PostgresCohortRepository(pool, schema)
         const keys: string[] = []
         for await (const row of repo.streamCohortRows(pgParams())) {
-          keys.push(String(row.variant_key))
+          keys.push(keyOf(row as never))
         }
         return keys
       })
