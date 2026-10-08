@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { h } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -28,6 +29,11 @@ vi.mock('../../../src/renderer/src/services/LogService', () => ({
 }))
 
 const vuetify = createVuetify({ components, directives })
+
+/** The panel reads the footer inset from the Vuetify layout, so it needs a v-app. */
+function inApp(props: Record<string, unknown> = {}) {
+  return { render: () => h(components.VApp, null, () => h(BackgroundJobsPanel, props)) }
+}
 
 function job(overrides: Partial<Job> = {}): Job {
   return {
@@ -70,8 +76,7 @@ describe('BackgroundJobsPanel', () => {
 
   /** The list is collapsed by default; most tests look at the expanded list. */
   async function mountPanel(props: Record<string, unknown> = {}, expanded = true) {
-    wrapper = mount(BackgroundJobsPanel, {
-      props,
+    wrapper = mount(inApp(props), {
       attachTo: document.body,
       global: { plugins: [vuetify] }
     })
@@ -236,7 +241,7 @@ describe('collapsed by default (footer toggle)', () => {
       attachTo: document.body,
       global: { plugins: [vuetify] }
     })
-    panel = mount(BackgroundJobsPanel, { attachTo: document.body, global: { plugins: [vuetify] } })
+    panel = mount(inApp(), { attachTo: document.body, global: { plugins: [vuetify] } })
     await flushPromises()
   })
 

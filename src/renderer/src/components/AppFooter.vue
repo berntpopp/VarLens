@@ -229,6 +229,8 @@
           size="small"
           variant="text"
           aria-label="Toggle log viewer"
+          :aria-pressed="logViewerOpen"
+          :active="logViewerOpen"
           @click="toggleLogViewer"
         >
           <v-badge :content="errorCount" :model-value="errorCount > 0" color="error" floating>
@@ -274,6 +276,7 @@ import {
 
 defineProps<{
   disclaimerAcknowledged: boolean
+  logViewerOpen: boolean
 }>()
 
 const emit = defineEmits<{

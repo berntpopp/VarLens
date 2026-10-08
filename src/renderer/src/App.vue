@@ -77,6 +77,7 @@
 
     <AppFooter
       :disclaimer-acknowledged="dialogHostRef?.disclaimerAcknowledged ?? false"
+      :log-viewer-open="dialogHostRef?.logViewerOpen ?? false"
       @toggle-log-viewer="dialogHostRef?.toggleLogViewer()"
       @open-disclaimer="dialogHostRef?.showDisclaimer()"
       @open-faq="dialogHostRef?.showFaq()"

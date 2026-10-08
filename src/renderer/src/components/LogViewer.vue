@@ -1,6 +1,10 @@
 <template>
   <Transition name="slide-up">
-    <div v-if="isOpen" class="log-viewer-panel d-flex flex-column">
+    <div
+      v-if="isOpen"
+      class="log-viewer-panel d-flex flex-column"
+      :style="{ bottom: `${mainRect.bottom}px` }"
+    >
       <!-- Compact toolbar with stats and actions -->
       <v-toolbar density="compact" color="surface" class="flex-grow-0">
         <v-toolbar-title class="text-title-small">Log Viewer</v-toolbar-title>
@@ -128,6 +132,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useLayout } from 'vuetify'
 import { useLogStore } from '../stores/logStore'
 import { logService } from '../services/LogService'
 import { useDebounce } from '../composables/useDebounce'
@@ -136,6 +141,10 @@ import { mdiChevronDown, mdiClose, mdiDeleteOutline, mdiDownload, mdiMagnify } f
 
 // Props
 const isOpen = defineModel<boolean>('open', { default: false })
+
+// Mounted outside v-main, so --v-layout-bottom is not inherited here: sit on
+// top of the layout's bottom items (the footer) instead of covering them.
+const { mainRect } = useLayout()
 
 // Store
 const logStore = useLogStore()
@@ -320,7 +329,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .log-viewer-panel {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
   height: 40vh;
