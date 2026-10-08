@@ -149,8 +149,10 @@ describe('operation security registry', () => {
     expect(Object.keys(HTTP_ROUTE_SECURITY_MAP).sort()).toEqual([
       'http:events',
       'http:export:download',
+      'http:import:discardUpload',
       'http:import:upload'
     ])
+    expect(HTTP_ROUTE_SECURITY_MAP['http:import:discardUpload'].minRole).toBe('analyst')
     expect(HTTP_ROUTE_SECURITY_MAP['http:import:upload'].minRole).toBe('analyst')
     expect(HTTP_ROUTE_SECURITY_MAP['http:export:download'].minRole).toBe('analyst')
   })

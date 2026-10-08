@@ -1001,31 +1001,33 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     expect((await pgVariants.getFilterOptions(pgCase)).clinvars).toEqual(offered)
   }, 120_000)
 
-  it('c. / p. search terms find the same rows on both backends (#515)', async () => {
-    // `c.1_2del` must not match `c.112del`: `_` is literal in HGVS.
-    const hgvs = [
-      { pos: 1000, cdna: 'c.5266dupC', aa_change: 'p.Gln1756ProfsTer74' },
-      { pos: 2000, cdna: 'c.1_2del', aa_change: 'p.Met1fs' },
-      { pos: 3000, cdna: 'c.112del', aa_change: 'p.Lys38fs' }
-    ]
-    const sqliteCase = sqlite.cases.createCase('hgvs-sqlite', '/tmp/hgvs.json', 0, 'GRCh38')
+  interface SearchRow {
+    pos: number
+    gene_symbol: string
+    cdna: string
+    aa_change: string
+  }
+
+  /** One case with `rows` on `chr`, on both backends, summarised. */
+  async function seedSearchCase(name: string, chr: string, rows: SearchRow[]): Promise<void> {
+    const sqliteCase = sqlite.cases.createCase(`${name}-sqlite`, `/tmp/${name}.json`, 0, 'GRCh38')
     sqlite.variants.insertVariantsBatch(
       sqliteCase,
-      hgvs.map((v) => ({ ...baseVariant({ chr: '17', pos: v.pos, gene_symbol: 'BRCA1' }), ...v }))
+      rows.map((v) => ({ ...baseVariant({ chr, pos: v.pos }), ...v }))
     )
     sqlite.cohortSummary.rebuild()
 
     const pgCase = await probe.query<{ id: number }>(
       `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, genome_build)
-         VALUES ('hgvs-pg', '/tmp/hgvs.json', 0, $1, 'GRCh38') RETURNING id`,
-      [now]
+         VALUES ($1, $2, 0, $3, 'GRCh38') RETURNING id`,
+      [`${name}-pg`, `/tmp/${name}.json`, now]
     )
-    for (const v of hgvs) {
+    for (const v of rows) {
       await probe.query(
         `INSERT INTO "${schema}".variants
            (case_id, chr, pos, ref, alt, variant_type, gene_symbol, gt_num, cdna, aa_change)
-           VALUES ($1, '17', $2, 'A', 'T', 'snv', 'BRCA1', '0/1', $3, $4)`,
-        [pgCase.rows[0].id, v.pos, v.cdna, v.aa_change]
+           VALUES ($1, $2, $3, 'A', 'T', 'snv', $4, '0/1', $5, $6)`,
+        [pgCase.rows[0].id, chr, v.pos, v.gene_symbol, v.cdna, v.aa_change]
       )
     }
     await withClient(async (client) => {
@@ -1037,20 +1039,71 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       })
       await client.query('COMMIT')
     })
+  }
 
-    const expected: Record<string, number[]> = {
-      'c.5266dupC': [1000],
-      'c.5266': [1000],
-      'p.gln1756': [1000],
-      'c.1_2del': [2000],
-      'c.9999': []
-    }
+  /** Each search term finds exactly `positions` on both backends. */
+  async function expectSearchParity(expected: Record<string, number[]>): Promise<void> {
     for (const [term, positions] of Object.entries(expected)) {
       const sqlitePos = sqliteCohortRows({ search_term: term }).map((row) => row.pos)
       const pgPos = (await pgCohortRows({ search_term: term })).map((row) => row.pos)
       expect(sqlitePos.sort(), `sqlite ${term}`).toEqual(positions)
       expect(pgPos.sort(), `postgres ${term}`).toEqual(positions)
     }
+  }
+
+  it('c. / p. search terms find the same rows on both backends (#515)', async () => {
+    // `c.1_2del` must not match `c.112del`: `_` is literal in HGVS.
+    await seedSearchCase('hgvs', '17', [
+      { pos: 1000, gene_symbol: 'BRCA1', cdna: 'c.5266dupC', aa_change: 'p.Gln1756ProfsTer74' },
+      { pos: 2000, gene_symbol: 'BRCA1', cdna: 'c.1_2del', aa_change: 'p.Met1fs' },
+      { pos: 3000, gene_symbol: 'BRCA1', cdna: 'c.112del', aa_change: 'p.Lys38fs' }
+    ])
+
+    await expectSearchParity({
+      'c.5266dupC': [1000],
+      'c.5266': [1000],
+      'p.gln1756': [1000],
+      'c.1_2del': [2000],
+      'c.9999': []
+    })
+  }, 120_000)
+
+  it('the search box means the same on both backends: wildcards, AND / OR / NOT', async () => {
+    const row = (pos: number, gene_symbol: string, cdna: string): SearchRow => ({
+      pos,
+      gene_symbol,
+      cdna,
+      aa_change: 'p.?'
+    })
+    await seedSearchCase('search', '20', [
+      row(1000, 'ZZA1', 'c.68_69del'),
+      row(2000, 'ZZA1', 'c.5266dupC'),
+      row(3000, 'ZZB2', 'c.743G>A'),
+      row(4000, 'Z_Q', 'c.1A>T'),
+      row(5000, 'ZXQ', 'c.2A>T'),
+      row(6000, 'Z%Q', 'c.3A>T'),
+      row(7000, 'Z\\Q', 'c.4A>T'),
+      row(8000, 'ZZ locus', 'c.5A>T')
+    ])
+
+    await expectSearchParity({
+      // `_`, `%` and `\` are literal characters, not LIKE syntax.
+      Z_: [4000],
+      'Z%': [6000],
+      'Z\\Q': [7000],
+      z_q: [4000],
+      // Without an uppercase operator the whole box is one literal term.
+      'ZZA1 ZZB2': [],
+      'ZZ locus': [8000],
+      '"ZZ locus"': [],
+      'ZZA1 c.68_69del': [],
+      'ZZA1 OR ZZB2': [1000, 2000, 3000],
+      'ZZA1 AND c.68_69del': [1000],
+      'ZZA1 AND NOT c.5266': [1000],
+      '(ZZA1 OR ZZB2) AND NOT c.68_69del': [2000, 3000],
+      // Does not parse: one literal term again.
+      'ZZA1 OR': []
+    })
   }, 120_000)
 
   it('panel-interval with spanning SV/CNV: spanning row is included on both backends (Pass-9 #7)', async () => {

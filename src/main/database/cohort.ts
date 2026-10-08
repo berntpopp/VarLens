@@ -20,8 +20,8 @@ import type {
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
-import { tokenize, parse } from '../../shared/utils/boolean-search'
-import { emitCohortSearch, emitTerm } from './search/cohort-search-emitter'
+import { booleanSearchSql } from '../../shared/utils/boolean-search'
+import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
@@ -106,15 +106,18 @@ export class CohortService {
     // Search term handling with LIKE-based strategy
     if (params.search_term !== undefined && params.search_term !== '') {
       const term = params.search_term.trim()
-      const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
-
-      if (!hasBooleanOps) {
-        const singleCondition = emitTerm(term, paramsArray)
-        whereConditions.push(singleCondition)
-      } else {
-        const sqlCondition = this.buildBooleanSearchCondition(term, paramsArray)
-        whereConditions.push(sqlCondition)
-      }
+      whereConditions.push(
+        booleanSearchSql(
+          term,
+          (t) => emitTerm(t, paramsArray),
+          (e) =>
+            mainLogger.warn(
+              'Malformed boolean search expression, falling back to single-term: ' +
+                (e instanceof Error ? e.message : String(e)),
+              'CohortService'
+            )
+        )
+      )
     }
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
@@ -298,28 +301,6 @@ export class CohortService {
       total_count: totalCount,
       ...paging
     }
-  }
-
-  /**
-   * Build a SQL boolean expression from a search string containing AND/OR/NOT.
-   */
-  private buildBooleanSearchCondition(term: string, paramsArray: (string | number)[]): string {
-    const tokens = tokenize(term)
-    if (tokens.length === 0) return '1=1'
-    let ast
-    try {
-      ast = parse(tokens)
-    } catch (e) {
-      mainLogger.warn(
-        'Malformed boolean search expression, falling back to single-term: ' +
-          (e instanceof Error ? e.message : String(e)),
-        'CohortService'
-      )
-      return emitTerm(term, paramsArray)
-    }
-    const { sql, params } = emitCohortSearch(ast)
-    paramsArray.push(...params)
-    return sql
   }
 
   /**

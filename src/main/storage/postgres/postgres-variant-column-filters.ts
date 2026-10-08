@@ -1,14 +1,29 @@
 /**
  * Per-column filters (`column_filters`) of the PostgreSQL case variant list.
  * Extracted from PostgresVariantReadRepository; the SQLite twin is
- * src/main/database/variant-filter/column-filters.ts.
+ * src/main/database/variant-filter/column-filters.ts. Also holds the HGVS
+ * search predicate the case and the cohort summary builders share.
  */
+import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { isSeverityKey } from '../../../shared/config/severity.config'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import { severityFilterOperands, severityFilterSql } from '../../../shared/filters/severity-filter'
 import type { CarrierRanks } from '../../../shared/sql/cohort-representative'
 import type { VariantFilter } from '../../../shared/types/database'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
+
+/** `c.`/`p.` tokens are HGVS: matched by ILIKE on cdna / aa_change, like SQLite. */
+export const HGVS_TOKEN = /^[cp]\./
+
+/** Shared by the case search (`v`) and the cohort summary search (`cvs`). */
+export function hgvsSearchSql(
+  alias: string,
+  token: string,
+  addParam: (value: unknown) => string
+): string {
+  const pattern = addParam(`%${escapeLikePattern(token)}%`)
+  return `(${alias}.cdna ILIKE ${pattern} ESCAPE '\\' OR ${alias}.aa_change ILIKE ${pattern} ESCAPE '\\')`
+}
 
 export function addPostgresColumnFilters(
   filter: VariantFilter,

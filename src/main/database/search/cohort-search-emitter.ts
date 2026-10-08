@@ -1,4 +1,4 @@
-import type { AstNode } from '../../../shared/utils/boolean-search'
+import { emitBooleanSql, type AstNode } from '../../../shared/utils/boolean-search'
 import { escapeLikePattern } from './search-clause-emitter'
 
 /**
@@ -7,21 +7,7 @@ import { escapeLikePattern } from './search-clause-emitter'
  */
 export function emitCohortSearch(ast: AstNode): { sql: string; params: (string | number)[] } {
   const params: (string | number)[] = []
-
-  function emit(node: AstNode): string {
-    switch (node.type) {
-      case 'term':
-        return emitTerm(node.value, params)
-      case 'and':
-        return `(${emit(node.left)} AND ${emit(node.right)})`
-      case 'or':
-        return `(${emit(node.left)} OR ${emit(node.right)})`
-      case 'not':
-        return `(NOT (${emit(node.operand)}))`
-    }
-  }
-
-  return { sql: emit(ast), params }
+  return { sql: emitBooleanSql(ast, (term) => emitTerm(term, params)), params }
 }
 
 /**
@@ -48,7 +34,8 @@ export function emitTerm(term: string, params: (string | number)[]): string {
   }
 
   // Default: LIKE-based search on gene_symbol, consequence, omim_mim_number
-  const searchPattern = `%${term}%`
+  const searchPattern = `%${escapeLikePattern(term)}%`
   params.push(searchPattern, searchPattern, searchPattern)
-  return '(cvs.gene_symbol LIKE ? COLLATE NOCASE OR cvs.consequence LIKE ? COLLATE NOCASE OR cvs.omim_mim_number LIKE ? COLLATE NOCASE)'
+  const like = "LIKE ? COLLATE NOCASE ESCAPE '\\'"
+  return `(cvs.gene_symbol ${like} OR cvs.consequence ${like} OR cvs.omim_mim_number ${like})`
 }

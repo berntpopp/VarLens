@@ -91,6 +91,127 @@ describe('web dispatcher: auto-route argument schemas', () => {
     expect(writeExecute).not.toHaveBeenCalled()
   })
 
+  // One argument list per auto-route, as the renderer passes it to `window.api`
+  // (the web client forwards those arguments unchanged as `args`).
+  const REAL_CALLS: Array<[string, unknown[]]> = [
+    ['cases:availableBuilds', []],
+    ['case-metadata:get', [7]],
+    ['case-metadata:listCohorts', []],
+    ['case-metadata:getCohortByName', ['Epilepsy trios']],
+    ['case-metadata:getCaseCohorts', [7]],
+    ['case-metadata:getHpoTerms', [7]],
+    ['case-metadata:getDataInfo', [7]],
+    ['case-metadata:listExternalIds', [7]],
+    ['case-metadata:distinctHpoTerms', []],
+    ['case-metadata:distinctPlatforms', []],
+    ['case-metadata:distinctExternalIdTypes', []],
+    ['case-metadata:getFullMetadata', [7]],
+    ['case-metadata:upsert', [7, { affected_status: 'affected' }]],
+    ['case-metadata:updateCohort', [3, { name: 'Epilepsy trios', description: null }]],
+    ['case-metadata:deleteCohort', [3]],
+    ['case-metadata:assignCohort', [7, 3]],
+    ['case-metadata:removeCohort', [7, 3]],
+    ['case-metadata:setCohorts', [7, [3, 4]]],
+    ['case-metadata:assignHpoTerm', [7, 'HP:0001250', 'Seizure']],
+    ['case-metadata:removeHpoTerm', [7, 'HP:0001250']],
+    [
+      'case-metadata:upsertDataInfo',
+      [
+        7,
+        {
+          platform: 'Exome',
+          platform_details: null,
+          af_filter: '<1%',
+          quality_filter: null,
+          data_notes: null,
+          gene_list_id: null,
+          region_file_id: 2
+        }
+      ]
+    ],
+    ['case-metadata:upsertExternalId', [7, 'Lab ID', 'L-2024-0815']],
+    ['case-metadata:deleteExternalId', [7, 'Lab ID']],
+    ['variants:typeCounts', [7]],
+    ['variants:typesPresent', [{ caseIds: [7, 8] }]],
+    ['variants:geneSymbols', [7, 'BRC', 50]],
+    ['variants:shortlist', [{ caseId: 7, presetId: 4 }]],
+    ['tags:list', []],
+    ['tags:getUsageCount', [5]],
+    ['tags:getVariantTags', [7, 1234]],
+    ['tags:create', ['Reviewed', '#00ff00']],
+    ['tags:update', [5, { name: 'Reviewed', color: '#00ff00' }]],
+    ['tags:delete', [5]],
+    ['tags:assignVariantTag', [7, 1234, 5]],
+    ['tags:removeVariantTag', [7, 1234, 5]],
+    ['tags:setVariantTags', [7, 1234, [5, 6]]],
+    ['annotations:getPerCase', [7, 1234]],
+    ['annotations:deletePerCase', [7, 1234]],
+    [
+      'annotations:batchGet',
+      [7, [{ chr: 'chr17', pos: 43045712, ref: 'T', alt: 'C', variantId: 1234 }]]
+    ],
+    // Cohort scope: no case, coordinate-only keys.
+    ['annotations:batchGet', [null, [{ chr: '17', pos: 43045712, ref: 'T', alt: 'C' }]]],
+    ['case-comments:list', [7]],
+    ['case-comments:create', [7, 'Clinical Note', 'Seizures since age 2.']],
+    ['case-comments:update', [11, 'Seizures since age 3.']],
+    ['case-comments:delete', [11]],
+    ['case-metrics:listDefinitions', []],
+    ['case-metrics:listForCase', [7]],
+    ['case-metrics:createDefinition', ['Mean coverage', 'numeric', 'x', 'Sequencing']],
+    ['case-metrics:upsert', [7, 2, { numeric_value: 104.5 }]],
+    ['case-metrics:delete', [7, 2]],
+    ['panels:list', []],
+    ['panels:getGenes', [9]],
+    ['panels:activeForCase', [7]],
+    ['panels:delete', [9]],
+    ['panels:duplicate', [9, 'Epilepsy (copy)']],
+    ['panels:setGenes', [9, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }]]],
+    ['panels:activate', [7, 9, 5000]],
+    ['panels:deactivate', [7, 9]],
+    ['gene-lists:list', []],
+    ['gene-lists:getGenes', [2]],
+    ['gene-lists:create', ['Epilepsy genes', null]],
+    ['gene-lists:delete', [2]],
+    ['region-files:list', []],
+    ['region-files:create', ['Exome targets v8', 'Vendor BED']],
+    ['region-files:delete', [2]],
+    ['presets:list', []],
+    [
+      'presets:create',
+      [{ name: 'Rare HIGH', description: null, filterJson: { consequence: ['HIGH'] } }]
+    ],
+    ['presets:update', [4, { isVisible: false }]],
+    ['presets:delete', [4]],
+    [
+      'presets:reorder',
+      [
+        [
+          { id: 4, sortOrder: 0 },
+          { id: 5, sortOrder: 1 }
+        ]
+      ]
+    ],
+    ['analysis-groups:list', []],
+    ['analysis-groups:get', [6]],
+    ['analysis-groups:getForCase', [7]],
+    ['analysis-groups:update', [6, { name: 'Family 12', description: null }]],
+    ['analysis-groups:delete', [6]],
+    ['analysis-groups:removeMember', [6, 7]]
+  ]
+
+  test.each(REAL_CALLS)('%s accepts the arguments of a real call: %j', (key, args) => {
+    // Through JSON, as on the wire.
+    const parsed = AUTO_ROUTE_ARG_SCHEMAS[key].safeParse(JSON.parse(JSON.stringify(args)))
+    expect(parsed.error?.issues).toBeUndefined()
+  })
+
+  test('the real-call table covers every schema', () => {
+    expect([...new Set(REAL_CALLS.map(([key]) => key))].sort()).toEqual(
+      Object.keys(AUTO_ROUTE_ARG_SCHEMAS).sort()
+    )
+  })
+
   test('valid arguments reach the executor as the task params', async () => {
     const read = await call('case-metadata/get', [7])
     expect(read.response.statusCode).toBe(200)

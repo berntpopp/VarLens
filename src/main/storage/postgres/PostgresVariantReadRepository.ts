@@ -5,7 +5,9 @@ import {
 import { carrierRanks } from './cohort-summary-representative-sql'
 import {
   addPostgresColumnFilters,
-  hasPostgresColumnFilterPrefix
+  hasPostgresColumnFilterPrefix,
+  HGVS_TOKEN,
+  hgvsSearchSql
 } from './postgres-variant-column-filters'
 import type { Pool } from 'pg'
 
@@ -34,7 +36,6 @@ import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import type { PostgresVariantColumnDefinition } from './postgres-variant-columns'
 import { addPostgresClinicalVariantFilters } from './postgres-variant-clinical-filter-sql'
 import { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
-import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
 import {
   buildPostgresVariantOrderTerms,
@@ -83,19 +84,6 @@ function toNumber(value: unknown): number {
   if (typeof value === 'number') return value
   if (typeof value === 'string') return Number(value)
   return 0
-}
-
-/** `c.`/`p.` tokens are HGVS: matched by ILIKE on cdna / aa_change, like SQLite. */
-export const HGVS_TOKEN = /^[cp]\./
-
-/** Shared by the case search (`v`) and the cohort summary search (`cvs`). */
-export function hgvsSearchSql(
-  alias: string,
-  token: string,
-  addParam: (value: unknown) => string
-): string {
-  const pattern = addParam(`%${escapeLikePattern(token)}%`)
-  return `(${alias}.cdna ILIKE ${pattern} ESCAPE '\\' OR ${alias}.aa_change ILIKE ${pattern} ESCAPE '\\')`
 }
 
 function searchTokens(query: string): string[] {

@@ -145,14 +145,14 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('(cvs.gnomad_af IS NULL OR cvs.gnomad_af <= $')
     expect(dataSql).toContain('(cvs.cadd IS NULL OR cvs.cadd >= $')
     expect(dataSql).toContain('cvs.carrier_count >= $')
-    expect(dataSql).toContain('ILIKE $')
+    expect(dataSql).toContain("cvs.gene_symbol ILIKE $1 ESCAPE '\\'")
     expect(dataSql).not.toContain('DROP TABLE')
     expect(dataSql).not.toContain('OR TRUE')
     expect(countSql).not.toContain('DROP TABLE')
     expect(countParams).toEqual([
-      `%TP53%' OR TRUE --%`,
-      `%TP53%' OR TRUE --%`,
-      `%TP53%' OR TRUE --%`,
+      `%TP53\\%' OR TRUE --%`,
+      `%TP53\\%' OR TRUE --%`,
+      `%TP53\\%' OR TRUE --%`,
       '1',
       200,
       100,
@@ -165,6 +165,26 @@ describe('PostgresCohortRepository', () => {
       2
     ])
     expect(dataParams).toEqual([...countParams, 10, 0])
+  })
+
+  it('emits one predicate per term of an AND / OR / NOT search, like SQLite', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ total_cases: '10' }] })
+      .mockResolvedValueOnce({ rows: [{ total_count: '0' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const repository = new PostgresCohortRepository({ query } as never, 'public')
+
+    await repository.queryVariants({ search_term: 'BRCA1 OR NOT c.68_69del', limit: 10, offset: 0 })
+
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
+    expect(dataSql).toContain("OR (NOT ((cvs.cdna ILIKE $4 ESCAPE '\\' OR cvs.aa_change ILIKE $4")
+    expect(callParams(query.mock.calls[2]).slice(0, 4)).toEqual([
+      '%BRCA1%',
+      '%BRCA1%',
+      '%BRCA1%',
+      '%c.68\\_69del%'
+    ])
   })
 
   it('resolves active panels to padded genomic intervals across the cohort', async () => {

@@ -47,7 +47,18 @@ export function buildImportOpenApiPaths(): Record<string, OpenApiPathItem> {
             }
           },
           400: { description: 'Invalid upload' },
-          413: { description: 'Upload exceeds configured byte limit' },
+          413: { description: 'Upload exceeds the per-file or the per-user staged byte limit' },
+          401: { description: 'Authentication required' },
+          403: { description: 'Forbidden' }
+        }
+      },
+      delete: {
+        tags: ['import'],
+        summary: 'Discard one of your own staged uploads that no import is reading',
+        parameters: [{ name: 'ref', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: {
+          204: { description: 'Discarded, or no such upload of yours' },
+          409: { description: 'An import is reading this upload' },
           401: { description: 'Authentication required' },
           403: { description: 'Forbidden' }
         }

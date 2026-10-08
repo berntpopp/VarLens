@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, readdir, rm, stat } from 'node:fs/promises'
+import { mkdir, readdir, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { once } from 'node:events'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrorCode } from '../../../shared/types/errors'
 
@@ -155,43 +155,16 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
   })
 
   app.post('/api/import/upload', async (request: UploadRouteBody, reply) => {
-    const userId = request.session.user?.id
-    if (userId === undefined) {
+    const gate = gateUploadRequest('http:import:upload', request, reply)
+    if ('refused' in gate) {
       deps?.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
-        failureClass: 'unauthenticated'
+        failureClass: gate.refused
       })
-      reply.code(401)
-      return {
-        code: 'UNAUTHENTICATED',
-        message: 'authentication required',
-        userMessage: 'Please log in to continue.'
-      }
+      return gate.body
     }
-    // Staging an upload is the first step of an import: analysts and up.
-    if (requireOperation('http:import:upload', request, reply) === undefined) {
-      deps?.metrics?.recordOperationEvent({
-        operation: 'upload-stage',
-        result: 'error',
-        failureClass: 'forbidden'
-      })
-      return reply
-    }
-    // Same pre-rotation gate as the dispatcher and the download route.
-    if (request.session.mustChangePassword === true) {
-      deps?.metrics?.recordOperationEvent({
-        operation: 'upload-stage',
-        result: 'error',
-        failureClass: 'forbidden'
-      })
-      reply.code(403)
-      return {
-        code: ErrorCode.UNKNOWN,
-        message: 'password-rotation-required',
-        userMessage: 'Your password must be changed before any other action.'
-      }
-    }
+    const { userId } = gate
 
     const originalName = headerString(request.headers['x-varlens-file-name'])
     if (originalName === undefined || originalName.trim() === '') {
@@ -269,6 +242,63 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
       size: upload.size
     }
   })
+
+  // Lets the browser give back the files of a selection it could not finish
+  // (cap reached, cancelled) instead of leaving them staged for the whole TTL.
+  app.delete('/api/import/upload', async (request, reply) => {
+    const gate = gateUploadRequest('http:import:discardUpload', request, reply)
+    if ('refused' in gate) return gate.body
+    const ref = (request.query as { ref?: unknown }).ref
+    const id = typeof ref === 'string' ? parseWebUploadId(ref) : null
+    const upload = id === null ? undefined : stagedUploads.get(id)
+    // Unknown, expired and foreign refs all answer 204: idempotent, and no existence oracle.
+    if (upload !== undefined && upload.userId === gate.userId) {
+      if (heldUploads.has(upload.id)) {
+        reply.code(409)
+        return { error: 'upload-in-use', message: 'An import is reading this upload' }
+      }
+      discardWebUploads([upload])
+    }
+    reply.code(204)
+    return null
+  })
+}
+
+/** Session, role and pre-rotation gate of the upload routes; sends nothing but the role refusal. */
+function gateUploadRequest(
+  key: string,
+  request: FastifyRequest,
+  reply: FastifyReply
+): { userId: number } | { refused: 'unauthenticated' | 'forbidden'; body: unknown } {
+  const userId = request.session?.user?.id
+  if (userId === undefined) {
+    reply.code(401)
+    return {
+      refused: 'unauthenticated',
+      body: {
+        code: 'UNAUTHENTICATED',
+        message: 'authentication required',
+        userMessage: 'Please log in to continue.'
+      }
+    }
+  }
+  // Staging an upload is the first step of an import: analysts and up.
+  if (requireOperation(key, request, reply) === undefined) {
+    return { refused: 'forbidden', body: reply }
+  }
+  // Same pre-rotation gate as the dispatcher and the download route.
+  if (request.session.mustChangePassword === true) {
+    reply.code(403)
+    return {
+      refused: 'forbidden',
+      body: {
+        code: ErrorCode.UNKNOWN,
+        message: 'password-rotation-required',
+        userMessage: 'Your password must be changed before any other action.'
+      }
+    }
+  }
+  return { userId }
 }
 
 export async function stageExistingFileUpload(params: {
@@ -302,14 +332,17 @@ async function stageUpload(params: {
   const quotaExceeded = (): UploadTooLargeError =>
     new UploadTooLargeError(
       'upload-quota-exceeded',
-      `Staged uploads would exceed the ${maxStagedBytes} byte limit per user; ` +
-        'import or wait for the expiry of earlier uploads, then try again'
+      `Staged uploads would exceed the ${maxStagedBytes} byte limit per user ` +
+        `(${(maxStagedBytes / 2 ** 30).toFixed(1)} GiB). Files of this selection that were ` +
+        'already uploaded were discarded; import or wait for the expiry of earlier uploads, ' +
+        'then try again with fewer files'
     )
 
   const quotaLeft = maxStagedBytes - stagedBytesOf(params.userId)
 
   await mkdir(uploadDir, { recursive: true, mode: 0o700 })
 
+  let size: number
   try {
     const written = await writeLimitedUpload(params.source, storedPath, (bytes) => {
       if (bytes > maxBytes) {
@@ -320,15 +353,15 @@ async function stageUpload(params: {
       }
       if (bytes > quotaLeft) throw quotaExceeded()
     })
-    // Checked again without an await before the upload is registered below:
-    // parallel uploads of one user cannot each fit and together pass the cap.
+    // No await between this re-check and stagedUploads.set below: parallel
+    // uploads of one user cannot each fit and together pass the cap.
     if (stagedBytesOf(params.userId) + written > maxStagedBytes) throw quotaExceeded()
+    size = written
   } catch (error) {
     await rm(uploadDir, { recursive: true, force: true })
     throw error
   }
 
-  const size = (await stat(storedPath)).size
   const createdAt = Date.now()
   const upload: StagedUpload = {
     id,
