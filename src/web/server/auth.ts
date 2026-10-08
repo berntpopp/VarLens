@@ -75,6 +75,7 @@ declare module '@fastify/secure-session' {
 
 const DEFAULT_RECOVERY_KEY_DIR = '/data'
 const SESSION_SECRET_FILENAME = 'web-session-secret'
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 4
 
 /**
  * Cookie name. In production we use the `__Host-` prefix, which the
@@ -238,8 +239,11 @@ export async function registerSessions(
       // doesn't need a multi-day cookie; the shorter window limits
       // exposure if a laptop is briefly unattended. Re-login is
       // cheap.
-      maxAge: 60 * 60 * 4
-    }
+      maxAge: SESSION_MAX_AGE_SECONDS
+    },
+    // Server-side validity. Without it the plugin accepts a cookie for 24 h,
+    // longer than a logout revocation is remembered (session-revocation.ts).
+    expiry: SESSION_MAX_AGE_SECONDS
   })
 
   app.addHook('preHandler', async (request, reply) => {
