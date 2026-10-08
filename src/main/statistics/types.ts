@@ -24,22 +24,18 @@ export interface AssociationConfig {
 /**
  * Variant-level filters applied before association.
  *
- * Mirrors the FilterIpcParams contract for the subset of fields relevant
- * to burden analysis so that Path 3 reaches cohort parity with Paths 1
- * and 2. The extended fields flow through association:build DbPool
- * dispatch without touching AssociationEngine.run() or the statistical
- * WorkerRequest (which carries pre-built GeneContingencyData[], not filters).
+ * Variant-level filters that select the sites of an association run. Every
+ * field is applied to `variants` rows by both AssociationDataBuilders; a
+ * filter that needs the cohort summary (ACMG class, cohort frequency) is not
+ * part of this contract.
  */
 export interface VariantFilters {
   gnomad_af_max?: number
   cadd_min?: number
   consequences?: string[]
   gene_list?: string[]
-  // Parity fields with Paths 1/2
   clinvars?: string[]
   funcs?: string[]
-  acmg_classifications?: string[]
-  max_internal_af?: number
   // Flexible column filter map — dotted keys (e.g. 'cnv.copy_number') route
   // through the shared extension helpers.
   column_filters?: ColumnFiltersParam

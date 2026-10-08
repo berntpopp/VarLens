@@ -11,7 +11,6 @@ import {
   type Sample
 } from './support/burden-fixture'
 
-
 describe('AssociationDataBuilder', () => {
   let db: Database.Database
 
@@ -133,7 +132,7 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
 
   it('regression: existing 4-filter burden still works after refactor', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build(
+    const { genes } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       {
@@ -152,51 +151,10 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
     expect(brca1!.groupB_non_carrier_count).toBe(3)
   })
 
-  it('accepts all new parity fields without error (cohort-summary-only fields are silently dropped)', () => {
-    // acmg_classifications + max_internal_af map to columns (acmg_best,
-    // cohort_frequency) that exist on cohort_variant_summary but NOT on the
-    // base variants table. buildBaseWhere with scope='cohort-burden' silently
-    // drops these fields, preserving type parity with Paths 1/2 while
-    // avoiding runtime SQL errors against the variants table.
-    const builder = new AssociationDataBuilder(db)
-    expect(() =>
-      builder.build(
-        [1, 2, 3],
-        [4, 5, 6],
-        {
-          clinvars: ['Pathogenic'],
-          funcs: ['missense_variant'],
-          acmg_classifications: ['Pathogenic'],
-          max_internal_af: 0.1
-        },
-        []
-      )
-    ).not.toThrow()
-  })
-
-  it('silently drops cohort-summary-only fields for burden scope (no runtime error, no filter effect)', () => {
-    // Setting acmg_classifications=['Benign'] must NOT filter BRCA1 out —
-    // the field is dropped before reaching SQL. Only clinvars (which lives
-    // on variants) should actually filter.
-    const builder = new AssociationDataBuilder(db)
-    const genes = builder.build(
-      [1, 2, 3],
-      [4, 5, 6],
-      {
-        acmg_classifications: ['Benign'], // dropped
-        max_internal_af: 0.0001, // dropped
-        clinvars: ['Pathogenic'] // applied
-      },
-      []
-    )
-    // BRCA1 should still match because the dropped fields don't filter it out
-    expect(genes.find((g) => g.gene_symbol === 'BRCA1')).toBeDefined()
-  })
-
   it('applies clinvars + funcs filter through shared helper', () => {
     const builder = new AssociationDataBuilder(db)
     // Matching clinvar + func: BRCA1 should pass
-    const genesMatching = builder.build(
+    const { genes: genesMatching } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       { clinvars: ['Pathogenic'], funcs: ['missense_variant'] },
@@ -227,7 +185,7 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
     // Extension filter: copy_number >= 3 should return only CNVs.
     // Because buildExtensionJoinClauses prepends variant_type='cnv' narrowing,
     // the BRCA1 SNV is excluded and only MYCN CNVs remain.
-    const genes = builder.build(
+    const { genes } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       { column_filters: { 'cnv.copy_number': { operator: '>=', value: 3 } } },
