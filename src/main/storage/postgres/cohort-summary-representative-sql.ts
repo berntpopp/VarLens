@@ -35,6 +35,7 @@ import {
   type CarrierRanks
 } from '../../../shared/sql/cohort-representative'
 import { impactRankCaseSql } from '../../../shared/config/severity.config'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../../shared/sql/genotype-dosage'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
@@ -45,9 +46,6 @@ const KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as cons
 const keyList = (alias: string): string => KEY.map((column) => `${alias}.${column}`).join(', ')
 const keyMatch = (a: string, b: string): string =>
   KEY.map((column) => `${a}.${column} = ${b}.${column}`).join(' AND ')
-
-const HET = "('0/1','1/0','0|1','1|0')"
-const HOM = "('1/1','1|1')"
 
 /** The ClinVar rank of variant row `alias` from the `clinvar_severity` lookup (0 = unknown). */
 export function clinvarLookupRankSql(alias: string, lookupTable: string): string {

@@ -11,9 +11,8 @@ import {
   summaryColumnsOverWindow,
   transcriptOrderBy
 } from './cohort-representative'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from './genotype-dosage'
 
-const HET = "('0/1','1/0','0|1','1|0')"
-const HOM = "('1/1','1|1')"
 const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 
 /**
@@ -237,8 +236,8 @@ export const INCREMENTAL_REMOVE_SQL = `
     hom_count = cohort_variant_summary.hom_count - sub.hom_count
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-      CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END AS het_count,
-      CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END AS hom_count
+      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het_count,
+      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom_count
     FROM variants v
     JOIN cases c ON c.id = v.case_id
     WHERE v.case_id = ?

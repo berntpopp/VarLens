@@ -19,7 +19,7 @@ import {
   type CaseMetricRow
 } from '../../statistics/contingency'
 import type { GeneContingencyData, VariantFilters } from '../../statistics/types'
-import { GT_DOSAGE_SQL } from '../../../shared/sql/genotype-dosage'
+import { gtDosageSql } from '../../../shared/sql/genotype-dosage'
 import { quoteIdentifier } from './identifiers'
 
 type Queryable = Pick<Pool, 'query'>
@@ -118,7 +118,7 @@ export class PostgresAssociationDataBuilder {
       `SELECT v.gene_symbol,
               v.case_id,
               v.chr || ':' || v.pos::text || ':' || v.ref || ':' || v.alt AS variant_key,
-              ${GT_DOSAGE_SQL.replace('CASE gt_num', 'CASE v.gt_num')} AS dosage,
+              ${gtDosageSql('v.gt_num')} AS dosage,
               v.gnomad_af,
               v.cadd
          FROM ${this.schemaName}."variants" v

@@ -1,6 +1,12 @@
 import { sql, type RawBuilder } from 'kysely'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
+import { HET_GT_SQL, HOM_GT_SQL, HOM_OR_HEMI_GT_SQL } from '../../../shared/sql/genotype-dosage'
+
+// The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
+const HET = sql.raw(HET_GT_SQL)
+const HOM = sql.raw(HOM_GT_SQL)
+const HOM_OR_HEMI = sql.raw(HOM_OR_HEMI_GT_SQL)
 
 /**
  * Inheritance-mode predicates for the case variant query.
@@ -21,23 +27,23 @@ function candidateCompoundHetCondition(cid: number): SqlCondition {
   return sql`(variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
             WHERE v2.case_id = ${cid}
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ${HET}
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
-          ) AND variants.gt_num IN ('0/1', '0|1', '1|0'))`
+          ) AND variants.gt_num IN ${HET})`
 }
 
 /** Solo modes — always available, no family data required. */
 function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
   const conditions: SqlCondition[] = []
   if (modes.includes('homozygous')) {
-    conditions.push(sql`variants.gt_num IN ('1/1', '1|1')`)
+    conditions.push(sql`variants.gt_num IN ${HOM}`)
   }
   if (modes.includes('heterozygous')) {
-    conditions.push(sql`variants.gt_num IN ('0/1', '0|1', '1|0')`)
+    conditions.push(sql`variants.gt_num IN ${HET}`)
   }
   if (modes.includes('x_hemizygous')) {
-    conditions.push(sql`(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1'))`)
+    conditions.push(sql`(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ${HOM_OR_HEMI})`)
   }
   if (modes.includes('candidate_compound_het')) {
     conditions.push(candidateCompoundHetCondition(caseId))
@@ -48,7 +54,7 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
 /** Het in proband, absent or ref in both parents. */
 function deNovoCondition(cid: number, gid: number): SqlCondition {
   return sql`(
-            variants.gt_num IN ('0/1', '0|1', '1|0')
+            variants.gt_num IN ${HET}
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
@@ -75,7 +81,7 @@ function deNovoCondition(cid: number, gid: number): SqlCondition {
 /** Proband hom, parents NOT hom (must be het carriers or absent). */
 function autosomalRecessiveCondition(cid: number, gid: number): SqlCondition {
   return sql`(
-            variants.gt_num IN ('1/1', '1|1')
+            variants.gt_num IN ${HOM}
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_par
@@ -83,7 +89,7 @@ function autosomalRecessiveCondition(cid: number, gid: number): SqlCondition {
               INNER JOIN variants par
                 ON par.case_id = agm_par.case_id
                 AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
-                AND par.gt_num IN ('1/1', '1|1')
+                AND par.gt_num IN ${HOM}
               WHERE p.case_id = ${cid}
             )
           )`
@@ -97,13 +103,13 @@ function autosomalRecessiveCondition(cid: number, gid: number): SqlCondition {
  */
 function compoundHetCondition(cid: number, gid: number): SqlCondition {
   return sql`(
-            variants.gt_num IN ('0/1', '0|1', '1|0')
+            variants.gt_num IN ${HET}
             AND variants.gene_symbol IS NOT NULL
             AND variants.gene_symbol IN (
               SELECT v_inner.gene_symbol
               FROM variants v_inner
               WHERE v_inner.case_id = ${cid}
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gt_num IN ${HET}
                 AND v_inner.gene_symbol IS NOT NULL
               GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
             )
@@ -114,19 +120,19 @@ function compoundHetCondition(cid: number, gid: number): SqlCondition {
                 ON agm_f.group_id = ${gid} AND agm_f.role = 'father'
               INNER JOIN variants f ON f.case_id = agm_f.case_id
                 AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
+                AND f.gt_num IN ${HET}
               INNER JOIN variants pm
                 ON pm.case_id = ${cid}
                 AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
+                AND pm.gt_num IN ${HET}
                 AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
               INNER JOIN analysis_group_members agm_m
                 ON agm_m.group_id = ${gid} AND agm_m.role = 'mother'
               INNER JOIN variants m ON m.case_id = agm_m.case_id
                 AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
+                AND m.gt_num IN ${HET}
               WHERE pf.case_id = ${cid}
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gt_num IN ${HET}
                 AND pf.gene_symbol IS NOT NULL
             )
           )`

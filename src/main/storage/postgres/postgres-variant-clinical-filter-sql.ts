@@ -1,3 +1,8 @@
+import {
+  HET_GT_SQL as HET,
+  HOM_GT_SQL as HOM,
+  HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI
+} from '../../../shared/sql/genotype-dosage'
 import type { VariantFilter } from '../../../shared/types/database'
 
 export interface PostgresClinicalVariantFilterSqlContext {
@@ -132,13 +137,13 @@ function addInheritanceFilters(
   const conditions: string[] = []
 
   if (modes.includes('homozygous')) {
-    conditions.push("v.gt_num IN ('1/1', '1|1')")
+    conditions.push(`v.gt_num IN ${HOM}`)
   }
   if (modes.includes('heterozygous')) {
-    conditions.push("v.gt_num IN ('0/1', '0|1', '1|0')")
+    conditions.push(`v.gt_num IN ${HET}`)
   }
   if (modes.includes('x_hemizygous')) {
-    conditions.push("(v.chr IN ('X', 'chrX') AND v.gt_num IN ('1/1', '1|1', '1'))")
+    conditions.push(`(v.chr IN ('X', 'chrX') AND v.gt_num IN ${HOM_OR_HEMI})`)
   }
   if (modes.includes('candidate_compound_het')) {
     const caseParam = addParam(filter.case_id)
@@ -146,11 +151,11 @@ function addInheritanceFilters(
             SELECT v2.gene_symbol
             FROM ${schemaName}."variants" v2
             WHERE v2.case_id = ${caseParam}
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ${HET}
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol
             HAVING COUNT(*) >= 2
-          ) AND v.gt_num IN ('0/1', '0|1', '1|0'))`)
+          ) AND v.gt_num IN ${HET})`)
   }
 
   if (filter.analysis_group_id !== undefined) {
@@ -173,7 +178,7 @@ function addTrioInheritanceFilters(
 ): void {
   if (modes.includes('de_novo')) {
     conditions.push(`(
-            v.gt_num IN ('0/1', '0|1', '1|0')
+            v.gt_num IN ${HET}
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
@@ -209,7 +214,7 @@ function addTrioInheritanceFilters(
 
   if (modes.includes('autosomal_recessive')) {
     conditions.push(`(
-            v.gt_num IN ('1/1', '1|1')
+            v.gt_num IN ${HOM}
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
@@ -222,7 +227,7 @@ function addTrioInheritanceFilters(
                AND par.pos = p.pos
                AND par.ref = p.ref
                AND par.alt = p.alt
-               AND par.gt_num IN ('1/1', '1|1')
+               AND par.gt_num IN ${HOM}
               WHERE p.case_id = ${caseParam}
             )
           )`)
@@ -230,13 +235,13 @@ function addTrioInheritanceFilters(
 
   if (modes.includes('compound_het')) {
     conditions.push(`(
-            v.gt_num IN ('0/1', '0|1', '1|0')
+            v.gt_num IN ${HET}
             AND v.gene_symbol IS NOT NULL
             AND v.gene_symbol IN (
               SELECT v_inner.gene_symbol
               FROM ${schemaName}."variants" v_inner
               WHERE v_inner.case_id = ${caseParam}
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
+                AND v_inner.gt_num IN ${HET}
                 AND v_inner.gene_symbol IS NOT NULL
               GROUP BY v_inner.gene_symbol
               HAVING COUNT(*) >= 2
@@ -253,11 +258,11 @@ function addTrioInheritanceFilters(
                AND f.pos = pf.pos
                AND f.ref = pf.ref
                AND f.alt = pf.alt
-               AND f.gt_num IN ('0/1', '0|1', '1|0')
+               AND f.gt_num IN ${HET}
               INNER JOIN ${schemaName}."variants" pm
                 ON pm.case_id = ${caseParam}
                AND pm.gene_symbol = pf.gene_symbol
-               AND pm.gt_num IN ('0/1', '0|1', '1|0')
+               AND pm.gt_num IN ${HET}
                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
               INNER JOIN ${schemaName}."analysis_group_members" agm_m
                 ON agm_m.group_id = ${groupParam}
@@ -268,9 +273,9 @@ function addTrioInheritanceFilters(
                AND m.pos = pm.pos
                AND m.ref = pm.ref
                AND m.alt = pm.alt
-               AND m.gt_num IN ('0/1', '0|1', '1|0')
+               AND m.gt_num IN ${HET}
               WHERE pf.case_id = ${caseParam}
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
+                AND pf.gt_num IN ${HET}
                 AND pf.gene_symbol IS NOT NULL
             )
           )`)

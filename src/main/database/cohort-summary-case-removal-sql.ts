@@ -18,9 +18,7 @@ import {
   transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
 import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
-
-const HET = "('0/1','1/0','0|1','1|0')"
-const HOM = "('1/1','1|1')"
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../shared/sql/genotype-dosage'
 
 export const CASE_REMOVAL_TEMP_TABLES_SQL = `
   CREATE TEMP TABLE IF NOT EXISTS removed_case_rows (

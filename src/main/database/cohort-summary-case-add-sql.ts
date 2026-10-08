@@ -17,11 +17,9 @@ import {
   summaryColumnsOverWindow,
   transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../shared/sql/genotype-dosage'
 
 export { IMPORT_SESSION_OPEN_KEY }
-
-const HET = "('0/1','1/0','0|1','1|0')"
-const HOM = "('1/1','1|1')"
 
 export const SET_IMPORT_SESSION_OPEN_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
