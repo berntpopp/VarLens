@@ -25,7 +25,9 @@ export async function* streamMappedVcfRows(
   filePath: string,
   selectedSample: string,
   filters?: ImportFilters,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  /** Set for a file appended to an existing case (files 2..N of a multi-file import). */
+  appendedTo?: { genomeBuild: string }
 ): AsyncGenerator<VcfMappedVariant, void, void> {
   // createReadStream reports open failures asynchronously; fail before the
   // worker's per-file error boundary can lose ownership of that event.
@@ -58,7 +60,11 @@ export async function* streamMappedVcfRows(
 
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
-        activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, selectedSample)
+        activeSampleColumn = resolveVcfSelectedSampleColumn(
+          header.samples,
+          selectedSample,
+          appendedTo !== undefined
+        )
         activeSample = activeSampleColumn?.name ?? ''
         if (activeSample === '') break
         const callerInfo = detectCaller(headerLines)

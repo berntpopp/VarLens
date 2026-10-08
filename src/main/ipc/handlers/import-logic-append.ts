@@ -123,7 +123,8 @@ export async function importAdditionalFileToCase(
           header = parseVcfHeaderFromLines(headerLines)
           activeSampleColumn = resolveVcfSelectedSampleColumn(
             header.samples,
-            vcfOptions?.selectedSample
+            vcfOptions?.selectedSample,
+            true
           )
           activeSample = activeSampleColumn?.name ?? ''
 

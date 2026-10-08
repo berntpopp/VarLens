@@ -24,16 +24,30 @@ export interface VcfSelectedSampleColumn {
   index: number
 }
 
+/**
+ * The column of the sample an import reads; throws when the file does not
+ * have the requested sample.
+ *
+ * `loneSampleIsCase`: for a file appended to a case. A file with one sample is
+ * then read for that sample under whatever name its caller wrote (Sniffles2
+ * writes `SAMPLE`); a file with several samples must still name the case's.
+ */
 export function resolveVcfSelectedSampleColumn(
   sampleNames: string[],
-  requestedSample?: string
+  requestedSample?: string,
+  loneSampleIsCase = false
 ): VcfSelectedSampleColumn | null {
   const name =
     requestedSample !== undefined && requestedSample !== '' ? requestedSample : sampleNames[0]
   if (name === undefined || name === '') return null
-  const index = sampleNames.indexOf(name)
-  if (index < 0) throw new Error(`Selected VCF sample "${name}" is not present in the header`)
-  return { name, index }
+  const index = loneSampleIsCase && sampleNames.length === 1 ? 0 : sampleNames.indexOf(name)
+  if (index < 0) {
+    const listed = sampleNames.slice(0, 10).join(', ') + (sampleNames.length > 10 ? ', ...' : '')
+    throw new Error(
+      `Selected VCF sample "${name}" is not present in the header (samples: ${listed})`
+    )
+  }
+  return { name: sampleNames[index], index }
 }
 
 /**

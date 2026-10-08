@@ -109,6 +109,8 @@ export interface RunImportDeps {
       genomeBuild: string
       filters?: ImportFilters
       onSkip?: (reason: string) => void
+      /** Set for files 2..N of a multi-file import: the case they are appended to. */
+      appendedTo?: { genomeBuild: string }
     }
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
@@ -119,7 +121,13 @@ const defaultDeps: RunImportDeps = {
   createMapperPipeline: defaultCreateMapperPipeline,
   statFile: (path: string) => ({ size: statSync(path).size }),
   createVcfMappedStream: async (filePath, options) =>
-    streamMappedVcfRows(filePath, options.selectedSample, options.filters, options.onSkip)
+    streamMappedVcfRows(
+      filePath,
+      options.selectedSample,
+      options.filters,
+      options.onSkip,
+      options.appendedTo
+    )
 }
 
 function recordParseSkip(args: { reason: string; errors: string[]; prefix?: string }): void {
@@ -595,6 +603,7 @@ export async function runImport(
               genomeBuild,
               // Every file, the first included: same records as SQLite (#484).
               filters: importFilters,
+              appendedTo: i > 0 ? { genomeBuild } : undefined,
               onSkip: (reason) => {
                 totalSkipped += 1
                 recordParseSkip({

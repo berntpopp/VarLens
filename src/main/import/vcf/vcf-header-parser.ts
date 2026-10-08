@@ -300,3 +300,19 @@ export async function parseVcfHeader(
     stream.on('error', settle)
   })
 }
+
+/**
+ * The sample every file of one multi-file import is read for: the requested
+ * one, else the first sample of the first file. Left to itself each file falls
+ * back to its own first column, which need not be the same person.
+ */
+export async function resolveCaseSample(
+  firstFilePath: string | undefined,
+  requested: string | undefined
+): Promise<string | undefined> {
+  if (requested !== undefined && requested !== '') return requested
+  if (firstFilePath === undefined) return undefined
+  // An unreadable first file fails in the import itself, with its own error.
+  const parsed = await parseVcfHeader(firstFilePath).catch(() => undefined)
+  return parsed?.header.samples[0]
+}
