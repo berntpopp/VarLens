@@ -1,4 +1,12 @@
+import {
+  HET_GT_SQL as HET,
+  HOM_GT_SQL as HOM,
+  HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI,
+  notReferenceGtSql
+} from '../../../shared/sql/genotype-dosage'
+import { compoundHetPairIdsSql, variantIdentitySql } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
+import { TRIO_MODES } from '../../../shared/types/inheritance'
 
 export interface PostgresClinicalVariantFilterSqlContext {
   schemaName: string
@@ -132,13 +140,13 @@ function addInheritanceFilters(
   const conditions: string[] = []
 
   if (modes.includes('homozygous')) {
-    conditions.push("v.gt_num IN ('1/1', '1|1')")
+    conditions.push(`v.gt_num IN ${HOM}`)
   }
   if (modes.includes('heterozygous')) {
-    conditions.push("v.gt_num IN ('0/1', '0|1', '1|0')")
+    conditions.push(`v.gt_num IN ${HET}`)
   }
   if (modes.includes('x_hemizygous')) {
-    conditions.push("(v.chr IN ('X', 'chrX') AND v.gt_num IN ('1/1', '1|1', '1'))")
+    conditions.push(`(v.chr IN ('X', 'chrX') AND v.gt_num IN ${HOM_OR_HEMI})`)
   }
   if (modes.includes('candidate_compound_het')) {
     const caseParam = addParam(filter.case_id)
@@ -146,14 +154,17 @@ function addInheritanceFilters(
             SELECT v2.gene_symbol
             FROM ${schemaName}."variants" v2
             WHERE v2.case_id = ${caseParam}
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ${HET}
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol
-            HAVING COUNT(*) >= 2
-          ) AND v.gt_num IN ('0/1', '0|1', '1|0'))`)
+            HAVING COUNT(DISTINCT ${variantIdentitySql('v2')}) >= 2
+          ) AND v.gt_num IN ${HET})`)
   }
 
-  if (filter.analysis_group_id !== undefined) {
+  // Bound only when a trio mode reads them: PostgreSQL rejects a parameter
+  // no placeholder uses (a solo mode with an analysis group selected).
+  const wantsTrio = modes.some((mode) => (TRIO_MODES as readonly string[]).includes(mode))
+  if (filter.analysis_group_id !== undefined && wantsTrio) {
     const caseParam = addParam(filter.case_id)
     const groupParam = addParam(filter.analysis_group_id)
     addTrioInheritanceFilters(modes, conditions, schemaName, caseParam, groupParam)
@@ -173,7 +184,7 @@ function addTrioInheritanceFilters(
 ): void {
   if (modes.includes('de_novo')) {
     conditions.push(`(
-            v.gt_num IN ('0/1', '0|1', '1|0')
+            v.gt_num IN ${HET}
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
@@ -186,7 +197,7 @@ function addTrioInheritanceFilters(
                AND f.pos = p.pos
                AND f.ref = p.ref
                AND f.alt = p.alt
-               AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+               AND ${notReferenceGtSql('f.gt_num')}
               WHERE p.case_id = ${caseParam}
             )
             AND v.id NOT IN (
@@ -201,7 +212,7 @@ function addTrioInheritanceFilters(
                AND m.pos = p.pos
                AND m.ref = p.ref
                AND m.alt = p.alt
-               AND m.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+               AND ${notReferenceGtSql('m.gt_num')}
               WHERE p.case_id = ${caseParam}
             )
           )`)
@@ -209,7 +220,7 @@ function addTrioInheritanceFilters(
 
   if (modes.includes('autosomal_recessive')) {
     conditions.push(`(
-            v.gt_num IN ('1/1', '1|1')
+            v.gt_num IN ${HOM}
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
@@ -222,57 +233,19 @@ function addTrioInheritanceFilters(
                AND par.pos = p.pos
                AND par.ref = p.ref
                AND par.alt = p.alt
-               AND par.gt_num IN ('1/1', '1|1')
+               AND par.gt_num IN ${HOM}
               WHERE p.case_id = ${caseParam}
             )
           )`)
   }
 
   if (modes.includes('compound_het')) {
-    conditions.push(`(
-            v.gt_num IN ('0/1', '0|1', '1|0')
-            AND v.gene_symbol IS NOT NULL
-            AND v.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM ${schemaName}."variants" v_inner
-              WHERE v_inner.case_id = ${caseParam}
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol
-              HAVING COUNT(*) >= 2
-            )
-            AND v.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM ${schemaName}."variants" pf
-              INNER JOIN ${schemaName}."analysis_group_members" agm_f
-                ON agm_f.group_id = ${groupParam}
-               AND agm_f.role = 'father'
-              INNER JOIN ${schemaName}."variants" f
-                ON f.case_id = agm_f.case_id
-               AND f.chr = pf.chr
-               AND f.pos = pf.pos
-               AND f.ref = pf.ref
-               AND f.alt = pf.alt
-               AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN ${schemaName}."variants" pm
-                ON pm.case_id = ${caseParam}
-               AND pm.gene_symbol = pf.gene_symbol
-               AND pm.gt_num IN ('0/1', '0|1', '1|0')
-               AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN ${schemaName}."analysis_group_members" agm_m
-                ON agm_m.group_id = ${groupParam}
-               AND agm_m.role = 'mother'
-              INNER JOIN ${schemaName}."variants" m
-                ON m.case_id = agm_m.case_id
-               AND m.chr = pm.chr
-               AND m.pos = pm.pos
-               AND m.ref = pm.ref
-               AND m.alt = pm.alt
-               AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ${caseParam}
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          )`)
+    const ids = compoundHetPairIdsSql({
+      variants: `${schemaName}."variants"`,
+      members: `${schemaName}."analysis_group_members"`,
+      caseParam,
+      groupParam
+    })
+    conditions.push(`(v.id IN (${ids}))`)
   }
 }

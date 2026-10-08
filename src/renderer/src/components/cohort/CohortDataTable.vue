@@ -156,7 +156,12 @@
 
       <!-- Het / Hom combined column -->
       <template #[`item.het_count`]="{ item }">
-        {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
+        <span :title="COHORT_ZYGOSITY_HELP">
+          {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
+          <template v-if="otherZygosityCount(item) > 0">
+            (+{{ otherZygosityCount(item) }} other)
+          </template>
+        </span>
       </template>
 
       <!-- Merged Links column: one icon link per configured link-out -->
@@ -186,6 +191,7 @@ import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nex
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
 import type { CohortVariant } from '../../../../shared/types/cohort'
+import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { SortItem } from '../../composables/useOffsetPagination'
 import { useTableScroll } from '../../composables/useTableScroll'

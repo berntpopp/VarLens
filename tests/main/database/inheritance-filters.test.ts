@@ -65,6 +65,36 @@ describe('Solo inheritance filters', () => {
     expect(result.data[0].gt_num).toBe('1/1')
   })
 
+  it('candidate_compound_het counts a variant stored twice once', () => {
+    const caseId = service.cases.createCase('test', '/a.json', 100)
+    service.variants.insertVariantsBatch(caseId, [
+      makeVariant({ gt_num: '1/.', pos: 100, alt: 'G' }),
+      makeVariant({ gt_num: '1/.', pos: 100, alt: 'G' })
+    ])
+
+    const result = service.variants.getVariants(
+      { case_id: caseId, inheritance_modes: ['candidate_compound_het'] },
+      50,
+      0
+    )
+    expect(result.data).toHaveLength(0)
+  })
+
+  it('candidate_compound_het keeps two different ALT alleles at one position', () => {
+    const caseId = service.cases.createCase('test', '/a.json', 100)
+    service.variants.insertVariantsBatch(caseId, [
+      makeVariant({ gt_num: '1/.', pos: 100, alt: 'G' }),
+      makeVariant({ gt_num: './1', pos: 100, alt: 'T' })
+    ])
+
+    const result = service.variants.getVariants(
+      { case_id: caseId, inheritance_modes: ['candidate_compound_het'] },
+      50,
+      0
+    )
+    expect(result.data.map((v) => v.alt).sort()).toEqual(['G', 'T'])
+  })
+
   it('candidate_compound_het returns genes with 2+ het variants', () => {
     const caseId = service.cases.createCase('test', '/a.json', 100)
     service.variants.insertVariantsBatch(caseId, [

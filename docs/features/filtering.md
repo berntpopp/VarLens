@@ -46,6 +46,17 @@ Click **Filters** or press `Ctrl+Shift+F` to open the drawer. Filters are groupe
 
 Numeric filters are **NULL-inclusive** by default: variants without annotation data (e.g., novel variants with no gnomAD entry) pass through frequency and CADD filters.
 
+### Inheritance
+
+Genotype modes need no family; segregation modes need an analysis group with a father and a mother. Hover or focus a chip to read what it selects. All of them read the stored genotype calls only:
+
+- **HOM / HET** — `1/1`, or one copy (`0/1`), including [assumed het](./cohort-analysis.md#partly-missing-genotypes) calls (`1/.`, `./1`).
+- **X_HEMI** — on chrX, a haploid call (`1`) or `1/1`. The sex of the case is not checked.
+- **CH?** (candidate compound het) — het variants in a gene with at least two different ones. Phase is not known.
+- **DN** (de novo) — het in the proband, and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier, because reference and uncovered sites are not stored; check parental coverage before reporting. A parent with an uncalled genotype (`./.`) withholds the variant.
+- **AR** — homozygous in the proband and in neither parent. The parents are not required to be carriers.
+- **CH** (compound het, one from each parent) — het variants of one gene of which one comes from the father and one from the mother: one parent carries the variant and the other has a reference call or no row. Variants that both parents carry, or with an uncalled parent, are left out, because their phase is not established.
+
 ### Annotations
 
 - **Tags** — Filter by assigned tags

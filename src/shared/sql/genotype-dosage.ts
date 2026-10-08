@@ -1,20 +1,44 @@
 /**
- * Canonical GT-to-dosage SQL CASE expression.
- *
- * Maps VCF genotype strings to integer dosage values.
- * Standard mapping per VCF v4.3 spec + PLINK/Hail conventions.
- *
- * Usage: embed in SQL queries as a column expression, e.g.:
- *   `SELECT gene_symbol, ${GT_DOSAGE_SQL} AS dosage FROM variants`
- *
- * The expression references the `gt_num` column from the variants table.
+ * SQL forms of the genotype classes in ../utils/genotype.ts: the zygosity
+ * lists for `gt_num IN (...)` and the GT-to-dosage CASE expression. Every
+ * SQL consumer on both backends takes them from here.
  */
-export const GT_DOSAGE_SQL = `CASE gt_num
-    WHEN '1/1' THEN 2  WHEN '1|1' THEN 2
-    WHEN '0/1' THEN 1  WHEN '1/0' THEN 1
-    WHEN '0|1' THEN 1  WHEN '1|0' THEN 1
-    WHEN '0/0' THEN 0  WHEN '0|0' THEN 0
-    WHEN '1'   THEN 1
-    WHEN '0'   THEN 0
+import { HEMI_GENOTYPES, HET_GENOTYPES, HOM_GENOTYPES, REF_GENOTYPES } from '../utils/genotype'
+
+const sqlList = (genotypes: readonly string[]): string =>
+  `(${genotypes.map((gt) => `'${gt}'`).join(',')})`
+
+export const HET_GT_SQL = sqlList(HET_GENOTYPES)
+export const HOM_GT_SQL = sqlList(HOM_GENOTYPES)
+export const HEMI_GT_SQL = sqlList(HEMI_GENOTYPES)
+/** X-linked hemizygous filter: a haploid call, or a caller that wrote it diploid. */
+export const HOM_OR_HEMI_GT_SQL = sqlList([...HOM_GENOTYPES, ...HEMI_GENOTYPES])
+
+export const REF_GT_SQL = sqlList(REF_GENOTYPES)
+/** A carrier of the row's allele, whatever the zygosity. */
+export const ALT_GT_SQL = sqlList([...HET_GENOTYPES, ...HOM_GENOTYPES, ...HEMI_GENOTYPES])
+
+/**
+ * Genotype column `column` is not an explicit reference call: the sample
+ * carries the allele, or its call says nothing (no-call, NULL, other text).
+ */
+export function notReferenceGtSql(column: string): string {
+  return `(${column} IS NULL OR ${column} NOT IN ${REF_GT_SQL})`
+}
+
+/**
+ * Copies of the ALT allele in genotype column `column`: 2 hom, 1 het or
+ * hemizygous, 0 reference, NULL when the genotype names no dosage.
+ */
+export function gtDosageSql(column = 'gt_num'): string {
+  return `CASE
+    WHEN ${column} IN ${HOM_GT_SQL} THEN 2
+    WHEN ${column} IN ${HET_GT_SQL} THEN 1
+    WHEN ${column} IN ${HEMI_GT_SQL} THEN 1
+    WHEN ${column} IN ${REF_GT_SQL} THEN 0
     ELSE NULL
   END`
+}
+
+/** {@link gtDosageSql} on the unqualified `gt_num` column. */
+export const GT_DOSAGE_SQL = gtDosageSql()

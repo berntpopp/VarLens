@@ -37,6 +37,7 @@ import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { applyConnectionPragmas } from './connection-pragmas'
 import { rekeyConnection } from './journal-mode'
 import { isImportSessionOpen } from './cohort-summary-case-add'
+import { isCohortSummaryStale } from './cohort-summary-case-removal'
 import { sessionIndexesMissing } from '../workers/import-index-sql'
 import { hasInterruptedImports } from '../workers/import-recovery'
 
@@ -232,8 +233,8 @@ export class DatabaseService {
   /**
    * Check whether the cohort summary tables need a startup rebuild.
    *
-   * Returns true when the summary is empty but variants exist —
-   * i.e., the summary was never built or was cleared — or when an import
+   * Returns true when variants exist and the summary is empty or flagged
+   * stale — never built, cleared, or outdated — or when an import
    * session died before its orderly end (`import_session_open` marker).
    * Uses lightweight EXISTS queries instead of COUNT(*).
    */
@@ -241,11 +242,13 @@ export class DatabaseService {
     try {
       const summaryRow = this.db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get()
       const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
-      if (summaryRow === undefined && variantRow !== undefined) return true
       // An import session that never reached its orderly end leaves the
       // summary in an unknown state (cohort-summary-case-add.ts); one killed
       // before it set its marker leaves only its dropped indexes missing.
-      return isImportSessionOpen(this.db) || sessionIndexesMissing(this.db)
+      if (isImportSessionOpen(this.db) || sessionIndexesMissing(this.db)) return true
+      if (variantRow === undefined) return false
+      // Empty, or flagged stale (a migration, or a writer that could not patch it).
+      return summaryRow === undefined || isCohortSummaryStale(this.db)
     } catch (e) {
       mainLogger.warn(
         'Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)),

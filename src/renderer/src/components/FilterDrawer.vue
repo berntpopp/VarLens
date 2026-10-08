@@ -472,7 +472,7 @@
               @click="toggleInheritanceMode(meta.mode)"
             >
               {{ meta.abbr }}
-              <v-tooltip activator="parent" location="top">{{ meta.label }}</v-tooltip>
+              <v-tooltip v-bind="HELP_TOOLTIP">{{ meta.help }}</v-tooltip>
             </v-chip>
           </div>
           <div class="text-caption text-medium-emphasis mb-1">Segregation (requires family)</div>
@@ -487,10 +487,10 @@
               @click="toggleInheritanceMode(meta.mode)"
             >
               {{ meta.abbr }}
-              <v-tooltip activator="parent" location="top">
+              <v-tooltip v-bind="HELP_TOOLTIP">
                 {{
                   filters.analysisGroupId !== null
-                    ? meta.label
+                    ? meta.help
                     : meta.label + ' — assign a family to enable'
                 }}
               </v-tooltip>
@@ -811,6 +811,7 @@ onMounted(() => {
 })
 
 // Inheritance modes
+const HELP_TOOLTIP = { activator: 'parent', location: 'top', maxWidth: 360 } as const
 const soloModes = SOLO_MODES.map((m) => INHERITANCE_MODE_META[m])
 const trioModes = TRIO_MODES.map((m) => INHERITANCE_MODE_META[m])
 

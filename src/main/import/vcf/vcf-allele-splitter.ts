@@ -236,7 +236,8 @@ function splitOneSampleFields(
  * Remap a GT string for a specific ALT allele.
  * - The target allele (originalAltAllele) becomes 1
  * - REF (0) stays 0
- * - All other alleles become "." (missing)
+ * - All other alleles become "." (missing): `1/2` is `1/.` on the first ALT's
+ *   row, which every consumer reads as heterozygous (src/shared/utils/genotype.ts)
  *
  * @param gt - Original GT string (e.g. "0/2", "1/2")
  * @param originalAltAllele - 1-based allele number to keep (e.g. 2 for second ALT)

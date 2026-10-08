@@ -10,6 +10,7 @@ import {
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from './cohort-summary-lock'
+import { summaryAwaitsRebuild } from './cohort-summary-state-sql'
 import { removeCaseFromSummary } from './cohort-summary-representative-sql'
 
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
@@ -255,29 +256,13 @@ export class PostgresCaseLifecycleRepository {
     client: Pick<PoolClient, 'query'>,
     caseId: number
   ): Promise<void> {
-    // Annotation flags: only coordinates where THIS case carried a per-case
-    // annotation can change; the hook excludes the case via v.case_id <> $1.
-    await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
-      schema: this.schema,
-      deletedCaseId: caseId
-    })
+    // A summary that waits for its rebuild is left to it: its rows do not
+    // hold what this case would subtract (summaryAwaitsRebuild).
+    if (!(await summaryAwaitsRebuild({ schema: this.schema, client }))) {
+      await this.subtractCaseFromSummaries(client, caseId)
+    }
 
-    // Summary rows: recompute the representative annotation this case held,
-    // subtract carrier/het/hom together (one carrier per coordinate per case —
-    // symmetric with incrementalAdd), drop the rows that lost their last
-    // carrier and keep the unique-variant counter in step. Scoped to this
-    // case's coordinates (no full scan).
     const tbl = (t: string): string => this.tbl(t)
-    await removeCaseFromSummary({
-      schema: this.schema,
-      client,
-      caseId,
-      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
-    })
-
-    // Per-gene aggregates: subtract the case while its rows are still visible.
-    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
-
     // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
     // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.
     const caseCoords = `SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1`
@@ -300,6 +285,34 @@ export class PostgresCaseLifecycleRepository {
       client: client as unknown as PoolClient,
       caseId
     })
+  }
+
+  private async subtractCaseFromSummaries(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number
+  ): Promise<void> {
+    // Annotation flags: only coordinates where THIS case carried a per-case
+    // annotation can change; the hook excludes the case via v.case_id <> $1.
+    await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
+      schema: this.schema,
+      deletedCaseId: caseId
+    })
+
+    // Summary rows: recompute the representative annotation this case held,
+    // subtract carrier/het/hom together (one carrier per coordinate per case —
+    // symmetric with incrementalAdd), drop the rows that lost their last
+    // carrier and keep the unique-variant counter in step. Scoped to this
+    // case's coordinates (no full scan).
+    const tbl = (t: string): string => this.tbl(t)
+    await removeCaseFromSummary({
+      schema: this.schema,
+      client,
+      caseId,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
+    })
+
+    // Per-gene aggregates: subtract the case while its rows are still visible.
+    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
   }
 
   private tbl(table: string): string {

@@ -7,7 +7,10 @@ import {
   gateIpcMainOnDatabaseStartup,
   whenDatabaseReady
 } from '../../src/main/database/startup-gate'
-import { openDefaultDatabaseAfterWindow } from '../../src/main/startup-sequence'
+import {
+  openDefaultDatabaseAfterWindow,
+  startSqliteHousekeeping
+} from '../../src/main/startup-sequence'
 
 class FakeWindow extends EventEmitter {
   destroyed = false
@@ -70,6 +73,51 @@ describe('openDefaultDatabaseAfterWindow', () => {
 
     expect(onOpenFailed).toHaveBeenCalledWith(new Error('locked'))
     expect(onSettled).toHaveBeenCalledOnce()
+  })
+})
+
+describe('after the default database opened', () => {
+  const destroyed = (): FakeWindow => Object.assign(new FakeWindow(), { destroyed: true })
+
+  it('runs the housekeeping hook once the open settled', async () => {
+    const order: string[] = []
+    await openDefaultDatabaseAfterWindow(destroyed(), {
+      openDefault: async () => void order.push('open'),
+      onOpenFailed: () => order.push('failed'),
+      onSettled: () => order.push('settled'),
+      onOpened: () => order.push('opened')
+    })
+    expect(order).toEqual(['open', 'settled', 'opened'])
+  })
+
+  it('does not run it when the open failed', async () => {
+    const onOpened = vi.fn()
+    await openDefaultDatabaseAfterWindow(destroyed(), {
+      openDefault: async () => {
+        throw new Error('locked')
+      },
+      onOpenFailed: vi.fn(),
+      onSettled: vi.fn(),
+      onOpened
+    })
+    expect(onOpened).not.toHaveBeenCalled()
+  })
+
+  it('starts SQLite housekeeping only for an open SQLite database', () => {
+    const trigger = vi.fn()
+    const db = { name: 'sqlite-service' }
+    const manager = (backend: string | null): never =>
+      ({
+        getCurrentSessionOrNull: () => (backend === null ? null : { capabilities: { backend } }),
+        getCurrent: () => db
+      }) as never
+
+    startSqliteHousekeeping(manager(null), trigger)
+    startSqliteHousekeeping(manager('postgres'), trigger)
+    expect(trigger).not.toHaveBeenCalled()
+
+    startSqliteHousekeeping(manager('sqlite'), trigger)
+    expect(trigger).toHaveBeenCalledExactlyOnceWith(db)
   })
 })
 
