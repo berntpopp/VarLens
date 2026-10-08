@@ -11,7 +11,7 @@ import {
   summaryColumnsOverWindow,
   transcriptOrderBy
 } from './cohort-representative'
-import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from './genotype-dosage'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM, resolvedGtSql } from './genotype-dosage'
 
 const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 
@@ -51,7 +51,7 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     WITH case_rows AS (
       SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build, v.case_id,
         ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
-        MAX(v.gt_num) OVER case_key AS gt_num,
+        ${resolvedGtSql('v.gt_num', 'sqlite', ' OVER case_key')} AS gt_num,
         ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS case_rn
       FROM variants v
       JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
@@ -229,7 +229,7 @@ export const INCREMENTAL_ADD_SQL = `
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
       ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
-      MAX(v.gt_num) OVER case_key AS gt_num,
+      ${resolvedGtSql('v.gt_num', 'sqlite', ' OVER case_key')} AS gt_num,
       ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
@@ -250,8 +250,8 @@ export const INCREMENTAL_REMOVE_SQL = `
     hom_count = cohort_variant_summary.hom_count - sub.hom_count
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het_count,
-      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom_count
+      CASE WHEN ${resolvedGtSql('v.gt_num', 'sqlite')} IN ${HET} THEN 1 ELSE 0 END AS het_count,
+      CASE WHEN ${resolvedGtSql('v.gt_num', 'sqlite')} IN ${HOM} THEN 1 ELSE 0 END AS hom_count
     FROM variants v
     JOIN cases c ON c.id = v.case_id
     WHERE v.case_id = ?

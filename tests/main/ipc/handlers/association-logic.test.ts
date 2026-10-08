@@ -28,6 +28,7 @@ function rows() {
       gene_symbol: 'GENE1',
       case_id: caseId,
       variant_key: '1:10:A:T',
+      gt_num: '0/1',
       dosage: 1,
       gnomad_af: null,
       cadd: 20
@@ -37,6 +38,7 @@ function rows() {
     gene_symbol: 'GENE2',
     case_id: 1,
     variant_key: '2:20:C:G',
+    gt_num: '0/1',
     dosage: 1,
     gnomad_af: 0.01,
     cadd: null
@@ -45,6 +47,7 @@ function rows() {
     gene_symbol: 'GENE2',
     case_id: 5,
     variant_key: '2:20:C:G',
+    gt_num: '1/1',
     dosage: 2,
     gnomad_af: 0.01,
     cadd: null

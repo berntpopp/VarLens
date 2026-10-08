@@ -70,6 +70,7 @@ export class AssociationDataBuilder {
       SELECT ${baseAlias}.gene_symbol,
              ${baseAlias}.case_id,
              ${baseAlias}.chr || ':' || ${baseAlias}.pos || ':' || ${baseAlias}.ref || ':' || ${baseAlias}.alt AS variant_key,
+             ${baseAlias}.gt_num,
              ${GT_DOSAGE_SQL} AS dosage,
              ${baseAlias}.gnomad_af,
              ${baseAlias}.cadd

@@ -92,6 +92,7 @@ describe('missing covariates (#499)', () => {
         gene_symbol: 'GENE1',
         case_id: id,
         variant_key: '1:100:A:T',
+        gt_num: '0/1',
         dosage: 1,
         gnomad_af: null,
         cadd: null

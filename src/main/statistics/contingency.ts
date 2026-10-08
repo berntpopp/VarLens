@@ -4,12 +4,15 @@
  * contingency data. Shared by the SQLite AssociationDataBuilder (desktop) and
  * the Postgres builder (web), so both runtimes compute identical inputs.
  */
+import { calledAlleleCount, genotypeCallKey } from '../../shared/utils/genotype'
 import type { GeneContingencyData, SampleBurdenData } from './types'
 
 export interface AssociationVariantRow {
   gene_symbol: string
   case_id: number
   variant_key: string
+  /** The stored genotype `dosage` was read from. */
+  gt_num: string | null
   dosage: number
   gnomad_af: number | null
   cadd: number | null
@@ -27,7 +30,12 @@ export interface CaseMetricRow {
   numeric_value: number | null
 }
 
-type VariantCaseData = { dosage: number; gnomad_af: number | null; cadd: number | null }
+type VariantCaseData = {
+  gt_num: string | null
+  dosage: number
+  gnomad_af: number | null
+  cadd: number | null
+}
 type GeneVariantMap = Map<string, Map<string, Map<number, VariantCaseData>>>
 
 /**
@@ -73,7 +81,12 @@ function groupRows(rows: AssociationVariantRow[]): GeneVariantMap {
     if (!geneMap.has(row.gene_symbol)) geneMap.set(row.gene_symbol, new Map())
     const variantMap = geneMap.get(row.gene_symbol)!
     if (!variantMap.has(row.variant_key)) variantMap.set(row.variant_key, new Map())
-    variantMap.get(row.variant_key)!.set(row.case_id, {
+    const caseMap = variantMap.get(row.variant_key)!
+    const kept = caseMap.get(row.case_id)
+    // Duplicate rows of one case: the highest-dosage call stands, as in the cohort summary.
+    if (kept && genotypeCallKey(kept.gt_num) >= genotypeCallKey(row.gt_num)) continue
+    caseMap.set(row.case_id, {
+      gt_num: row.gt_num,
       dosage: row.dosage,
       gnomad_af: row.gnomad_af,
       cadd: row.cadd
@@ -120,18 +133,20 @@ function geneSamples(
   for (const vKey of variantKeys) {
     const caseMap = variantMap.get(vKey)!
     let altCount = 0
+    let calledAlleles = 0
     let caddSum = 0
     let caddCount = 0
     for (const caseId of allIds) {
       const data = caseMap.get(caseId)
       altCount += data?.dosage ?? 0
+      // No row: reference sites are not stored, so the sample is read as a diploid 0/0.
+      calledAlleles += data ? calledAlleleCount(data.gt_num) : 2
       if (data?.cadd !== null && data?.cadd !== undefined) {
         caddSum += data.cadd
         caddCount++
       }
     }
-    const totalAlleles = allIds.length * 2
-    const maf = totalAlleles > 0 ? altCount / totalAlleles : 0
+    const maf = calledAlleles > 0 ? altCount / calledAlleles : 0
     variantMafs.push(Math.max(maf, 1e-8))
     variantCadds.push(caddCount > 0 ? caddSum / caddCount : null)
   }

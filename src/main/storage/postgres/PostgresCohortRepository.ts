@@ -32,6 +32,7 @@ import {
   type PanelIntervalLookup
 } from './postgres-panel-interval-resolver'
 import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
+import { resolvedGtSql } from '../../../shared/sql/genotype-dosage'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 
@@ -296,7 +297,7 @@ export class PostgresCohortRepository {
       `SELECT
          v.case_id,
          c.name AS case_name,
-         MAX(v.gt_num) AS gt_num,
+         ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num,
          MAX(v.gq) AS gq,
          MAX(v.dp) AS dp
        FROM ${this.schemaName}."variants" v

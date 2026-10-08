@@ -18,7 +18,11 @@ import {
   transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
 import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
-import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../shared/sql/genotype-dosage'
+import {
+  HET_GT_SQL as HET,
+  HOM_GT_SQL as HOM,
+  resolvedGtSql
+} from '../../shared/sql/genotype-dosage'
 
 export const CASE_REMOVAL_TEMP_TABLES_SQL = `
   CREATE TEMP TABLE IF NOT EXISTS removed_case_rows (
@@ -60,7 +64,7 @@ const CAPTURE_ROWS_SQL = `
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
       ${summaryColumnsOverWindow('v', 'case_key', 'sqlite')},
-      MAX(v.gt_num) OVER case_key AS gt_num,
+      ${resolvedGtSql('v.gt_num', 'sqlite', ' OVER case_key')} AS gt_num,
       ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
