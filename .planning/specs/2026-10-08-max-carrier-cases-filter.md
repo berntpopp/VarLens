@@ -75,6 +75,10 @@ that mixes GRCh37 and GRCh38 cases, the case-view count can include a different 
 same coordinate and hide a row it should keep. The internal-frequency filter has the same limit
 today. Fixing the key fixes both filters and is separate work; the cohort view is not affected.
 
+The two views read different tables: the case view reads `variant_frequency`, updated when a
+case is published; the cohort view reads the summary, which can be stale until its rebuild
+finishes. While it is stale the two views can differ for the same K.
+
 ## Out of scope
 
 - Zygosity-specific caps (het / hom). A general cap must not change recessive analyses.
@@ -86,8 +90,8 @@ today. Fixing the key fixes both filters and is separate work; the cohort view i
 - K = 1, K = 3 and off; the current case counts exactly once.
 - Several transcript rows of one case count once; a second imported case counts.
 - A variant without a frequency row is kept.
-- Case view and cohort view return the same variants for the same K, on both backends,
-  including page counts and the cohort export.
+- In a single-build database with a fresh cohort summary, case view and cohort view return the
+  same variants for the same K, on both backends, including page counts and the cohort export.
 - A saved preset with `maxCarriers` round-trips; user presets and the eight existing built-ins
   are unchanged by the migrations.
 - K below 1 or non-integer is rejected by the schema.

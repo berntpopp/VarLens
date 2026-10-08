@@ -60,8 +60,13 @@ assumption in the result. It needs no schema change. Phase 2 adds chrX.
    ClinVar, column filters). Step two reads every stored row of the selected cases at those
    variants, without row filters. A filter can no longer turn a carrier into a reference call.
 3. **Missing dosage.** A sample's dosage at a site is 0, 1, 2 or missing. It is missing when the
-   stored call is unknown or partial, or when duplicate rows of the case disagree in dosage.
-   Phased and unphased forms of the same call agree. There is no quality-based rescue.
+   stored call is in the "unknown" class of `.planning/docs/SPLIT-GENOTYPE-ZYGOSITY.md` (dosage
+   NULL: `./.`, NULL, other text), or when duplicate rows of the case disagree in dosage. The
+   shipped classes stay as they are: an assumed het (`1/.`, `./1`) is dosage 1, and a reference
+   half-call (`0/.`) is dosage 0 with two called alleles. Phased and unphased forms of the same
+   call agree. There is no quality-based rescue. The duplicate rule applies to the association
+   test only; the cohort summary and the carrier list keep "highest dosage" (#516), and the
+   decision record is updated to say so.
 4. **Complete-site rule.** A site with a missing dosage in any analysed sample is excluded from
    both groups, from the burden score and from the Fisher table. Nothing is imputed.
 5. **Weight.** The Beta weight uses `min(p, 1 - p)` with `p` from the analysed samples. Dosage
@@ -70,7 +75,8 @@ assumption in the result. It needs no schema change. Phase 2 adds chrX.
 6. **Covariates.** The complete-covariate sample set is chosen before frequencies and weights
    are computed, so weights describe the samples that are tested.
 7. **Reporting.** Each gene result carries the number of sites used and the number excluded per
-   reason. The result view and the export state: "Samples without a stored call are treated as
+   reason. The run result carries the number of qualifying variants left out because they are
+   not on an autosome, so a gene list on chrX does not come back empty without a reason. The result view and the export state: "Samples without a stored call are treated as
    reference. Use data called and filtered the same way for both groups." No checkbox; a
    declaration VarLens cannot verify adds nothing.
 8. **Cleanup.** Remove `acmg_classifications` and `max_internal_af` from both builders' calls.
@@ -110,10 +116,11 @@ table and export in the renderer, `.planning/docs/SPLIT-GENOTYPE-ZYGOSITY.md` ("
 - A column filter on depth does not turn a carrier into a reference sample.
 - An unknown call in either group excludes the site from the burden score and the Fisher table;
   swapping the group labels excludes the same sites.
+- `1/.` stays dosage 1 and does not exclude its site; `./.` excludes it.
 - `0/1` with `1/1` for one case is missing; `0/1` with `0|1` is het; the GQ 99 / GQ 2 example
   from the issue does not select the homozygote.
 - `p = 0.75` gives a weight at 0.25.
-- chrX, chrY and MT variants do not enter a result; a mixed-build selection is rejected.
+- chrX, chrY and MT variants do not enter a result and are counted in the run result; a mixed-build selection is rejected.
 - Both builders return identical matrices and exclusion counts on the same data.
 - Results on an eligible complete dataset still match the golden references in
   `tests/fixtures/golden/`.
