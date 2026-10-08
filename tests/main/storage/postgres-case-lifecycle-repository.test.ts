@@ -123,6 +123,25 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     expect(sql[flip]).toContain('name = $2::text')
   })
 
+  it('renames the successor in the transaction that hides the case (#493)', async () => {
+    const { client, pool } = makePool()
+    const repo = new PostgresCaseLifecycleRepository(
+      pool as never,
+      'public',
+      makeSummary() as never
+    )
+
+    await repo.deleteCase(7, { successor: { id: 9, name: 'HG001' } })
+
+    const calls = client.query.mock.calls as unknown[][]
+    const sql = calls.map(([arg]) => sqlText(arg))
+    const flip = sql.findIndex((s) => s.includes("SET import_status = 'deleting'"))
+    const rename = sql.findIndex((s) => s.includes('SET name = $1 WHERE id = $2'))
+    expect(rename).toBeGreaterThan(flip)
+    expect(calls[rename][1]).toEqual(['HG001', 9])
+    expect(sql.indexOf('COMMIT')).toBeGreaterThan(rename)
+  })
+
   it('refuses to delete a case that is still importing', async () => {
     const { client, pool } = makePool({
       genome_build: 'GRCh38',

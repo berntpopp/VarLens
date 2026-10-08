@@ -147,6 +147,22 @@ export async function runSessionBatchImport(params: {
     params.ctx?.reportProgress(progress.finishedFiles, files.length, message)
   }
 
+  /** Delete the old case and give its name to the imported replacement, in one transaction. */
+  const swapIn = async (oldId: number, newId: number, name: string): Promise<void> => {
+    const remove = (params: Extract<StorageWriteTask, { type: 'cases:delete' }>['params']) =>
+      session.getWriteExecutor().execute({ type: DELETE_CASE_TASK_TYPE, params })
+    try {
+      await remove([oldId, { id: newId, name }])
+    } catch (error) {
+      // Failed after the swap committed (the old case's purge resumes at the
+      // next start): the replacement is in place. Before it: the old case stays.
+      const cases = await session.listCases()
+      if (cases.some((item) => item.id === newId && item.name === name)) return
+      await remove([newId])
+      throw error
+    }
+  }
+
   const processFile = async (index: number, importOne: ImportOneFile): Promise<void> => {
     if (signal.aborted) {
       result.cancelled = true
@@ -182,15 +198,13 @@ export async function runSessionBatchImport(params: {
     }
 
     try {
-      if (existingId !== undefined) {
-        await session
-          .getWriteExecutor()
-          .execute({ type: DELETE_CASE_TASK_TYPE, params: [existingId] } as StorageWriteTask)
-        existingIds.delete(caseName)
-      }
-      const imported = await importOne(file, caseName, (fileProgress) =>
+      // The old case keeps its (UNIQUE) name until its replacement is imported (#493).
+      const importName =
+        existingId === undefined ? caseName : `${caseName} (replacing #${existingId})`
+      const imported = await importOne(file, importName, (fileProgress) =>
         progress.update(index, fileProgress)
       )
+      if (existingId !== undefined) await swapIn(existingId, imported.caseId, caseName)
       result.succeeded++
       existingIds.set(caseName, imported.caseId)
       const unranked =

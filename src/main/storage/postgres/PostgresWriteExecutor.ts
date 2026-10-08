@@ -103,7 +103,9 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
   async execute(task: StorageWriteTask): Promise<unknown> {
     switch (task.type) {
       case 'cases:delete':
-        return await this.caseLifecycle.deleteCase(task.params[0])
+        return task.params[1]
+          ? await this.caseLifecycle.deleteCase(task.params[0], { successor: task.params[1] })
+          : await this.caseLifecycle.deleteCase(task.params[0])
 
       case 'case-metadata:upsert':
         return await this.caseMetadata.upsertCaseMetadata(task.params[0], task.params[1])

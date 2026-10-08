@@ -12,18 +12,32 @@ import type { BatchFileComplete } from '../../../../src/shared/types/api'
  * Shared batch-import loop (PR-W9a; used by web and desktop-on-Postgres).
  */
 function fakeSession(existing: Array<{ id: number; name: string }>) {
-  const writeExecute = vi.fn(async () => undefined)
+  const cases = [...existing]
+  const events: string[] = []
+  const writeExecute = vi.fn(async (task: { params: [number, { id: number; name: string }?] }) => {
+    const [caseId, successor] = task.params
+    events.push(`delete:${caseId}`)
+    cases.splice(
+      cases.findIndex((c) => c.id === caseId),
+      1
+    )
+    const renamed = cases.find((c) => c.id === successor?.id)
+    if (renamed && successor) renamed.name = successor.name
+  })
+  let nextCaseId = 100
   const importSingleFile = vi.fn(async (params: { caseName: string }) => {
-    if (params.caseName === 'broken') throw new Error('parse failure in broken.json')
-    return { caseId: 100, variantCount: 3, skipped: 0, errors: [], elapsed: 1 }
+    events.push(`import:${params.caseName}`)
+    if (params.caseName.startsWith('broken')) throw new Error('parse failure in broken.json')
+    cases.push({ id: nextCaseId, name: params.caseName })
+    return { caseId: nextCaseId++, variantCount: 3, skipped: 0, errors: [], elapsed: 1 }
   })
   const session = {
     capabilities: { backend: 'postgres' },
-    listCases: vi.fn(async () => existing),
+    listCases: vi.fn(async () => cases.map((c) => ({ ...c }))),
     getWriteExecutor: () => ({ execute: writeExecute }),
     getImportExecutor: () => ({ importSingleFile, cancel: vi.fn() })
   } as unknown as StorageSession
-  return { session, writeExecute, importSingleFile }
+  return { session, writeExecute, importSingleFile, cases, events }
 }
 
 function file(name: string): SessionBatchFile {
@@ -65,17 +79,73 @@ describe('runSessionBatchImport', () => {
     expect(completed.every((event) => event.totalFiles === 3)).toBe(true)
   })
 
-  it('overwrite deletes the existing case before importing it again', async () => {
-    const { session, writeExecute } = fakeSession([{ id: 5, name: 'HG001' }])
-    const result = await runSessionBatchImport({
-      files: [file('HG001.json')],
+  const overwrite = (session: StorageSession, names: string[]) =>
+    runSessionBatchImport({
+      files: names.map(file),
       duplicateStrategy: 'overwrite',
       session,
       callbacks: {},
       signal: new AbortController().signal
     })
-    expect(writeExecute).toHaveBeenCalledWith({ type: 'cases:delete', params: [5] })
+
+  // #493: the old case goes only once its replacement is imported.
+  it('overwrite imports the replacement under a temporary name, then swaps it in', async () => {
+    const { session, writeExecute, cases, events } = fakeSession([{ id: 5, name: 'HG001' }])
+    const result = await overwrite(session, ['HG001.json'])
+    expect(events).toEqual(['import:HG001 (replacing #5)', 'delete:5'])
+    expect(writeExecute).toHaveBeenCalledWith({
+      type: 'cases:delete',
+      params: [5, { id: 100, name: 'HG001' }]
+    })
+    expect(cases).toEqual([{ id: 100, name: 'HG001' }])
     expect(result.succeeded).toBe(1)
+  })
+
+  it('overwrite keeps the existing case when the replacement fails to import', async () => {
+    const { session, writeExecute, cases } = fakeSession([{ id: 5, name: 'broken' }])
+    const result = await overwrite(session, ['broken.json'])
+    expect(result).toMatchObject({ succeeded: 0, failed: 1 })
+    expect(writeExecute).not.toHaveBeenCalled()
+    expect(cases).toEqual([{ id: 5, name: 'broken' }])
+  })
+
+  it('overwrite removes the replacement when the swap fails before it committed', async () => {
+    const { session, writeExecute, cases } = fakeSession([{ id: 5, name: 'HG001' }])
+    writeExecute.mockRejectedValueOnce(new Error('summary lock timeout'))
+    const result = await overwrite(session, ['HG001.json'])
+    expect(result).toMatchObject({ succeeded: 0, failed: 1 })
+    expect(cases).toEqual([{ id: 5, name: 'HG001' }])
+  })
+
+  it('overwrite keeps the replacement when the swap committed but its purge failed', async () => {
+    const { session, writeExecute, cases } = fakeSession([{ id: 5, name: 'HG001' }])
+    const swap = writeExecute.getMockImplementation()!
+    writeExecute.mockImplementationOnce(async (task) => {
+      await swap(task)
+      throw new Error('purge interrupted')
+    })
+    const result = await overwrite(session, ['HG001.json'])
+    expect(result.succeeded).toBe(1)
+    expect(writeExecute).toHaveBeenCalledTimes(1)
+    expect(cases).toEqual([{ id: 100, name: 'HG001' }])
+  })
+
+  it('two files for one case: the last wins, and a failed one changes nothing', async () => {
+    const first = fakeSession([{ id: 5, name: 'HG001' }])
+    await overwrite(first.session, ['HG001.json', 'HG001.vcf'])
+    expect(first.events).toEqual([
+      'import:HG001 (replacing #5)',
+      'delete:5',
+      'import:HG001 (replacing #100)',
+      'delete:100'
+    ])
+    expect(first.cases).toEqual([{ id: 101, name: 'HG001' }])
+
+    const second = fakeSession([{ id: 5, name: 'broken' }])
+    second.importSingleFile.mockRejectedValueOnce(new Error('truncated'))
+    const result = await overwrite(second.session, ['broken.json', 'broken.vcf'])
+    expect(result).toMatchObject({ failed: 2 })
+    expect(second.cases).toEqual([{ id: 5, name: 'broken' }])
   })
 
   it('names VCF cases without the inner extension', async () => {
@@ -109,7 +179,7 @@ describe('runSessionBatchImport', () => {
   })
 
   it('overwrite replaces such a legacy-named case in place instead of adding a twin', async () => {
-    const { session, writeExecute, importSingleFile } = fakeSession([
+    const { session, writeExecute, importSingleFile, cases } = fakeSession([
       { id: 7, name: 'SIM-0001.vcf' }
     ])
     const result = await runSessionBatchImport({
@@ -119,8 +189,14 @@ describe('runSessionBatchImport', () => {
       callbacks: {},
       signal: new AbortController().signal
     })
-    expect(writeExecute).toHaveBeenCalledWith({ type: 'cases:delete', params: [7] })
-    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual(['SIM-0001.vcf'])
+    expect(writeExecute).toHaveBeenCalledWith({
+      type: 'cases:delete',
+      params: [7, { id: 100, name: 'SIM-0001.vcf' }]
+    })
+    expect(importSingleFile.mock.calls.map(([params]) => params.caseName)).toEqual([
+      'SIM-0001.vcf (replacing #7)'
+    ])
+    expect(cases).toEqual([{ id: 100, name: 'SIM-0001.vcf' }])
     expect(result.succeeded).toBe(1)
   })
 
