@@ -428,6 +428,16 @@ describe('useFilterState', () => {
       expect(entry?.value).toBe('0.50%')
     })
 
+    it('keeps significant digits for a very small max AF (#504)', () => {
+      const { result } = createState()
+      result.filters.value.maxGnomadAf = 0.00001
+      result.filters.value.maxInternalAf = 0.00001
+
+      const list = result.activeFiltersList.value
+      expect(list.find((f) => f.id === 'frequency')?.value).toBe('0.001%')
+      expect(list.find((f) => f.id === 'internal-frequency')?.value).toBe('0.001%')
+    })
+
     it('adds annotationScope entry only when set to all', () => {
       const { result } = createState()
 

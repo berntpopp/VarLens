@@ -18,7 +18,7 @@ export { clearFilter, clearAllFilters, type FilterId } from './filterClearing'
 export { buildFilterIpcParams, buildIpcParams } from './filterSerialization'
 
 // Active filters computation
-export { buildActiveFiltersList } from './activeFilters'
+export { buildActiveFiltersList, formatAfPercent } from './activeFilters'
 
 // Custom input handlers
 export {

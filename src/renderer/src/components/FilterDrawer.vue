@@ -552,7 +552,7 @@ import PanelFilterSection from './panels/PanelFilterSection.vue'
 import ExtensionColumnFilters from './filters/ExtensionColumnFilters.vue'
 import FilterTypeNarrowingChip from './filters/FilterTypeNarrowingChip.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
-import { ACMG_FILTER_OPTIONS_LONG } from '../utils/filters'
+import { ACMG_FILTER_OPTIONS_LONG, formatAfPercent } from '../utils/filters'
 import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
 import { useAnalysisGroups } from '../composables/useAnalysisGroups'
 import type { Tag } from '../../../shared/types/database-entities'
@@ -688,7 +688,7 @@ const clinvarSummary = computed(() =>
 
 const frequencySummary = computed(() => {
   if (filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0) {
-    const pct = (filters.value.maxGnomadAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.value.maxGnomadAf)
     return `<= ${pct}%`
   }
   return ''
@@ -752,7 +752,7 @@ watch(
 
 const internalFrequencySummary = computed(() => {
   if (filters.value.maxInternalAf !== null && filters.value.maxInternalAf > 0) {
-    const pct = (filters.value.maxInternalAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.value.maxInternalAf)
     return `<= ${pct}%`
   }
   return ''

@@ -99,6 +99,14 @@ describe('buildActiveFiltersList', () => {
       expect(result.find((f) => f.id === 'internal-frequency')).toBeUndefined()
     })
 
+    it('keeps significant digits for a very small max AF (#504)', () => {
+      const result = buildActiveFiltersList(
+        makeDefaultFilters({ maxGnomadAf: 0.00001, maxInternalAf: 0.00001 })
+      )
+      expect(result.find((f) => f.id === 'frequency')!.value).toBe('<= 0.001%')
+      expect(result.find((f) => f.id === 'internal-frequency')!.value).toBe('\u2264 0.001%')
+    })
+
     it('formats small percentages correctly', () => {
       const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: 0.001 }))
       const chip = result.find((f) => f.id === 'internal-frequency')

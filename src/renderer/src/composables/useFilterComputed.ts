@@ -9,6 +9,7 @@
 import { computed, type Ref, type ComputedRef } from 'vue'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
 import { resetAdapterFields } from './filter-types'
+import { formatAfPercent } from '../utils/filters'
 import type { Tag } from '../../../shared/types/database-entities'
 
 /**
@@ -178,7 +179,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       !Number.isNaN(filters.value.maxGnomadAf) &&
       filters.value.maxGnomadAf > 0
     ) {
-      const pct = (filters.value.maxGnomadAf * 100).toFixed(2)
+      const pct = formatAfPercent(filters.value.maxGnomadAf)
       list.push({ id: 'frequency', label: 'AF \u2264', value: `${pct}%` })
     }
     if (
@@ -193,7 +194,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       !Number.isNaN(filters.value.maxInternalAf) &&
       filters.value.maxInternalAf > 0
     ) {
-      const pct = (filters.value.maxInternalAf * 100).toFixed(2)
+      const pct = formatAfPercent(filters.value.maxInternalAf)
       list.push({ id: 'internal-frequency', label: 'Internal AF \u2264', value: `${pct}%` })
     }
     if (filters.value.tagIds.length > 0) {

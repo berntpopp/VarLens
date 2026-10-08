@@ -11,6 +11,12 @@ import type { FilterState, ActiveFilter } from '../../../../shared/types/filters
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import { INHERITANCE_MODE_META } from '../../../../shared/types/inheritance'
 
+/** AF fraction as a percentage; below 0.01% significant digits replace the two decimals. */
+export function formatAfPercent(af: number): string {
+  const pct = af * 100
+  return pct >= 0.01 ? pct.toFixed(2) : String(Number(pct.toPrecision(2)))
+}
+
 /** Human-readable labels for column filter keys */
 const COLUMN_LABELS: Record<string, string> = {
   chr: 'Chr',
@@ -103,11 +109,11 @@ export function buildActiveFiltersList(
 
   // Numeric filters - operator goes in value for cleaner chip display
   if (filters.maxGnomadAf !== null && filters.maxGnomadAf > 0) {
-    const pct = (filters.maxGnomadAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.maxGnomadAf)
     list.push({ id: 'frequency', label: 'AF', value: `<= ${pct}%` })
   }
   if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
-    const pct = (filters.maxInternalAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.maxInternalAf)
     list.push({ id: 'internal-frequency', label: 'Internal AF', value: `\u2264 ${pct}%` })
   }
   if (filters.minCadd !== null && filters.minCadd >= 0) {
