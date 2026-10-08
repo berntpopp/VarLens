@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
 import type { DispatcherDeps } from '../../src/web/server/dispatcher'
 import { WebAssociationRuns } from '../../src/web/server/association/web-association-runs'
+import { InvalidParametersError } from '../../src/main/ipc/errors'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
 /**
@@ -39,7 +40,7 @@ function sampleGenes() {
   ]
 }
 
-function harness(build = vi.fn(async () => sampleGenes())) {
+function harness(build = vi.fn(async () => ({ genes: sampleGenes(), non_autosomal_variants: 2 }))) {
   const base = makeDeps()
   const publish = vi.fn()
   const association = new WebAssociationRuns({ builder: { build }, events: { publish } })
@@ -63,6 +64,7 @@ describe('web cohort association', () => {
     const body = result as { results: Array<{ gene_symbol: string; q_value: number | null }> }
     expect(body.results.map((r) => r.gene_symbol)).toEqual(['GENE1'])
     expect(body.results[0].q_value).not.toBeNull()
+    expect((body as any).non_autosomal_variants).toBe(2)
     expect(publish).toHaveBeenCalledWith(7, 'cohort:geneBurdenProgress', {
       completed: 1,
       total: 1
@@ -75,6 +77,18 @@ describe('web cohort association', () => {
     const overlap = await call('cohort:runAssociation', [{ ...CONFIG, groupB_ids: [2, 3] }])
     expect(overlap.reply.code).toHaveBeenCalledWith(400)
     expect(overlap.result).toMatchObject({ error: 'association-groups-overlap' })
+
+    const mixedBuild = harness(
+      vi.fn(async () => {
+        throw new InvalidParametersError('Mixed genome builds: hg19 and hg38', 'Mixed genome builds: hg19 and hg38')
+      })
+    )
+    const mixed = await mixedBuild.call('cohort:runAssociation', [CONFIG])
+    expect(mixed.reply.code).toHaveBeenCalledWith(400)
+    expect(mixed.result).toMatchObject({
+      error: 'invalid-parameters',
+      message: expect.stringContaining('Mixed genome builds')
+    })
   })
 
   test('a second run for the same user is refused; cancel stops only the caller', async () => {
@@ -84,7 +98,7 @@ describe('web cohort association', () => {
     })
     const build = vi.fn(async () => {
       await gate
-      return sampleGenes()
+      return { genes: sampleGenes(), non_autosomal_variants: 2 }
     })
     const { call } = harness(build)
 

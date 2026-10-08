@@ -698,6 +698,7 @@ export const mockApi: WindowAPI = {
     runAssociation: async () => ({
       results: [],
       warnings: [],
+      non_autosomal_variants: 0,
       elapsed_ms: 0,
       primary_test: 'fisher'
     }),

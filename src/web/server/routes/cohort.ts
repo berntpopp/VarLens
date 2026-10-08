@@ -16,6 +16,7 @@ import {
   runAssociationInProcess
 } from '../../../main/ipc/handlers/association-logic'
 import { AssociationBusyError } from '../association/web-association-runs'
+import { InvalidParametersError } from '../../../main/ipc/errors'
 import { badRequest, serviceNotConfigured } from './common'
 import type { OverrideHandler } from './types'
 
@@ -76,6 +77,9 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
           if (error instanceof AssociationBusyError) {
             reply.code(409)
             return { error: 'association-running', message: error.message }
+          }
+          if (error instanceof InvalidParametersError) {
+            return badRequest(reply, 'invalid-parameters', error.userMessage ?? error.message)
           }
           if (error instanceof Error && error.message.startsWith('Groups overlap')) {
             return badRequest(reply, 'association-groups-overlap', error.message)

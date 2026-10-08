@@ -68,9 +68,8 @@
 
     <!-- Results summary -->
     <v-alert v-if="results" type="success" variant="tonal" density="compact" class="mb-3">
-      Analysis complete: {{ results.results.length }} genes tested,
-      {{ significantCount }} significant (FDR &lt; 0.05) in
-      {{ (results.elapsed_ms / 1000).toFixed(1) }}s
+      Analysis complete: {{ testedCount }} genes tested, {{ significantCount }} significant (FDR
+      &lt; 0.05) in {{ (results.elapsed_ms / 1000).toFixed(1) }}s
     </v-alert>
 
     <!-- Results tabs -->
@@ -82,7 +81,11 @@
 
     <v-tabs-window v-if="results" v-model="activeTab">
       <v-tabs-window-item value="table">
-        <AssociationResultsTable :results="results.results" :primary-test="results.primary_test" />
+        <AssociationResultsTable
+          :results="results.results"
+          :primary-test="results.primary_test"
+          :non-autosomal-variants="results.non_autosomal_variants"
+        />
       </v-tabs-window-item>
       <v-tabs-window-item value="volcano">
         <VolcanoPlot :results="results.results" :primary-test="results.primary_test" />
@@ -103,6 +106,7 @@ import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import { formatError } from '../../utils/ipc-result'
+import type { AssociationResultRow } from '../../utils/association-results'
 
 interface CaseInfo {
   id: number
@@ -117,36 +121,12 @@ interface CohortGroup {
   name: string
 }
 
-interface AssociationResult {
-  gene_symbol: string
-  n_variants: number
-  groupA_carriers: number
-  groupB_carriers: number
-  groupA_total: number
-  groupB_total: number
-  fisher: {
-    p_value: number | null
-    odds_ratio: number | null
-    ci_lower: number | null
-    ci_upper: number | null
-  }
-  logistic_burden: {
-    p_value: number | null
-    beta: number | null
-    se: number | null
-    ci_lower: number | null
-    ci_upper: number | null
-    used_firth: boolean
-    warning?: string
-  }
-  q_value: number | null
-}
-
 interface AssociationResultsData {
-  results: AssociationResult[]
+  results: AssociationResultRow[]
   warnings: string[]
   elapsed_ms: number
   primary_test: string
+  non_autosomal_variants: number
 }
 
 const {
@@ -173,6 +153,10 @@ const progressPercent = computed(() =>
 
 const significantCount = computed(
   () => results.value?.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length ?? 0
+)
+
+const testedCount = computed(
+  () => results.value?.results.filter((r) => r.n_variants > 0).length ?? 0
 )
 
 let cleanupProgress: (() => void) | null = null

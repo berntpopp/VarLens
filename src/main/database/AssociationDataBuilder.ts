@@ -1,16 +1,25 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
-import type { GeneContingencyData, VariantFilters } from '../statistics/types'
+import type { AssociationBuildResult, VariantFilters } from '../statistics/types'
 import {
+  assertSingleGenomeBuild,
   buildCovariateMap,
   buildGeneContingencyData,
   type AssociationVariantRow,
   type CaseMetaRow,
   type CaseMetricRow
 } from '../statistics/contingency'
-import { GT_DOSAGE_SQL } from '../../shared/sql/genotype-dosage'
+import { autosomeSql } from '../../shared/sql/chromosome-order'
+import { gtDosageSql } from '../../shared/sql/genotype-dosage'
 import { sqlPlaceholders } from './sql-utils'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionJoinClauses } from './variant-extension-registry'
+
+/** The filters of a run as SQL on `variants v`, without the case and chromosome terms. */
+interface SiteFilter {
+  joins: string
+  conditions: string[]
+  params: (string | number)[]
+}
 
 export class AssociationDataBuilder {
   private db: Database.Database
@@ -24,15 +33,35 @@ export class AssociationDataBuilder {
     groupB_ids: number[],
     filters: VariantFilters,
     covariateNames: string[]
-  ): GeneContingencyData[] {
+  ): AssociationBuildResult {
     const allIds = [...groupA_ids, ...groupB_ids]
-    if (allIds.length === 0) return []
+    if (allIds.length === 0) return { genes: [], non_autosomal_variants: 0 }
 
-    const baseAlias = 'v'
+    const placeholders = sqlPlaceholders(allIds.length)
+    assertSingleGenomeBuild(
+      this.db
+        .prepare(`SELECT DISTINCT genome_build FROM cases WHERE id IN (${placeholders})`)
+        .pluck()
+        .all(...allIds) as (string | null)[]
+    )
 
-    // Delegate base-field + bare-key column_filters to the shared helper.
-    // scope='cohort-burden' emits the gene_symbol IS NOT NULL + != ''
-    // invariants so we don't have to hand-roll them.
+    const site = this.siteFilter(filters)
+    const non_autosomal_variants = this.countNonAutosomalVariants(allIds, placeholders, site)
+    const variantRows = this.loadVariantRows(allIds, placeholders, site)
+    if (variantRows.length === 0) return { genes: [], non_autosomal_variants }
+
+    const covariateMap =
+      covariateNames.length > 0
+        ? this.loadCovariates(allIds, covariateNames)
+        : new Map<number, number[]>()
+    return {
+      genes: buildGeneContingencyData(variantRows, groupA_ids, groupB_ids, covariateMap),
+      non_autosomal_variants
+    }
+  }
+
+  private siteFilter(filters: VariantFilters): SiteFilter {
+    // scope='cohort-burden' emits the gene_symbol IS NOT NULL + != '' invariants.
     const baseInput: BaseFilterInput = {
       gnomad_af_max: filters.gnomad_af_max,
       cadd_min: filters.cadd_min,
@@ -40,55 +69,81 @@ export class AssociationDataBuilder {
       clinvars: filters.clinvars,
       funcs: filters.funcs,
       gene_list: filters.gene_list,
-      acmg_classifications: filters.acmg_classifications,
-      max_internal_af: filters.max_internal_af,
       column_filters: filters.column_filters
     }
-    const { sql: baseWhere, params: baseParams } = buildBaseWhere(baseInput, {
-      baseAlias,
-      scope: 'cohort-burden'
-    })
-
+    const base = buildBaseWhere(baseInput, { baseAlias: 'v', scope: 'cohort-burden' })
     // Extension (dotted) column_filters — direct JOIN mode (same as VariantFilterBuilder).
-    const {
-      joins: extJoins,
-      whereClause: extWhere,
-      params: extParams
-    } = buildExtensionJoinClauses(filters.column_filters ?? {}, baseAlias)
+    const ext = buildExtensionJoinClauses(filters.column_filters ?? {}, 'v')
+    return {
+      joins: ext.joins,
+      conditions: [base.sql, ext.whereClause].filter((sql) => sql !== ''),
+      params: [...base.params, ...ext.params]
+    }
+  }
 
-    // Case ID filter stays hand-rolled — not a BaseFilterInput field.
-    const placeholders = sqlPlaceholders(allIds.length)
-    const whereParts: string[] = [`${baseAlias}.case_id IN (${placeholders})`]
-    if (baseWhere !== '') whereParts.push(baseWhere)
-    if (extWhere !== '') whereParts.push(extWhere)
-    const whereClause = whereParts.join(' AND ')
-
-    // Step 1: Get all qualifying variants grouped by gene and case
-    const variantRows = this.db
+  /** Qualifying variants of the selected cases that are not on an autosome: reported, never tested. */
+  private countNonAutosomalVariants(
+    allIds: number[],
+    placeholders: string,
+    site: SiteFilter
+  ): number {
+    const where = [
+      `v.case_id IN (${placeholders})`,
+      `NOT (${autosomeSql('v.chr')})`,
+      ...site.conditions
+    ]
+    return this.db
       .prepare(
         `
-      SELECT ${baseAlias}.gene_symbol,
-             ${baseAlias}.case_id,
-             ${baseAlias}.chr || ':' || ${baseAlias}.pos || ':' || ${baseAlias}.ref || ':' || ${baseAlias}.alt AS variant_key,
-             ${baseAlias}.gt_num,
-             ${GT_DOSAGE_SQL} AS dosage,
-             ${baseAlias}.gnomad_af,
-             ${baseAlias}.cadd
-      FROM variants ${baseAlias}
-      ${extJoins}
-      WHERE ${whereClause}
-      ORDER BY ${baseAlias}.gene_symbol, variant_key, ${baseAlias}.case_id
+      SELECT COUNT(*) FROM (
+        SELECT DISTINCT v.chr, v.pos, v.ref, v.alt
+        FROM variants v
+        ${site.joins}
+        WHERE ${where.join(' AND ')}
+      )
     `
       )
-      .all(...allIds, ...baseParams, ...extParams) as AssociationVariantRow[]
+      .pluck()
+      .get(...allIds, ...site.params) as number
+  }
 
-    if (variantRows.length === 0) return []
-
-    const covariateMap =
-      covariateNames.length > 0
-        ? this.loadCovariates(allIds, covariateNames)
-        : new Map<number, number[]>()
-    return buildGeneContingencyData(variantRows, groupA_ids, groupB_ids, covariateMap)
+  /**
+   * Select, then collect. `selected` holds the autosomal sites that pass every
+   * filter in at least one selected case. The outer query then reads every
+   * stored row of the selected cases at those sites without a row filter, so a
+   * filter cannot turn a carrier into a reference sample. The case ids are
+   * bound once (`picked`), which keeps the SQLite parameter count at one per case.
+   */
+  private loadVariantRows(
+    allIds: number[],
+    placeholders: string,
+    site: SiteFilter
+  ): AssociationVariantRow[] {
+    const where = ['v.case_id IN (SELECT id FROM picked)', autosomeSql('v.chr'), ...site.conditions]
+    return this.db
+      .prepare(
+        `
+      WITH picked(id) AS (SELECT id FROM cases WHERE id IN (${placeholders})),
+      selected AS (
+        SELECT DISTINCT v.gene_symbol, v.chr, v.pos, v.ref, v.alt
+        FROM variants v
+        ${site.joins}
+        WHERE ${where.join(' AND ')}
+      )
+      SELECT s.gene_symbol,
+             r.case_id,
+             r.chr || ':' || r.pos || ':' || r.ref || ':' || r.alt AS variant_key,
+             r.gt_num,
+             ${gtDosageSql('r.gt_num')} AS dosage,
+             r.gnomad_af,
+             r.cadd
+      FROM selected s
+      JOIN variants r ON r.chr = s.chr AND r.pos = s.pos AND r.ref = s.ref AND r.alt = s.alt
+      WHERE r.case_id IN (SELECT id FROM picked)
+      ORDER BY s.gene_symbol, r.chr, r.pos, r.ref, r.alt, r.case_id
+    `
+      )
+      .all(...allIds, ...site.params) as AssociationVariantRow[]
   }
 
   private loadCovariates(caseIds: number[], covariateNames: string[]): Map<number, number[]> {

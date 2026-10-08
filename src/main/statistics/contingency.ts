@@ -1,11 +1,18 @@
 /**
- * Backend-neutral half of association data building: turns qualifying
- * variant rows (already filtered in SQL) and covariate inputs into per-gene
- * contingency data. Shared by the SQLite AssociationDataBuilder (desktop) and
- * the Postgres builder (web), so both runtimes compute identical inputs.
+ * Backend-neutral half of association data building: turns the stored rows of
+ * the selected cases at the qualifying sites into per-gene contingency data.
+ * Shared by the SQLite AssociationDataBuilder (desktop) and the Postgres
+ * builder (web), so both runtimes compute identical inputs.
+ * Rules: .planning/specs/2026-10-08-burden-test-eligible-sites.md (phase 1).
  */
 import { calledAlleleCount, genotypeCallKey } from '../../shared/utils/genotype'
-import type { GeneContingencyData, SampleBurdenData } from './types'
+import type {
+  GeneContingencyData,
+  SampleBurdenData,
+  SiteExclusionCounts,
+  SiteExclusionReason
+} from './types'
+import { InvalidParametersError } from '../ipc/errors'
 
 export interface AssociationVariantRow {
   gene_symbol: string
@@ -13,7 +20,8 @@ export interface AssociationVariantRow {
   variant_key: string
   /** The stored genotype `dosage` was read from. */
   gt_num: string | null
-  dosage: number
+  /** gtDosageSql of `gt_num`: 2, 1, 0, or null for a call outside the carrier and reference classes. */
+  dosage: number | null
   gnomad_af: number | null
   cadd: number | null
 }
@@ -32,11 +40,19 @@ export interface CaseMetricRow {
 
 type VariantCaseData = {
   gt_num: string | null
-  dosage: number
-  gnomad_af: number | null
+  dosage: number | null
+  /** Rows of this case disagree in dosage: the call is missing. */
+  conflict: boolean
   cadd: number | null
 }
-type GeneVariantMap = Map<string, Map<string, Map<number, VariantCaseData>>>
+type CaseCalls = Map<number, VariantCaseData>
+type GeneVariantMap = Map<string, Map<string, CaseCalls>>
+/** A site the gene's tests use, with its ALT allele frequency among the tested samples. */
+type Site = { calls: CaseCalls; frequency: number }
+
+/** A sample enters the regression only when every selected covariate is present. */
+export const hasCompleteCovariates = (values: readonly (number | null)[]): boolean =>
+  values.every(Number.isFinite)
 
 /**
  * Covariate vector per case: sex (1 male / 0 female / 0.5 unknown), age, custom metrics.
@@ -75,28 +91,103 @@ export function buildCovariateMap(
   return covariateMap
 }
 
+/**
+ * A run compares sites by chr:pos:ref:alt, which names one site only within
+ * one genome build. `builds` are the distinct builds of the selected cases.
+ */
+export function assertSingleGenomeBuild(builds: (string | null)[]): void {
+  const distinct = [...new Set(builds.map((build) => build ?? 'unknown'))].sort()
+  if (distinct.length <= 1) return
+  const message =
+    `Mixed genome builds: the selected cases use ${distinct.join(' and ')}. ` +
+    'Run the burden test on cases of one genome build.'
+  throw new InvalidParametersError(message, message)
+}
+
+/**
+ * The dosage of one stored row; null = missing. SQL gives NULL for every call
+ * outside the carrier and reference classes. Of those, a reference half-call
+ * (`0/.`) is two called alleles with no copy of this ALT, so it is 0. What is
+ * left — `./.`, NULL, other text — is the unknown class.
+ */
+function rowDosage(row: AssociationVariantRow): number | null {
+  return row.dosage ?? (calledAlleleCount(row.gt_num) > 0 ? 0 : null)
+}
+
 function groupRows(rows: AssociationVariantRow[]): GeneVariantMap {
   const geneMap: GeneVariantMap = new Map()
   for (const row of rows) {
+    const dosage = rowDosage(row)
     if (!geneMap.has(row.gene_symbol)) geneMap.set(row.gene_symbol, new Map())
     const variantMap = geneMap.get(row.gene_symbol)!
     if (!variantMap.has(row.variant_key)) variantMap.set(row.variant_key, new Map())
-    const caseMap = variantMap.get(row.variant_key)!
-    const kept = caseMap.get(row.case_id)
-    // Duplicate rows of one case: the highest-dosage call stands, as in the cohort summary.
-    if (kept && genotypeCallKey(kept.gt_num) >= genotypeCallKey(row.gt_num)) continue
-    caseMap.set(row.case_id, {
-      gt_num: row.gt_num,
-      dosage: row.dosage,
-      gnomad_af: row.gnomad_af,
-      cadd: row.cadd
-    })
+    const calls = variantMap.get(row.variant_key)!
+    const kept = calls.get(row.case_id)
+    if (!kept) {
+      calls.set(row.case_id, { gt_num: row.gt_num, dosage, conflict: false, cadd: row.cadd })
+      continue
+    }
+    // Duplicate rows of one case: equal dosages agree (0/1 and 0|1). No row wins otherwise.
+    // Association test only; the cohort summary keeps "highest dosage" (genotypeCallKey).
+    if (kept.dosage !== dosage) kept.conflict = true
+    // The greatest call key names the ploidy of an agreed call (frequency denominator).
+    if (genotypeCallKey(row.gt_num) > genotypeCallKey(kept.gt_num)) kept.gt_num = row.gt_num
+    kept.cadd ??= row.cadd
   }
   return geneMap
 }
 
+/**
+ * Why a site cannot be used, judged on every selected sample so both groups
+ * and both tests share one site set. A conflict outranks a missing call, so
+ * the reason does not depend on the sample order.
+ */
+function siteExclusion(calls: CaseCalls, allIds: number[]): SiteExclusionReason | null {
+  let missing = false
+  for (const caseId of allIds) {
+    const data = calls.get(caseId)
+    if (!data) continue // no row: read as reference
+    if (data.conflict) return 'conflicting_calls'
+    if (data.dosage === null) missing = true
+  }
+  return missing ? 'missing_call' : null
+}
+
+/** ALT allele frequency among `ids`; null when they call no allele at all. */
+function altAlleleFrequency(calls: CaseCalls, ids: number[]): number | null {
+  let altCount = 0
+  let calledAlleles = 0
+  for (const caseId of ids) {
+    const data = calls.get(caseId)
+    altCount += data?.dosage ?? 0
+    // No row: reference sites are not stored, so the sample is read as a diploid 0/0.
+    calledAlleles += data ? calledAlleleCount(data.gt_num) : 2
+  }
+  return calledAlleles > 0 ? altCount / calledAlleles : null
+}
+
+function eligibleSites(
+  variantMap: Map<string, CaseCalls>,
+  allIds: number[],
+  frequencyIds: number[]
+): { sites: Site[]; sites_excluded: SiteExclusionCounts } {
+  const sites: Site[] = []
+  const sites_excluded: SiteExclusionCounts = {
+    missing_call: 0,
+    conflicting_calls: 0,
+    no_called_alleles: 0
+  }
+  for (const calls of variantMap.values()) {
+    const reason = siteExclusion(calls, allIds)
+    const frequency = reason === null ? altAlleleFrequency(calls, frequencyIds) : null
+    if (frequency === null) sites_excluded[reason ?? 'no_called_alleles']++
+    else sites.push({ calls, frequency })
+  }
+  return { sites, sites_excluded }
+}
+
 function carrierCounts(
-  variantMap: Map<string, Map<number, VariantCaseData>>,
+  sites: Site[],
   groupA_ids: number[],
   groupB_ids: number[]
 ): Pick<
@@ -107,8 +198,8 @@ function carrierCounts(
   | 'groupB_non_carrier_count'
 > {
   const carriers = new Set<number>()
-  for (const caseMap of variantMap.values()) {
-    for (const [caseId, data] of caseMap) if (data.dosage > 0) carriers.add(caseId)
+  for (const { calls } of sites) {
+    for (const [caseId, data] of calls) if ((data.dosage ?? 0) > 0) carriers.add(caseId)
   }
   const a = groupA_ids.filter((id) => carriers.has(id)).length
   const b = groupB_ids.filter((id) => carriers.has(id)).length
@@ -120,40 +211,31 @@ function carrierCounts(
   }
 }
 
+function meanCadd(calls: CaseCalls, allIds: number[]): number | null {
+  let sum = 0
+  let count = 0
+  for (const caseId of allIds) {
+    const cadd = calls.get(caseId)?.cadd
+    if (cadd !== null && cadd !== undefined) {
+      sum += cadd
+      count++
+    }
+  }
+  return count > 0 ? sum / count : null
+}
+
 function geneSamples(
-  variantMap: Map<string, Map<number, VariantCaseData>>,
+  sites: Site[],
   allIds: number[],
   groupASet: Set<number>,
   covariateMap: Map<number, number[]>
 ): SampleBurdenData[] {
-  const variantKeys = [...variantMap.keys()]
-  const variantMafs: number[] = []
-  const variantCadds: (number | null)[] = []
-
-  for (const vKey of variantKeys) {
-    const caseMap = variantMap.get(vKey)!
-    let altCount = 0
-    let calledAlleles = 0
-    let caddSum = 0
-    let caddCount = 0
-    for (const caseId of allIds) {
-      const data = caseMap.get(caseId)
-      altCount += data?.dosage ?? 0
-      // No row: reference sites are not stored, so the sample is read as a diploid 0/0.
-      calledAlleles += data ? calledAlleleCount(data.gt_num) : 2
-      if (data?.cadd !== null && data?.cadd !== undefined) {
-        caddSum += data.cadd
-        caddCount++
-      }
-    }
-    const maf = calledAlleles > 0 ? altCount / calledAlleles : 0
-    variantMafs.push(Math.max(maf, 1e-8))
-    variantCadds.push(caddCount > 0 ? caddSum / caddCount : null)
-  }
-
+  // ALT allele frequency p; computeWeight takes the weight at min(p, 1 - p).
+  const variantMafs = sites.map((site) => Math.max(site.frequency, 1e-8))
+  const variantCadds = sites.map((site) => meanCadd(site.calls, allIds))
   return allIds.map((caseId) => ({
     group: groupASet.has(caseId) ? 1 : 0,
-    dosages: variantKeys.map((vKey) => variantMap.get(vKey)!.get(caseId)?.dosage ?? 0),
+    dosages: sites.map((site) => site.calls.get(caseId)?.dosage ?? 0),
     variant_mafs: variantMafs,
     variant_cadds: variantCadds,
     covariate_values: covariateMap.get(caseId) ?? []
@@ -161,8 +243,9 @@ function geneSamples(
 }
 
 /**
- * Group qualifying variant rows by gene → variant → case and build the
- * per-gene carrier table plus per-sample burden inputs.
+ * Group the stored rows by gene → site → case and build the per-gene carrier
+ * table plus per-sample burden inputs. A site with a missing dosage in any
+ * selected sample is used for no sample; nothing is imputed.
  */
 export function buildGeneContingencyData(
   rows: AssociationVariantRow[],
@@ -172,12 +255,17 @@ export function buildGeneContingencyData(
 ): GeneContingencyData[] {
   const allIds = [...groupA_ids, ...groupB_ids]
   const groupASet = new Set(groupA_ids)
+  const testedIds = allIds.filter((id) => hasCompleteCovariates(covariateMap.get(id) ?? []))
+  const frequencyIds = testedIds.length > 0 ? testedIds : allIds
   const results: GeneContingencyData[] = []
   for (const [geneSymbol, variantMap] of groupRows(rows)) {
+    // Frequencies and weights describe the samples the regression tests (burden.ts).
+    const { sites, sites_excluded } = eligibleSites(variantMap, allIds, frequencyIds)
     results.push({
       gene_symbol: geneSymbol,
-      ...carrierCounts(variantMap, groupA_ids, groupB_ids),
-      samples: geneSamples(variantMap, allIds, groupASet, covariateMap)
+      ...carrierCounts(sites, groupA_ids, groupB_ids),
+      sites_excluded,
+      samples: geneSamples(sites, allIds, groupASet, covariateMap)
     })
   }
   return results

@@ -3,6 +3,13 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { AssociationDataBuilder } from '../../../src/main/database/AssociationDataBuilder'
+import {
+  EXPECTED_GENES,
+  EXPECTED_NON_AUTOSOMAL,
+  projectGenes,
+  seedSqlite,
+  type Sample
+} from './support/burden-fixture'
 
 describe('AssociationDataBuilder', () => {
   let db: Database.Database
@@ -51,7 +58,7 @@ describe('AssociationDataBuilder', () => {
 
   it('builds contingency data for two groups', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, [])
+    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, []).genes
 
     expect(genes.length).toBeGreaterThan(0)
 
@@ -65,7 +72,7 @@ describe('AssociationDataBuilder', () => {
 
   it('applies gnomad_af filter', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3], [4, 5, 6], { gnomad_af_max: 0.0005 }, [])
+    const genes = builder.build([1, 2, 3], [4, 5, 6], { gnomad_af_max: 0.0005 }, []).genes
 
     // BRCA1 has gnomad_af=0.001, should be filtered out
     const brca1 = genes.find((g) => g.gene_symbol === 'BRCA1')
@@ -78,7 +85,7 @@ describe('AssociationDataBuilder', () => {
 
   it('builds per-sample dosage arrays', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, [])
+    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, []).genes
 
     const brca1 = genes.find((g) => g.gene_symbol === 'BRCA1')!
     expect(brca1.samples.length).toBe(6) // all 6 cases
@@ -90,7 +97,7 @@ describe('AssociationDataBuilder', () => {
 
   it('returns empty for no qualifying variants', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1], [2], { cadd_min: 100 }, [])
+    const genes = builder.build([1], [2], { cadd_min: 100 }, []).genes
     expect(genes).toHaveLength(0)
   })
 })
@@ -125,7 +132,7 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
 
   it('regression: existing 4-filter burden still works after refactor', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build(
+    const { genes } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       {
@@ -144,51 +151,10 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
     expect(brca1!.groupB_non_carrier_count).toBe(3)
   })
 
-  it('accepts all new parity fields without error (cohort-summary-only fields are silently dropped)', () => {
-    // acmg_classifications + max_internal_af map to columns (acmg_best,
-    // cohort_frequency) that exist on cohort_variant_summary but NOT on the
-    // base variants table. buildBaseWhere with scope='cohort-burden' silently
-    // drops these fields, preserving type parity with Paths 1/2 while
-    // avoiding runtime SQL errors against the variants table.
-    const builder = new AssociationDataBuilder(db)
-    expect(() =>
-      builder.build(
-        [1, 2, 3],
-        [4, 5, 6],
-        {
-          clinvars: ['Pathogenic'],
-          funcs: ['missense_variant'],
-          acmg_classifications: ['Pathogenic'],
-          max_internal_af: 0.1
-        },
-        []
-      )
-    ).not.toThrow()
-  })
-
-  it('silently drops cohort-summary-only fields for burden scope (no runtime error, no filter effect)', () => {
-    // Setting acmg_classifications=['Benign'] must NOT filter BRCA1 out —
-    // the field is dropped before reaching SQL. Only clinvars (which lives
-    // on variants) should actually filter.
-    const builder = new AssociationDataBuilder(db)
-    const genes = builder.build(
-      [1, 2, 3],
-      [4, 5, 6],
-      {
-        acmg_classifications: ['Benign'], // dropped
-        max_internal_af: 0.0001, // dropped
-        clinvars: ['Pathogenic'] // applied
-      },
-      []
-    )
-    // BRCA1 should still match because the dropped fields don't filter it out
-    expect(genes.find((g) => g.gene_symbol === 'BRCA1')).toBeDefined()
-  })
-
   it('applies clinvars + funcs filter through shared helper', () => {
     const builder = new AssociationDataBuilder(db)
     // Matching clinvar + func: BRCA1 should pass
-    const genesMatching = builder.build(
+    const { genes: genesMatching } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       { clinvars: ['Pathogenic'], funcs: ['missense_variant'] },
@@ -197,7 +163,7 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
     expect(genesMatching.find((g) => g.gene_symbol === 'BRCA1')).toBeDefined()
 
     // Non-matching clinvar: BRCA1 should be filtered out
-    const genesNonMatching = builder.build([1, 2, 3], [4, 5, 6], { clinvars: ['Benign'] }, [])
+    const genesNonMatching = builder.build([1, 2, 3], [4, 5, 6], { clinvars: ['Benign'] }, []).genes
     expect(genesNonMatching.find((g) => g.gene_symbol === 'BRCA1')).toBeUndefined()
   })
 
@@ -219,7 +185,7 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
     // Extension filter: copy_number >= 3 should return only CNVs.
     // Because buildExtensionJoinClauses prepends variant_type='cnv' narrowing,
     // the BRCA1 SNV is excluded and only MYCN CNVs remain.
-    const genes = builder.build(
+    const { genes } = builder.build(
       [1, 2, 3],
       [4, 5, 6],
       { column_filters: { 'cnv.copy_number': { operator: '>=', value: 3 } } },
@@ -237,7 +203,79 @@ describe('AssociationDataBuilder — Path 3 parity (shared helpers)', () => {
   it('no column_filters still works (no JOIN, clean SQL)', () => {
     const builder = new AssociationDataBuilder(db)
     expect(() => builder.build([1, 2, 3], [4, 5, 6], {}, [])).not.toThrow()
-    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, [])
+    const genes = builder.build([1, 2, 3], [4, 5, 6], {}, []).genes
     expect(genes.find((g) => g.gene_symbol === 'BRCA1')).toBeDefined()
+  })
+})
+
+describe('AssociationDataBuilder — eligible sites (#520)', () => {
+  let db: Database.Database
+  let ids: Record<Sample, number>
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+    ids = seedSqlite(db)
+  })
+
+  const build = (filters = {}) =>
+    new AssociationDataBuilder(db).build([ids.S1, ids.S2], [ids.S3, ids.S4], filters, [])
+
+  it('uses autosomal sites with a known call in every sample and counts the rest', () => {
+    // chrX, chrY, chrM/MT and unplaced contigs never enter; `2` and `chr1` both do.
+    const built = build()
+    expect(projectGenes(built.genes)).toEqual(EXPECTED_GENES)
+    expect(built.non_autosomal_variants).toBe(EXPECTED_NON_AUTOSOMAL)
+  })
+
+  it('1/. stays one copy and 0/. no copy; neither excludes its site', () => {
+    // chr1:500 is the third used site of GENE1: S2 1/., S3 0/.
+    const gene1 = build().genes[0]
+    expect(gene1.samples.map((s) => s.dosages[2])).toEqual([0, 1, 0, 0])
+    // 1 ALT copy of 8 called alleles: two rows of 2, two samples without a row.
+    expect(gene1.samples[0].variant_mafs[2]).toBe(1 / 8)
+  })
+
+  it('a gene list on chrX comes back empty with a reason', () => {
+    const built = build({ gene_list: ['GENEX'] })
+    expect(built.genes).toEqual([])
+    // chrX:500 and X:510 qualify and are left out.
+    expect(built.non_autosomal_variants).toBe(2)
+  })
+
+  it('a column filter selects sites; it does not turn a carrier into a reference sample', () => {
+    // S2's homozygous call at chr1:100 has quality 5: the filter must not drop it.
+    const built = build({
+      column_filters: { qual: { operator: '>=', value: 20, includeEmpty: false } }
+    })
+    expect(projectGenes(built.genes)).toEqual(EXPECTED_GENES)
+    // S2's chr1:100 is now at dosage index 1 (since chr1:90 is at 0)
+    expect(built.genes[0].samples[1].dosages[1]).toBe(2)
+  })
+
+  it('0/1 (quality 99) with 1/1 (quality 2) does not select the homozygote', () => {
+    const gene1 = build().genes[0]
+    expect(gene1.sites_excluded.conflicting_calls).toBe(1)
+    // chr1:300 is in no sample's dosages: S2 keeps only chr1:100 (2) and chr1:500 (1).
+    // Because of numerical ordering, chr1:90 is at [0], chr1:100 is at [1], chr1:500 is at [2].
+    expect(gene1.samples[1].dosages).toEqual([0, 2, 1])
+  })
+
+  it('rejects a selection with more than one genome build', () => {
+    db.prepare("UPDATE cases SET genome_build = 'GRCh37' WHERE id = ?").run(ids.S4)
+    expect(() => build()).toThrow(
+      'Mixed genome builds: the selected cases use GRCh37 and GRCh38. ' +
+        'Run the burden test on cases of one genome build.'
+    )
+    // A case of another build that is not selected does not block the run.
+    expect(() =>
+      new AssociationDataBuilder(db).build([ids.S1], [ids.S2, ids.S3], {}, [])
+    ).not.toThrow()
+  })
+
+  it('binds the case ids once per query: 20,000 selected cases stay under the SQLite parameter limit', () => {
+    const many = Array.from({ length: 20_000 }, (_, i) => i + 1000)
+    expect(() => new AssociationDataBuilder(db).build(many, [ids.S1], {}, [])).not.toThrow()
   })
 })

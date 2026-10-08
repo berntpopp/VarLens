@@ -72,6 +72,11 @@ export function chrRankSql(column = 'chr'): string {
   return `(CASE ${normalized} ${arms} ELSE ${OTHER_CONTIG_RANK} END)`
 }
 
+/** SQL condition: `column` names an autosome (1..22), with or without a `chr` prefix. */
+export function autosomeSql(column = 'chr'): string {
+  return `${chrRankSql(column)} <= 22`
+}
+
 /**
  * SQL dialect of the sink. The only difference is the collation of the `chr`
  * name tiebreaker: SQLite compares TEXT bytewise (BINARY), PostgreSQL uses the
