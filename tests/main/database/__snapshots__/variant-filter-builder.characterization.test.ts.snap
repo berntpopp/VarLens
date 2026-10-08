@@ -1273,7 +1273,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             WHERE v2.case_id = ?
               AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
           ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')) OR (
             variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
             AND variants.id NOT IN (
@@ -1357,7 +1358,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             WHERE v2.case_id = ?
               AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
           ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
 }
 `;
@@ -1482,7 +1484,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             WHERE v2.case_id = ?
               AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
           ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
 }
 `;

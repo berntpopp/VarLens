@@ -4,6 +4,7 @@ import {
   HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI,
   notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
+import { variantIdentitySql } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
 
 export interface PostgresClinicalVariantFilterSqlContext {
@@ -155,7 +156,7 @@ function addInheritanceFilters(
               AND v2.gt_num IN ${HET}
               AND v2.gene_symbol IS NOT NULL
             GROUP BY v2.gene_symbol
-            HAVING COUNT(*) >= 2
+            HAVING COUNT(DISTINCT ${variantIdentitySql('v2')}) >= 2
           ) AND v.gt_num IN ${HET})`)
   }
 

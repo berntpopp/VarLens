@@ -399,6 +399,28 @@ describe.skipIf(!RUN)('trio and duplicate-row inheritance filters on both backen
     return pg
   }
 
+  it('candidate compound het counts a variant stored twice once', async () => {
+    await seed([
+      ['proband', 100, 'G', '1/.'],
+      ['proband', 100, 'G', '1/.'],
+      ['mother', 100, 'G', '1/.'],
+      ['mother', 100, 'T', './1']
+    ])
+    const candidates = async (member: Member): Promise<string[]> =>
+      (
+        await new PostgresVariantReadRepository(pool, schema).queryVariants(
+          { case_id: pgIds[member], inheritance_modes: ['candidate_compound_het'] },
+          50,
+          0
+        )
+      ).data
+        .map((v) => `${v.pos}>${v.alt}`)
+        .sort()
+    expect(await candidates('proband')).toEqual([])
+    // Two different ALT alleles at one position stay a candidate pair.
+    expect(await candidates('mother')).toEqual(['100>G', '100>T'])
+  }, 60_000)
+
   it('de_novo: a split het neither parent carries; an inherited one is dropped', async () => {
     await seed([
       ['proband', 100, 'G', '1|.'],

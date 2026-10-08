@@ -7,6 +7,7 @@ import {
   HOM_OR_HEMI_GT_SQL,
   notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
+import { variantIdentitySql } from '../../../shared/sql/inheritance-sql'
 
 // The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
 const HET = sql.raw(HET_GT_SQL)
@@ -28,14 +29,15 @@ const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 type SqlCondition = RawBuilder<unknown>
 
-/** Het in the proband with at least two het variants in the same gene. */
+/** Het in the proband with at least two different het variants in the same gene. */
 function candidateCompoundHetCondition(cid: number): SqlCondition {
   return sql`(variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
             WHERE v2.case_id = ${cid}
               AND v2.gt_num IN ${HET}
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT ${sql.raw(variantIdentitySql('v2'))}) >= 2
           ) AND variants.gt_num IN ${HET})`
 }
 
