@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path'
 import { RegionFileImportBedArgsSchema } from '../../../shared/api/schemas/region-files'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
 import type { OverrideHandler } from './types'
-import { isWebUploadRef, resolveWebUploadPath } from './upload-staging'
+import { holdWebUploads, isWebUploadRef, resolveWebUploadPath } from './upload-staging'
 
 export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
   return {
@@ -27,10 +27,15 @@ export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
           reply.code(400)
           return { error: 'invalid-bed-import' }
         }
-        return await session.getWriteExecutor().execute({
-          type: 'region-files:importBed',
-          params: [fileId, resolvedPath, { rejectMalformedRows: true }]
-        })
+        const releaseUpload = holdWebUploads([filePath])
+        try {
+          return await session.getWriteExecutor().execute({
+            type: 'region-files:importBed',
+            params: [fileId, resolvedPath, { rejectMalformedRows: true }]
+          })
+        } finally {
+          releaseUpload()
+        }
       }
     }
   }

@@ -26,7 +26,12 @@ import {
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
 import { jobViewerOf } from './jobs'
 import type { DispatcherDeps, OverrideHandler } from './types'
-import { isWebUploadRef, resolveWebUploadRef, stageExistingFileUpload } from './upload-staging'
+import {
+  holdWebUploads,
+  isWebUploadRef,
+  resolveWebUploadRef,
+  stageExistingFileUpload
+} from './upload-staging'
 
 interface ResolvedBatchFile {
   inputPath: string
@@ -109,7 +114,8 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           callbacks: webBatchCallbacks(events, userId, validRunId)
         })
         batchImportRuns.start(validRunId, userId, job.jobId)
-        void job.result.then(
+        const releaseUploads = holdWebUploads(resolution.files.map((file) => file.inputPath))
+        void job.result.finally(releaseUploads).then(
           (result) => batchImportRuns.complete(validRunId, userId, result),
           (error: unknown) => {
             const serialized = toSerializableWebError(error)
@@ -291,6 +297,8 @@ async function extractWebUploadZip(
         })
       )
     }
+    // The archive is fully re-staged as individual files: retire the ZIP itself.
+    holdWebUploads([zipRef])()
     return {
       files: stagedFiles.map((file) => file.ref),
       errors: result.errors,

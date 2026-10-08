@@ -52,7 +52,7 @@ import { registerPlatformIdentityRoutes } from './server/platform-identity-route
 import { registerWebRateLimit } from './server/rate-limit'
 import { serializeRequestForTechnicalLog } from './server/request-logging'
 import { registerExportDownloadRoutes } from './server/routes/export-download'
-import { registerImportUploadRoutes } from './server/routes/upload-staging'
+import { clearStagedUploads, registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
@@ -246,6 +246,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     production: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
     warn: (message) => app.log.warn(message)
   })
+  // Staged uploads are indexed in memory: files left by a previous process are orphans.
+  await clearStagedUploads()
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)
