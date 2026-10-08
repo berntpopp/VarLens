@@ -679,6 +679,24 @@ describe('web client api', () => {
     }
   )
 
+  test('the discard event gives back upload refs, and only upload refs', async () => {
+    resetMockXhr()
+    stubUploadPicker([new File(['a'], 'a.vcf')])
+    const fetchMock = mockFetch({ ok: true, status: 204, statusText: 'No Content', body: '' })
+    const api = createApi() as unknown as TestApi
+    const ref = await api.import.selectFile()
+
+    window.dispatchEvent(
+      new CustomEvent('varlens:web-upload-discard', { detail: { refs: [ref, '/desktop/a.vcf'] } })
+    )
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      `/api/import/upload?ref=${encodeURIComponent(ref)}`,
+      { method: 'DELETE', credentials: 'include' }
+    )
+  })
+
   test('upload helper aborts the active upload through the cancel event', async () => {
     resetMockXhr('manual')
     const file = new File(['pending'], 'pending.vcf')

@@ -10,6 +10,8 @@ import { API_BASE } from './transport'
 
 export const WEB_UPLOAD_EVENT = 'varlens:web-upload'
 export const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
+/** Sent by the import wizard with `{ refs }` it abandons before any import used them. */
+export const WEB_UPLOAD_DISCARD_EVENT = 'varlens:web-upload-discard'
 
 export type WebUploadStatus = 'started' | 'progress' | 'complete' | 'error' | 'aborted'
 
@@ -49,6 +51,9 @@ function ensureUploadCancelListener(): void {
   if (uploadCancelListenerRegistered && uploadCancelListenerTarget === window) return
   window.addEventListener(WEB_UPLOAD_CANCEL_EVENT, () => {
     activeUpload?.abort()
+  })
+  window.addEventListener(WEB_UPLOAD_DISCARD_EVENT, (event) => {
+    void discardUploads((event as CustomEvent<{ refs: string[] }>).detail.refs)
   })
   uploadCancelListenerRegistered = true
   uploadCancelListenerTarget = window
@@ -178,6 +183,17 @@ async function uploadImportFileWithProgress(
   })
 }
 
+/** Best effort, one at a time: a folder selection can hold thousands of refs. */
+async function discardUploads(refs: readonly string[]): Promise<void> {
+  for (const ref of refs) {
+    if (!ref.startsWith('web-upload:')) continue
+    await fetch(`${API_BASE}/import/upload?ref=${encodeURIComponent(ref)}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    }).catch(() => undefined)
+  }
+}
+
 export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
   const uploaded: UploadedFileRef[] = []
   try {
@@ -187,12 +203,7 @@ export async function uploadImportFiles(files: readonly File[]): Promise<Uploade
   } catch (error) {
     // Refused or cancelled part-way: nothing will import the files already
     // staged, and left alone they count against the per-user cap for 24 h.
-    for (const { ref } of uploaded) {
-      void fetch(`${API_BASE}/import/upload?ref=${encodeURIComponent(ref)}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      }).catch(() => undefined)
-    }
+    void discardUploads(uploaded.map((file) => file.ref))
     throw error
   }
   return uploaded
