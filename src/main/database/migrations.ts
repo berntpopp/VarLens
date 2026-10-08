@@ -230,12 +230,23 @@ export function runMigrations(db: Database.Database): void {
 
   // v0.4.0 schema fix: Move starred and ACMG to per-case
   if (currentVersion < 3) {
+    // Each ALTER autocommits, so a kill before `user_version = 3` replays this
+    // over columns that already exist: add only the missing ones.
+    const cvaCols3 = new Set(
+      (db.pragma('table_info(case_variant_annotations)') as Array<{ name: string }>).map(
+        (c) => c.name
+      )
+    )
+    for (const [name, type] of [
+      ['starred', 'INTEGER NOT NULL DEFAULT 0'],
+      ['acmg_classification', 'TEXT'],
+      ['acmg_evidence', 'TEXT']
+    ]) {
+      if (!cvaCols3.has(name)) {
+        db.exec(`ALTER TABLE case_variant_annotations ADD COLUMN ${name} ${type}`)
+      }
+    }
     db.exec(`
-      -- Add starred and ACMG columns to case_variant_annotations (per-case)
-      ALTER TABLE case_variant_annotations ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE case_variant_annotations ADD COLUMN acmg_classification TEXT;
-      ALTER TABLE case_variant_annotations ADD COLUMN acmg_evidence TEXT;
-
       -- Create index for starred filter
       CREATE INDEX IF NOT EXISTS idx_case_variant_annotations_starred
         ON case_variant_annotations(starred) WHERE starred = 1;
@@ -1654,11 +1665,14 @@ export function runMigrations(db: Database.Database): void {
   // unified-shortlist rollout updates the repository to read/write `kind`
   // through its public CRUD interface.
   if (currentVersion < 27) {
-    db.exec(`
-      ALTER TABLE filter_presets ADD COLUMN kind TEXT NOT NULL DEFAULT 'filter'
-        CHECK (kind IN ('filter', 'shortlist'));
-      CREATE INDEX IF NOT EXISTS idx_filter_presets_kind ON filter_presets(kind);
-    `)
+    // Guarded: a kill before `user_version = 27` replays this over the column.
+    const presetCols27 = db.pragma('table_info(filter_presets)') as Array<{ name: string }>
+    if (!presetCols27.some((c) => c.name === 'kind')) {
+      db.exec(
+        "ALTER TABLE filter_presets ADD COLUMN kind TEXT NOT NULL DEFAULT 'filter' CHECK (kind IN ('filter', 'shortlist'))"
+      )
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_filter_presets_kind ON filter_presets(kind)')
 
     const now = Date.now()
     // INSERT OR IGNORE so the migration is safe to replay and does not fail
