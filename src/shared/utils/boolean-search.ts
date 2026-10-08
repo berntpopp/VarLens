@@ -134,3 +134,40 @@ export function parse(tokens: Token[]): AstNode {
 
   return ast
 }
+
+// ── SQL emission ──
+
+/** Render the AST as a SQL boolean expression; `emitTerm` renders one leaf. */
+export function emitBooleanSql(ast: AstNode, emitTerm: (term: string) => string): string {
+  switch (ast.type) {
+    case 'term':
+      return emitTerm(ast.value)
+    case 'and':
+      return `(${emitBooleanSql(ast.left, emitTerm)} AND ${emitBooleanSql(ast.right, emitTerm)})`
+    case 'or':
+      return `(${emitBooleanSql(ast.left, emitTerm)} OR ${emitBooleanSql(ast.right, emitTerm)})`
+    case 'not':
+      return `(NOT (${emitBooleanSql(ast.operand, emitTerm)}))`
+  }
+}
+
+/**
+ * SQL for the cohort search box, the same on SQLite and PostgreSQL. Without an
+ * uppercase AND / OR / NOT the whole text is one term; so is an expression that
+ * does not parse (`onMalformed` is told why).
+ */
+export function booleanSearchSql(
+  query: string,
+  emitTerm: (term: string) => string,
+  onMalformed?: (error: unknown) => void
+): string {
+  if (!/\b(AND|OR|NOT)\b/.test(query)) return emitTerm(query)
+  let ast: AstNode
+  try {
+    ast = parse(tokenize(query))
+  } catch (error) {
+    onMalformed?.(error)
+    return emitTerm(query)
+  }
+  return emitBooleanSql(ast, emitTerm)
+}

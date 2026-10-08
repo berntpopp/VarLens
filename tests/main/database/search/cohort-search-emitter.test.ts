@@ -69,4 +69,26 @@ describe('emitCohortSearch', () => {
       db.close()
     }
   })
+
+  it('takes _, % and backslash in a general term literally', () => {
+    const db = new Database(':memory:')
+    try {
+      db.exec(`CREATE TABLE cvs (gene_symbol TEXT, consequence TEXT, omim_mim_number TEXT);
+               INSERT INTO cvs (gene_symbol) VALUES ('A_B'), ('AXB'), ('P%Q'), ('a\\b'), ('ab')`)
+      const found = (term: string): unknown[] => {
+        const { sql, params } = emit(term)
+        return db
+          .prepare(`SELECT gene_symbol FROM cvs WHERE ${sql} ORDER BY gene_symbol`)
+          .pluck()
+          .all(...params)
+      }
+
+      expect(found('_')).toEqual(['A_B'])
+      expect(found('%')).toEqual(['P%Q'])
+      expect(found('a\\b')).toEqual(['a\\b'])
+      expect(found('a_b')).toEqual(['A_B'])
+    } finally {
+      db.close()
+    }
+  })
 })
