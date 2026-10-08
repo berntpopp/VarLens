@@ -58,12 +58,14 @@ export function addPostgresColumnFilters(
       (operator === '=' || operator === '!=') &&
       (typeof value === 'string' || typeof value === 'number')
     ) {
-      addWhere(`${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value))}`)
+      addWhere(
+        `${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, definition.kind === 'numeric'))}`
+      )
     } else if (
       (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
       (typeof value === 'string' || typeof value === 'number')
     ) {
-      const comparison = `${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value))}`
+      const comparison = `${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, definition.kind === 'numeric'))}`
       const includeEmpty = filterDef.includeEmpty ?? !column.includes('.')
       addWhere(includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison)
     }
@@ -74,8 +76,12 @@ export function hasPostgresColumnFilterPrefix(filter: VariantFilter, prefix: str
   return Object.keys(filter.column_filters ?? {}).some((column) => column.startsWith(prefix))
 }
 
-function normalizePostgresColumnFilterValue(value: string | number): string | number {
-  if (typeof value === 'number') return value
+/** Only numeric columns coerce: on a text column "007" must stay "007" (#510). */
+export function normalizePostgresColumnFilterValue(
+  value: string | number,
+  isNumeric: boolean
+): string | number {
+  if (!isNumeric || typeof value === 'number') return value
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : value
 }

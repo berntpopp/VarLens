@@ -155,6 +155,33 @@ describe('buildSummaryQueryParts', () => {
     expect(result.parts.values).toEqual(['%BRCA%', '%BRCA%', '%BRCA%'])
   })
 
+  it.each(['c.1_2del', 'p.Val600Glu'])(
+    'routes the HGVS term %s to cdna / aa_change (#515)',
+    (term) => {
+      const result = buildSummaryQueryParts({ search_term: term }, TOTAL_CASES)
+
+      expect(result.parts.whereParts).toEqual([
+        "(cvs.cdna ILIKE $1 ESCAPE '\\' OR cvs.aa_change ILIKE $1 ESCAPE '\\')"
+      ])
+      // `_` is literal in HGVS, not a LIKE wildcard.
+      expect(result.parts.values).toEqual([`%${term.replace('_', '\\_')}%`])
+    }
+  )
+
+  it('coerces a numeric-looking filter value on numeric columns only (#510)', () => {
+    const result = buildSummaryQueryParts(
+      {
+        column_filters: {
+          gene_symbol: { operator: '=', value: '007' },
+          pos: { operator: '=', value: '007' }
+        }
+      },
+      TOTAL_CASES
+    )
+
+    expect(result.parts.values).toEqual(['007', 7])
+  })
+
   it('uses the exact panel-interval predicate that overlaps spanning variants', () => {
     const params: CohortSearchParams = {
       panel_intervals: [

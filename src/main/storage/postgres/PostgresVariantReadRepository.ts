@@ -86,7 +86,17 @@ function toNumber(value: unknown): number {
 }
 
 /** `c.`/`p.` tokens are HGVS: matched by ILIKE on cdna / aa_change, like SQLite. */
-const HGVS_TOKEN = /^[cp]\./
+export const HGVS_TOKEN = /^[cp]\./
+
+/** Shared by the case search (`v`) and the cohort summary search (`cvs`). */
+export function hgvsSearchSql(
+  alias: string,
+  token: string,
+  addParam: (value: unknown) => string
+): string {
+  const pattern = addParam(`%${escapeLikePattern(token)}%`)
+  return `(${alias}.cdna ILIKE ${pattern} ESCAPE '\\' OR ${alias}.aa_change ILIKE ${pattern} ESCAPE '\\')`
+}
 
 function searchTokens(query: string): string[] {
   return query.trim().split(/\s+/)
@@ -198,8 +208,7 @@ export function buildPostgresVariantQueryParts(
 
   const searchQuery = filter.search_query ?? ''
   for (const token of searchTokens(searchQuery).filter((t) => HGVS_TOKEN.test(t))) {
-    const pattern = addParam(`%${escapeLikePattern(token)}%`)
-    addWhere(`(v.cdna ILIKE ${pattern} ESCAPE '\\' OR v.aa_change ILIKE ${pattern} ESCAPE '\\')`)
+    addWhere(hgvsSearchSql('v', token, addParam))
   }
   const tsQuery = toPrefixTsQuery(searchQuery)
   if (tsQuery !== '') {

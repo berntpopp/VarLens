@@ -359,6 +359,17 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
         expect(result.data).toHaveLength(4)
       }
     })
+
+    it('PostgreSQL case view binds it as text, as the cohort path does (#510)', () => {
+      const params = (column: string): unknown[] =>
+        buildPostgresVariantQueryParts(
+          { case_id: 1, column_filters: { [column]: { operator: '=', value: '007' } } },
+          '"public"'
+        ).params
+      expect(params('omim_mim_number')).toContain('007')
+      expect(params('omim_mim_number')).not.toContain(7)
+      expect(params('pos')).toContain(7)
+    })
   })
 
   describe('bare chr / pos column filters', () => {
