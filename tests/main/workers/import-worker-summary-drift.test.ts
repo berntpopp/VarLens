@@ -330,8 +330,9 @@ describe('import worker: per-file cohort summary upkeep', () => {
     )
   })
 
-  it('removes a replaced case exactly even when its replacement fails to import', async () => {
+  it('keeps a case and its summary contribution when its replacement fails to import', async () => {
     await seedAnnotatedCohort()
+    const before = snapshotSummary(db)
     const broken = join(dir, 'broken.json')
     writeFileSync(broken, '{"variants": [{"chr": "chr1", "pos": ')
 
@@ -346,13 +347,8 @@ describe('import worker: per-file cohort summary upkeep', () => {
 
     expect(statuses(messages)).toEqual(['OLD:failed'])
     const summary = snapshotSummary(db)
+    expect(summary).toEqual(before)
     expect(summary).toEqual(referenceSummary(db))
-    expect(summary.variants).toContainEqual(
-      expect.objectContaining({ pos: 100, carrier_count: 1, cadd: 10, acmg_best: 'Pathogenic' })
-    )
-    expect(summary.variants).toContainEqual(
-      expect.objectContaining({ pos: 500, carrier_count: 1, has_star: 0, acmg_best: null })
-    )
     expect(summaryMeta(db, 'is_stale')).toBe('0')
   })
 

@@ -181,17 +181,14 @@ export async function runImportSession(
             skipped++
             continue
           } else if (existing) {
-            // Fail on what the head of the file shows before the old case goes (#493).
-            // ponytail: a file that breaks further in still loses the old case;
-            // deleting it only after the new one is published would close that.
+            // Fail fast on what the head of the file shows. The old case stays
+            // until its replacement is published (#493).
             if ((await detectFormat(file.filePath)).format === 'vcf') {
               const { header } = await parseVcfHeader(file.filePath)
-              resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0])
+              // Without a sample the import is an empty case, which would replace the old one.
+              if (!resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0]))
+                throw new Error('VCF has no #CHROM header line or no sample column')
             }
-            // Replacing a case: drop its contribution to the shared
-            // frequency table before its variants disappear.
-            frequencies.decrementFrequencies(existing.id)
-            summary.replaceCase(existing.id, () => stmts.deleteCase.run(existing.id))
           }
         }
 
@@ -199,7 +196,8 @@ export async function runImportSession(
         // Use VCF genome build override if provided, otherwise default to GRCh38
         const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
         const caseResult = stmts.insertCase.run(
-          file.caseName,
+          // cases.name is UNIQUE: a replacement is filled under a temporary name.
+          existing ? `${file.caseName} (replacing #${existing.id})` : file.caseName,
           file.filePath,
           fileSize,
           Date.now(),
@@ -316,9 +314,16 @@ export async function runImportSession(
 
           // The file's rows are committed and it was not cancelled: publish
           // the case before anyone is told the file is done.
-          frequenciesCounted = publishCase(db, caseId, frequencies, () =>
+          frequenciesCounted = publishCase(db, caseId, frequencies, () => {
+            if (existing) {
+              // In the publishing transaction: the old case goes, with its
+              // frequencies and summary contribution, only if the new one arrives.
+              frequencies.decrementFrequencies(existing.id)
+              summary.replaceCase(existing.id, () => stmts.deleteCase.run(existing.id))
+              workerDb.prepare('UPDATE cases SET name = ? WHERE id = ?').run(file.caseName, caseId)
+            }
             summary.addCase(caseId, totalFiles - fileIndex - 1)
-          )
+          })
           published = true
           checkpointBetweenFiles(db)
           // Worker thread: no structured logger (documented console exception).
