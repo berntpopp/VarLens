@@ -57,10 +57,15 @@ export async function markCohortSummaryStale({
 /**
  * Whether the summary needs a rebuild: flagged stale on its state row, or a
  * writer that could not get the summary write lock left a rebuild request
- * (see {@link requestSummaryRebuild}). `stateAlias` names the state row.
+ * (see {@link requestSummaryRebuildForVariant}). `stateAlias` names the state row.
+ *
+ * An 'annotation' request does not count: an annotation changes no count,
+ * only the flag columns, and those are refreshed without a rebuild
+ * (refreshAnnotationFlags in cohort-annotation-flags-sql.ts).
  */
 export function summaryIsStaleSql(tbl: (t: string) => string, stateAlias: string): string {
-  return `(${stateAlias}.is_stale OR EXISTS (SELECT 1 FROM ${tbl('cohort_summary_rebuild_requests')}))`
+  return `(${stateAlias}.is_stale OR EXISTS (SELECT 1 FROM ${tbl('cohort_summary_rebuild_requests')}
+            WHERE reason <> 'annotation'))`
 }
 
 /**

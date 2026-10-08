@@ -36,6 +36,7 @@ import {
   CohortSummaryRefreshingError
 } from '../../../shared/errors/cohort-summary-refreshing'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
+import { refreshAnnotationFlags } from './cohort-annotation-flags-sql'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
@@ -90,6 +91,8 @@ interface FreshnessProbe {
   summary_present: boolean
   gene_summary_missing: boolean
   is_stale: boolean
+  /** Annotation saves that could not get the lock: flags to refresh, counts valid. */
+  flags_pending: boolean
   total_cases: number
   /** Variant rows from before migration 0025 still lack stored severity ranks. */
   rank_backfill_pending: boolean
@@ -119,6 +122,7 @@ async function probeFreshness({
     summary_present: boolean
     gene_summary_missing: boolean
     is_stale: boolean
+    flags_pending: boolean
     total_cases: string
     rank_backfill_pending: boolean | null
   }>(
@@ -130,6 +134,8 @@ async function probeFreshness({
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
                      WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
        ${summaryIsStaleSql(tbl, 's')} AS is_stale,
+       EXISTS (SELECT 1 FROM ${tbl('cohort_summary_rebuild_requests')}
+                WHERE reason = 'annotation') AS flags_pending,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases,
        (SELECT b.completed_at IS NULL FROM ${tbl('severity_rank_backfill')} b
          WHERE b.id = 1) AS rank_backfill_pending
@@ -144,6 +150,7 @@ async function probeFreshness({
     summary_present: row.summary_present,
     gene_summary_missing: row.gene_summary_missing,
     is_stale: row.is_stale,
+    flags_pending: row.flags_pending,
     total_cases: Number(row.total_cases),
     rank_backfill_pending: row.rank_backfill_pending === true
   }
@@ -155,9 +162,14 @@ async function probeFreshness({
  * `wait: false` is the request path: it gives up immediately, returning
  * false, when another writer holds the summary lock. `wait: true` is the
  * background path: it queues for the lock with the session's lock and
- * statement timeouts lifted.
+ * statement timeouts lifted. `flagsOnly` serves pending annotation saves
+ * instead of rebuilding (refreshAnnotationFlags).
  */
-async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<boolean> {
+async function runRebuild(
+  { pool, schema }: ScopedPool,
+  wait: boolean,
+  flagsOnly = false
+): Promise<boolean> {
   const repository = new PostgresCohortSummaryRepository()
   const client = (await pool.connect()) as PoolClient
   // Only the background path raises the server timeout, so only it outlives the client one.
@@ -180,7 +192,9 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
       await client.query('ROLLBACK')
       return false
     }
-    await repository.rebuild({ schema, client })
+    await (flagsOnly
+      ? refreshAnnotationFlags(client, schema)
+      : repository.rebuild({ schema, client }))
     await client.query('COMMIT')
     return true
   } catch (error) {
@@ -260,7 +274,12 @@ export async function prepareCohortRead(
   if (probe.rank_backfill_pending) scheduleSeverityRankBackfill(scope)
   const bootstrap = needsBootstrap(probe)
   const needsRebuild = bootstrap || probe.is_stale
-  if (!needsRebuild) return {}
+  if (!needsRebuild) {
+    // Only annotation saves are pending: one UPDATE of the flags, no rebuild.
+    // A busy lock means a publication or a rebuild is running; the next read retries.
+    if (!probe.flags_pending || (await runRebuild(scope, false, true))) return {}
+    return { warnings: { staleSummary: true } }
+  }
 
   const rebuildNow = bootstrap || probe.total_cases < syncRebuildMaxCases()
   if (rebuildNow && (await runRebuild(scope, false))) return {}
