@@ -234,6 +234,22 @@ describe('useFilters', () => {
   })
 
   describe('clearFilter', () => {
+    it('clearing clinvars keeps the other drawer filters (#483)', () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.filters.value.maxGnomadAf = 0.001
+      result.filters.value.minCadd = 20
+      result.filters.value.acmgClassifications = ['LP']
+      result.filters.value.clinvars = ['Pathogenic']
+
+      result.clearFilter('clinvars')
+
+      expect(result.filters.value.clinvars).toEqual([])
+      expect(result.filters.value.maxGnomadAf).toBe(0.001)
+      expect(result.filters.value.minCadd).toBe(20)
+      expect(result.filters.value.acmgClassifications).toEqual(['LP'])
+    })
+
     it('clears gene filter', () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance

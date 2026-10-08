@@ -10,7 +10,6 @@ import { computed, type Ref, type ComputedRef } from 'vue'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
 import { resetAdapterFields } from './filter-types'
 import type { Tag } from '../../../shared/types/database-entities'
-import type { FilterCoreReturn } from './useFilterCore'
 
 /**
  * Options for useFilterComputed
@@ -22,10 +21,6 @@ export interface UseFilterComputedOptions {
   selectedImpactPresets: Ref<string[]>
   /** Available tags for label resolution */
   availableTags: ComputedRef<Tag[]>
-  /** Core filter composable (for clearFilter and reset) */
-  core: FilterCoreReturn
-  /** Sync core state back to filters ref */
-  syncCoreToFilters: () => void
   /** Reset presets to defaults */
   resetPresets: () => void
   /** Callback to reset sort order in parent */
@@ -67,8 +62,6 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
     filters,
     selectedImpactPresets,
     availableTags,
-    core,
-    syncCoreToFilters,
     resetPresets,
     onResetSort,
     selectedAfPreset,
@@ -299,24 +292,6 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
   // ---------------------------------------------------------------------------
 
   const clearFilter = (filterId: string): void => {
-    // Map adapter filter IDs to core IDs for shared fields, then sync back
-    const coreIdMap: Record<string, string> = {
-      consequences: 'consequences',
-      funcs: 'funcs',
-      clinvars: 'clinvars',
-      frequency: 'gnomad_af',
-      'internal-frequency': 'internal_af',
-      cadd: 'cadd',
-      acmg: 'acmg'
-    }
-
-    const coreId = coreIdMap[filterId]
-    if (coreId !== undefined) {
-      core.clearFilter(coreId)
-      syncCoreToFilters()
-    }
-
-    // Handle adapter-specific and preset-related clearing
     switch (filterId) {
       case 'search':
         filters.value.searchQuery = ''
@@ -324,13 +299,30 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       case 'gene':
         filters.value.geneSymbol = ''
         break
+      case 'consequences':
+        filters.value.consequences = []
+        break
+      case 'funcs':
+        filters.value.funcs = []
+        break
+      case 'clinvars':
+        filters.value.clinvars = []
+        break
+      case 'acmg':
+        filters.value.acmgClassifications = []
+        break
+      case 'internal-frequency':
+        filters.value.maxInternalAf = null
+        break
       case 'impact':
         selectedImpactPresets.value = []
         break
       case 'frequency':
+        filters.value.maxGnomadAf = null
         selectedAfPreset.value = null
         break
       case 'cadd':
+        filters.value.minCadd = null
         selectedCaddPreset.value = null
         break
       case 'tags':
@@ -362,11 +354,6 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
   }
 
   const clearAllFilters = (): void => {
-    // Reset shared fields via core, then sync back to filters object
-    core.reset()
-    syncCoreToFilters()
-
-    // Reset adapter-specific fields
     resetAdapterFields(filters)
     resetPresets()
     // Also reset sort order in parent

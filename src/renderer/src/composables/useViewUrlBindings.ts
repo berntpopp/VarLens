@@ -67,9 +67,7 @@ export function useCaseUrlParam(appState: AppStateReturn): void {
 export function useFilterUrlParam(
   route: ViewRoute,
   filters: Ref<FilterState>,
-  impactPresets: Ref<string[]>,
-  /** Optional hook after state is replaced (e.g. resync derived refs). */
-  afterApply?: () => void
+  impactPresets: Ref<string[]>
 ): void {
   useUrlParam({
     route,
@@ -82,7 +80,6 @@ export function useFilterUrlParam(
       // Search text is owned by the `q` binding; keep it across filter restores.
       filters.value = createFilterState({ ...state, searchQuery: filters.value.searchQuery })
       impactPresets.value = impact
-      afterApply?.()
     }
   })
 }
