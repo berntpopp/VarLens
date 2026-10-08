@@ -27,10 +27,13 @@ import { serverPathImportDisabled, serverPathImportDisabledResponse } from './se
 import { jobViewerOf } from './jobs'
 import type { DispatcherDeps, OverrideHandler } from './types'
 import {
+  discardWebUploads,
   holdWebUploads,
   isWebUploadRef,
   resolveWebUploadRef,
-  stageExistingFileUpload
+  stageExistingFileUpload,
+  UploadTooLargeError,
+  type StagedUpload
 } from './upload-staging'
 
 interface ResolvedBatchFile {
@@ -115,9 +118,13 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
         })
         batchImportRuns.start(validRunId, userId, job.jobId)
         const releaseUploads = holdWebUploads(resolution.files.map((file) => file.inputPath))
-        void job.result.finally(releaseUploads).then(
-          (result) => batchImportRuns.complete(validRunId, userId, result),
+        void job.result.then(
+          (result) => {
+            releaseUploads(!result.cancelled && result.failed === 0)
+            batchImportRuns.complete(validRunId, userId, result)
+          },
           (error: unknown) => {
+            releaseUploads(false)
             const serialized = toSerializableWebError(error)
             batchImportRuns.fail(validRunId, userId, serialized)
             events.publish(userId, WEB_EVENT_BATCH_IMPORT_FAILED, {
@@ -179,7 +186,11 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
             validatedZipPath.data,
             request.session.user?.id,
             typeof password === 'string' ? password : undefined
-          )
+          ).catch((error: unknown) => {
+            if (!(error instanceof UploadTooLargeError)) throw error
+            reply.code(413)
+            return { error: error.code, message: error.message }
+          })
           if (result === null) {
             reply.code(404)
             return {
@@ -286,8 +297,8 @@ async function extractWebUploadZip(
   if (upload === null || userId === undefined) return null
 
   const result = await extractZip(upload.storedPath, password)
+  const stagedFiles: StagedUpload[] = []
   try {
-    const stagedFiles = []
     for (const filePath of result.files) {
       stagedFiles.push(
         await stageExistingFileUpload({
@@ -304,6 +315,10 @@ async function extractWebUploadZip(
       errors: result.errors,
       extractionId: result.extractionId
     }
+  } catch (error) {
+    // Refused part-way (per-user staged bytes cap): leave none of its files behind.
+    discardWebUploads(stagedFiles)
+    throw error
   } finally {
     cleanupZipTemp(result.extractionId)
   }

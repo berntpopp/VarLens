@@ -28,13 +28,16 @@ export function buildRegionFileOverrides(): Record<string, OverrideHandler> {
           return { error: 'invalid-bed-import' }
         }
         const releaseUpload = holdWebUploads([filePath])
+        let imported = false
         try {
-          return await session.getWriteExecutor().execute({
+          const result = await session.getWriteExecutor().execute({
             type: 'region-files:importBed',
             params: [fileId, resolvedPath, { rejectMalformedRows: true }]
           })
+          imported = true
+          return result
         } finally {
-          releaseUpload()
+          releaseUpload(imported)
         }
       }
     }
