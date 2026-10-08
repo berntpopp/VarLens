@@ -179,6 +179,8 @@ export interface CohortSearchParams {
   max_internal_af?: number
   /** Minimum carrier count */
   carrier_count_min?: number
+  /** Maximum carrier count (integer >= 1; absent = off) */
+  carrier_count_max?: number
   /** Show only starred variants (global annotations) */
   starred_only?: boolean
   /** Show only variants with comments (global annotations) */

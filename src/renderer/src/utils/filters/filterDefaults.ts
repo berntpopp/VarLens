@@ -35,6 +35,7 @@ export const FILTER_DEFAULTS: Readonly<FilterState> = Object.freeze({
   activePanelIds: [],
   panelPaddingBp: 5000,
   maxInternalAf: null,
+  maxCarriers: null,
   inheritanceModes: [],
   analysisGroupId: null,
   considerPhasing: false,
