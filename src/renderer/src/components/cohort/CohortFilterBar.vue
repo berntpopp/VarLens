@@ -150,7 +150,8 @@ import {
   ACMG_FILTER_OPTIONS,
   applyPresetStateToFilters,
   buildPresetFilterJson,
-  isPresetDiverged
+  isPresetDiverged,
+  summarizeInternalFilters
 } from '../../utils/filters'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
@@ -384,11 +385,7 @@ const isFilterGroupActive = (groupId: string): boolean => {
     case 'clinvar':
       return filters.value.clinvars.length > 0
     case 'internal-frequency':
-      return (
-        filters.value.maxInternalAf !== null &&
-        !Number.isNaN(filters.value.maxInternalAf) &&
-        filters.value.maxInternalAf > 0
-      )
+      return summarizeInternalFilters(filters.value) !== ''
     case 'frequency':
       return (
         filters.value.maxGnomadAf !== null &&

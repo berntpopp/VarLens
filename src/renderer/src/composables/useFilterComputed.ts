@@ -9,7 +9,12 @@
 import { computed, type Ref, type ComputedRef } from 'vue'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
 import { resetAdapterFields } from './filter-types'
-import { formatAfPercent } from '../utils/filters'
+import {
+  activeMaxCarriers,
+  formatAfPercent,
+  maxCarriersLabel,
+  summarizeInternalFilters
+} from '../utils/filters'
 import type { Tag } from '../../../shared/types/database-entities'
 
 /**
@@ -86,6 +91,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       filters.value.maxInternalAf !== null &&
       Number.isNaN(filters.value.maxInternalAf) === false &&
       filters.value.maxInternalAf > 0
+    const maxCarriersActive = activeMaxCarriers(filters.value.maxCarriers) !== null
 
     return (
       filters.value.searchQuery !== '' ||
@@ -97,6 +103,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       afActive ||
       caddActive ||
       internalAfActive ||
+      maxCarriersActive ||
       filters.value.tagIds.length > 0 ||
       filters.value.starredOnly ||
       filters.value.hasCommentOnly ||
@@ -132,6 +139,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       filters.value.maxInternalAf > 0
     )
       count++
+    if (activeMaxCarriers(filters.value.maxCarriers) !== null) count++
     if (filters.value.tagIds.length > 0) count++
     if (filters.value.starredOnly) count++
     if (filters.value.hasCommentOnly) count++
@@ -197,6 +205,11 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       const pct = formatAfPercent(filters.value.maxInternalAf)
       list.push({ id: 'internal-frequency', label: 'Internal AF \u2264', value: `${pct}%` })
     }
+
+    const maxCarriers = activeMaxCarriers(filters.value.maxCarriers)
+    if (maxCarriers !== null) {
+      list.push({ id: 'max-carriers', label: 'Seen in', value: maxCarriersLabel(maxCarriers) })
+    }
     if (filters.value.tagIds.length > 0) {
       const tagNames = availableTags.value
         .filter((t) => filters.value.tagIds.includes(t.id))
@@ -260,11 +273,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
           filters.value.maxGnomadAf > 0
         )
       case 'internal-frequency':
-        return (
-          filters.value.maxInternalAf !== null &&
-          !Number.isNaN(filters.value.maxInternalAf) &&
-          filters.value.maxInternalAf > 0
-        )
+        return summarizeInternalFilters(filters.value) !== ''
       case 'cadd':
         return (
           filters.value.minCadd !== null &&
@@ -314,6 +323,9 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
         break
       case 'internal-frequency':
         filters.value.maxInternalAf = null
+        break
+      case 'max-carriers':
+        filters.value.maxCarriers = null
         break
       case 'impact':
         selectedImpactPresets.value = []
