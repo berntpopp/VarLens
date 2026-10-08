@@ -181,7 +181,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { evidenceFingerprint, summarizeAcmgDraft } from '../utils/acmg/acmg-undo'
+import {
+  evidenceFingerprint,
+  hasMeaningfulAcmgEvidence,
+  summarizeAcmgDraft
+} from '../utils/acmg/acmg-undo'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg/types'
 import {
@@ -399,6 +403,12 @@ let resolveLeave: ((leave: boolean) => void) | null = null
 function confirmLeave(): Promise<boolean> | null {
   emitChange() // notes typed but not blurred yet
   if (pending.value === null) return null
+  // Unconfirmed suggestions alone are not work to lose.
+  if (
+    !hasMeaningfulAcmgEvidence(pending.value.evidenceJson) &&
+    !hasMeaningfulAcmgEvidence(props.evidenceJson)
+  )
+    return null
   leavePrompt.value = true
   return new Promise((resolve) => (resolveLeave = resolve))
 }

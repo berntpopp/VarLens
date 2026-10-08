@@ -94,6 +94,19 @@ describe('AcmgClassificationPanel confirm step', () => {
       expect((wrapper.vm as unknown as Leave).confirmLeave()).toBeNull()
     })
 
+    it('does not prompt for unconfirmed suggestions alone', async () => {
+      const wrapper = mount(AcmgClassificationPanel, {
+        props: { evidenceJson: null, variantData: { gnomad_af: 0.2, cadd: 30 } as never },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      const suggest = wrapper.findAll('button').find((b) => b.text().includes('Auto-suggest'))!
+      await suggest.trigger('click')
+      expect((wrapper.vm as unknown as { pending: unknown }).pending).not.toBeNull()
+      expect((wrapper.vm as unknown as Leave).confirmLeave()).toBeNull()
+      wrapper.unmount()
+    })
+
     it('Apply saves the draft, then lets the selection change', async () => {
       const saved: string[] = []
       const wrapper = await draftPanel(async () => {
