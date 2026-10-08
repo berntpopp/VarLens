@@ -39,7 +39,8 @@
             <div>
               <strong>Overwrite duplicates</strong>
               <div class="text-body-small text-medium-emphasis">
-                Replace existing cases with data from the selected files
+                Replace existing cases with data from the selected files. The annotations of the
+                replaced cases (ACMG classifications, stars, comments, tags) are deleted.
               </div>
             </div>
           </template>

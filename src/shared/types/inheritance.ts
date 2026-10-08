@@ -91,7 +91,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'autosomal_recessive',
     abbr: 'AR',
     label: 'Autosomal recessive',
-    help: 'Homozygous (1/1) in the proband, and every parent in the analysis group is a het carrier (including assumed het calls). A parent with a reference or homozygous call, or without a row, withholds the variant: that suggests a de novo second hit, uniparental disomy or a deletion. A parent with an uncalled genotype (./.) does not, and a parent missing from the group is not checked.',
+    help: 'Strict carrier-parents screen on autosomes: homozygous (1/1) in the proband, and every parent in the analysis group is a het carrier (including assumed het calls). A parent with a reference or homozygous call withholds the variant; so does a parent without a row, treated as reference because reference and uncovered sites are not stored. A parent with only uncalled genotypes (./.) does not. For a homozygous parent, UPD or a deletion use Homozygous.',
     requiresFamily: true,
     color: 'deep-purple'
   },

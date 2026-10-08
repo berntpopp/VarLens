@@ -39,6 +39,12 @@ describe('burden allele frequency counts called alleles (#517)', () => {
     expect(frequency([row(1, '1/.')], [1], [])).toBe(0.5)
   })
 
+  it('a reference half-call (0/.) is two called alleles with no copy of this ALT', () => {
+    expect(frequency([row(1, '0/.'), row(2, '0/1')], [1], [2])).toBe(1 / 4)
+    expect(frequency([row(1, './0'), row(2, '0|1')], [1], [2])).toBe(1 / 4)
+    expect(frequency([row(1, '1/.'), row(2, '0/0')], [1], [2])).toBe(1 / 4)
+  })
+
   it('no called allele at all does not divide by zero', () => {
     expect(frequency([row(1, './.')], [1], [])).toBe(1e-8)
   })

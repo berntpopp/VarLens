@@ -10,6 +10,7 @@ import { basename } from 'node:path'
 
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
 import { DATABASE_CONFIG } from '../../shared/config'
+import { replacementCaseName } from '../../shared/utils/case-name'
 import { detectFormat } from '../import/format-detection'
 import { loadImportFilters } from '../import/vcf/import-filters'
 import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
@@ -195,7 +196,7 @@ export async function runImportSession(
         const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
         const caseResult = stmts.insertCase.run(
           // cases.name is UNIQUE: a replacement is filled under a temporary name.
-          existing ? `${file.caseName} (replacing #${existing.id})` : file.caseName,
+          existing ? replacementCaseName(file.caseName, existing.id) : file.caseName,
           file.filePath,
           fileSize,
           Date.now(),

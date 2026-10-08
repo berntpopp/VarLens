@@ -1,3 +1,4 @@
+import { InvalidParametersError } from '../../ipc/errors'
 import type { StorageWriteExecutor, StorageWriteTask } from '../write-executor'
 import type { PostgresAnalysisGroupsRepository } from './PostgresAnalysisGroupsRepository'
 import type { PostgresAnnotationsRepository } from './PostgresAnnotationsRepository'
@@ -102,10 +103,21 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
 
   async execute(task: StorageWriteTask): Promise<unknown> {
     switch (task.type) {
-      case 'cases:delete':
-        return task.params[1]
-          ? await this.caseLifecycle.deleteCase(task.params[0], { successor: task.params[1] })
-          : await this.caseLifecycle.deleteCase(task.params[0])
+      case 'cases:delete': {
+        const [caseId, successor] = task.params
+        if (successor === undefined) return await this.caseLifecycle.deleteCase(caseId)
+        // A successor that names no case would delete without replacing (case 0 of a cancelled import).
+        if (
+          !Number.isSafeInteger(successor.id) ||
+          successor.id <= 0 ||
+          successor.id === caseId ||
+          typeof successor.name !== 'string' ||
+          successor.name.trim() === ''
+        ) {
+          throw new InvalidParametersError(`cases:delete: invalid successor for case ${caseId}`)
+        }
+        return await this.caseLifecycle.deleteCase(caseId, { successor })
+      }
 
       case 'case-metadata:upsert':
         return await this.caseMetadata.upsertCaseMetadata(task.params[0], task.params[1])

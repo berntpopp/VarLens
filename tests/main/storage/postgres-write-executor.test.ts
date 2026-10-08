@@ -70,6 +70,31 @@ describe('PostgresWriteExecutor', () => {
     expect(caseLifecycle.deleteCase).toHaveBeenCalledWith(7)
   })
 
+  it('cases:delete passes a valid successor on and refuses one that names no case', async () => {
+    const caseLifecycle = { deleteCase: vi.fn().mockResolvedValue(undefined) }
+    const executor = new PostgresWriteExecutor({} as never, caseLifecycle, workflowRepositories())
+
+    await executor.execute({ type: 'cases:delete', params: [7, { id: 9, name: 'HG001' }] })
+    expect(caseLifecycle.deleteCase).toHaveBeenCalledWith(7, {
+      successor: { id: 9, name: 'HG001' }
+    })
+
+    caseLifecycle.deleteCase.mockClear()
+    for (const successor of [
+      { id: 0, name: 'HG001' },
+      { id: -3, name: 'HG001' },
+      { id: 1.5, name: 'HG001' },
+      { id: 7, name: 'HG001' },
+      { id: 9, name: ' ' },
+      { id: '9', name: 'HG001' } as never
+    ]) {
+      await expect(
+        executor.execute({ type: 'cases:delete', params: [7, successor] })
+      ).rejects.toThrow(/invalid successor/)
+    }
+    expect(caseLifecycle.deleteCase).not.toHaveBeenCalled()
+  })
+
   it('routes workflow write tasks to postgres workflow repositories', async () => {
     const workflow = workflowRepositories()
     workflow.tags = { createTag: vi.fn().mockResolvedValue({ id: 1 }) } as never

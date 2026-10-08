@@ -468,6 +468,23 @@ describe.skipIf(!RUN)('trio and duplicate-row inheritance filters on both backen
     expect(await candidates('mother')).toEqual(['100>G', '100>T'])
   }, 60_000)
 
+  it('autosomal_recessive: each parent is read once, by its resolved call', async () => {
+    await seed([
+      // 100: het + het. 200: mother reference next to an uncalled row. 300: mother het next to
+      // a reference row. 400: mother uncalled only. 500: father without a row.
+      ...[100, 200, 300, 400, 500].map((pos): Row => ['proband', pos, 'G', '1/1']),
+      ...[100, 200, 300, 400].map((pos): Row => ['father', pos, 'G', '0/1']),
+      ['mother', 100, 'G', './1'],
+      ['mother', 200, 'G', './.'],
+      ['mother', 200, 'G', '0/0'],
+      ['mother', 300, 'G', '0/0'],
+      ['mother', 300, 'G', '0|1'],
+      ['mother', 400, 'G', null],
+      ['mother', 500, 'G', '0/1']
+    ])
+    expect(await matching('autosomal_recessive')).toEqual(['100>G', '300>G', '400>G'])
+  })
+
   it('de_novo: a split het neither parent carries; an inherited one is dropped', async () => {
     await seed([
       ['proband', 100, 'G', '1|.'],
