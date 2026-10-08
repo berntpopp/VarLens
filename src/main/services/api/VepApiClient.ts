@@ -290,7 +290,7 @@ export class VepApiClient {
     const url = `${this.baseUrl}/vep/human/region/${vepRegionAllele(chr, pos, ref, alt)}?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1`
 
     const response = await fetch(url, {
-      signal,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS)]),
       headers: {
         'Content-Type': 'application/json'
       }
