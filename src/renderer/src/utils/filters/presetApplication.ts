@@ -48,9 +48,7 @@ interface ApplyPresetOptions {
  *
  * Note: searchQuery and geneSymbol are intentionally NOT managed by presets.
  * These are ad-hoc user inputs that should persist independently of preset
- * toggles. The getActiveFilterState() merger includes them so saved presets
- * can capture them, but they are not applied/reset on toggle to avoid
- * surprising the user by clearing their current search.
+ * toggles, so they are neither saved nor applied/reset on toggle.
  */
 export function applyPresetStateToFilters({
   filters,
@@ -107,6 +105,33 @@ export function applyPresetStateToFilters({
 }
 
 /**
+ * The fields a preset manages (exactly those `applyPresetStateToFilters`
+ * restores), without default-valued keys. Used on save, and on load to
+ * normalise stored presets: an explicit null/false means "not set" and must
+ * not override another active preset. `impactPresets` (the HIGH/MOD/LOW chips,
+ * a separate ref) are saved as consequences.
+ */
+export function buildPresetFilterJson(
+  filters: Partial<FilterState>,
+  impactPresets: string[] = []
+): Partial<FilterState> {
+  const json: Partial<FilterState> = {}
+  for (const key of ['maxGnomadAf', 'maxInternalAf', 'minCadd', 'minCarriers'] as const) {
+    const value = filters[key]
+    if (typeof value === 'number') json[key] = value
+  }
+  if (filters.starredOnly === true) json.starredOnly = true
+  if (filters.hasCommentOnly === true) json.hasCommentOnly = true
+  const consequences = [...new Set([...(filters.consequences ?? []), ...impactPresets])]
+  if (consequences.length > 0) json.consequences = consequences
+  for (const key of ['funcs', 'clinvars', 'acmgClassifications'] as const) {
+    const value = filters[key]
+    if (value !== undefined && value.length > 0) json[key] = [...value]
+  }
+  return json
+}
+
+/**
  * Check if a single preset's filter values still match the current filter state.
  * Returns false if any field the preset sets has diverged from the preset's value.
  */
@@ -129,7 +154,7 @@ export function isPresetDiverged({
   presetFilterJson,
   consequencesValue
 }: DivergenceCheckOptions): boolean {
-  const fj = presetFilterJson
+  const fj = buildPresetFilterJson(presetFilterJson) // explicit defaults are "not set"
 
   if (fj.maxGnomadAf !== undefined && filters.maxGnomadAf !== fj.maxGnomadAf) return true
   if (fj.maxInternalAf !== undefined && filters.maxInternalAf !== fj.maxInternalAf) return true

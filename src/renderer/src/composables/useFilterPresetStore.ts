@@ -22,6 +22,7 @@ import type {
 import type { FilterState } from '../../../shared/types/filters'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { filterPresetsQuery } from '../queries/filter-presets'
+import { buildPresetFilterJson } from '../utils/filters/presetApplication'
 import { loadIfAllowed, queryApi } from '../queries/gate'
 import { queryKeys } from '../queries/keys'
 
@@ -101,14 +102,14 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
     const merged: Partial<FilterState> = {}
 
     for (const preset of active) {
-      const fj = preset.filterJson
+      // Presets saved before #504 hold explicit defaults (null/false), which
+      // must not override another active preset's value.
+      const fj = buildPresetFilterJson(preset.filterJson)
       // Scalar fields: last wins
       if (fj.maxGnomadAf !== undefined) merged.maxGnomadAf = fj.maxGnomadAf
       if (fj.maxInternalAf !== undefined) merged.maxInternalAf = fj.maxInternalAf
       if (fj.minCadd !== undefined) merged.minCadd = fj.minCadd
       if (fj.minCarriers !== undefined) merged.minCarriers = fj.minCarriers
-      if (fj.searchQuery !== undefined) merged.searchQuery = fj.searchQuery
-      if (fj.geneSymbol !== undefined) merged.geneSymbol = fj.geneSymbol
       if (fj.starredOnly !== undefined) merged.starredOnly = fj.starredOnly
       if (fj.hasCommentOnly !== undefined) merged.hasCommentOnly = fj.hasCommentOnly
 
