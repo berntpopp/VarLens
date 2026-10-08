@@ -17,6 +17,7 @@ import {
   registerImportUploadRoutes,
   resolveWebUploadRef,
   stageExistingFileUpload,
+  UPLOAD_FAILED_RETENTION_MS,
   UPLOAD_RELEASE_GRACE_MS,
   type StagedUpload
 } from '../../src/web/server/routes/upload-staging'
@@ -99,22 +100,72 @@ describe('staged upload cleanup (#498)', () => {
     expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
   })
 
-  test('a failed import keeps the upload for a retry, until the staging TTL', async () => {
+  test('a failed import keeps the upload for a retry, for one hour', async () => {
     const upload = await stage()
     await importTwice(upload, true)
+    expect(upload.expiresAt).toBe(Date.now() + UPLOAD_FAILED_RETENTION_MS)
 
     // Fix the option and retry after more than the release grace: no second upload.
     await vi.advanceTimersByTimeAsync(UPLOAD_RELEASE_GRACE_MS + 60_000)
     expect(resolveWebUploadRef(upload.ref, 7)?.storedPath).toBe(upload.storedPath)
     expect(existsSync(upload.storedPath)).toBe(true)
 
-    // Not for ever: like an upload nobody imported (its own sweep timer was
-    // set before the clock was faked; any later access sweeps as well).
-    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
-    expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
+    // Swept by the timer the failed import set, not by a later request.
+    await vi.advanceTimersByTimeAsync(UPLOAD_FAILED_RETENTION_MS)
     vi.useRealTimers()
     await vi.waitFor(() => expect(existsSync(dirname(upload.storedPath))).toBe(false))
+    expect(resolveWebUploadRef(upload.ref, 7)).toBeNull()
   })
+
+  test('a staging TTL shorter than one hour wins over the failed-import retention', async () => {
+    vi.stubEnv('VARLENS_WEB_UPLOAD_TTL_MS', '60000')
+    const upload = await stage()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] })
+    holdWebUploads([upload.ref])(false)
+    expect(upload.expiresAt).toBe(Date.now() + 60_000)
+  })
+
+  /** One staged upload per import route, with the call that imports it. */
+  const ROUTES: Record<string, { name: string; args: (ref: string) => unknown[] }> = {
+    'import:start': { name: 'input.vcf', args: (ref) => [ref, 'Case A'] },
+    'import:startMultiFile': {
+      name: 'input.vcf',
+      args: (ref) => ['Case A', [{ filePath: ref, variantType: 'snv', caller: 'test' }]]
+    },
+    'batch-import:start': {
+      name: 'Case B.json',
+      args: (ref) => [[ref], 'skip', undefined, `settle-${Math.random()}`]
+    },
+    'region-files:importBed': { name: 'regions.bed', args: (ref) => [4, ref] }
+  }
+
+  for (const [route, { name, args }] of Object.entries(ROUTES)) {
+    for (const fails of [false, true]) {
+      test(`${route} settles its upload after ${fails ? 'a failure' : 'a success'}`, async () => {
+        const sourcePath = join(root, 'source')
+        await writeFile(sourcePath, '{}')
+        const upload = await stageExistingFileUpload({ userId: 7, originalName: name, sourcePath })
+        const { deps, importSingleFile, importMultiFile, writeExecute, reply } = makeDeps()
+        if (fails) {
+          for (const mock of [importSingleFile, importMultiFile, writeExecute]) {
+            mock.mockRejectedValue(new Error('import failed'))
+          }
+        }
+        const { overrides } = buildDispatcher(deps)
+        const before = Date.now()
+        await (route === 'batch-import:start'
+          ? startBatchAndAwaitResult(overrides, args(upload.ref), REQUEST, reply, deps)
+          : Promise.resolve(
+              overrides[route].handle(args(upload.ref), REQUEST as never, reply as never, deps)
+            ).catch(() => undefined))
+
+        const retention = fails ? UPLOAD_FAILED_RETENTION_MS : UPLOAD_RELEASE_GRACE_MS
+        expect(reply.code).not.toHaveBeenCalled()
+        await vi.waitFor(() => expect(upload.expiresAt).toBeLessThanOrEqual(Date.now() + retention))
+        expect(upload.expiresAt).toBeGreaterThanOrEqual(before + retention)
+      })
+    }
+  }
 
   test('a batch import retires its uploads when the background job settles', async () => {
     const sourcePath = join(root, 'Case B.json')
