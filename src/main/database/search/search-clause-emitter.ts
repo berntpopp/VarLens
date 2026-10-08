@@ -95,10 +95,20 @@ function composeFtsTermUnion(
 }
 
 /**
+ * `term` as the body of a LIKE pattern that matches it literally, for use
+ * with `ESCAPE '\'`. HGVS uses `_` all the time (`c.1_2del`); unescaped it
+ * is a wildcard and also matches `c.112del`.
+ */
+export function escapeLikePattern(term: string): string {
+  return term.replace(/[\\%_]/g, '\\$&')
+}
+
+/**
  * Expand an HGVS term into a base-table LIKE predicate. Pushes two `?`
  * parameters (one for `cdna`, one for `aa_change`).
  */
 function composeHgvsTerm(term: string, params: (string | number)[]): string {
-  params.push(`%${term}%`, `%${term}%`)
-  return '(cdna LIKE ? OR aa_change LIKE ?)'
+  const pattern = `%${escapeLikePattern(term)}%`
+  params.push(pattern, pattern)
+  return "(cdna LIKE ? ESCAPE '\\' OR aa_change LIKE ? ESCAPE '\\')"
 }

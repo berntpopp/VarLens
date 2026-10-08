@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3-multiple-ciphers'
 import { describe, it, expect } from 'vitest'
 import { emitCohortSearch } from '../../../../src/main/database/search/cohort-search-emitter'
 import { tokenize, parse } from '../../../../src/shared/utils/boolean-search'
@@ -46,5 +47,26 @@ describe('emitCohortSearch', () => {
     const { sql, params } = emit('c.1234A>G')
     expect(sql).toContain('LIKE ?')
     expect(params).toEqual(['%c.1234A>G%', '%c.1234A>G%'])
+  })
+
+  it('takes _ and % in an HGVS term literally', () => {
+    const db = new Database(':memory:')
+    try {
+      db.exec(`CREATE TABLE cvs (cdna TEXT, aa_change TEXT);
+               INSERT INTO cvs (cdna) VALUES ('c.1_2del'), ('c.112del'), ('c.1%2del')`)
+      const found = (term: string): unknown[] => {
+        const { sql, params } = emit(term)
+        return db
+          .prepare(`SELECT cdna FROM cvs WHERE ${sql} ORDER BY cdna`)
+          .pluck()
+          .all(...params)
+      }
+
+      expect(found('c.1_2del')).toEqual(['c.1_2del'])
+      expect(found('c.1%2del')).toEqual(['c.1%2del'])
+      expect(found('c.1')).toHaveLength(3)
+    } finally {
+      db.close()
+    }
   })
 })

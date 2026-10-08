@@ -1061,7 +1061,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
     "%c.123A>G%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (cdna LIKE ? OR aa_change LIKE ?)",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (cdna LIKE ? ESCAPE '\\' OR aa_change LIKE ? ESCAPE '\\')",
 }
 `;
 
