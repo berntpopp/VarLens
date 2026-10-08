@@ -48,12 +48,19 @@ interface StrengthCounts {
 
 function countByStrength(codes: AcmgEvidenceCode[]): StrengthCounts {
   const confirmed = codes.filter((c) => c.confirmed)
+  const at = (strength: AcmgEvidenceCode['strength']): number =>
+    confirmed.filter((c) => c.strength === strength).length
+  // Stand-Alone is a rule for BA1 only. Evidence stored with it on another
+  // criterion counts as very strong, the level with the same 8 points.
+  const standAlone = confirmed.filter(
+    (c) => c.strength === 'stand_alone' && c.code === 'BA1'
+  ).length
   return {
-    veryStrong: confirmed.filter((c) => c.strength === 'very_strong').length,
-    strong: confirmed.filter((c) => c.strength === 'strong').length,
-    moderate: confirmed.filter((c) => c.strength === 'moderate').length,
-    supporting: confirmed.filter((c) => c.strength === 'supporting').length,
-    standAlone: confirmed.filter((c) => c.strength === 'stand_alone').length
+    veryStrong: at('very_strong') + at('stand_alone') - standAlone,
+    strong: at('strong'),
+    moderate: at('moderate'),
+    supporting: at('supporting'),
+    standAlone
   }
 }
 
