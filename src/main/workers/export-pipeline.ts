@@ -27,8 +27,8 @@ export const EXPORT_COLUMNS: ExportColumn[] = [
   { key: 'alt', header: 'Alternate' },
   { key: 'gt_num', header: 'Genotype' },
   { key: 'gene_symbol', header: 'Gene' },
-  { key: 'func', header: 'Function' },
-  { key: 'consequence', header: 'Consequence' },
+  { key: 'func', header: 'Consequence' },
+  { key: 'consequence', header: 'Impact' },
   { key: 'transcript', header: 'Transcript' },
   { key: 'cdna', header: 'cDNA' },
   { key: 'aa_change', header: 'AA Change' },
@@ -125,10 +125,10 @@ export function buildMetadataSheet(
       ? [['Gene', filterSummary.gene_symbol]]
       : []),
     ...(filterSummary.consequences !== undefined && filterSummary.consequences.length > 0
-      ? [['Consequences', filterSummary.consequences.join(', ')]]
+      ? [['Impact Levels', filterSummary.consequences.join(', ')]]
       : []),
     ...(filterSummary.funcs !== undefined && filterSummary.funcs.length > 0
-      ? [['Functions', filterSummary.funcs.join(', ')]]
+      ? [['Consequences', filterSummary.funcs.join(', ')]]
       : []),
     ...(filterSummary.clinvars !== undefined && filterSummary.clinvars.length > 0
       ? [['ClinVar', filterSummary.clinvars.join(', ')]]

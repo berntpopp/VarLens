@@ -21,6 +21,7 @@ import {
   buildMetadataSheet,
   EXPORT_COLUMNS
 } from '../../../src/main/workers/export-pipeline'
+import { COHORT_EXPORT_COLUMNS } from '../../../src/main/workers/cohort-export'
 import type { ExportPipelineParams } from '../../../src/main/workers/export-pipeline'
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,20 @@ afterEach(() => {
 })
 
 // ---------------------------------------------------------------------------
+// Impact / Consequence vocabulary (case and cohort export must agree, #477)
+// ---------------------------------------------------------------------------
+
+describe('impact / consequence export headers', () => {
+  it.each([
+    ['case export', EXPORT_COLUMNS],
+    ['cohort export', COHORT_EXPORT_COLUMNS]
+  ])('%s heads the impact level "Impact" and the SO term "Consequence"', (_name, columns) => {
+    expect(columns.find((c) => c.key === 'consequence')?.header).toBe('Impact')
+    expect(columns.find((c) => c.key === 'func')?.header).toBe('Consequence')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // buildMetadataSheet (unit)
 // ---------------------------------------------------------------------------
 
@@ -169,14 +184,15 @@ describe('buildMetadataSheet', () => {
   it('includes consequences filter when provided', () => {
     const sheet = buildMetadataSheet('Case', 0, { consequences: ['HIGH', 'MODERATE'] })
     const flat = sheet.flat()
-    expect(flat).toContain('Consequences')
+    expect(flat).toContain('Impact Levels')
+    expect(flat).not.toContain('Consequences')
     expect(flat).toContain('HIGH, MODERATE')
   })
 
   it('includes funcs filter when provided', () => {
     const sheet = buildMetadataSheet('Case', 0, { funcs: ['missense_variant'] })
     const flat = sheet.flat()
-    expect(flat).toContain('Functions')
+    expect(flat).toContain('Consequences')
     expect(flat).toContain('missense_variant')
   })
 
@@ -205,6 +221,7 @@ describe('buildMetadataSheet', () => {
     const sheet = buildMetadataSheet('Case', 0, {})
     const flat = sheet.flat()
     expect(flat).not.toContain('Gene')
+    expect(flat).not.toContain('Impact Levels')
     expect(flat).not.toContain('Consequences')
     expect(flat).not.toContain('Max gnomAD AF')
   })

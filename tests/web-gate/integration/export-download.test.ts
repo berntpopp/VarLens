@@ -159,8 +159,8 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web export downloads (PostgreSQL)', () 
       'Alternate'
     ])
     expect(rows).toHaveLength(expectedTotal)
-    const consequenceIndex = header.split(',').indexOf('Consequence')
-    for (const row of rows) expect(row.split(',')[consequenceIndex]).toBe('HIGH')
+    const impactIndex = header.split(',').indexOf('Impact')
+    for (const row of rows) expect(row.split(',')[impactIndex]).toBe('HIGH')
 
     const unfiltered = await download({ kind: 'variants', caseId, caseName: 'x', filters: {} })
     expect(csvRows(unfiltered.body)).toHaveLength(31)

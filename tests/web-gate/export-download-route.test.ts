@@ -128,7 +128,7 @@ describe('web export: prepare + signed download', () => {
     expect(res.headers['cache-control']).toBe('no-store')
     const lines = res.body.split('\r\n')
     expect(lines[0]).toBe(
-      'Chromosome,Position,Reference,Alternate,Genotype,Gene,Function,Consequence,Transcript,' +
+      'Chromosome,Position,Reference,Alternate,Genotype,Gene,Consequence,Impact,Transcript,' +
         'cDNA,AA Change,gnomAD AF,CADD,Quality,ClinVar,HPO Similarity,MOI'
     )
     expect(lines[1]).toBe('chr22,100,A,G,,COMT,,,,,,1.23e-4,25.46,,,,')

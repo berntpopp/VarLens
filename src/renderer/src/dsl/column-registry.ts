@@ -104,7 +104,7 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
   {
     key: 'consequence',
     label: 'Impact',
-    aliases: ['csq', 'effect'],
+    aliases: ['impact', 'csq', 'effect'],
     type: 'categorical',
     operators: CATEGORICAL_OPERATORS
   },
@@ -112,8 +112,7 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     key: 'func',
     label: 'Consequence',
     aliases: ['function'],
-    // Note: 'impact' is NOT an alias for func — the spec uses impact:=:HIGH
-    // but that maps to the consequences filter (HIGH/MODERATE/LOW), not func
+    // 'impact' is an alias of `consequence` above (HIGH/MODERATE/LOW/MODIFIER), never of func
     type: 'categorical',
     operators: CATEGORICAL_OPERATORS
   },
