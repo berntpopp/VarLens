@@ -41,6 +41,26 @@ Bootstrap variables are intentionally one-shot. After an admin exists, the
 server logs that env-based rotation is ignored; password changes happen through
 the authenticated app flow.
 
+## Single Replica
+
+Run exactly one server process per deployment. This is a hard requirement, not
+a sizing hint: the following state lives in that process's memory and is not
+shared.
+
+| State | With a second replica |
+| --- | --- |
+| Upload staging index | upload on A, `import:start` on B → 404 |
+| Download grants (signed with a per-process key) | a link prepared on A is rejected by B |
+| Batch-import runs, job registry, SSE events | progress and cancel reach only the owning replica |
+| Logout revocations | a logout on A is not honoured on B |
+| Rate-limit counters | every limit is multiplied by the replica count |
+
+Cookie affinity (sticky sessions) covers the first three rows only; revocation
+and rate limits stay per replica, so affinity does not make multiple replicas
+safe. A restart also clears all of the above: staged uploads are deleted at
+boot, in-flight jobs stop, and revocation entries are forgotten (session
+cookies expire server-side after 4 hours).
+
 ## URL Prefix Contract
 
 The browser bundle and server redirects must agree on the public path prefix:
