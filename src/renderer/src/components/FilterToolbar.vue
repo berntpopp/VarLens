@@ -166,12 +166,8 @@ import type { VariantFilter } from '../../../shared/types/api'
 import type { ColumnFilter, ColumnFiltersParam } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
-import {
-  ACMG_FILTER_OPTIONS,
-  applyPresetStateToFilters,
-  buildPresetFilterJson,
-  isPresetDiverged
-} from '../utils/filters'
+import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
+import { buildPresetFilterJson } from '../utils/filters/presetApplication'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { usePermissions } from '../composables/usePermissions'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
@@ -461,11 +457,8 @@ async function handleSavePreset(data: { name: string; description: string | null
   savingPreset.value = true
   savePresetError.value = null
   try {
-    await savePreset({
-      name: data.name,
-      description: data.description,
-      filterJson: buildPresetFilterJson(filters.value, selectedImpactPresets.value)
-    })
+    const filterJson = buildPresetFilterJson(filters.value, selectedImpactPresets.value)
+    await savePreset({ name: data.name, description: data.description, filterJson })
     showSavePresetDialog.value = false
   } catch (e) {
     savePresetError.value = formatError(e, 'The preset could not be saved.')
@@ -584,12 +577,8 @@ watch(
 const { writeBlockedReason } = usePermissions()
 
 const exportToExcel = async (format?: ExportFormat) => {
-  const result = await composableExportToExcel(
-    props.caseId,
-    props.caseName,
-    format,
-    props.getExportFilters?.()
-  )
+  const tableFilters = props.getExportFilters?.()
+  const result = await composableExportToExcel(props.caseId, props.caseName, format, tableFilters)
 
   if (result === null) return
 

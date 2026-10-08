@@ -132,7 +132,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     requestIdHeader: false,
     // Off unless the operator names the reverse proxy; then `request.ip` (login
     // rate-limit key, request log) is the forwarded client, not the proxy.
-    trustProxy: resolveTrustProxy(process.env),
+    // Cast: Fastify's types omit the hop count its runtime (proxy-addr) accepts.
+    trustProxy: resolveTrustProxy(process.env) as false | string,
     logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info',

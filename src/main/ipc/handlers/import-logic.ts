@@ -292,9 +292,7 @@ async function startMultiFileImportSqlite(
       caseName,
       vcfOptions,
       // The worker loads the BED file itself, so it gets the path (#484).
-      ...(filtersPayload !== undefined
-        ? { filters: translateFiltersPayloadToStorage(filtersPayload) }
-        : {}),
+      filters: filtersPayload && translateFiltersPayloadToStorage(filtersPayload),
       throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
       onProgress: firstCallbacks.onProgress,
       onSummaryStale: () => stale.announce()
