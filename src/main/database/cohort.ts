@@ -22,6 +22,7 @@ import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
 import { emitCohortSearch } from './search/cohort-search-emitter'
+import { PANEL_TEMP_TABLE_THRESHOLD } from './variant-filter/core-filters'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
@@ -98,7 +99,15 @@ export class CohortService {
     }
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
-    if (params.panel_intervals && params.panel_intervals.length > 0) {
+    if (params.panel_intervals && params.panel_intervals.length >= PANEL_TEMP_TABLE_THRESHOLD) {
+      // One JSON parameter: SQLite caps an expression tree at depth 1000, so the
+      // OR chain below throws beyond ~1000 regions (#491). Interval-driven
+      // (CROSS JOIN pins the order) so each region seeks the primary key.
+      paramsArray.push(JSON.stringify(params.panel_intervals))
+      whereConditions.push(
+        `cvs.rowid IN (SELECT pv.rowid FROM json_each(?) iv CROSS JOIN cohort_variant_summary pv WHERE pv.chr = iv.value ->> 'chr' AND pv.pos <= iv.value ->> 'end' AND COALESCE(pv.end_pos, pv.pos) >= iv.value ->> 'start')`
+      )
+    } else if (params.panel_intervals && params.panel_intervals.length > 0) {
       const intervalConditions = params.panel_intervals.map((iv) => {
         // Interval-overlap (not point-in-interval) so a spanning SV/CNV whose
         // start lies outside [start,end] but which covers the region is still

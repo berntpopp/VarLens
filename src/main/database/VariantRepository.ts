@@ -428,7 +428,7 @@ export class VariantRepository extends BaseRepository {
     filter: VariantFilter,
     limit: number
   ): { sql: string; parameters: readonly unknown[] } {
-    // Force OR chain for compiled queries — temp tables don't transfer to worker threads
+    // No temp table for compiled queries — they don't transfer to worker threads
     const query = this.filterBuilder
       .applySort(this.filterBuilder.build(filter, { forceOrChain: true }))
       .limit(limit)
