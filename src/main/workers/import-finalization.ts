@@ -1,7 +1,7 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 
 import { isImportSessionOpen } from '../database/cohort-summary-case-add'
-import { RECREATE_INDEXES } from './import-index-sql'
+import { RECREATE_INDEXES, sessionIndexesMissing } from './import-index-sql'
 import { rebuildFts } from './worker-db'
 
 export interface ImportFtsFinalizationState {
@@ -33,10 +33,11 @@ export function finalizeInterruptedImportFts(
  * A session killed while "finalizing" has published its cases but never ran
  * its last steps: the indexes it dropped are missing and the FTS index does
  * not know the new cases (#505). Redo both when the open-session marker is
- * found; idempotent. Must run before a summary rebuild, which clears the marker.
+ * found, or when the indexes are simply gone (killed before the marker was
+ * set); idempotent. Must run before a summary rebuild, which clears the marker.
  */
 export function repairInterruptedImportSession(db: DatabaseType): boolean {
-  if (!isImportSessionOpen(db)) return false
+  if (!isImportSessionOpen(db) && !sessionIndexesMissing(db)) return false
   db.exec(RECREATE_INDEXES)
   rebuildFts(db)
   return true

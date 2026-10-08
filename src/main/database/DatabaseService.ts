@@ -37,6 +37,7 @@ import { assertNotHexLiteralKey } from './sqlcipher-key-guard'
 import { applyConnectionPragmas } from './connection-pragmas'
 import { rekeyConnection } from './journal-mode'
 import { isImportSessionOpen } from './cohort-summary-case-add'
+import { sessionIndexesMissing } from '../workers/import-index-sql'
 import { hasInterruptedImports } from '../workers/import-recovery'
 
 /**
@@ -242,8 +243,9 @@ export class DatabaseService {
       const variantRow = this.db.prepare('SELECT 1 FROM variants LIMIT 1').get()
       if (summaryRow === undefined && variantRow !== undefined) return true
       // An import session that never reached its orderly end leaves the
-      // summary in an unknown state (cohort-summary-case-add.ts).
-      return isImportSessionOpen(this.db)
+      // summary in an unknown state (cohort-summary-case-add.ts); one killed
+      // before it set its marker leaves only its dropped indexes missing.
+      return isImportSessionOpen(this.db) || sessionIndexesMissing(this.db)
     } catch (e) {
       mainLogger.warn(
         'Failed to check startup rebuild status: ' + (e instanceof Error ? e.message : String(e)),

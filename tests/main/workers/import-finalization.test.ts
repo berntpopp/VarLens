@@ -115,12 +115,24 @@ describe('repairInterruptedImportSession', () => {
     service.close()
   })
 
-  it('leaves a database without an open session alone', () => {
-    const { service } = killedWhileFinalizing(false)
+  it('repairs indexes dropped by a session killed before it set its marker', () => {
+    // No case yet: the kill came before anything was imported.
+    const service = new DatabaseService(':memory:')
+    service.database.exec(DROP_INDEXES)
+    expect(service.needsStartupRebuild()).toBe(true)
 
+    expect(repairInterruptedImportSession(service.database)).toBe(true)
+
+    expect(indexNames(service)).toEqual(expect.arrayContaining(SESSION_INDEXES))
+    expect(service.needsStartupRebuild()).toBe(false)
+    service.close()
+  })
+
+  it('leaves a healthy database alone', () => {
+    const service = new DatabaseService(':memory:')
+
+    expect(service.needsStartupRebuild()).toBe(false)
     expect(repairInterruptedImportSession(service.database)).toBe(false)
-
-    expect(indexNames(service)).not.toContain('idx_variants_case_coords')
     service.close()
   })
 })
