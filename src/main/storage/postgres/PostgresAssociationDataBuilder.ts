@@ -118,6 +118,7 @@ export class PostgresAssociationDataBuilder {
       `SELECT v.gene_symbol,
               v.case_id,
               v.chr || ':' || v.pos::text || ':' || v.ref || ':' || v.alt AS variant_key,
+              v.gt_num,
               ${gtDosageSql('v.gt_num')} AS dosage,
               v.gnomad_af,
               v.cadd
@@ -132,6 +133,7 @@ export class PostgresAssociationDataBuilder {
       gene_symbol: String(row.gene_symbol),
       case_id: Number(row.case_id),
       variant_key: String(row.variant_key),
+      gt_num: typeof row.gt_num === 'string' ? row.gt_num : null,
       // NULL dosage (unparsed GT) behaves as non-carrier, as in SQLite's numeric compare.
       dosage: toNumberOrNull(row.dosage) ?? 0,
       gnomad_af: toNumberOrNull(row.gnomad_af),

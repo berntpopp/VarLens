@@ -133,7 +133,7 @@ describe('automatic start with a summary flagged stale by migration v42', () => 
       await startApp(key)
 
       const db = manager.getCurrent()
-      expect(db.database.pragma('user_version', { simple: true })).toBe(42)
+      expect(db.database.pragma('user_version', { simple: true })).toBe(43)
       expect(db.isEncrypted()).toBe(key !== undefined)
       await vi.waitFor(() => expect(isCohortSummaryStale(db.database)).toBe(false), {
         timeout: 20_000

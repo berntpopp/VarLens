@@ -25,6 +25,7 @@ import { emitCohortSearch, emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
+import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
@@ -434,7 +435,7 @@ export class CohortService {
       SELECT
         v.case_id,
         c.name as case_name,
-        MAX(v.gt_num) as gt_num
+        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num
       FROM variants v
       JOIN cases c ON v.case_id = c.id
       WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?

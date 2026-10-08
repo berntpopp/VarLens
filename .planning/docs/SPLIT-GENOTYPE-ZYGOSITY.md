@@ -47,6 +47,22 @@ carrying parent and a reference (or absent) other parent, in genes that have one
 A parent **without a row** is read as a non-carrier on every path — reference and uncovered sites
 are not stored — so no trio filter proves absence in a parent.
 
+## Conflicting duplicate calls, and called alleles (#516, #517)
+
+Several rows of one case for one variant with different genotypes resolve to **one call, the
+highest dosage**: hom > het (incl. assumed) > hemizygous > reference > unknown, ties by the
+bytewise greatest text. A called ALT is evidence; a reference or missing call on another row is
+not evidence against it. Defined once — `genotypeCallKey` (TS) / `gtCallKeySql`, `resolvedGtSql`
+(SQL) — and used by the cohort summary (rebuild and every incremental path), the carrier list and
+the association rows on both backends. It replaced a text `MAX(gt_num)` (summary) and "last row
+wins" (association). SQLite **v43** / PostgreSQL **0027** flag a populated summary stale again.
+
+Burden allele frequency = ALT copies / **called alleles** (`calledAlleleCount`): a haploid call
+(`1`, `0`) is 1 allele, a diploid one 2, an assumed het (`1/.`) 2 — it is read as a het
+everywhere, so its frequency is the same lower bound as its dosage — and an unknown call (`./.`,
+`0/.`, NULL) 0. A sample without a row is a diploid `0/0`, as on every other path; for a male on
+chrX that overstates the denominator by one allele, which the stored data cannot show.
+
 ## Consequences users will see
 
 - Cohort table: `het_count` rises by the assumed-het carriers; hemizygous and unknown carriers show
@@ -55,6 +71,6 @@ are not stored — so no trio filter proves absence in a parent.
 - Filters: heterozygous, candidate compound het and de novo include assumed het and `1/0`; the
   candidate needs two different variants, not two rows; compound het and de novo are stricter (above).
 - Carrier list: `assumed het (1/.)`, `hemi`, or the stored text of an unknown call (all were `het`).
-- Existing databases: SQLite migration **v42** / PostgreSQL **0026** flag a populated summary stale.
+- Existing databases: SQLite migrations **v42**, **v43** / PostgreSQL **0026**, **0027** flag a populated summary stale.
   SQLite rebuilds it at app start (automatic or interactive open); PostgreSQL in the background,
   leaving it unpatched by imports and deletions until then. Dosage and filters are read-time.
