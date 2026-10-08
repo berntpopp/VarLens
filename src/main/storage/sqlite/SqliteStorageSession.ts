@@ -1,7 +1,7 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import { DatabaseError } from '../../database/errors'
-import { listActiveDatabaseWork } from '../../services/jobs/database-activity'
+import { assertNoActiveDatabaseWork } from '../../services/jobs/database-activity'
 import type { Case } from '../../../shared/types/database'
 import type { StorageImportExecutor } from '../import-executor'
 import type { StorageReadExecutor } from '../read-executor'
@@ -183,14 +183,14 @@ export class SqliteStorageSession implements StorageSession {
         'The new database password must not be empty; removing encryption is not supported.'
       )
     }
-    this.assertNoActiveDatabaseWork()
+    assertNoActiveDatabaseWork('change the database password')
 
     await this.writeExecutor.runExclusive(async () => {
       try {
         await this.dbPool?.suspend()
         // A job may have started while the writer and pool drained. From here
         // to `resume()` is synchronous, so nothing can start in between.
-        this.assertNoActiveDatabaseWork()
+        assertNoActiveDatabaseWork('change the database password')
         this.databaseService.rekey(newPassword)
       } finally {
         // Always: the session must never be left without a working pool. The
@@ -202,16 +202,6 @@ export class SqliteStorageSession implements StorageSession {
         }
       }
     })
-  }
-
-  private assertNoActiveDatabaseWork(): void {
-    const active = listActiveDatabaseWork()
-    if (active.length > 0) {
-      throw new DatabaseError(
-        `Cannot change the database password while work is in progress (${active.join(', ')}). ` +
-          'Wait for it to finish and try again.'
-      )
-    }
   }
 
   async close(): Promise<void> {

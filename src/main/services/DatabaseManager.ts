@@ -13,6 +13,7 @@ import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesSe
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
 import { migrateSqliteOffThread } from '../database/migrate-off-thread'
+import { assertNoActiveDatabaseWork } from './jobs/database-activity'
 import type { StorageSession } from '../storage/session'
 
 /**
@@ -45,6 +46,7 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be opened
    */
   async open(dbPath: string, key?: string): Promise<void> {
+    assertNoActiveDatabaseWork('open a database')
     try {
       await this.close()
 
@@ -103,19 +105,17 @@ export class DatabaseManager {
   /**
    * Create a new database at the specified path
    *
-   * Closes current database if open. Creates encrypted database if key provided.
+   * Opens the new database first and closes the current one after, so a failed
+   * creation leaves the current database open. Creates encrypted database if key provided.
    *
    * @param dbPath - Path for the new database file
    * @param key - Optional encryption key
    * @throws DatabaseError if database cannot be created
    */
   async createDatabase(dbPath: string, key?: string): Promise<void> {
+    assertNoActiveDatabaseWork('create a database')
     try {
-      await this.close()
-
-      const newSession = await this.createSqliteSession(dbPath, key)
-      this.currentSession = newSession
-      this.recentDatabases.addRecent(dbPath)
+      await this.switchDatabase(dbPath, key)
     } catch (error) {
       throw new DatabaseError(
         `Failed to create database at ${dbPath}`,
@@ -140,6 +140,7 @@ export class DatabaseManager {
    * @throws DatabaseError if switch fails and rollback succeeds
    */
   async switchDatabase(newPath: string, key?: string): Promise<void> {
+    assertNoActiveDatabaseWork('switch database')
     const previousSession = this.currentSession
     let newSession: StorageSession | null = null
 
@@ -197,6 +198,7 @@ export class DatabaseManager {
       throw new DatabaseError('openPostgresSession requires a postgres-backed session')
     }
 
+    assertNoActiveDatabaseWork('switch database')
     await this.close()
     this.currentSession = session
   }
