@@ -14,8 +14,6 @@ export const HOM_GT_SQL = sqlList(HOM_GENOTYPES)
 export const HEMI_GT_SQL = sqlList(HEMI_GENOTYPES)
 /** De novo proband: one copy, diploid or haploid (male chrX). */
 export const HET_OR_HEMI_GT_SQL = sqlList([...HET_GENOTYPES, ...HEMI_GENOTYPES])
-/** A hom or haploid call: X-linked hemizygous, and a parent who is no het carrier. */
-export const HOM_OR_HEMI_GT_SQL = sqlList([...HOM_GENOTYPES, ...HEMI_GENOTYPES])
 
 export const REF_GT_SQL = sqlList(REF_GENOTYPES)
 /** A carrier of the row's allele, whatever the zygosity. */
@@ -52,6 +50,11 @@ export function gtCallKeySql(column: string): string {
     WHEN ${column} IN ${REF_GT_SQL} THEN '1'
     ELSE '0'
   END || COALESCE(${column}, ''))`
+}
+
+/** Rank character of {@link gtCallKeySql}: '4' hom, '3' het, '2' haploid, '1' reference, '0' unknown. */
+export function gtCallRankSql(column: string): string {
+  return `substr(${gtCallKeySql(column)}, 1, 1)`
 }
 
 /**

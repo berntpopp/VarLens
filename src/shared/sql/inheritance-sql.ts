@@ -3,12 +3,13 @@
  * way. Table names and parameter placeholders come from the caller; the
  * genotype classes come from ./genotype-dosage.ts.
  */
+import { chrRankSql, chromosomeRank } from './chromosome-order'
 import {
   ALT_GT_SQL,
+  gtCallRankSql,
   HEMI_GT_SQL,
   HET_GT_SQL,
   HOM_GT_SQL,
-  HOM_OR_HEMI_GT_SQL,
   notReferenceGtSql
 } from './genotype-dosage'
 
@@ -37,33 +38,35 @@ function parentRowSql(ctx: TrioSqlContext, role: 'father' | 'mother', condition:
         )`
 }
 
+/** Ranks of X, Y and MT in {@link chrRankSql}: every spelling, with or without `chr`. */
+const NON_AUTOSOME_RANKS = ['X', 'Y', 'MT'].map(chromosomeRank).join(', ')
+
 /**
- * Row `row` is homozygous in the proband and every parent of the group is a
- * het carrier of it (issue #518).
+ * Row `row` is an autosomal homozygous call of the proband and every parent of
+ * the group is a het carrier of it (issue #518).
  *
- * A parent with a reference, homozygous or haploid call, or without a row,
- * fails the variant: that pattern points to a de novo second hit, uniparental
- * disomy or a deletion. A parent whose genotype is uncalled passes, so that a
- * parental dropout does not hide a recessive candidate. A parent with several
- * rows is read by its highest dosage: one hom or haploid row fails it. A group
- * without a parent does not constrain.
+ * Each parent is read once, by its resolved call (the highest dosage of its
+ * rows, as everywhere: gtCallKeySql). Het passes. Reference, homozygous or
+ * haploid fails, and so does a parent without a row, which is read as
+ * reference. A parent with only uncalled genotypes passes, so that a parental
+ * dropout does not hide a candidate. A group without a parent does not constrain.
  */
 export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string {
-  const parentRow = (alias: string, condition: string): string => `EXISTS (
-                SELECT 1 FROM ${ctx.variants} ${alias}
-                WHERE ${alias}.case_id = agm.case_id
-                  AND ${alias}.chr = ${row}.chr AND ${alias}.pos = ${row}.pos
-                  AND ${alias}.ref = ${row}.ref AND ${alias}.alt = ${row}.alt
-                  AND ${condition}
-              )`
+  // One digit per row, so MAX needs no collation and the text is the same on both backends.
+  const parentRank = `(
+              SELECT MAX(${gtCallRankSql('par.gt_num')}) FROM ${ctx.variants} par
+              WHERE par.case_id = agm.case_id
+                AND par.chr = ${row}.chr AND par.pos = ${row}.pos
+                AND par.ref = ${row}.ref AND par.alt = ${row}.alt
+            )`
   return `(
           ${row}.gt_num IN ${HOM_GT_SQL}
           AND ${row}.case_id = ${ctx.caseParam}
+          AND ${chrRankSql(`${row}.chr`)} NOT IN (${NON_AUTOSOME_RANKS})
           AND NOT EXISTS (
             SELECT 1 FROM ${ctx.members} agm
             WHERE agm.group_id = ${ctx.groupParam} AND agm.role IN ('father', 'mother')
-              AND (NOT ${parentRow('par', `${notReferenceGtSql('par.gt_num')} AND (par.gt_num IS NULL OR par.gt_num NOT IN ${HOM_OR_HEMI_GT_SQL})`)}
-                OR ${parentRow('hom', `hom.gt_num IN ${HOM_OR_HEMI_GT_SQL}`)})
+              AND COALESCE(${parentRank}, '1') NOT IN ('3', '0')
           )
         )`
 }

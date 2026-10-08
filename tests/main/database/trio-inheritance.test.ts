@@ -170,6 +170,42 @@ describe('Trio inheritance filters', () => {
       expect(recessive()).toBe(0)
     })
 
+    it('a parent with a reference and an uncalled row is reference: the resolved call decides', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: './.', pos: 100 }),
+        makeVariant({ gt_num: '0/0', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(0)
+    })
+
+    it('a parent with a het and a reference row is a het carrier', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: '0/0', pos: 100 }),
+        makeVariant({ gt_num: '1|0', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(1)
+    })
+
+    it('fails when a parent has a haploid call', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      expect(recessive()).toBe(0)
+    })
+
+    it.each(['X', 'chrX', 'Y', 'chrY', 'MT', 'chrM'])(
+      'leaves out a homozygous call on %s: the mode is autosomal',
+      (chr) => {
+        const solo = service.analysisGroups.createGroup('SOLO', 'family').id
+        service.analysisGroups.addMember(solo, probandId, 'proband', 'affected')
+        service.variants.insertVariantsBatch(probandId, [
+          makeVariant({ gt_num: '1/1', chr, pos: 500 })
+        ])
+        expect(recessive(solo)).toBe(1) // the chr 1 variant only
+      }
+    )
+
     it('a duo constrains only the parent it has', () => {
       const duo = service.analysisGroups.createGroup('DUO', 'family').id
       service.analysisGroups.addMember(duo, probandId, 'proband', 'affected')
