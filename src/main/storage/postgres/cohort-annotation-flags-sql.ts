@@ -16,6 +16,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../../shared/config/severi
 import type { Pool } from 'pg'
 
 import { InvalidParametersError } from '../../ipc/errors'
+import { lockSummaryForWriteWithin } from './cohort-summary-lock'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
 
@@ -159,6 +160,26 @@ export function annotationFlagsOnCaseDeleteSql(schemaName: string): string {
   `
 }
 
+/** How long an annotation save waits for the summary write lock before deferring. */
+const SUMMARY_LOCK_WAIT_MS = 5_000
+
+/**
+ * Open an annotation write: BEGIN, then — before any row is locked — try to
+ * get the summary write lock for a bounded time. Without it a concurrent
+ * rebuild replaces the summary rows from a snapshot older than this write and
+ * the flags stay wrong until the next rebuild (#503). When the lock is busy
+ * (`summaryLocked: false`) the write-hooks below leave the flags alone and
+ * insert a rebuild request instead, like a transcript switch does.
+ */
+export async function beginAnnotationWrite(
+  client: RunNamedCapable,
+  schema: string,
+  waitMs: number = SUMMARY_LOCK_WAIT_MS
+): Promise<{ schema: string; summaryLocked: boolean }> {
+  await client.query('BEGIN')
+  return { schema, summaryLocked: await lockSummaryForWriteWithin(client, schema, waitMs) }
+}
+
 /**
  * Global annotation write-hook (C5a / Pass-4 MED #4). Recomputes the three flag
  * columns on EVERY cohort_variant_summary row matching (chr, pos, ref, alt) — a
@@ -168,9 +189,26 @@ export function annotationFlagsOnCaseDeleteSql(schemaName: string): string {
  */
 export async function applyAnnotationFlagsGlobal(
   client: RunNamedCapable,
-  args: { schema: string; chr: string; pos: number; ref: string; alt: string }
+  args: {
+    schema: string
+    summaryLocked: boolean
+    chr: string
+    pos: number
+    ref: string
+    alt: string
+  }
 ): Promise<void> {
   const schemaName = quoteIdentifier(args.schema)
+  if (!args.summaryLocked) {
+    await client.query(
+      `INSERT INTO ${schemaName}."cohort_summary_rebuild_requests" (reason)
+       SELECT 'annotation' WHERE EXISTS (
+         SELECT 1 FROM ${schemaName}."variants"
+         WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4)`,
+      [args.chr, args.pos, args.ref, args.alt]
+    )
+    return
+  }
   await runNamed(client as Pool, {
     name: 'cohort_summary:annotation_flags_global:v1',
     text: annotationFlagsGlobalSql(schemaName),
@@ -195,15 +233,28 @@ export async function applyAnnotationFlagsGlobal(
  */
 export async function applyAnnotationFlagsPerCase(
   client: RunNamedCapable,
-  args: { schema: string; caseId: number; variantId: number }
+  args: { schema: string; summaryLocked: boolean; caseId: number; variantId: number }
 ): Promise<void> {
   const schemaName = quoteIdentifier(args.schema)
-  const result = await runNamed<{ target_resolved: number }>(client as Pool, {
-    name: 'cohort_summary:annotation_flags_per_case:v2',
-    text: annotationFlagsPerCaseSql(schemaName),
-    values: [args.caseId, args.variantId],
-    schema: args.schema
-  })
+  const result = args.summaryLocked
+    ? await runNamed<{ target_resolved: number }>(client as Pool, {
+        name: 'cohort_summary:annotation_flags_per_case:v2',
+        text: annotationFlagsPerCaseSql(schemaName),
+        values: [args.caseId, args.variantId],
+        schema: args.schema
+      })
+    : // Same ownership check as the hook; the flags are left to the rebuild.
+      await client.query<{ target_resolved: number }>(
+        `WITH target AS (
+           SELECT 1 FROM ${schemaName}."variants" v WHERE v.id = $2 AND v.case_id = $1
+         ),
+         requested AS (
+           INSERT INTO ${schemaName}."cohort_summary_rebuild_requests" (reason)
+           SELECT 'annotation' FROM target
+         )
+         SELECT count(*)::int AS target_resolved FROM target`,
+        [args.caseId, args.variantId]
+      )
   const targetResolved = result.rows[0]?.target_resolved ?? 0
   if (targetResolved === 0) {
     throw new InvalidParametersError(
