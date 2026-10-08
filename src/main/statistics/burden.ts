@@ -6,6 +6,17 @@ export function logisticBurdenTest(
   samples: SampleBurdenData[],
   weightScheme: WeightScheme
 ): LogisticBurdenResult {
+  // A sample lacking a selected covariate (NaN; null once serialised) must not enter the fit.
+  const complete = samples.filter((s) => s.covariate_values.every(Number.isFinite))
+  const result = fitLogisticBurden(complete, weightScheme)
+  const missing = samples.length - complete.length
+  return missing > 0 ? { ...result, n_missing_covariate: missing } : result
+}
+
+function fitLogisticBurden(
+  samples: SampleBurdenData[],
+  weightScheme: WeightScheme
+): LogisticBurdenResult {
   if (samples.length === 0) {
     return {
       p_value: null,

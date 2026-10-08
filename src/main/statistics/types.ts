@@ -81,6 +81,8 @@ export interface LogisticBurdenResult {
   ci_upper: number | null
   used_firth: boolean
   warning?: string
+  /** Samples excluded from the regression because a selected covariate was missing. */
+  n_missing_covariate?: number
 }
 
 /** Combined result for one gene */

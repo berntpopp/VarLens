@@ -30,7 +30,10 @@ export interface CaseMetricRow {
 type VariantCaseData = { dosage: number; gnomad_af: number | null; cadd: number | null }
 type GeneVariantMap = Map<string, Map<string, Map<number, VariantCaseData>>>
 
-/** Covariate vector per case: sex (1 male / 0 female / 0.5 unknown), age, custom metrics. */
+/**
+ * Covariate vector per case: sex (1 male / 0 female / 0.5 unknown), age, custom metrics.
+ * A missing age or metric is NaN, never 0: `logisticBurdenTest` drops such samples.
+ */
 export function buildCovariateMap(
   caseIds: number[],
   covariateNames: string[],
@@ -54,9 +57,9 @@ export function buildCovariateMap(
       if (name === 'sex') {
         values.push(meta?.sex === 'male' ? 1 : meta?.sex === 'female' ? 0 : 0.5)
       } else if (name === 'age') {
-        values.push(meta?.age ?? 0)
+        values.push(meta?.age ?? NaN)
       } else {
-        values.push(metricsMap.get(caseId)?.get(name) ?? 0)
+        values.push(metricsMap.get(caseId)?.get(name) ?? NaN)
       }
     }
     covariateMap.set(caseId, values)
