@@ -18,6 +18,7 @@ import {
   applyAnnotationValueFilters,
   applyExactVariantMatch,
   applyInternalAfFilter,
+  applyMaxCarriersFilter,
   applyPanelIntervalFilter,
   applyScoreRangeFilters,
   applyTagFilter,
@@ -70,6 +71,7 @@ export class VariantFilterBuilder {
     query = applyAnnotationValueFilters(query, filter)
     query = applyScoreRangeFilters(query, filter)
     query = applyInternalAfFilter(query, filter, totalCaseCount)
+    query = applyMaxCarriersFilter(query, filter)
     query = this.applySearch(query, filter)
     query = applyExactVariantMatch(query, filter)
     query = applyTagFilter(query, this.kysely, filter)

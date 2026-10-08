@@ -175,3 +175,16 @@ export function applyPanelIntervalFilter(
     sql<boolean>`EXISTS (SELECT 1 FROM _panel_intervals pi WHERE variants.chr = pi.chr AND variants.pos <= pi.end_pos AND COALESCE(variants.end_pos, variants.pos) >= pi.start_pos)`
   )
 }
+
+/** Carrier cap: keep a variant seen in at most K cases (no frequency row: kept). */
+export function applyMaxCarriersFilter(
+  query: VariantQueryBuilder,
+  filter: VariantFilter
+): VariantQueryBuilder {
+  const max = filter.carrier_count_max
+  return query.$if(max !== undefined && max >= 1, (qb) =>
+    qb.where(({ or, eb }) =>
+      or([eb(sql.ref('vf.case_count'), 'is', null), eb(sql.ref('vf.case_count'), '<=', max!)])
+    )
+  )
+}
