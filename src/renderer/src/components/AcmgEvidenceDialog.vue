@@ -32,7 +32,7 @@
         <AcmgClassificationPanel
           :evidence-json="evidenceJson"
           :variant-data="variantData"
-          @change="handleChange"
+          :save="handleSave"
         />
       </v-card-text>
     </v-card>
@@ -47,7 +47,7 @@ import AcmgClassificationPanel from './AcmgClassificationPanel.vue'
 import { mdiClipboardCheckOutline, mdiClose } from '@mdi/js'
 import { usePermissions } from '../composables/usePermissions'
 
-defineProps<{
+const props = defineProps<{
   /** Evidence JSON from database */
   evidenceJson: string | null
   /** Variant annotation data for auto-suggestions */
@@ -58,15 +58,11 @@ defineProps<{
   variantCdna?: string | null
   /** Amino acid change notation (e.g., p.Met41Val) */
   variantAaChange?: string | null
-}>()
-
-const emit = defineEmits<{
-  change: [
-    payload: {
-      classification: AcmgClassification | null
-      evidenceJson: string
-    }
-  ]
+  /** Persists the applied evidence; resolves false when nothing was saved. */
+  save: (payload: {
+    classification: AcmgClassification | null
+    evidenceJson: string
+  }) => Promise<boolean>
 }>()
 
 const dialogOpen = ref(false)
@@ -77,12 +73,11 @@ function open(): void {
 
 const { canWrite, writeBlockedReason } = usePermissions()
 
-function handleChange(payload: {
+async function handleSave(payload: {
   classification: AcmgClassification | null
   evidenceJson: string
-}): void {
-  if (!canWrite.value) return
-  emit('change', payload)
+}): Promise<boolean> {
+  return canWrite.value && (await props.save(payload))
 }
 
 defineExpose({ open })

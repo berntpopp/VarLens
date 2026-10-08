@@ -182,16 +182,16 @@ export function useAnnotationDialogs(
     }
   }
 
-  /** Handle ACMG evidence change from dialog */
+  /** Handle ACMG evidence change from dialog; resolves false when nothing was saved */
   const handleAcmgEvidenceChange = async (payload: {
     classification: AcmgClassification | null
     evidenceJson: string
-  }): Promise<void> => {
+  }): Promise<boolean> => {
     const v = selectedVariantForAcmg.value
-    if (v === null) return
+    if (v === null) return false
     const effectiveScope = scope?.value ?? 'case'
     if (effectiveScope === 'all' && annotations.setGlobalAcmgClassificationWithEvidence) {
-      await annotations.setGlobalAcmgClassificationWithEvidence(
+      return annotations.setGlobalAcmgClassificationWithEvidence(
         v.chr,
         v.pos,
         v.ref,
@@ -200,7 +200,7 @@ export function useAnnotationDialogs(
         payload.evidenceJson
       )
     } else if (caseId.value !== null && v.id !== undefined) {
-      await annotations.setAcmgClassificationWithEvidence(
+      return annotations.setAcmgClassificationWithEvidence(
         caseId.value,
         v.id,
         v.chr,
@@ -211,6 +211,7 @@ export function useAnnotationDialogs(
         payload.evidenceJson
       )
     }
+    return false
   }
 
   /** Handle comment save */

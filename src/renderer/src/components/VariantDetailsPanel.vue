@@ -141,7 +141,7 @@
                   <AcmgClassificationPanel
                     :evidence-json="currentAcmgEvidence"
                     :variant-data="currentVariantData"
-                    @change="handleAcmgEvidenceChange"
+                    :save="handleAcmgEvidenceChange"
                   />
                 </v-expansion-panel-text>
               </v-expansion-panel>
@@ -463,12 +463,12 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
 const handleAcmgEvidenceChange = async (payload: {
   classification: AcmgClassification | null
   evidenceJson: string
-}) => {
-  if (props.variant === null) return
+}): Promise<boolean> => {
+  if (props.variant === null) return false
 
   if (props.mode === 'case' && props.caseId !== null) {
     const variantId = (props.variant as Variant).id
-    await setAcmgClassificationWithEvidence(
+    return setAcmgClassificationWithEvidence(
       props.caseId,
       variantId,
       props.variant.chr,
@@ -479,7 +479,7 @@ const handleAcmgEvidenceChange = async (payload: {
       payload.evidenceJson
     )
   } else {
-    await setGlobalAcmgClassificationWithEvidence(
+    return setGlobalAcmgClassificationWithEvidence(
       props.variant.chr,
       props.variant.pos,
       props.variant.ref,
