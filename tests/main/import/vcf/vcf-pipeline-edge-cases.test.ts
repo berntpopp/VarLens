@@ -52,4 +52,12 @@ describe('VCF pipeline edge cases', () => {
       [null, null, null]
     ])
   })
+
+  it('gives each allele its own value of a per-allele INFO field the header does not declare', () => {
+    const afs = (info: string): Array<number | null> =>
+      mapRow([], `chr1 100 . A T,G 50 PASS ${info} GT 1/2`).map((v) => v.gnomad_af)
+    expect(afs('gnomAD_AF=0.5,0.0001')).toEqual([0.5, 0.0001])
+    // Not one value per ALT: a wrong frequency is worse than none.
+    expect(afs('gnomAD_AF=0.5,0.0001,0.2')).toEqual([null, null])
+  })
 })

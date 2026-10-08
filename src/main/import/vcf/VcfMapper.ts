@@ -126,7 +126,13 @@ export function mapVcfRecord(
     const annotation = annotationByTarget[targetIndex]
 
     // Step 4: Apply INFO field registry
-    const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)
+    const infoResult = applyInfoFieldRegistry(
+      rec.info,
+      registry,
+      annotation,
+      altIdx,
+      record.alt.length
+    )
 
     // Step 5: Build sample raw FORMAT values for extension parsers
     const sampleRawValues = new Map<string, string>()
