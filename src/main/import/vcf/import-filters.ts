@@ -112,8 +112,9 @@ export function passesPreMappingFilters(
       record.alt.some((alt) => alt.includes('[') || alt.includes(']'))
     const endRaw = isBreakend ? undefined : record.info.get('END')
     if (endRaw !== undefined && endRaw !== '') {
-      const endPos = parseInt(endRaw, 10)
-      if (Number.isInteger(endPos) && endPos >= record.pos) {
+      // The whole token must be an integer: parseInt would read "5000junk" as 5000.
+      const endPos = /^\d+$/.test(endRaw) ? Number(endRaw) : NaN
+      if (Number.isSafeInteger(endPos) && endPos >= record.pos) {
         if (!filters.bedFilter.containsRange(record.chrom, record.pos, endPos)) {
           return false
         }

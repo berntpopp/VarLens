@@ -311,6 +311,20 @@ describe('passesPreMappingFilters', () => {
       expect(passesPreMappingFilters(del, withBed)).toBe(true)
     })
 
+    it('partially numeric END falls back to point check on POS', () => {
+      const del = rawRecord({
+        chrom: 'chr1',
+        pos: 100,
+        alt: ['<DEL>'],
+        info: new Map([
+          ['END', '5000junk'],
+          ['SVTYPE', 'DEL']
+        ])
+      })
+      // POS=100 is outside [1000, 2000]; "5000junk" must not become END=5000.
+      expect(passesPreMappingFilters(del, withBed)).toBe(false)
+    })
+
     it('END < POS (malformed) falls back to point check on POS', () => {
       const del = rawRecord({
         chrom: 'chr1',
