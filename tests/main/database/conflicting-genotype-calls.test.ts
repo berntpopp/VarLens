@@ -45,7 +45,16 @@ describe('conflicting duplicate genotype calls on SQLite', () => {
 
         service.cohortSummary.rebuild()
         expect(counts()).toEqual(expected)
-        expect(service.cohort.getCarriers({ chr: '1', pos: 100, ref: 'A', alt: 'G', variant_type: 'snv', genome_build: 'GRCh38' })[0].gt_num).toBe(resolved)
+        expect(
+          service.cohort.getCarriers({
+            chr: '1',
+            pos: 100,
+            ref: 'A',
+            alt: 'G',
+            variant_type: 'snv',
+            genome_build: 'GRCh38'
+          })[0].gt_num
+        ).toBe(resolved)
 
         const [gene] = new AssociationDataBuilder(service.database).build([caseId], [], {}, [])
         expect(gene.samples[0].dosages).toEqual([het + 2 * hom])

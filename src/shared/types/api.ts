@@ -132,7 +132,6 @@ export type {
   ProgressUpdate,
   ImportResult,
   CohortVariant,
-  CohortVariantIdentity,
   CohortSummary,
   CohortSearchParams,
   VepFetchResult,

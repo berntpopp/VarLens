@@ -503,7 +503,8 @@ export const mockApi: WindowAPI = {
       if (params?.clinvars !== undefined && params.clinvars.length > 0) {
         cohortVariants = cohortVariants.filter(
           (v) =>
-            v.clinvar !== null && params.clinvars!.some((clinvar: string) => v.clinvar!.includes(clinvar))
+            v.clinvar !== null &&
+            params.clinvars!.some((clinvar: string) => v.clinvar!.includes(clinvar))
         )
       }
 

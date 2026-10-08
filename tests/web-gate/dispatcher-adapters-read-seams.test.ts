@@ -175,8 +175,10 @@ describe('web dispatcher adapters: read seams', () => {
     await overrides['cohort:getCarriers'].handle([variant], {} as never, reply as never, deps)
 
     expect(reply.code).not.toHaveBeenCalled()
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:summary', params: [] })
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:columnMeta', params: [] })
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:geneBurden', params: [] })
     expect(execute).toHaveBeenCalledWith({ type: 'cohort:carriers', params: [variant] })
-  })
   })
 
   test('desktop-only database methods are not served in web mode (parity manifest)', () => {
@@ -373,3 +375,4 @@ describe('web dispatcher adapters: read seams', () => {
     })
     expect(execute).not.toHaveBeenCalled()
   })
+})

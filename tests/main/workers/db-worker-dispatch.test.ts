@@ -186,7 +186,16 @@ describe('db-worker-dispatch', () => {
   it('cohort:carriers returns empty array for fresh DB', () => {
     const result = dispatchTask(makeDeps(), {
       type: 'cohort:carriers',
-      params: [{ chr: 'chr1', pos: 100000, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: 'GRCh38' }]
+      params: [
+        {
+          chr: 'chr1',
+          pos: 100000,
+          ref: 'A',
+          alt: 'T',
+          variant_type: 'snv',
+          genome_build: 'GRCh38'
+        }
+      ]
     })
     expect(Array.isArray(result)).toBe(true)
   })

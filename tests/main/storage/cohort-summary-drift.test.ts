@@ -560,7 +560,9 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     })
     const cohort = new PostgresCohortRepository(pool, schema)
     expect(
-      (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`)
+      (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map(
+        (v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+      )
     ).toEqual(['1:100:A:T'])
     await expectExact()
 
@@ -760,7 +762,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     }
     const cohort = new PostgresCohortRepository(pool, schema)
     const representative = {
-      chr: '7', alt: '<DEL>',
+      chr: '7',
+      alt: '<DEL>',
       gene_symbol: 'BRCA1',
       consequence: 'HIGH',
       gnomad_af: 0.01, // the lowest frequency any carrier has

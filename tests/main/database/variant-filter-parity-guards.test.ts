@@ -6,7 +6,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const geneRef = vi.hoisted(() => ({ getCoordinatesForGenes: vi.fn() }))
 
-
 vi.mock('../../../src/main/database/geneReferenceLoader', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/main/database/geneReferenceLoader')>()),
   getGeneReferenceDb: () => geneRef
@@ -221,10 +220,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       const exported = (params: Record<string, unknown>): string[] => {
         const prepared = prepareCohortExportParams(() => sqlite, params as never)
         expect(prepared).not.toHaveProperty('active_panel_ids')
-        return new CohortService(sqlite.db)
-          .getCohortVariants(prepared)
-          .data.map(coord)
-          .sort()
+        return new CohortService(sqlite.db).getCohortVariants(prepared).data.map(coord).sort()
       }
       const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }
 

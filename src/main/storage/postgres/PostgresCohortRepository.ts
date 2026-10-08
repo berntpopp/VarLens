@@ -7,8 +7,8 @@ import type {
   CohortSearchParams,
   CohortSummary,
   CohortVariant,
-  GeneBurden
-, CohortVariantIdentity
+  GeneBurden,
+  CohortVariantIdentity
 } from '../../../shared/types/cohort'
 import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
 import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'

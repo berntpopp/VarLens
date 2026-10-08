@@ -13,8 +13,6 @@ import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
 import type { CohortVariant } from '../../../src/shared/types/cohort'
 import { cohortVariantKey } from '../../../src/shared/utils/cohort-variant-key'
-import type { CohortVariant } from '../../../src/shared/types/cohort'
-import { cohortVariantKey } from '../../../src/shared/utils/cohort-variant-key'
 import { CohortSummaryService } from '../../../src/main/database/CohortSummaryService'
 
 describe('CohortService', () => {
@@ -813,58 +811,6 @@ describe('CohortService', () => {
       expect(new Set(all.map((row) => row.variant_key)).size).toBe(all.length)
       expect(at(321681).map((row) => row.alt)).toEqual([']13:123456]T'])
     })
-  })
-
-
-  describe('row identity: genome build and variant type (#503)', () => {
-    const SEEDS: Array<[string, string, string, number, string, string, string]> = [
-      ['b38-a', 'GRCh38', '1', 100, 'A', 'T', 'snv'],
-      ['b38-b', 'GRCh38', '1', 100, 'A', 'T', 'snv'],
-      ['b37-a', 'GRCh37', '1', 100, 'A', 'T', 'snv'],
-      ['sv-a', 'GRCh38', '7', 1000, 'N', '<DEL>', 'sv'],
-      ['cnv-a', 'GRCh38', '7', 1000, 'N', '<DEL>', 'cnv'],
-      ['cnv-b', 'GRCh38', '7', 1000, 'N', '<DEL>', 'cnv'],
-      ['bnd-a', 'GRCh38', '2', 321681, 'G', ']13:123456]T', 'sv'],
-      ['indel-a', 'GRCh38', '3', 500, 'AT', 'A', 'indel']
-    ]
-
-    const rows = (params: Record<string, unknown> = {}): CohortVariant[] =>
-      cohortService.getCohortVariants({ limit: 100, ...params }).data
-    const at = (pos: number): CohortVariant[] => rows().filter((row) => row.pos === pos)
-
-    beforeEach(() => {
-      for (const [name, build, chr, pos, ref, alt, type] of SEEDS) {
-        const caseId = db
-          .prepare(
-            'INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, ?, 0, 1, ?, ?)'
-          )
-          .run(name, `/test/${name}.vcf`, Date.now(), build).lastInsertRowid
-        db.prepare(
-          "INSERT INTO variants (case_id, chr, pos, ref, alt, variant_type, gt_num) VALUES (?, ?, ?, ?, ?, ?, '0/1')"
-        ).run(caseId, chr, pos, ref, alt, type)
-      }
-      rebuildSummary()
-    })
-
-    it('gives one coordinate in two builds two rows with their own key', () => {
-      const pair = at(100)
-      expect(pair.map((row) => row.genome_build).sort()).toEqual(['GRCh37', 'GRCh38'])
-      expect(new Set(pair.map((row) => row.variant_key)).size).toBe(2)
-    })
-
-    it('gives one coordinate stored as sv and as cnv two rows with their own key', () => {
-      const pair = at(1000)
-      expect(pair.map((row) => row.variant_type).sort()).toEqual(['cnv', 'sv'])
-      expect(new Set(pair.map((row) => row.variant_key)).size).toBe(2)
-    })
-
-    it('builds every key from the six fields, so no two rows share one', () => {
-      const all = rows()
-      expect(all).toHaveLength(6)
-      for (const row of all) expect(row.variant_key).toBe(cohortVariantKey(row))
-      expect(new Set(all.map((row) => row.variant_key)).size).toBe(all.length)
-      expect(at(321681).map((row) => row.alt)).toEqual([']13:123456]T'])
-    })
 
     const carriersOf = (row: CohortVariant): string[] =>
       cohortService.getCarriers(row).map((carrier) => carrier.case_name)
@@ -889,7 +835,6 @@ describe('CohortService', () => {
       expect(carriersOf(indel)).toEqual(['indel-a'])
     })
   })
-
 
   describe('getGeneBurden', () => {
     it('should return gene-level burden statistics', () => {

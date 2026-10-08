@@ -29,7 +29,15 @@ vi.mock('../../../../src/renderer/src/services/LogService', () => ({
 const vuetify = createVuetify({ components, directives })
 
 const variant = (pos: number, genome_build: string = 'GRCh38'): CohortVariant =>
-  ({ variant_key: `chr1-${pos}-A-T-${genome_build}`, chr: 'chr1', pos, ref: 'A', alt: 'T', variant_type: 'snv', genome_build }) as CohortVariant
+  ({
+    variant_key: `chr1-${pos}-A-T-${genome_build}`,
+    chr: 'chr1',
+    pos,
+    ref: 'A',
+    alt: 'T',
+    variant_type: 'snv',
+    genome_build
+  }) as CohortVariant
 
 const carrier = (name: string, gt = '0/1'): CohortCarrier =>
   ({ case_id: name.length, case_name: name, gt_num: gt }) as CohortCarrier

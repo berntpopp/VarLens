@@ -109,7 +109,16 @@ describe('split multi-allelic genotypes on SQLite', () => {
 
   it('lists each sample as a carrier of each ALT it carries', () => {
     const carriers = (alt: string): string[] =>
-      service.cohort.getCarriers({ chr: 'chr1', pos: 1000, ref: 'A', alt, variant_type: 'snv', genome_build: 'GRCh38' }).map((c) => `${c.case_name} ${c.gt_num}`)
+      service.cohort
+        .getCarriers({
+          chr: 'chr1',
+          pos: 1000,
+          ref: 'A',
+          alt,
+          variant_type: 'snv',
+          genome_build: 'GRCh38'
+        })
+        .map((c) => `${c.case_name} ${c.gt_num}`)
     expect(carriers('G')).toEqual(['S1 1/.', 'S2 0/1', 'S3 1/1', 'S4 .|1'])
     expect(carriers('T')).toEqual(['S1 ./1', 'S4 1|.', 'S5 0/1'])
   })

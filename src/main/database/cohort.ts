@@ -15,8 +15,8 @@ import type {
   CohortSearchParams,
   CohortCarrier,
   GeneBurden,
-  CohortPaginatedResult
-, CohortVariantIdentity
+  CohortPaginatedResult,
+  CohortVariantIdentity
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { capCohortDistinctCount } from '../../shared/types/column-filters'

@@ -134,7 +134,6 @@ describe.skipIf(!RUN)('cohort row identity on PostgreSQL (#503)', () => {
     expect(indel.variant_type).toBe('indel')
     expect(await carriersOf(indel)).toEqual(['indel-a'])
   })
-
 })
 describe.skipIf(RUN)('cohort row identity on PostgreSQL (skipped)', () => {
   it('runs only when VARLENS_RUN_POSTGRES_E2E=1 and `make pg-up` is up', () => {

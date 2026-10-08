@@ -22,7 +22,6 @@ import {
 import { recoverInterruptedImportsAtStartup } from './import-interrupted-recovery'
 import type { CohortCallbacks } from './cohort-logic'
 
-
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
 const cohortCallbacks: CohortCallbacks = {
   onSummaryStale: (data) => safeEmit('cohort:summaryRebuilt', data),
