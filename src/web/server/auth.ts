@@ -38,6 +38,7 @@ import secureSession from '@fastify/secure-session'
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
+import { requestPath } from './request-path'
 import { newSessionId, type SessionRevocations } from './session-revocation'
 import { isPublicApiDocsEnabled } from './instance-settings'
 
@@ -241,9 +242,7 @@ export async function registerSessions(
   })
 
   app.addHook('preHandler', async (request, reply) => {
-    const url = request.url
-    // Strip query string for the gate decision.
-    const path = url.split('?', 1)[0]
+    const path = requestPath(request)
 
     if (!path.startsWith('/api/')) return
 

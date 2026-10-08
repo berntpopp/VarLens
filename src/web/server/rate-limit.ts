@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 
+import { requestPath } from './request-path'
+
 const RATE_LIMIT_WINDOW_MS = 60_000
 const LOGIN_PAGE_RATE_LIMIT_MAX_ENV = 'VARLENS_LOGIN_PAGE_RATE_LIMIT_MAX'
 const AUTH_LOGIN_RATE_LIMIT_MAX_ENV = 'VARLENS_AUTH_LOGIN_RATE_LIMIT_MAX'
@@ -79,8 +81,7 @@ export function registerAuthLoginRateLimit(
   })
 
   app.addHook('preHandler', async (request, reply) => {
-    const path = request.url.split('?', 1)[0]
-    if (request.method !== 'POST' || path !== '/api/auth/login') return
+    if (request.method !== 'POST' || requestPath(request) !== '/api/auth/login') return
 
     const result = await checkRateLimit(request)
     if (result.isAllowed || !result.isExceeded) return
