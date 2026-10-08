@@ -12,6 +12,8 @@ import type { WorkerMessage, MainMessage } from '../../shared/types/import-worke
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
 import { loadImportFilters } from '../import/vcf/import-filters'
+import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
+import { resolveVcfSelectedSampleColumn } from '../import/vcf/vcf-line-parser'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import {
   openImportSummarySession,
@@ -179,6 +181,13 @@ export async function runImportSession(
             skipped++
             continue
           } else if (existing) {
+            // Fail on what the head of the file shows before the old case goes (#493).
+            // ponytail: a file that breaks further in still loses the old case;
+            // deleting it only after the new one is published would close that.
+            if ((await detectFormat(file.filePath)).format === 'vcf') {
+              const { header } = await parseVcfHeader(file.filePath)
+              resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0])
+            }
             // Replacing a case: drop its contribution to the shared
             // frequency table before its variants disappear.
             frequencies.decrementFrequencies(existing.id)
