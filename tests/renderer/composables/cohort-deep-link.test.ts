@@ -35,7 +35,8 @@ function mountShell(router: Router): {
     panelOpen: state.panelOpen,
     selectedPanelVariant: state.selectedPanelVariant,
     transitioning: ref(false),
-    router
+    router,
+    confirmPanelLeave: state.confirmPanelLeave
   })
   useShellLifecycle({
     api: undefined,

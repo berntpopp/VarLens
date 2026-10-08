@@ -79,6 +79,8 @@ export interface AppStateReturn {
    * there is none, otherwise the user's answer to the prompt (true = leave).
    */
   setPanelLeaveGuard: (fn: (() => Promise<boolean> | null) | null) => void
+  /** Null when the open panel has no unsaved draft, else the prompt's answer (true = leave). */
+  confirmPanelLeave: () => Promise<boolean> | null
 
   // Snackbar
   setSnackbarHandler: (
@@ -114,28 +116,32 @@ export function createAppState(): AppStateReturn {
   // Everything that would move the open details panel off its variant (new
   // selection, close, tab or case switch) waits for the unsaved-draft prompt.
   let leaveGuard: (() => Promise<boolean> | null) | null = null
-  let heldActions: (() => void)[] | null = null
+  let leaving: Promise<boolean> | null = null
+  let leaveEpoch = 0
 
   function setPanelLeaveGuard(fn: (() => Promise<boolean> | null) | null): void {
     leaveGuard = fn
   }
 
-  function guardLeave(action: () => void): void {
-    if (heldActions !== null) {
-      heldActions.push(action)
-      return
-    }
+  /** One prompt at a time: everything that asks while it is open shares its answer. */
+  function confirmPanelLeave(): Promise<boolean> | null {
+    if (leaving !== null) return leaving
     const answer = panelOpenRaw.value ? (leaveGuard?.() ?? null) : null
-    if (answer === null) {
-      action()
-      return
-    }
-    heldActions = [action]
-    void answer.then((leave) => {
-      const actions = heldActions ?? []
-      heldActions = null
-      if (leave) actions.forEach((run) => run())
+    if (answer === null) return null
+    const epoch = leaveEpoch
+    leaving = answer.then((leave) => {
+      // A database switch in between already closed the panel: drop what was held.
+      if (epoch !== leaveEpoch) return false
+      leaving = null
+      return leave
     })
+    return leaving
+  }
+
+  function guardLeave(action: () => void): void {
+    const answer = confirmPanelLeave()
+    if (answer === null) action()
+    else void answer.then((leave) => leave && action())
   }
 
   function guarded<T>(source: Ref<T>): Ref<T> {
@@ -203,8 +209,18 @@ export function createAppState(): AppStateReturn {
     _importHandler?.()
   }
 
+  // A panel left open would pair the old case's variant with the new case id,
+  // so its annotation writes would land under the wrong case.
+  function setSelectedCaseId(id: number | null): void {
+    if (id !== selectedCaseId.value) {
+      panelOpenRaw.value = false
+      selectedPanelVariant.value = null
+    }
+    selectedCaseId.value = id
+  }
+
   function clearSelectedCase(): void {
-    guardLeave(() => (selectedCaseId.value = null))
+    guardLeave(() => setSelectedCaseId(null))
   }
 
   function setCaseCount(count: number): void {
@@ -257,7 +273,8 @@ export function createAppState(): AppStateReturn {
   function resetForDatabaseSwitch(options: { keepView?: boolean } = {}): void {
     // The old database's draft cannot be saved any more: close without asking.
     panelOpenRaw.value = false
-    heldActions = null
+    leaveEpoch++
+    leaving = null
     void invalidateServerData('database-switch')
     incrementDataGeneration()
     resetCaseContext()
@@ -276,7 +293,7 @@ export function createAppState(): AppStateReturn {
 
   function selectCase(input: SelectedCaseInput): void {
     guardLeave(() => {
-      selectedCaseId.value = input.caseId
+      setSelectedCaseId(input.caseId)
       selectedCaseName.value = input.caseName
       selectedVariantCount.value = input.variantCount ?? 0
       selectedCreatedAt.value = input.createdAt ?? 0
@@ -334,6 +351,7 @@ export function createAppState(): AppStateReturn {
     returnToCaseHome,
     selectCase,
     setPanelLeaveGuard,
+    confirmPanelLeave,
 
     // Snackbar
     setSnackbarHandler,

@@ -322,7 +322,8 @@ useShellNavigation({
   panelOpen,
   selectedPanelVariant,
   transitioning,
-  router
+  router,
+  confirmPanelLeave: appState.confirmPanelLeave
 })
 
 // Clear filters on case change
