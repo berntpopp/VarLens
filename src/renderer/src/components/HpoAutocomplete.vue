@@ -54,6 +54,7 @@ import { ref, computed, watch } from 'vue'
 import { useHpoBundled, type HpoTerm } from '../composables/useHpoBundled'
 import { useDebounce } from '../composables/useDebounce'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 interface DisplayHpoTerm extends HpoTerm {
   displayText: string
@@ -105,10 +106,7 @@ const performSearch = async (query: string) => {
       displayText: `${term.id} - ${term.name}`
     }))
   } catch (error) {
-    logService.error(
-      'HPO search failed: ' + (error instanceof Error ? error.message : String(error)),
-      'hpo'
-    )
+    logService.error('HPO search failed: ' + formatError(error), 'hpo')
     searchResults.value = []
   }
 }

@@ -147,6 +147,7 @@ import {
   mdiTagMultiple
 } from '@mdi/js'
 import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 
 const props = defineProps<{
   tags: OverviewTag[]
@@ -221,10 +222,7 @@ async function saveTagEdit(): Promise<void> {
     cancelTagEdit()
     emit('refresh')
   } catch (err) {
-    logService.error(
-      'Failed to update tag: ' + (err instanceof Error ? err.message : String(err)),
-      'tags'
-    )
+    logService.error('Failed to update tag: ' + formatError(err), 'tags')
   } finally {
     tagSaving.value = false
   }
@@ -251,10 +249,7 @@ async function executeDeleteTag(): Promise<void> {
 
     emit('refresh')
   } catch (err) {
-    logService.error(
-      'Failed to delete tag: ' + (err instanceof Error ? err.message : String(err)),
-      'tags'
-    )
+    logService.error('Failed to delete tag: ' + formatError(err), 'tags')
   } finally {
     tagDeleting.value = false
     tagDeleteDialog.value = false

@@ -63,6 +63,7 @@ import { useAppState } from '../composables/useAppState'
 import { useLiveDataSignal } from '../composables/useLiveDataSignal'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { useUrlParam } from '../composables/useUrlState'
 import { useFilterUrlParam } from '../composables/useViewUrlBindings'
 import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
@@ -156,11 +157,7 @@ onMounted(async () => {
   try {
     await loadAvailableBuilds()
   } catch (error) {
-    logService.error(
-      'Failed to load available genome builds: ' +
-        (error instanceof Error ? error.message : String(error)),
-      'cohort'
-    )
+    logService.error('Failed to load available genome builds: ' + formatError(error), 'cohort')
   }
 })
 
@@ -172,8 +169,7 @@ watch([genomeBuild, selectedVariantType], async () => {
     await refresh()
   } catch (error) {
     logService.error(
-      'Failed to refresh cohort view after selector change: ' +
-        (error instanceof Error ? error.message : String(error)),
+      'Failed to refresh cohort view after selector change: ' + formatError(error),
       'cohort'
     )
   }
@@ -193,8 +189,7 @@ const softRefresh = async (): Promise<void> => {
     await Promise.all([loadAvailableBuilds(), cohortTableRef.value?.softRefresh()])
   } catch (error) {
     logService.error(
-      'Failed to refresh cohort view after an import: ' +
-        (error instanceof Error ? error.message : String(error)),
+      'Failed to refresh cohort view after an import: ' + formatError(error),
       'cohort'
     )
   }
@@ -217,8 +212,7 @@ onActivated(async () => {
       await refresh()
     } catch (error) {
       logService.error(
-        'Failed to refresh cohort view on activation: ' +
-          (error instanceof Error ? error.message : String(error)),
+        'Failed to refresh cohort view on activation: ' + formatError(error),
         'cohort'
       )
     }

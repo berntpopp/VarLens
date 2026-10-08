@@ -4,6 +4,7 @@
 
 import { ref } from 'vue'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 /**
  * Provides clipboard copy functionality with state tracking
@@ -30,10 +31,7 @@ export function useClipboard() {
     } catch (e) {
       error.value = 'Failed to copy to clipboard'
       copied.value = false
-      logService.error(
-        'Clipboard error: ' + (e instanceof Error ? e.message : String(e)),
-        'clipboard'
-      )
+      logService.error('Clipboard error: ' + formatError(e), 'clipboard')
       return false
     }
   }

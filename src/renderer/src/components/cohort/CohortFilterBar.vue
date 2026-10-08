@@ -449,10 +449,7 @@ const searchGeneSymbols = async (query: string) => {
       ...new Set(variants.map((v) => v.gene_symbol).filter((s): s is string => s !== null))
     ]
   } catch (e) {
-    logService.warn(
-      'Gene symbol autocomplete failed: ' + (e instanceof Error ? e.message : String(e)),
-      'filters'
-    )
+    logService.warn('Gene symbol autocomplete failed: ' + formatError(e), 'filters')
     geneSymbolSuggestions.value = []
   } finally {
     loadingGeneSuggestions.value = false

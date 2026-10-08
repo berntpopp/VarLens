@@ -67,6 +67,7 @@ import { useApiService } from '../composables/useApiService'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { resolveUrlTemplate } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -177,10 +178,7 @@ async function openLink(linkId: string): Promise<void> {
   try {
     await api!.shell.openExternal(link.resolvedUrl)
   } catch (e) {
-    logService.warn(
-      'Failed to open external link: ' + (e instanceof Error ? e.message : String(e)),
-      'links'
-    )
+    logService.warn('Failed to open external link: ' + formatError(e), 'links')
   }
 }
 

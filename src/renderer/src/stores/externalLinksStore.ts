@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { GenomeBuild } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 const STORAGE_KEY = 'varlens_external_links'
 
@@ -165,8 +166,7 @@ function loadLinks(): ExternalLinkConfig[] {
     }
   } catch (error) {
     logService.warn(
-      'Failed to load external links from localStorage: ' +
-        (error instanceof Error ? error.message : String(error)),
+      'Failed to load external links from localStorage: ' + formatError(error),
       'settings'
     )
   }
@@ -181,8 +181,7 @@ function saveLinks(links: ExternalLinkConfig[]): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(links))
   } catch (error) {
     logService.warn(
-      'Failed to save external links to localStorage: ' +
-        (error instanceof Error ? error.message : String(error)),
+      'Failed to save external links to localStorage: ' + formatError(error),
       'settings'
     )
   }
@@ -219,10 +218,7 @@ export const useExternalLinksStore = defineStore('externalLinks', () => {
         domains.add(url.hostname)
       } catch (e) {
         logService.warn(
-          'Skipping invalid URL template for link "' +
-            link.id +
-            '": ' +
-            (e instanceof Error ? e.message : String(e)),
+          'Skipping invalid URL template for link "' + link.id + '": ' + formatError(e),
           'settings'
         )
       }

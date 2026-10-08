@@ -144,6 +144,7 @@ import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { traceStart, traceEnd } from '../services/PerfTrace'
 import type { PerfBudgetKey } from '../../../shared/config/perf-budgets'
 import { useDebounce } from '../composables/useDebounce'
@@ -440,11 +441,7 @@ const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
       }
     }
   } catch (error) {
-    const message = isIpcError(error)
-      ? (error.userMessage ?? error.message)
-      : error instanceof Error
-        ? error.message
-        : String(error)
+    const message = isIpcError(error) ? (error.userMessage ?? error.message) : formatError(error)
     snackbar.value = {
       visible: true,
       message: `Export failed: ${message}`,

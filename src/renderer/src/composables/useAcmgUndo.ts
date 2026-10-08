@@ -13,6 +13,7 @@ import { useAnnotations } from './useAnnotations'
 import { AppStateKey } from './useAppState'
 import { planAcmgUndo, type AcmgState } from '../utils/acmg/acmg-undo'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 const UNDO_SNACKBAR_MS = 8000
 
@@ -33,10 +34,7 @@ export function useAcmgUndo() {
           restore()
             .then(() => appState.showSnack('ACMG change undone', 'info'))
             .catch((e: unknown) => {
-              logService.error(
-                'ACMG undo failed: ' + (e instanceof Error ? e.message : String(e)),
-                'acmg'
-              )
+              logService.error('ACMG undo failed: ' + formatError(e), 'acmg')
               appState.showSnack('Could not undo the ACMG change', 'error')
             })
         }
