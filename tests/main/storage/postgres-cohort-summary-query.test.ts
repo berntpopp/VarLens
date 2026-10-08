@@ -139,9 +139,9 @@ describe('buildSummaryQueryParts', () => {
     const result = buildSummaryQueryParts({ search_term: 'chr17:43044295' }, TOTAL_CASES)
     const where = result.parts.whereParts.join(' ')
 
-    expect(where).toContain('cvs.chr =')
+    expect(where).toContain('cvs.chr IN ($1, $2) AND cvs.pos = $3')
     expect(where).toContain('cvs.pos =')
-    expect(result.parts.values).toEqual(['17', 43044295])
+    expect(result.parts.values).toEqual(['17', 'chr17', 43044295])
   })
 
   it('builds the gene/consequence/OMIM ILIKE search on cvs', () => {

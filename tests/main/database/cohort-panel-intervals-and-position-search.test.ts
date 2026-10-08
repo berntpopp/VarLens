@@ -77,4 +77,19 @@ describe('SQLite cohort + export: large panels and position search', () => {
       /SCAN iv VIRTUAL TABLE.*SEARCH pv USING (COVERING )?INDEX \S+ \(chr=\? AND pos<\?\)/
     )
   })
+
+  it.each(['chr3:777', '3:777', 'CHR3:777'])('finds a chr-prefixed variant by %s', (term) => {
+    const result = sqlite.cohort.getCohortVariants({ search_term: term })
+    expect(result.data.map((r) => `${r.chr}:${r.pos}`)).toEqual(['chr3:777'])
+  })
+
+  it.each(['chr2:' + IN_PANEL, '2:' + IN_PANEL])('finds a bare-named variant by %s', (term) => {
+    const result = sqlite.cohort.getCohortVariants({ search_term: term })
+    expect(result.data.map((r) => `${r.chr}:${r.pos}`)).toEqual([`2:${IN_PANEL}`])
+  })
+
+  it('finds a chr-prefixed variant inside a boolean search', () => {
+    const result = sqlite.cohort.getCohortVariants({ search_term: '3:777 OR NOSUCHGENE' })
+    expect(result.data.map((r) => `${r.chr}:${r.pos}`)).toEqual(['chr3:777'])
+  })
 })
