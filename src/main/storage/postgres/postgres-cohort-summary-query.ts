@@ -520,6 +520,9 @@ export function buildSummaryQueryParts(
   if (params.carrier_count_min !== undefined) {
     whereParts.push(`cvs.carrier_count >= ${addParam(params.carrier_count_min)}`)
   }
+  if (params.carrier_count_max !== undefined && params.carrier_count_max >= 1) {
+    whereParts.push(`cvs.carrier_count <= ${addParam(params.carrier_count_max)}`)
+  }
 
   const sortKey =
     params.sort_by !== undefined && SUMMARY_SORT_COLUMNS[params.sort_by] !== undefined
