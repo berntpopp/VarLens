@@ -14,6 +14,8 @@ import {
   beginAnnotationWrite
 } from './cohort-annotation-flags-sql'
 import { quoteIdentifier } from './identifiers'
+// A failed ROLLBACK leaves the summary write lock held: release(failure) destroys the connection.
+import { runOrDestroy } from './long-running-client'
 import { runNamed } from './named-query'
 import { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 
@@ -83,14 +85,6 @@ function variantKey(key: VariantKey): string {
   return `${key.chr}:${key.pos}:${key.ref}:${key.alt}`
 }
 
-async function rollbackTransaction(client: Pick<PoolClient, 'query'>): Promise<void> {
-  try {
-    await client.query('ROLLBACK')
-  } catch {
-    // Preserve the original transaction failure; rollback errors add noise here.
-  }
-}
-
 export class PostgresAnnotationsRepository {
   constructor(
     private readonly pool: QueryablePool,
@@ -127,6 +121,7 @@ export class PostgresAnnotationsRepository {
     updates: GlobalAnnotationUpdates
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const result = await this._upsertGlobalAnnotationOn(client, chr, pos, ref, alt, updates)
@@ -134,10 +129,10 @@ export class PostgresAnnotationsRepository {
       await client.query('COMMIT')
       return result
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
@@ -223,6 +218,7 @@ export class PostgresAnnotationsRepository {
     updates: GlobalAnnotationUpdates & { user_name?: string | null }
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
@@ -240,25 +236,26 @@ export class PostgresAnnotationsRepository {
       await client.query('COMMIT')
       return result
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
   async deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): Promise<void> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       await this._deleteGlobalAnnotationOn(client, chr, pos, ref, alt)
       await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
       await client.query('COMMIT')
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
@@ -307,6 +304,7 @@ export class PostgresAnnotationsRepository {
     updates: PerCaseAnnotationUpdates
   ): Promise<CaseVariantAnnotation> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
@@ -314,10 +312,10 @@ export class PostgresAnnotationsRepository {
       await client.query('COMMIT')
       return result
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
@@ -393,6 +391,7 @@ export class PostgresAnnotationsRepository {
     updates: PerCaseAnnotationUpdates & { user_name?: string | null }
   ): Promise<CaseVariantAnnotation> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
@@ -411,25 +410,26 @@ export class PostgresAnnotationsRepository {
       await client.query('COMMIT')
       return result
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
   async deletePerCaseAnnotation(caseId: number, variantId: number): Promise<void> {
     const client = await this.connect()
+    let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       await this._deletePerCaseAnnotationOn(client, caseId, variantId)
       await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
       await client.query('COMMIT')
     } catch (error) {
-      await rollbackTransaction(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      client.release(rollbackFailure)
     }
   }
 
