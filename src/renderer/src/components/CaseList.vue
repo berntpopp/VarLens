@@ -599,8 +599,8 @@ const softRefreshCases = async (): Promise<void> => {
   }
 }
 
-const selectCase = (caseId: number): void => {
-  selected.value = [caseId]
+const selectCase = (caseId: number | null): void => {
+  selected.value = caseId === null ? [] : [caseId]
 }
 
 defineExpose({ refreshCases, softRefreshCases, selectCase })

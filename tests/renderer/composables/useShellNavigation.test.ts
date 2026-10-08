@@ -35,7 +35,8 @@ describe('useShellNavigation sidebar collapse timing', () => {
         selectedPanelVariant: ref(null),
         transitioning,
         router,
-        confirmPanelLeave: () => null
+        confirmPanelLeave: () => null,
+        closePanelWithoutAsking: vi.fn()
       })
     )
 
@@ -81,22 +82,42 @@ describe('useShellNavigation unsaved-draft route guard', () => {
     })
     await router.push('/case?case=1')
     const confirmPanelLeave = vi.fn(() => answer)
+    const closePanelWithoutAsking = vi.fn()
+    const activeTab = ref<'case' | 'cohort'>('case')
     const scope = effectScope()
     scope.run(() =>
       useShellNavigation({
-        activeTab: ref<'case' | 'cohort'>('case'),
+        activeTab,
         sidebarOpen: ref(true),
         panelOpen: ref(true),
         selectedPanelVariant: ref(null),
         transitioning: ref(false),
         router,
-        confirmPanelLeave
+        confirmPanelLeave,
+        closePanelWithoutAsking
       })
     )
+    closePanelWithoutAsking.mockClear() // the immediate route sync
     await router.push(to)
+    await nextTick()
     scope.stop()
-    return { fullPath: router.currentRoute.value.fullPath, confirmPanelLeave }
+    return {
+      fullPath: router.currentRoute.value.fullPath,
+      confirmPanelLeave,
+      closePanelWithoutAsking,
+      activeTab
+    }
   }
+
+  it('back/forward to the other tab closes the panel of the view being left', async () => {
+    const moved = await navigate(Promise.resolve(true), '/cohort')
+    expect(moved.activeTab.value).toBe('cohort')
+    expect(moved.closePanelWithoutAsking).toHaveBeenCalledTimes(1)
+
+    // Same tab (another case, a filter step): the panel is not this watcher's business.
+    const stayed = await navigate(null, '/case?case=2')
+    expect(stayed.closePanelWithoutAsking).not.toHaveBeenCalled()
+  })
 
   it('Cancel keeps the route on a tab change and on a case change', async () => {
     expect((await navigate(Promise.resolve(false), '/cohort')).fullPath).toBe('/case?case=1')

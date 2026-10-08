@@ -5,6 +5,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import AcmgClassificationPanel from '../../../src/renderer/src/components/AcmgClassificationPanel.vue'
 import AcmgEvidenceGrid from '../../../src/renderer/src/components/acmg/AcmgEvidenceGrid.vue'
+import { isInputFocused } from '../../../src/renderer/src/composables/useTableKeyboardNav'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -150,6 +151,67 @@ describe('AcmgClassificationPanel confirm step', () => {
       // Escape must not also reach the details panel's and the table's own Escape handlers.
       expect(outer).not.toHaveBeenCalled()
       expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('switches the table row shortcuts off while the prompt is open', async () => {
+      const wrapper = await draftPanel()
+      expect(isInputFocused()).toBe(false)
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      // s / c / a, the arrows and Enter all bail out on this check.
+      expect(isInputFocused()).toBe(true)
+      click('acmg-leave-cancel')
+      await leave
+      await wrapper.vm.$nextTick()
+      expect(isInputFocused()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('a rejected save answers "stay" instead of holding the selection forever', async () => {
+      const wrapper = await draftPanel(() => Promise.reject(new Error('write failed')))
+      wrapper.vm.$.appContext.config.errorHandler = () => {}
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      click('acmg-leave-apply')
+      expect(await Promise.race([leave, flushPromises().then(() => 'held')])).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('a double click on Apply saves once', async () => {
+      const save = vi.fn(async () => true)
+      const wrapper = await draftPanel(save)
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+      const apply = document.querySelector<HTMLElement>('[data-testid="acmg-leave-apply"]')!
+      apply.click()
+      apply.click()
+      expect(await leave).toBe(true)
+      expect(save).toHaveBeenCalledTimes(1)
+      wrapper.unmount()
+    })
+
+    it('an evidence reload for the same variant keeps the draft and the prompt', async () => {
+      const wrapper = await draftPanel()
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+
+      // A late annotation load: the saved evidence arrives while the prompt is open.
+      await wrapper.setProps({ evidenceJson: JSON.stringify({ pathogenic: [], benign: [] }) })
+
+      expect(await Promise.race([leave, flushPromises().then(() => 'asking')])).toBe('asking')
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').text()).toContain('PVS1')
+      click('acmg-leave-cancel')
+      expect(await leave).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('another variant still drops the draft and lets the selection change', async () => {
+      const wrapper = await draftPanel()
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.setProps({ variantData: { gnomad_af: null, cadd: null, clinvar: null } })
+      expect(await leave).toBe(true)
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
       wrapper.unmount()
     })
   })

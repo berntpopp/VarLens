@@ -412,12 +412,17 @@ function settleLeave(leave: boolean): void {
 
 async function answerLeave(answer: 'apply' | 'discard' | 'cancel'): Promise<void> {
   const resolve = resolveLeave
+  if (resolve === null) return // already answered (double click)
   // Taken before the save: its evidence reload must not settle the prompt early.
   resolveLeave = null
   leavePrompt.value = false
-  if (answer === 'apply') await applyPending()
-  else if (answer === 'discard') discardPending()
-  resolve?.(pending.value === null)
+  try {
+    if (answer === 'apply') await applyPending()
+    else if (answer === 'discard') discardPending()
+  } finally {
+    // Also after a rejected save: the held selection change must not wait forever.
+    resolve(pending.value === null)
+  }
 }
 
 function onLeaveKeydown(e: KeyboardEvent): void {
@@ -432,10 +437,13 @@ function onLeaveKeydown(e: KeyboardEvent): void {
 // that both have null evidence (where evidenceJson alone wouldn't trigger).
 watch(
   () => [props.evidenceJson, props.variantData] as const,
-  () => {
-    pending.value = null
+  (_, old) => {
+    // Same variant (late annotation load, a save's own reload): the draft and its prompt stay.
+    const draft = old?.[1] === props.variantData ? pending.value : null
     loadState(props.evidenceJson)
     baselineJson = evidenceFingerprint(serialize())
+    if (draft !== null) return loadState(draft.evidenceJson)
+    pending.value = null
     settleLeave(true)
   },
   { immediate: true }

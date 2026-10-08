@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, it, expect, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -28,6 +28,8 @@ vi.mock(
 )
 
 import App from '../../src/renderer/src/App.vue'
+import { AppStateKey } from '../../src/renderer/src/composables/useAppState'
+import type { AppStateReturn } from '../../src/renderer/src/composables/useAppState'
 import { createMockApi } from '../utils/mock-api'
 
 const mockApi = createMockApi()
@@ -108,6 +110,9 @@ const asyncComponentStubs = {
 }
 
 describe('App.vue', () => {
+  // The apps share one router: a mounted leftover would answer the next test's URL changes.
+  enableAutoUnmount(afterEach)
+
   it('mounts App without shell contract gaps', async () => {
     useShellNavigationSpy.mockReset()
     useShellLifecycleSpy.mockReset()
@@ -167,6 +172,94 @@ describe('App.vue', () => {
     wrapper.findComponent({ name: 'CaseList' }).vm.$emit('case-selected', 7, 'LB-1', 10, 0)
     await wrapper.vm.$nextTick()
     expect(wrapper.findComponent({ name: 'VNavigationDrawer' }).props('modelValue')).toBe(false)
+  })
+
+  describe('with an unsaved ACMG draft open', () => {
+    const listSelectCase = vi.fn()
+    // What the metadata editor would open: it reads the selected case when asked.
+    const editorOpenedFor: (number | null)[] = []
+    let state: AppStateReturn
+
+    async function mountWithDraft(answer: Promise<boolean>) {
+      listSelectCase.mockClear()
+      editorOpenedFor.length = 0
+      useShellLifecycleSpy.mockReturnValue({})
+      await router.push('/case')
+      const wrapper = mount(App, {
+        global: {
+          plugins: [vuetify, createPinia(), router],
+          stubs: {
+            ...asyncComponentStubs,
+            CaseList: {
+              name: 'CaseList',
+              template: '<div />',
+              setup: (_: unknown, { expose }: { expose: (exposed: object) => void }) =>
+                expose({ selectCase: listSelectCase, refreshCases: vi.fn() })
+            },
+            AppDialogHost: {
+              template: '<div />',
+              setup: (_: unknown, { expose }: { expose: (exposed: object) => void }) =>
+                expose({
+                  showCaseMetadata: () => editorOpenedFor.push(state.selectedCaseId.value)
+                })
+            }
+          }
+        }
+      })
+      await flushPromises() // the URL restore of the mount, which clears the case
+      state = (wrapper.vm.$ as unknown as { provides: Record<symbol, AppStateReturn> }).provides[
+        AppStateKey as symbol
+      ]
+      state.selectCase({ caseId: 1, caseName: 'A' })
+      state.selectedPanelVariant.value = { id: 1 } as never
+      state.panelOpen.value = true
+      // Once answered the draft is gone (applied / discarded) or kept (asked again).
+      const guard = vi.fn<() => Promise<boolean> | null>(() => null).mockReturnValueOnce(answer)
+      state.setPanelLeaveGuard(guard)
+      return { caseList: wrapper.findComponent({ name: 'CaseList' }), guard }
+    }
+
+    it('"Edit case" opens the editor for the new case, after the prompt', async () => {
+      let answer!: (leave: boolean) => void
+      const { caseList } = await mountWithDraft(new Promise<boolean>((r) => (answer = r)))
+
+      caseList.vm.$emit('edit-case', 2, 'B', 0, 0)
+      await flushPromises()
+      expect(editorOpenedFor).toEqual([])
+
+      answer(true)
+      await flushPromises()
+      expect(editorOpenedFor).toEqual([2])
+    })
+
+    it('"Edit case" does nothing when the prompt is cancelled', async () => {
+      const { caseList } = await mountWithDraft(Promise.resolve(false))
+      caseList.vm.$emit('edit-case', 2, 'B', 0, 0)
+      await flushPromises()
+      expect(editorOpenedFor).toEqual([])
+      expect(state.selectedCaseId.value).toBe(1)
+    })
+
+    it('deleting the open case clears it without asking', async () => {
+      const { caseList, guard } = await mountWithDraft(new Promise<boolean>(() => {}))
+      caseList.vm.$emit('case-deleted', 1)
+      expect(guard).not.toHaveBeenCalled()
+      expect(state.selectedCaseId.value).toBeNull()
+      expect(state.panelOpen.value).toBe(false)
+    })
+
+    it('Cancel puts the sidebar highlight back on the open case', async () => {
+      const { caseList, guard } = await mountWithDraft(Promise.resolve(false))
+      caseList.vm.$emit('case-selected', 2, 'B', 0, 0)
+      await flushPromises()
+      expect(state.selectedCaseId.value).toBe(1)
+      expect(listSelectCase).toHaveBeenCalledExactlyOnceWith(1)
+
+      // The list reports its restored highlight: that must not ask again.
+      caseList.vm.$emit('case-selected', 1, 'A', 0, 0)
+      await flushPromises()
+      expect(guard).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('does not mount the details panel or shortcut dialog until first opened', async () => {
