@@ -6,6 +6,7 @@ import {
 } from '../../../shared/sql/genotype-dosage'
 import { compoundHetPairIdsSql, variantIdentitySql } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
+import { TRIO_MODES } from '../../../shared/types/inheritance'
 
 export interface PostgresClinicalVariantFilterSqlContext {
   schemaName: string
@@ -160,7 +161,10 @@ function addInheritanceFilters(
           ) AND v.gt_num IN ${HET})`)
   }
 
-  if (filter.analysis_group_id !== undefined) {
+  // Bound only when a trio mode reads them: PostgreSQL rejects a parameter
+  // no placeholder uses (a solo mode with an analysis group selected).
+  const wantsTrio = modes.some((mode) => (TRIO_MODES as readonly string[]).includes(mode))
+  if (filter.analysis_group_id !== undefined && wantsTrio) {
     const caseParam = addParam(filter.case_id)
     const groupParam = addParam(filter.analysis_group_id)
     addTrioInheritanceFilters(modes, conditions, schemaName, caseParam, groupParam)

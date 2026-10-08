@@ -436,6 +436,16 @@ describe.skipIf(!RUN)('trio and duplicate-row inheritance filters on both backen
     expect(await matching('compound_het')).toEqual([])
   }, 60_000)
 
+  it('a solo mode works while an analysis group is selected', async () => {
+    await seed([
+      ['proband', 100, 'G', '1/.'],
+      ['proband', 100, 'T', './1'],
+      ['proband', 200, 'G', '1/1']
+    ])
+    expect(await matching('candidate_compound_het')).toEqual(['100>G', '100>T'])
+    expect(await matching('homozygous')).toEqual(['200>G'])
+  }, 60_000)
+
   it('candidate compound het counts a variant stored twice once', async () => {
     await seed([
       ['proband', 100, 'G', '1/.'],
