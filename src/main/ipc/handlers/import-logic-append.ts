@@ -126,12 +126,7 @@ export async function importAdditionalFileToCase(
             vcfOptions?.selectedSample,
             true
           )
-          activeSample = activeSampleColumn?.name ?? ''
-
-          if (activeSample === '') {
-            errors.push(`No sample found in VCF file: ${filePath}`)
-            break
-          }
+          activeSample = activeSampleColumn.name
 
           const callerInfo = detectCaller(headerLines)
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null

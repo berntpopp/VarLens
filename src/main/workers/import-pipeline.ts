@@ -420,11 +420,7 @@ export async function streamInsertVcf(
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
         activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, vcfSelectedSamples?.[0])
-        activeSample = activeSampleColumn?.name ?? ''
-
-        if (activeSample === '') {
-          break
-        }
+        activeSample = activeSampleColumn.name
 
         // Detect caller from header lines for variant type routing
         const callerInfo = detectCaller(headerLines)

@@ -185,9 +185,7 @@ export async function runImportSession(
             // until its replacement is published (#493).
             if ((await detectFormat(file.filePath)).format === 'vcf') {
               const { header } = await parseVcfHeader(file.filePath)
-              // Without a sample the import is an empty case, which would replace the old one.
-              if (!resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0]))
-                throw new Error('VCF has no #CHROM header line or no sample column')
+              resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0])
             }
           }
         }

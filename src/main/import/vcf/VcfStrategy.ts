@@ -85,12 +85,7 @@ export class VcfStrategy implements ImportStrategy {
             header.samples,
             vcfOptions?.selectedSamples?.[0]
           )
-          activeSample = activeSampleColumn?.name ?? ''
-
-          if (activeSample === '') {
-            errors.push('No sample found in VCF file')
-            break
-          }
+          activeSample = activeSampleColumn.name
 
           const callerInfo = detectCaller(header.rawHeaderLines)
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null

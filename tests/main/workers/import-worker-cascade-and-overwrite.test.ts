@@ -399,6 +399,35 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       }
     )
 
+    // Used to import as an empty case.
+    it.each([
+      ['no sample column', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'],
+      ['no #CHROM line', '']
+    ])('fails a fresh import of a VCF with %s', async (_what, chromLine) => {
+      const filePath = join(tmpdir(), `${randomUUID()}.vcf`)
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n${chromLine}chr1\t100\t.\tA\tT\t50\tPASS\t.\n`)
+      const messages: WorkerMessage[] = []
+      try {
+        await runImportSession(
+          {
+            type: 'start',
+            dbPath,
+            throttleMs: 0,
+            files: [{ filePath, caseName: 'fresh', isDuplicate: false, duplicateStrategy: 'skip' }]
+          },
+          { postMessage: (m) => messages.push(m) }
+        )
+      } finally {
+        unlinkSync(filePath)
+      }
+      const complete = messages.find((m) => m.type === 'complete')
+      expect(complete?.type === 'complete' && complete.results.details[0]).toMatchObject({
+        status: 'failed',
+        error: 'VCF has no #CHROM header line or no sample column'
+      })
+      expect(db.prepare('SELECT name FROM cases').all()).toEqual([])
+    })
+
     it('replaces the case under its own name and keeps the cohort summary exact', async () => {
       const run = async (variants: unknown[]): Promise<void> => {
         const filePath = join(tmpdir(), `${randomUUID()}.json`)

@@ -54,6 +54,19 @@ describe('streamMappedVcfRows DoS guards (postgres-import-worker.ts, live PG wor
     delete process.env[LINE_CAP_ENV_VAR]
   })
 
+  // Used to end the stream silently: the import published an empty case.
+  it.each([
+    ['no sample column', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'],
+    ['no #CHROM line', '']
+  ])('rejects a VCF with %s', async (_what, chromLine) => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-dos-'))
+    const filePath = join(tmpDir, 'sites.vcf')
+    writeFileSync(filePath, `##fileformat=VCFv4.2\n${chromLine}chr1\t100\t.\tA\tG\t99\tPASS\t.\n`)
+    await expect(drain(streamMappedVcfRows(filePath, ''))).rejects.toThrow(
+      'VCF has no #CHROM header line or no sample column'
+    )
+  })
+
   it('rejects a VCF line over the production call-path cap -- not a silent skip', async () => {
     process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
     tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-dos-'))

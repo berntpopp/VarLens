@@ -26,7 +26,8 @@ export interface VcfSelectedSampleColumn {
 
 /**
  * The column of the sample an import reads; throws when the file does not
- * have the requested sample.
+ * have the requested sample, or has none at all (no #CHROM line, or a
+ * sites-only file): there is no genotype to import, and the case would be empty.
  *
  * `loneSampleIsCase`: for a file appended to a case. A file with one sample is
  * then read for that sample under whatever name its caller wrote (Sniffles2
@@ -36,10 +37,11 @@ export function resolveVcfSelectedSampleColumn(
   sampleNames: string[],
   requestedSample?: string,
   loneSampleIsCase = false
-): VcfSelectedSampleColumn | null {
+): VcfSelectedSampleColumn {
   const name =
     requestedSample !== undefined && requestedSample !== '' ? requestedSample : sampleNames[0]
-  if (name === undefined || name === '') return null
+  if (sampleNames.length === 0 || name === undefined || name === '')
+    throw new Error('VCF has no #CHROM header line or no sample column')
   const index = loneSampleIsCase && sampleNames.length === 1 ? 0 : sampleNames.indexOf(name)
   if (index < 0) {
     const listed = sampleNames.slice(0, 10).join(', ') + (sampleNames.length > 10 ? ', ...' : '')
