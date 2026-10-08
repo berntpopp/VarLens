@@ -59,8 +59,9 @@ wins" (association). SQLite **v43** / PostgreSQL **0027** flag a populated summa
 
 Burden allele frequency = ALT copies / **called alleles** (`calledAlleleCount`): a haploid call
 (`1`, `0`) is 1 allele, a diploid one 2, an assumed het (`1/.`) 2 — it is read as a het
-everywhere, so its frequency is the same lower bound as its dosage — and an unknown call (`./.`,
-`0/.`, NULL) 0. A sample without a row is a diploid `0/0`, as on every other path; for a male on
+everywhere, so its frequency is the same lower bound as its dosage — a reference half-call (`0/.`,
+`./0`) 2 with no copy of this ALT, under the same assumption (the missing allele is a different
+ALT; its class, dosage and duplicate-call rank stay unknown), and an unknown call (`./.`, NULL) 0. A sample without a row is a diploid `0/0`, as on every other path; for a male on
 chrX that overstates the denominator by one allele, which the stored data cannot show.
 
 ## Consequences users will see

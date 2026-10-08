@@ -65,13 +65,19 @@ export function genotypeCallKey(gt: string | null | undefined): string {
   return `${rank}${gt ?? ''}`
 }
 
+/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
+const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
+
 /**
  * Alleles a genotype calls, for an allele-frequency denominator: 1 for a
- * haploid call, 2 for a diploid one — an assumed het (`1/.`) is a het — and 0
- * for anything unknown (`./.`, `0/.`, NULL), which says nothing about the site.
+ * haploid call, 2 for a diploid one — an assumed het (`1/.`) is a het, and a
+ * reference half-call (`0/.`) is two alleles, none of them this ALT — and 0
+ * for anything unknown (`./.`, NULL), which says nothing about the site.
  */
 export function calledAlleleCount(gt: string | null | undefined): number {
-  if (gt == null || genotypeCallKey(gt).startsWith('0')) return 0
+  if (gt == null) return 0
+  if (includes(REF_HALF_CALLS, gt)) return 2
+  if (genotypeCallKey(gt).startsWith('0')) return 0
   return gt.split(/[/|]/).length
 }
 
