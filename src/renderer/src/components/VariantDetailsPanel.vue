@@ -216,6 +216,7 @@ import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } fr
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
+import { formatConsequence } from '../utils/formatters'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
@@ -529,10 +530,6 @@ function getConsequenceColor(consequence: string): string {
     return 'warning'
   }
   return 'grey'
-}
-
-function formatConsequence(consequence: string): string {
-  return consequence.replace(/_/g, ' ')
 }
 
 // Handle Escape key to close panel
