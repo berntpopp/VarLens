@@ -48,12 +48,14 @@ export function searchHpoTerms(
       term.name.toLowerCase().includes(normalized)
     ) {
       results.push(term)
-      if (results.length >= maxResults) break
     }
   }
 
-  return results.sort((a, b) => {
-    const diff = rank(a, normalized) - rank(b, normalized)
-    return diff !== 0 ? diff : a.name.localeCompare(b.name)
-  })
+  // Rank every match before capping: the best one may come late in the list.
+  return results
+    .sort((a, b) => {
+      const diff = rank(a, normalized) - rank(b, normalized)
+      return diff !== 0 ? diff : a.name.localeCompare(b.name)
+    })
+    .slice(0, maxResults)
 }
