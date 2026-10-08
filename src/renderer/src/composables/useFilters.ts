@@ -154,7 +154,9 @@ export function createFilters(): UseFiltersReturn {
   })
 
   watch(customCadd, (value) => {
-    if (value === null || Number.isNaN(value)) return
+    // An emptied v-model.number field holds '', which would pass `>= 0` below
+    if (typeof value !== 'number' && value !== null) filters.value.minCadd = null
+    if (typeof value !== 'number' || Number.isNaN(value)) return
 
     // ANTI-12: Validate range before applying
     if (value < FILTER_RANGES.cadd.min || value > FILTER_RANGES.cadd.max) {

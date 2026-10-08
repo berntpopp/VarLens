@@ -40,25 +40,23 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
     params.clinvars = [...plainState.clinvars]
   }
 
+  // typeof: an emptied v-model.number field holds '' (and '' >= 0 is true)
   if (
-    plainState.maxGnomadAf !== null &&
-    plainState.maxGnomadAf !== undefined &&
+    typeof plainState.maxGnomadAf === 'number' &&
     Number.isNaN(plainState.maxGnomadAf) === false &&
     plainState.maxGnomadAf > 0
   ) {
     params.gnomad_af_max = plainState.maxGnomadAf
   }
   if (
-    plainState.minCadd !== null &&
-    plainState.minCadd !== undefined &&
+    typeof plainState.minCadd === 'number' &&
     Number.isNaN(plainState.minCadd) === false &&
     plainState.minCadd >= 0
   ) {
     params.cadd_min = plainState.minCadd
   }
   if (
-    plainState.minCarriers !== null &&
-    plainState.minCarriers !== undefined &&
+    typeof plainState.minCarriers === 'number' &&
     Number.isNaN(plainState.minCarriers) === false &&
     plainState.minCarriers > 0
   ) {
@@ -81,8 +79,7 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
   }
 
   if (
-    plainState.maxInternalAf !== null &&
-    plainState.maxInternalAf !== undefined &&
+    typeof plainState.maxInternalAf === 'number' &&
     Number.isNaN(plainState.maxInternalAf) === false &&
     plainState.maxInternalAf > 0
   ) {

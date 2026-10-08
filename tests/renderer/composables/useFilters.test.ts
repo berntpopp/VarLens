@@ -322,6 +322,18 @@ describe('useFilters', () => {
   })
 
   describe('Bidirectional preset/custom sync', () => {
+    it('emptying the custom CADD field clears the filter (#504)', async () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.customCadd.value = 22
+      await nextTick()
+
+      result.customCadd.value = '' as unknown as number
+      await nextTick()
+
+      expect(result.filters.value.minCadd).toBeNull()
+    })
+
     it('setting selectedAfPreset updates maxGnomadAf and clears customGnomadAf', async () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
