@@ -9,6 +9,7 @@ import { reactive, isReactive } from 'vue'
 import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useCohortData } from '@renderer/composables/useCohortData'
+import { SUMMARY_STALE_POLL_MS } from '@renderer/composables/useSummaryFreshness'
 import type { CohortVariant, CohortSummary } from '../../../../../src/shared/types/cohort'
 import { logService } from '../../../src/renderer/src/services/LogService'
 import { ErrorCode } from '../../../src/shared/types/errors'
@@ -502,6 +503,42 @@ describe('IPC safety — buildIpcParams strips reactive proxies', () => {
 
       // Should have been called again on re-activation
       expect(window.api.cohort.onSummaryRebuilt).toHaveBeenCalledTimes(2)
+    })
+
+    it('activate clears a stale notice whose rebuild ended while deactivated', async () => {
+      window.api.cohort.getSummaryStatus = vi.fn().mockResolvedValue({ is_stale: true })
+      const [result, appInstance] = withSetup(() => useCohortData())
+      app = appInstance
+      await flushPromises()
+      expect(result.summaryStale.value).toBe(true)
+
+      // The rebuild ends while the tab is hidden: no listener, no poll.
+      result.deactivate()
+      window.api.cohort.getSummaryStatus = vi.fn().mockResolvedValue({ is_stale: false })
+      result.activate()
+      await flushPromises()
+
+      expect(result.summaryStale.value).toBe(false)
+    })
+
+    it('activate resumes polling when the summary is still stale', async () => {
+      vi.useFakeTimers()
+      try {
+        window.api.cohort.getSummaryStatus = vi.fn().mockResolvedValue({ is_stale: true })
+        const [result, appInstance] = withSetup(() => useCohortData())
+        app = appInstance
+        await vi.advanceTimersByTimeAsync(0)
+
+        result.deactivate()
+        result.activate()
+        await vi.advanceTimersByTimeAsync(0)
+        window.api.cohort.getSummaryStatus = vi.fn().mockResolvedValue({ is_stale: false })
+        await vi.advanceTimersByTimeAsync(SUMMARY_STALE_POLL_MS)
+
+        expect(result.summaryStale.value).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

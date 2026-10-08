@@ -25,6 +25,7 @@ import type { AvailableBuild } from '../../../shared/types/database'
 import { useApiService } from './useApiService'
 import { stripVueProxies } from '../utils/stripVueProxies'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 /**
@@ -229,27 +230,24 @@ export function useCohortData(): UseCohortDataReturn {
   // Register on init
   registerSummaryListener()
 
-  // Initialize staleness from current status (catches in-progress rebuilds)
-  if (api) {
+  // Read staleness from the current status: on init (catches in-progress
+  // rebuilds) and on activation (a rebuild may have ended, unheard, meanwhile).
+  function readSummaryStatus(): void {
+    if (!api) return
     const cohortApi = api.cohort
     cohortApi
       .getSummaryStatus()
       .then((statusResult) => {
         const status = unwrapIpcResult(statusResult)
         summaryStale.value = status.is_stale
+        // Unchanged `true` does not fire the watcher below; restart the poll here.
+        if (status.is_stale) freshness?.markStale()
       })
       .catch((e: unknown) => {
-        logService.warn(
-          'Failed to get cohort summary status: ' +
-            (e instanceof Error
-              ? e.message
-              : isIpcError(e)
-                ? (e.userMessage ?? e.message)
-                : String(e)),
-          'cohort'
-        )
+        logService.warn('Failed to get cohort summary status: ' + formatError(e), 'cohort')
       })
   }
+  readSummaryStatus()
 
   // PostgreSQL rebuilds in the background without an event: ask while stale,
   // and reload the summary figures once the rebuild is through.
@@ -269,6 +267,7 @@ export function useCohortData(): UseCohortDataReturn {
   function activate(): void {
     isActive.value = true
     registerSummaryListener()
+    readSummaryStatus()
   }
 
   function deactivate(): void {
