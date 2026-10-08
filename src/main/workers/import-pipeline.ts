@@ -8,6 +8,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { createInterface } from 'node:readline'
 
 import { DATABASE_CONFIG } from '../../shared/config'
+import { deleteCaseSqls } from '../database/case-dependents'
 import { clinvarRankForImport, impactRank } from '../../shared/config/severity.config'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/strategies/ImportStrategy'
@@ -79,24 +80,8 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
     "INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build, import_status) VALUES (?, ?, ?, 0, ?, ?, 'provisional')"
   )
 
-  // Child deletion statements for atomic case cleanup when foreign_keys = OFF (F01)
-  const deleteChildSqls = [
-    'DELETE FROM variant_transcripts WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
-    'DELETE FROM variant_sv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
-    'DELETE FROM variant_cnv WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
-    'DELETE FROM variant_str WHERE variant_id IN (SELECT id FROM variants WHERE case_id = ?)',
-    'DELETE FROM case_variant_annotations WHERE case_id = ?',
-    'DELETE FROM case_data_info WHERE case_id = ?',
-    'DELETE FROM variants WHERE case_id = ?',
-    'DELETE FROM cases WHERE id = ?'
-  ]
-  const deleteCaseStmts = deleteChildSqls.flatMap((sql) => {
-    try {
-      return [db.prepare(sql)]
-    } catch {
-      return []
-    }
-  })
+  // foreign_keys is OFF here: delete by hand what ON DELETE CASCADE would (F01).
+  const deleteCaseStmts = deleteCaseSqls(db).map((sql) => db.prepare(sql))
 
   const runDeleteCase = (caseId: number) => {
     let lastResult = { changes: 0, lastInsertRowid: 0 }
