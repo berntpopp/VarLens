@@ -191,7 +191,7 @@ describe('cohort IPC handlers', () => {
       insertVariant(case1, '1', 12345, 'A', 'G', { gt_num: '0/1' })
       insertVariant(case2, '1', 12345, 'A', 'G', { gt_num: '1/1' })
 
-      const result = cohortService.getCarriers('1', 12345, 'A', 'G')
+      const result = cohortService.getCarriers({ chr: '1', pos: 12345, ref: 'A', alt: 'G', variant_type: 'snv', genome_build: 'GRCh38' })
 
       // Snapshot captures structure
       expect(result).toMatchSnapshot()

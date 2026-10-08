@@ -7,10 +7,14 @@ export const cohortScenario: IpcScenario = {
     await ctx.call('cohort', 'getColumnMeta'),
     await ctx.call('cohort', 'getSummary'),
     await ctx.call('cohort', 'getCarriers', [
-      ctx.primaryVariant.chr,
-      ctx.primaryVariant.pos,
-      ctx.primaryVariant.ref,
-      ctx.primaryVariant.alt
+      {
+        chr: ctx.primaryVariant.chr,
+        pos: ctx.primaryVariant.pos,
+        ref: ctx.primaryVariant.ref,
+        alt: ctx.primaryVariant.alt,
+        variant_type: 'snv',
+        genome_build: 'GRCh38'
+      }
     ]),
     await ctx.call('cohort', 'getGeneBurden'),
     await ctx.call('cohort', 'getSummaryStatus')

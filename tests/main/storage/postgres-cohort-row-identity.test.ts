@@ -93,7 +93,6 @@ describe.skipIf(!RUN)('cohort row identity on PostgreSQL (#503)', () => {
 
   it('gives one coordinate in two builds two rows with their own key', async () => {
     const pair = await at(100)
-    expect(pair.map((row) => row.genome_build).sort()).toEqual(['GRCh37', 'GRCh38'])
     expect(new Set(pair.map((row) => row.variant_key)).size).toBe(2)
   })
 
@@ -110,8 +109,33 @@ describe.skipIf(!RUN)('cohort row identity on PostgreSQL (#503)', () => {
     expect(new Set(all.map((row) => row.variant_key)).size).toBe(all.length)
     expect((await at(321681)).map((row) => row.alt)).toEqual([']13:123456]T'])
   })
-})
 
+  const carriersOf = async (row: CohortVariant): Promise<string[]> =>
+    (await repo.getCarriers(row)).map((carrier) => carrier.case_name)
+
+  it('lists the carriers of each build of one coordinate separately', async () => {
+    const byBuild: Record<string, string[]> = {}
+    for (const row of await at(100)) byBuild[row.genome_build] = await carriersOf(row)
+    expect(byBuild).toEqual({ GRCh38: ['b38-a', 'b38-b'], GRCh37: ['b37-a'] })
+  })
+
+  it('lists the carriers of the sv row and of the cnv row separately', async () => {
+    const byType: Record<string, string[]> = {}
+    for (const row of await at(1000)) byType[row.variant_type] = await carriersOf(row)
+    expect(byType).toEqual({ sv: ['sv-a'], cnv: ['cnv-a', 'cnv-b'] })
+  })
+
+  it('returns as many carriers as the row counts, for every row', async () => {
+    for (const row of await rows()) expect(await carriersOf(row)).toHaveLength(row.carrier_count)
+  })
+
+  it('finds the carriers of an indel row listed under the snv filter', async () => {
+    const [indel] = (await rows({ variant_type: 'snv' })).filter((row) => row.pos === 500)
+    expect(indel.variant_type).toBe('indel')
+    expect(await carriersOf(indel)).toEqual(['indel-a'])
+  })
+
+})
 describe.skipIf(RUN)('cohort row identity on PostgreSQL (skipped)', () => {
   it('runs only when VARLENS_RUN_POSTGRES_E2E=1 and `make pg-up` is up', () => {
     expect(RUN).toBe(false)

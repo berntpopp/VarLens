@@ -623,9 +623,17 @@ describe('PostgresCohortRepository', () => {
     })
     const repository = new PostgresCohortRepository({ query } as never, 'public')
 
-    const carriers = await repository.getCarriers('1', 123, 'A', 'G')
+    const carriers = await repository.getCarriers({
+      chr: '1',
+      pos: 123,
+      ref: 'A',
+      alt: 'G',
+      variant_type: 'snv',
+      genome_build: 'GRCh38'
+    })
 
-    expect(query.mock.calls[0][1]).toEqual(['1', 123, 'A', 'G'])
+    expect(query.mock.calls[0][1]).toEqual(['1', 123, 'A', 'G', 'snv', 'GRCh38'])
+    expect(query.mock.calls[0][0]).toContain('v.variant_type = $5 AND c.genome_build = $6')
     expect(carriers).toEqual([
       { case_id: 7, case_name: 'Case B', gt_num: '0/1', gq: 99.5, dp: 42 },
       { case_id: 8, case_name: 'Case C', gt_num: '1/1', gq: null, dp: null }

@@ -16,6 +16,7 @@ import type {
   CohortCarrier,
   GeneBurden,
   CohortPaginatedResult
+, CohortVariantIdentity
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
@@ -413,9 +414,10 @@ export class CohortService {
   }
 
   /**
-   * Get carriers for a specific variant
+   * Get the carriers of one cohort row. The row is one variant type in one
+   * genome build, so both are part of the lookup (#503).
    */
-  getCarriers(chr: string, pos: number, ref: string, alt: string): CohortCarrier[] {
+  getCarriers(variant: CohortVariantIdentity): CohortCarrier[] {
     const sql = `
       SELECT
         v.case_id,
@@ -424,12 +426,20 @@ export class CohortService {
       FROM variants v
       JOIN cases c ON v.case_id = c.id
       WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
+        AND v.variant_type = ? AND c.genome_build = ?
       GROUP BY v.case_id, c.name
       ORDER BY c.name
     `
 
     const stmt = this.getStatement(sql)
-    return stmt.all(chr, pos, ref, alt) as CohortCarrier[]
+    return stmt.all(
+      variant.chr,
+      variant.pos,
+      variant.ref,
+      variant.alt,
+      variant.variant_type,
+      variant.genome_build
+    ) as CohortCarrier[]
   }
 
   /**

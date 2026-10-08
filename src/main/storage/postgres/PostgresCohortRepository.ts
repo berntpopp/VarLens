@@ -8,6 +8,7 @@ import type {
   CohortSummary,
   CohortVariant,
   GeneBurden
+, CohortVariantIdentity
 } from '../../../shared/types/cohort'
 import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
 import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
@@ -288,12 +289,8 @@ export class PostgresCohortRepository {
     }
   }
 
-  async getCarriers(
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ): Promise<CohortCarrierWithDepth[]> {
+  /** Carriers of one cohort row: one variant type in one genome build (#503). */
+  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrierWithDepth[]> {
     const result = await this.pool.query(
       `SELECT
          v.case_id,
@@ -304,9 +301,17 @@ export class PostgresCohortRepository {
        FROM ${this.schemaName}."variants" v
        JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
        WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
+         AND v.variant_type = $5 AND c.genome_build = $6
        GROUP BY v.case_id, c.name
        ORDER BY c.name`,
-      [chr, pos, ref, alt]
+      [
+        variant.chr,
+        variant.pos,
+        variant.ref,
+        variant.alt,
+        variant.variant_type,
+        variant.genome_build
+      ]
     )
 
     return (result.rows as Array<Record<string, unknown>>).map((row) => ({
