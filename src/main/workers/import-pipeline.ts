@@ -331,9 +331,10 @@ export async function streamInsertJson(
   stmts: ImportStatements,
   isCancelled: () => boolean,
   onProgress: (count: number) => void,
-  limits?: ImportBatchLimits
+  limits?: ImportBatchLimits,
+  onSkip?: (reason: string) => void
 ): Promise<number> {
-  const mapperStream = await createMapperPipeline(filePath, formatInfo)
+  const mapperStream = await createMapperPipeline(filePath, formatInfo, onSkip)
   const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {

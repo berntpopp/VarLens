@@ -250,6 +250,12 @@ export async function runImportSession(
             }
           }
 
+          const onSkip = (reason: string): void => {
+            if (skipTracker.record(reason)) {
+              console.warn(`[import-worker] Record skipped in ${fileName}:`, reason)
+            }
+          }
+
           stmts.beginBulkInsert()
           try {
             if (formatInfo.format === 'vcf') {
@@ -262,11 +268,7 @@ export async function runImportSession(
                 isCancelled,
                 file.vcfSelectedSamples,
                 onProgress,
-                (reason) => {
-                  if (skipTracker.record(reason)) {
-                    console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
-                  }
-                },
+                onSkip,
                 undefined,
                 vcfFilters
               )
@@ -278,7 +280,9 @@ export async function runImportSession(
                 batchSize,
                 stmts,
                 isCancelled,
-                onProgress
+                onProgress,
+                undefined,
+                onSkip
               )
             }
           } finally {

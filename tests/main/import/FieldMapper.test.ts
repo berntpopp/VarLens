@@ -254,6 +254,22 @@ describe('FieldMapper', () => {
       expect(results).toHaveLength(0)
     })
 
+    it('reports every dropped row to onSkip (#495)', async () => {
+      const reasons: string[] = []
+      const mapper = createFieldMapper(mockDictionaries, undefined, undefined, (r) =>
+        reasons.push(r)
+      )
+      const rows = [createTestRow({}), createTestRow({ 10: null }), createTestRow({ 9: null })]
+      const out: unknown[] = []
+      await pipeline(
+        Readable.from(rows.map((value, key) => ({ key, value }))),
+        mapper,
+        new Writable({ objectMode: true, write: (c, _e, cb) => void (out.push(c), cb()) })
+      )
+      expect(out).toHaveLength(1)
+      expect(reasons).toHaveLength(2)
+    })
+
     it('should skip rows with missing ref', async () => {
       const row = createTestRow({
         11: null // Missing ref

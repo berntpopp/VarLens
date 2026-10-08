@@ -83,8 +83,14 @@ function normalizeNumber(value: unknown): number | null {
  * as opposed to the columnar format with positional tuples.
  */
 export class ObjectFormatMapper extends Transform {
-  /** @param takeRecordBytes source size of the next input record, if tracked */
-  constructor(private readonly takeRecordBytes?: () => number) {
+  /**
+   * @param takeRecordBytes source size of the next input record, if tracked
+   * @param onSkip told about every record dropped for a missing required field
+   */
+  constructor(
+    private readonly takeRecordBytes?: () => number,
+    private readonly onSkip?: (reason: string) => void
+  ) {
     super({ objectMode: true })
   }
 
@@ -118,7 +124,8 @@ export class ObjectFormatMapper extends Transform {
       )
       const mapped: MappedVariant = {
         chr: normalizeString(variant.chr) ?? '',
-        pos: normalizeNumber(variant.pos) ?? 0,
+        // A missing position stays null and is rejected below, not stored as 0.
+        pos: normalizeNumber(variant.pos) as number,
         ref: normalizeString(variant.ref) ?? '',
         alt: normalizeString(variant.alt) ?? '',
         gene_symbol: normalizeString(variant.gene_symbol),
@@ -176,7 +183,7 @@ export class ObjectFormatMapper extends Transform {
         mapped.alt === null ||
         mapped.alt === ''
       ) {
-        // Skip invalid variants - will be counted as skipped
+        this.onSkip?.('JSON variant without chr, pos, ref or alt')
         callback(null)
         return
       }
@@ -190,6 +197,9 @@ export class ObjectFormatMapper extends Transform {
   }
 }
 
-export function createObjectFormatMapper(takeRecordBytes?: () => number): ObjectFormatMapper {
-  return new ObjectFormatMapper(takeRecordBytes)
+export function createObjectFormatMapper(
+  takeRecordBytes?: () => number,
+  onSkip?: (reason: string) => void
+): ObjectFormatMapper {
+  return new ObjectFormatMapper(takeRecordBytes, onSkip)
 }
