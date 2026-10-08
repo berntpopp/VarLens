@@ -27,11 +27,7 @@
           <tr v-for="carrier in carriers" :key="carrier.case_id">
             <td>{{ carrier.case_name }}</td>
             <td>
-              <v-chip
-                size="x-small"
-                :color="isHomozygous(carrier.gt_num) ? 'error' : 'warning'"
-                label
-              >
+              <v-chip size="x-small" :color="zygosityColor(carrier.gt_num)" label>
                 {{ formatZygosity(carrier.gt_num) }}
               </v-chip>
             </td>
@@ -62,6 +58,7 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
 import type { CohortVariant } from '../../../../shared/types/cohort'
+import { genotypeZygosity } from '../../../../shared/utils/genotype'
 import { mdiOpenInApp } from '@mdi/js'
 import { carriersQuery } from '../../queries/carriers'
 
@@ -81,13 +78,22 @@ const { data, status, refetch } = useQuery(() => carriersQuery(props.variant))
 const error = computed(() => status.value === 'error')
 const carriers = computed(() => (error.value ? [] : (data.value ?? [])))
 
-// Zygosity helper functions
-const isHomozygous = (gt: string): boolean => {
-  return gt.includes('1/1') || gt.includes('1|1')
+const ZYGOSITY_COLORS = { hom: 'error', het: 'warning', hemi: 'info' } as const
+
+const zygosityColor = (gt: string): string | undefined => {
+  const zygosity = genotypeZygosity(gt)
+  return zygosity === null ? undefined : ZYGOSITY_COLORS[zygosity]
 }
 
+/**
+ * The shared zygosity class. A partly missing genotype (one allele of a split
+ * multi-allelic site, or a half-call) keeps its stored call next to the
+ * class; a genotype without a class is shown as stored.
+ */
 const formatZygosity = (gt: string): string => {
-  return isHomozygous(gt) ? 'hom' : 'het'
+  const zygosity = genotypeZygosity(gt)
+  if (zygosity === null) return gt || '?'
+  return gt.includes('.') ? `${zygosity} (${gt})` : zygosity
 }
 </script>
 

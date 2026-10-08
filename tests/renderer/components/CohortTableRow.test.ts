@@ -404,6 +404,21 @@ describe('CohortTableRow', () => {
       expect(wrapper.text()).toContain('2 het / 1 hom')
     })
 
+    it('names the carriers that are neither het nor hom', () => {
+      const wrapper = mount(CohortTableRow, {
+        props: {
+          item: { ...mockVariant, carrier_count: 4 },
+          column: 'het_count',
+          isStarred: false,
+          acmgClassification: null,
+          hasComment: false
+        },
+        global: { plugins: [vuetify] }
+      })
+
+      expect(wrapper.text()).toContain('2 het / 1 hom / 1 other')
+    })
+
     it('renders het count without hom when hom is zero', () => {
       const variantNoHom = { ...mockVariant, hom_count: 0 }
       const wrapper = mount(CohortTableRow, {

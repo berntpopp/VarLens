@@ -72,6 +72,22 @@ describe('CarrierExpandedRow', () => {
     expect(failed(wrapper)).toBe(false)
   })
 
+  it('labels each carrier by the zygosity of its genotype', async () => {
+    getCarriers.mockResolvedValue([
+      carrier('A', '1/.'),
+      carrier('BB', '.|1'),
+      carrier('CCC', '1'),
+      carrier('DDDD', './.'),
+      carrier('EEEEE', '1|1')
+    ])
+    const wrapper = mountRow()
+    await flushPromises()
+
+    const chips = wrapper.findAll('.v-chip').map((chip) => chip.text())
+    // A split or half-called genotype is het for this allele; the stored call stays visible.
+    expect(chips).toEqual(['het (1/.)', 'het (.|1)', 'hemi', './.', 'hom'])
+  })
+
   it('shares one request and the cached list between rows of the same variant', async () => {
     mountRow()
     mountRow()
