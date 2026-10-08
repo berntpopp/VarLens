@@ -23,17 +23,13 @@ const CONNECTION_ATTEMPTS = 30
 const CONNECTION_RETRY_DELAY_MS = 1000
 
 const MIGRATION_FILES = [
-  { version: '0001', name: 'create_cases', fileName: '0001_create_cases.sql' },
-  { version: '0002', name: 'create_case_metadata', fileName: '0002_create_case_metadata.sql' },
-  { version: '0003', name: 'create_variants', fileName: '0003_create_variants.sql' },
-  {
-    version: '0004',
-    name: 'generated_search_documents',
-    fileName: '0004_generated_search_documents.sql'
-  },
-  { version: '0005', name: 'create_workflow_tables', fileName: '0005_create_workflow_tables.sql' },
-  { version: '0006', name: 'create_audit_log', fileName: '0006_create_audit_log.sql' }
-]
+  ['0001', 'create_cases'],
+  ['0002', 'create_case_metadata'],
+  ['0003', 'create_variants'],
+  ['0004', 'generated_search_documents'],
+  ['0005', 'create_workflow_tables'],
+  ['0006', 'create_audit_log']
+].map(([version, name]) => ({ version, name, fileName: `${version}_${name}.sql` }))
 
 const FILTER_PRESETS = [
   {
@@ -216,18 +212,14 @@ function parseEnvFile(contents) {
 
     const key = normalized.slice(0, separatorIndex).trim()
     const value = normalized.slice(separatorIndex + 1).trim()
-    if (key !== '') {
-      env[key] = stripOptionalQuotes(value)
-    }
+    if (key !== '') env[key] = stripOptionalQuotes(value)
   }
 
   return env
 }
 
 function quoteIdentifier(identifier) {
-  if (identifier === undefined || identifier.trim() === '') {
-    throw new Error('PostgreSQL schema must not be blank')
-  }
+  if (!identifier?.trim()) throw new Error('PostgreSQL schema must not be blank')
   return `"${identifier.replace(/"/gu, '""')}"`
 }
 
