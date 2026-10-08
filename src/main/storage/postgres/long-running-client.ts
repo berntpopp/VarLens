@@ -11,6 +11,12 @@ import QueryStream from 'pg-query-stream'
 
 /** An export is paced by its consumer (a download); bound an abandoned one. */
 const STREAM_STATEMENT_TIMEOUT_MS = 30 * 60 * 1000
+/**
+ * How long the consumer of a stream may go without taking a row. The server
+ * timeout above cannot end that wait: PostgreSQL only delivers it with the
+ * next fetch, so a paused download would keep its pool connection for good.
+ */
+const STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 
 /**
  * Lift pg's "Query read timeout" on a checked-out client; call the returned
@@ -47,24 +53,51 @@ export async function runOrDestroy(
   }
 }
 
-/** Stream a query whose rows may take longer than both timeouts to consume. */
+/**
+ * Stream a query whose rows may take longer than both timeouts to consume.
+ * A consumer that takes no row for `idleMs` loses the connection, and its
+ * next read throws: the output it wrote so far is not the whole result.
+ */
 export async function* streamLongQuery(
   pool: Pick<Pool, 'connect'>,
   sql: string,
-  values: unknown[]
+  values: unknown[],
+  idleMs: number = STREAM_IDLE_TIMEOUT_MS
 ): AsyncGenerator<Record<string, unknown>> {
   const client: Pick<PoolClient, 'query' | 'release'> = await pool.connect()
   const restoreQueryTimeout = liftClientQueryTimeout(client)
-  let failure: Error | undefined
+  let abandoned: Error | undefined
+  // Runs while this generator is suspended at `yield`, where no `finally`
+  // can: destroying the connection is the only way to give its slot back.
+  const abandon = (): void => {
+    abandoned = new Error(`Export stream abandoned: no row was read for ${idleMs} ms`)
+    restoreQueryTimeout()
+    client.release(abandoned)
+  }
+  let rows: AsyncIterator<Record<string, unknown>> | undefined
   try {
     // Session-level, not SET LOCAL: an open transaction would sit "idle in
     // transaction" while the consumer drains the last batch.
     await client.query(`SET statement_timeout = ${STREAM_STATEMENT_TIMEOUT_MS}`)
-    yield* client.query(new QueryStream(sql, values)) as AsyncIterable<Record<string, unknown>>
+    rows = client.query(new QueryStream(sql, values))[Symbol.asyncIterator]()
+    for (let next = await rows.next(); next.done !== true; next = await rows.next()) {
+      const idle = setTimeout(abandon, idleMs)
+      try {
+        yield next.value
+      } finally {
+        clearTimeout(idle)
+      }
+      // Not through the stream: closing its cursor needs the connection.
+      if (abandoned !== undefined) throw abandoned
+    }
   } finally {
-    // RESET returns to the value the pool connected with.
-    failure = await runOrDestroy(client, 'RESET statement_timeout')
-    restoreQueryTimeout()
-    client.release(failure)
+    if (abandoned === undefined) {
+      // Closes the cursor when the consumer stopped early.
+      await rows?.return?.()
+      // RESET returns to the value the pool connected with.
+      const failure = await runOrDestroy(client, 'RESET statement_timeout')
+      restoreQueryTimeout()
+      client.release(failure)
+    }
   }
 }
