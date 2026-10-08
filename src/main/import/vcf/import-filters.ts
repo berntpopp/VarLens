@@ -15,8 +15,11 @@ export type VariantType = 'snv' | 'indel' | 'sv' | 'cnv' | 'str'
  * | `passOnly`  | ✅ applies  | ✅ applies                  | ✅ applies              | ✅ applies         |
  * | `minQual`   | ✅ applies  | ⚠ no-op when QUAL=`.`       | ⚠ no-op when QUAL=`.`  | ⚠ no-op when QUAL=`.` |
  * | `bedFilter` | ✅ point    | ✅ range overlap (uses END) | ✅ range overlap        | ✅ range overlap   |
- * | `minGq`     | ✅ applies  | ⚠ no-op (no FORMAT/GQ)      | ⚠ no-op                | ⚠ no-op            |
+ * | `minGq`     | ✅ applies  | ✅ when FORMAT/GQ is set    | ✅ when FORMAT/GQ is set | ⚠ no-op (no GQ)   |
  * | `minDp`     | ✅ applies  | ⚠ no-op (no FORMAT/DP)      | ⚠ no-op                | ⚠ no-op            |
+ *
+ * The filters apply to every file of an import, the first included, on both
+ * backends (`tests/main/workers/vcf-import-filters-backend-parity.e2e.test.ts`).
  *
  * **Semantic notes:**
  *
@@ -39,10 +42,10 @@ export type VariantType = 'snv' | 'indel' | 'sv' | 'cnv' | 'str'
  *    on their own POS.
  *
  * 4. **`minGq` / `minDp`**: these gate the sample's FORMAT/GQ and FORMAT/DP
- *    fields. SV/CNV/STR callers typically do not populate those standard
- *    fields, so these filters are effectively no-ops for non-small-variant
- *    classes. This is intentional — we don't want to silently drop entire
- *    SV callsets based on missing standard metrics.
+ *    fields, whatever the variant type. A record without the field passes
+ *    unchanged, so a callset that does not write it (Straglr, for example)
+ *    is never dropped for the missing metric. A caller that does write it
+ *    (Sniffles2 and Spectre write GQ) is filtered by it.
  */
 export interface ImportFilters {
   bedFilter?: BedFilter
