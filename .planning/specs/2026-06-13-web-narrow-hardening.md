@@ -23,7 +23,8 @@ or add row-level multi-user data isolation.
 
 2. **Unsafe API requests require a fail-closed CSRF signal.**
    For unsafe `/api/*` methods, reject `Sec-Fetch-Site: cross-site` and
-   `Sec-Fetch-Site: none`. Allow `same-origin` and `same-site`. If Fetch
+   `Sec-Fetch-Site: none`. Allow `same-origin` only (`same-site` was allowed
+   until #507: a sibling subdomain could then drive argument-less writes). If Fetch
    Metadata is absent, fall back to strict Origin verification against the
    request host and protocol. If both signals are absent, reject.
 

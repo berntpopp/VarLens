@@ -38,6 +38,7 @@ import secureSession from '@fastify/secure-session'
 import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
+import { requestPath } from './request-path'
 import { newSessionId, type SessionRevocations } from './session-revocation'
 import { isPublicApiDocsEnabled } from './instance-settings'
 
@@ -74,6 +75,7 @@ declare module '@fastify/secure-session' {
 
 const DEFAULT_RECOVERY_KEY_DIR = '/data'
 const SESSION_SECRET_FILENAME = 'web-session-secret'
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 4
 
 /**
  * Cookie name. In production we use the `__Host-` prefix, which the
@@ -150,7 +152,8 @@ export function isAllowedUnsafeApiRequest(params: {
   protocol: string
 }): boolean {
   const secFetchSite = params.secFetchSite?.trim().toLowerCase()
-  if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') return true
+  // Not 'same-site': a sibling subdomain could then drive argument-less writes (#507).
+  if (secFetchSite === 'same-origin') return true
   if (secFetchSite !== undefined && secFetchSite !== '') return false
 
   return isAllowedApiOrigin({
@@ -236,14 +239,15 @@ export async function registerSessions(
       // doesn't need a multi-day cookie; the shorter window limits
       // exposure if a laptop is briefly unattended. Re-login is
       // cheap.
-      maxAge: 60 * 60 * 4
-    }
+      maxAge: SESSION_MAX_AGE_SECONDS
+    },
+    // Server-side validity. Without it the plugin accepts a cookie for 24 h,
+    // longer than a logout revocation is remembered (session-revocation.ts).
+    expiry: SESSION_MAX_AGE_SECONDS
   })
 
   app.addHook('preHandler', async (request, reply) => {
-    const url = request.url
-    // Strip query string for the gate decision.
-    const path = url.split('?', 1)[0]
+    const path = requestPath(request)
 
     if (!path.startsWith('/api/')) return
 

@@ -30,15 +30,36 @@ proxy. The container's internal port and healthcheck remain fixed at `8080`.
 | `VARLENS_SESSION_SECRET_HEX` | no | Optional 32-byte hex session secret. If absent, the server seals one in the recovery directory. |
 | `VARLENS_WEB_UPLOAD_DIR` | no | Absolute directory for browser-upload staging. Defaults to `${VARLENS_RECOVERY_KEY_DIR}/uploads` (`/data/uploads` in the chart). |
 | `VARLENS_WEB_MAX_UPLOAD_BYTES` | no | Maximum accepted browser upload size in bytes. Defaults to `1073741824` (1 GiB). |
-| `VARLENS_WEB_UPLOAD_TTL_MS` | no | Staged upload lifetime before lazy cleanup. Defaults to `86400000` (24 hours). |
+| `VARLENS_WEB_UPLOAD_TTL_MS` | no | Lifetime of a staged upload that is never imported. Defaults to `86400000` (24 hours). Imported uploads are deleted within five minutes of the import settling; all staged uploads are deleted at boot. |
 | `VARLENS_ADMIN_USERNAME` | first boot only | Optional one-shot admin bootstrap username. |
 | `VARLENS_ADMIN_PASSWORD_HASH` | first boot only | Optional one-shot Argon2id admin bootstrap hash. Plaintext bootstrap is refused. |
 | `VARLENS_ADMIN_DISPLAY_NAME` | first boot only | Optional display name for the bootstrap admin. |
 | `VARLENS_LOG_LEVEL` | no | Pino log level. Defaults to `info`. |
+| `VARLENS_WEB_TRUST_PROXY` | behind a proxy | Proxy hop count (e.g. `1`) or comma-separated proxy IPs/CIDRs whose `X-Forwarded-*` headers are trusted. Unset = none; the login rate limit is then keyed on the proxy's address for every user. |
 
 Bootstrap variables are intentionally one-shot. After an admin exists, the
 server logs that env-based rotation is ignored; password changes happen through
 the authenticated app flow.
+
+## Single Replica
+
+Run exactly one server process per deployment. This is a hard requirement, not
+a sizing hint: the following state lives in that process's memory and is not
+shared.
+
+| State | With a second replica |
+| --- | --- |
+| Upload staging index | upload on A, `import:start` on B → 404 |
+| Download grants (signed with a per-process key) | a link prepared on A is rejected by B |
+| Batch-import runs, job registry, SSE events | progress and cancel reach only the owning replica |
+| Logout revocations | a logout on A is not honoured on B |
+| Rate-limit counters | every limit is multiplied by the replica count |
+
+Cookie affinity (sticky sessions) covers the first three rows only; revocation
+and rate limits stay per replica, so affinity does not make multiple replicas
+safe. A restart also clears all of the above: staged uploads are deleted at
+boot, in-flight jobs stop, and revocation entries are forgotten (session
+cookies expire server-side after 4 hours).
 
 ## URL Prefix Contract
 

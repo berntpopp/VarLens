@@ -60,21 +60,20 @@ describe('web auth origin gate', () => {
     ).toBe(false)
   })
 
-  test('allows unsafe API requests with same-origin or same-site Fetch Metadata', () => {
-    for (const secFetchSite of ['same-origin', 'same-site']) {
-      expect(
-        isAllowedUnsafeApiRequest({
-          secFetchSite,
-          origin: undefined,
-          host: 'varlens.example',
-          protocol: 'https'
-        })
-      ).toBe(true)
-    }
+  test('allows unsafe API requests with same-origin Fetch Metadata', () => {
+    expect(
+      isAllowedUnsafeApiRequest({
+        secFetchSite: 'same-origin',
+        origin: undefined,
+        host: 'varlens.example',
+        protocol: 'https'
+      })
+    ).toBe(true)
   })
 
-  test('rejects unsafe API requests with cross-site or none Fetch Metadata', () => {
-    for (const secFetchSite of ['cross-site', 'none']) {
+  // same-site: a sibling subdomain is not the SPA's origin (#507).
+  test('rejects unsafe API requests with same-site, cross-site or none Fetch Metadata', () => {
+    for (const secFetchSite of ['same-site', 'cross-site', 'none']) {
       expect(
         isAllowedUnsafeApiRequest({
           secFetchSite,

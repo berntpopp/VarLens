@@ -20,12 +20,20 @@ export class UserAdminError extends Error {
   }
 }
 
+/**
+ * Advisory-lock key that serialises every change to the set of active admins:
+ * the first-admin bootstrap and role changes take it in their transaction.
+ */
+export function adminSetLockKey(schemaQuoted: string): string {
+  return `${schemaQuoted}:first-admin-bootstrap`
+}
+
 async function requireExistingRole(
-  pool: Pool,
+  db: Pick<Pool, 'query'>,
   schemaQuoted: string,
   username: string
 ): Promise<UserRole> {
-  const existing = await pool.query<{ role: UserRole }>(
+  const existing = await db.query<{ role: UserRole }>(
     `SELECT role FROM ${schemaQuoted}."users" WHERE username = $1`,
     [username]
   )
@@ -37,7 +45,9 @@ async function requireExistingRole(
 
 /**
  * Change a user's role. Refuses to demote the last active admin so the
- * deployment can never lock itself out of user management.
+ * deployment can never lock itself out of user management. The "other active
+ * admins" check and the UPDATE run in one transaction under the admin-set
+ * advisory lock: without it two admins demoting each other both pass the check.
  */
 export async function setUserRole(
   pool: Pool,
@@ -46,22 +56,40 @@ export async function setUserRole(
   role: UserRole
 ): Promise<void> {
   if (!isUserRole(role)) throw new UserAdminError('invalid-role', `Invalid role: ${role}`)
-  const current = await requireExistingRole(pool, schemaQuoted, username)
-  if (current === role) return
-  if (current === ROLE_ADMIN) {
-    const others = await pool.query<{ c: string }>(
-      `SELECT COUNT(*)::text AS c FROM ${schemaQuoted}."users"
-        WHERE role = $1 AND is_active = TRUE AND username <> $2`,
-      [ROLE_ADMIN, username]
-    )
-    if (Number(others.rows[0]?.c ?? 0) === 0) {
-      throw new UserAdminError('last-admin', 'Cannot demote the last active admin')
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      adminSetLockKey(schemaQuoted)
+    ])
+    const current = await requireExistingRole(client, schemaQuoted, username)
+    if (current !== role) {
+      if (current === ROLE_ADMIN) {
+        const others = await client.query<{ c: string }>(
+          `SELECT COUNT(*)::text AS c FROM ${schemaQuoted}."users"
+            WHERE role = $1 AND is_active = TRUE AND username <> $2`,
+          [ROLE_ADMIN, username]
+        )
+        if (Number(others.rows[0]?.c ?? 0) === 0) {
+          throw new UserAdminError('last-admin', 'Cannot demote the last active admin')
+        }
+      }
+      await client.query(
+        `UPDATE ${schemaQuoted}."users" SET role = $1, updated_at = now() WHERE username = $2`,
+        [role, username]
+      )
     }
+    await client.query('COMMIT')
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // ignore rollback failures; original error wins
+    }
+    throw err
+  } finally {
+    client.release()
   }
-  await pool.query(
-    `UPDATE ${schemaQuoted}."users" SET role = $1, updated_at = now() WHERE username = $2`,
-    [role, username]
-  )
 }
 
 /** Re-enable a deactivated account and clear any lockout state. */

@@ -2,10 +2,11 @@ import type { FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { ForbiddenError } from '../../../main/ipc/errors'
+import type { StorageReadTask } from '../../../main/storage/read-executor'
 import type { StorageWriteTask } from '../../../main/storage/write-executor'
 import type { CaseDeleteTarget } from '../../../shared/types/case-delete-job'
 import { ErrorCode, type SerializableError } from '../../../shared/types/errors'
-import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
+import { CaseIdSchema, CaseSearchParamsSchema } from '../../../shared/types/ipc-schemas'
 import { CaseNotFoundError } from '../jobs/case-delete-jobs'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT } from '../web-event-types'
 import type { DispatcherDeps, OverrideHandler } from './types'
@@ -67,6 +68,25 @@ export function buildCasesOverrides(): Record<string, OverrideHandler> {
     'cases:list': {
       async handle(_args, _request, _reply, { session }) {
         return await session.listCases()
+      }
+    },
+
+    // Not autorouted: the executor binds `limit` as given, so raw args such as
+    // `{}` would run `LIMIT NULL` and return every case.
+    'cases:query': {
+      async handle(args, _request, reply, { session }) {
+        const parsed = CaseSearchParamsSchema.safeParse(args[0])
+        if (!parsed.success) {
+          reply.code(400)
+          return {
+            code: ErrorCode.INVALID_PARAMETERS,
+            message: 'invalid case search parameters',
+            userMessage: 'Invalid case search.'
+          } satisfies SerializableError
+        }
+        return await session
+          .getReadExecutor()
+          .execute({ type: 'cases:query', params: [parsed.data] } as StorageReadTask)
       }
     },
 

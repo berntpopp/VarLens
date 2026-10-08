@@ -14,6 +14,7 @@ import fastifyStatic from '@fastify/static'
 
 import { isLocalIgvAllowed, LOCAL_IGV_ORIGINS } from './instance-settings'
 import { isProbePath } from './probe-paths'
+import { requestPath } from './request-path'
 
 // At runtime the bundle lives at `/app/out/web/server.cjs`, so __dirname is
 // `/app/out/web/` and the renderer build lands beside it at `./public/`.
@@ -99,7 +100,7 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
   })
 
   app.setNotFoundHandler(async (request, reply) => {
-    const url = request.url.split('?', 1)[0]
+    const url = requestPath(request)
     if (request.method !== 'GET') {
       reply.code(404)
       return { error: 'not found' }

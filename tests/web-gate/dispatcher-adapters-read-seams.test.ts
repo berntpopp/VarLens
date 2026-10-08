@@ -58,6 +58,26 @@ describe('web dispatcher adapters: read seams', () => {
     })
   })
 
+  // #507: the autoroute passed raw args, so `{}` bound LIMIT NULL and returned every case.
+  test('cases.query validates and bounds the search parameters', async () => {
+    const { deps, execute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    await overrides['cases:query'].handle([{}], {} as never, reply as never, deps)
+    expect(execute).toHaveBeenCalledWith({
+      type: 'cases:query',
+      params: [expect.objectContaining({ limit: 50, offset: 0 })]
+    })
+
+    execute.mockClear()
+    for (const args of [[], [{ limit: 1_000_000 }], [{ limit: null }], [{ sort_by: 'id; --' }]]) {
+      await overrides['cases:query'].handle(args, {} as never, reply as never, deps)
+    }
+    expect(reply.code).toHaveBeenCalledTimes(4)
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(execute).not.toHaveBeenCalled()
+  })
+
   test('cases.list delegates to the web storage session', async () => {
     const { deps, reply } = makeDeps()
     const { overrides } = buildDispatcher(deps)

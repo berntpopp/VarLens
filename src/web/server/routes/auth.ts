@@ -71,6 +71,9 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
             result: 'error',
             failureClass: reason
           })
+          // Anonymous callers get one failure shape: no `locked` flag, which
+          // would confirm that the username exists.
+          return { success: false, user: null }
         }
         return result
       }
