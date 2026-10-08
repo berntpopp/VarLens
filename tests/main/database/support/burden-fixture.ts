@@ -38,7 +38,7 @@ const site =
 const complete = site('chr1', 100, 'A', 'G', 'GENE1')
 const unknown = site('chr1', 200, 'C', 'T', 'GENE1')
 const conflict = site('chr1', 300, 'G', 'A', 'GENE1')
-const phased = site('chr1', 400, 'T', 'C', 'GENE1')
+const phased = site('chr1', 90, 'T', 'C', 'GENE1')
 const halfCalls = site('chr1', 500, 'C', 'A', 'GENE1')
 const bare = site('2', 800, 'A', 'C', 'GENE2')
 
@@ -78,12 +78,12 @@ export const EXPECTED_NON_AUTOSOMAL = 6
 export const EXPECTED_GENES = [
   {
     gene_symbol: 'GENE1',
-    // Sites used, in order: chr1:100, chr1:400, chr1:500. Samples S1..S4.
+    // Sites used, in order: chr1:90, chr1:100, chr1:500. Samples S1..S4.
     dosages: [
       [1, 1, 0],
-      [2, 0, 1],
+      [0, 2, 1],
       [0, 0, 0],
-      [1, 0, 0]
+      [0, 1, 0]
     ],
     sites_excluded: { missing_call: 1, conflicting_calls: 1, no_called_alleles: 0 },
     groupA_carrier_count: 2,

@@ -250,14 +250,16 @@ describe('AssociationDataBuilder — eligible sites (#520)', () => {
       column_filters: { qual: { operator: '>=', value: 20, includeEmpty: false } }
     })
     expect(projectGenes(built.genes)).toEqual(EXPECTED_GENES)
-    expect(built.genes[0].samples[1].dosages[0]).toBe(2)
+    // S2's chr1:100 is now at dosage index 1 (since chr1:90 is at 0)
+    expect(built.genes[0].samples[1].dosages[1]).toBe(2)
   })
 
   it('0/1 (quality 99) with 1/1 (quality 2) does not select the homozygote', () => {
     const gene1 = build().genes[0]
     expect(gene1.sites_excluded.conflicting_calls).toBe(1)
     // chr1:300 is in no sample's dosages: S2 keeps only chr1:100 (2) and chr1:500 (1).
-    expect(gene1.samples[1].dosages).toEqual([2, 0, 1])
+    // Because of numerical ordering, chr1:90 is at [0], chr1:100 is at [1], chr1:500 is at [2].
+    expect(gene1.samples[1].dosages).toEqual([0, 2, 1])
   })
 
   it('rejects a selection with more than one genome build', () => {

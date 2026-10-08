@@ -92,10 +92,11 @@ export class PostgresAssociationDataBuilder {
     }
   }
 
-  private async countNonAutosomalVariants(
+  private buildSiteFilter(
     allIds: number[],
-    filters: VariantFilters
-  ): Promise<number> {
+    filters: VariantFilters,
+    autosomeCondition: string
+  ): { joins: string; whereParts: string[]; params: unknown[] } {
     const baseInput: BaseFilterInput = {
       gnomad_af_max: filters.gnomad_af_max,
       cadd_min: filters.cadd_min,
@@ -109,7 +110,7 @@ export class PostgresAssociationDataBuilder {
     const ext = buildExtensionJoinClauses(filters.column_filters ?? {}, 'v')
 
     const params: unknown[] = [allIds]
-    const whereParts = ['v.case_id = ANY($1::bigint[])', `NOT (${autosomeSql('v.chr')})`]
+    const whereParts = ['v.case_id = ANY($1::bigint[])', autosomeCondition]
     let next = 2
     if (base.sql !== '') {
       const converted = toPostgresFragment(base.sql, next, this.schemaName)
@@ -123,6 +124,19 @@ export class PostgresAssociationDataBuilder {
       params.push(...ext.params)
     }
     const joins = toPostgresFragment(ext.joins, next, this.schemaName).sql
+
+    return { joins, whereParts, params }
+  }
+
+  private async countNonAutosomalVariants(
+    allIds: number[],
+    filters: VariantFilters
+  ): Promise<number> {
+    const { joins, whereParts, params } = this.buildSiteFilter(
+      allIds,
+      filters,
+      `NOT (${autosomeSql('v.chr')})`
+    )
 
     const result = await this.pool.query<{ count: string }>(
       `SELECT COUNT(*) FROM (
@@ -140,33 +154,11 @@ export class PostgresAssociationDataBuilder {
     allIds: number[],
     filters: VariantFilters
   ): Promise<AssociationVariantRow[]> {
-    const baseInput: BaseFilterInput = {
-      gnomad_af_max: filters.gnomad_af_max,
-      cadd_min: filters.cadd_min,
-      consequences: filters.consequences,
-      clinvars: filters.clinvars,
-      funcs: filters.funcs,
-      gene_list: filters.gene_list,
-      column_filters: filters.column_filters
-    }
-    const base = buildBaseWhere(baseInput, { baseAlias: 'v', scope: 'cohort-burden' })
-    const ext = buildExtensionJoinClauses(filters.column_filters ?? {}, 'v')
-
-    const params: unknown[] = [allIds]
-    const whereParts = ['v.case_id = ANY($1::bigint[])', autosomeSql('v.chr')]
-    let next = 2
-    if (base.sql !== '') {
-      const converted = toPostgresFragment(base.sql, next, this.schemaName)
-      whereParts.push(converted.sql)
-      next = converted.next
-      params.push(...base.params)
-    }
-    if (ext.whereClause !== '') {
-      const converted = toPostgresFragment(ext.whereClause, next, this.schemaName)
-      whereParts.push(converted.sql)
-      params.push(...ext.params)
-    }
-    const joins = toPostgresFragment(ext.joins, next, this.schemaName).sql
+    const { joins, whereParts, params } = this.buildSiteFilter(
+      allIds,
+      filters,
+      autosomeSql('v.chr')
+    )
 
     const result = await this.pool.query<Record<string, unknown>>(
       `WITH picked AS (SELECT unnest($1::bigint[]) AS id),
@@ -186,7 +178,7 @@ export class PostgresAssociationDataBuilder {
          FROM selected s
          JOIN ${this.schemaName}."variants" r ON r.chr = s.chr AND r.pos = s.pos AND r.ref = s.ref AND r.alt = s.alt
         WHERE r.case_id IN (SELECT id FROM picked)
-        ORDER BY s.gene_symbol, variant_key, r.case_id`,
+        ORDER BY s.gene_symbol COLLATE "C", r.chr COLLATE "C", r.pos, r.ref COLLATE "C", r.alt COLLATE "C", r.case_id`,
       params
     )
 

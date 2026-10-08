@@ -59,7 +59,6 @@ const built = () => ({
   genes: buildGeneContingencyData(rows(), CONFIG.groupA_ids, CONFIG.groupB_ids, new Map()),
   non_autosomal_variants: 2
 })
-  
 
 describe('association-logic (web in-process runner)', () => {
   it('matches the desktop pipeline: per-gene tests + shared FDR/sort tail', async () => {
@@ -99,7 +98,10 @@ describe('association-logic (web in-process runner)', () => {
   })
 
   it('no qualifying genes → empty result with a warning', async () => {
-    const result = await runAssociationInProcess(CONFIG, async () => ({ genes: [], non_autosomal_variants: 5 }))
+    const result = await runAssociationInProcess(CONFIG, async () => ({
+      genes: [],
+      non_autosomal_variants: 5
+    }))
     expect(result.warnings).toEqual(['No genes with qualifying variants'])
     expect(result.non_autosomal_variants).toBe(5)
   })

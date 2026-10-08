@@ -19,7 +19,11 @@ function sqlDosage(gt: string | null): number | null {
 }
 
 /** A stored row as both builders read it. */
-const row = (case_id: number, gt_num: string | null, variant_key = SITE): AssociationVariantRow => ({
+const row = (
+  case_id: number,
+  gt_num: string | null,
+  variant_key = SITE
+): AssociationVariantRow => ({
   gene_symbol: 'GENE1',
   case_id,
   variant_key,
@@ -57,25 +61,34 @@ describe('burden allele frequency counts called alleles (#517)', () => {
 })
 
 describe('the shipped genotype classes stay (#520)', () => {
-  it.each(['1/.', './1', '1|.', '.|1'])('an assumed het %s is dosage 1 and keeps its site', (gt) => {
-    const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
-    expect(gene.sites_excluded).toEqual(NONE)
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[1], [1]])
-    expect(gene).toMatchObject({ groupA_carrier_count: 1, groupB_carrier_count: 1 })
-  })
+  it.each(['1/.', './1', '1|.', '.|1'])(
+    'an assumed het %s is dosage 1 and keeps its site',
+    (gt) => {
+      const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
+      expect(gene.sites_excluded).toEqual(NONE)
+      expect(gene.samples.map((s) => s.dosages)).toEqual([[1], [1]])
+      expect(gene).toMatchObject({ groupA_carrier_count: 1, groupB_carrier_count: 1 })
+    }
+  )
 
-  it.each(['0/.', './0', '0|.', '.|0'])('a reference half-call %s is dosage 0 and keeps its site', (gt) => {
-    const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
-    expect(gene.sites_excluded).toEqual(NONE)
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[0], [1]])
-  })
+  it.each(['0/.', './0', '0|.', '.|0'])(
+    'a reference half-call %s is dosage 0 and keeps its site',
+    (gt) => {
+      const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
+      expect(gene.sites_excluded).toEqual(NONE)
+      expect(gene.samples.map((s) => s.dosages)).toEqual([[0], [1]])
+    }
+  )
 
-  it.each(['./.', '.|.', '.', null, 'not-a-genotype'])('an unknown call %j excludes its site', (gt) => {
-    const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
-    expect(gene.sites_excluded).toEqual({ ...NONE, missing_call: 1 })
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[], []])
-    expect(gene.groupB_carrier_count).toBe(0)
-  })
+  it.each(['./.', '.|.', '.', null, 'not-a-genotype'])(
+    'an unknown call %j excludes its site',
+    (gt) => {
+      const gene = build([row(1, gt), row(2, '0/1')], [1], [2])
+      expect(gene.sites_excluded).toEqual({ ...NONE, missing_call: 1 })
+      expect(gene.samples.map((s) => s.dosages)).toEqual([[], []])
+      expect(gene.groupB_carrier_count).toBe(0)
+    }
+  )
 })
 
 describe('complete-site rule (#520)', () => {
@@ -115,15 +128,16 @@ describe('complete-site rule (#520)', () => {
     expect(ba.groupB_carrier_count).toBe(ab.groupA_carrier_count)
   })
 
-  it('a site no tested sample calls is excluded: no_called_alleles', () => {
-    // Neither sample has its covariate, so nobody is left to compute a frequency from.
+  it('a site no tested sample calls still keeps its frequency via allIds fallback', () => {
+    // Neither sample has its covariate, so nobody is left to compute a frequency from testedIds.
     const covariates = new Map([
       [1, [NaN]],
       [2, [NaN]]
     ])
     const [gene] = buildGeneContingencyData([row(1, '0/1')], [1], [2], covariates)
-    expect(gene.sites_excluded).toEqual({ ...NONE, no_called_alleles: 1 })
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[], []])
+    // The fallback frequency now uses allIds, so it is not excluded for Fisher.
+    expect(gene.sites_excluded).toEqual({ ...NONE, no_called_alleles: 0 })
+    expect(gene.samples.map((s) => s.dosages)).toEqual([[1], [0]])
   })
 
   it('a gene whose every site is excluded is reported, not tested', () => {

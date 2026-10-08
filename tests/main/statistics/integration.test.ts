@@ -119,7 +119,12 @@ describe('Association analysis integration', () => {
 
   it('respects gnomAD AF filter', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], { gnomad_af_max: 0.005 }, []).genes
+    const genes = builder.build(
+      [1, 2, 3, 4, 5],
+      [6, 7, 8, 9, 10],
+      { gnomad_af_max: 0.005 },
+      []
+    ).genes
 
     // BRCA1 (AF=0.001) should pass, TP53 (AF=0.01) and EGFR (AF=0.1) should be filtered
     const geneNames = genes.map((g) => g.gene_symbol)
@@ -129,7 +134,7 @@ describe('Association analysis integration', () => {
 
   it('handles covariates (sex)', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, ['sex'])
+    const { genes } = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, ['sex'])
 
     const brca1 = genes.find((g) => g.gene_symbol === 'BRCA1')!
 
@@ -169,10 +174,10 @@ describe('AssociationEngine with DbPool (off-thread build)', () => {
   it('uses dbPool.run for association:build when pool is provided', async () => {
     // Build expected result using direct builder (for mock return)
     const builder = new AssociationDataBuilder(db)
-    const expectedGenes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, [])
+    const { genes: expectedGenes } = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, [])
 
     // Mock DbPool
-    const mockPoolRun = vi.fn().mockResolvedValue(expectedGenes)
+    const mockPoolRun = vi.fn().mockResolvedValue({ genes: expectedGenes, non_autosomal_variants: 0 })
     const mockDbPool = {
       run: mockPoolRun
     } as unknown as import('../../../src/main/database/DbPool').DbPool
@@ -312,43 +317,41 @@ describe('AssociationEngine with DbPool (off-thread build)', () => {
     expect(results.results).toEqual([])
     expect(mockWorkerRun).toHaveBeenCalledOnce()
   })
-})
-
   it('the run result carries the qualifying variants that are not on an autosome', async () => {
-    db.prepare(
-      "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, gt_num) VALUES (1, 'chrX', 5000, 'G', 'A', 'DMD', '1')"
-    ).run()
-    const mockWorkerRun = vi.fn().mockResolvedValue([])
-    vi.resetModules()
-    vi.doMock('../../../src/main/statistics/WorkerPool', () => {
-      function WorkerPool() {
-        return { run: mockWorkerRun, abort: vi.fn() }
-      }
-      return { WorkerPool }
-    })
-    const { AssociationEngine } = await import('../../../src/main/statistics/AssociationEngine')
-    const config = {
-      groupA_ids: [1, 2, 3, 4, 5],
-      groupB_ids: [6, 7, 8, 9, 10],
-      primary_test: 'fisher' as const,
-      weight_scheme: 'uniform' as const,
-      covariates: [],
-      filters: {},
-      max_threads: 2
+  db.prepare(
+    "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, gt_num) VALUES (1, 'chrX', 5000, 'G', 'A', 'DMD', '1')"
+  ).run()
+  const mockWorkerRun = vi.fn().mockResolvedValue([])
+  vi.resetModules()
+  vi.doMock('../../../src/main/statistics/WorkerPool', () => {
+    function WorkerPool() {
+      return { run: mockWorkerRun, abort: vi.fn() }
     }
-
-    const results = await new AssociationEngine(db, undefined, null).run(config)
-    expect(results.non_autosomal_variants).toBe(1)
-
-    // A run that finds only chrX variants is empty, and says how many it left out.
-    const onlyX = await new AssociationEngine(db, undefined, null).run({
-      ...config,
-      filters: { gene_list: ['DMD'] }
-    })
-    expect(onlyX.results).toEqual([])
-    expect(onlyX.warnings).toEqual(['No genes with qualifying variants'])
-    expect(onlyX.non_autosomal_variants).toBe(1)
+    return { WorkerPool }
   })
+  const { AssociationEngine } = await import('../../../src/main/statistics/AssociationEngine')
+  const config = {
+    groupA_ids: [1, 2, 3, 4, 5],
+    groupB_ids: [6, 7, 8, 9, 10],
+    primary_test: 'fisher' as const,
+    weight_scheme: 'uniform' as const,
+    covariates: [],
+    filters: {},
+    max_threads: 2
+  }
+
+  const results = await new AssociationEngine(db, undefined, null).run(config)
+  expect(results.non_autosomal_variants).toBe(1)
+
+  // A run that finds only chrX variants is empty, and says how many it left out.
+  const onlyX = await new AssociationEngine(db, undefined, null).run({
+    ...config,
+    filters: { gene_list: ['DMD'] }
+  })
+  expect(onlyX.results).toEqual([])
+  expect(onlyX.warnings).toEqual(['No genes with qualifying variants'])
+  expect(onlyX.non_autosomal_variants).toBe(1)
+})
 
 describe('AssociationEngine parallel execution', () => {
   let db: Database.Database
@@ -477,4 +480,5 @@ describe('AssociationEngine parallel execution', () => {
     expect(mockAbort).toHaveBeenCalled()
     expect(results.warnings).toContain('Analysis cancelled')
   })
+})
 })

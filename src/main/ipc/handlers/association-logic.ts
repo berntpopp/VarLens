@@ -52,14 +52,24 @@ export async function runAssociationInProcess(
   const built = await buildData(config)
   const { genes, non_autosomal_variants } = built
   if (genes.length === 0) {
-    return emptyAssociationResults(config, 'No genes with qualifying variants', startedAt, non_autosomal_variants)
+    return emptyAssociationResults(
+      config,
+      'No genes with qualifying variants',
+      startedAt,
+      non_autosomal_variants
+    )
   }
 
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE)
   const raw: GeneAssociationResult[] = []
   for (let i = 0; i < genes.length; i++) {
     if (options.signal?.aborted === true) {
-      return emptyAssociationResults(config, 'Analysis cancelled', startedAt, non_autosomal_variants)
+      return emptyAssociationResults(
+        config,
+        'Analysis cancelled',
+        startedAt,
+        non_autosomal_variants
+      )
     }
     // A failing gene is skipped, as in the desktop worker (which logs and continues).
     try {

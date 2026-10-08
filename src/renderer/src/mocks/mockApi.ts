@@ -221,8 +221,6 @@ export const mockApi: WindowAPI = {
       }
       return [...set]
     },
-    // Wave 4 — unified shortlist: minimal stub so browser dev mode has a
-    // placeholder. Real data flows through the main-process handler.
     shortlist: async () => ({
       rows: [],
       totalCandidates: 0,

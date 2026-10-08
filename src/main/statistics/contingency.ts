@@ -179,7 +179,10 @@ function eligibleSites(
   }
   for (const calls of variantMap.values()) {
     const reason = siteExclusion(calls, allIds)
-    const frequency = reason === null ? altAlleleFrequency(calls, frequencyIds) : null
+    const frequency =
+      reason === null
+        ? (altAlleleFrequency(calls, frequencyIds) ?? altAlleleFrequency(calls, allIds))
+        : null
     if (frequency === null) sites_excluded[reason ?? 'no_called_alleles']++
     else sites.push({ calls, frequency })
   }
@@ -255,10 +258,10 @@ export function buildGeneContingencyData(
 ): GeneContingencyData[] {
   const allIds = [...groupA_ids, ...groupB_ids]
   const groupASet = new Set(groupA_ids)
+  const testedIds = allIds.filter((id) => hasCompleteCovariates(covariateMap.get(id) ?? []))
   const results: GeneContingencyData[] = []
   for (const [geneSymbol, variantMap] of groupRows(rows)) {
     // Frequencies and weights describe the samples the regression tests (burden.ts).
-    const testedIds = allIds.filter((id) => hasCompleteCovariates(covariateMap.get(id) ?? []))
     const { sites, sites_excluded } = eligibleSites(variantMap, allIds, testedIds)
     results.push({
       gene_symbol: geneSymbol,
