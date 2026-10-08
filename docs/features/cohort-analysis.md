@@ -38,3 +38,9 @@ VarLens includes gene burden testing to identify genes with statistically signif
 ## Filtering
 
 Cohort view supports the same filtering capabilities as case view, plus additional cohort-specific filters for carrier count thresholds.
+
+## Burden Test Eligible Sites
+During burden testing, VarLens applies specific rules to ensure statistically rigorous site selection:
+- **Autosomes Only:** The analysis is restricted to autosomal chromosomes (chr1-22). Sex chromosomes (chrX, chrY) and mitochondrial variants (chrM) are automatically excluded. A warning is displayed if these are dropped.
+- **Missing Calls:** Partial or missing calls (like `0/.` or `1/.`) do not disqualify the variant. The site is treated based on presence of the alternate allele.
+- **Weights and MAF Limits:** When using Beta(MAF) weights, the tool clamps MAF at 50% to prevent unexpected inversion of weight scaling.

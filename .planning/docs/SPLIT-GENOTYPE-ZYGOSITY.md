@@ -90,3 +90,6 @@ chrX that overstates the denominator by one allele, which the stored data cannot
 - Existing databases: SQLite migrations **v42**, **v43** / PostgreSQL **0026**, **0027** flag a populated summary stale.
   SQLite rebuilds it at app start (automatic or interactive open); PostgreSQL in the background,
   leaving it unpatched by imports and deletions until then. Dosage and filters are read-time.
+
+## Burden Test Site-Based Inclusion (Phase 16)
+Burden testing (Path 3) evaluates single-nucleotide and indels purely at the site level, treating multi-allelic sites or missing calls in a boolean manner (`1/.` is a carrier, `0/.` is non-carrier). It does not strictly enforce fully resolved diploid zygosity for inclusion, avoiding data loss from partial calls.
