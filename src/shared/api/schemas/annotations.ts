@@ -15,6 +15,11 @@ export {
   VariantCoordsSchema
 }
 
+/** Variant keys of one `annotations:batchGet` call (desktop IPC and web dispatcher). */
+export const VariantKeysSchema = z.array(
+  VariantCoordsSchema.extend({ variantId: z.number().int().positive().optional() })
+)
+
 const AcmgClassificationInputSchema = z
   .enum([
     ...ACMG_CLASSIFICATIONS,

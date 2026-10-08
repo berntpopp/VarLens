@@ -12,6 +12,8 @@
  *   2. Read-task autoroute — if `<domain>:<method>` is one of the
  *      StorageReadTask types, dispatch to `getReadExecutor()`.
  *   3. Write-task autoroute — same for StorageWriteTask.
+ *      Both parse `args` with the method's schema in auto-route-schemas.ts
+ *      first and answer 400 on a mismatch.
  *
  * Anything else returns 404. The type sets in task-types.ts are
  * `as const satisfies` against the executor unions, so the
@@ -39,6 +41,7 @@ import {
   safeIdentifier,
   toSerializableWebError
 } from './dispatcher-errors'
+import { AUTO_ROUTE_ARG_SCHEMAS } from './auto-route-schemas'
 import { isReadTaskType, isWriteTaskType, toTaskDomain } from './task-types'
 import { runAsJobActor, type JobActor } from './jobs/job-actor'
 import { buildAnalysisGroupOverrides } from './routes/analysis-groups'
@@ -317,15 +320,26 @@ function resolveInvocation(
   if (override !== undefined) {
     return async () => override.handle(args, request, reply, deps)
   }
-  if (isReadTaskType(key)) {
-    const task = { type: key, params: args } as StorageReadTask
-    return () => deps.session.getReadExecutor().execute(task)
+  // Fail closed: an auto-route without an argument schema is not served.
+  const schema = AUTO_ROUTE_ARG_SCHEMAS[key]
+  if (schema === undefined || !(isReadTaskType(key) || isWriteTaskType(key))) return undefined
+  return async () => {
+    const parsed = schema.safeParse(args)
+    if (!parsed.success) {
+      reply.code(400)
+      return {
+        code: ErrorCode.INVALID_PARAMETERS,
+        message: `invalid arguments for ${key}`,
+        userMessage: 'Invalid request.'
+      } satisfies SerializableError
+    }
+    if (isReadTaskType(key)) {
+      const task = { type: key, params: parsed.data } as StorageReadTask
+      return deps.session.getReadExecutor().execute(task)
+    }
+    const task = { type: key, params: parsed.data } as StorageWriteTask
+    return deps.session.getWriteExecutor().execute(task)
   }
-  if (isWriteTaskType(key)) {
-    const task = { type: key, params: args } as StorageWriteTask
-    return () => deps.session.getWriteExecutor().execute(task)
-  }
-  return undefined
 }
 
 /**

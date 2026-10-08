@@ -154,7 +154,7 @@ describe('role matrix: anonymous and legacy roles', () => {
     const tag = await app.inject({
       method: 'POST',
       url: urlFor('tags:create'),
-      payload: { args: [{ name: 'x', color: '#fff' }] }
+      payload: { args: ['x', '#fff'] }
     })
     expect(tag.statusCode).toBe(200)
     const users = await app.inject({ method: 'POST', url: urlFor('auth:listUsers') })
@@ -167,7 +167,7 @@ describe('role matrix: anonymous and legacy roles', () => {
     const response = await app.inject({
       method: 'POST',
       url: urlFor('tags:create'),
-      payload: { args: [{ name: 'x', color: '#fff' }] }
+      payload: { args: ['x', '#fff'] }
     })
     expect(response.statusCode).toBe(200)
     expect(made.writeExecute).toHaveBeenCalledWith({

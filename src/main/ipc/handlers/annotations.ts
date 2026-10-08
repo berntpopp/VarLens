@@ -7,7 +7,8 @@ import {
   VariantCoordsSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema,
-  CaseVariantIdSchema
+  CaseVariantIdSchema,
+  VariantKeysSchema
 } from '../../../shared/api/schemas/annotations'
 import { mainLogger } from '../../services/MainLogger'
 import type { AnnotationChangeEvent } from '../../../shared/types/api'
@@ -272,17 +273,6 @@ export function registerAnnotationHandlers({
         )
       })
     }
-  )
-
-  // Zod schema for batch annotation variant keys (hoisted to avoid re-creation per call)
-  const VariantKeysSchema = z.array(
-    z.object({
-      chr: z.string().min(1),
-      pos: z.number().int().positive(),
-      ref: z.string().min(1),
-      alt: z.string().min(1),
-      variantId: z.number().int().positive().optional()
-    })
   )
 
   // Batch read -- single round-trip for N variants (pool-dispatched)
