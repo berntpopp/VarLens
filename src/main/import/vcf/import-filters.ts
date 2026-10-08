@@ -34,12 +34,12 @@ export type VariantType = 'snv' | 'indel' | 'sv' | 'cnv' | 'str'
  *    The per-caller quality metrics are NOT filtered at import time — use
  *    the case-view column filters instead.
  *
- * 3. **`bedFilter`**: range overlap is preferred when the INFO field carries
- *    a numeric END (set by Sniffles, Spectre, Straglr, Manta, etc.). For
- *    breakend notation (`ALT=N]chr2:1234]`) and point-like records without
- *    END, a single-position contains check on `POS` is used. Only the
- *    primary breakend is checked; mate-pair records are tested independently
- *    on their own POS.
+ * 3. **`bedFilter`**: range overlap POS..END when INFO carries a whole-number
+ *    END at or after POS (Sniffles, Spectre, Straglr, Manta, ...). Everything
+ *    else takes a point check on POS: records without END, a malformed END,
+ *    and breakends (`SVTYPE=BND` or bracket ALT) even when they carry END,
+ *    which is then the mate's coordinate. Mate records are tested
+ *    independently on their own POS.
  *
  * 4. **`minGq` / `minDp`**: these gate the sample's FORMAT/GQ and FORMAT/DP
  *    fields, whatever the variant type. A record without the field passes
