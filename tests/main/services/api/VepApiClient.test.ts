@@ -108,9 +108,55 @@ describe('VepApiClient', () => {
 
   // VEP endpoint path used in nock mocks (extracted to stay within print width)
   const vepPath =
-    '/vep/human/region/1:100:100/T?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1'
+    '/vep/human/region/1:100-100:1/T?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1'
 
   describe('fetchVariantAnnotation', () => {
+    // Ensembl default format: exact changed bases, '-' for a deleted
+    // sequence, start = end + 1 for an insertion (#494).
+    it.each([
+      ['SNV', 'A', 'T', '1:100-100:1/T'],
+      ['deletion', 'ATG', 'A', '1:101-102:1/-'],
+      ['insertion', 'A', 'ATT', '1:101-100:1/TT'],
+      ['MNV', 'AT', 'GC', '1:100-101:1/GC']
+    ])('should request the full reference span for a %s', async (_kind, ref, alt, region) => {
+      const scope = nock('https://rest.ensembl.org')
+        .get(`/vep/human/region/${region}`)
+        .query(true)
+        .reply(200, mockVepResponse)
+
+      const result = await client.fetchVariantAnnotation('1', 100, ref, alt)
+
+      expect(result.success).toBe(true)
+      expect(scope.isDone()).toBe(true)
+    })
+
+    it('should not serve entries cached before the reference span was sent', async () => {
+      cache.set('vep:1:100:ATG:A', JSON.stringify(mockVepResponse), 30)
+      const scope = nock('https://rest.ensembl.org')
+        .get('/vep/human/region/1:101-102:1/-')
+        .query(true)
+        .reply(200, mockVepResponse)
+
+      const result = await client.fetchVariantAnnotation('1', 100, 'ATG', 'A')
+
+      expect(result.success && result.cacheInfo.cached).toBe(false)
+      expect(scope.isDone()).toBe(true)
+    })
+
+    it.each([
+      ['a path in the allele', '1', 'A', 'T/../../info/ping'],
+      ['a symbolic allele', '1', 'N', '<DEL>'],
+      ['a query in the chromosome', '1?x=', 'A', 'T'],
+      ['identical alleles', '1', 'A', 'A']
+    ])('should refuse %s without a request', async (_kind, chr, ref, alt) => {
+      const result = await client.fetchVariantAnnotation(chr, 100, ref, alt)
+
+      expect(result).toMatchObject({
+        success: false,
+        error: 'VEP lookup needs a chromosome and differing sequence alleles'
+      })
+    })
+
     it('should fetch and validate VEP response', async () => {
       nock('https://rest.ensembl.org').get(vepPath).reply(200, mockVepResponse)
 
@@ -135,13 +181,13 @@ describe('VepApiClient', () => {
       await client.fetchVariantAnnotation('chr1', 100, 'A', 'T')
 
       // Check that cache key was normalized (chr prefix removed)
-      const cached = cache.get('vep:1:100:A:T')
+      const cached = cache.get('vep:v2:1:100:A:T')
       expect(cached).not.toBe(null)
     })
 
     it('should return cached data when available', async () => {
       // Pre-populate cache
-      const cacheKey = 'vep:1:100:A:T'
+      const cacheKey = 'vep:v2:1:100:A:T'
       cache.set(cacheKey, JSON.stringify(mockVepResponse), 30)
 
       // Should not make HTTP request - don't register any nock mocks
@@ -231,7 +277,7 @@ describe('VepApiClient', () => {
 
   describe('getCached', () => {
     it('should return cached response when available', () => {
-      const cacheKey = 'vep:1:100:A:T'
+      const cacheKey = 'vep:v2:1:100:A:T'
       cache.set(cacheKey, JSON.stringify(mockVepResponse), 30)
 
       const result = client.getCached(cacheKey)
@@ -244,12 +290,12 @@ describe('VepApiClient', () => {
     })
 
     it('should return null when not cached', () => {
-      const result = client.getCached('vep:1:100:A:T')
+      const result = client.getCached('vep:v2:1:100:A:T')
       expect(result).toBe(null)
     })
 
     it('should return null for corrupted cache entry', () => {
-      const cacheKey = 'vep:1:100:A:T'
+      const cacheKey = 'vep:v2:1:100:A:T'
       cache.set(cacheKey, 'invalid json', 30)
 
       const result = client.getCached(cacheKey)
@@ -456,7 +502,7 @@ describe('VepApiClient', () => {
   describe('clearCache', () => {
     it('should clear all VEP cache entries', () => {
       // Add VEP cache entries
-      cache.set('vep:1:100:A:T', JSON.stringify(mockVepResponse), 30)
+      cache.set('vep:v2:1:100:A:T', JSON.stringify(mockVepResponse), 30)
       cache.set('vep:2:200:C:G', JSON.stringify(mockVepResponse), 30)
 
       // Add HPO cache entry (should not be cleared)
@@ -465,7 +511,7 @@ describe('VepApiClient', () => {
       client.clearCache()
 
       // VEP entries should be gone
-      expect(cache.get('vep:1:100:A:T')).toBe(null)
+      expect(cache.get('vep:v2:1:100:A:T')).toBe(null)
       expect(cache.get('vep:2:200:C:G')).toBe(null)
 
       // HPO entry should remain

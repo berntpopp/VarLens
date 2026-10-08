@@ -15,45 +15,68 @@ interface CacheEntry {
   created_at: number
 }
 
-export class ApiCache {
-  private getStmt: Database.Statement
-  private setStmt: Database.Statement
-  private deleteByPrefixStmt: Database.Statement
-  private cleanupExpiredStmt: Database.Statement
-  private getCacheStatsStmt: Database.Statement
+interface CacheStatements {
+  get: Database.Statement
+  set: Database.Statement
+  deleteByPrefix: Database.Statement
+  cleanupExpired: Database.Statement
+  getCacheStats: Database.Statement
+}
 
-  constructor(private readonly db: Database.Database) {
-    // Prepare statements for performance - avoid reparsing SQL on each call
-    this.getStmt = db.prepare(`
+// Prepare statements once per connection - avoid reparsing SQL on each call
+function prepareStatements(db: Database.Database): CacheStatements {
+  return {
+    get: db.prepare(`
       SELECT response_data, created_at
       FROM api_cache
       WHERE cache_key = ? AND expires_at > ?
-    `)
-
-    this.setStmt = db.prepare(`
+    `),
+    set: db.prepare(`
       INSERT INTO api_cache (cache_key, response_data, created_at, expires_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(cache_key) DO UPDATE SET
         response_data = excluded.response_data,
         created_at = excluded.created_at,
         expires_at = excluded.expires_at
-    `)
-
-    this.deleteByPrefixStmt = db.prepare(`
+    `),
+    deleteByPrefix: db.prepare(`
       DELETE FROM api_cache WHERE cache_key LIKE ?
-    `)
-
-    this.cleanupExpiredStmt = db.prepare(`
+    `),
+    cleanupExpired: db.prepare(`
       DELETE FROM api_cache WHERE expires_at <= ?
-    `)
-
-    this.getCacheStatsStmt = db.prepare(`
+    `),
+    getCacheStats: db.prepare(`
       SELECT
         SUM(CASE WHEN cache_key LIKE 'vep:%' THEN 1 ELSE 0 END) as vep_count,
         SUM(CASE WHEN cache_key LIKE 'hpo:%' THEN 1 ELSE 0 END) as hpo_count,
         SUM(LENGTH(response_data)) as total_bytes
       FROM api_cache
     `)
+  }
+}
+
+export class ApiCache {
+  private readonly statements = new WeakMap<Database.Database, CacheStatements>()
+
+  /**
+   * @param source - A connection, or a getter for the current one. Long-lived
+   *   owners (IPC handlers) pass the getter so the cache follows a database
+   *   switch instead of holding statements of a closed connection.
+   */
+  constructor(private readonly source: Database.Database | (() => Database.Database)) {}
+
+  private get db(): Database.Database {
+    return typeof this.source === 'function' ? this.source() : this.source
+  }
+
+  private get stmts(): CacheStatements {
+    const db = this.db
+    let stmts = this.statements.get(db)
+    if (!stmts) {
+      stmts = prepareStatements(db)
+      this.statements.set(db, stmts)
+    }
+    return stmts
   }
 
   /**
@@ -62,7 +85,7 @@ export class ApiCache {
    */
   get(key: string): { data: string; createdAt: number } | null {
     const now = Date.now()
-    const result = this.getStmt.get(key, now) as CacheEntry | undefined
+    const result = this.stmts.get.get(key, now) as CacheEntry | undefined
 
     if (!result) return null
 
@@ -89,7 +112,7 @@ export class ApiCache {
     const ttlMs = ttlDays * 24 * 60 * 60 * 1000 * jitterFactor
     const expiresAt = now + ttlMs
 
-    this.runWithoutLockWait(() => this.setStmt.run(key, data, now, expiresAt))
+    this.runWithoutLockWait(() => this.stmts.set.run(key, data, now, expiresAt))
   }
 
   /**
@@ -131,7 +154,7 @@ export class ApiCache {
       | 'clinvar:'
       | 'ensembl:'
   ): number {
-    const result = this.deleteByPrefixStmt.run(`${prefix}%`)
+    const result = this.stmts.deleteByPrefix.run(`${prefix}%`)
     return result.changes
   }
 
@@ -143,7 +166,7 @@ export class ApiCache {
    */
   cleanupExpired(): number {
     const now = Date.now()
-    const result = this.cleanupExpiredStmt.run(now)
+    const result = this.stmts.cleanupExpired.run(now)
     return result.changes
   }
 
@@ -151,7 +174,7 @@ export class ApiCache {
    * Get cache statistics for settings page
    */
   getCacheStats(): CacheSizeInfo {
-    const result = this.getCacheStatsStmt.get() as {
+    const result = this.stmts.getCacheStats.get() as {
       vep_count: number | null
       hpo_count: number | null
       total_bytes: number | null

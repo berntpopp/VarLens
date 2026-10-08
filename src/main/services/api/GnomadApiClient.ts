@@ -20,6 +20,7 @@ import type {
 } from '../../../shared/types/protein'
 import { parseProteinPosition } from '../../../shared/utils/protein-utils'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 
 const GNOMAD_ENDPOINT = 'https://gnomad.broadinstitute.org/api'
 const CACHE_TTL_DAYS = 30
@@ -173,6 +174,7 @@ export class GnomadApiClient {
   private async makeGnomadRequest(geneSymbol: string, dataset: string = DATASET): Promise<unknown> {
     const response = await fetch(GNOMAD_ENDPOINT, {
       method: 'POST',
+      signal: AbortSignal.timeout(API_CONFIG.GNOMAD_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json'
       },
@@ -329,6 +331,7 @@ export class GnomadApiClient {
   private async makeClinVarRequest(geneSymbol: string, referenceGenome: string): Promise<unknown> {
     const response = await fetch(GNOMAD_ENDPOINT, {
       method: 'POST',
+      signal: AbortSignal.timeout(API_CONFIG.GNOMAD_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json'
       },

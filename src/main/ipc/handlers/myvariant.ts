@@ -18,8 +18,7 @@ let apiCache: ApiCache | null = null
 export function registerMyVariantHandlers({ ipcMain, getDb }: HandlerDependencies): void {
   function getMyVariantClient(): MyVariantApiClient {
     if (!myVariantClient) {
-      const db = getDb().database
-      apiCache = new ApiCache(db)
+      apiCache = new ApiCache(() => getDb().database)
       myVariantClient = new MyVariantApiClient(apiCache)
     }
     return myVariantClient
