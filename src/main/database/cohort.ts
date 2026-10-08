@@ -460,6 +460,8 @@ export class CohortService {
 
   /** Cached column metadata — invalidated on summary rebuild */
   private _columnMetaCache: ColumnFilterMeta[] | null = null
+  /** `PRAGMA data_version` the cache was read at: it moves when another connection commits. */
+  private _columnMetaDataVersion: unknown = null
 
   /** Clear cached column metadata (call after cohort summary rebuild) */
   invalidateColumnMetaCache(): void {
@@ -474,7 +476,12 @@ export class CohortService {
    * Results are cached and invalidated on summary rebuild.
    */
   getColumnMeta(): ColumnFilterMeta[] {
-    if (this._columnMetaCache !== null) return this._columnMetaCache
+    // DB worker threads are never told about an import or rebuild made by
+    // another connection, so the cache checks for foreign commits itself.
+    const dataVersion = this.db.pragma('data_version', { simple: true })
+    if (this._columnMetaCache !== null && dataVersion === this._columnMetaDataVersion) {
+      return this._columnMetaCache
+    }
 
     const DISTINCT_THRESHOLD = 50
     // The frequency is derived, so the metadata reads through the build totals.
@@ -556,6 +563,7 @@ export class CohortService {
     }
 
     this._columnMetaCache = meta
+    this._columnMetaDataVersion = dataVersion
     return meta
   }
 
