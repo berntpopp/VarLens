@@ -163,6 +163,7 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import { isWebRuntime } from '../utils/runtime-mode'
+import { stripVueProxies } from '../utils/stripVueProxies'
 import { useCapabilityStore } from '../stores/capabilityStore'
 
 // Emit for navigation and row click
@@ -402,19 +403,12 @@ const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
 
   exporting.value = true
   try {
-    const plainParams = {
-      search_term: searchTerm.value || undefined,
-      gene_symbol: filters.value.geneSymbol || undefined,
-      consequences:
-        selectedImpactPresets.value.length > 0 ? [...selectedImpactPresets.value] : undefined,
-      funcs: filters.value.funcs.length > 0 ? [...filters.value.funcs] : undefined,
-      clinvars: filters.value.clinvars.length > 0 ? [...filters.value.clinvars] : undefined,
-      gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
-      cadd_min: filters.value.minCadd ?? undefined,
-      max_internal_af: filters.value.maxInternalAf ?? undefined,
+    // Same filter params as the table query, so the file matches the table (#485)
+    const plainParams = stripVueProxies({
+      ...buildCohortQueryParams(),
       genome_build: genomeBuild.value || undefined,
       variant_type: selectedVariantType.value || undefined
-    }
+    })
     const result = unwrapIpcResult(await api.export.cohort(plainParams, { format }))
 
     if (result !== null && result !== undefined && result.success === true) {

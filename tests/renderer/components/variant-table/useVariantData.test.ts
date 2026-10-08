@@ -7,16 +7,15 @@ const mockVariants = ref<Variant[]>([])
 const loadAnnotationsBatchSpy = vi.fn()
 const invalidateAnnotationGenerationSpy = vi.fn()
 const clearAnnotationCacheSpy = vi.fn()
+const querySpy = vi.fn().mockResolvedValue({ data: [], total_count: 0, unfiltered_count: 0 })
+let headerColumnFilters: Record<string, unknown> | undefined
+let fetchPage: (args: Record<string, unknown>) => Promise<unknown>
 
 vi.mock('../../../../src/renderer/src/composables/useApiService', () => ({
   useApiService: () => ({
     api: {
       variants: {
-        query: vi.fn().mockResolvedValue({
-          data: [],
-          total_count: 0,
-          unfiltered_count: 0
-        })
+        query: querySpy
       }
     }
   })
@@ -33,7 +32,7 @@ vi.mock('../../../../src/renderer/src/composables/useAnnotations', () => ({
 vi.mock('../../../../src/renderer/src/composables/useColumnFilters', () => ({
   useColumnFilters: () => ({
     columnFilters: ref({}),
-    getColumnFiltersParam: () => undefined,
+    getColumnFiltersParam: () => headerColumnFilters,
     clearAllColumnFilters: vi.fn()
   })
 }))
@@ -45,7 +44,8 @@ vi.mock('../../../../src/renderer/src/composables/useDebounce', () => ({
 }))
 
 vi.mock('../../../../src/renderer/src/composables/useOffsetPagination', () => ({
-  useOffsetPagination: () => ({
+  useOffsetPagination: (options: { fetchPage: typeof fetchPage }) => ({
+    ...((fetchPage = options.fetchPage), {}),
     page: ref(1),
     itemsPerPage: ref(10),
     sortBy: ref([]),
@@ -126,5 +126,39 @@ describe('useVariantData hidden-work gating', () => {
 
     expect(loadAnnotationsBatchSpy).toHaveBeenCalledTimes(1)
     expect(loadAnnotationsBatchSpy).toHaveBeenCalledWith(1, [makeVariant(2)])
+  })
+
+  // #485: the export reuses buildQueryFilters, so it must be what the table sends.
+  it('builds the same filters for the export as for the table query', async () => {
+    headerColumnFilters = { cadd_phred: { operator: '>=', value: 25 } }
+    const [data, appInstance] = withSetup(() =>
+      useVariantData({
+        caseId: ref(1),
+        filters: ref({
+          variant_type: 'sv',
+          starred_only: true,
+          active_panel_ids: [7],
+          column_filters: { gene_symbol: { operator: '=', value: 'BRCA1' } }
+        }),
+        active: computed(() => true),
+        onCountsUpdate: vi.fn(),
+        onSortUpdate: vi.fn()
+      })
+    )
+    app = appInstance
+
+    await fetchPage({ offset: 0, limit: 10, sortBy: [], skipCount: false })
+
+    expect(data.buildQueryFilters()).toEqual({
+      variant_type: 'sv',
+      starred_only: true,
+      active_panel_ids: [7],
+      column_filters: {
+        cadd_phred: { operator: '>=', value: 25 },
+        gene_symbol: { operator: '=', value: 'BRCA1' }
+      }
+    })
+    expect(querySpy.mock.calls[0][1]).toEqual(data.buildQueryFilters())
+    headerColumnFilters = undefined
   })
 })

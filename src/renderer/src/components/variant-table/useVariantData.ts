@@ -67,6 +67,25 @@ export function useVariantData(options: UseVariantDataOptions) {
   const pageCursors = new Map<string, string>()
   const MAX_PAGE_CURSORS = 64
 
+  // The filters of the table query; the export sends the same ones (#485).
+  // Deep-cloned to strip Vue reactive proxies for IPC serialization.
+  const buildQueryFilters = (): Omit<VariantFilter, 'case_id'> => {
+    const colFilters = getColumnFiltersParam()
+    const rawFilters = filters.value
+    return stripVueProxies({
+      ...rawFilters,
+      ...(colFilters !== undefined || rawFilters.column_filters !== undefined
+        ? {
+            // Merge: header filters first, DSL filters override for same column
+            column_filters: {
+              ...(colFilters ?? {}),
+              ...(rawFilters.column_filters ?? {})
+            }
+          }
+        : {})
+    })
+  }
+
   // Shared offset pagination
   const {
     page,
@@ -88,21 +107,7 @@ export function useVariantData(options: UseVariantDataOptions) {
         return { data: [], total_count: 0 }
       }
 
-      // Deep-clone to strip Vue reactive proxies for IPC serialization
-      const colFilters = getColumnFiltersParam()
-      const rawFilters = filters.value
-      const plainFilters = stripVueProxies({
-        ...rawFilters,
-        ...(colFilters !== undefined || rawFilters.column_filters !== undefined
-          ? {
-              // Merge: header filters first, DSL filters override for same column
-              column_filters: {
-                ...(colFilters ?? {}),
-                ...(rawFilters.column_filters ?? {})
-              }
-            }
-          : {})
-      })
+      const plainFilters = buildQueryFilters()
       const shouldFetchUnfiltered = needsUnfilteredCount
       const cursorScope = `${caseId.value}|${limit}|${JSON.stringify(sortItems)}|${JSON.stringify(plainFilters)}`
       const result = unwrapIpcResult(
@@ -260,6 +265,7 @@ export function useVariantData(options: UseVariantDataOptions) {
 
     // Methods
     loadVariants,
+    buildQueryFilters,
     resetSort,
     getRowProps,
 

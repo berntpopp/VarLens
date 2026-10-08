@@ -202,6 +202,8 @@ interface Props {
   columns?: ColumnDef[]
   /** Additional active filter chips from column filters (appended to drawer filter chips) */
   columnActiveFilters?: ActiveFilter[]
+  /** The table's own query filters, so the export matches the table (#485) */
+  getExportFilters?: () => Omit<VariantFilter, 'case_id'>
 }
 
 const props = defineProps<Props>()
@@ -579,7 +581,12 @@ watch(
 const { writeBlockedReason } = usePermissions()
 
 const exportToExcel = async (format?: ExportFormat) => {
-  const result = await composableExportToExcel(props.caseId, props.caseName, format)
+  const result = await composableExportToExcel(
+    props.caseId,
+    props.caseName,
+    format,
+    props.getExportFilters?.()
+  )
 
   if (result === null) return
 

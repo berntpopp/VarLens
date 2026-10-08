@@ -444,6 +444,7 @@ defineExpose({
           :initial-search="initialSearch"
           :columns="variantTableRef?.columns"
           :column-active-filters="variantTableRef?.columnActiveFilters"
+          :get-export-filters="variantTableRef?.buildQueryFilters"
           @update:filters="handleFiltersUpdate"
           @reset-sort="handleResetSort"
           @export-success="handleExportSuccess"
