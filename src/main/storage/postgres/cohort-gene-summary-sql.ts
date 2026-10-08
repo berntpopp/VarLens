@@ -193,6 +193,13 @@ export async function prepareCaseGenePairs({
   await client.query(`ANALYZE ${CASE_PAIRS_TABLE}`)
 }
 
+/** Drop what {@link prepareCaseGenePairs} staged without adding it. */
+export async function discardPreparedCaseGenePairs(
+  client: Pick<PoolClient, 'query'>
+): Promise<void> {
+  await client.query(`DROP TABLE IF EXISTS ${CASE_PAIRS_TABLE}`)
+}
+
 /** Add the case prepared by {@link prepareCaseGenePairs}; needs the write lock. */
 export async function addPreparedCaseToGeneSummary({
   schema,

@@ -30,6 +30,7 @@ import {
 } from './cohort-summary-flags-sql'
 import {
   addPreparedCaseToGeneSummary,
+  discardPreparedCaseGenePairs,
   prepareCaseGenePairs,
   rebuildGeneSummary,
   removeCaseFromGeneSummary
@@ -37,7 +38,8 @@ import {
 import {
   consumeSummaryRebuildRequests,
   getCohortSummaryState,
-  markCohortSummaryStale
+  markCohortSummaryStale,
+  summaryAwaitsRebuild
 } from './cohort-summary-state-sql'
 import {
   countAddedCoordinatesSql,
@@ -231,6 +233,14 @@ export class PostgresCohortSummaryRepository {
     prepared?: boolean
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    // A summary that waits for its rebuild is left to it (summaryAwaitsRebuild).
+    if (await summaryAwaitsRebuild({ schema, client })) {
+      if (prepared) {
+        await dropCaseAggregate(client)
+        await discardPreparedCaseGenePairs(client)
+      }
+      return
+    }
     if (!prepared) await this.prepareAdd({ schema, client, caseId, includeProvisional })
 
     // One statement: the upsert, and from what it inserted the unique-variant
@@ -287,6 +297,7 @@ export class PostgresCohortSummaryRepository {
     caseId
   }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    if (await summaryAwaitsRebuild({ schema, client })) return
 
     await removeCaseFromSummary({
       schema,

@@ -19,6 +19,7 @@ import { AssociationDataBuilder } from '../../../src/main/database/AssociationDa
 import { VcfStrategy } from '../../../src/main/import/vcf/VcfStrategy'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
+import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresAssociationDataBuilder } from '../../../src/main/storage/postgres/PostgresAssociationDataBuilder'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
@@ -302,6 +303,126 @@ describe.skipIf(!RUN)('migration 0026 — genotype classes of the cohort summary
     await setState(false, null)
     await migrate()
     expect(await state()).toEqual({ is_stale: false, stale_reason: null })
+  }, 60_000)
+})
+
+describe.skipIf(!RUN)('a summary that waits for its rebuild is not patched', () => {
+  let schema: string
+  let pool: Pool
+  const repo = new PostgresCohortSummaryRepository()
+  const ids: Record<string, number> = {}
+
+  /**
+   * An upgraded database: A (`1/.`) and B (`1/1`) carry one variant, and the
+   * summary row still holds what the previous version counted for them.
+   */
+  beforeEach(async () => {
+    schema = `varlens_test_stale_patch_${Date.now()}_${randomBytes(4).toString('hex')}`
+    pool = new Pool({ connectionString: PG_URL, max: 3 })
+    await pool.query(`CREATE SCHEMA "${schema}"`)
+    const before = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0026')
+    await new PostgresMigrationRunner(pool, schema, before).migrate()
+    for (const [name, gt] of [
+      ['A', '1/.'],
+      ['B', '1/1'],
+      ['C', '0/1']
+    ]) {
+      ids[name] = await seedCase(name, gt, name === 'C' ? 'importing' : 'ready')
+    }
+    await pool.query(
+      `INSERT INTO "${schema}".cohort_variant_summary
+         (chr, pos, ref, alt, variant_type, genome_build, gene_symbol, variant_key,
+          carrier_count, het_count, hom_count)
+       VALUES ('1', 100, 'A', 'T', 'snv', 'GRCh38', 'GENEA', '1:100:A:T', 2, 0, 1)`
+    )
+    await pool.query(
+      `UPDATE "${schema}".cohort_summary_state
+          SET is_stale = false, stale_reason = NULL, last_rebuilt_at = now() WHERE id = 1`
+    )
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+  }, 60_000)
+
+  afterEach(async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    await pool.end()
+  }, 60_000)
+
+  async function seedCase(name: string, gt: string, status: string): Promise<number> {
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO "${schema}".cases_all
+         (name, file_path, file_size, created_at, genome_build, import_status)
+       VALUES ($1, '/x.vcf', 0, 0, 'GRCh38', $2) RETURNING id`,
+      [name, status]
+    )
+    const caseId = Number(inserted.rows[0].id)
+    await pool.query(
+      `INSERT INTO "${schema}".variants_all
+         (case_id, chr, pos, ref, alt, variant_type, gene_symbol, gt_num)
+       VALUES ($1, '1', 100, 'A', 'T', 'snv', 'GENEA', $2)`,
+      [caseId, gt]
+    )
+    return caseId
+  }
+
+  const counts = async (): Promise<string> => {
+    const res = await pool.query<Record<string, number>>(
+      `SELECT carrier_count, het_count, hom_count FROM "${schema}".cohort_variant_summary`
+    )
+    return res.rows.map((r) => `${r.carrier_count}/${r.het_count}/${r.hom_count}`).join(' ')
+  }
+
+  const isStale = async (): Promise<boolean> =>
+    (await pool.query(`SELECT is_stale FROM "${schema}".cohort_summary_state WHERE id = 1`)).rows[0]
+      .is_stale
+
+  async function inTransaction(fn: (client: never) => Promise<void>): Promise<void> {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await fn(client as never)
+      await client.query('COMMIT')
+    } finally {
+      client.release()
+    }
+  }
+
+  const rebuild = (): Promise<void> => inTransaction((client) => repo.rebuild({ schema, client }))
+
+  it('deleting a case before the rebuild never shows a negative het count', async () => {
+    expect(await isStale()).toBe(true)
+
+    await new PostgresCaseLifecycleRepository(pool, schema).hideCase(ids.A)
+
+    // Old counts + new classes would give 1/-1/1. The row waits for the rebuild instead.
+    expect(await counts()).toBe('2/0/1')
+    expect(await isStale()).toBe(true)
+    await rebuild()
+    expect(await counts()).toBe('1/0/1')
+    expect(await isStale()).toBe(false)
+  }, 60_000)
+
+  it('the repository remove and add leave a stale summary to the rebuild', async () => {
+    await inTransaction((client) => repo.incrementalRemove({ schema, client, caseId: ids.A }))
+    expect(await counts()).toBe('2/0/1')
+
+    await inTransaction((client) =>
+      repo.incrementalAdd({ schema, client, caseId: ids.C, includeProvisional: true })
+    )
+    expect(await counts()).toBe('2/0/1')
+    expect(await isStale()).toBe(true)
+
+    await pool.query(`UPDATE "${schema}".cases_all SET import_status = 'ready'`)
+    await rebuild()
+    // A (1/.) and C (0/1) het, B hom.
+    expect(await counts()).toBe('3/2/1')
+  }, 60_000)
+
+  it('a current summary is still maintained incrementally', async () => {
+    await rebuild()
+    expect(await counts()).toBe('2/1/1')
+    await new PostgresCaseLifecycleRepository(pool, schema).hideCase(ids.A)
+    expect(await counts()).toBe('1/0/1')
+    expect(await isStale()).toBe(false)
   }, 60_000)
 })
 

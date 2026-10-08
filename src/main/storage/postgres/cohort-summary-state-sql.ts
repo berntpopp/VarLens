@@ -64,6 +64,26 @@ export function summaryIsStaleSql(tbl: (t: string) => string, stateAlias: string
 }
 
 /**
+ * Whether incremental upkeep must leave the summary alone: it waits for a
+ * rebuild, so its rows were not written by the current rules or miss a
+ * writer. Patching them mixes the two — a case's subtraction can exceed what
+ * was ever counted for it (het_count -1 after migration 0026). The rebuild
+ * recomputes every row from the visible cases, as SQLite's does
+ * (openCaseSummaryRemoval). Call under the summary write lock, in the
+ * transaction that changes the case's visibility.
+ */
+export async function summaryAwaitsRebuild(args: {
+  schema: string
+  client: Pick<PoolClient, 'query'>
+}): Promise<boolean> {
+  const tbl = (t: string): string => `"${args.schema}"."${t}"`
+  const r = await args.client.query<{ stale: boolean }>(
+    `SELECT ${summaryIsStaleSql(tbl, 's')} AS stale FROM ${tbl('cohort_summary_state')} s WHERE s.id = 1`
+  )
+  return r.rows[0]?.stale === true
+}
+
+/**
  * Ask for a rebuild without the summary write lock. The state row cannot be
  * used for this: the lock holder updates it, so marking it stale would wait
  * for that holder to commit. An inserted request row waits for nobody.
