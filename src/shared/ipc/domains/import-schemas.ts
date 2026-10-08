@@ -46,14 +46,19 @@ const MultiFileImportSpecSchema = z
   })
   .strict()
 
+/** Numeric bounds of the import filters, shared with the web schema (src/shared/api/schemas/import.ts). */
+export const importFilterNumericFields = {
+  bedPadding: z.number().int().nonnegative().max(1000000).optional(),
+  minQual: z.number().nonnegative().max(1000000).nullable().optional(),
+  minGq: z.number().nonnegative().max(1000000).nullable().optional(),
+  minDp: z.number().nonnegative().max(1000000).nullable().optional()
+}
+
 export const ImportFiltersIpcPayloadSchema = z
   .object({
     bedFile: NonBlankFilePathSchema.nullable().optional(),
-    bedPadding: z.number().int().nonnegative().max(1000000).optional(),
     passOnly: z.boolean().optional(),
-    minQual: z.number().nonnegative().max(1000000).nullable().optional(),
-    minGq: z.number().nonnegative().max(1000000).nullable().optional(),
-    minDp: z.number().nonnegative().max(1000000).nullable().optional()
+    ...importFilterNumericFields
   })
   .strict()
 

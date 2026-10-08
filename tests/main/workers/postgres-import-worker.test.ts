@@ -770,7 +770,8 @@ describe('postgres-import-worker runImport', () => {
     )
   })
 
-  it('applies multi-file filters only to append files when a base file creates the case', async () => {
+  // Was "only to append files": bug-parity with the SQLite first-file bug (#484).
+  it('applies multi-file filters to every file, including the base file that creates the case', async () => {
     const client = {
       connect: vi.fn(async () => undefined),
       query: vi.fn(async (sql: string | { text: string }) => {
@@ -827,11 +828,9 @@ describe('postgres-import-worker runImport', () => {
       () => {}
     )
 
-    expect(filtersByFile.get('/tmp/base.vcf.gz')).toBeUndefined()
-    expect(filtersByFile.get('/tmp/append.vcf.gz')).toMatchObject({
-      passOnly: true,
-      minQual: 30
-    })
+    for (const file of ['/tmp/base.vcf.gz', '/tmp/append.vcf.gz']) {
+      expect(filtersByFile.get(file)).toMatchObject({ passOnly: true, minQual: 30 })
+    }
   })
 })
 

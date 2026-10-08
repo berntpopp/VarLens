@@ -50,6 +50,11 @@ export class BedFilter {
       throw new Error(`BedFilter.fromFile: path must not contain '..' segments: ${filePath}`)
     }
 
+    // A negative padding inverts short intervals, which then match nothing.
+    if (!Number.isSafeInteger(padding) || padding < 0) {
+      throw new Error(`BedFilter.fromFile: padding must be a non-negative integer: ${padding}`)
+    }
+
     const intervals = new Map<string, Interval[]>()
     const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
 

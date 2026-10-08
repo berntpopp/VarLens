@@ -123,7 +123,8 @@ export async function importAdditionalFileToCase(
           header = parseVcfHeaderFromLines(headerLines)
           activeSampleColumn = resolveVcfSelectedSampleColumn(
             header.samples,
-            vcfOptions?.selectedSample
+            vcfOptions?.selectedSample,
+            true
           )
           activeSample = activeSampleColumn?.name ?? ''
 
@@ -159,10 +160,9 @@ export async function importAdditionalFileToCase(
           // `import-filters.ts` so the worker path (first file) and the
           // main-thread append path (2nd..Nth files) stay semantically
           // identical.
-          if (!passesPreMappingFilters(record, importFilters)) {
-            totalSkipped++
-            continue
-          }
+          // Filtered records are not "skipped": on every import path that
+          // count is the rows that could not be read.
+          if (!passesPreMappingFilters(record, importFilters)) continue
 
           let mapped = mapVcfRecord(
             record,
@@ -175,11 +175,6 @@ export async function importAdditionalFileToCase(
           // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
           if (importFilters !== undefined) {
             mapped = mapped.filter((v) => passesPostMappingFilters(v, importFilters))
-          }
-
-          if (mapped.length === 0) {
-            totalSkipped++
-            continue
           }
 
           for (const variant of mapped) {

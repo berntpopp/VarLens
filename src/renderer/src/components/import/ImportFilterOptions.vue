@@ -12,23 +12,30 @@
       <div class="text-body-2 mb-1 font-weight-medium">How filters apply per variant type</div>
       <ul class="text-caption ma-0 ps-4">
         <li>
-          <strong>PASS-only</strong> &amp; <strong>BED region</strong>: apply to
-          <em>all</em> variant types (SNV, indel, SV, CNV, STR).
+          All filters apply to <em>every</em> file of the import, the first included, and read one
+          sample: the first sample of the first file.
         </li>
         <li>
-          <strong>Min QUAL</strong>: applies to records with a numeric <code>QUAL</code>. SV/CNV/STR
-          records typically leave <code>QUAL=.</code> and pass through unchanged — use
+          <strong>PASS-only</strong> &amp; <strong>BED region</strong>: apply to
+          <em>all</em> variant types (SNV, indel, SV, CNV, STR). PASS-only also keeps records whose
+          <code>FILTER</code> is <code>.</code> (no filter applied).
+        </li>
+        <li>
+          <strong>Min QUAL</strong>: compares a numeric <code>QUAL</code>. A record with
+          <code>QUAL=.</code> passes unchanged — SV/CNV/STR callers typically leave it empty; use
           caller-specific metrics in the case view instead.
         </li>
         <li>
-          <strong>Min GQ</strong> &amp; <strong>Min DP</strong>: apply to variants that expose
-          <code>FORMAT/GQ</code> and <code>FORMAT/DP</code>
-          — effectively SNV/indel only. SV/CNV/STR records are NOT filtered by these thresholds.
+          <strong>Min GQ</strong> &amp; <strong>Min DP</strong>: compare that sample's numeric
+          <code>FORMAT/GQ</code> and <code>FORMAT/DP</code>, whatever the variant type (Sniffles2
+          and Spectre write a GQ, for example). A record where the field is absent or
+          <code>.</code> passes unchanged — most SV/CNV/STR callers write no DP.
         </li>
         <li>
-          <strong>BED region</strong>: uses <em>interval overlap</em> when the record has an
-          <code>END</code> (SV/CNV/STR) and a <em>point check on POS</em> for SNV/indel and
-          breakends.
+          <strong>BED region</strong>: uses <em>interval overlap</em> from <code>POS</code> to
+          <code>END</code> when the record has a valid <code>END</code> (SV/CNV/STR), and a
+          <em>point check on POS</em> otherwise: SNV/indel, records without a usable
+          <code>END</code>, and breakends (BND), whose <code>END</code> is the mate's position.
         </li>
       </ul>
     </v-alert>

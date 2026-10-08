@@ -283,6 +283,20 @@ describe('passesPreMappingFilters', () => {
       expect(passesPreMappingFilters(bnd, withBed)).toBe(false)
     })
 
+    it('BND carrying END still uses the point check on POS, not a POS..END interval', () => {
+      // END on a breakend is the mate's coordinate on another chromosome.
+      for (const info of [
+        new Map([
+          ['SVTYPE', 'BND'],
+          ['END', '5000']
+        ]),
+        new Map([['END', '5000']]) // breakend ALT alone marks the record
+      ]) {
+        const bnd = rawRecord({ chrom: 'chr1', pos: 100, alt: ['N]chr2:5000]'], info })
+        expect(passesPreMappingFilters(bnd, withBed)).toBe(false)
+      }
+    })
+
     it('malformed END falls back to point check on POS (defensive)', () => {
       const del = rawRecord({
         chrom: 'chr1',
@@ -295,6 +309,20 @@ describe('passesPreMappingFilters', () => {
       })
       // Should fall back to point check on POS=1500, which IS inside [1000, 2000]
       expect(passesPreMappingFilters(del, withBed)).toBe(true)
+    })
+
+    it('partially numeric END falls back to point check on POS', () => {
+      const del = rawRecord({
+        chrom: 'chr1',
+        pos: 100,
+        alt: ['<DEL>'],
+        info: new Map([
+          ['END', '5000junk'],
+          ['SVTYPE', 'DEL']
+        ])
+      })
+      // POS=100 is outside [1000, 2000]; "5000junk" must not become END=5000.
+      expect(passesPreMappingFilters(del, withBed)).toBe(false)
     })
 
     it('END < POS (malformed) falls back to point check on POS', () => {

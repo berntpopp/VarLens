@@ -26,6 +26,7 @@ import {
   type EmitCohortStale
 } from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
+import { assertGenomeBuildMatches, resolveCaseSample } from '../../import/vcf/vcf-header-parser'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
 
@@ -383,13 +384,7 @@ async function startMultiFileImportSqlite(
         // build against the case's locked build. Mismatches abort the
         // import of this file BEFORE any variants are inserted.
         const fileBuild = await detectGenomeBuildFromFile(spec.filePath)
-        if (lockedGenomeBuild !== null && fileBuild !== null && fileBuild !== lockedGenomeBuild) {
-          throw new Error(
-            `Genome build mismatch: case is locked to ${lockedGenomeBuild} but ` +
-              `${spec.filePath} declares ${fileBuild}. All files in a multi-file ` +
-              `import must share the same reference assembly.`
-          )
-        }
+        assertGenomeBuildMatches(lockedGenomeBuild, fileBuild, spec.filePath)
 
         const fileSize = statSync(spec.filePath).size
 
@@ -506,21 +501,16 @@ async function startMultiFileImportSqlite(
 }
 
 /**
- * Backend-aware entry point for multi-file import.
+ * Backend-aware entry point for multi-file import; the IPC handler and the web
+ * route call this, never `startMultiFileImportSqlite`.
  *
- * - PostgreSQL: delegates to `session.getImportExecutor().importMultiFile()`.
- *   The raw `filtersPayload` (IPC shape) is translated directly to
- *   `StorageImportFileFilters` so the BED file path is preserved — the
- *   worker re-loads the BED file from that path rather than receiving a
- *   pre-built `BedFilter` instance.
+ * - PostgreSQL: `session.getImportExecutor().importMultiFile()`. The worker
+ *   loads the BED file itself, so it gets `filtersPayload` with the path.
+ * - SQLite: `startMultiFileImportSqlite`, with the built `importFilters` for
+ *   the appended files and `filtersPayload` for the worker's first file.
  *
- * - SQLite: delegates to `startMultiFileImportSqlite`, which is the full
- *   append pipeline unchanged from Phase 8. The caller-supplied
- *   `importFilters` (already a built `ImportFilters`) is forwarded as-is.
- *
- * The IPC handler in `import.ts` must call this function (not
- * `startMultiFileImportSqlite`) so that PostgreSQL sessions are dispatched
- * correctly.
+ * Every file is read for one sample: the selected one, else file 1's first
+ * (a single-sample file appended to the case is read as that sample).
  */
 export async function startMultiFileImport(
   caseName: string,
@@ -542,6 +532,8 @@ export async function startMultiFileImport(
       executor.cancel()
     },
     async () => {
+      const selectedSample = await resolveCaseSample(files[0]?.filePath, vcfOptions?.selectedSample)
+      if (selectedSample !== undefined) vcfOptions = { ...vcfOptions, selectedSample }
       if (session.capabilities.backend === 'postgres') {
         const storageFilters =
           filtersPayload !== undefined

@@ -11,7 +11,7 @@ import {
 } from '../import/vcf/import-filters'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
-import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
+import { assertGenomeBuildMatches, parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import {
   parseVcfLine,
   resolveVcfSelectedSampleColumn,
@@ -25,7 +25,9 @@ export async function* streamMappedVcfRows(
   filePath: string,
   selectedSample: string,
   filters?: ImportFilters,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  /** Set for a file appended to an existing case (files 2..N of a multi-file import). */
+  appendedTo?: { genomeBuild: string }
 ): AsyncGenerator<VcfMappedVariant, void, void> {
   // createReadStream reports open failures asynchronously; fail before the
   // worker's per-file error boundary can lose ownership of that event.
@@ -58,7 +60,13 @@ export async function* streamMappedVcfRows(
 
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
-        activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, selectedSample)
+        // Before the first row of the file is yielded, so none of it is inserted.
+        assertGenomeBuildMatches(appendedTo?.genomeBuild, header.genomeBuild, filePath)
+        activeSampleColumn = resolveVcfSelectedSampleColumn(
+          header.samples,
+          selectedSample,
+          appendedTo !== undefined
+        )
         activeSample = activeSampleColumn?.name ?? ''
         if (activeSample === '') break
         const callerInfo = detectCaller(headerLines)
@@ -84,10 +92,9 @@ export async function* streamMappedVcfRows(
         }
       } catch (error) {
         if (error instanceof VcfResourceLimitError) throw error
-        console.warn(
-          '[postgres-import-worker] Skipping unparseable VCF line:',
-          error instanceof Error ? error.message : String(error)
-        )
+        const reason = error instanceof Error ? error.message : String(error)
+        console.warn('[postgres-import-worker] Skipping unparseable VCF line:', reason)
+        onSkip?.(reason)
       }
     }
     if (streamError !== null) throw streamError
