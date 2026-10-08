@@ -53,7 +53,10 @@ const SNV_VCF = [
   'chr1\t500\t.\tA\tG\t50\tPASS\t.\tGT:GQ:DP\t0/1:5:30', // fails min GQ
   'chr1\t600\t.\tC\tT\t.\t.\t.\tGT:GQ:DP\t0/1:.:.', // nothing to judge: always kept
   'chr3\t100\t.\tA\tG\t50\tPASS\t.\tGT:GQ:DP\t0/0:40:30', // hom-ref: never a variant
-  'chr1\t700\t.\tA', // truncated: the one skipped row
+  // The three unreadable rows; each must be counted as skipped on every path.
+  'chr1\t700\t.\tA', // truncated
+  'chr1\t800\t.\tA\tT\t50\tPASS\t.', // no FORMAT and sample column
+  'chr1\t900\t.\tA\tT\t50\tPASS\t.\tGT:GQ:DP\t0/2:40:30', // GT names an allele the row lacks
   ''
 ].join('\n')
 
@@ -84,6 +87,8 @@ interface FilterCase {
   filters: NonNullable<FileImportRequest['vcfFilters']> | undefined
   bed?: true
   expected: string[]
+  /** Unreadable rows counted; 3 unless a filter drops a row before its genotype is read. */
+  skipped?: number
 }
 
 const CASES: FilterCase[] = [
@@ -126,6 +131,8 @@ const CASES: FilterCase[] = [
     name: 'BED regions',
     filters: { bedPadding: 0 },
     bed: true,
+    // chr1:900 (bad GT) is outside the regions: filtered, so its genotype is never read.
+    skipped: 2,
     expected: [
       'chr1:100',
       'chr1:200',
@@ -237,8 +244,8 @@ describe('VCF import filters: every file, both backends', () => {
           expect(result.rows.sort(), `first file ${order[0].variantType}`).toEqual(
             [...c.expected].sort()
           )
-          // Only the truncated row is "skipped"; filtered records are not.
-          expect(result.skipped, `first file ${order[0].variantType}`).toBe(1)
+          // Only the unreadable rows are "skipped"; filtered and hom-ref records are not.
+          expect(result.skipped, `first file ${order[0].variantType}`).toBe(c.skipped ?? 3)
         }
       },
       120_000
@@ -310,7 +317,7 @@ describe('VCF import filters: every file, both backends', () => {
           expect(result.rows.sort(), `first file ${order[0].variantType}`).toEqual(
             [...c.expected].sort()
           )
-          expect(result.skipped, `first file ${order[0].variantType}`).toBe(1)
+          expect(result.skipped, `first file ${order[0].variantType}`).toBe(c.skipped ?? 3)
         }
       },
       120_000

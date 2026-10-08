@@ -454,10 +454,10 @@ export async function streamInsertVcf(
         }
       } catch (e) {
         if (e instanceof VcfResourceLimitError) throw e
-        console.warn(
-          '[import-pipeline] Skipping unparseable VCF line:',
-          e instanceof Error ? e.message : String(e)
-        )
+        const reason = e instanceof Error ? e.message : String(e)
+        // The worker's onSkip counts and logs the row; log here only without one.
+        if (onSkip !== undefined) onSkip(reason)
+        else console.warn('[import-pipeline] Skipping unparseable VCF line:', reason)
       }
       if (full) batch.flush()
     }

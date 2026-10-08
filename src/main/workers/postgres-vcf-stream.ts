@@ -84,10 +84,9 @@ export async function* streamMappedVcfRows(
         }
       } catch (error) {
         if (error instanceof VcfResourceLimitError) throw error
-        console.warn(
-          '[postgres-import-worker] Skipping unparseable VCF line:',
-          error instanceof Error ? error.message : String(error)
-        )
+        const reason = error instanceof Error ? error.message : String(error)
+        console.warn('[postgres-import-worker] Skipping unparseable VCF line:', reason)
+        onSkip?.(reason)
       }
     }
     if (streamError !== null) throw streamError

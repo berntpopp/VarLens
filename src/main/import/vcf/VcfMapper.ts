@@ -59,6 +59,14 @@ export function mapVcfRecord(
   const gtIdx = record.format.indexOf('GT')
   const rawGt = gtIdx >= 0 && gtIdx < selectedValues.length ? selectedValues[gtIdx] : '.'
   const carriedAlleles = carriedAltAlleles(rawGt)
+  // Thrown, so the import paths count the row as skipped; an empty result means hom-ref.
+  for (const allele of carriedAlleles) {
+    if (allele > record.alt.length) {
+      throw new Error(
+        `GT "${rawGt}" names allele ${allele} but the row has ${record.alt.length} ALT allele(s)`
+      )
+    }
+  }
   const isNoCallGt = rawGt === '.' || rawGt === './.' || rawGt === '.|.'
   const targetAltIndexes: number[] = []
 

@@ -191,6 +191,10 @@ export function parseVcfLine(
         return null
       }
     }
+  } else if (selectedSample !== undefined) {
+    // The header has the sample, the row stops before FORMAT: unreadable, not hom-ref.
+    onSkip?.(`VCF row has no FORMAT and sample column for "${selectedSample.name}"`)
+    return null
   }
 
   return {
