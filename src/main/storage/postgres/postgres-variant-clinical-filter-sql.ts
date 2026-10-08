@@ -1,10 +1,16 @@
 import {
   HET_GT_SQL as HET,
+  HET_OR_HEMI_GT_SQL as HET_OR_HEMI,
   HOM_GT_SQL as HOM,
-  HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI,
   notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
-import { compoundHetPairIdsSql, variantIdentitySql } from '../../../shared/sql/inheritance-sql'
+import {
+  autosomalRecessiveSql,
+  compoundHetPairIdsSql,
+  variantIdentitySql,
+  xHemizygousSql,
+  type TrioSqlContext
+} from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
 import { TRIO_MODES } from '../../../shared/types/inheritance'
 
@@ -146,7 +152,7 @@ function addInheritanceFilters(
     conditions.push(`v.gt_num IN ${HET}`)
   }
   if (modes.includes('x_hemizygous')) {
-    conditions.push(`(v.chr IN ('X', 'chrX') AND v.gt_num IN ${HOM_OR_HEMI})`)
+    conditions.push(xHemizygousSql('v', `${schemaName}."case_metadata"`))
   }
   if (modes.includes('candidate_compound_het')) {
     const caseParam = addParam(filter.case_id)
@@ -184,7 +190,7 @@ function addTrioInheritanceFilters(
 ): void {
   if (modes.includes('de_novo')) {
     conditions.push(`(
-            v.gt_num IN ${HET}
+            v.gt_num IN ${HET_OR_HEMI}
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
@@ -218,34 +224,14 @@ function addTrioInheritanceFilters(
           )`)
   }
 
-  if (modes.includes('autosomal_recessive')) {
-    conditions.push(`(
-            v.gt_num IN ${HOM}
-            AND v.id NOT IN (
-              SELECT p.id
-              FROM ${schemaName}."variants" p
-              INNER JOIN ${schemaName}."analysis_group_members" agm_par
-                ON agm_par.group_id = ${groupParam}
-               AND agm_par.role IN ('father', 'mother')
-              INNER JOIN ${schemaName}."variants" par
-                ON par.case_id = agm_par.case_id
-               AND par.chr = p.chr
-               AND par.pos = p.pos
-               AND par.ref = p.ref
-               AND par.alt = p.alt
-               AND par.gt_num IN ${HOM}
-              WHERE p.case_id = ${caseParam}
-            )
-          )`)
+  const trio: TrioSqlContext = {
+    variants: `${schemaName}."variants"`,
+    members: `${schemaName}."analysis_group_members"`,
+    caseParam,
+    groupParam
   }
-
+  if (modes.includes('autosomal_recessive')) conditions.push(autosomalRecessiveSql(trio, 'v'))
   if (modes.includes('compound_het')) {
-    const ids = compoundHetPairIdsSql({
-      variants: `${schemaName}."variants"`,
-      members: `${schemaName}."analysis_group_members"`,
-      caseParam,
-      groupParam
-    })
-    conditions.push(`(v.id IN (${ids}))`)
+    conditions.push(`(v.id IN (${compoundHetPairIdsSql(trio)}))`)
   }
 }

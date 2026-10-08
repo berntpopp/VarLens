@@ -65,6 +65,30 @@ describe('Solo inheritance filters', () => {
     expect(result.data[0].gt_num).toBe('1/1')
   })
 
+  // Issue #518: a diploid 1/1 on chrX is hemizygous only if the case is not female.
+  it.each([
+    ['female', ['1']],
+    ['male', ['1', '1/1']],
+    ['unknown', ['1', '1/1']],
+    ['other', ['1', '1/1']],
+    [null, ['1', '1/1']]
+  ])('x_hemizygous for a case of sex %s keeps %j', (sex, expected) => {
+    const caseId = service.cases.createCase('test', '/a.json', 100)
+    service.metadata.upsertCaseMetadata(caseId, { sex })
+    service.variants.insertVariantsBatch(caseId, [
+      makeVariant({ chr: 'chrX', gt_num: '1', pos: 5000000 }),
+      makeVariant({ chr: 'chrX', gt_num: '1/1', pos: 5000100 }),
+      makeVariant({ chr: 'chrX', gt_num: '0/1', pos: 5000200 })
+    ])
+
+    const result = service.variants.getVariants(
+      { case_id: caseId, inheritance_modes: ['x_hemizygous'] },
+      50,
+      0
+    )
+    expect(result.data.map((v) => v.gt_num).sort()).toEqual(expected)
+  })
+
   it('candidate_compound_het counts a variant stored twice once', () => {
     const caseId = service.cases.createCase('test', '/a.json', 100)
     service.variants.insertVariantsBatch(caseId, [
