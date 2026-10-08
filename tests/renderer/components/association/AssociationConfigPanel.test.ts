@@ -29,7 +29,7 @@ const vuetify = createVuetify({ components, directives })
 interface FilterStateShape {
   maxGnomadAf: number | null
   minCadd: number | null
-  consequences: string[]
+  funcs: string[]
   columnFilters: Record<string, unknown>
 }
 
@@ -87,7 +87,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     const vm = wrapper.vm as unknown as PanelVm
     expect(vm.filters.maxGnomadAf).toBeNull()
     expect(vm.filters.minCadd).toBeNull()
-    expect(vm.filters.consequences).toEqual([])
+    expect(vm.filters.funcs).toEqual([])
     expect(vm.filters.columnFilters).toEqual({})
   })
 
@@ -106,7 +106,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     vm.groupBIds.push(3, 4)
     vm.filters.maxGnomadAf = 0.01
     vm.filters.minCadd = 20
-    vm.filters.consequences = ['missense_variant']
+    vm.filters.funcs = ['missense_variant']
     vm.geneListText = 'BRCA1, TP53'
     await wrapper.vm.$nextTick()
 
@@ -125,7 +125,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
       filters: {
         gnomad_af_max?: number
         cadd_min?: number
-        consequences?: string[]
+        funcs?: string[]
         gene_list?: string[]
         column_filters?: Record<string, unknown>
       }
@@ -137,7 +137,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     // buildIpcParams produces snake_case keys
     expect(config.filters.gnomad_af_max).toBe(0.01)
     expect(config.filters.cadd_min).toBe(20)
-    expect(config.filters.consequences).toEqual(['missense_variant'])
+    expect(config.filters.funcs).toEqual(['missense_variant'])
     // gene_list is panel-local, merged into the IPC payload by handleRun
     expect(config.filters.gene_list).toEqual(['BRCA1', 'TP53'])
     // column_filters not present because filters.columnFilters is empty
@@ -210,7 +210,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     const vm = wrapper.vm as unknown as PanelVm
 
     // Start from a clean state
-    expect(vm.filters.consequences).toEqual([])
+    expect(vm.filters.funcs).toEqual([])
 
     // Simulate the v-chip-group model update by invoking setProps on the
     // underlying ref via the chip. We use the reactive wrapper and emit
@@ -225,7 +225,7 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     await wrapper.vm.$nextTick()
 
     // Consequences should now be non-empty (truncating group has entries)
-    expect(vm.filters.consequences.length).toBeGreaterThan(0)
+    expect(vm.filters.funcs.length).toBeGreaterThan(0)
   })
 
   it('impact preset deselection removes preset-derived consequences', async () => {
@@ -236,14 +236,14 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
     // Select HIGH → consequences populate with truncating group
     await chipGroups[0]!.vm.$emit('update:modelValue', [0])
     await wrapper.vm.$nextTick()
-    const afterSelect = vm.filters.consequences.length
+    const afterSelect = vm.filters.funcs.length
     expect(afterSelect).toBeGreaterThan(0)
 
     // Deselect all → consequences should be EMPTY (preset-derived entries
     // stripped, no manual non-preset entries exist in this scenario)
     await chipGroups[0]!.vm.$emit('update:modelValue', [])
     await wrapper.vm.$nextTick()
-    expect(vm.filters.consequences).toEqual([])
+    expect(vm.filters.funcs).toEqual([])
   })
 
   it('impact preset preserves manually-added non-preset consequences on deselect', async () => {
@@ -252,19 +252,19 @@ describe('AssociationConfigPanel (post-migration to shared FilterState)', () => 
 
     // Seed the consequences with a non-preset value (simulating a manual
     // GroupedMultiSelect choice the user made before touching presets)
-    vm.filters.consequences = ['synonymous_variant_manual_test_sentinel']
+    vm.filters.funcs = ['synonymous_variant_manual_test_sentinel']
     await wrapper.vm.$nextTick()
 
     const chipGroups = wrapper.findAllComponents({ name: 'VChipGroup' })
     // Select HIGH → adds preset consequences but keeps the sentinel
     await chipGroups[0]!.vm.$emit('update:modelValue', [0])
     await wrapper.vm.$nextTick()
-    expect(vm.filters.consequences).toContain('synonymous_variant_manual_test_sentinel')
+    expect(vm.filters.funcs).toContain('synonymous_variant_manual_test_sentinel')
 
     // Deselect HIGH → strips preset consequences but keeps the sentinel
     await chipGroups[0]!.vm.$emit('update:modelValue', [])
     await wrapper.vm.$nextTick()
-    expect(vm.filters.consequences).toEqual(['synonymous_variant_manual_test_sentinel'])
+    expect(vm.filters.funcs).toEqual(['synonymous_variant_manual_test_sentinel'])
   })
 
   it('AF preset deselection clears filters.maxGnomadAf', async () => {

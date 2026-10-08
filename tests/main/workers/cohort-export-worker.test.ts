@@ -89,6 +89,31 @@ describe('cohort export worker', () => {
     expect(progress.at(-1)).toEqual([rowCount, rowCount])
   })
 
+  it('labels the impact-level and SO-term filters like the case export', async () => {
+    const outputFilePath = join(dir, 'cohort-filtered.xlsx')
+    await new Promise<number>((resolvePromise, reject) => {
+      new ExportWorkerClient(exportWorker).startCohort({
+        dbPath: db.getPath(),
+        params: {
+          genome_build: 'GRCh38',
+          consequences: ['MODERATE'],
+          funcs: ['missense_variant']
+        } as never,
+        outputFilePath,
+        onProgress: () => undefined,
+        onComplete: (_filePath, rows) => resolvePromise(rows),
+        onError: (error) => reject(new Error(error))
+      })
+    })
+
+    const info = XLSX.utils.sheet_to_json<string[]>(
+      XLSX.read(readFileSync(outputFilePath)).Sheets['Export Info'],
+      { header: 1 }
+    )
+    expect(info).toContainEqual(['Impact Levels', 'MODERATE'])
+    expect(info).toContainEqual(['Consequences', 'missense_variant'])
+  })
+
   it('cancels by terminating the worker and reports cancellation instead of completion', async () => {
     const outcome = await new Promise<string>((resolvePromise) => {
       const client = new ExportWorkerClient(exportWorker)

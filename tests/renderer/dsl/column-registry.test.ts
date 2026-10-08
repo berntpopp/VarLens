@@ -71,6 +71,11 @@ describe('column-registry', () => {
       expect(findColumn('gene')?.key).toBe('gene_symbol')
     })
 
+    it('resolves impact to the impact-level column, not the SO term', () => {
+      expect(findColumn('impact')?.key).toBe('consequence')
+      expect(findColumn('consequence')?.key).toBe('consequence')
+    })
+
     it('is case-insensitive', () => {
       expect(findColumn('CADD')?.key).toBe('cadd')
       expect(findColumn('Gene')?.key).toBe('gene_symbol')

@@ -128,7 +128,7 @@
                   <span class="text-body-2 text-medium-emphasis">Consequences:</span>
                 </div>
                 <GroupedMultiSelect
-                  v-model:model-value="filters.consequences"
+                  v-model:model-value="filters.funcs"
                   :config="consequenceGroupConfig"
                   label="Consequences"
                   :icon="mdiFilterVariant"
@@ -326,7 +326,7 @@ const selectedCovariates = ref<string[]>([])
 const geneListText = ref('')
 
 // Impact presets (panel-specific UX — maps HIGH/MOD/LOW chips to the SO
-// consequence arrays that live on the shared filters.value.consequences field).
+// consequence arrays that live on the shared filters.value.funcs field).
 const impactPresets = [
   { label: 'HIGH', value: 'HIGH', color: 'error' },
   { label: 'MOD', value: 'MODERATE', color: 'warning' },
@@ -345,7 +345,7 @@ const impactToConsequences: Record<string, string[]> = {
 
 const selectedImpactPresets = ref<number[]>([])
 
-// Impact preset chips → shared filters.consequences.
+// Impact preset chips → shared filters.funcs.
 // Rebuild the preset-derived portion from the currently-selected chips on
 // every change: we strip every consequence that belongs to ANY impact
 // preset, then add back consequences for the currently-selected presets.
@@ -363,15 +363,13 @@ const allPresetConsequences = (() => {
 watch(selectedImpactPresets, (indices) => {
   // Start from current consequences minus anything that belongs to a preset
   // (preserves non-preset manual selections)
-  const next = new Set<string>(
-    filters.value.consequences.filter((c) => !allPresetConsequences.has(c))
-  )
+  const next = new Set<string>(filters.value.funcs.filter((c) => !allPresetConsequences.has(c)))
   // Add back consequences for currently-selected presets
   for (const idx of indices) {
     const preset = impactPresets[idx]
     for (const v of impactToConsequences[preset.value] ?? []) next.add(v)
   }
-  filters.value.consequences = [...next]
+  filters.value.funcs = [...next]
 })
 
 // gnomAD AF presets

@@ -101,7 +101,8 @@ column:operator:value
 | `gnomad_af:<:0.01` | AF less than 1% |
 | `cadd:>=:20` | CADD at least 20 |
 | `gene:=:BRCA1` | Exact gene match |
-| `consequence:~:missense` | Consequence contains "missense" |
+| `func:~:missense` | Consequence contains "missense" |
+| `impact:=:HIGH` | Impact is HIGH |
 
 ### Operators
 
