@@ -3,20 +3,32 @@ import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
 import {
   HET_GT_SQL,
+  HET_OR_HEMI_GT_SQL,
   HOM_GT_SQL,
-  HOM_OR_HEMI_GT_SQL,
   notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
-import { compoundHetPairIdsSql, variantIdentitySql } from '../../../shared/sql/inheritance-sql'
+import {
+  autosomalRecessiveSql,
+  compoundHetPairIdsSql,
+  variantIdentitySql,
+  xHemizygousSql,
+  type TrioSqlContext
+} from '../../../shared/sql/inheritance-sql'
 
 // The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
 const HET = sql.raw(HET_GT_SQL)
 const HOM = sql.raw(HOM_GT_SQL)
-const HOM_OR_HEMI = sql.raw(HOM_OR_HEMI_GT_SQL)
+const HET_OR_HEMI = sql.raw(HET_OR_HEMI_GT_SQL)
 const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 const CASE_MARK = '@case@'
 const GROUP_MARK = '@group@'
+const TRIO_CONTEXT: TrioSqlContext = {
+  variants: 'variants',
+  members: 'analysis_group_members',
+  caseParam: CASE_MARK,
+  groupParam: GROUP_MARK
+}
 
 /** Shared SQL text with its case and group markers bound as parameters. */
 function bound(text: string, caseId: number, groupId: number): SqlCondition {
@@ -63,7 +75,7 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
     conditions.push(sql`variants.gt_num IN ${HET}`)
   }
   if (modes.includes('x_hemizygous')) {
-    conditions.push(sql`(variants.chr IN ('X', 'chrX') AND variants.gt_num IN ${HOM_OR_HEMI})`)
+    conditions.push(sql.raw(xHemizygousSql('variants', 'case_metadata')))
   }
   if (modes.includes('candidate_compound_het')) {
     conditions.push(candidateCompoundHetCondition(caseId))
@@ -71,10 +83,10 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
   return conditions
 }
 
-/** Het in proband; neither parent has a row there other than an explicit reference call. */
+/** One copy in the proband; neither parent has a row there other than an explicit reference call. */
 function deNovoCondition(cid: number, gid: number): SqlCondition {
   return sql`(
-            variants.gt_num IN ${HET}
+            variants.gt_num IN ${HET_OR_HEMI}
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
@@ -98,32 +110,14 @@ function deNovoCondition(cid: number, gid: number): SqlCondition {
           )`
 }
 
-/** Proband hom, parents NOT hom (must be het carriers or absent). */
+/** Proband hom and every parent of the group a het carrier (inheritance-sql.ts). */
 function autosomalRecessiveCondition(cid: number, gid: number): SqlCondition {
-  return sql`(
-            variants.gt_num IN ${HOM}
-            AND variants.id NOT IN (
-              SELECT p.id FROM variants p
-              INNER JOIN analysis_group_members agm_par
-                ON agm_par.group_id = ${gid} AND agm_par.role IN ('father', 'mother')
-              INNER JOIN variants par
-                ON par.case_id = agm_par.case_id
-                AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
-                AND par.gt_num IN ${HOM}
-              WHERE p.case_id = ${cid}
-            )
-          )`
+  return bound(autosomalRecessiveSql(TRIO_CONTEXT, 'variants'), cid, gid)
 }
 
 /** Het variants of a pair inherited from opposite parents (inheritance-sql.ts). */
 function compoundHetCondition(cid: number, gid: number): SqlCondition {
-  const ids = compoundHetPairIdsSql({
-    variants: 'variants',
-    members: 'analysis_group_members',
-    caseParam: CASE_MARK,
-    groupParam: GROUP_MARK
-  })
-  return sql`(variants.id IN (${bound(ids, cid, gid)}))`
+  return sql`(variants.id IN (${bound(compoundHetPairIdsSql(TRIO_CONTEXT), cid, gid)}))`
 }
 
 /** Trio modes — require an analysis group (father/mother members). */

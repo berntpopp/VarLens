@@ -11,7 +11,9 @@ const sqlList = (genotypes: readonly string[]): string =>
 export const HET_GT_SQL = sqlList(HET_GENOTYPES)
 export const HOM_GT_SQL = sqlList(HOM_GENOTYPES)
 export const HEMI_GT_SQL = sqlList(HEMI_GENOTYPES)
-/** X-linked hemizygous filter: a haploid call, or a caller that wrote it diploid. */
+/** De novo proband: one copy, diploid or haploid (male chrX). */
+export const HET_OR_HEMI_GT_SQL = sqlList([...HET_GENOTYPES, ...HEMI_GENOTYPES])
+/** A hom or haploid call: X-linked hemizygous, and a parent who is no het carrier. */
 export const HOM_OR_HEMI_GT_SQL = sqlList([...HOM_GENOTYPES, ...HEMI_GENOTYPES])
 
 export const REF_GT_SQL = sqlList(REF_GENOTYPES)

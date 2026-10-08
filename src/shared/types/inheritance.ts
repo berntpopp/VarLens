@@ -67,7 +67,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'x_hemizygous',
     abbr: 'X_HEMI',
     label: 'X-linked hemizygous',
-    help: 'On chrX: a haploid call (1) or 1/1. The sex of the case is not checked.',
+    help: 'On chrX: a haploid call (1), or 1/1 unless the sex of the case is female (a female 1/1 is homozygous). A case of unknown, other or unset sex keeps 1/1. Pseudoautosomal regions are not told apart.',
     requiresFamily: false,
     color: 'pink'
   },
@@ -83,7 +83,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'de_novo',
     abbr: 'DN',
     label: 'De novo',
-    help: 'Het in the proband (including assumed het calls), and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier: reference and uncovered sites are not stored. An uncalled parent withholds the variant.',
+    help: 'Het (including assumed het calls) or haploid (1) in the proband, and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier: reference and uncovered sites are not stored. An uncalled parent withholds the variant.',
     requiresFamily: true,
     color: 'red'
   },
@@ -91,7 +91,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'autosomal_recessive',
     abbr: 'AR',
     label: 'Autosomal recessive',
-    help: 'Homozygous in the proband and in neither parent. The parents are not required to be carriers.',
+    help: 'Homozygous (1/1) in the proband, and every parent in the analysis group is a het carrier (including assumed het calls). A parent with a reference or homozygous call, or without a row, withholds the variant: that suggests a de novo second hit, uniparental disomy or a deletion. A parent with an uncalled genotype (./.) does not, and a parent missing from the group is not checked.',
     requiresFamily: true,
     color: 'deep-purple'
   },

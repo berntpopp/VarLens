@@ -3,7 +3,14 @@
  * way. Table names and parameter placeholders come from the caller; the
  * genotype classes come from ./genotype-dosage.ts.
  */
-import { ALT_GT_SQL, HET_GT_SQL, notReferenceGtSql } from './genotype-dosage'
+import {
+  ALT_GT_SQL,
+  HEMI_GT_SQL,
+  HET_GT_SQL,
+  HOM_GT_SQL,
+  HOM_OR_HEMI_GT_SQL,
+  notReferenceGtSql
+} from './genotype-dosage'
 
 /** One variant, however many rows (transcripts, duplicates) a case stores for it. */
 export function variantIdentitySql(alias: string): string {
@@ -28,6 +35,50 @@ function parentRowSql(ctx: TrioSqlContext, role: 'father' | 'mother', condition:
            AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
           WHERE agm.group_id = ${ctx.groupParam} AND agm.role = '${role}' AND ${condition}
         )`
+}
+
+/**
+ * Row `row` is homozygous in the proband and every parent of the group is a
+ * het carrier of it (issue #518).
+ *
+ * A parent with a reference, homozygous or haploid call, or without a row,
+ * fails the variant: that pattern points to a de novo second hit, uniparental
+ * disomy or a deletion. A parent whose genotype is uncalled passes, so that a
+ * parental dropout does not hide a recessive candidate. A group without a
+ * parent does not constrain.
+ */
+export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string {
+  return `(
+          ${row}.gt_num IN ${HOM_GT_SQL}
+          AND ${row}.case_id = ${ctx.caseParam}
+          AND NOT EXISTS (
+            SELECT 1 FROM ${ctx.members} agm
+            WHERE agm.group_id = ${ctx.groupParam} AND agm.role IN ('father', 'mother')
+              AND NOT EXISTS (
+                SELECT 1 FROM ${ctx.variants} par
+                WHERE par.case_id = agm.case_id
+                  AND par.chr = ${row}.chr AND par.pos = ${row}.pos
+                  AND par.ref = ${row}.ref AND par.alt = ${row}.alt
+                  AND ${notReferenceGtSql('par.gt_num')}
+                  AND (par.gt_num IS NULL OR par.gt_num NOT IN ${HOM_OR_HEMI_GT_SQL})
+              )
+          )
+        )`
+}
+
+/**
+ * Row `row` is a hemizygous chrX call: haploid, or `1/1` from a caller that
+ * wrote it diploid — unless the case is recorded as female, whose `1/1` is
+ * homozygous. Pseudoautosomal regions are not told apart.
+ */
+export function xHemizygousSql(row: string, caseMetadata: string): string {
+  return `(${row}.chr IN ('X', 'chrX') AND (
+          ${row}.gt_num IN ${HEMI_GT_SQL}
+          OR (${row}.gt_num IN ${HOM_GT_SQL} AND NOT EXISTS (
+            SELECT 1 FROM ${caseMetadata} cm
+            WHERE cm.case_id = ${row}.case_id AND cm.sex = 'female'
+          ))
+        ))`
 }
 
 /**
