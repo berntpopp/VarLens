@@ -1,10 +1,11 @@
+import { BUILT_IN_PRESETS } from '../../../src/main/database/built-in-presets'
 import { describe, expect, it } from 'vitest'
 
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(27)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(28)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -32,7 +33,8 @@ describe('Postgres migration definitions', () => {
       '0024',
       '0025',
       '0026',
-      '0027'
+      '0027',
+      '0028'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -61,7 +63,8 @@ describe('Postgres migration definitions', () => {
       'cohort_summary_maintenance',
       'annotation_severity_ranks',
       'summary_genotype_classes',
-      'summary_conflicting_calls'
+      'summary_conflicting_calls',
+      'rare_not_recurrent_preset'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -131,4 +134,25 @@ describe('Postgres migration definitions', () => {
     expect(platformIdentityMigration?.sql).toContain('auth_source')
     expect(platformIdentityMigration?.sql).toContain('users_single_platform_identity')
   })
+
+  // The SQL seed and the shared preset definition must not drift apart.
+  it('0028 seeds the "Rare, not recurrent" preset exactly as BUILT_IN_PRESETS defines it', () => {
+    const preset = BUILT_IN_PRESETS.find((p) => p.name === 'Rare, not recurrent')
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0028')
+
+    expect(preset).toEqual({
+      name: 'Rare, not recurrent',
+      description: 'gnomAD AF <= 1% + seen in at most 3 cases',
+      filterJson: { maxGnomadAf: 0.01, maxCarriers: 3 },
+      sortOrder: 8
+    })
+    expect(BUILT_IN_PRESETS).toHaveLength(9)
+    expect(migration?.sql).toContain(`'${preset!.name}'`)
+    expect(migration?.sql).toContain(`'${preset!.description}'`)
+    expect(migration?.sql).toContain(`'${JSON.stringify(preset!.filterJson)}'`)
+    expect(migration?.sql).toContain(`1, 1, ${preset!.sortOrder}, 'filter'`)
+    expect(migration?.sql).toContain('ON CONFLICT (name) DO NOTHING')
+    expect(migration?.afterApply).toBeUndefined()
+  })
+
 })

@@ -86,6 +86,12 @@ const FILTER_PRESETS = [
     description: 'CADD Phred score at least 20',
     filterJson: { minCadd: 20 },
     sortOrder: 7
+  },
+  {
+    name: 'Rare, not recurrent',
+    description: 'gnomAD AF <= 1% + seen in at most 3 cases',
+    filterJson: { maxGnomadAf: 0.01, maxCarriers: 3 },
+    sortOrder: 8
   }
 ]
 

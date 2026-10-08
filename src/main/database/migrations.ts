@@ -8,7 +8,7 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
 import { CLINICAL_METRICS } from './clinical-metrics'
 import { caseDependents } from './case-dependents'
-import { BUILT_IN_PRESETS } from './built-in-presets'
+import { BUILT_IN_PRESETS, RARE_NOT_RECURRENT_PRESET_NAME } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
@@ -18,7 +18,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 44
+export const LATEST_SQLITE_SCHEMA_VERSION = 45
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -69,6 +69,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 44
  * - 42: cohort summary het/hom counts follow the shared genotype classes (mirrors PG 0026)
  * - 43: cohort summary resolves a case's conflicting duplicate calls by dosage (mirrors PG 0027)
  * - 44: delete the rows (comments, tags, links …) the import worker left of replaced cases
+ * - 45: built-in filter preset "Rare, not recurrent" (carrier cap, #455; mirrors PG 0028)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1940,6 +1941,35 @@ export function runMigrations(db: Database.Database): void {
       db.exec(`DELETE FROM "${table}" WHERE "${column}" NOT IN (SELECT id FROM cases)`)
     }
     db.exec('PRAGMA user_version = 44')
+  }
+
+  // v45: built-in preset "Rare, not recurrent" (#455, mirrors PG 0028). A
+  // database created by this version already has it from the v15/v16 seed; an
+  // existing one gets it here. INSERT OR IGNORE: every existing row, and a
+  // user preset of the same name, stays as it is.
+  if (currentVersion < 45) {
+    const preset = BUILT_IN_PRESETS.find((p) => p.name === RARE_NOT_RECURRENT_PRESET_NAME)
+    const hasPresetTable =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'filter_presets'")
+        .get() !== undefined
+    if (preset !== undefined && hasPresetTable) {
+      const now = Date.now()
+      db.prepare(
+        `INSERT OR IGNORE INTO filter_presets
+           (name, description, filter_json, is_built_in, is_visible, sort_order, kind, created_at, updated_at)
+         VALUES (?, ?, ?, 1, 1, ?, 'filter', ?, ?)`
+      ).run(
+        preset.name,
+        preset.description,
+        JSON.stringify(preset.filterJson),
+        preset.sortOrder,
+        now,
+        now
+      )
+    }
+
+    db.exec('PRAGMA user_version = 45')
   }
 }
 

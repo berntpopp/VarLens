@@ -27,6 +27,7 @@ These presets ship with VarLens and cover common filtering needs:
 | **HIGH Impact** | Impact = HIGH | Loss-of-function variants |
 | **Rare (1%)** | gnomAD AF ≤ 1% | Standard rare variant threshold |
 | **CADD >= 20** | CADD Phred ≥ 20 | Strongly predicted deleterious |
+| **Rare, not recurrent** | gnomAD AF ≤ 1% + seen in at most 3 cases | Rare variants that do not recur in your own database. The count includes the open case. |
 
 Built-in presets cannot be deleted, but you can hide them from the preset bar.
 
