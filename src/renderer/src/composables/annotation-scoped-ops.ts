@@ -230,14 +230,18 @@ function upsert(
   return client.annotations.upsertGlobal(coords.chr, coords.pos, coords.ref, coords.alt, updates)
 }
 
-/** Optimistically apply a write, confirm it over IPC, roll back on failure. */
+/**
+ * Optimistically apply a write, confirm it over IPC, roll back on failure.
+ * Resolves `false` when nothing was saved, after telling the user (#486).
+ */
 async function mutate(
   api: WindowAPI | undefined,
+  onWriteFailed: () => void,
   scope: AnnotationWriteScope,
   coords: VariantCoords,
   buildPlan: (current: AnnotationCache | undefined, previous: SlotValue | null) => MutationPlan
-): Promise<void> {
-  if (!api) return
+): Promise<boolean> {
+  if (!api) return false
   const dbPath = beginAnnotationRequest(scopeCaseId(scope))
   const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
@@ -253,12 +257,12 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    if (leftScope(scope, dbPath)) return
+    if (leftScope(scope, dbPath)) return true
     // Merge into what the cache holds now. If the cache was rebuilt while the
     // write was in flight (case switch), `current` belongs to the old scope:
     // update the entry the new scope loaded, and never recreate one from it.
     const live = annotationCache.value.get(key)
-    if (epoch !== getAnnotationCacheEpoch() && !live) return
+    if (epoch !== getAnnotationCacheEpoch() && !live) return true
     // The write confirms its own slot; the other one stays as (un)loaded as it was.
     const written = slotOf(scope)
     const unloaded = live ? unloadedSlotOf(key) : otherSlot(written)
@@ -267,13 +271,16 @@ async function mutate(
       mergeServerSlot(live, scope, updated),
       unloaded === written ? undefined : unloaded
     )
+    return true
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
-    if (leftScope(scope, dbPath)) return
+    onWriteFailed()
+    if (leftScope(scope, dbPath)) return false
     // Every failed write rolls back and notifies, so no view keeps showing the
     // optimistic value of a write that never landed.
     if (current) rollBackSlot(current, scope, plan, previous)
     triggerAnnotationCache()
+    return false
   }
 }
 
@@ -389,29 +396,34 @@ async function loadBatch(
  */
 export function createScopedAnnotationOps(
   api: WindowAPI | undefined,
-  getUserName: () => string | undefined
+  getUserName: () => string | undefined,
+  onWriteFailed: () => void = () => {}
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),
     loadBatch: (scope: AnnotationLoadScope, variants: BatchLoadVariant[]) =>
       loadBatch(api, scope, variants),
     toggleStar: (scope: AnnotationWriteScope, coords: VariantCoords) =>
-      mutate(api, scope, coords, (_current, previous) => toggleStarPlan(scope, previous)),
+      mutate(api, onWriteFailed, scope, coords, (_current, previous) =>
+        toggleStarPlan(scope, previous)
+      ),
     setAcmgClassification: (
       scope: AnnotationWriteScope,
       coords: VariantCoords,
       classification: AcmgClassification | null
     ) =>
-      mutate(api, scope, coords, (_current, previous) => acmgPlan(scope, previous, classification)),
+      mutate(api, onWriteFailed, scope, coords, (_current, previous) =>
+        acmgPlan(scope, previous, classification)
+      ),
     upsertComment: (scope: AnnotationWriteScope, coords: VariantCoords, comment: string | null) =>
-      mutate(api, scope, coords, (current) => commentPlan(scope, current, comment)),
+      mutate(api, onWriteFailed, scope, coords, (current) => commentPlan(scope, current, comment)),
     setAcmgClassificationWithEvidence: (
       scope: AnnotationWriteScope,
       coords: VariantCoords,
       classification: AcmgClassification | null,
       evidenceJson: string
     ) =>
-      mutate(api, scope, coords, () =>
+      mutate(api, onWriteFailed, scope, coords, () =>
         acmgWithEvidencePlan(scope, classification, evidenceJson, getUserName())
       )
   }

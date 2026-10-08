@@ -9,9 +9,11 @@
  * `annotation-scoped-ops.ts` and bound here to the per-case / global pairs.
  */
 
+import { hasInjectionContext, inject } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from './useApiService'
+import { AppStateKey } from './useAppState'
 import {
   annotationCache,
   clearAnnotationCache,
@@ -146,12 +148,12 @@ function bindStarsAndComments(ops: ScopedOps) {
     pos: number,
     ref: string,
     alt: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.toggleStar({ kind: 'case', caseId, variantId }, coordsOf(chr, pos, ref, alt))
   }
 
   // Toggle global star (for cohort mode)
-  function toggleGlobalStar(chr: string, pos: number, ref: string, alt: string): Promise<void> {
+  function toggleGlobalStar(chr: string, pos: number, ref: string, alt: string): Promise<boolean> {
     return ops.toggleStar(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt))
   }
 
@@ -162,7 +164,7 @@ function bindStarsAndComments(ops: ScopedOps) {
     ref: string,
     alt: string,
     comment: string | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.upsertComment(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt), comment)
   }
 
@@ -175,7 +177,7 @@ function bindStarsAndComments(ops: ScopedOps) {
     ref: string,
     alt: string,
     comment: string | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.upsertComment(
       { kind: 'case', caseId, variantId },
       coordsOf(chr, pos, ref, alt),
@@ -189,8 +191,8 @@ function bindStarsAndComments(ops: ScopedOps) {
     pos: number,
     ref: string,
     alt: string
-  ): Promise<void> {
-    await upsertGlobalComment(chr, pos, ref, alt, null)
+  ): Promise<boolean> {
+    return upsertGlobalComment(chr, pos, ref, alt, null)
   }
 
   // Delete per-case comment (sets to null, preserves other fields)
@@ -201,8 +203,8 @@ function bindStarsAndComments(ops: ScopedOps) {
     pos: number,
     ref: string,
     alt: string
-  ): Promise<void> {
-    await upsertPerCaseComment(caseId, variantId, chr, pos, ref, alt, null)
+  ): Promise<boolean> {
+    return upsertPerCaseComment(caseId, variantId, chr, pos, ref, alt, null)
   }
 
   return {
@@ -226,7 +228,7 @@ function bindAcmg(ops: ScopedOps) {
     ref: string,
     alt: string,
     classification: AcmgClassification | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.setAcmgClassification(
       { kind: 'case', caseId, variantId },
       coordsOf(chr, pos, ref, alt),
@@ -241,7 +243,7 @@ function bindAcmg(ops: ScopedOps) {
     ref: string,
     alt: string,
     classification: AcmgClassification | null
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.setAcmgClassification(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt), classification)
   }
 
@@ -255,7 +257,7 @@ function bindAcmg(ops: ScopedOps) {
     alt: string,
     classification: AcmgClassification | null,
     evidenceJson: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.setAcmgClassificationWithEvidence(
       { kind: 'case', caseId, variantId },
       coordsOf(chr, pos, ref, alt),
@@ -272,7 +274,7 @@ function bindAcmg(ops: ScopedOps) {
     alt: string,
     classification: AcmgClassification | null,
     evidenceJson: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     return ops.setAcmgClassificationWithEvidence(
       GLOBAL_SCOPE,
       coordsOf(chr, pos, ref, alt),
@@ -291,7 +293,11 @@ function bindAcmg(ops: ScopedOps) {
 
 export function useAnnotations() {
   const { api } = useApiService()
-  const ops = createScopedAnnotationOps(api, getUserName)
+  // A failed write is rolled back; say so, or the user believes it was saved (#486).
+  const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
+  const ops = createScopedAnnotationOps(api, getUserName, () =>
+    appState?.showSnack('Annotation not saved. The change was reverted.', 'error')
+  )
   const getters = createAnnotationGetters()
   const loads = bindLoads(ops)
   const marks = bindStarsAndComments(ops)

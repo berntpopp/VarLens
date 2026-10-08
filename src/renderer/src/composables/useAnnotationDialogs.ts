@@ -23,7 +23,7 @@ interface AnnotationFunctions {
     pos: number,
     ref: string,
     alt: string
-  ) => Promise<void>
+  ) => Promise<boolean>
   setAcmgClassification: (
     caseId: number,
     variantId: number,
@@ -32,7 +32,7 @@ interface AnnotationFunctions {
     ref: string,
     alt: string,
     classification: AcmgClassification | null
-  ) => Promise<void>
+  ) => Promise<boolean>
   setAcmgClassificationWithEvidence: (
     caseId: number,
     variantId: number,
@@ -42,14 +42,14 @@ interface AnnotationFunctions {
     alt: string,
     classification: AcmgClassification | null,
     evidenceJson: string
-  ) => Promise<void>
+  ) => Promise<boolean>
   upsertGlobalComment: (
     chr: string,
     pos: number,
     ref: string,
     alt: string,
     comment: string | null
-  ) => Promise<void>
+  ) => Promise<boolean>
   upsertPerCaseComment: (
     caseId: number,
     variantId: number,
@@ -58,7 +58,7 @@ interface AnnotationFunctions {
     ref: string,
     alt: string,
     comment: string | null
-  ) => Promise<void>
+  ) => Promise<boolean>
   getAnnotations: (
     chr: string,
     pos: number,
@@ -71,14 +71,14 @@ interface AnnotationFunctions {
       }
     | undefined
   // Global variants (used when scope === 'all' or in cohort mode)
-  toggleGlobalStar?: (chr: string, pos: number, ref: string, alt: string) => Promise<void>
+  toggleGlobalStar?: (chr: string, pos: number, ref: string, alt: string) => Promise<boolean>
   setGlobalAcmgClassification?: (
     chr: string,
     pos: number,
     ref: string,
     alt: string,
     classification: AcmgClassification | null
-  ) => Promise<void>
+  ) => Promise<boolean>
   setGlobalAcmgClassificationWithEvidence?: (
     chr: string,
     pos: number,
@@ -86,7 +86,7 @@ interface AnnotationFunctions {
     alt: string,
     classification: AcmgClassification | null,
     evidenceJson: string
-  ) => Promise<void>
+  ) => Promise<boolean>
   getGlobalAcmgEvidence?: (chr: string, pos: number, ref: string, alt: string) => string | null
   getGlobalComment?: (chr: string, pos: number, ref: string, alt: string) => string | null
   getPerCaseComment?: (chr: string, pos: number, ref: string, alt: string) => string | null
@@ -224,8 +224,12 @@ export function useAnnotationDialogs(
     const v = selectedVariantForComment.value
     const effectiveScope = scope?.value ?? 'case'
 
-    if (data.globalChanged) {
-      await annotations.upsertGlobalComment(v.chr, v.pos, v.ref, v.alt, data.globalComment)
+    // A failed save keeps the dialog open, so the typed comment is not lost (#486).
+    if (
+      data.globalChanged &&
+      !(await annotations.upsertGlobalComment(v.chr, v.pos, v.ref, v.alt, data.globalComment))
+    ) {
+      return
     }
     if (
       data.perCaseChanged &&
@@ -233,7 +237,7 @@ export function useAnnotationDialogs(
       caseId.value !== null &&
       v.id !== undefined
     ) {
-      await annotations.upsertPerCaseComment(
+      const saved = await annotations.upsertPerCaseComment(
         caseId.value,
         v.id,
         v.chr,
@@ -242,6 +246,7 @@ export function useAnnotationDialogs(
         v.alt,
         data.perCaseComment
       )
+      if (!saved) return
     }
 
     commentDialogOpen.value = false

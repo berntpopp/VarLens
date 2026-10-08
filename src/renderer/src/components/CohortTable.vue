@@ -456,10 +456,10 @@ const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
 const annotationActions = {
   // Per-case stubs (not used in cohort mode, but required by interface)
   getAcmgEvidence: getGlobalAcmgEvidence,
-  toggleStar: async () => {},
-  setAcmgClassification: async () => {},
-  setAcmgClassificationWithEvidence: async () => {},
-  upsertPerCaseComment: async () => {},
+  toggleStar: async () => false,
+  setAcmgClassification: async () => false,
+  setAcmgClassificationWithEvidence: async () => false,
+  upsertPerCaseComment: async () => false,
   // Shared
   upsertGlobalComment,
   getAnnotations,
