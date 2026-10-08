@@ -11,10 +11,15 @@ import type { FilterState, ActiveFilter } from '../../../../shared/types/filters
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import { INHERITANCE_MODE_META } from '../../../../shared/types/inheritance'
 
-/** AF fraction as a percentage; below 0.01% significant digits replace the two decimals. */
+/**
+ * AF fraction as a percentage: two decimals when that is the exact value,
+ * otherwise every digit, so the chip never shows another threshold than the
+ * one applied.
+ */
 export function formatAfPercent(af: number): string {
-  const pct = af * 100
-  return pct >= 0.01 ? pct.toFixed(2) : String(Number(pct.toPrecision(2)))
+  const pct = Number((af * 100).toPrecision(12)) // drops binary noise (0.015000000000000001)
+  const twoDecimals = pct.toFixed(2)
+  return Number(twoDecimals) === pct ? twoDecimals : String(pct)
 }
 
 /** Human-readable labels for column filter keys */

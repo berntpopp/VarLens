@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buildActiveFiltersList } from '../../../../src/renderer/src/utils/filters/activeFilters'
+import {
+  buildActiveFiltersList,
+  formatAfPercent
+} from '../../../../src/renderer/src/utils/filters/activeFilters'
 import type { FilterState } from '../../../../src/shared/types/filters'
 import type { ColumnFiltersParam } from '../../../../src/shared/types/column-filters'
 
@@ -105,6 +108,18 @@ describe('buildActiveFiltersList', () => {
       )
       expect(result.find((f) => f.id === 'frequency')!.value).toBe('<= 0.001%')
       expect(result.find((f) => f.id === 'internal-frequency')!.value).toBe('\u2264 0.001%')
+    })
+
+    // custom % -> AF fraction, as the custom field stores it
+    it.each([
+      [0.015, '0.015'],
+      [0.125, '0.125'],
+      [0.014, '0.014'],
+      [1.005, '1.005'],
+      [0.5, '0.50'],
+      [1, '1.00']
+    ])('shows a custom %s%% threshold as the value applied', (percent, shown) => {
+      expect(formatAfPercent(percent / 100)).toBe(shown)
     })
 
     it('formats small percentages correctly', () => {
