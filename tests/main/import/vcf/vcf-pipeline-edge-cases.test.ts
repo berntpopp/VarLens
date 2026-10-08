@@ -37,4 +37,19 @@ describe('VCF pipeline edge cases', () => {
       ['GA', 'frameshift_variant', 'HIGH']
     ])
   })
+
+  it('reads allele depths when the header declares AD as Number=. (older GATK)', () => {
+    const ad = '##FORMAT=<ID=AD,Number=.,Type=Integer,Description="Allelic depths">'
+    const mapped = mapRow([ad], 'chr1 100 . A T,G 50 PASS . GT:AD 1/2:2,10,30')
+    expect(mapped.map((v) => [v.alt, v.ad_ref, v.ad_alt, v.ab])).toEqual([
+      ['T', 2, 10, 10 / 12],
+      ['G', 2, 30, 30 / 32]
+    ])
+    // Not one value per allele: no way to tell which depth belongs to which.
+    const unclear = mapRow([ad], 'chr1 100 . A T,G 50 PASS . GT:AD 1/2:2,10')
+    expect(unclear.map((v) => [v.ad_ref, v.ad_alt, v.ab])).toEqual([
+      [null, null, null],
+      [null, null, null]
+    ])
+  })
 })

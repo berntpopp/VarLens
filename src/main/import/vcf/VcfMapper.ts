@@ -12,7 +12,7 @@ import type {
   VcfMappedVariant,
   InfoFieldMapping
 } from './types'
-import { splitAlleleForSample } from './vcf-allele-splitter'
+import { effectiveAdNumber, splitAlleleForSample } from './vcf-allele-splitter'
 import { parseAnnotationsForAlleles } from './vcf-annotation-parser'
 import { isVepClinSigAlleleSpecific, normalizeVepClinSig } from './vep-clin-sig'
 import { parseGenotype } from './vcf-genotype-parser'
@@ -114,7 +114,11 @@ export function mapVcfRecord(
       sampleValues,
       rec.format,
       1,
-      header.formatDefs.get('AD')?.number ?? 'R'
+      effectiveAdNumber(
+        header.formatDefs.get('AD')?.number,
+        selectedValues[record.format.indexOf('AD')],
+        record.alt.length
+      )
     )
 
     // Step 3: Select the pre-grouped annotation result for this ALT.
