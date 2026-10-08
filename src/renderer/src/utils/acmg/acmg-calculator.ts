@@ -95,7 +95,15 @@ export function classifyByRules(
   benign: AcmgEvidenceCode[]
 ): AcmgClassification {
   const p = countByStrength(pathogenic)
-  const b = countByStrength(benign)
+  const counted = countByStrength(benign)
+  // The benign rules know only BS and BP. A benign criterion raised to Very
+  // Strong still counts as BS, one set to Moderate as BP, so that changing a
+  // strength never drops the criterion from the rule check.
+  const b = {
+    standAlone: counted.standAlone,
+    strong: counted.strong + counted.veryStrong,
+    supporting: counted.supporting + counted.moderate
+  }
 
   // --- Benign stand-alone (BA1) and strong benign (≥2 BS) always win ---
   if (b.standAlone >= 1) return 'Benign'

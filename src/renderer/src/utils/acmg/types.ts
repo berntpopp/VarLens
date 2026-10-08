@@ -138,6 +138,11 @@ export const STRENGTH_OPTIONS: Array<{
   { value: 'stand_alone', label: 'Stand-Alone', abbreviation: 'SA', points: 8 }
 ]
 
+/** Strengths a criterion can be set to: Stand-Alone exists for BA1 only. */
+export function strengthOptionsFor(code: AcmgCode): typeof STRENGTH_OPTIONS {
+  return STRENGTH_OPTIONS.filter((o) => o.value !== 'stand_alone' || code === 'BA1')
+}
+
 /**
  * A single selected evidence code with its metadata
  */
