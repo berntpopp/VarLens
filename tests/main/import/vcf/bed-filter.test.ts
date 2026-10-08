@@ -53,6 +53,13 @@ describe('BedFilter', () => {
       expect(filter.contains('chr1', 998850)).toBe(false)
     })
 
+    it('rejects a padding that is not a non-negative integer', async () => {
+      // -1 would turn a one-base region into an inverted interval that matches nothing.
+      for (const padding of [-1, 0.5, Number.NaN]) {
+        await expect(BedFilter.fromFile(BED_PATH, padding)).rejects.toThrow(/padding/)
+      }
+    })
+
     it('rejects more valid BED rows than the configured entry cap', async () => {
       const tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-entries-'))
       const filePath = path.join(tmpDir, 'too-many.bed')

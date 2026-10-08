@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { importFilterNumericFields } from '../../ipc/domains/import-schemas'
+
 export interface ImportVcfOptions {
   selectedSample?: string
   genomeBuild?: string
@@ -26,11 +28,8 @@ export const ImportVcfOptionsSchema = z
 export const ImportFiltersPayloadSchema = z
   .object({
     bedFile: z.string().nullable().optional(),
-    bedPadding: z.number().optional(),
     passOnly: z.boolean().optional(),
-    minQual: z.number().nullable().optional(),
-    minGq: z.number().nullable().optional(),
-    minDp: z.number().nullable().optional()
+    ...importFilterNumericFields
   })
   .passthrough()
 
