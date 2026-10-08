@@ -151,7 +151,8 @@ export function isAllowedUnsafeApiRequest(params: {
   protocol: string
 }): boolean {
   const secFetchSite = params.secFetchSite?.trim().toLowerCase()
-  if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') return true
+  // Not 'same-site': a sibling subdomain could then drive argument-less writes (#507).
+  if (secFetchSite === 'same-origin') return true
   if (secFetchSite !== undefined && secFetchSite !== '') return false
 
   return isAllowedApiOrigin({
