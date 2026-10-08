@@ -76,11 +76,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
-
       - name: Resolve native toolchain identity
         id: electron-ver
         shell: bash

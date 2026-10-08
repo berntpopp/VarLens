@@ -16,6 +16,7 @@ concurrency:
 jobs:
   web-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -41,11 +42,6 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev build-essential
 
       - name: Resolve native toolchain identity
         id: electron-ver
@@ -79,9 +75,6 @@ jobs:
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-
-      - name: Build web bundle for UI gates
-        run: make ui-gates-build
 
       # Lighthouse launches its own Chrome (without Playwright's --no-sandbox);
       # Ubuntu 24.04 runners restrict unprivileged user namespaces via AppArmor,

@@ -66,14 +66,14 @@ describe('hosted gate contracts', () => {
     expect(checks).not.toContain('rebuild:electron')
   })
 
-  test('Docker gates use bounded builders and PR-scoped writes', () => {
+  test('Docker gates use bounded builders and PRs never write the layer cache', () => {
     const source = job(workflow('build'), 'docker')
     expect(source).toContain('memory=6g')
     expect(source).toContain('max-parallelism = 2')
     expect(source).toContain('node scripts/ci/containers.mjs smoke varlens-web-ci')
     expect(source).toContain('node scripts/ci/containers.mjs scan varlens-web-ci')
     const cacheTo = source.split('\n').find((line) => line.includes('cache-to:'))
-    expect(cacheTo).toContain("format('pr-{0}', github.event.pull_request.number)")
+    expect(cacheTo).toContain("github.event_name != 'pull_request' &&")
   })
 
   test('publishing tags the scanned object and verifies the registry identity', () => {

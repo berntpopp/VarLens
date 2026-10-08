@@ -255,7 +255,7 @@ web-gate: web-gate-static ## Run the Phase 1 gate fast tests (parity is opt-in v
 
 web-ci: ## Opt-in web readiness gate; requires VARLENS_PG_URL
 	$(MAKE) rebuild-node
-	$(MAKE) build-web
+	$(MAKE) ui-gates-build
 	$(MAKE) web-gate-static
 	$(MAKE) web-gate-integration
 	$(MAKE) web-gate-postgres-tests
