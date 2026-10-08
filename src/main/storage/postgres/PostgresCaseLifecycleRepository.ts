@@ -47,6 +47,12 @@ export interface CaseDeletionOptions {
    * 'deleting' (invisible to readers) and is resumed at the next start.
    */
   signal?: AbortSignal
+  /**
+   * A published replacement imported under a temporary name: it takes `name`
+   * in the transaction that hides the deleted case, so a reader never sees
+   * neither or both under that name.
+   */
+  successor?: { id: number; name: string }
 }
 
 export type CaseLifecycleStatus = 'ready' | 'importing' | 'deleting'
@@ -109,7 +115,7 @@ export class PostgresCaseLifecycleRepository {
   /** Run (or resume) the full deletion and resolve when the case is gone. */
   async deleteCase(caseId: number, options: CaseDeletionOptions = {}): Promise<void> {
     options.onProgress?.({ phase: 'hiding', done: 0, total: null })
-    const hidden = await this.hideCase(caseId)
+    const hidden = await this.hideCase(caseId, options.successor)
     if (hidden.state === 'missing') return
     await this.completeHiddenDeletion(caseId, hidden, options)
   }
@@ -136,10 +142,23 @@ export class PostgresCaseLifecycleRepository {
     return result.rows[0]?.import_status
   }
 
-  async hideCase(caseId: number): Promise<HideCaseResult> {
+  async hideCase(
+    caseId: number,
+    successor?: CaseDeletionOptions['successor']
+  ): Promise<HideCaseResult> {
     const client = await this.pool.connect()
     const restoreQueryTimeout = liftClientQueryTimeout(client)
     let rollbackFailure: Error | undefined
+    // Before every COMMIT: the name is free whether the case was hidden now, earlier, or is gone.
+    const commit = async (): Promise<void> => {
+      if (successor !== undefined) {
+        await client.query(`UPDATE ${this.tbl('cases_all')} SET name = $1 WHERE id = $2`, [
+          successor.name,
+          successor.id
+        ])
+      }
+      await client.query('COMMIT')
+    }
     try {
       await client.query('BEGIN')
       await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
@@ -157,12 +176,12 @@ export class PostgresCaseLifecycleRepository {
       )
       const current = row.rows[0]
       if (current === undefined) {
-        await client.query('COMMIT')
+        await commit()
         return { state: 'missing', variantCount: 0 }
       }
       const variantCount = Number(current.variant_count ?? 0)
       if (current.import_status === 'deleting') {
-        await client.query('COMMIT')
+        await commit()
         return { state: 'resume', genomeBuild: current.genome_build, variantCount }
       }
       if (current.import_status !== 'ready') {
@@ -184,7 +203,7 @@ export class PostgresCaseLifecycleRepository {
           WHERE id = $1`,
         [caseId, DELETING_NAME_PREFIX]
       )
-      await client.query('COMMIT')
+      await commit()
       return { state: 'hidden', genomeBuild: current.genome_build, variantCount }
     } catch (error) {
       rollbackFailure = await runOrDestroy(client, 'ROLLBACK')

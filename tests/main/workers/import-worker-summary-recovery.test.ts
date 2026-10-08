@@ -121,6 +121,39 @@ describe('import worker: cohort summary recovery', () => {
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
   })
 
+  // #493: the replaced case is already gone, so taking the new one back would lose both.
+  it('keeps the published replacement of an overwritten case when reporting it fails', async () => {
+    await h.run([
+      h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')]),
+      h.file('B', [variantAt(100, 'AAA')])
+    ])
+
+    const messages = await h.run(
+      [h.file('A', [variantAt(400, 'CCC')], { isDuplicate: true, duplicateStrategy: 'overwrite' })],
+      {
+        onMessage: (m) => {
+          if (m.type === 'file-complete') throw new Error('port closed')
+        }
+      }
+    )
+
+    expect(sessionStatuses(messages)).toEqual(['A:failed'])
+    expect(
+      h.db.prepare('SELECT name, import_status, variant_count FROM cases ORDER BY name').all()
+    ).toEqual([
+      { name: 'A', import_status: 'ready', variant_count: 1 },
+      { name: 'B', import_status: 'ready', variant_count: 1 }
+    ])
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    expect(
+      h.db.prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
+    ).toEqual([
+      { pos: 100, case_count: 1 },
+      { pos: 400, case_count: 1 }
+    ])
+  })
+
   it('tells the main process when it stops keeping the summary current', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
     let rebuilt = false

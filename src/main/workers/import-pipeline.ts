@@ -420,11 +420,7 @@ export async function streamInsertVcf(
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
         activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, vcfSelectedSamples?.[0])
-        activeSample = activeSampleColumn?.name ?? ''
-
-        if (activeSample === '') {
-          break
-        }
+        activeSample = activeSampleColumn.name
 
         // Detect caller from header lines for variant type routing
         const callerInfo = detectCaller(headerLines)
@@ -461,6 +457,12 @@ export async function streamInsertVcf(
       }
       if (full) batch.flush()
     }
+    // A file without rows never reached the header check above.
+    if (header === null && !isCancelled())
+      resolveVcfSelectedSampleColumn(
+        parseVcfHeaderFromLines(headerLines).samples,
+        vcfSelectedSamples?.[0]
+      )
   } finally {
     // Flush remaining items
     if (!isCancelled()) batch.flush()

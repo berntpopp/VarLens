@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
 
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
@@ -13,6 +14,17 @@ import { openWorkerDatabase } from '../../../src/main/workers/worker-db'
 import { prepareStatements } from '../../../src/main/workers/import-pipeline'
 import { runImportSession, type ImportWorkerPort } from '../../../src/main/workers/import-worker'
 import type { WorkerMessage } from '../../../src/shared/types/import-worker'
+import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
+
+const VCF_HEAD = '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n'
+/** Half of a gzipped VCF whose rows do not compress away: it ends mid-body. */
+const truncatedGzipVcf = (): Buffer => {
+  let body = VCF_HEAD
+  for (let i = 1; i <= 20000; i++)
+    body += `chr1\t${i * 7}\t${randomUUID()}\tA\tT\t50\tPASS\t.\tGT\t0/1\n`
+  const gz = gzipSync(body)
+  return gz.subarray(0, gz.length >> 1)
+}
 
 describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () => {
   let dbPath: string
@@ -305,10 +317,24 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       [
         'a VCF without the selected sample',
         'other.vcf',
-        '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n' +
-          'chr1\t100\t.\tA\tT\t50\tPASS\t.\tGT\t0/1\n',
+        VCF_HEAD + 'chr1\t100\t.\tA\tT\t50\tPASS\t.\tGT\t0/1\n',
         ['S2']
-      ]
+      ],
+      [
+        'a VCF without a sample column',
+        'sites.vcf',
+        '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n' +
+          'chr1\t100\t.\tA\tT\t50\tPASS\t.\n',
+        undefined
+      ],
+      // The head of these two is fine; they break after rows were inserted.
+      [
+        'a JSON file truncated mid-array',
+        'mid.json',
+        '{"variants":[{"chr":"chr2","pos":200,"ref":"G","alt":"T"},{"chr":"chr2","pos":300,"re',
+        undefined
+      ],
+      ['a gzip truncated in its body', 'body.vcf.gz', truncatedGzipVcf(), undefined]
     ])(
       'keeps the existing case and its annotations when overwriting with %s',
       async (_what, name, content, vcfSelectedSamples) => {
@@ -337,6 +363,7 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
               type: 'start',
               dbPath,
               throttleMs: 0,
+              batchSize: 1,
               files: [
                 {
                   filePath,
@@ -363,9 +390,119 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
         expect(count('SELECT COUNT(*) AS c FROM case_variant_annotations WHERE case_id = ?')).toBe(
           1
         )
+        // Nothing of the failed replacement is left under any name.
+        expect(verifyDb.prepare('SELECT name FROM cases').all()).toEqual([
+          { name: 'existing-sample' }
+        ])
+        expect(count('SELECT COUNT(*) AS c FROM variants WHERE case_id <> ?')).toBe(0)
         verifyDb.close()
       }
     )
+
+    // Used to import as an empty case.
+    const ROW = 'chr1\t100\t.\tA\tT\t50\tPASS\t.\n'
+    it.each([
+      ['no sample column', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n' + ROW],
+      ['no #CHROM line', ROW],
+      ['no #CHROM line and no rows', '']
+    ])('fails a fresh import of a VCF with %s', async (_what, body) => {
+      const filePath = join(tmpdir(), `${randomUUID()}.vcf`)
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n${body}`)
+      const messages: WorkerMessage[] = []
+      try {
+        await runImportSession(
+          {
+            type: 'start',
+            dbPath,
+            throttleMs: 0,
+            files: [{ filePath, caseName: 'fresh', isDuplicate: false, duplicateStrategy: 'skip' }]
+          },
+          { postMessage: (m) => messages.push(m) }
+        )
+      } finally {
+        unlinkSync(filePath)
+      }
+      const complete = messages.find((m) => m.type === 'complete')
+      expect(complete?.type === 'complete' && complete.results.details[0]).toMatchObject({
+        status: 'failed',
+        error: 'VCF has no #CHROM header line or no sample column'
+      })
+      expect(db.prepare('SELECT name FROM cases').all()).toEqual([])
+    })
+
+    it('imports a VCF with a sample column and no rows as an empty case', async () => {
+      const filePath = join(tmpdir(), `${randomUUID()}.vcf`)
+      writeFileSync(filePath, VCF_HEAD)
+      try {
+        await runImportSession(
+          {
+            type: 'start',
+            dbPath,
+            throttleMs: 0,
+            files: [{ filePath, caseName: 'empty', isDuplicate: false, duplicateStrategy: 'skip' }]
+          },
+          { postMessage: () => undefined }
+        )
+      } finally {
+        unlinkSync(filePath)
+      }
+      expect(db.prepare('SELECT name, import_status, variant_count FROM cases').all()).toEqual([
+        { name: 'empty', import_status: 'ready', variant_count: 0 }
+      ])
+    })
+
+    it('replaces the case under its own name and keeps the cohort summary exact', async () => {
+      const run = async (variants: unknown[]): Promise<void> => {
+        const filePath = join(tmpdir(), `${randomUUID()}.json`)
+        writeFileSync(filePath, JSON.stringify({ variants }))
+        try {
+          await runImportSession(
+            {
+              type: 'start',
+              dbPath,
+              throttleMs: 0,
+              files: [
+                {
+                  filePath,
+                  caseName: 'existing-sample',
+                  isDuplicate: true,
+                  duplicateStrategy: 'overwrite'
+                }
+              ]
+            },
+            { postMessage: () => undefined }
+          )
+        } finally {
+          unlinkSync(filePath)
+        }
+      }
+      const variant = (pos: number): Record<string, unknown> => ({
+        chr: 'chr1',
+        pos,
+        ref: 'A',
+        alt: 'C',
+        gene_symbol: 'GENE',
+        gt_num: '0/1'
+      })
+      await run([variant(100), variant(200)])
+      await run([variant(200), variant(300)])
+
+      expect(db.prepare('SELECT name, import_status, variant_count FROM cases').all()).toEqual([
+        { name: 'existing-sample', import_status: 'ready', variant_count: 2 }
+      ])
+      expect(db.prepare('SELECT pos FROM variants ORDER BY pos').all()).toEqual([
+        { pos: 200 },
+        { pos: 300 }
+      ])
+      expect(
+        db.prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
+      ).toEqual([
+        { pos: 200, case_count: 1 },
+        { pos: 300, case_count: 1 }
+      ])
+      expect(summaryMeta(db, 'is_stale')).toBe('0')
+      expect(snapshotSummary(db)).toEqual(referenceSummary(db))
+    })
 
     it('successfully overwrites existing case when the new file exists and is valid', async () => {
       // 1. Pre-populate an existing case

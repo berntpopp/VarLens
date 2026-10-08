@@ -207,7 +207,7 @@ describe('runSessionBatchImport — parallel', () => {
     expect(s.started).toEqual(['DUP', 'OTHER'])
   })
 
-  it('overwrite deletes the existing case before its file is imported', async () => {
+  it('overwrite deletes the existing case only after its replacement is imported (#493)', async () => {
     const s = parallelSession([{ id: 5, name: 'S1' }])
     const run = runSessionBatchImport({
       files: names(2),
@@ -218,9 +218,14 @@ describe('runSessionBatchImport — parallel', () => {
       concurrency: 2
     })
     await flush()
+    expect(s.events).toEqual([])
+    expect(s.started).toEqual(['S1 (replacing #5)', 'S2'])
+    await s.settle('S1 (replacing #5)')
     expect(s.events).toEqual(['delete:5'])
-    expect(s.started).toContain('S1')
-    await s.settle('S1')
+    expect(s.writeExecute).toHaveBeenCalledWith({
+      type: 'cases:delete',
+      params: [5, { id: 100, name: 'S1' }]
+    })
     await s.settle('S2')
     expect((await run).succeeded).toBe(2)
   })
