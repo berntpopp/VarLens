@@ -32,7 +32,12 @@ import {
   normalizeUserRole,
   type UserRole
 } from '../../shared/auth/auth-constants'
-import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
+import {
+  adminSetLockKey,
+  assertUserExists,
+  reactivateUser,
+  setUserRole
+} from './postgres-user-admin'
 import { assertArgon2idHashMatchesProviderPolicy, isLikelyArgon2idHash } from './argon2id-phc'
 
 /**
@@ -293,9 +298,7 @@ export class PostgresWebAuthService {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `${sch}:first-admin-bootstrap`
-      ])
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [adminSetLockKey(sch)])
       const existingAdmin = await client.query(
         `SELECT 1 FROM ${sch}."users" WHERE role = $1 AND is_active = TRUE LIMIT 1`,
         [ROLE_ADMIN]

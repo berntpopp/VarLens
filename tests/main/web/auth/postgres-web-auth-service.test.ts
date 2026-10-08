@@ -698,20 +698,14 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('setRole promotes a user with a parameterised update', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
     pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
     await svc.setRole('bob', ROLE_ADMIN)
-    expect(pool.queries[1].text).toMatch(/UPDATE[\s\S]+SET role = \$1/i)
-    expect(pool.queries[1].values).toEqual([ROLE_ADMIN, 'bob'])
-  })
-
-  it('setRole refuses to demote the last active admin', async () => {
-    const pool = new FakePool()
-    const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 })
-    pool.enqueueResponse({ rows: [{ c: '0' }], rowCount: 1 })
-    await expect(svc.setRole('admin', ROLE_ANALYST)).rejects.toThrow(/last active admin/i)
-    expect(pool.queries).toHaveLength(2)
+    expect(pool.queries[3].text).toMatch(/UPDATE[\s\S]+SET role = \$1/i)
+    expect(pool.queries[3].values).toEqual([ROLE_ADMIN, 'bob'])
   })
 
   it('reactivateUser re-enables and clears lockout; unknown users throw', async () => {
@@ -785,6 +779,52 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   })
 })
 
+// #507: two admins demoting each other must not both pass the "another active
+// admin exists" check. The check and the UPDATE share one transaction under the
+// advisory lock the first-admin bootstrap uses.
+describe('PostgresWebAuthService — setRole', () => {
+  it('demotes an admin inside one locked transaction', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+    pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 }) // current role
+    pool.enqueueResponse({ rows: [{ c: '1' }], rowCount: 1 }) // other active admins
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // UPDATE
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
+
+    await svc.setRole('bob', ROLE_ANALYST)
+
+    expect(pool.queries.every((q) => q.viaClient)).toBe(true)
+    expect(pool.queries.map((q) => q.text.trim().split(/\s+/).slice(0, 2).join(' '))).toEqual([
+      'BEGIN',
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      'SELECT role',
+      'SELECT COUNT(*)::text',
+      `UPDATE "${SCHEMA}"."users"`,
+      'COMMIT'
+    ])
+    expect(pool.queries[1].values).toEqual([`"${SCHEMA}":first-admin-bootstrap`])
+    expect(pool.releasedCount).toBe(1)
+  })
+
+  it('rolls back and releases when it would demote the last active admin', async () => {
+    const pool = new FakePool()
+    const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
+    pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [{ c: '0' }], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(svc.setRole('bob', ROLE_ANALYST)).rejects.toThrow(/last active admin/i)
+
+    expect(pool.queries.at(-1)?.text).toBe('ROLLBACK')
+    expect(pool.queries.some((q) => q.text.includes('UPDATE'))).toBe(false)
+    expect(pool.releasedCount).toBe(1)
+  })
+})
+
 describe('PostgresWebAuthService — cached session-user lookup', () => {
   function newCachedSvc(pool: FakePool): PostgresWebAuthService {
     return new PostgresWebAuthService({
@@ -828,8 +868,11 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
     expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_ANALYST)
 
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // BEGIN
+    pool.enqueueResponse({ rows: [], rowCount: 1 }) // advisory xact lock
     pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // COMMIT
     await svc.setRole('alice', ROLE_ADMIN)
     pool.enqueueResponse({ rows: [pgUserRow({ role: ROLE_ADMIN })], rowCount: 1 })
     expect((await svc.getSessionUser('alice'))?.role).toBe(ROLE_ADMIN)
