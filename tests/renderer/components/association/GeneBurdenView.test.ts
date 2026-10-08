@@ -41,8 +41,9 @@ describe('GeneBurdenView', () => {
     expect(panel.props('allCases')).toEqual(mockCases)
     expect(panel.props('cohortGroups')).toEqual(mockGroups)
 
-    expect(typeof (wrapper.vm as any).refresh).toBe('function')
-    await (wrapper.vm as any).refresh()
+    const vm = wrapper.vm as unknown as { refresh: () => Promise<void> }
+    expect(typeof vm.refresh).toBe('function')
+    await vm.refresh()
     await flushPromises()
     expect(mockLoadCasesWithMetadata).toHaveBeenCalledTimes(2)
   })

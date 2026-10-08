@@ -4,9 +4,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { VariantInvokeBodySchemas } from '../../../src/shared/api/schemas/variants'
-import { FILTER_DEFAULTS } from '../../../src/shared/filters/filterDefaults'
 import {
-  AssociationConfigSchema,
   CohortSearchParamsSchema,
   FilterStateSchema,
   VariantFilterPartialSchema

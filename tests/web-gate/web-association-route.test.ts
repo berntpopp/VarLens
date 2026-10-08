@@ -61,10 +61,13 @@ describe('web cohort association', () => {
     const { result, reply } = await call('cohort:runAssociation', [CONFIG])
     expect(reply.code).not.toHaveBeenCalled()
     expect(build).toHaveBeenCalledWith([1, 2], [3, 4], {}, [])
-    const body = result as { results: Array<{ gene_symbol: string; q_value: number | null }> }
+    const body = result as {
+      results: Array<{ gene_symbol: string; q_value: number | null }>
+      non_autosomal_variants: number
+    }
     expect(body.results.map((r) => r.gene_symbol)).toEqual(['GENE1'])
     expect(body.results[0].q_value).not.toBeNull()
-    expect((body as any).non_autosomal_variants).toBe(2)
+    expect(body.non_autosomal_variants).toBe(2)
     expect(publish).toHaveBeenCalledWith(7, 'cohort:geneBurdenProgress', {
       completed: 1,
       total: 1
@@ -80,7 +83,10 @@ describe('web cohort association', () => {
 
     const mixedBuild = harness(
       vi.fn(async () => {
-        throw new InvalidParametersError('Mixed genome builds: hg19 and hg38', 'Mixed genome builds: hg19 and hg38')
+        throw new InvalidParametersError(
+          'Mixed genome builds: hg19 and hg38',
+          'Mixed genome builds: hg19 and hg38'
+        )
       })
     )
     const mixed = await mixedBuild.call('cohort:runAssociation', [CONFIG])
