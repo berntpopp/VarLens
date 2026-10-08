@@ -100,51 +100,58 @@ describe('import worker: cohort summary recovery', () => {
     })
   })
 
-  // #493: once published, a case is not taken back — the case it replaced is already gone.
-  it('keeps a published case, and the summary exact, when reporting it fails', async () => {
+  it('takes a merged case out of the summary again when reporting it fails', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const failReport = {
-      onMessage: (m: { type: string }): void => {
-        if (m.type === 'file-complete') throw new Error('port closed')
-      }
-    }
-    const published = (): unknown[] =>
-      h.db.prepare('SELECT name, import_status, variant_count FROM cases ORDER BY name').all()
-    const expectConsistent = (): void => {
-      expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
-      expect(summaryMeta(h.db, 'is_stale')).toBe('0')
-      const counted = h.db.prepare(
-        'SELECT COALESCE(SUM(case_count), 0) AS c FROM variant_frequency'
-      )
-      const carried = h.db.prepare(
-        'SELECT COUNT(*) AS c FROM (SELECT DISTINCT case_id, chr, pos, ref, alt FROM variants)'
-      )
-      expect(counted.get()).toEqual(carried.get())
-    }
+    const frequencies = (): unknown[] =>
+      h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
+    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
 
     // B is inserted and merged; then telling the main process throws.
-    const fresh = await h.run(
-      [h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])],
-      failReport
-    )
-    expect(sessionStatuses(fresh)).toEqual(['B:failed'])
-    expect(published()).toEqual([
-      { name: 'A', import_status: 'ready', variant_count: 2 },
-      { name: 'B', import_status: 'ready', variant_count: 2 }
-    ])
-    expectConsistent()
+    const messages = await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])], {
+      onMessage: (m) => {
+        if (m.type === 'file-complete') throw new Error('port closed')
+      }
+    })
 
-    // The same while replacing A: neither the old A nor nothing, but the new A.
-    const replaced = await h.run(
-      [h.file('A', [variantAt(400, 'CCC')], { isDuplicate: true, duplicateStrategy: 'overwrite' })],
-      failReport
-    )
-    expect(sessionStatuses(replaced)).toEqual(['A:failed'])
-    expect(published()).toEqual([
-      { name: 'A', import_status: 'ready', variant_count: 1 },
-      { name: 'B', import_status: 'ready', variant_count: 2 }
+    expect(sessionStatuses(messages)).toEqual(['B:failed'])
+    expect(h.db.prepare("SELECT 1 FROM cases WHERE name = 'B'").get()).toBeUndefined()
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+    expect(snapshotSummary(h.db)).toEqual(before.summary)
+    expect(frequencies()).toEqual(before.frequencies)
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+  })
+
+  // #493: the replaced case is already gone, so taking the new one back would lose both.
+  it('keeps the published replacement of an overwritten case when reporting it fails', async () => {
+    await h.run([
+      h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')]),
+      h.file('B', [variantAt(100, 'AAA')])
     ])
-    expectConsistent()
+
+    const messages = await h.run(
+      [h.file('A', [variantAt(400, 'CCC')], { isDuplicate: true, duplicateStrategy: 'overwrite' })],
+      {
+        onMessage: (m) => {
+          if (m.type === 'file-complete') throw new Error('port closed')
+        }
+      }
+    )
+
+    expect(sessionStatuses(messages)).toEqual(['A:failed'])
+    expect(
+      h.db.prepare('SELECT name, import_status, variant_count FROM cases ORDER BY name').all()
+    ).toEqual([
+      { name: 'A', import_status: 'ready', variant_count: 1 },
+      { name: 'B', import_status: 'ready', variant_count: 1 }
+    ])
+    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    expect(
+      h.db.prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
+    ).toEqual([
+      { pos: 100, case_count: 1 },
+      { pos: 400, case_count: 1 }
+    ])
   })
 
   it('tells the main process when it stops keeping the summary current', async () => {
