@@ -26,7 +26,7 @@ import {
   type EmitCohortStale
 } from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
-import { resolveCaseSample } from '../../import/vcf/vcf-header-parser'
+import { assertGenomeBuildMatches, resolveCaseSample } from '../../import/vcf/vcf-header-parser'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
 
@@ -386,13 +386,7 @@ async function startMultiFileImportSqlite(
         // build against the case's locked build. Mismatches abort the
         // import of this file BEFORE any variants are inserted.
         const fileBuild = await detectGenomeBuildFromFile(spec.filePath)
-        if (lockedGenomeBuild !== null && fileBuild !== null && fileBuild !== lockedGenomeBuild) {
-          throw new Error(
-            `Genome build mismatch: case is locked to ${lockedGenomeBuild} but ` +
-              `${spec.filePath} declares ${fileBuild}. All files in a multi-file ` +
-              `import must share the same reference assembly.`
-          )
-        }
+        assertGenomeBuildMatches(lockedGenomeBuild, fileBuild, spec.filePath)
 
         const fileSize = statSync(spec.filePath).size
 

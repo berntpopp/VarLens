@@ -11,7 +11,7 @@ import {
 } from '../import/vcf/import-filters'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
-import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
+import { assertGenomeBuildMatches, parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import {
   parseVcfLine,
   resolveVcfSelectedSampleColumn,
@@ -60,6 +60,8 @@ export async function* streamMappedVcfRows(
 
       if (header === null) {
         header = parseVcfHeaderFromLines(headerLines)
+        // Before the first row of the file is yielded, so none of it is inserted.
+        assertGenomeBuildMatches(appendedTo?.genomeBuild, header.genomeBuild, filePath)
         activeSampleColumn = resolveVcfSelectedSampleColumn(
           header.samples,
           selectedSample,

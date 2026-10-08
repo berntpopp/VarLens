@@ -316,3 +316,20 @@ export async function resolveCaseSample(
   const parsed = await parseVcfHeader(firstFilePath).catch(() => undefined)
   return parsed?.header.samples[0]
 }
+
+/**
+ * One case, one reference assembly: refuse a file whose header declares another
+ * build than the case is locked to. A header that declares none passes.
+ */
+export function assertGenomeBuildMatches(
+  lockedBuild: string | null | undefined,
+  declaredBuild: string | null | undefined,
+  filePath: string
+): void {
+  if (lockedBuild == null || declaredBuild == null || declaredBuild === lockedBuild) return
+  throw new Error(
+    `Genome build mismatch: case is locked to ${lockedBuild} but ` +
+      `${filePath} declares ${declaredBuild}. All files in a multi-file ` +
+      `import must share the same reference assembly.`
+  )
+}

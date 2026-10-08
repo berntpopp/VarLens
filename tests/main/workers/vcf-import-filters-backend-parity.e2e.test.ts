@@ -46,9 +46,10 @@ const PG_URL =
 
 const VCF_DIR = resolve(__dirname, '../../test-data/vcf')
 
-const vcf = (samples: string, rows: string[]): string =>
+const vcf = (samples: string, rows: string[], extraHeader: string[] = []): string =>
   [
     '##fileformat=VCFv4.2',
+    ...extraHeader,
     '##INFO=<ID=END,Number=1,Type=Integer,Description="End">',
     '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type">',
     '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
@@ -93,6 +94,12 @@ const DEPTH_VCF = vcf('SAMPLE', [
   'chr7\t50000\t.\tC\t<STR12>\t.\tPASS\tEND=50030\tGT:GQ:DP\t0/1:40:3',
   'chr7\t60000\t.\tC\t<STR12>\t.\tPASS\tEND=60030\tGT:GQ:DP\t0/1:40:30'
 ])
+
+const GRCH37_VCF = vcf(
+  'A',
+  ['chr9\t100\t.\tA\tT\t50\tPASS\t.\tGT:GQ:DP\t0/1:40:30'],
+  ['##reference=file:///ref/GRCh37.fa']
+)
 
 // 0-based half-open. The chr22, chr21 and chr7 regions hit their record only
 // through its POS..END interval, not through POS.
@@ -260,7 +267,7 @@ const rowText = (r: Record<string, unknown>): string =>
 describe('VCF import filters: every file, both backends', () => {
   let dir: string
   let bedPath: string
-  const file = (key: FileKey): FileSpec => ({
+  const file = (key: FileKey | 'grch37'): FileSpec => ({
     filePath: key in SHIPPED ? resolve(VCF_DIR, SHIPPED[key]) : join(dir, `${key}.vcf`),
     variantType: 'auto',
     caller: null,
@@ -272,6 +279,7 @@ describe('VCF import filters: every file, both backends', () => {
     writeFileSync(join(dir, 'snv.vcf'), SNV_VCF)
     writeFileSync(join(dir, 'swapped.vcf'), SWAPPED_VCF)
     writeFileSync(join(dir, 'depth.vcf'), DEPTH_VCF)
+    writeFileSync(join(dir, 'grch37.vcf'), GRCH37_VCF)
     bedPath = join(dir, 'regions.bed')
     writeFileSync(bedPath, BED)
   })
@@ -398,6 +406,18 @@ describe('VCF import filters: every file, both backends', () => {
         'snv.vcf': expect.stringMatching(/sample "SAMPLE1" is not present.*A, B/)
       })
       expect(outcome.rows).toEqual([...ROWS.sv].sort())
+    }, 60_000)
+
+    it('rejects a file of another reference assembly before inserting its rows', async () => {
+      const outcome = await importCase([file('snv'), file('grch37')], undefined, {
+        genomeBuild: 'GRCh38'
+      })
+      expect(outcome.errors).toEqual({
+        'grch37.vcf': expect.stringMatching(
+          /Genome build mismatch: case is locked to GRCh38 but .*grch37\.vcf declares GRCh37/
+        )
+      })
+      expect(outcome.rows).toEqual([...ROWS.snv].sort())
     }, 60_000)
   }
 
