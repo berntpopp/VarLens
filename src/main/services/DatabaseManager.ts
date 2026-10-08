@@ -5,6 +5,7 @@
  * Handles encryption detection and password validation.
  */
 
+import Database from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
 import { isNotADatabaseError } from '../database/sqlite-error'
@@ -74,26 +75,14 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be read
    */
   openDetectEncryption(dbPath: string): { needsPassword: boolean } {
-    let testDb: DatabaseService | null = null
+    let testDb: Database.Database | null = null
 
     try {
-      testDb = new DatabaseService(dbPath)
-      testDb.database.prepare('SELECT count(*) FROM sqlite_master').get()
-      testDb.close()
+      // Raw read-only probe: never creates a missing file, never migrates.
+      testDb = new Database(dbPath, { fileMustExist: true, readonly: true })
+      testDb.prepare('SELECT count(*) FROM sqlite_master').get()
       return { needsPassword: false }
     } catch (error) {
-      if (testDb !== null) {
-        try {
-          testDb.close()
-        } catch (e) {
-          mainLogger.warn(
-            'Failed to close test DB during encryption detection: ' +
-              (e instanceof Error ? e.message : String(e)),
-            'DatabaseManager'
-          )
-        }
-      }
-
       if (isNotADatabaseError(error)) {
         return { needsPassword: true }
       }
@@ -102,6 +91,8 @@ export class DatabaseManager {
         `Failed to read database at ${dbPath}`,
         error instanceof Error ? error : undefined
       )
+    } finally {
+      testDb?.close()
     }
   }
 

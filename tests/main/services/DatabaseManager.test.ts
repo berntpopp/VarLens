@@ -310,6 +310,16 @@ describe('DatabaseManager', () => {
       }).toThrow(DatabaseError)
     })
 
+    it('throws for a missing file in an existing folder and does not create it (#489)', () => {
+      const missing = tempDbPath('-missing')
+      try {
+        expect(() => manager.openDetectEncryption(missing)).toThrow(DatabaseError)
+        expect(existsSync(missing)).toBe(false)
+      } finally {
+        cleanupDb(missing)
+      }
+    })
+
     it('treats an unreadable/corrupted file as needing a password -- SQLite cannot distinguish it from a wrong-key encrypted file', () => {
       const badPath = tempDbPath('-bad')
       writeFileSync(badPath, 'not a database')
