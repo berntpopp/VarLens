@@ -242,6 +242,7 @@ defineExpose({
   toggleLogViewer: () => {
     logViewerOpen.value = !logViewerOpen.value
   },
+  logViewerOpen,
   disclaimerAcknowledged
 })
 </script>

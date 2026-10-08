@@ -11,6 +11,7 @@
       v-if="jobs.length > 0 && panelExpanded"
       :id="BACKGROUND_JOBS_PANEL_ID"
       class="background-jobs__card"
+      :style="{ bottom: `${mainRect.bottom + 16}px` }"
       elevation="6"
       role="region"
       aria-labelledby="background-jobs-title"
@@ -91,6 +92,7 @@
  * `kinds` narrows it to a subset when embedded in a specific context.
  */
 import { nextTick, ref, watch } from 'vue'
+import { useLayout } from 'vuetify'
 import { mdiChevronDown, mdiClose } from '@mdi/js'
 
 import type { Job, JobKind } from '../../../../shared/types/jobs'
@@ -121,6 +123,8 @@ const {
   setPanelExpanded
 } = useBackgroundJobs({ kinds: props.kinds })
 const authStore = useAuthStore()
+// Float 16px above the layout's bottom items (the footer), whatever their height.
+const { mainRect } = useLayout()
 
 function labelOf(job: Job): string {
   return JOB_KIND_LABELS[job.kind] ?? job.kind
@@ -191,7 +195,6 @@ watch(
 .background-jobs__card {
   position: fixed;
   right: 16px;
-  bottom: 48px;
   z-index: 2000;
   width: min(360px, calc(100vw - 32px));
   max-height: 50vh;
