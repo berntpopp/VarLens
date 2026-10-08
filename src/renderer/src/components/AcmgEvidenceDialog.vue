@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="dialogOpen" max-width="480" scrollable>
+  <v-dialog :model-value="dialogOpen" max-width="480" scrollable @update:model-value="requestClose">
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between pa-3">
         <div class="d-flex align-center ga-2">
@@ -11,7 +11,7 @@
           :icon="mdiClose"
           size="x-small"
           variant="text"
-          @click="dialogOpen = false"
+          @click="requestClose"
         />
       </v-card-title>
 
@@ -30,6 +30,7 @@
           {{ writeBlockedReason }}
         </div>
         <AcmgClassificationPanel
+          ref="panelRef"
           :evidence-json="evidenceJson"
           :variant-data="variantData"
           :save="handleSave"
@@ -69,6 +70,13 @@ const dialogOpen = ref(false)
 
 function open(): void {
   dialogOpen.value = true
+}
+
+const panelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)
+
+/** Close button, Escape and click outside: an unsaved draft is asked about first. */
+async function requestClose(): Promise<void> {
+  if ((await panelRef.value?.confirmLeave()) !== false) dialogOpen.value = false
 }
 
 const { canWrite, writeBlockedReason } = usePermissions()
