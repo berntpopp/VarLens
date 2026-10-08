@@ -709,7 +709,9 @@ export const mockApi: WindowAPI = {
       results: [],
       warnings: [],
       elapsed_ms: 0,
-      primary_test: 'fisher'
+      primary_test: 'fisher',
+      sites_excluded: 0,
+      non_autosomal_variants: 0
     }),
     cancelAssociation: async () => {},
     onAssociationProgress: () => () => {}

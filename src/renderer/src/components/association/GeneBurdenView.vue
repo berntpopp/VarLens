@@ -38,6 +38,18 @@
       {{ error }}
     </v-alert>
 
+    <!-- Non-Autosomal Warning -->
+    <v-alert
+      v-if="results && results.non_autosomal_variants > 0"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mb-3"
+      :icon="mdiAlertCircleOutline"
+    >
+      {{ results.non_autosomal_variants }} non-autosomal variants were excluded from the analysis.
+    </v-alert>
+
     <!-- Warnings -->
     <v-alert
       v-if="results && results.warnings.length > 0"
@@ -103,6 +115,7 @@ import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import { formatError } from '../../utils/ipc-result'
+import { mdiAlertCircleOutline } from '@mdi/js'
 
 interface CaseInfo {
   id: number
@@ -147,6 +160,8 @@ interface AssociationResultsData {
   warnings: string[]
   elapsed_ms: number
   primary_test: string
+  sites_excluded: number
+  non_autosomal_variants: number
 }
 
 const {

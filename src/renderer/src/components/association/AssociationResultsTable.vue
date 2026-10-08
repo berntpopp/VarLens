@@ -36,6 +36,11 @@
         <span class="gene-symbol font-weight-medium">{{ value }}</span>
       </template>
 
+      <!-- Sites count -->
+      <template #[`item.sites`]="{ item }">
+        {{ item.n_variants - (item.sites_excluded ?? 0) }}
+      </template>
+
       <!-- Significant row highlighting -->
       <template #[`item.q_value`]="{ value }">
         <v-chip v-if="value !== null && value < 0.05" size="small" color="error" variant="tonal">
@@ -102,6 +107,7 @@ interface AssociationResult {
   groupB_carriers: number
   groupA_total: number
   groupB_total: number
+  sites_excluded?: number
   fisher: {
     p_value: number | null
     odds_ratio: number | null
@@ -135,6 +141,7 @@ watch(itemsPerPage, (v) => {
 
 const headers = [
   { title: 'Gene', key: 'gene_symbol', sortable: true },
+  { title: 'Sites', key: 'sites', sortable: true, align: 'end' as const },
   { title: 'Variants', key: 'n_variants', sortable: true, align: 'end' as const },
   {
     title: 'Cases A',
