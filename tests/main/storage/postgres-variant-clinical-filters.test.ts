@@ -5,6 +5,8 @@ import {
   buildPostgresVariantQueryParts,
   PostgresVariantReadRepository
 } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
+import { HET_OR_HEMI_GT_SQL } from '../../../src/shared/sql/genotype-dosage'
+import { autosomalRecessiveSql, xHemizygousSql } from '../../../src/shared/sql/inheritance-sql'
 
 function repoWithQueryCapture() {
   const calls: string[] = []
@@ -217,6 +219,55 @@ describe('PostgreSQL clinical variant filters', () => {
     expect(sql).toContain('f.chr = p.chr')
     expect(sql).toContain('m.alt = p.alt')
     expect(paramsByCall[0]).toContain(9)
+  })
+
+  // Issue #518: both backends emit the predicate text of src/shared/sql/inheritance-sql.ts,
+  // whose rows tests/main/database/{trio-inheritance,inheritance-filters}.test.ts check on SQLite.
+  it('x_hemizygous reads the sex of the case through the shared predicate', async () => {
+    const { repo, calls } = repoWithQueryCapture()
+    await repo.queryVariants({ case_id: 1, inheritance_modes: ['x_hemizygous'] }, 25)
+
+    expect(calls.join('\n')).toContain(xHemizygousSql('v', '"public"."case_metadata"'))
+    expect(xHemizygousSql('v', 'cm_table')).toContain("cm.sex = 'female'")
+  })
+
+  it('autosomal_recessive requires carrier parents through the shared predicate', async () => {
+    const { repo, calls, paramsByCall } = repoWithQueryCapture()
+    await repo.queryVariants(
+      { case_id: 4242, inheritance_modes: ['autosomal_recessive'], analysis_group_id: 99 },
+      25
+    )
+
+    const sql = calls[0]
+    const params = paramsByCall[0]
+    const groupParam = `$${params.indexOf(99) + 1}`
+    const caseParam = `$${params.lastIndexOf(4242) + 1}`
+    expect(sql).toContain(
+      autosomalRecessiveSql(
+        {
+          variants: '"public"."variants"',
+          members: '"public"."analysis_group_members"',
+          caseParam,
+          groupParam
+        },
+        'v'
+      )
+    )
+    // PostgreSQL rejects a bound parameter that no placeholder uses.
+    params.forEach((_, index) => expect(sql).toMatch(new RegExp(`\\$${index + 1}(?!\\d)`)))
+  })
+
+  it('de novo accepts a haploid proband call', async () => {
+    const { repo, calls } = repoWithQueryCapture()
+    await repo.queryVariants(
+      { case_id: 1, inheritance_modes: ['de_novo'], analysis_group_id: 9 },
+      25
+    )
+    expect(calls.join('\n')).toContain(`v.gt_num IN ${HET_OR_HEMI_GT_SQL}`)
+    // ...and a chrX 1/1 of a case recorded as male (a caller that writes it diploid).
+    expect(calls.join('\n')).toContain(xHemizygousSql('v', '"public"."case_metadata"', true))
+    expect(xHemizygousSql('v', 'cm_table', true)).toContain('AND EXISTS (')
+    expect(xHemizygousSql('v', 'cm_table', true)).toContain("cm.sex = 'male'")
   })
 
   it('accepts consider_phasing as an inheritance no-op', async () => {

@@ -3,7 +3,15 @@
  * way. Table names and parameter placeholders come from the caller; the
  * genotype classes come from ./genotype-dosage.ts.
  */
-import { ALT_GT_SQL, HET_GT_SQL, notReferenceGtSql } from './genotype-dosage'
+import { chrRankSql, chromosomeRank } from './chromosome-order'
+import {
+  ALT_GT_SQL,
+  gtCallRankSql,
+  HEMI_GT_SQL,
+  HET_GT_SQL,
+  HOM_GT_SQL,
+  notReferenceGtSql
+} from './genotype-dosage'
 
 /** One variant, however many rows (transcripts, duplicates) a case stores for it. */
 export function variantIdentitySql(alias: string): string {
@@ -28,6 +36,55 @@ function parentRowSql(ctx: TrioSqlContext, role: 'father' | 'mother', condition:
            AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
           WHERE agm.group_id = ${ctx.groupParam} AND agm.role = '${role}' AND ${condition}
         )`
+}
+
+/** Ranks of X, Y and MT in {@link chrRankSql}: every spelling, with or without `chr`. */
+const NON_AUTOSOME_RANKS = ['X', 'Y', 'MT'].map(chromosomeRank).join(', ')
+
+/**
+ * Row `row` is an autosomal homozygous call of the proband and every parent of
+ * the group is a het carrier of it (issue #518).
+ *
+ * Each parent is read once, by its resolved call (the highest dosage of its
+ * rows, as everywhere: gtCallKeySql). Het passes. Reference, homozygous or
+ * haploid fails, and so does a parent without a row, which is read as
+ * reference. A parent with only uncalled genotypes passes, so that a parental
+ * dropout does not hide a candidate. A group without a parent does not constrain.
+ */
+export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string {
+  // One digit per row, so MAX needs no collation and the text is the same on both backends.
+  const parentRank = `(
+              SELECT MAX(${gtCallRankSql('par.gt_num')}) FROM ${ctx.variants} par
+              WHERE par.case_id = agm.case_id
+                AND par.chr = ${row}.chr AND par.pos = ${row}.pos
+                AND par.ref = ${row}.ref AND par.alt = ${row}.alt
+            )`
+  return `(
+          ${row}.gt_num IN ${HOM_GT_SQL}
+          AND ${row}.case_id = ${ctx.caseParam}
+          AND ${chrRankSql(`${row}.chr`)} NOT IN (${NON_AUTOSOME_RANKS})
+          AND NOT EXISTS (
+            SELECT 1 FROM ${ctx.members} agm
+            WHERE agm.group_id = ${ctx.groupParam} AND agm.role IN ('father', 'mother')
+              AND COALESCE(${parentRank}, '1') NOT IN ('3', '0')
+          )
+        )`
+}
+
+/**
+ * Row `row` is a hemizygous chrX call: haploid, or `1/1` from a caller that
+ * wrote it diploid — unless the case is recorded as female, whose `1/1` is
+ * homozygous. Pseudoautosomal regions are not told apart. With `maleOnly`, a
+ * `1/1` counts only for a case recorded as male (de novo: one copy must be sure).
+ */
+export function xHemizygousSql(row: string, caseMetadata: string, maleOnly = false): string {
+  return `(${row}.chr IN ('X', 'chrX') AND (
+          ${row}.gt_num IN ${HEMI_GT_SQL}
+          OR (${row}.gt_num IN ${HOM_GT_SQL} AND ${maleOnly ? '' : 'NOT '}EXISTS (
+            SELECT 1 FROM ${caseMetadata} cm
+            WHERE cm.case_id = ${row}.case_id AND cm.sex = '${maleOnly ? 'male' : 'female'}'
+          ))
+        ))`
 }
 
 /**

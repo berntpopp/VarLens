@@ -10,6 +10,8 @@ import { API_BASE } from './transport'
 
 export const WEB_UPLOAD_EVENT = 'varlens:web-upload'
 export const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
+/** Sent by the import wizard with `{ refs }` it abandons before any import used them. */
+export const WEB_UPLOAD_DISCARD_EVENT = 'varlens:web-upload-discard'
 
 export type WebUploadStatus = 'started' | 'progress' | 'complete' | 'error' | 'aborted'
 
@@ -50,16 +52,15 @@ function ensureUploadCancelListener(): void {
   window.addEventListener(WEB_UPLOAD_CANCEL_EVENT, () => {
     activeUpload?.abort()
   })
+  window.addEventListener(WEB_UPLOAD_DISCARD_EVENT, (event) => {
+    void discardUploads((event as CustomEvent<{ refs: string[] }>).detail.refs)
+  })
   uploadCancelListenerRegistered = true
   uploadCancelListenerTarget = window
 }
 
 // Vite's `base` config materialises here at build time. The browser
 // loads the SPA from BASE_URL (e.g. `/varlens/`), so API calls have to
-
-async function uploadImportFile(file: File): Promise<UploadedFileRef> {
-  return await uploadImportFileWithProgress(file, 0, 1)
-}
 
 async function uploadImportFileWithProgress(
   file: File,
@@ -182,13 +183,28 @@ async function uploadImportFileWithProgress(
   })
 }
 
-export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
-  if (files.length === 1) {
-    return [await uploadImportFile(files[0])]
+/** Best effort, one at a time: a folder selection can hold thousands of refs. */
+async function discardUploads(refs: readonly string[]): Promise<void> {
+  for (const ref of refs) {
+    if (!ref.startsWith('web-upload:')) continue
+    await fetch(`${API_BASE}/import/upload?ref=${encodeURIComponent(ref)}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    }).catch(() => undefined)
   }
+}
+
+export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
   const uploaded: UploadedFileRef[] = []
-  for (let index = 0; index < files.length; index++) {
-    uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+  try {
+    for (let index = 0; index < files.length; index++) {
+      uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+    }
+  } catch (error) {
+    // Refused or cancelled part-way: nothing will import the files already
+    // staged, and left alone they count against the per-user cap for 24 h.
+    void discardUploads(uploaded.map((file) => file.ref))
+    throw error
   }
   return uploaded
 }

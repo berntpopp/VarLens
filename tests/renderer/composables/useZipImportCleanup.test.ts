@@ -163,3 +163,35 @@ describe('useZipImportCleanup request ownership', () => {
     expect(cleanupRequest).toHaveBeenNthCalledWith(2, 'extraction-current')
   })
 })
+
+describe('useZipImportCleanup staged upload discard', () => {
+  const discarded = (): string[][] => {
+    const events: string[][] = []
+    window.addEventListener('varlens:web-upload-discard', (event) => {
+      events.push((event as CustomEvent<{ refs: string[] }>).detail.refs)
+    })
+    return events
+  }
+
+  it('gives back the selection when it is abandoned before an import started', () => {
+    const { cleanup, state } = createHarness(vi.fn())
+    const events = discarded()
+
+    cleanup.abandonZipImport('dialog close')
+    expect(events).toEqual([['/tmp/archive.zip', '/tmp/current.json']])
+
+    state.isZipImport.value = false
+    state.selectedFilePaths.value = ['web-upload:a/a.json']
+    cleanup.handleBack()
+    expect(events[1]).toEqual(['web-upload:a/a.json'])
+  })
+
+  it.each([3, 4])('keeps the files of an import that was started (step %i)', (step) => {
+    const { cleanup, state } = createHarness(vi.fn())
+    const events = discarded()
+    state.step.value = step
+
+    cleanup.abandonZipImport('dialog close')
+    expect(events).toEqual([])
+  })
+})

@@ -43,6 +43,8 @@ export async function executeSqliteWriteTask(
 ): Promise<unknown> {
   switch (task.type) {
     case 'cases:delete':
+      // Only the session batch import replaces a case; SQLite imports through its worker.
+      if (task.params[1]) throw new Error('cases:delete with a successor needs PostgreSQL')
       repos.cases.deleteCase(task.params[0])
       return undefined
 

@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3-multiple-ciphers'
 import { CLINICAL_METRICS } from './clinical-metrics'
+import { caseDependents } from './case-dependents'
 import { BUILT_IN_PRESETS } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { createChrRankIndexes } from './chr-rank-indexes'
@@ -17,7 +18,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 42
+export const LATEST_SQLITE_SCHEMA_VERSION = 44
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -66,6 +67,8 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 42
  * - 40: cases.import_status
  * - 41: impact_rank / clinvar_rank on variants and the cohort summary (#469)
  * - 42: cohort summary het/hom counts follow the shared genotype classes (mirrors PG 0026)
+ * - 43: cohort summary resolves a case's conflicting duplicate calls by dosage (mirrors PG 0027)
+ * - 44: delete the rows (comments, tags, links …) the import worker left of replaced cases
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -1909,9 +1912,10 @@ export function runMigrations(db: Database.Database): void {
   }
 
   // v42: a split multi-allelic genotype (`1/.`) counts as het
-  // (src/shared/utils/genotype.ts). The stored counts predate that: flag a
-  // populated summary stale, the app start rebuilds it.
-  if (currentVersion < 42) {
+  // (src/shared/utils/genotype.ts). v43: a case's conflicting duplicate calls
+  // resolve to the highest dosage (#516). The stored counts predate both: flag
+  // a populated summary stale, the app start rebuilds it.
+  if (currentVersion < 43) {
     const summaryTables = db
       .prepare(
         "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cohort_variant_summary', 'cohort_summary_meta')"
@@ -1923,7 +1927,19 @@ export function runMigrations(db: Database.Database): void {
     ) {
       db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
     }
-    db.exec('PRAGMA user_version = 42')
+    db.exec('PRAGMA user_version = 43')
+  }
+
+  // v44: the import worker (foreign_keys = OFF) did not delete every table of
+  // a case it replaced or discarded. Case ids are never reused (AUTOINCREMENT),
+  // so a row whose case is gone belongs to no one. Variant-keyed tables were
+  // always deleted and are not scanned.
+  if (currentVersion < 44) {
+    for (const { table, column, parent } of caseDependents(db)) {
+      if (parent !== 'cases') continue
+      db.exec(`DELETE FROM "${table}" WHERE "${column}" NOT IN (SELECT id FROM cases)`)
+    }
+    db.exec('PRAGMA user_version = 44')
   }
 }
 

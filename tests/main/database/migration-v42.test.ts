@@ -1,7 +1,8 @@
 /**
- * Migration v42: het/hom counts of the cohort summary follow the shared
- * genotype classes (a split `1/.` is het). Stored counts predate that, so a
- * populated summary is flagged stale and the app start rebuilds it.
+ * Migrations v42 and v43: het/hom counts of the cohort summary follow the
+ * shared genotype classes (a split `1/.` is het), and a case's conflicting
+ * duplicate calls resolve to the highest dosage (#516). Stored counts predate
+ * both, so a populated summary is flagged stale and the app start rebuilds it.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -10,7 +11,7 @@ import { isCohortSummaryStale } from '../../../src/main/database/cohort-summary-
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { makeVariant } from '../../utils/make-variant'
 
-describe('migration v42 — genotype classes of the cohort summary', () => {
+describe('migrations v42 / v43 — genotype classes of the cohort summary', () => {
   let service: DatabaseService
 
   beforeEach(() => {
@@ -26,18 +27,18 @@ describe('migration v42 — genotype classes of the cohort summary', () => {
       }
     ).het_count
 
-  /** A v41 database whose summary was built when `1/.` was in no class. */
-  function seedV41(): void {
+  /** A v41 (or v42) database whose summary was built when `1/.` was in no class. */
+  function seedV41(version = 41): void {
     const caseId = service.cases.createCase('split', '/s.vcf', 1)
     service.variants.insertVariantsBatch(caseId, [makeVariant({ gt_num: '1/.' })])
     service.cohortSummary.rebuild()
     service.database.exec('UPDATE cohort_variant_summary SET het_count = 0')
-    service.database.exec('PRAGMA user_version = 41')
+    service.database.exec(`PRAGMA user_version = ${version}`)
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(42)
-    expect(service.database.pragma('user_version', { simple: true })).toBe(42)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(44)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(44)
   })
 
   it('flags a populated summary stale, so the app start rebuilds it', () => {
@@ -46,13 +47,20 @@ describe('migration v42 — genotype classes of the cohort summary', () => {
 
     runMigrations(service.database)
 
-    expect(service.database.pragma('user_version', { simple: true })).toBe(42)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(44)
     expect(isCohortSummaryStale(service.database)).toBe(true)
     expect(service.needsStartupRebuild()).toBe(true)
 
     service.cohortSummary.rebuild()
     expect(hetCount()).toBe(1)
     expect(service.needsStartupRebuild()).toBe(false)
+  })
+
+  it('flags the summary of a v42 database too', () => {
+    seedV41(42)
+    runMigrations(service.database)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(44)
+    expect(isCohortSummaryStale(service.database)).toBe(true)
   })
 
   it('leaves an empty summary alone', () => {

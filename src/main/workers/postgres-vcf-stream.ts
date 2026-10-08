@@ -67,8 +67,7 @@ export async function* streamMappedVcfRows(
           selectedSample,
           appendedTo !== undefined
         )
-        activeSample = activeSampleColumn?.name ?? ''
-        if (activeSample === '') break
+        activeSample = activeSampleColumn.name
         const callerInfo = detectCaller(headerLines)
         callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
       }
@@ -98,6 +97,13 @@ export async function* streamMappedVcfRows(
       }
     }
     if (streamError !== null) throw streamError
+    // A file without rows never reached the header check above.
+    if (header === null)
+      resolveVcfSelectedSampleColumn(
+        parseVcfHeaderFromLines(headerLines).samples,
+        selectedSample,
+        appendedTo !== undefined
+      )
   } finally {
     lines.close()
     stream.destroy()

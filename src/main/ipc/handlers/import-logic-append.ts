@@ -126,12 +126,7 @@ export async function importAdditionalFileToCase(
             vcfOptions?.selectedSample,
             true
           )
-          activeSample = activeSampleColumn?.name ?? ''
-
-          if (activeSample === '') {
-            errors.push(`No sample found in VCF file: ${filePath}`)
-            break
-          }
+          activeSample = activeSampleColumn.name
 
           const callerInfo = detectCaller(headerLines)
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
@@ -206,6 +201,14 @@ export async function importAdditionalFileToCase(
           if (isCancelled()) throw new Error('Import cancelled by user')
         }
       }
+
+      // A file without rows never reached the header check above.
+      if (header === null)
+        resolveVcfSelectedSampleColumn(
+          parseVcfHeaderFromLines(headerLines).samples,
+          vcfOptions?.selectedSample,
+          true
+        )
 
       // Flush remaining batch
       if (batch.rows > 0) {

@@ -5,6 +5,7 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
+import { AppStateKey, createAppState } from '../../../src/renderer/src/composables/useAppState'
 import VariantDetailsPanel from '../../../src/renderer/src/components/VariantDetailsPanel.vue'
 import { createMockApi } from '../../utils/mock-api'
 import { installCapabilities } from '../helpers/capabilities'
@@ -22,7 +23,11 @@ const variant = {
 
 type TestWindow = Window & { api?: unknown; __VARLENS_WEB__?: boolean }
 
-function mountPanel(runtime: 'desktop' | 'web' = 'desktop', proteinLookupEnabled = false) {
+function mountPanel(
+  runtime: 'desktop' | 'web' = 'desktop',
+  proteinLookupEnabled = false,
+  extra: { provide?: Record<symbol, unknown>; stubs?: Record<string, unknown> } = {}
+) {
   setActivePinia(createPinia())
   installCapabilities({
     runtime,
@@ -45,8 +50,9 @@ function mountPanel(runtime: 'desktop' | 'web' = 'desktop', proteinLookupEnabled
           'ActivityLogPanel',
           'ProteinVisualizationModal',
           'ProteinViewUnavailableDialog'
-        ].map((name) => [name, { name, template: '<div />' }])
-      )
+        ].map((name) => [name, extra.stubs?.[name] ?? { name, template: '<div />' }])
+      ),
+      provide: extra.provide
     }
   })
 }
@@ -96,5 +102,34 @@ describe('VariantDetailsPanel protein view mounting', () => {
 
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
     expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).exists()).toBe(false)
+  })
+
+  it('asks the evidence editor about an unsaved draft before the selection changes', async () => {
+    const state = createAppState()
+    state.selectedPanelVariant.value = variant as never
+    state.panelOpen.value = true
+    const editor = {
+      name: 'AcmgClassificationPanel',
+      template: '<div />',
+      setup: (_: unknown, { expose }: { expose: (exposed: object) => void }) =>
+        expose({ confirmLeave: () => Promise.resolve(false) })
+    }
+    const wrapper = mountPanel('desktop', false, {
+      provide: { [AppStateKey as symbol]: state },
+      stubs: { AcmgClassificationPanel: editor }
+    })
+    await flushPromises()
+
+    state.selectedPanelVariant.value = { ...variant, id: 2 } as never
+    state.panelOpen.value = false
+    await flushPromises()
+
+    expect(state.selectedPanelVariant.value).toMatchObject({ id: 1 })
+    expect(state.panelOpen.value).toBe(true)
+
+    // Once the panel is gone its guard is too.
+    wrapper.unmount()
+    state.panelOpen.value = false
+    expect(state.panelOpen.value).toBe(false)
   })
 })

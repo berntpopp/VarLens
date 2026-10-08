@@ -1,4 +1,4 @@
-import { nextTick, watch } from 'vue'
+import { nextTick, onScopeDispose, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { Router } from 'vue-router'
 import type { Variant } from '../../../shared/types/api'
@@ -12,6 +12,9 @@ interface UseShellNavigationOptions {
   selectedPanelVariant: Ref<Variant | CohortVariant | null>
   transitioning: Ref<boolean>
   router: Router
+  /** App state's unsaved-draft check: null = nothing to ask, false = stay. */
+  confirmPanelLeave: () => Promise<boolean> | null
+  closePanelWithoutAsking: () => void
 }
 
 /** Resolves after the next frame has been rendered (two rAF ticks). */
@@ -28,9 +31,21 @@ export function useShellNavigation({
   panelOpen,
   selectedPanelVariant,
   transitioning,
-  router
+  router,
+  confirmPanelLeave,
+  closePanelWithoutAsking
 }: UseShellNavigationOptions): void {
   let syncingFromRoute = false
+
+  // Back/forward and pasted links move the route before any state: ask first,
+  // so Cancel leaves the URL where it was. Filter/sort/search steps do not ask.
+  onScopeDispose(
+    router.beforeEach(
+      async (to, from) =>
+        (to.path === from.path && to.query.case === from.query.case) ||
+        (await confirmPanelLeave()) !== false
+    )
+  )
 
   watch(
     () => router.currentRoute.value.path,
@@ -38,6 +53,8 @@ export function useShellNavigation({
       const routeTab = path.startsWith('/cohort') ? 'cohort' : 'case'
       if (activeTab.value === routeTab) return
 
+      // Back/forward: the open panel belongs to the view being left (asked in beforeEach).
+      closePanelWithoutAsking()
       syncingFromRoute = true
       activeTab.value = routeTab
       syncingFromRoute = false

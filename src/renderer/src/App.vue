@@ -188,6 +188,7 @@ const {
   resetCaseFilters,
   resetCaseContext,
   resetForDatabaseSwitch,
+  closePanelWithoutAsking,
   selectCase
 } = appState
 
@@ -277,6 +278,8 @@ const handleDeleteAllCases = async () => {
     } catch (error) {
       dialogHostRef.value?.showSnackbar(formatError(error, 'Deleting all cases failed.'), 'error')
     } finally {
+      // Every case is gone: there is nothing left to apply a draft to.
+      closePanelWithoutAsking()
       resetCaseContext()
       incrementDataGeneration()
       await caseListRef.value?.refreshCases()
@@ -285,12 +288,25 @@ const handleDeleteAllCases = async () => {
 }
 
 // Case list handlers
-const handleCaseSelected = (
+let restoredCaseId: number | null = null
+const handleCaseSelected = async (
   caseId: number,
   caseName: string,
   variantCount: number,
   createdAt: number
-): void => {
+): Promise<void> => {
+  // The list re-emits the case its highlight was put back on: nothing to open.
+  if (caseId === restoredCaseId) {
+    restoredCaseId = null
+    return
+  }
+  const leave = appState.confirmPanelLeave() // null without a draft: no tick lost
+  if (leave !== null && !(await leave)) {
+    // Cancel: the list already highlights the case that was not opened.
+    restoredCaseId = selectedCaseId.value
+    caseListRef.value?.selectCase(selectedCaseId.value)
+    return
+  }
   selectCase({ caseId, caseName, variantCount, createdAt })
   // Docked (desktop) sidebar stays put: collapsing it animated the whole
   // case view sideways right after open (CLS ~0.19). Only dismiss it when it
@@ -298,12 +314,15 @@ const handleCaseSelected = (
   if (sidebarIsOverlay.value) closeSidebar()
 }
 
-const handleEditCase = (
+const handleEditCase = async (
   caseId: number,
   caseName: string,
   variantCount: number,
   createdAt: number
-): void => {
+): Promise<void> => {
+  // The editor reads the selected case at once: open it only after the draft prompt.
+  const leave = appState.confirmPanelLeave()
+  if (leave !== null && !(await leave)) return
   selectCase({ caseId, caseName, variantCount, createdAt })
   dialogHostRef.value?.showCaseMetadata()
 }
@@ -312,7 +331,11 @@ const handleCasesLoaded = (count: number): void => {
   setCaseCount(count)
 }
 const handleCaseDeleted = (caseId: number): void => {
-  if (selectedCaseId.value === caseId) clearSelectedCase()
+  if (selectedCaseId.value === caseId) {
+    // No prompt: Apply would write into the case being deleted, Cancel would keep it selected.
+    closePanelWithoutAsking()
+    clearSelectedCase()
+  }
   incrementDataGeneration()
 }
 
@@ -322,7 +345,9 @@ useShellNavigation({
   panelOpen,
   selectedPanelVariant,
   transitioning,
-  router
+  router,
+  confirmPanelLeave: appState.confirmPanelLeave,
+  closePanelWithoutAsking
 })
 
 // Clear filters on case change

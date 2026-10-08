@@ -122,6 +122,144 @@ describe('Trio inheritance filters', () => {
     })
   })
 
+  describe('autosomal_recessive — parental carrier status (issue #518)', () => {
+    const recessive = (group = groupId): number =>
+      service.variants.getVariants(
+        {
+          case_id: probandId,
+          inheritance_modes: ['autosomal_recessive'],
+          analysis_group_id: group
+        },
+        50,
+        0
+      ).data.length
+
+    beforeEach(() => {
+      service.variants.insertVariantsBatch(probandId, [makeVariant({ gt_num: '1/1', pos: 100 })])
+    })
+
+    it('passes with two het parents, an assumed-het parent included', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: './1', pos: 100 })])
+      expect(recessive()).toBe(1)
+    })
+
+    it('fails when a parent has a reference call', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/0', pos: 100 })])
+      expect(recessive()).toBe(0)
+    })
+
+    it('fails when a parent in the group has no row at the variant', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      expect(recessive()).toBe(0)
+    })
+
+    it('keeps the variant when a parent has an uncalled genotype', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: './.', pos: 100 })])
+      expect(recessive()).toBe(1)
+    })
+
+    it('fails when a parent has a het and a hom row: the highest dosage wins', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: '0/1', pos: 100 }),
+        makeVariant({ gt_num: '1/1', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(0)
+    })
+
+    it('a parent with a reference and an uncalled row is reference: the resolved call decides', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: './.', pos: 100 }),
+        makeVariant({ gt_num: '0/0', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(0)
+    })
+
+    it('a parent with a het and a reference row is a het carrier', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: '0/0', pos: 100 }),
+        makeVariant({ gt_num: '1|0', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(1)
+    })
+
+    it('fails when a parent has a haploid call', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      expect(recessive()).toBe(0)
+    })
+
+    it.each(['X', 'chrX', 'Y', 'chrY', 'MT', 'chrM'])(
+      'leaves out a homozygous call on %s: the mode is autosomal',
+      (chr) => {
+        const solo = service.analysisGroups.createGroup('SOLO', 'family').id
+        service.analysisGroups.addMember(solo, probandId, 'proband', 'affected')
+        service.variants.insertVariantsBatch(probandId, [
+          makeVariant({ gt_num: '1/1', chr, pos: 500 })
+        ])
+        expect(recessive(solo)).toBe(1) // the chr 1 variant only
+      }
+    )
+
+    it('a duo constrains only the parent it has', () => {
+      const duo = service.analysisGroups.createGroup('DUO', 'family').id
+      service.analysisGroups.addMember(duo, probandId, 'proband', 'affected')
+      service.analysisGroups.addMember(duo, fatherId, 'father', 'unaffected')
+      expect(recessive(duo)).toBe(0)
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      expect(recessive(duo)).toBe(1)
+    })
+
+    it('a group without parents keeps every homozygous variant', () => {
+      const solo = service.analysisGroups.createGroup('SOLO', 'family').id
+      service.analysisGroups.addMember(solo, probandId, 'proband', 'affected')
+      expect(recessive(solo)).toBe(1)
+    })
+  })
+
+  it('de_novo keeps a haploid proband call (male chrX)', () => {
+    service.variants.insertVariantsBatch(probandId, [
+      makeVariant({ chr: 'X', gt_num: '1', pos: 5000000 }),
+      makeVariant({ chr: 'X', gt_num: '1', pos: 5000100 })
+    ])
+    service.variants.insertVariantsBatch(motherId, [
+      makeVariant({ chr: 'X', gt_num: '0/1', pos: 5000100 })
+    ])
+    const result = service.variants.getVariants(
+      { case_id: probandId, inheritance_modes: ['de_novo'], analysis_group_id: groupId },
+      50,
+      0
+    )
+    expect(result.data.map((v) => v.pos)).toEqual([5000000])
+  })
+
+  it.each([
+    ['male', [5000000]],
+    ['female', []],
+    ['unknown', []]
+  ])('de_novo for a proband of sex %s keeps a diploid chrX 1/1 at %j', (sex, expected) => {
+    service.metadata.upsertCaseMetadata(probandId, { sex })
+    service.variants.insertVariantsBatch(probandId, [
+      makeVariant({ chr: 'X', gt_num: '1/1', pos: 5000000 }),
+      makeVariant({ chr: 'X', gt_num: '1/1', pos: 5000100 }),
+      makeVariant({ chr: '1', gt_num: '1/1', pos: 300 })
+    ])
+    service.variants.insertVariantsBatch(motherId, [
+      makeVariant({ chr: 'X', gt_num: '0/1', pos: 5000100 })
+    ])
+    const result = service.variants.getVariants(
+      { case_id: probandId, inheritance_modes: ['de_novo'], analysis_group_id: groupId },
+      50,
+      0
+    )
+    expect(result.data.map((v) => v.pos)).toEqual(expected)
+  })
+
   describe('compound_het', () => {
     it('finds gene with het variants from different parents', () => {
       service.variants.insertVariantsBatch(probandId, [

@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg'
 
+import { parseReplacementCaseName } from '../../../shared/utils/case-name'
 import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
 import { removeCaseFromGeneSummary } from './cohort-gene-summary-sql'
@@ -47,9 +48,22 @@ export interface CaseDeletionOptions {
    * 'deleting' (invisible to readers) and is resumed at the next start.
    */
   signal?: AbortSignal
+  /**
+   * A published replacement imported under a temporary name: it takes `name`
+   * in the transaction that hides the deleted case, so a reader never sees
+   * neither or both under that name.
+   */
+  successor?: { id: number; name: string }
 }
 
 export type CaseLifecycleStatus = 'ready' | 'importing' | 'deleting'
+
+/** A case that is hidden only while it still is the unswapped replacement of `oldId`. */
+interface AbandonedReplacement {
+  name: string
+  oldId: number
+  oldName: string
+}
 
 /**
  * statement_timeout for the case-scoped maintenance transaction. It only
@@ -109,7 +123,7 @@ export class PostgresCaseLifecycleRepository {
   /** Run (or resume) the full deletion and resolve when the case is gone. */
   async deleteCase(caseId: number, options: CaseDeletionOptions = {}): Promise<void> {
     options.onProgress?.({ phase: 'hiding', done: 0, total: null })
-    const hidden = await this.hideCase(caseId)
+    const hidden = await this.hideCase(caseId, options.successor)
     if (hidden.state === 'missing') return
     await this.completeHiddenDeletion(caseId, hidden, options)
   }
@@ -136,13 +150,39 @@ export class PostgresCaseLifecycleRepository {
     return result.rows[0]?.import_status
   }
 
-  async hideCase(caseId: number): Promise<HideCaseResult> {
+  async hideCase(
+    caseId: number,
+    successor?: CaseDeletionOptions['successor'],
+    abandoned?: AbandonedReplacement
+  ): Promise<HideCaseResult> {
     const client = await this.pool.connect()
     const restoreQueryTimeout = liftClientQueryTimeout(client)
     let rollbackFailure: Error | undefined
+    // Before every COMMIT: the name is free whether the case was hidden now, earlier, or is gone.
+    const commit = async (): Promise<void> => {
+      if (successor !== undefined) {
+        const renamed = await client.query(
+          `UPDATE ${this.tbl('cases_all')} SET name = $1 WHERE id = $2 AND import_status = 'ready'`,
+          [successor.name, successor.id]
+        )
+        if (renamed.rowCount !== 1) throw replacementNotReady(caseId, successor.id)
+      }
+      await client.query('COMMIT')
+    }
     try {
       await client.query('BEGIN')
       await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
+      if (successor !== undefined) {
+        // Locked first and before anything is changed: without a published
+        // replacement the case must stay (a cancelled import reports case 0).
+        const replacement = await client.query<{ import_status: string }>(
+          `SELECT import_status FROM ${this.tbl('cases_all')} WHERE id = $1 FOR NO KEY UPDATE`,
+          [successor.id]
+        )
+        if (replacement.rows[0]?.import_status !== 'ready') {
+          throw replacementNotReady(caseId, successor.id)
+        }
+      }
       // NO KEY: this row is held while waiting for the summary lock below, and
       // an annotation save that holds that lock needs the row's key-share lock
       // for its foreign key (lock order: cohort-summary-lock.ts).
@@ -157,12 +197,17 @@ export class PostgresCaseLifecycleRepository {
       )
       const current = row.rows[0]
       if (current === undefined) {
-        await client.query('COMMIT')
+        await commit()
+        return { state: 'missing', variantCount: 0 }
+      }
+      // Checked under the row lock: a swap that committed meanwhile renamed this case.
+      if (abandoned !== undefined && !(await this.isAbandoned(client, caseId, abandoned))) {
+        await commit()
         return { state: 'missing', variantCount: 0 }
       }
       const variantCount = Number(current.variant_count ?? 0)
       if (current.import_status === 'deleting') {
-        await client.query('COMMIT')
+        await commit()
         return { state: 'resume', genomeBuild: current.genome_build, variantCount }
       }
       if (current.import_status !== 'ready') {
@@ -184,7 +229,7 @@ export class PostgresCaseLifecycleRepository {
           WHERE id = $1`,
         [caseId, DELETING_NAME_PREFIX]
       )
-      await client.query('COMMIT')
+      await commit()
       return { state: 'hidden', genomeBuild: current.genome_build, variantCount }
     } catch (error) {
       rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
@@ -236,10 +281,39 @@ export class PostgresCaseLifecycleRepository {
     return result.rows.map((row) => Number(row.id))
   }
 
-  /** Case ids left in 'deleting' (crash or shutdown mid-purge), oldest first. */
+  /**
+   * Hide every published replacement whose overwrite died before its swap: a
+   * `ready` case named `<name> (replacing #<id>)` while case `<id>` still
+   * exists as `<name>`. The swap hides the old case and renames the
+   * replacement in one transaction, so an old case that is still there is the
+   * authoritative one. Returns the ids hidden; their rows are purged like any
+   * pending deletion.
+   */
+  async hideAbandonedReplacements(): Promise<number[]> {
+    const candidates = await this.pool.query<{ id: string | number; name: string }>(
+      `SELECT id, name FROM ${this.tbl('cases_all')}
+        WHERE import_status = 'ready' AND name LIKE '% (replacing #%)' ORDER BY id`
+    )
+    const hidden: number[] = []
+    for (const row of candidates.rows) {
+      const parsed = parseReplacementCaseName(row.name)
+      if (parsed === null) continue
+      const caseId = Number(row.id)
+      const guard = { name: row.name, oldId: parsed.oldId, oldName: parsed.caseName }
+      if ((await this.hideCase(caseId, undefined, guard)).state === 'hidden') hidden.push(caseId)
+    }
+    return hidden
+  }
+
+  /**
+   * Case ids left in 'deleting' (crash or shutdown mid-purge), oldest first —
+   * after abandoned replacements joined them ({@link hideAbandonedReplacements}):
+   * this is the list a restart resumes.
+   */
   async listPendingDeletions(): Promise<
     Array<{ caseId: number; genomeBuild: string; variantCount: number }>
   > {
+    await this.hideAbandonedReplacements()
     const result = await this.pool.query<{
       id: string | number
       genome_build: string
@@ -253,6 +327,21 @@ export class PostgresCaseLifecycleRepository {
       genomeBuild: row.genome_build,
       variantCount: Number(row.variant_count ?? 0)
     }))
+  }
+
+  private async isAbandoned(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number,
+    replacement: AbandonedReplacement
+  ): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM ${this.tbl('cases_all')} r
+         JOIN ${this.tbl('cases_all')} old
+           ON old.id = $3 AND old.name = $4 AND old.import_status <> 'deleting'
+        WHERE r.id = $1 AND r.name = $2`,
+      [caseId, replacement.name, replacement.oldId, replacement.oldName]
+    )
+    return result.rows.length === 1
   }
 
   private async applyCaseScopedMaintenance(
@@ -321,6 +410,13 @@ export class PostgresCaseLifecycleRepository {
   private tbl(table: string): string {
     return `${this.schemaName}."${table}"`
   }
+}
+
+function replacementNotReady(caseId: number, successorId: number): InvalidParametersError {
+  return new InvalidParametersError(
+    `case ${caseId} is kept: its replacement ${successorId} is not a published case`,
+    'The replacement was not imported, so the existing case was kept.'
+  )
 }
 
 function pause(ms: number): Promise<void> {

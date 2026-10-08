@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   ASSUMED_HET_HELP,
+  calledAlleleCount,
+  genotypeCallKey,
   genotypeZygosity,
   gtToDosage,
   isAssumedHetGenotype,
@@ -131,5 +133,29 @@ describe('assumed het', () => {
     expect(ASSUMED_HET_HELP).toMatch(/multi-allelic/)
     expect(ASSUMED_HET_HELP).toMatch(/half-call/)
     expect(ASSUMED_HET_HELP).toMatch(/lower bound/)
+  })
+})
+
+describe('calledAlleleCount', () => {
+  it.each([
+    ['0/1', 2],
+    ['1/.', 2],
+    ['0/.', 2],
+    ['./0', 2],
+    ['0|.', 2],
+    ['.|0', 2],
+    ['1', 1],
+    ['0', 1],
+    ['./.', 0],
+    ['.', 0],
+    [null, 0]
+  ])('%s calls %i alleles', (gt, count) => {
+    expect(calledAlleleCount(gt)).toBe(count)
+  })
+
+  it('a reference half-call keeps its class, dosage and duplicate-call rank', () => {
+    expect(genotypeZygosity('0/.')).toBeNull()
+    expect(gtToDosage('0/.')).toBeNull()
+    expect(genotypeCallKey('0/.')).toBe('00/.')
   })
 })

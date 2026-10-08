@@ -45,7 +45,39 @@ Trio filters use the same classes. A parent's row blocks de novo unless it is a 
 uncalled parent never establishes one. Trio compound het returns only het variants with one
 carrying parent and a reference (or absent) other parent, in genes that have one from each parent.
 A parent **without a row** is read as a non-carrier on every path — reference and uncovered sites
-are not stored — so no trio filter proves absence in a parent.
+are not stored — so no trio filter proves absence in a parent. Autosomal recessive (chrX, chrY and
+chrM left out) reads each parent once, by its resolved call (below): het or only uncalled passes;
+reference, homozygous, haploid or no row withholds.
+
+## Conflicting duplicate calls, and called alleles (#516, #517)
+
+Several rows of one case for one variant with different genotypes resolve to **one call, the
+highest dosage**: hom > het (incl. assumed) > hemizygous > reference > unknown, ties by the
+bytewise greatest text. A called ALT is evidence; a reference or missing call on another row is
+not evidence against it. Defined once — `genotypeCallKey` (TS) / `gtCallKeySql`, `resolvedGtSql`
+(SQL) — and used by the cohort summary (rebuild and every incremental path), the carrier list and
+the association rows on both backends. It replaced a text `MAX(gt_num)` (summary) and "last row
+wins" (association). SQLite **v43** / PostgreSQL **0027** flag a populated summary stale again.
+
+Burden allele frequency = ALT copies / **called alleles** (`calledAlleleCount`): a haploid call
+(`1`, `0`) is 1 allele, a diploid one 2, an assumed het (`1/.`) 2 — it is read as a het
+everywhere, so its frequency is the same lower bound as its dosage — a reference half-call (`0/.`,
+`./0`) 2 with no copy of this ALT, under the same assumption (the missing allele is a different
+ALT; its class, dosage and duplicate-call rank stay unknown), and an unknown call (`./.`, NULL) 0. A sample without a row is a diploid `0/0`, as on every other path; for a male on
+chrX that overstates the denominator by one allele, which the stored data cannot show.
+
+## Known limits
+
+- Conflicting duplicate calls resolve to the highest dosage without looking at genotype quality,
+  which biases toward ALT (PLINK sets such conflicts to missing); the burden test has no "missing"
+  dosage yet.
+- `1` and `0/1` duplicates on chrX resolve to het by rank: a ploidy disagreement, not a dosage one.
+- A sample with no row is counted as two reference alleles, also on male chrX and at uncovered
+  sites; an explicit unknown call is dosage 0.
+- The burden weight uses the ALT allele frequency, not the minor allele frequency.
+- The SQL and TypeScript duplicate-call keys agree for the stored ASCII genotype grammar only.
+- Overwriting a case does not carry its per-case annotations (ACMG classifications, stars,
+  comments, tags) over to the replacement; the batch-import dialog says so.
 
 ## Consequences users will see
 
@@ -55,6 +87,6 @@ are not stored — so no trio filter proves absence in a parent.
 - Filters: heterozygous, candidate compound het and de novo include assumed het and `1/0`; the
   candidate needs two different variants, not two rows; compound het and de novo are stricter (above).
 - Carrier list: `assumed het (1/.)`, `hemi`, or the stored text of an unknown call (all were `het`).
-- Existing databases: SQLite migration **v42** / PostgreSQL **0026** flag a populated summary stale.
+- Existing databases: SQLite migrations **v42**, **v43** / PostgreSQL **0026**, **0027** flag a populated summary stale.
   SQLite rebuilds it at app start (automatic or interactive open); PostgreSQL in the background,
   leaving it unpatched by imports and deletions until then. Dosage and filters are read-time.

@@ -21,7 +21,11 @@ import type { AuditAppendParams } from './audit-log-types'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
 
 export type StorageWriteTask =
-  | { type: 'cases:delete'; params: [caseId: number] }
+  | {
+      type: 'cases:delete'
+      /** `successor`: a published case that takes the deleted one's name in the same transaction. */
+      params: [caseId: number, successor?: { id: number; name: string }]
+    }
   | { type: 'case-metadata:upsert'; params: [caseId: number, updates: MetadataUpdates] }
   | { type: 'case-metadata:createCohort'; params: [params: CohortCreateParams] }
   | {

@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
+import { replacementCaseName } from '../../../src/shared/utils/case-name'
 import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
 import {
   openSummarySessionHarness,
@@ -73,6 +74,22 @@ describe('import worker: interrupted imports', () => {
     expect(snapshotSummary(h.db)).toEqual(before.summary)
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+  })
+
+  // A replacement takes its case's name in the transaction that publishes it,
+  // so on SQLite a temp-named case is always provisional (PostgreSQL publishes
+  // first: PostgresCaseLifecycleRepository.hideAbandonedReplacements).
+  it('discards the temp-named replacement of an overwrite that died, and keeps the case', async () => {
+    await h.run([h.file('A', [variantAt(100, 'AAA')])])
+    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const { id } = h.db.prepare("SELECT id FROM cases WHERE name = 'A'").get() as { id: number }
+    leaveInterruptedCase(replacementCaseName('A', id), 'A')
+
+    await h.run([])
+
+    expect(cases()).toEqual([{ name: 'A', import_status: 'ready' }])
+    expect(frequencies()).toEqual(before.frequencies)
+    expect(snapshotSummary(h.db)).toEqual(before.summary)
   })
 
   it('imports a file under the name an interrupted import left behind', async () => {

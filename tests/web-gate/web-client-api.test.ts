@@ -649,6 +649,54 @@ describe('web client api', () => {
     )
   })
 
+  test.each(['quota', 'cancel'])(
+    'a batch upload stopped by %s discards the files it already uploaded',
+    async (stoppedBy) => {
+      resetMockXhr('manual')
+      stubUploadPicker([])
+      const fetchMock = mockFetch({ ok: true, status: 204, statusText: 'No Content', body: '' })
+      const files = [new File(['a'], 'a.vcf'), new File(['b'], 'b.vcf')]
+
+      const api = createApi() as unknown as TestApi
+      const upload = api.import.enrollDroppedFiles(files)
+      const [first] = MockXMLHttpRequest.instances
+      first.responseText = JSON.stringify({ ref: 'web-upload:id-a/a.vcf' })
+      first.onload?.()
+      await flushPromises()
+      const second = MockXMLHttpRequest.instances[1]
+      if (stoppedBy === 'quota') {
+        second.status = 413
+        second.onload?.()
+      } else {
+        window.dispatchEvent(new CustomEvent(WEB_UPLOAD_CANCEL_EVENT))
+      }
+
+      await expect(upload).rejects.toThrow()
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        `/api/import/upload?ref=${encodeURIComponent('web-upload:id-a/a.vcf')}`,
+        { method: 'DELETE', credentials: 'include' }
+      )
+    }
+  )
+
+  test('the discard event gives back upload refs, and only upload refs', async () => {
+    resetMockXhr()
+    stubUploadPicker([new File(['a'], 'a.vcf')])
+    const fetchMock = mockFetch({ ok: true, status: 204, statusText: 'No Content', body: '' })
+    const api = createApi() as unknown as TestApi
+    const ref = await api.import.selectFile()
+
+    window.dispatchEvent(
+      new CustomEvent('varlens:web-upload-discard', { detail: { refs: [ref, '/desktop/a.vcf'] } })
+    )
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      `/api/import/upload?ref=${encodeURIComponent(ref)}`,
+      { method: 'DELETE', credentials: 'include' }
+    )
+  })
+
   test('upload helper aborts the active upload through the cancel event', async () => {
     resetMockXhr('manual')
     const file = new File(['pending'], 'pending.vcf')

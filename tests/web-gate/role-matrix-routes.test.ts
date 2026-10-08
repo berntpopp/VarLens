@@ -42,18 +42,21 @@ describe('role matrix: non-dispatcher routes', () => {
         headers: { 'content-type': 'application/octet-stream' },
         payload: Buffer.from('{}')
       })
+      const discard = await app.inject({ method: 'DELETE', url: '/api/import/upload?ref=x' })
       const download = await app.inject({
         method: 'GET',
         url: '/api/download/unknowntokenvalue1.1.sig'
       })
       if (role === 'viewer') {
         expect(isRoleRefusal(upload.statusCode, jsonBody(upload))).toBe(true)
+        expect(isRoleRefusal(discard.statusCode, jsonBody(discard))).toBe(true)
         expect(isRoleRefusal(download.statusCode, jsonBody(download))).toBe(true)
         expect(made.execute).not.toHaveBeenCalled()
         expect(made.writeExecute).not.toHaveBeenCalled()
       } else {
         // Past authorization: missing file name / unknown download grant.
         expect(upload.statusCode).toBe(400)
+        expect(discard.statusCode).toBe(204)
         expect(download.statusCode).toBe(404)
       }
       await app.close()

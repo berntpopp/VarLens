@@ -62,3 +62,17 @@ export function resolveCaseName(
   if (legacy !== caseName && exists(legacy)) return { caseName: legacy, isDuplicate: true }
   return { caseName, isDuplicate: false }
 }
+
+/**
+ * Name a replacement is imported under until it takes the place of case
+ * `oldId`: `cases.name` is UNIQUE and the old case keeps its name until then.
+ */
+export function replacementCaseName(caseName: string, oldId: number): string {
+  return `${caseName} (replacing #${oldId})`
+}
+
+/** The case a {@link replacementCaseName} was built for; null for any other name. */
+export function parseReplacementCaseName(name: string): { caseName: string; oldId: number } | null {
+  const match = /^(.+) \(replacing #(\d+)\)$/s.exec(name)
+  return match === null ? null : { caseName: match[1], oldId: Number(match[2]) }
+}

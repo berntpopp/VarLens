@@ -134,6 +134,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0026',
     name: 'summary_genotype_classes',
     fileName: '0026_summary_genotype_classes.sql'
+  },
+  {
+    version: '0027',
+    name: 'summary_conflicting_calls',
+    fileName: '0027_summary_conflicting_calls.sql'
   }
 ]
 

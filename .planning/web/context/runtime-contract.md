@@ -30,7 +30,8 @@ proxy. The container's internal port and healthcheck remain fixed at `8080`.
 | `VARLENS_SESSION_SECRET_HEX` | no | Optional 32-byte hex session secret. If absent, the server seals one in the recovery directory. |
 | `VARLENS_WEB_UPLOAD_DIR` | no | Absolute directory for browser-upload staging. Defaults to `${VARLENS_RECOVERY_KEY_DIR}/uploads` (`/data/uploads` in the chart). |
 | `VARLENS_WEB_MAX_UPLOAD_BYTES` | no | Maximum accepted browser upload size in bytes. Defaults to `1073741824` (1 GiB). |
-| `VARLENS_WEB_UPLOAD_TTL_MS` | no | Lifetime of a staged upload that is never imported. Defaults to `86400000` (24 hours). Imported uploads are deleted within five minutes of the import settling; all staged uploads are deleted at boot. |
+| `VARLENS_WEB_UPLOAD_TTL_MS` | no | Lifetime of a staged upload that is never imported. Defaults to `86400000` (24 hours). Imported uploads are deleted within five minutes of the import settling, uploads of a failed or cancelled import after one hour (or this TTL, if shorter); all staged uploads are deleted at boot. |
+| `VARLENS_WEB_MAX_STAGED_BYTES_PER_USER` | no | Maximum bytes one user may have staged at a time, including files extracted from batch ZIPs. Defaults to `21474836480` (20 GiB). Crossing it is refused with HTTP 413. |
 | `VARLENS_ADMIN_USERNAME` | first boot only | Optional one-shot admin bootstrap username. |
 | `VARLENS_ADMIN_PASSWORD_HASH` | first boot only | Optional one-shot Argon2id admin bootstrap hash. Plaintext bootstrap is refused. |
 | `VARLENS_ADMIN_DISPLAY_NAME` | first boot only | Optional display name for the bootstrap admin. |

@@ -27,13 +27,17 @@ function makePool(
     import_status: 'ready',
     variant_count: 12
   },
-  purgeBatches: number[] = [0]
+  purgeBatches: number[] = [0],
+  renamedRows = 1
 ) {
   const remaining = [...purgeBatches]
   const client = {
     query: vi.fn(async (arg: unknown) => {
       if (sqlText(arg).includes('FOR NO KEY UPDATE'))
         return { rows: caseRow === null ? [] : [caseRow] }
+      if (sqlText(arg).includes('SET name = $1 WHERE id = $2')) {
+        return { rows: [], rowCount: renamedRows }
+      }
       return { rows: [], rowCount: 0 }
     }),
     release: vi.fn()
@@ -121,6 +125,44 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     )
     // The rename frees the UNIQUE case name for an immediate re-import.
     expect(sql[flip]).toContain('name = $2::text')
+  })
+
+  it('renames the successor in the transaction that hides the case (#493)', async () => {
+    const { client, pool } = makePool()
+    const repo = new PostgresCaseLifecycleRepository(
+      pool as never,
+      'public',
+      makeSummary() as never
+    )
+
+    await repo.deleteCase(7, { successor: { id: 9, name: 'HG001' } })
+
+    const calls = client.query.mock.calls as unknown[][]
+    const sql = calls.map(([arg]) => sqlText(arg))
+    const flip = sql.findIndex((s) => s.includes("SET import_status = 'deleting'"))
+    const rename = sql.findIndex((s) => s.includes('SET name = $1 WHERE id = $2'))
+    expect(rename).toBeGreaterThan(flip)
+    expect(calls[rename][1]).toEqual(['HG001', 9])
+    expect(sql.indexOf('COMMIT')).toBeGreaterThan(rename)
+  })
+
+  it('keeps the case when the successor rename affects no row', async () => {
+    const { client, pool } = makePool(undefined, [0], 0)
+    const repo = new PostgresCaseLifecycleRepository(
+      pool as never,
+      'public',
+      makeSummary() as never
+    )
+
+    await expect(repo.deleteCase(7, { successor: { id: 9, name: 'HG001' } })).rejects.toThrow(
+      /case 7 is kept/
+    )
+
+    const sql = clientSql(client)
+    expect(sql).toContain('ROLLBACK')
+    expect(sql).not.toContain('COMMIT')
+    // Nothing is purged for a case that was not hidden.
+    expect(pool.query).not.toHaveBeenCalled()
   })
 
   it('refuses to delete a case that is still importing', async () => {

@@ -476,25 +476,17 @@ export class PostgresWebAuthService {
 
   async deactivateUser(username: string): Promise<void> {
     const sch = this.schemaQuoted
-    const existing = await this.pool.query<{ role: UserRole }>(
-      `SELECT role FROM ${sch}."users" WHERE username = $1`,
-      [username]
-    )
-    if ((existing.rowCount ?? 0) === 0) {
-      throw new Error(`User not found: ${username}`)
-    }
-    if (existing.rows[0].role === ROLE_ADMIN) {
-      throw new Error('Cannot deactivate an admin user')
-    }
-
+    // One conditional UPDATE: a role check in a separate SELECT would let a
+    // concurrent promotion slip an admin through.
     const result = await this.pool.query(
-      `UPDATE ${sch}."users" SET is_active = FALSE, updated_at = now() WHERE username = $1`,
-      [username]
+      `UPDATE ${sch}."users" SET is_active = FALSE, updated_at = now()
+        WHERE username = $1 AND role <> $2`,
+      [username, ROLE_ADMIN]
     )
     this.invalidateUser(username)
-    if ((result.rowCount ?? 0) === 0) {
-      throw new Error(`User not found: ${username}`)
-    }
+    if ((result.rowCount ?? 0) > 0) return
+    await assertUserExists(this.pool, sch, username)
+    throw new Error('Cannot deactivate an admin user')
   }
 
   async setRole(username: string, role: UserRole): Promise<void> {

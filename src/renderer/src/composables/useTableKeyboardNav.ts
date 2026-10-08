@@ -43,9 +43,11 @@ export function isTextEntryFocused(): boolean {
 /**
  * Table row shortcuts bail out on text entry and on a focused link: a
  * focused link cell owns Enter, so it must not also open the row panel.
+ * An open dialog owns the keyboard: its keys must not act on the table behind.
  */
 export function isInputFocused(): boolean {
   if (isTextEntryFocused()) return true
+  if (document.querySelector('.v-dialog.v-overlay--active') !== null) return true
   const el = document.activeElement
   return el !== null && el.tagName.toLowerCase() === 'a' && el.hasAttribute('href')
 }

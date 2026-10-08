@@ -343,6 +343,102 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
     ])
   }, 60_000)
 
+  const caseRows = async (): Promise<Array<{ id: number; name: string; import_status: string }>> =>
+    (
+      await probe.query<{ id: string; name: string; import_status: string }>(
+        `SELECT id, name, import_status FROM "${schema}".cases_all ORDER BY id`
+      )
+    ).rows.map((row) => ({ ...row, id: Number(row.id) }))
+
+  it('a swap renames the published replacement in the transaction that hides the old case', async () => {
+    const oldId = await seedCaseWithVariants('HG001', 5)
+    const newId = await seedCaseWithVariants('HG001 (replacing #1)', 3)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+    await repo.deleteCase(oldId, { successor: { id: newId, name: 'HG001' } })
+
+    expect(await caseRows()).toEqual([{ id: newId, name: 'HG001', import_status: 'ready' }])
+  }, 60_000)
+
+  // A cancelled import reports case 0; a failed one may have been cleaned up.
+  it.each([
+    ['is case 0', async () => 0],
+    ['does not exist', async () => 999_999],
+    [
+      'is still importing',
+      async () => {
+        const id = await seedCaseWithVariants('HG001 (replacing #1)', 1)
+        await probe.query(
+          `UPDATE "${schema}".cases_all SET import_status = 'importing' WHERE id = $1`,
+          [id]
+        )
+        return id
+      }
+    ]
+  ])(
+    'a swap keeps the old case when its successor %s',
+    async (_label, seedSuccessor) => {
+      const oldId = await seedCaseWithVariants('HG001', 5)
+      const successorId = await seedSuccessor()
+      const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+      await expect(
+        repo.deleteCase(oldId, { successor: { id: successorId, name: 'HG001' } })
+      ).rejects.toThrow(/is kept/)
+
+      expect((await caseRows()).find((row) => row.id === oldId)).toEqual({
+        id: oldId,
+        name: 'HG001',
+        import_status: 'ready'
+      })
+      const kept = await probe.query(`SELECT 1 FROM "${schema}".variants WHERE case_id = $1`, [
+        oldId
+      ])
+      expect(kept.rows).toHaveLength(5)
+      const frequencies = await probe.query(`SELECT 1 FROM "${schema}".variant_frequency`)
+      expect(frequencies.rows).toHaveLength(5)
+    },
+    60_000
+  )
+
+  it('a restart discards a published replacement whose swap never ran, and only that', async () => {
+    const oldId = await seedCaseWithVariants('HG001', 5)
+    const abandoned = await seedCaseWithVariants(`HG001 (replacing #${oldId})`, 3)
+    // Not replacements of a case that is still there: the old case is gone, has
+    // another name, or the name only looks like one.
+    const orphan = await seedCaseWithVariants('HG002 (replacing #999999)', 1)
+    const otherName = await seedCaseWithVariants(`HG003 (replacing #${oldId})`, 1)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+    const pending = await repo.listPendingDeletions()
+    expect(pending.map((entry) => entry.caseId)).toEqual([abandoned])
+    await repo.deleteCase(abandoned)
+
+    expect((await caseRows()).map((row) => row.id)).toEqual([oldId, orphan, otherName])
+    // The discarded copy no longer counts: positions 1..3 were carried by both.
+    const counts = await probe.query<{ case_count: number }>(
+      `SELECT case_count FROM "${schema}".variant_frequency vf
+         JOIN "${schema}".variants v ON v.coord_hash = vf.coord_hash
+        WHERE v.case_id = $1 ORDER BY v.pos`,
+      [oldId]
+    )
+    expect(counts.rows.map((row) => Number(row.case_count))).toEqual([3, 1, 1, 1, 1])
+    // Idempotent: a second start finds nothing.
+    expect(await repo.listPendingDeletions()).toEqual([])
+  }, 60_000)
+
+  it('a replacement that was swapped in meanwhile is never discarded', async () => {
+    const oldId = await seedCaseWithVariants('HG001', 2)
+    const newId = await seedCaseWithVariants(`HG001 (replacing #${oldId})`, 2)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+    const guard = { name: `HG001 (replacing #${oldId})`, oldId, oldName: 'HG001' }
+
+    await repo.deleteCase(oldId, { successor: { id: newId, name: 'HG001' } })
+
+    expect(await repo.hideCase(newId, undefined, guard)).toMatchObject({ state: 'missing' })
+    expect(await caseRows()).toEqual([{ id: newId, name: 'HG001', import_status: 'ready' }])
+  }, 60_000)
+
   it('purges in batches, resumes after an interruption and finalizes', async () => {
     const caseId = await seedCaseWithVariants('purge-me', 120)
     const repo = new PostgresCaseLifecycleRepository(pool, schema)

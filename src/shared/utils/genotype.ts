@@ -44,6 +44,43 @@ export function isAssumedHetGenotype(gt: string | null | undefined): boolean {
   return genotypeZygosity(gt) === 'het' && gt!.includes('.')
 }
 
+/**
+ * Sort key of the conflicting-call policy: when one case has several rows for
+ * one variant, the call with the greatest key stands for the case — highest
+ * dosage first (hom > het > hemizygous > reference > unknown), ties by the
+ * genotype text. SQL form: gtCallKeySql in ../sql/genotype-dosage.ts.
+ */
+export function genotypeCallKey(gt: string | null | undefined): string {
+  const zygosity = genotypeZygosity(gt)
+  const rank =
+    zygosity === 'hom'
+      ? 4
+      : zygosity === 'het'
+        ? 3
+        : zygosity === 'hemi'
+          ? 2
+          : includes(REF_GENOTYPES, gt ?? '')
+            ? 1
+            : 0
+  return `${rank}${gt ?? ''}`
+}
+
+/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
+const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
+
+/**
+ * Alleles a genotype calls, for an allele-frequency denominator: 1 for a
+ * haploid call, 2 for a diploid one — an assumed het (`1/.`) is a het, and a
+ * reference half-call (`0/.`) is two alleles, none of them this ALT — and 0
+ * for anything unknown (`./.`, NULL), which says nothing about the site.
+ */
+export function calledAlleleCount(gt: string | null | undefined): number {
+  if (gt == null) return 0
+  if (includes(REF_HALF_CALLS, gt)) return 2
+  if (genotypeCallKey(gt).startsWith('0')) return 0
+  return gt.split(/[/|]/).length
+}
+
 /** What "assumed het" means, for every view that shows or counts such a call. */
 export const ASSUMED_HET_HELP =
   'Assumed het: one copy of this allele was called and the other allele is missing (1/. or ./1). ' +

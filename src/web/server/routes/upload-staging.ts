@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, readdir, rm, stat } from 'node:fs/promises'
+import { mkdir, readdir, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { once } from 'node:events'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrorCode } from '../../../shared/types/errors'
 
@@ -17,14 +17,21 @@ import type { DispatcherDeps } from './types'
 const DEFAULT_RECOVERY_KEY_DIR = '/data'
 const DEFAULT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
+const DEFAULT_MAX_STAGED_BYTES_PER_USER = 20 * 1024 * 1024 * 1024
 const UPLOAD_REF_PREFIX = 'web-upload:'
 /** How long a staged upload survives the import that used it (see holdWebUploads). */
 export const UPLOAD_RELEASE_GRACE_MS = 5 * 60 * 1000
+/** How long it survives an import that failed or was cancelled, so a retry needs no re-upload. */
+export const UPLOAD_FAILED_RETENTION_MS = 60 * 60 * 1000
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
 
-class UploadTooLargeError extends Error {
-  constructor(maxBytes: number) {
-    super(`Upload exceeds the configured ${maxBytes} byte limit`)
+/** Answered with HTTP 413; `code` tells one oversized file from a full per-user quota. */
+export class UploadTooLargeError extends Error {
+  constructor(
+    readonly code: 'upload-too-large' | 'upload-quota-exceeded',
+    message: string
+  ) {
+    super(message)
   }
 }
 
@@ -73,8 +80,9 @@ export async function clearStagedUploads(): Promise<void> {
  * lives UPLOAD_RELEASE_GRACE_MS instead of the 24 h staging TTL — not zero,
  * because a multi-sample VCF is imported with one call per sample on the same
  * ref. Pass `false` for an import that failed or was cancelled: the upload
- * then keeps its staging TTL, so a retry with corrected options needs no
- * second upload. Values that are not known upload refs are ignored.
+ * then lives UPLOAD_FAILED_RETENTION_MS (or the staging TTL, if shorter), so a
+ * retry with corrected options needs no second upload. Values that are not
+ * known upload refs are ignored.
  */
 export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) => void {
   const ids = refs.flatMap((ref) => {
@@ -84,6 +92,9 @@ export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) =
   for (const id of ids) heldUploads.set(id, (heldUploads.get(id) ?? 0) + 1)
 
   return (imported = true) => {
+    const retention = imported
+      ? UPLOAD_RELEASE_GRACE_MS
+      : Math.min(UPLOAD_FAILED_RETENTION_MS, resolveUploadTtlMs())
     for (const id of ids) {
       const holds = (heldUploads.get(id) ?? 1) - 1
       if (holds > 0) {
@@ -92,11 +103,17 @@ export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) =
       }
       heldUploads.delete(id)
       const upload = stagedUploads.get(id)
-      if (upload !== undefined && imported) {
-        upload.expiresAt = Date.now() + UPLOAD_RELEASE_GRACE_MS
-      }
+      if (upload !== undefined) upload.expiresAt = Date.now() + retention
     }
-    setTimeout(cleanupExpiredUploads, UPLOAD_RELEASE_GRACE_MS + 1).unref()
+    setTimeout(cleanupExpiredUploads, retention + 1).unref()
+  }
+}
+
+/** Delete staged uploads now, e.g. the files of an extraction that was refused. */
+export function discardWebUploads(uploads: readonly StagedUpload[]): void {
+  for (const upload of uploads) {
+    void deleteUpload(upload)
+    stagedUploads.delete(upload.id)
   }
 }
 
@@ -113,8 +130,7 @@ export function resolveWebUploadRef(value: string, userId: number): StagedUpload
   if (upload === undefined || upload.userId !== userId) return null
   const expired = upload.expiresAt <= Date.now() && !heldUploads.has(upload.id)
   if (expired || !existsSync(upload.storedPath)) {
-    void deleteUpload(upload)
-    stagedUploads.delete(upload.id)
+    discardWebUploads([upload])
     return null
   }
 
@@ -139,43 +155,16 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
   })
 
   app.post('/api/import/upload', async (request: UploadRouteBody, reply) => {
-    const userId = request.session.user?.id
-    if (userId === undefined) {
+    const gate = gateUploadRequest('http:import:upload', request, reply)
+    if ('refused' in gate) {
       deps?.metrics?.recordOperationEvent({
         operation: 'upload-stage',
         result: 'error',
-        failureClass: 'unauthenticated'
+        failureClass: gate.refused
       })
-      reply.code(401)
-      return {
-        code: 'UNAUTHENTICATED',
-        message: 'authentication required',
-        userMessage: 'Please log in to continue.'
-      }
+      return gate.body
     }
-    // Staging an upload is the first step of an import: analysts and up.
-    if (requireOperation('http:import:upload', request, reply) === undefined) {
-      deps?.metrics?.recordOperationEvent({
-        operation: 'upload-stage',
-        result: 'error',
-        failureClass: 'forbidden'
-      })
-      return reply
-    }
-    // Same pre-rotation gate as the dispatcher and the download route.
-    if (request.session.mustChangePassword === true) {
-      deps?.metrics?.recordOperationEvent({
-        operation: 'upload-stage',
-        result: 'error',
-        failureClass: 'forbidden'
-      })
-      reply.code(403)
-      return {
-        code: ErrorCode.UNKNOWN,
-        message: 'password-rotation-required',
-        userMessage: 'Your password must be changed before any other action.'
-      }
-    }
+    const { userId } = gate
 
     const originalName = headerString(request.headers['x-varlens-file-name'])
     if (originalName === undefined || originalName.trim() === '') {
@@ -225,11 +214,11 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
         deps?.metrics?.recordOperationEvent({
           operation: 'upload-stage',
           result: 'error',
-          failureClass: 'upload-too-large'
+          failureClass: error.code
         })
         reply.code(413)
         return {
-          error: 'upload-too-large',
+          error: error.code,
           message: error.message
         }
       }
@@ -253,6 +242,63 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
       size: upload.size
     }
   })
+
+  // Lets the browser give back the files of a selection it could not finish
+  // (cap reached, cancelled) instead of leaving them staged for the whole TTL.
+  app.delete('/api/import/upload', async (request, reply) => {
+    const gate = gateUploadRequest('http:import:discardUpload', request, reply)
+    if ('refused' in gate) return gate.body
+    const ref = (request.query as { ref?: unknown }).ref
+    const id = typeof ref === 'string' ? parseWebUploadId(ref) : null
+    const upload = id === null ? undefined : stagedUploads.get(id)
+    // Unknown, expired and foreign refs all answer 204: idempotent, and no existence oracle.
+    if (upload !== undefined && upload.userId === gate.userId) {
+      if (heldUploads.has(upload.id)) {
+        reply.code(409)
+        return { error: 'upload-in-use', message: 'An import is reading this upload' }
+      }
+      discardWebUploads([upload])
+    }
+    reply.code(204)
+    return null
+  })
+}
+
+/** Session, role and pre-rotation gate of the upload routes; sends nothing but the role refusal. */
+function gateUploadRequest(
+  key: string,
+  request: FastifyRequest,
+  reply: FastifyReply
+): { userId: number } | { refused: 'unauthenticated' | 'forbidden'; body: unknown } {
+  const userId = request.session?.user?.id
+  if (userId === undefined) {
+    reply.code(401)
+    return {
+      refused: 'unauthenticated',
+      body: {
+        code: 'UNAUTHENTICATED',
+        message: 'authentication required',
+        userMessage: 'Please log in to continue.'
+      }
+    }
+  }
+  // Staging an upload is the first step of an import: analysts and up.
+  if (requireOperation(key, request, reply) === undefined) {
+    return { refused: 'forbidden', body: reply }
+  }
+  // Same pre-rotation gate as the dispatcher and the download route.
+  if (request.session.mustChangePassword === true) {
+    reply.code(403)
+    return {
+      refused: 'forbidden',
+      body: {
+        code: ErrorCode.UNKNOWN,
+        message: 'password-rotation-required',
+        userMessage: 'Your password must be changed before any other action.'
+      }
+    }
+  }
+  return { userId }
 }
 
 export async function stageExistingFileUpload(params: {
@@ -282,17 +328,40 @@ async function stageUpload(params: {
   const uploadDir = join(resolveUploadRoot(), String(params.userId), id)
   const storedPath = join(uploadDir, params.safeName)
   const maxBytes = resolveMaxUploadBytes()
+  const maxStagedBytes = resolveMaxStagedBytesPerUser()
+  const quotaExceeded = (): UploadTooLargeError =>
+    new UploadTooLargeError(
+      'upload-quota-exceeded',
+      `Staged uploads would exceed the ${maxStagedBytes} byte limit per user ` +
+        `(${(maxStagedBytes / 2 ** 30).toFixed(1)} GiB). Files of this selection that were ` +
+        'already uploaded were discarded; import or wait for the expiry of earlier uploads, ' +
+        'then try again with fewer files'
+    )
+
+  const quotaLeft = maxStagedBytes - stagedBytesOf(params.userId)
 
   await mkdir(uploadDir, { recursive: true, mode: 0o700 })
 
+  let size: number
   try {
-    await writeLimitedUpload(params.source, storedPath, maxBytes)
+    const written = await writeLimitedUpload(params.source, storedPath, (bytes) => {
+      if (bytes > maxBytes) {
+        throw new UploadTooLargeError(
+          'upload-too-large',
+          `Upload exceeds the configured ${maxBytes} byte limit`
+        )
+      }
+      if (bytes > quotaLeft) throw quotaExceeded()
+    })
+    // No await between this re-check and stagedUploads.set below: parallel
+    // uploads of one user cannot each fit and together pass the cap.
+    if (stagedBytesOf(params.userId) + written > maxStagedBytes) throw quotaExceeded()
+    size = written
   } catch (error) {
     await rm(uploadDir, { recursive: true, force: true })
     throw error
   }
 
-  const size = (await stat(storedPath)).size
   const createdAt = Date.now()
   const upload: StagedUpload = {
     id,
@@ -316,7 +385,7 @@ async function stageUpload(params: {
 async function writeLimitedUpload(
   source: Readable,
   storedPath: string,
-  maxBytes: number
+  assertWithinLimits: (written: number) => void
 ): Promise<number> {
   const target = createWriteStream(storedPath, { mode: 0o600 })
   let written = 0
@@ -325,9 +394,7 @@ async function writeLimitedUpload(
     for await (const chunk of source) {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       written += buffer.length
-      if (written > maxBytes) {
-        throw new UploadTooLargeError(maxBytes)
-      }
+      assertWithinLimits(written)
       if (!target.write(buffer)) {
         await once(target, 'drain')
       }
@@ -389,6 +456,19 @@ function resolveMaxUploadBytes(): number {
   return resolvePositiveIntegerEnv('VARLENS_WEB_MAX_UPLOAD_BYTES', DEFAULT_MAX_UPLOAD_BYTES)
 }
 
+function resolveMaxStagedBytesPerUser(): number {
+  return resolvePositiveIntegerEnv(
+    'VARLENS_WEB_MAX_STAGED_BYTES_PER_USER',
+    DEFAULT_MAX_STAGED_BYTES_PER_USER
+  )
+}
+
+function stagedBytesOf(userId: number): number {
+  let bytes = 0
+  for (const upload of stagedUploads.values()) if (upload.userId === userId) bytes += upload.size
+  return bytes
+}
+
 function resolvePositiveIntegerEnv(name: string, fallback: number): number {
   const raw = process.env[name]
   if (raw === undefined || raw.trim() === '') return fallback
@@ -436,8 +516,7 @@ function cleanupExpiredUploads(): void {
   const now = Date.now()
   for (const upload of stagedUploads.values()) {
     if (upload.expiresAt > now || heldUploads.has(upload.id)) continue
-    void deleteUpload(upload)
-    stagedUploads.delete(upload.id)
+    discardWebUploads([upload])
   }
 }
 

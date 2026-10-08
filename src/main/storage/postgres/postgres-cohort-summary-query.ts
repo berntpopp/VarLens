@@ -9,6 +9,13 @@ import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
+import {
+  HGVS_TOKEN,
+  hgvsSearchSql,
+  normalizePostgresColumnFilterValue
+} from './postgres-variant-column-filters'
+import { booleanSearchSql } from '../../../shared/utils/boolean-search'
+import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
 
@@ -319,12 +326,6 @@ function summarySeverity(
   }
 }
 
-function normalizeColumnFilterValue(value: string | number, isNumeric: boolean): string | number {
-  if (!isNumeric || typeof value === 'number') return value
-  const numericValue = Number(value)
-  return Number.isFinite(numericValue) ? numericValue : value
-}
-
 function buildColumnFilterCondition(
   column: string,
   expression: string,
@@ -345,7 +346,7 @@ function buildColumnFilterCondition(
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return ''
     return `${expression} IN (${value
-      .map((item) => addParam(normalizeColumnFilterValue(item, isNumeric)))
+      .map((item) => addParam(normalizePostgresColumnFilterValue(item, isNumeric)))
       .join(', ')})`
   }
 
@@ -362,14 +363,14 @@ function buildColumnFilterCondition(
     (operator === '=' || operator === '!=') &&
     (typeof value === 'string' || typeof value === 'number')
   ) {
-    return `${expression} ${operator} ${addParam(normalizeColumnFilterValue(value, isNumeric))}`
+    return `${expression} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, isNumeric))}`
   }
 
   if (
     (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
     (typeof value === 'string' || typeof value === 'number')
   ) {
-    const comparison = `${expression} ${operator} ${addParam(normalizeColumnFilterValue(value, isNumeric))}`
+    const comparison = `${expression} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, isNumeric))}`
     // All summary column filters live in WHERE; mirror the live builder's
     // `includeEmpty` default for base WHERE columns (true).
     const includeEmpty = filter.includeEmpty ?? true
@@ -377,6 +378,20 @@ function buildColumnFilterCondition(
   }
 
   return ''
+}
+
+/** One search term; the PostgreSQL twin of SQLite's cohort `emitTerm`. */
+function summaryTermSql(term: string, addParam: (value: unknown) => string): string {
+  const genomicMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
+  if (genomicMatch !== null) {
+    // Import stores `chr` verbatim: match both spellings (#492).
+    const chr = genomicMatch[1].toUpperCase()
+    return `(cvs.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
+  }
+  if (HGVS_TOKEN.test(term)) return hgvsSearchSql('cvs', term, addParam)
+  const like = (column: string): string =>
+    `cvs.${column} ILIKE ${addParam(`%${escapeLikePattern(term)}%`)} ESCAPE '\\'`
+  return `(${like('gene_symbol')} OR ${like('consequence')} OR ${like('omim_mim_number')})`
 }
 
 export function buildSummaryQueryParts(
@@ -399,22 +414,9 @@ export function buildSummaryQueryParts(
   }
 
   if (params.search_term !== undefined && params.search_term.trim() !== '') {
-    const term = params.search_term.trim()
-    const genomicMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
-    if (genomicMatch !== null) {
-      // Import stores `chr` verbatim: match both spellings (#492).
-      const chr = genomicMatch[1].toUpperCase()
-      whereParts.push(
-        `(cvs.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
-      )
-    } else {
-      const searchPattern = `%${term}%`
-      whereParts.push(`(
-          cvs.gene_symbol ILIKE ${addParam(searchPattern)}
-          OR cvs.consequence ILIKE ${addParam(searchPattern)}
-          OR cvs.omim_mim_number ILIKE ${addParam(searchPattern)}
-        )`)
-    }
+    whereParts.push(
+      booleanSearchSql(params.search_term.trim(), (term) => summaryTermSql(term, addParam))
+    )
   }
 
   if (isNonEmptyArray(params.panel_intervals)) {

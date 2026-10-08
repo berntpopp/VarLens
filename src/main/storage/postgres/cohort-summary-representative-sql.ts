@@ -35,7 +35,11 @@ import {
   type CarrierRanks
 } from '../../../shared/sql/cohort-representative'
 import { impactRankCaseSql } from '../../../shared/config/severity.config'
-import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../../shared/sql/genotype-dosage'
+import {
+  HET_GT_SQL as HET,
+  HOM_GT_SQL as HOM,
+  resolvedGtSql
+} from '../../../shared/sql/genotype-dosage'
 import { CASE_AGG_TABLE, dropCaseAggregate, stageCaseAggregate } from './cohort-case-aggregate-sql'
 import { dropEmptySummaryRows } from './cohort-unique-variants-sql'
 
@@ -146,7 +150,7 @@ export function caseContributionCte(tbl: Tbl, includeProvisional = false): strin
   WITH grouped AS (
     SELECT ${keyList('v').replace('v.genome_build', 'c.genome_build')},
            ${carrierAggregates('v', carrierRanks('v', tbl))},
-           MAX(v.gt_num) AS gt_num
+           ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
     JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
     WHERE v.case_id = $1
@@ -174,7 +178,7 @@ export function summaryRowsCte(tbl: Tbl, variantFilter = ''): string {
       WITH case_rows AS (
         SELECT ${caseKey},
                ${carrierAggregates('v', carrierRanks('v', tbl))},
-               MAX(v.gt_num) AS gt_num
+               ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num
         FROM ${tbl('variants')} v
         JOIN ${tbl('cases')} c ON c.id = v.case_id
         ${variantFilter === '' ? '' : `WHERE ${variantFilter}`}

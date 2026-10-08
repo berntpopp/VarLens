@@ -20,11 +20,12 @@ import type {
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
-import { tokenize, parse } from '../../shared/utils/boolean-search'
-import { emitCohortSearch, emitTerm } from './search/cohort-search-emitter'
+import { booleanSearchSql } from '../../shared/utils/boolean-search'
+import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
+import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
@@ -105,15 +106,18 @@ export class CohortService {
     // Search term handling with LIKE-based strategy
     if (params.search_term !== undefined && params.search_term !== '') {
       const term = params.search_term.trim()
-      const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
-
-      if (!hasBooleanOps) {
-        const singleCondition = emitTerm(term, paramsArray)
-        whereConditions.push(singleCondition)
-      } else {
-        const sqlCondition = this.buildBooleanSearchCondition(term, paramsArray)
-        whereConditions.push(sqlCondition)
-      }
+      whereConditions.push(
+        booleanSearchSql(
+          term,
+          (t) => emitTerm(t, paramsArray),
+          (e) =>
+            mainLogger.warn(
+              'Malformed boolean search expression, falling back to single-term: ' +
+                (e instanceof Error ? e.message : String(e)),
+              'CohortService'
+            )
+        )
+      )
     }
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
@@ -300,28 +304,6 @@ export class CohortService {
   }
 
   /**
-   * Build a SQL boolean expression from a search string containing AND/OR/NOT.
-   */
-  private buildBooleanSearchCondition(term: string, paramsArray: (string | number)[]): string {
-    const tokens = tokenize(term)
-    if (tokens.length === 0) return '1=1'
-    let ast
-    try {
-      ast = parse(tokens)
-    } catch (e) {
-      mainLogger.warn(
-        'Malformed boolean search expression, falling back to single-term: ' +
-          (e instanceof Error ? e.message : String(e)),
-        'CohortService'
-      )
-      return emitTerm(term, paramsArray)
-    }
-    const { sql, params } = emitCohortSearch(ast)
-    paramsArray.push(...params)
-    return sql
-  }
-
-  /**
    * Get cohort summary statistics
    */
   getCohortSummary(): CohortSummary {
@@ -434,7 +416,7 @@ export class CohortService {
       SELECT
         v.case_id,
         c.name as case_name,
-        MAX(v.gt_num) as gt_num
+        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num
       FROM variants v
       JOIN cases c ON v.case_id = c.id
       WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?

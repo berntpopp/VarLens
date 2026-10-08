@@ -100,7 +100,18 @@ export function useZipImportCleanup({
     state.duplicateCount.value = 0
   }
 
+  // Web: the upload client (src/web/client/uploads.ts) deletes these staged
+  // files, which otherwise count against the user's cap for 24 h. Nothing
+  // listens on desktop. From step 3 on an import owns them.
+  function discardStagedSelection(): void {
+    if (state.step.value >= 3) return
+    const refs = [state.zipPath.value, ...state.selectedFilePaths.value].filter((r) => r !== '')
+    if (refs.length === 0) return
+    window.dispatchEvent(new CustomEvent('varlens:web-upload-discard', { detail: { refs } }))
+  }
+
   function abandonZipImport(context: string): void {
+    discardStagedSelection()
     const extractionId = state.zipExtractionId.value
     const pendingBeforeAttempt = [...pendingCleanupIds].filter((id) => id !== extractionId)
     if (!state.isZipImport.value) {
@@ -119,6 +130,7 @@ export function useZipImportCleanup({
   async function handleDuplicateCheckFailure(error: unknown): Promise<void> {
     const extractionId = state.zipExtractionId.value
     const message = formatErrorMessage(error, 'Could not check duplicate cases')
+    discardStagedSelection()
     invalidateReviewState()
     state.step.value = 1
     if (extractionId !== '') {
@@ -137,6 +149,7 @@ export function useZipImportCleanup({
     if (state.isZipImport.value) {
       abandonZipImport('review back navigation')
     } else {
+      discardStagedSelection()
       invalidateReviewState()
     }
     state.step.value = 1

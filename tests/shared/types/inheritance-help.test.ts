@@ -24,4 +24,11 @@ describe('inheritance mode help', () => {
     expect(INHERITANCE_MODE_META.de_novo.help).toMatch(/without a row/)
     expect(INHERITANCE_MODE_META.compound_het.help).toMatch(/without a row/)
   })
+
+  it('autosomal recessive states its rule without inferring a mechanism from a missing row', () => {
+    const { help } = INHERITANCE_MODE_META.autosomal_recessive
+    expect(help).toMatch(/autosomes/)
+    expect(help).toMatch(/without a row, treated as reference/)
+    expect(help).not.toMatch(/second hit|suggests/)
+  })
 })

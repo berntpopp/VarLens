@@ -56,6 +56,7 @@ export class ImportWorkerClient {
     // reports the file done, that case is partial and nobody inside the
     // worker is left to delete it.
     let partialCaseId: number | null = null
+    let partialIsReplacement = false
 
     worker.on('message', (msg: WorkerMessage) => {
       switch (msg.type) {
@@ -64,6 +65,7 @@ export class ImportWorkerClient {
           break
         case 'case-started':
           partialCaseId = msg.caseId
+          partialIsReplacement = msg.replacement === true
           break
         case 'file-complete':
           partialCaseId = null
@@ -104,7 +106,9 @@ export class ImportWorkerClient {
       if (partialCaseId === null) {
         callbacks.onError(failure)
       } else {
-        this.discardPartialCase(callbacks, partialCaseId, () => callbacks.onError(failure))
+        this.discardPartialCase(callbacks, partialCaseId, partialIsReplacement, () =>
+          callbacks.onError(failure)
+        )
       }
     })
 
@@ -151,6 +155,7 @@ export class ImportWorkerClient {
   private discardPartialCase(
     callbacks: ImportWorkerCallbacks,
     caseId: number,
+    replacement: boolean,
     done: () => void
   ): void {
     let finished = false
@@ -186,7 +191,9 @@ export class ImportWorkerClient {
       dbPath: callbacks.dbPath,
       encryptionKey: callbacks.encryptionKey,
       throttleMs: callbacks.throttleMs,
-      discardCaseIds: [caseId]
+      // A replacement may already be published in place of the case it overwrote:
+      // recovery deletes it only while it is still provisional.
+      discardCaseIds: replacement ? [] : [caseId]
     } satisfies MainMessage)
   }
 

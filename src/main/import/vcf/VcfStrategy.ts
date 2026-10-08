@@ -85,12 +85,7 @@ export class VcfStrategy implements ImportStrategy {
             header.samples,
             vcfOptions?.selectedSamples?.[0]
           )
-          activeSample = activeSampleColumn?.name ?? ''
-
-          if (activeSample === '') {
-            errors.push('No sample found in VCF file')
-            break
-          }
+          activeSample = activeSampleColumn.name
 
           const callerInfo = detectCaller(header.rawHeaderLines)
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
@@ -168,6 +163,13 @@ export class VcfStrategy implements ImportStrategy {
           }
         }
       }
+
+      // A file without rows never reached the header check above.
+      if (header === null && options.signal?.aborted !== true)
+        resolveVcfSelectedSampleColumn(
+          parseVcfHeaderFromLines(headerLines).samples,
+          vcfOptions?.selectedSamples?.[0]
+        )
 
       // Flush remaining batch
       if (batch.length > 0) {
