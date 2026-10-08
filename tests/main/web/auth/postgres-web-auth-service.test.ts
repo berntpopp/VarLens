@@ -647,28 +647,31 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
   it('deactivateUser throws when user not found', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [], rowCount: 0 })
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // conditional UPDATE matched nothing
+    pool.enqueueResponse({ rows: [], rowCount: 0 }) // existence check
     await expect(svc.deactivateUser('ghost')).rejects.toThrow(/user not found/i)
   })
 
   it('deactivateUser refuses to deactivate an admin user', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
+    pool.enqueueResponse({ rows: [], rowCount: 0 })
     pool.enqueueResponse({ rows: [{ role: ROLE_ADMIN }], rowCount: 1 })
 
     await expect(svc.deactivateUser('admin')).rejects.toThrow(/cannot deactivate an admin/i)
-    expect(pool.queries).toHaveLength(1)
   })
 
-  it('deactivateUser issues UPDATE is_active = FALSE for non-admin users', async () => {
+  it('deactivateUser checks the role in the UPDATE itself (no check-then-update race)', async () => {
     const pool = new FakePool()
     const svc = newSvc(pool)
-    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.deactivateUser('alice')
-    const upd = pool.queries[1]
-    expect(upd.text).toMatch(/UPDATE[\s\S]+users[\s\S]+is_active\s*=\s*FALSE/i)
-    expect(upd.values).toContain('alice')
+    expect(pool.queries).toHaveLength(1)
+    const upd = pool.queries[0]
+    expect(upd.text).toMatch(
+      /UPDATE[\s\S]+users[\s\S]+is_active\s*=\s*FALSE[\s\S]+role\s*<>\s*\$2/i
+    )
+    expect(upd.values).toEqual(['alice', ROLE_ADMIN])
   })
 
   it('resetPassword clears lockout state and forces password change', async () => {
@@ -869,7 +872,6 @@ describe('PostgresWebAuthService — cached session-user lookup', () => {
     pool.enqueueResponse({ rows: [pgUserRow()], rowCount: 1 })
     expect((await svc.getSessionUser('alice'))?.is_active).toBe(1)
 
-    pool.enqueueResponse({ rows: [{ role: ROLE_ANALYST }], rowCount: 1 })
     pool.enqueueResponse({ rows: [], rowCount: 1 })
     await svc.deactivateUser('alice')
 

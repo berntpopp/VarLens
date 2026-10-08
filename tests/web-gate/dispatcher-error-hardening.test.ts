@@ -90,7 +90,7 @@ describe('web dispatcher: error responses never expose stack traces', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/geneLists/create',
-      payload: { args: [{ name: 'x' }] }
+      payload: { args: ['x'] }
     })
 
     // The legacy UNIQUE_CONSTRAINT code maps to 409 like CONFLICT.
@@ -144,14 +144,14 @@ describe('web dispatcher: error responses never expose stack traces', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/variants/typeCounts',
+      url: '/api/caseMetadata/getCohortByName',
       payload: { args: ['<script>alert(1)</script>'] }
     })
 
     expect(res.statusCode).toBe(200)
     expectJsonHeaders(res.headers)
     expect(res.json()).toEqual({
-      task: { type: 'variants:typeCounts', params: ['<script>alert(1)</script>'] }
+      task: { type: 'case-metadata:getCohortByName', params: ['<script>alert(1)</script>'] }
     })
   })
 

@@ -20,9 +20,11 @@ export {
 
 export const VariantSortBySchema = z.array(SortItemSchema)
 
+export const VariantSearchQuerySchema = z.string().min(1).max(100)
+
 export const VariantSearchArgsSchema = z.tuple([
   CaseIdSchema,
-  z.string().min(1).max(100),
+  VariantSearchQuerySchema,
   LimitSchema.optional()
 ])
 

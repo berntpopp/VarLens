@@ -11,6 +11,7 @@ import {
   ColumnMetaPayloadSchema,
   TypesPresentPayloadSchema
 } from '../../../shared/types/ipc-schemas'
+import { VariantSearchQuerySchema as SearchQuerySchema } from '../../../shared/api/schemas/variants'
 import { mainLogger } from '../../services/MainLogger'
 import { clearPanelIntervalCache } from './panelIntervalHelper'
 import {
@@ -31,9 +32,6 @@ export { clearPanelIntervalCache }
  * Variants IPC handlers
  * Channels: variants:query, variants:filterOptions, variants:search, variants:geneSymbols
  */
-
-// Schema for search query params
-const SearchQuerySchema = z.string().min(1).max(100)
 
 export function registerVariantHandlers({
   ipcMain,

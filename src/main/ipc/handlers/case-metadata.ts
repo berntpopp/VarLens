@@ -1,7 +1,20 @@
-import { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
+import {
+  CohortIdSchema,
+  MetadataUpsertSchema,
+  CohortCreateSchema,
+  CohortUpdateSchema,
+  CohortNameSchema,
+  CaseCohortAssignSchema,
+  CaseSetCohortsSchema,
+  HpoTermAssignSchema,
+  HpoTermRemoveSchema,
+  DataInfoUpsertSchema,
+  ExternalIdUpsertSchema,
+  ExternalIdDeleteSchema
+} from '../../../shared/api/schemas/case-metadata'
 import { mainLogger } from '../../services/MainLogger'
 import {
   getMetadata,
@@ -28,76 +41,6 @@ import {
   distinctExternalIdTypes,
   getFullMetadata
 } from './case-metadata-logic'
-
-// ============================================================
-// Inline Zod Schemas for Case Metadata
-// ============================================================
-
-const CohortIdSchema = z.number().int().positive()
-
-const MetadataUpsertSchema = z.object({
-  affected_status: z.string().nullish(),
-  sex: z.string().nullish(),
-  notes: z.string().nullish(),
-  age: z.number().nullish(),
-  date_of_birth: z.string().nullish()
-})
-
-const CohortCreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().nullish()
-})
-
-const CohortUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  description: z.string().nullish()
-})
-
-const CohortNameSchema = z.string().min(1).max(200)
-
-const CaseCohortAssignSchema = z.object({
-  caseId: CaseIdSchema,
-  cohortId: CohortIdSchema
-})
-
-const CaseSetCohortsSchema = z.object({
-  caseId: CaseIdSchema,
-  cohortIds: z.array(z.number().int().positive())
-})
-
-const HpoTermAssignSchema = z.object({
-  caseId: CaseIdSchema,
-  hpoId: z.string().min(1),
-  hpoLabel: z.string().min(1)
-})
-
-const HpoTermRemoveSchema = z.object({
-  caseId: CaseIdSchema,
-  hpoId: z.string().min(1)
-})
-
-const DataInfoUpsertSchema = z.object({
-  platform: z.string().nullish(),
-  platform_details: z.string().nullish(),
-  af_filter: z.string().nullish(),
-  gene_list_filter: z.string().nullish(),
-  region_filter: z.string().nullish(),
-  quality_filter: z.string().nullish(),
-  data_notes: z.string().nullish(),
-  gene_list_id: z.number().int().positive().nullish(),
-  region_file_id: z.number().int().positive().nullish()
-})
-
-const ExternalIdUpsertSchema = z.object({
-  caseId: CaseIdSchema,
-  idType: z.string().min(1),
-  idValue: z.string().min(1)
-})
-
-const ExternalIdDeleteSchema = z.object({
-  caseId: CaseIdSchema,
-  idType: z.string().min(1)
-})
 
 /**
  * Case Metadata IPC handlers
