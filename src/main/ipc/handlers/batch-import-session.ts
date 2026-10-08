@@ -27,7 +27,7 @@ import type {
   BatchResult,
   DuplicateChoice
 } from '../../../shared/types/api'
-import { resolveCaseName } from '../../../shared/utils/case-name'
+import { replacementCaseName, resolveCaseName } from '../../../shared/utils/case-name'
 import { BatchProgressTracker, groupIntoChains, runChains } from './batch-import-pool'
 import { cancelImport, startImport, withActiveImportOperation } from './import-logic'
 
@@ -165,7 +165,7 @@ export async function runSessionBatchImport(params: {
   }
 
   const processFile = async (index: number, importOne: ImportOneFile): Promise<void> => {
-    if (signal.aborted) {
+    if (signal.aborted || result.cancelled) {
       result.cancelled = true
       return
     }
@@ -201,7 +201,7 @@ export async function runSessionBatchImport(params: {
     try {
       // The old case keeps its (UNIQUE) name until its replacement is imported (#493).
       const importName =
-        existingId === undefined ? caseName : `${caseName} (replacing #${existingId})`
+        existingId === undefined ? caseName : replacementCaseName(caseName, existingId)
       // An overwrite that died before its swap left a case under this name: it
       // would block every retry on the UNIQUE name and count the person twice.
       const leftoverId = existingId === undefined ? undefined : existingIds.get(importName)
@@ -212,6 +212,12 @@ export async function runSessionBatchImport(params: {
       const imported = await importOne(file, importName, (fileProgress) =>
         progress.update(index, fileProgress)
       )
+      // A cancelled import resolves without a case (the worker reports case 0):
+      // there is nothing to swap in, and the existing case stays.
+      if (!(imported.caseId > 0)) {
+        result.cancelled = true
+        return
+      }
       if (existingId !== undefined) await swapIn(existingId, imported.caseId, caseName)
       result.succeeded++
       existingIds.set(caseName, imported.caseId)
@@ -242,7 +248,7 @@ export async function runSessionBatchImport(params: {
       chains: groupIntoChains(caseNames),
       concurrency,
       processFile,
-      shouldStop: () => signal.aborted
+      shouldStop: () => signal.aborted || result.cancelled
     })
     if (signal.aborted) result.cancelled = true
   } else {

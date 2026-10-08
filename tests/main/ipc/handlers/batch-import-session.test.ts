@@ -211,6 +211,25 @@ describe('runSessionBatchImport', () => {
     expect(result.succeeded).toBe(1)
   })
 
+  // A cancelled Postgres import resolves with case 0 instead of rejecting.
+  it('a cancelled overwrite keeps the existing case and reports the batch cancelled', async () => {
+    const { session, importSingleFile, writeExecute, cases } = fakeSession([
+      { id: 7, name: 'HG001' }
+    ])
+    importSingleFile.mockResolvedValueOnce({
+      caseId: 0,
+      variantCount: 0,
+      skipped: 0,
+      errors: ['cancelled'],
+      elapsed: 0
+    })
+    const result = await overwrite(session, ['HG001.json', 'HG002.json'])
+    expect(writeExecute).not.toHaveBeenCalled()
+    expect(cases).toEqual([{ id: 7, name: 'HG001' }])
+    expect(result).toMatchObject({ succeeded: 0, failed: 0, cancelled: true, details: [] })
+    expect(importSingleFile).toHaveBeenCalledTimes(1)
+  })
+
   it('stops at the next file once cancelled', async () => {
     const { session } = fakeSession([])
     const controller = new AbortController()

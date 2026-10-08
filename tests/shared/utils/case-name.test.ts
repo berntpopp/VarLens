@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveCaseName,
   legacyCaseName,
+  parseReplacementCaseName,
+  replacementCaseName,
   resolveCaseName
 } from '../../../src/shared/utils/case-name'
 
@@ -71,4 +73,19 @@ describe('resolveCaseName', () => {
       isDuplicate: true
     })
   })
+})
+
+describe('replacement case name', () => {
+  it('round-trips the case name and the id of the case it replaces', () => {
+    const name = replacementCaseName('HG001 (run 2)', 7)
+    expect(name).toBe('HG001 (run 2) (replacing #7)')
+    expect(parseReplacementCaseName(name)).toEqual({ caseName: 'HG001 (run 2)', oldId: 7 })
+  })
+
+  it.each(['HG001', 'HG001 (replacing #)', 'HG001 (replacing #7) b', ' (replacing #7)'])(
+    '%s is not a replacement name',
+    (name) => {
+      expect(parseReplacementCaseName(name)).toBeNull()
+    }
+  )
 })
