@@ -67,6 +67,21 @@ describe('streamMappedVcfRows DoS guards (postgres-import-worker.ts, live PG wor
     )
   })
 
+  it('rejects a VCF that ends without a #CHROM line, and accepts a header with no rows', async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-dos-'))
+    const headless = join(tmpDir, 'headless.vcf')
+    writeFileSync(headless, '##fileformat=VCFv4.2\n')
+    await expect(drain(streamMappedVcfRows(headless, ''))).rejects.toThrow(
+      'VCF has no #CHROM header line or no sample column'
+    )
+    const empty = join(tmpDir, 'empty.vcf')
+    writeFileSync(
+      empty,
+      '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n'
+    )
+    expect(await drain(streamMappedVcfRows(empty, ''))).toEqual([])
+  })
+
   it('rejects a VCF line over the production call-path cap -- not a silent skip', async () => {
     process.env[LINE_CAP_ENV_VAR] = String(TEST_LINE_CAP)
     tmpDir = mkdtempSync(join(tmpdir(), 'varlens-pg-worker-dos-'))

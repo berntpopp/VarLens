@@ -202,6 +202,14 @@ export async function importAdditionalFileToCase(
         }
       }
 
+      // A file without rows never reached the header check above.
+      if (header === null)
+        resolveVcfSelectedSampleColumn(
+          parseVcfHeaderFromLines(headerLines).samples,
+          vcfOptions?.selectedSample,
+          true
+        )
+
       // Flush remaining batch
       if (batch.rows > 0) {
         if (isCancelled()) throw new Error('Import cancelled by user')

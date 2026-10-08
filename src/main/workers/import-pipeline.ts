@@ -457,6 +457,12 @@ export async function streamInsertVcf(
       }
       if (full) batch.flush()
     }
+    // A file without rows never reached the header check above.
+    if (header === null && !isCancelled())
+      resolveVcfSelectedSampleColumn(
+        parseVcfHeaderFromLines(headerLines).samples,
+        vcfSelectedSamples?.[0]
+      )
   } finally {
     // Flush remaining items
     if (!isCancelled()) batch.flush()

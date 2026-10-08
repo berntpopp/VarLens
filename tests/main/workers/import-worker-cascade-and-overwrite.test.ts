@@ -400,12 +400,14 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
     )
 
     // Used to import as an empty case.
+    const ROW = 'chr1\t100\t.\tA\tT\t50\tPASS\t.\n'
     it.each([
-      ['no sample column', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'],
-      ['no #CHROM line', '']
-    ])('fails a fresh import of a VCF with %s', async (_what, chromLine) => {
+      ['no sample column', '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n' + ROW],
+      ['no #CHROM line', ROW],
+      ['no #CHROM line and no rows', '']
+    ])('fails a fresh import of a VCF with %s', async (_what, body) => {
       const filePath = join(tmpdir(), `${randomUUID()}.vcf`)
-      writeFileSync(filePath, `##fileformat=VCFv4.2\n${chromLine}chr1\t100\t.\tA\tT\t50\tPASS\t.\n`)
+      writeFileSync(filePath, `##fileformat=VCFv4.2\n${body}`)
       const messages: WorkerMessage[] = []
       try {
         await runImportSession(
@@ -426,6 +428,27 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
         error: 'VCF has no #CHROM header line or no sample column'
       })
       expect(db.prepare('SELECT name FROM cases').all()).toEqual([])
+    })
+
+    it('imports a VCF with a sample column and no rows as an empty case', async () => {
+      const filePath = join(tmpdir(), `${randomUUID()}.vcf`)
+      writeFileSync(filePath, VCF_HEAD)
+      try {
+        await runImportSession(
+          {
+            type: 'start',
+            dbPath,
+            throttleMs: 0,
+            files: [{ filePath, caseName: 'empty', isDuplicate: false, duplicateStrategy: 'skip' }]
+          },
+          { postMessage: () => undefined }
+        )
+      } finally {
+        unlinkSync(filePath)
+      }
+      expect(db.prepare('SELECT name, import_status, variant_count FROM cases').all()).toEqual([
+        { name: 'empty', import_status: 'ready', variant_count: 0 }
+      ])
     })
 
     it('replaces the case under its own name and keeps the cohort summary exact', async () => {
