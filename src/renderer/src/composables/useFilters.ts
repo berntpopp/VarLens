@@ -143,8 +143,13 @@ export function createFilters(): UseFiltersReturn {
   })
 
   // Custom -> Filter + clear preset
+  // An emptied field holds '' (v-model.number) or null (clear button): drop the
+  // filter, unless a preset just took over and nulled the field itself.
   watch(customGnomadAf, (value) => {
-    if (value === null || Number.isNaN(value)) return
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      if (selectedAfPreset.value === null) filters.value.maxGnomadAf = null
+      return
+    }
 
     // ANTI-12: Validate range before applying
     if (value < FILTER_RANGES.gnomadAfPercent.min || value > FILTER_RANGES.gnomadAfPercent.max) {
@@ -160,9 +165,10 @@ export function createFilters(): UseFiltersReturn {
   })
 
   watch(customCadd, (value) => {
-    // An emptied v-model.number field holds '', which would pass `>= 0` below
-    if (typeof value !== 'number' && value !== null) filters.value.minCadd = null
-    if (typeof value !== 'number' || Number.isNaN(value)) return
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      if (selectedCaddPreset.value === null) filters.value.minCadd = null
+      return
+    }
 
     // ANTI-12: Validate range before applying
     if (value < FILTER_RANGES.cadd.min || value > FILTER_RANGES.cadd.max) {
