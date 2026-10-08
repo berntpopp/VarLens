@@ -161,6 +161,15 @@ describe('Trio inheritance filters', () => {
       expect(recessive()).toBe(1)
     })
 
+    it('fails when a parent has a het and a hom row: the highest dosage wins', () => {
+      service.variants.insertVariantsBatch(fatherId, [makeVariant({ gt_num: '0/1', pos: 100 })])
+      service.variants.insertVariantsBatch(motherId, [
+        makeVariant({ gt_num: '0/1', pos: 100 }),
+        makeVariant({ gt_num: '1/1', pos: 100, transcript: 'NM_OTHER.1' })
+      ])
+      expect(recessive()).toBe(0)
+    })
+
     it('a duo constrains only the parent it has', () => {
       const duo = service.analysisGroups.createGroup('DUO', 'family').id
       service.analysisGroups.addMember(duo, probandId, 'proband', 'affected')
@@ -191,6 +200,28 @@ describe('Trio inheritance filters', () => {
       0
     )
     expect(result.data.map((v) => v.pos)).toEqual([5000000])
+  })
+
+  it.each([
+    ['male', [5000000]],
+    ['female', []],
+    ['unknown', []]
+  ])('de_novo for a proband of sex %s keeps a diploid chrX 1/1 at %j', (sex, expected) => {
+    service.metadata.upsertCaseMetadata(probandId, { sex })
+    service.variants.insertVariantsBatch(probandId, [
+      makeVariant({ chr: 'X', gt_num: '1/1', pos: 5000000 }),
+      makeVariant({ chr: 'X', gt_num: '1/1', pos: 5000100 }),
+      makeVariant({ chr: '1', gt_num: '1/1', pos: 300 })
+    ])
+    service.variants.insertVariantsBatch(motherId, [
+      makeVariant({ chr: 'X', gt_num: '0/1', pos: 5000100 })
+    ])
+    const result = service.variants.getVariants(
+      { case_id: probandId, inheritance_modes: ['de_novo'], analysis_group_id: groupId },
+      50,
+      0
+    )
+    expect(result.data.map((v) => v.pos)).toEqual(expected)
   })
 
   describe('compound_het', () => {

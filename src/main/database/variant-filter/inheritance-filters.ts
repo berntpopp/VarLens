@@ -19,6 +19,7 @@ import {
 const HET = sql.raw(HET_GT_SQL)
 const HOM = sql.raw(HOM_GT_SQL)
 const HET_OR_HEMI = sql.raw(HET_OR_HEMI_GT_SQL)
+const MALE_X_HEMIZYGOUS = sql.raw(xHemizygousSql('variants', 'case_metadata', true))
 const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 const CASE_MARK = '@case@'
@@ -85,8 +86,9 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
 
 /** One copy in the proband; neither parent has a row there other than an explicit reference call. */
 function deNovoCondition(cid: number, gid: number): SqlCondition {
+  // A male chrX call written diploid (1/1) is one copy too.
   return sql`(
-            variants.gt_num IN ${HET_OR_HEMI}
+            (variants.gt_num IN ${HET_OR_HEMI} OR ${MALE_X_HEMIZYGOUS})
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
