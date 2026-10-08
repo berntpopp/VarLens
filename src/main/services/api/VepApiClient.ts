@@ -45,6 +45,42 @@ export function normalizeChromosome(chr: string): string {
 }
 
 /**
+ * Cache key for a VEP lookup. `v2`: entries written before #494 were fetched
+ * without the reference span, so non-SNV results under the old keys are wrong.
+ */
+export function vepCacheKey(chr: string, pos: number, ref: string, alt: string): string {
+  return `vep:v2:${normalizeChromosome(chr)}:${pos}:${ref}:${alt}`
+}
+
+/**
+ * Ensembl `region/allele` path for a VCF-style (padded) variant, in the
+ * Ensembl default format: the exact changed bases, `-` for a deleted
+ * sequence, and start = end + 1 for an insertion.
+ *
+ * @example
+ * vepRegionAllele('1', 100, 'ATG', 'A') => '1:101-102:1/-'
+ * vepRegionAllele('1', 100, 'A', 'ATT') => '1:101-100:1/TT'
+ */
+export function vepRegionAllele(chr: string, pos: number, ref: string, alt: string): string {
+  const refBases = ref.toUpperCase()
+  const altBases = alt.toUpperCase()
+  let shared = 0
+  while (
+    shared < refBases.length &&
+    shared < altBases.length &&
+    refBases[shared] === altBases[shared]
+  ) {
+    shared++
+  }
+  const end = pos + refBases.length - 1
+  return `${chr}:${pos + shared}-${end}:1/${altBases.slice(shared) || '-'}`
+}
+
+// chr, ref and alt are interpolated into the request URL and the fixture path.
+const CHROMOSOME_PATTERN = /^[A-Za-z0-9_.]+$/
+const SEQUENCE_ALLELE_PATTERN = /^[ACGTN]+$/i
+
+/**
  * Extracted prediction scores from VEP transcript
  * Used for UI display in side panel
  */
@@ -114,7 +150,20 @@ export class VepApiClient {
   ): Promise<VepFetchResult> {
     // Generate normalized cache key
     const normalizedChr = normalizeChromosome(chr)
-    const cacheKey = `vep:${normalizedChr}:${pos}:${ref}:${alt}`
+    const cacheKey = vepCacheKey(chr, pos, ref, alt)
+
+    if (
+      !CHROMOSOME_PATTERN.test(normalizedChr) ||
+      !SEQUENCE_ALLELE_PATTERN.test(ref) ||
+      !SEQUENCE_ALLELE_PATTERN.test(alt) ||
+      ref.toUpperCase() === alt.toUpperCase()
+    ) {
+      return {
+        success: false,
+        error: 'VEP lookup needs a chromosome and differing sequence alleles',
+        offline: false
+      }
+    }
 
     const fixture = readApiFixture(
       apiFixturePath([
@@ -227,18 +276,18 @@ export class VepApiClient {
   private async makeVepRequest(
     chr: string,
     pos: number,
-    _ref: string,
+    ref: string,
     alt: string,
     signal: AbortSignal
   ): Promise<unknown> {
     // Use GET endpoint for single variants (more reliable than POST)
-    // URL format: /vep/human/region/{chr}:{start}:{end}/{allele}
+    // URL format: /vep/human/region/{chr}:{start}-{end}:{strand}/{allele}
     // Add parameters for prediction scores:
     // - CADD=1: Request CADD phred scores
     // - sift=b: Request SIFT prediction and score (b = both)
     // - polyphen=b: Request PolyPhen prediction and score (b = both)
     // Note: REVEL and SpliceAI are NOT available via REST API (require VEP plugins)
-    const url = `${this.baseUrl}/vep/human/region/${chr}:${pos}:${pos}/${alt}?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1`
+    const url = `${this.baseUrl}/vep/human/region/${vepRegionAllele(chr, pos, ref, alt)}?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1`
 
     const response = await fetch(url, {
       signal,

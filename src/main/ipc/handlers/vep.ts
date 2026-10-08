@@ -1,6 +1,6 @@
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
-import { VepApiClient, normalizeChromosome } from '../../services/api/VepApiClient'
+import { VepApiClient, vepCacheKey } from '../../services/api/VepApiClient'
 import { ApiCache } from '../../services/api/ApiCache'
 import { apiFixturesEnabled } from '../../services/api/ApiFixtureLoader'
 import { networkStatus } from '../../services/network/NetworkStatus'
@@ -47,8 +47,8 @@ export function registerVepHandlers({ ipcMain, getDb }: HandlerDependencies): vo
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = normalizeChromosome(validated.data.chr)
-          const cacheKey = `vep:${normalizedChr}:${validated.data.pos}:${validated.data.ref}:${validated.data.alt}`
+          const { chr, pos, ref, alt } = validated.data
+          const cacheKey = vepCacheKey(chr, pos, ref, alt)
           const cached = client.getCached(cacheKey)
 
           if (cached) {
