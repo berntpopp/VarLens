@@ -121,18 +121,24 @@ export function createFilters(): UseFiltersReturn {
   const customGnomadAf = ref<number | null>(null) // Percentage (0-100)
   const customCadd = ref<number | null>(null) // Raw CADD score
 
-  // BIDIRECTIONAL SYNC: Preset -> Filter + clear custom
-  watch(selectedAfPreset, (value) => {
-    filters.value.maxGnomadAf = value
+  // BIDIRECTIONAL SYNC: Preset -> Filter + clear custom.
+  // Deselecting clears the filter only while it still holds the preset's value,
+  // so a number typed over an active preset survives (same as useFilterPresets).
+  watch(selectedAfPreset, (value, old) => {
     if (value !== null) {
+      filters.value.maxGnomadAf = value
       customGnomadAf.value = null
+    } else if (filters.value.maxGnomadAf === old) {
+      filters.value.maxGnomadAf = null
     }
   })
 
-  watch(selectedCaddPreset, (value) => {
-    filters.value.minCadd = value
+  watch(selectedCaddPreset, (value, old) => {
     if (value !== null) {
+      filters.value.minCadd = value
       customCadd.value = null
+    } else if (filters.value.minCadd === old) {
+      filters.value.minCadd = null
     }
   })
 
