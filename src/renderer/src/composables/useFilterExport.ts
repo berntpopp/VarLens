@@ -5,6 +5,7 @@ import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
+import type { VariantFilter } from '../../../shared/types/api'
 
 async function getVariantExportBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('export.variants')
@@ -24,7 +25,9 @@ export function useFilterExport(
   const exportToExcel = async (
     caseId: number,
     caseName: string,
-    format?: ExportFormat
+    format?: ExportFormat,
+    // The filters of the table query (tab type, DSL and header column filters)
+    tableFilters?: Omit<VariantFilter, 'case_id'>
   ): Promise<ExportResult | null> => {
     if (!api) {
       logService.warn('API not available - running outside Electron', 'export')
@@ -39,7 +42,8 @@ export function useFilterExport(
 
     exporting.value = true
     try {
-      const exportFilters = buildFilterFromState(filters.value, selectedImpactPresets.value)
+      const exportFilters =
+        tableFilters ?? buildFilterFromState(filters.value, selectedImpactPresets.value)
 
       const result = unwrapIpcResult(
         await api.export.variants(

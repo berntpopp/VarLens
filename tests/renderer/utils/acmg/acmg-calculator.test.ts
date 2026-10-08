@@ -5,6 +5,7 @@ import {
   calculateClassification
 } from '../../../../src/renderer/src/utils/acmg/acmg-calculator'
 import type { AcmgEvidenceCode } from '../../../../src/renderer/src/utils/acmg/types'
+import { strengthOptionsFor } from '../../../../src/renderer/src/utils/acmg/types'
 
 function makeCode(code: string, strength: string): AcmgEvidenceCode {
   return {
@@ -291,5 +292,26 @@ describe('calculateClassification', () => {
     const pathogenic = [makeCode('PVS1', 'very_strong')]
     const result = calculateClassification(pathogenic, [])
     expect(result.classification).toBe('Uncertain significance')
+  })
+})
+
+// #497: a strength change must not drop a criterion from the rule check.
+describe('benign criteria at a non-default strength', () => {
+  it('BP4 raised to Moderate still counts as supporting: BP4 + BP7 stays Likely benign', () => {
+    const benign = [makeCode('BP4', 'moderate'), makeCode('BP7', 'supporting')]
+    expect(classifyByRules([], benign)).toBe('Likely benign')
+  })
+
+  it('BS1 raised to Very Strong still counts as strong: BS1 + BS2 stays Benign', () => {
+    const benign = [makeCode('BS1', 'very_strong'), makeCode('BS2', 'strong')]
+    expect(classifyByRules([], benign)).toBe('Benign')
+  })
+
+  it('offers Stand-Alone for BA1 only', () => {
+    const offered = (code: AcmgEvidenceCode['code']): string[] =>
+      strengthOptionsFor(code).map((o) => o.value)
+    expect(offered('BA1')).toContain('stand_alone')
+    expect(offered('PVS1')).toEqual(['very_strong', 'strong', 'moderate', 'supporting'])
+    expect(offered('BS1')).not.toContain('stand_alone')
   })
 })

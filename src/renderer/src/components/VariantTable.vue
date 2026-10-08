@@ -418,6 +418,7 @@ const {
   itemsPerPageOptions,
   selectedVariantId,
   loadVariants,
+  buildQueryFilters,
   resetSort,
   getRowProps,
   columnMeta,
@@ -651,6 +652,7 @@ onUnmounted(() => {
 defineExpose({
   resetSort,
   refresh: loadVariants,
+  buildQueryFilters,
   columns: computed(() => headers.value.map((h) => ({ key: h.key, title: h.title }))),
   hasColumnFilters,
   columnFilterCount,

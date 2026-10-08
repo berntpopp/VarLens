@@ -59,6 +59,7 @@ describe('CohortTable paging', () => {
   let wrapper: VueWrapper
   let pinia: Pinia
   let getVariants: ReturnType<typeof vi.fn>
+  let filtersCtx: ReturnType<typeof createFilters>
 
   function queries(): Query[] {
     return getVariants.mock.calls.map((call) => call[0] as Query)
@@ -109,10 +110,11 @@ describe('CohortTable paging', () => {
     // Adjacent-page prefetch is exercised separately; keep the default flow deterministic.
     useSettingsStore(pinia).prefetchEnabled = false
 
+    filtersCtx = createFilters()
     wrapper = mount(CohortTable, {
       global: {
         plugins: [vuetify, pinia],
-        provide: { [FiltersKey as symbol]: createFilters() },
+        provide: { [FiltersKey as symbol]: filtersCtx },
         stubs: {
           CohortDataTable: CohortDataTableStub,
           CohortFilterBar: true,
@@ -142,6 +144,32 @@ describe('CohortTable paging', () => {
     expect(queries()[1]).toMatchObject({ offset: limit, cursor: `cursor-after-${limit}` })
     expect(queries()[2]).toMatchObject({ offset: 2 * limit, cursor: `cursor-after-${2 * limit}` })
     expect(shownRows()).toEqual([`v${2 * limit}`])
+  })
+
+  // #485: the exported file must contain exactly the rows the table shows.
+  it('exports with the same filter params as the table query', async () => {
+    const exportCohort = vi.fn(async () => ({ success: true, filePath: '/tmp/cohort.xlsx' }))
+    window.api.export.cohort = exportCohort as never
+    filtersCtx.filters.value.starredOnly = true
+    filtersCtx.filters.value.activePanelIds = [7]
+    await table().vm.$emit('column-filters-change', {
+      cadd_phred: { operator: '>=', value: 25 }
+    })
+    await vi.waitFor(() => expect(queries().at(-1)).toHaveProperty('column_filters'))
+
+    await wrapper.findComponent({ name: 'CohortFilterBar' }).vm.$emit('export')
+    await flushPromises()
+
+    const tableFilters = { ...(queries().at(-1) as Query) }
+    for (const paging of ['limit', 'offset', 'sort_by', 'sort_order', '_count_needed', 'cursor']) {
+      delete tableFilters[paging]
+    }
+    expect(tableFilters).toMatchObject({
+      starred_only: true,
+      active_panel_ids: [7],
+      column_filters: { cadd_phred: { operator: '>=', value: 25 } }
+    })
+    expect(exportCohort.mock.calls[0][0]).toEqual(tableFilters)
   })
 
   it('reuses the cursor although only page 1 asks for the count', async () => {

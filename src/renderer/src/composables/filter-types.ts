@@ -72,7 +72,8 @@ export interface UseFilterStateReturn {
   exportToExcel: (
     caseId: number,
     caseName: string,
-    format?: ExportFormat
+    format?: ExportFormat,
+    tableFilters?: Omit<VariantFilter, 'case_id'>
   ) => Promise<ExportResult | null>
 }
 

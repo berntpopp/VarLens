@@ -7,10 +7,10 @@ const annotations = {
   getGlobalAcmgClassification: vi.fn(),
   getAcmgEvidence: vi.fn(),
   getGlobalAcmgEvidence: vi.fn(),
-  setAcmgClassification: vi.fn(async () => {}),
-  setGlobalAcmgClassification: vi.fn(async () => {}),
-  setAcmgClassificationWithEvidence: vi.fn(async () => {}),
-  setGlobalAcmgClassificationWithEvidence: vi.fn(async () => {})
+  setAcmgClassification: vi.fn(async () => true),
+  setGlobalAcmgClassification: vi.fn(async () => true),
+  setAcmgClassificationWithEvidence: vi.fn(async () => true),
+  setGlobalAcmgClassificationWithEvidence: vi.fn(async () => true)
 }
 vi.mock('../../../src/renderer/src/composables/useAnnotations', () => ({
   useAnnotations: () => annotations
@@ -98,6 +98,18 @@ describe('useAcmgUndo', () => {
       null,
       ''
     )
+  })
+
+  // #486: the write failed and was rolled back; useAnnotations shows the error.
+  it('offers no Undo and no success message when the write failed', async () => {
+    annotations.getAcmgClassification.mockReturnValue('Uncertain significance')
+    annotations.setAcmgClassification.mockResolvedValueOnce(false)
+    const { acmg, snacks } = mountWithSnack()
+
+    const saved = await acmg.setAcmgClassification(7, 42, 'chr1', 100, 'A', 'G', 'Pathogenic')
+
+    expect(saved).toBe(false)
+    expect(snacks).toHaveLength(0)
   })
 
   it('shows no snackbar when the classification did not change', async () => {

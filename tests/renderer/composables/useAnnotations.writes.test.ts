@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { watch } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMockApi } from '../../utils/mock-api'
 import { useDatabaseStore } from '@renderer/stores/databaseStore'
@@ -18,6 +18,7 @@ import {
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
 import { logService } from '@renderer/services/LogService'
+import { AppStateKey, createAppState } from '@renderer/composables/useAppState'
 
 type Annotations = ReturnType<typeof useAnnotations>
 
@@ -26,7 +27,7 @@ const KEY = 'chr1:100:A:G'
 const CASE_ID = 1
 const VARIANT_ID = 11
 
-const WRITES: Record<string, (a: Annotations) => Promise<void>> = {
+const WRITES: Record<string, (a: Annotations) => Promise<boolean>> = {
   toggleStar: (a) => a.toggleStar(CASE_ID, VARIANT_ID, ...V),
   toggleGlobalStar: (a) => a.toggleGlobalStar(...V),
   setAcmgClassification: (a) => a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Pathogenic'),
@@ -94,6 +95,34 @@ describe('failed annotation writes roll back and notify watchers', () => {
 
     expect(annotationCache.value.has(KEY)).toBe(false)
     expect(triggers).toBe(1)
+  })
+
+  // #486: a write that did not land must never look like a saved one.
+  it.each(Object.keys(WRITES))('%s reports the failure to caller and user', async (name) => {
+    seedEntry()
+    const snacks: string[][] = []
+    let a!: Annotations
+    const state = createAppState()
+    state.setSnackbarHandler((message, type) => snacks.push([message, type]))
+    const app = createApp({ render: () => null })
+    app.provide(AppStateKey, state)
+    app.runWithContext(() => {
+      a = useAnnotations()
+    })
+
+    expect(await WRITES[name](a)).toBe(false)
+    expect(snacks).toEqual([[expect.stringContaining('not saved'), 'error']])
+  })
+})
+
+describe('successful annotation writes', () => {
+  it.each(Object.keys(WRITES))('%s resolves true', async (name) => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+    window.api.annotations.upsertPerCase = vi.fn().mockResolvedValue({})
+    window.api.annotations.upsertGlobal = vi.fn().mockResolvedValue({})
+
+    expect(await WRITES[name](useAnnotations())).toBe(true)
   })
 })
 

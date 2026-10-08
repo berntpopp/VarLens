@@ -74,7 +74,7 @@
               </template>
               <v-list density="compact" nav>
                 <v-list-item
-                  v-for="opt in STRENGTH_OPTIONS"
+                  v-for="opt in strengthOptionsFor(entry.code)"
                   :key="opt.value"
                   :active="entry.strength === opt.value"
                   @click="handleStrengthChange(entry.code, opt.value)"
@@ -158,7 +158,7 @@ import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg
 import {
   PATHOGENIC_CODES,
   BENIGN_CODES,
-  STRENGTH_OPTIONS,
+  strengthOptionsFor,
   EVIDENCE_POINTS
 } from '../utils/acmg/types'
 import type { VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
