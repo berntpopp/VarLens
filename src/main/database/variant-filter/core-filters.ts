@@ -137,9 +137,11 @@ export const PANEL_TEMP_TABLE_THRESHOLD = 50
 /**
  * Panel genomic interval filter (overlap semantics).
  *
- * Small sets (or `forceOrChain` for compiled queries) emit an OR chain of
- * chr + position-range conditions. Large sets read the `_panel_intervals`
- * temp table, which `preparePanelIntervals` must have populated first.
+ * Small sets emit an OR chain of chr + position-range conditions. Large sets
+ * read the `_panel_intervals` temp table, which `preparePanelIntervals` must
+ * have populated first — or, with `forceOrChain` (compiled queries, which
+ * cannot see the temp table), one JSON parameter: SQLite caps an expression
+ * tree at depth 1000, so an OR chain throws beyond ~1000 regions (#491).
  */
 export function applyPanelIntervalFilter(
   query: VariantQueryBuilder,
@@ -148,7 +150,7 @@ export function applyPanelIntervalFilter(
 ): VariantQueryBuilder {
   const panelIntervals = filter.panel_intervals
   if (!panelIntervals || panelIntervals.length === 0) return query
-  if (panelIntervals.length < PANEL_TEMP_TABLE_THRESHOLD || forceOrChain === true) {
+  if (panelIntervals.length < PANEL_TEMP_TABLE_THRESHOLD) {
     return query.where(({ or }) =>
       or(
         panelIntervals.map(
@@ -156,6 +158,13 @@ export function applyPanelIntervalFilter(
             sql<boolean>`(variants.chr = ${iv.chr} AND variants.pos <= ${iv.end} AND COALESCE(variants.end_pos, variants.pos) >= ${iv.start})`
         )
       )
+    )
+  }
+  if (forceOrChain === true) {
+    // Interval-driven (CROSS JOIN pins the order) so each region is an index
+    // seek; a correlated EXISTS over json_each rescans the JSON for every row.
+    return query.where(
+      sql<boolean>`variants.id IN (SELECT pv.id FROM json_each(${JSON.stringify(panelIntervals)}) iv CROSS JOIN variants pv WHERE pv.case_id = ${filter.case_id} AND pv.chr = iv.value ->> 'chr' AND pv.pos <= iv.value ->> 'end' AND COALESCE(pv.end_pos, pv.pos) >= iv.value ->> 'start')`
     )
   }
   return query.where(

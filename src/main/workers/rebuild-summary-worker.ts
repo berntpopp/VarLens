@@ -9,6 +9,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
+import { repairInterruptedImportSession } from './import-finalization'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
   UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL,
@@ -100,6 +101,9 @@ port.on('message', (msg: RebuildWorkerRequest) => {
     db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
     db.pragma('temp_store = MEMORY')
     db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
+
+    // Before the rebuild: it clears the marker this keys off.
+    repairInterruptedImportSession(db)
 
     db.transaction(() => {
       // Phase 1/3 — largest phase, the big INSERT-SELECT rebuilding the

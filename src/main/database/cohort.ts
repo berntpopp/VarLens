@@ -21,7 +21,8 @@ import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/co
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
-import { emitCohortSearch } from './search/cohort-search-emitter'
+import { emitCohortSearch, emitTerm } from './search/cohort-search-emitter'
+import { PANEL_TEMP_TABLE_THRESHOLD } from './variant-filter/core-filters'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
@@ -89,7 +90,7 @@ export class CohortService {
       const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
 
       if (!hasBooleanOps) {
-        const singleCondition = this.buildSingleTermCondition(term, paramsArray)
+        const singleCondition = emitTerm(term, paramsArray)
         whereConditions.push(singleCondition)
       } else {
         const sqlCondition = this.buildBooleanSearchCondition(term, paramsArray)
@@ -98,7 +99,15 @@ export class CohortService {
     }
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
-    if (params.panel_intervals && params.panel_intervals.length > 0) {
+    if (params.panel_intervals && params.panel_intervals.length >= PANEL_TEMP_TABLE_THRESHOLD) {
+      // One JSON parameter: SQLite caps an expression tree at depth 1000, so the
+      // OR chain below throws beyond ~1000 regions (#491). Interval-driven
+      // (CROSS JOIN pins the order) so each region seeks the primary key.
+      paramsArray.push(JSON.stringify(params.panel_intervals))
+      whereConditions.push(
+        `cvs.rowid IN (SELECT pv.rowid FROM json_each(?) iv CROSS JOIN cohort_variant_summary pv WHERE pv.chr = iv.value ->> 'chr' AND pv.pos <= iv.value ->> 'end' AND COALESCE(pv.end_pos, pv.pos) >= iv.value ->> 'start')`
+      )
+    } else if (params.panel_intervals && params.panel_intervals.length > 0) {
       const intervalConditions = params.panel_intervals.map((iv) => {
         // Interval-overlap (not point-in-interval) so a spanning SV/CNV whose
         // start lies outside [start,end] but which covers the region is still
@@ -289,34 +298,6 @@ export class CohortService {
   }
 
   /**
-   * Build a SQL condition for a single search token.
-   * Uses LIKE-based search on summary table columns.
-   */
-  private buildSingleTermCondition(token: string, paramsArray: (string | number)[]): string {
-    const genomicPosPattern = /^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i
-    const hgvsPattern = /^[cp]\./
-
-    if (genomicPosPattern.test(token)) {
-      const match = token.match(genomicPosPattern)
-      if (match !== null) {
-        paramsArray.push(match[1], parseInt(match[2], 10))
-        return '(cvs.chr = ? AND cvs.pos = ?)'
-      }
-    }
-
-    if (hgvsPattern.test(token)) {
-      const searchPattern = `%${token}%`
-      paramsArray.push(searchPattern, searchPattern)
-      return '(cvs.cdna LIKE ? OR cvs.aa_change LIKE ?)'
-    }
-
-    // Default: LIKE-based search on gene_symbol, consequence, omim_mim_number
-    const searchPattern = `%${token}%`
-    paramsArray.push(searchPattern, searchPattern, searchPattern)
-    return '(cvs.gene_symbol LIKE ? COLLATE NOCASE OR cvs.consequence LIKE ? COLLATE NOCASE OR cvs.omim_mim_number LIKE ? COLLATE NOCASE)'
-  }
-
-  /**
    * Build a SQL boolean expression from a search string containing AND/OR/NOT.
    */
   private buildBooleanSearchCondition(term: string, paramsArray: (string | number)[]): string {
@@ -331,7 +312,7 @@ export class CohortService {
           (e instanceof Error ? e.message : String(e)),
         'CohortService'
       )
-      return this.buildSingleTermCondition(term, paramsArray)
+      return emitTerm(term, paramsArray)
     }
     const { sql, params } = emitCohortSearch(ast)
     paramsArray.push(...params)
@@ -479,6 +460,8 @@ export class CohortService {
 
   /** Cached column metadata — invalidated on summary rebuild */
   private _columnMetaCache: ColumnFilterMeta[] | null = null
+  /** `PRAGMA data_version` the cache was read at: it moves when another connection commits. */
+  private _columnMetaDataVersion: unknown = null
 
   /** Clear cached column metadata (call after cohort summary rebuild) */
   invalidateColumnMetaCache(): void {
@@ -493,7 +476,12 @@ export class CohortService {
    * Results are cached and invalidated on summary rebuild.
    */
   getColumnMeta(): ColumnFilterMeta[] {
-    if (this._columnMetaCache !== null) return this._columnMetaCache
+    // DB worker threads are never told about an import or rebuild made by
+    // another connection, so the cache checks for foreign commits itself.
+    const dataVersion = this.db.pragma('data_version', { simple: true })
+    if (this._columnMetaCache !== null && dataVersion === this._columnMetaDataVersion) {
+      return this._columnMetaCache
+    }
 
     const DISTINCT_THRESHOLD = 50
     // The frequency is derived, so the metadata reads through the build totals.
@@ -575,6 +563,7 @@ export class CohortService {
     }
 
     this._columnMetaCache = meta
+    this._columnMetaDataVersion = dataVersion
     return meta
   }
 
