@@ -105,7 +105,12 @@ export function passesPreMappingFilters(
   // and breakends. Guard against non-numeric END so malformed VCFs can't
   // silently poison the filter via NaN.
   if (filters.bedFilter !== undefined) {
-    const endRaw = record.info.get('END')
+    // A breakend's END, when a caller writes one, is its mate's coordinate:
+    // POS..END is not a span of this chromosome.
+    const isBreakend =
+      record.info.get('SVTYPE') === 'BND' ||
+      record.alt.some((alt) => alt.includes('[') || alt.includes(']'))
+    const endRaw = isBreakend ? undefined : record.info.get('END')
     if (endRaw !== undefined && endRaw !== '') {
       const endPos = parseInt(endRaw, 10)
       if (Number.isInteger(endPos) && endPos >= record.pos) {
