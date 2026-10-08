@@ -16,6 +16,7 @@ import { resolve } from 'path'
 import { existsSync } from 'fs'
 import { unlink } from 'fs/promises'
 import { mainLogger } from '../../services/MainLogger'
+import { assertNoActiveDatabaseWork } from '../../services/jobs/database-activity'
 import { DatabaseError } from '../../database/errors'
 import {
   migratePlaintextToEncrypted,
@@ -59,6 +60,9 @@ export async function migrateCurrentToEncrypted(
   if (options.consent !== true) {
     throw new DatabaseError('Migrating to an encrypted database requires explicit consent.')
   }
+
+  // The migration rewrites the file; a worker still holding it would corrupt the result.
+  assertNoActiveDatabaseWork('encrypt the database')
 
   const manager = getDbManager()
   const currentInfo = manager.getCurrentInfo()

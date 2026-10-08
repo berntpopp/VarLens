@@ -47,4 +47,23 @@ describe('csvEscape', () => {
   it('converts numbers to strings', () => {
     expect(csvEscape(42)).toBe('42')
   })
+  it.each([
+    ['=HYPERLINK("http://x","y")', '"\'=HYPERLINK(""http://x"",""y"")"'],
+    ['@SUM(1+1)', "'@SUM(1+1)"],
+    ['+cmd', "'+cmd"],
+    ["-2+3+cmd|' /C calc'!A0", "'-2+3+cmd|' /C calc'!A0"],
+    ['\t=1+1', "'\t=1+1"],
+    ['\r=1+1', '"\'\r=1+1"']
+  ])('neutralises the spreadsheet formula %j (#487)', (input, expected) => {
+    expect(csvEscape(input)).toBe(expected)
+  })
+  it.each(['-', '+', '-1.50', '+3', '-1.23e-4', 'c.-5C>T', '0/1', '<DEL>'])(
+    'leaves the inert value %j unchanged',
+    (value) => {
+      expect(csvEscape(value)).toBe(value)
+    }
+  )
+  it('leaves negative numbers unchanged', () => {
+    expect(csvEscape(-3.5)).toBe('-3.5')
+  })
 })

@@ -40,6 +40,7 @@ import {
 } from '../../../src/main/ipc/handlers/database-migration-logic'
 import type { DatabaseLifecycleCallbacks } from '../../../src/main/ipc/handlers/database-lifecycle-logic'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { jobRunner } from '../../../src/main/services/jobs/runner'
 import { recoverySidecarPathFor } from '../../../src/main/database/recovery-sidecar'
 
 /** Reversible fake "encryption" so round-trips work in tests (same fake used across the I1/I2a suites). */
@@ -459,6 +460,30 @@ describe('migrateCurrentToEncrypted (consent + orchestration)', () => {
     expect(siblingFiles(dbPath).filter((f) => !f.endsWith('-wal') && !f.endsWith('-shm'))).toEqual(
       []
     )
+  })
+
+  it('refuses while database work is running, leaving the database open and plaintext (#496)', async () => {
+    const keyStore = new DbKeyStore({
+      registryPath: join(tmpDir, 'keys.json'),
+      safeStorage: fakeSafeStorage(true)
+    })
+    let release: () => void = () => undefined
+    const job = jobRunner.enqueue(
+      'import_batch',
+      {},
+      () => new Promise<void>((resolve) => (release = resolve))
+    )
+
+    try {
+      await expect(
+        migrateCurrentToEncrypted({ consent: true }, () => manager, keyStore, noopCallbacks)
+      ).rejects.toThrow(/in progress \(import batch\)/)
+      expect(manager.getCurrentInfo()?.encrypted).toBe(false)
+      expect(keyStore.resolveKeyForPath(dbPath).ok).toBe(false)
+    } finally {
+      release()
+      await job.result
+    }
   })
 
   it('no-keyring path: safeStorage unavailable and no passphrase supplied -> typed error, never half-migrates', async () => {

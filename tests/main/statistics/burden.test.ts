@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { logisticBurdenTest } from '../../../src/main/statistics/burden'
-import type { SampleBurdenData } from '../../../src/main/statistics/types'
+import type { AssociationConfig, SampleBurdenData } from '../../../src/main/statistics/types'
+import {
+  buildCovariateMap,
+  buildGeneContingencyData,
+  type AssociationVariantRow,
+  type CaseMetaRow
+} from '../../../src/main/statistics/contingency'
+import { computeGeneAssociation } from '../../../src/main/statistics/gene-tests'
+import { finalizeAssociationResults } from '../../../src/main/statistics/finalize'
 
 function makeSample(group: 0 | 1, dosages: number[], mafs: number[]): SampleBurdenData {
   return {
@@ -59,5 +67,82 @@ describe('logisticBurdenTest', () => {
     expect(result.used_firth).toBe(true)
     expect(result.p_value).toBeDefined()
     expect(result.p_value).not.toBeNull()
+  })
+})
+
+describe('missing covariates (#499)', () => {
+  const config: AssociationConfig = {
+    groupA_ids: [],
+    groupB_ids: [],
+    primary_test: 'logistic_burden',
+    weight_scheme: 'uniform',
+    covariates: ['age', 'bmi'],
+    filters: {},
+    max_threads: 1
+  }
+
+  // 20 cases (ids 1-20) vs 20 controls (ids 21-40), ages 30-69 in both groups, carriers enriched in cases.
+  const ids = Array.from({ length: 40 }, (_, i) => i + 1)
+  const meta = ids.map((id) => ({ case_id: id, sex: null, age: 30 + ((id * 7) % 40) }))
+  const metrics = ids.map((id) => ({ case_id: id, name: 'bmi', numeric_value: 20 + (id % 7) }))
+  const rowsFor = (caseIds: number[]): AssociationVariantRow[] =>
+    caseIds
+      .filter((id) => (id <= 20 ? id % 2 === 0 : id % 5 === 0))
+      .map((id) => ({
+        gene_symbol: 'GENE1',
+        case_id: id,
+        variant_key: '1:100:A:T',
+        dosage: 1,
+        gnomad_af: null,
+        cadd: null
+      }))
+
+  function run(groupA: number[], groupB: number[], metaRows: CaseMetaRow[], metricRows = metrics) {
+    const all = [...groupA, ...groupB]
+    const covariates = buildCovariateMap(all, config.covariates, metaRows, metricRows)
+    const genes = buildGeneContingencyData(rowsFor(all), groupA, groupB, covariates)
+    return finalizeAssociationResults(
+      genes.map((gene) => computeGeneAssociation(gene, 'uniform')),
+      config,
+      Date.now()
+    )
+  }
+
+  const groupA = ids.slice(0, 20)
+  const groupB = ids.slice(20)
+  const complete = run(groupA, groupB, meta)
+
+  it('reports nothing when every sample has its covariates', () => {
+    expect(complete.results[0].logistic_burden.beta).not.toBeNull()
+    expect(complete.warnings).toEqual([])
+  })
+
+  it('excludes a sample without an age instead of analysing it as age 0', () => {
+    // Case 41: a carrier in group A whose age was never recorded.
+    const withMissing = run(
+      [...groupA, 41],
+      groupB,
+      [...meta, { case_id: 41, sex: null, age: null }],
+      [...metrics, { case_id: 41, name: 'bmi', numeric_value: 22 }]
+    )
+
+    expect(withMissing.results[0].logistic_burden.beta).toBe(
+      complete.results[0].logistic_burden.beta
+    )
+    expect(withMissing.results[0].logistic_burden.p_value).toBe(
+      complete.results[0].logistic_burden.p_value
+    )
+    // Fisher's test needs no covariates and still counts the sample.
+    expect(withMissing.results[0].groupA_total).toBe(21)
+    expect(withMissing.warnings).toEqual([expect.stringMatching(/^MISSING_COVARIATE: 1 sample/)])
+  })
+
+  it('excludes a sample without a selected metric value', () => {
+    const withMissing = run([...groupA, 41], groupB, [...meta, { case_id: 41, sex: null, age: 50 }])
+
+    expect(withMissing.results[0].logistic_burden.beta).toBe(
+      complete.results[0].logistic_burden.beta
+    )
+    expect(withMissing.warnings).toEqual([expect.stringMatching(/^MISSING_COVARIATE: 1 sample/)])
   })
 })
