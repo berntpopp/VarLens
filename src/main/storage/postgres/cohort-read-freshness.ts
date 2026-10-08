@@ -105,7 +105,13 @@ function needsBootstrap(probe: FreshnessProbe): boolean {
 }
 
 /** Null when the schema has no summary state row (nothing to reconcile against). */
-async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe | null> {
+async function probeFreshness({
+  pool,
+  schema
+}: {
+  pool: Pick<Pool, 'query'>
+  schema: string
+}): Promise<FreshnessProbe | null> {
   const tbl = (t: string): string => `"${schema}"."${t}"`
   const result = await pool.query<{
     never_rebuilt: boolean
@@ -163,6 +169,13 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
       await client.query('SET LOCAL lock_timeout = 0')
       await client.query(`SET LOCAL statement_timeout = ${BACKGROUND_REBUILD_STATEMENT_TIMEOUT_MS}`)
       await lockSummaryForWrite(client, schema)
+      // Whoever held the lock may have rebuilt already: do not do it twice.
+      // On this client: the pool may have no second connection to give.
+      const probe = await probeFreshness({ pool: client, schema })
+      if (probe !== null && !needsBootstrap(probe) && !probe.is_stale) {
+        await client.query('ROLLBACK')
+        return true
+      }
     } else if (!(await tryLockSummaryForWrite(client, schema))) {
       await client.query('ROLLBACK')
       return false
