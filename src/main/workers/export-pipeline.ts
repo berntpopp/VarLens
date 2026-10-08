@@ -136,6 +136,9 @@ export function buildMetadataSheet(
     ...(filterSummary.gnomad_af_max !== undefined
       ? [['Max gnomAD AF', filterSummary.gnomad_af_max]]
       : []),
+    ...(filterSummary.carrier_count_max !== undefined
+      ? [['Max Carrier Cases', filterSummary.carrier_count_max]]
+      : []),
     ...(filterSummary.cadd_min !== undefined ? [['Min CADD', filterSummary.cadd_min]] : [])
   ]
 }
