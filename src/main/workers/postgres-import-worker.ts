@@ -593,7 +593,8 @@ export async function runImport(
             const stream = await deps.createVcfMappedStream(fileSpec.filePath, {
               selectedSample,
               genomeBuild,
-              filters: start.files.length > 1 && i === 0 ? undefined : importFilters,
+              // Every file, the first included: same records as SQLite (#484).
+              filters: importFilters,
               onSkip: (reason) => {
                 totalSkipped += 1
                 recordParseSkip({
