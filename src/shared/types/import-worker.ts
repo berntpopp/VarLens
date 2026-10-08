@@ -88,6 +88,15 @@ export interface FileImportRequest {
   vcfSelectedSamples?: string[]
   /** VCF-specific: genome build override */
   vcfGenomeBuild?: string
+  /** VCF-specific: import filters; the worker loads the BED file itself. */
+  vcfFilters?: {
+    bedFilePath?: string | null
+    bedPadding?: number
+    passOnly?: boolean
+    minQual?: number | null
+    minGq?: number | null
+    minDp?: number | null
+  }
 }
 
 /** Maximum number of representative skip reasons retained per imported file. */

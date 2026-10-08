@@ -11,6 +11,7 @@ import { basename } from 'node:path'
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
+import { loadImportFilters } from '../import/vcf/import-filters'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import {
   openImportSummarySession,
@@ -159,6 +160,8 @@ export async function runImportSession(
           throw new Error(`File is not a regular file: ${file.filePath}`)
         }
         const fileSize = fileStat.size
+        // Before any case is created or replaced: an unreadable BED file fails the file.
+        const vcfFilters = await loadImportFilters(file.vcfFilters)
 
         // Handle duplicates (database + in-batch)
         const existing = stmts.getCaseByName.get(file.caseName) as { id: number } | undefined
@@ -254,7 +257,9 @@ export async function runImportSession(
                   if (skipTracker.record(reason)) {
                     console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
                   }
-                }
+                },
+                undefined,
+                vcfFilters
               )
             } else {
               variantCount = await streamInsertJson(

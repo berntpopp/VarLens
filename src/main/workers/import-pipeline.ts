@@ -20,6 +20,11 @@ import {
 } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord } from '../import/vcf/VcfMapper'
 import { detectCaller } from '../import/vcf/caller-detector'
+import {
+  passesPostMappingFilters,
+  passesPreMappingFilters,
+  type ImportFilters
+} from '../import/vcf/import-filters'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
@@ -367,7 +372,8 @@ export async function streamInsertVcf(
   vcfSelectedSamples: string[] | undefined,
   onProgress: (count: number) => void,
   onSkip?: (reason: string) => void,
-  limits?: ImportBatchLimits
+  limits?: ImportBatchLimits,
+  filters?: ImportFilters
 ): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
@@ -430,6 +436,7 @@ export async function streamInsertVcf(
       try {
         const record = parseVcfLine(line, header.samples, onSkip, activeSampleColumn ?? undefined)
         if (record === null) continue // Skip truncated/corrupt lines
+        if (!passesPreMappingFilters(record, filters)) continue
         const mapped = mapVcfRecord(
           record,
           header,
@@ -441,6 +448,7 @@ export async function streamInsertVcf(
         // Every variant split from one line is charged the whole line: each
         // may retain that line's INFO payload.
         for (const variant of mapped) {
+          if (!passesPostMappingFilters(variant, filters)) continue
           full = batch.add(variant as unknown as MappedRow, line.length) || full
         }
       } catch (e) {
