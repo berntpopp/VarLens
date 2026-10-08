@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { GT_DOSAGE_SQL } from '../../../src/shared/sql/genotype-dosage'
-import { gtToDosage } from '../../../src/shared/utils/genotype'
+import {
+  GT_DOSAGE_SQL,
+  HEMI_GT_SQL,
+  HET_GT_SQL,
+  HOM_GT_SQL,
+  gtDosageSql
+} from '../../../src/shared/sql/genotype-dosage'
+import { genotypeZygosity, gtToDosage } from '../../../src/shared/utils/genotype'
 
 describe('GT_DOSAGE_SQL cross-check with gtToDosage', () => {
   let db: InstanceType<typeof Database>
@@ -26,6 +32,17 @@ describe('GT_DOSAGE_SQL cross-check with gtToDosage', () => {
     ['1|1', 2],
     ['0', 0],
     ['1', 1],
+    ['1/.', 1],
+    ['./1', 1],
+    ['1|.', 1],
+    ['.|1', 1],
+    ['0/.', null],
+    // Only the four approved partial spellings carry a dosage.
+    ['./2', null],
+    ['2/.', null],
+    ['1/./1', null],
+    ['./foo', null],
+    ['1/1/.', null],
     ['./.', null],
     ['.|.', null],
     ['.', null],
@@ -47,4 +64,21 @@ describe('GT_DOSAGE_SQL cross-check with gtToDosage', () => {
       expect(row.dosage).toBe(expected)
     })
   }
+
+  it('reads the genotype from the column it is given', () => {
+    db.exec('DELETE FROM test_gt')
+    db.prepare('INSERT INTO test_gt (gt_num) VALUES (?)').run('1|.')
+    const row = db.prepare(`SELECT ${gtDosageSql('t.gt_num')} AS dosage FROM test_gt t`).get()
+    expect(row).toEqual({ dosage: 1 })
+  })
+
+  it('the SQL zygosity lists are the classes of genotypeZygosity', () => {
+    const classOf = db.prepare(
+      `SELECT CASE WHEN @gt IN ${HET_GT_SQL} THEN 'het' WHEN @gt IN ${HOM_GT_SQL} THEN 'hom'
+              WHEN @gt IN ${HEMI_GT_SQL} THEN 'hemi' END AS zygosity`
+    )
+    for (const [gt] of testCases) {
+      expect(classOf.get({ gt }), String(gt)).toEqual({ zygosity: genotypeZygosity(gt) })
+    }
+  })
 })

@@ -212,6 +212,41 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
     expect(await summaryRowCount()).toBe(1)
   }, 60_000)
 
+  it('a rebuild request on a never-rebuilt summary follows the size rule, not the bootstrap rule', async () => {
+    // A fresh install grown by imports only, then a transcript switch that
+    // could not get the lock. Above the sync limit that must not rebuild
+    // inside the read request.
+    const caseA = await seedCase('requested-a')
+    await seedVariant(caseA, '7', 700)
+    const client = await pool.connect()
+    try {
+      await new PostgresCohortSummaryRepository().incrementalAdd({
+        schema,
+        client: client as never,
+        caseId: caseA
+      })
+    } finally {
+      client.release()
+    }
+    await probe.query(
+      `INSERT INTO "${schema}".cohort_summary_rebuild_requests (reason) VALUES ('transcript')`
+    )
+    const previous = process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+    process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = '0'
+    try {
+      const result = await prepareCohortRead({ pool, schema })
+      expect(result.warnings).toEqual({ staleSummary: true })
+    } finally {
+      if (previous === undefined) {
+        delete process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES
+      } else {
+        process.env.VARLENS_PG_COHORT_SUMMARY_SYNC_MAX_CASES = previous
+      }
+      await awaitBackgroundRebuild(schema)
+    }
+    expect(await lastRebuiltAt()).not.toBeNull()
+  }, 60_000)
+
   it('rebuilds a never-rebuilt summary that a migration flagged stale', async () => {
     const caseA = await seedCase('seeded-stale-a')
     await seedVariant(caseA, '6', 600)
@@ -275,6 +310,39 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
     await awaitBackgroundRebuild(schema)
     expect(await isStale()).toBe(false)
     expect(await summaryRowCount()).toBe(2)
+  }, 60_000)
+
+  it('does not rebuild again when the summary became current while it waited for the lock', async () => {
+    const caseA = await seedCase('redundant-a')
+    await seedVariant(caseA, '9', 900)
+    await prepareCohortRead({ pool, schema })
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state
+         SET is_stale = true, stale_reason = 'test', stale_at = now() WHERE id = 1`
+    )
+
+    // Another writer holds the lock and leaves the summary current, as a
+    // rebuild started elsewhere (a second server process) would.
+    const other = new Client({ connectionString: PG_URL })
+    await other.connect()
+    const marker = new Date('2020-01-01T00:00:00Z')
+    try {
+      await other.query('BEGIN')
+      await lockSummaryForWrite(other, schema)
+      expect((await prepareCohortRead({ pool, schema })).warnings).toEqual({ staleSummary: true })
+      await other.query(
+        `UPDATE "${schema}".cohort_summary_state
+            SET is_stale = false, last_rebuilt_at = $1 WHERE id = 1`,
+        [marker]
+      )
+    } finally {
+      await other.query('COMMIT')
+      await other.end()
+    }
+
+    await awaitBackgroundRebuild(schema)
+    expect(await isStale()).toBe(false)
+    expect(await lastRebuiltAt()).toEqual(marker)
   }, 60_000)
 
   it('keeps the previous rows visible to other sessions while a rebuild runs', async () => {

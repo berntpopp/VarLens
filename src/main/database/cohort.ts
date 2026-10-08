@@ -21,11 +21,12 @@ import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/co
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
 import { assertValidColumnFilterValues } from '../../shared/filters/column-filter-validation'
 import { tokenize, parse } from '../../shared/utils/boolean-search'
-import { emitCohortSearch } from './search/cohort-search-emitter'
+import { emitCohortSearch, emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
+import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -44,6 +45,24 @@ const SORTABLE_COLUMNS: Record<string, string> = {
 
 // prettier-ignore
 const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred'])
+
+/**
+ * Rows of `cvs` overlapping any region of one JSON parameter, i.e.
+ * `chr = c AND pos <= end AND COALESCE(end_pos, pos) >= start` (a spanning
+ * SV/CNV that covers a region counts — parity with the PG cohort query).
+ * Region-driven, in two index ranges per region: rows starting inside it, then
+ * spanning rows that start before it (idx_cvs_end_pos). Seeking `pos <= end`
+ * alone walks half a chromosome per region; an OR chain is no faster and
+ * throws beyond ~1000 regions (expression depth, #491).
+ */
+export const COHORT_PANEL_INTERVAL_CONDITION = `cvs.rowid IN (
+  WITH iv(chr, s, e) AS MATERIALIZED (
+    SELECT value ->> 'chr', value ->> 'start', value ->> 'end' FROM json_each(?))
+  SELECT pv.rowid FROM iv CROSS JOIN cohort_variant_summary pv
+    WHERE pv.chr = iv.chr AND pv.pos BETWEEN iv.s AND iv.e AND COALESCE(pv.end_pos, pv.pos) >= iv.s
+  UNION ALL
+  SELECT pv.rowid FROM iv CROSS JOIN cohort_variant_summary pv
+    WHERE pv.chr = iv.chr AND pv.end_pos >= iv.s AND pv.pos < iv.s)`
 
 /**
  * CohortService class
@@ -89,7 +108,7 @@ export class CohortService {
       const hasBooleanOps = /\b(AND|OR|NOT)\b/.test(term)
 
       if (!hasBooleanOps) {
-        const singleCondition = this.buildSingleTermCondition(term, paramsArray)
+        const singleCondition = emitTerm(term, paramsArray)
         whereConditions.push(singleCondition)
       } else {
         const sqlCondition = this.buildBooleanSearchCondition(term, paramsArray)
@@ -99,16 +118,8 @@ export class CohortService {
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
     if (params.panel_intervals && params.panel_intervals.length > 0) {
-      const intervalConditions = params.panel_intervals.map((iv) => {
-        // Interval-overlap (not point-in-interval) so a spanning SV/CNV whose
-        // start lies outside [start,end] but which covers the region is still
-        // included — parity with the PG cohort query (Pass-9 #7 / Gate 9).
-        // COALESCE(end_pos, pos) makes SNVs (end_pos NULL) behave exactly as the
-        // prior `pos BETWEEN start AND end`.
-        paramsArray.push(iv.chr, iv.end, iv.start)
-        return '(cvs.chr = ? AND cvs.pos <= ? AND COALESCE(cvs.end_pos, cvs.pos) >= ?)'
-      })
-      whereConditions.push(`(${intervalConditions.join(' OR ')})`)
+      paramsArray.push(JSON.stringify(params.panel_intervals))
+      whereConditions.push(COHORT_PANEL_INTERVAL_CONDITION)
     }
 
     // Validate against the caller's keys (before remapping, and covering the
@@ -289,34 +300,6 @@ export class CohortService {
   }
 
   /**
-   * Build a SQL condition for a single search token.
-   * Uses LIKE-based search on summary table columns.
-   */
-  private buildSingleTermCondition(token: string, paramsArray: (string | number)[]): string {
-    const genomicPosPattern = /^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i
-    const hgvsPattern = /^[cp]\./
-
-    if (genomicPosPattern.test(token)) {
-      const match = token.match(genomicPosPattern)
-      if (match !== null) {
-        paramsArray.push(match[1], parseInt(match[2], 10))
-        return '(cvs.chr = ? AND cvs.pos = ?)'
-      }
-    }
-
-    if (hgvsPattern.test(token)) {
-      const searchPattern = `%${token}%`
-      paramsArray.push(searchPattern, searchPattern)
-      return '(cvs.cdna LIKE ? OR cvs.aa_change LIKE ?)'
-    }
-
-    // Default: LIKE-based search on gene_symbol, consequence, omim_mim_number
-    const searchPattern = `%${token}%`
-    paramsArray.push(searchPattern, searchPattern, searchPattern)
-    return '(cvs.gene_symbol LIKE ? COLLATE NOCASE OR cvs.consequence LIKE ? COLLATE NOCASE OR cvs.omim_mim_number LIKE ? COLLATE NOCASE)'
-  }
-
-  /**
    * Build a SQL boolean expression from a search string containing AND/OR/NOT.
    */
   private buildBooleanSearchCondition(term: string, paramsArray: (string | number)[]): string {
@@ -331,7 +314,7 @@ export class CohortService {
           (e instanceof Error ? e.message : String(e)),
         'CohortService'
       )
-      return this.buildSingleTermCondition(term, paramsArray)
+      return emitTerm(term, paramsArray)
     }
     const { sql, params } = emitCohortSearch(ast)
     paramsArray.push(...params)
@@ -479,6 +462,8 @@ export class CohortService {
 
   /** Cached column metadata — invalidated on summary rebuild */
   private _columnMetaCache: ColumnFilterMeta[] | null = null
+  /** Summary content stamp the cache was read at (SUMMARY_CONTENT_STAMP_KEY). */
+  private _columnMetaStamp: unknown = null
 
   /** Clear cached column metadata (call after cohort summary rebuild) */
   invalidateColumnMetaCache(): void {
@@ -493,7 +478,18 @@ export class CohortService {
    * Results are cached and invalidated on summary rebuild.
    */
   getColumnMeta(): ColumnFilterMeta[] {
-    if (this._columnMetaCache !== null) return this._columnMetaCache
+    // DB worker threads are never told about an import or rebuild made by
+    // another connection, so the cache checks the stamp every summary writer
+    // moves. Not `PRAGMA data_version`: that moves on any commit (a star, a
+    // lookup-cache write), and the rescan below takes ~20 s on 2M summary rows.
+    const stamp = this.getStatement(
+      `SELECT value FROM cohort_summary_meta WHERE key = '${SUMMARY_CONTENT_STAMP_KEY}'`
+    )
+      .pluck()
+      .get()
+    if (this._columnMetaCache !== null && stamp === this._columnMetaStamp) {
+      return this._columnMetaCache
+    }
 
     const DISTINCT_THRESHOLD = 50
     // The frequency is derived, so the metadata reads through the build totals.
@@ -575,6 +571,7 @@ export class CohortService {
     }
 
     this._columnMetaCache = meta
+    this._columnMetaStamp = stamp
     return meta
   }
 

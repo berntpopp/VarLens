@@ -1,4 +1,5 @@
-import type { BedFilter } from './bed-filter'
+import type { FileImportRequest } from '../../../shared/types/import-worker'
+import { BedFilter } from './bed-filter'
 import type { VcfRawRecord, VcfMappedVariant } from './types'
 
 /** Variant type discriminator */
@@ -14,8 +15,11 @@ export type VariantType = 'snv' | 'indel' | 'sv' | 'cnv' | 'str'
  * | `passOnly`  | ✅ applies  | ✅ applies                  | ✅ applies              | ✅ applies         |
  * | `minQual`   | ✅ applies  | ⚠ no-op when QUAL=`.`       | ⚠ no-op when QUAL=`.`  | ⚠ no-op when QUAL=`.` |
  * | `bedFilter` | ✅ point    | ✅ range overlap (uses END) | ✅ range overlap        | ✅ range overlap   |
- * | `minGq`     | ✅ applies  | ⚠ no-op (no FORMAT/GQ)      | ⚠ no-op                | ⚠ no-op            |
+ * | `minGq`     | ✅ applies  | ✅ when FORMAT/GQ is set    | ✅ when FORMAT/GQ is set | ⚠ no-op (no GQ)   |
  * | `minDp`     | ✅ applies  | ⚠ no-op (no FORMAT/DP)      | ⚠ no-op                | ⚠ no-op            |
+ *
+ * The filters apply to every file of an import, the first included, on both
+ * backends (`tests/main/workers/vcf-import-filters-backend-parity.e2e.test.ts`).
  *
  * **Semantic notes:**
  *
@@ -30,18 +34,18 @@ export type VariantType = 'snv' | 'indel' | 'sv' | 'cnv' | 'str'
  *    The per-caller quality metrics are NOT filtered at import time — use
  *    the case-view column filters instead.
  *
- * 3. **`bedFilter`**: range overlap is preferred when the INFO field carries
- *    a numeric END (set by Sniffles, Spectre, Straglr, Manta, etc.). For
- *    breakend notation (`ALT=N]chr2:1234]`) and point-like records without
- *    END, a single-position contains check on `POS` is used. Only the
- *    primary breakend is checked; mate-pair records are tested independently
- *    on their own POS.
+ * 3. **`bedFilter`**: range overlap POS..END when INFO carries a whole-number
+ *    END at or after POS (Sniffles, Spectre, Straglr, Manta, ...). Everything
+ *    else takes a point check on POS: records without END, a malformed END,
+ *    and breakends (`SVTYPE=BND` or bracket ALT) even when they carry END,
+ *    which is then the mate's coordinate. Mate records are tested
+ *    independently on their own POS.
  *
  * 4. **`minGq` / `minDp`**: these gate the sample's FORMAT/GQ and FORMAT/DP
- *    fields. SV/CNV/STR callers typically do not populate those standard
- *    fields, so these filters are effectively no-ops for non-small-variant
- *    classes. This is intentional — we don't want to silently drop entire
- *    SV callsets based on missing standard metrics.
+ *    fields, whatever the variant type. A record without the field passes
+ *    unchanged, so a callset that does not write it (Straglr, for example)
+ *    is never dropped for the missing metric. A caller that does write it
+ *    (Sniffles2 and Spectre write GQ) is filtered by it.
  */
 export interface ImportFilters {
   bedFilter?: BedFilter
@@ -101,10 +105,16 @@ export function passesPreMappingFilters(
   // and breakends. Guard against non-numeric END so malformed VCFs can't
   // silently poison the filter via NaN.
   if (filters.bedFilter !== undefined) {
-    const endRaw = record.info.get('END')
+    // A breakend's END, when a caller writes one, is its mate's coordinate:
+    // POS..END is not a span of this chromosome.
+    const isBreakend =
+      record.info.get('SVTYPE') === 'BND' ||
+      record.alt.some((alt) => alt.includes('[') || alt.includes(']'))
+    const endRaw = isBreakend ? undefined : record.info.get('END')
     if (endRaw !== undefined && endRaw !== '') {
-      const endPos = parseInt(endRaw, 10)
-      if (Number.isInteger(endPos) && endPos >= record.pos) {
+      // The whole token must be an integer: parseInt would read "5000junk" as 5000.
+      const endPos = /^\d+$/.test(endRaw) ? Number(endRaw) : NaN
+      if (Number.isSafeInteger(endPos) && endPos >= record.pos) {
         if (!filters.bedFilter.containsRange(record.chrom, record.pos, endPos)) {
           return false
         }
@@ -142,4 +152,28 @@ export function passesPostMappingFilters(
     return false
   }
   return true
+}
+
+/**
+ * Build the filters of one worker file request. The BED file is loaded here,
+ * in the worker; a BED file that cannot be read fails the import rather than
+ * importing unfiltered.
+ */
+export async function loadImportFilters(
+  request: FileImportRequest['vcfFilters']
+): Promise<ImportFilters | undefined> {
+  if (request === undefined) return undefined
+  const bedPadding = request.bedPadding ?? 0
+  const bedPath = request.bedFilePath
+  return {
+    bedFilter:
+      bedPath !== undefined && bedPath !== null && bedPath !== ''
+        ? await BedFilter.fromFile(bedPath, bedPadding)
+        : undefined,
+    bedPadding,
+    passOnly: request.passOnly ?? false,
+    minQual: request.minQual ?? null,
+    minGq: request.minGq ?? null,
+    minDp: request.minDp ?? null
+  }
 }

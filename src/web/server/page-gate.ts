@@ -34,6 +34,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { hasControlOrWhitespace } from './login-route'
 import { PROBE_PATHS } from './probe-paths'
+import { requestPath } from './request-path'
 import { ROBOTS_TXT_PATH } from './robots'
 
 const ALWAYS_PUBLIC_PATHS = new Set<string>([...PROBE_PATHS, '/login', '/login/', ROBOTS_TXT_PATH])
@@ -103,7 +104,7 @@ export function registerPageGate(app: FastifyInstance, options: PageGateOptions)
     if (request.method !== 'GET' && request.method !== 'HEAD') return
 
     const fullUrl = request.url
-    const path = fullUrl.split('?', 1)[0]
+    const path = requestPath(request)
 
     // `/api/*` is auth.ts's territory — never short-circuit it here, or
     // the API would start redirecting instead of returning JSON 401s.

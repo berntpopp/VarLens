@@ -22,10 +22,13 @@ import { createJsonRecordBudget } from '../import/json-resource-budget'
  *
  * Output: plain Record<string, unknown> objects (not { key, value } wrappers),
  * because the mapper transforms consume the streamArray wrapper.
+ *
+ * @param onSkip told about every record dropped for a missing required field
  */
 export async function createMapperPipeline(
   filePath: string,
-  formatInfo: FormatInfo
+  formatInfo: FormatInfo,
+  onSkip?: (reason: string) => void
 ): Promise<Readable> {
   // The budget already counts each record's bytes; the mapper tags its output
   // with that count so batches can be bounded by size without re-measuring.
@@ -36,12 +39,12 @@ export async function createMapperPipeline(
   switch (formatInfo.format) {
     case 'simple':
       filter = 'variants'
-      mapper = createObjectFormatMapper(budget.takeRecordBytes)
+      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip)
       break
 
     case 'object':
       filter = `samples.${formatInfo.caseKey}.variants`
-      mapper = createObjectFormatMapper(budget.takeRecordBytes)
+      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip)
       break
 
     case 'columnar': {
@@ -50,7 +53,7 @@ export async function createMapperPipeline(
       filter = wrapped ? `${formatInfo.caseKey}.data` : 'data'
 
       const { dictionaries, columnIndices } = await parseHeader(filePath, headerPath)
-      mapper = createFieldMapper(dictionaries, columnIndices, budget.takeRecordBytes)
+      mapper = createFieldMapper(dictionaries, columnIndices, budget.takeRecordBytes, onSkip)
       break
     }
 

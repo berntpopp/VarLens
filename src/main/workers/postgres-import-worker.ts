@@ -96,7 +96,11 @@ process.on('unhandledRejection', (reason) => {
 export interface RunImportDeps {
   createClient: (config: ClientConfig) => Client
   detectFormat: (filePath: string) => Promise<FormatInfo>
-  createMapperPipeline: (filePath: string, formatInfo: FormatInfo) => Promise<Readable>
+  createMapperPipeline: (
+    filePath: string,
+    formatInfo: FormatInfo,
+    onSkip?: (reason: string) => void
+  ) => Promise<Readable>
   statFile: (filePath: string) => { size: number }
   isCancellationRequested?: () => boolean
   /** Byte budget per batch; defaults to DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES. */
@@ -109,6 +113,8 @@ export interface RunImportDeps {
       genomeBuild: string
       filters?: ImportFilters
       onSkip?: (reason: string) => void
+      /** Set for files 2..N of a multi-file import: the case they are appended to. */
+      appendedTo?: { genomeBuild: string }
     }
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
@@ -119,7 +125,13 @@ const defaultDeps: RunImportDeps = {
   createMapperPipeline: defaultCreateMapperPipeline,
   statFile: (path: string) => ({ size: statSync(path).size }),
   createVcfMappedStream: async (filePath, options) =>
-    streamMappedVcfRows(filePath, options.selectedSample, options.filters, options.onSkip)
+    streamMappedVcfRows(
+      filePath,
+      options.selectedSample,
+      options.filters,
+      options.onSkip,
+      options.appendedTo
+    )
 }
 
 function recordParseSkip(args: { reason: string; errors: string[]; prefix?: string }): void {
@@ -419,9 +431,14 @@ export async function runImport(
       )
 
       let totalInserted = 0
+      let totalSkipped = 0
+      const errors: string[] = []
       const writeVariants = async (session: PostgresJsonImportSession): Promise<void> => {
         if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
-        const stream = await deps.createMapperPipeline(filePath, formatInfo)
+        const stream = await deps.createMapperPipeline(filePath, formatInfo, (reason) => {
+          totalSkipped += 1
+          recordParseSkip({ reason, errors })
+        })
         const batch = createBoundedBatcher<Record<string, unknown>, Promise<void>>({
           maxRows: batchSize,
           maxBytes: maxBatchBytes,
@@ -495,8 +512,8 @@ export async function runImport(
         result: {
           caseId,
           variantCount,
-          skipped: 0,
-          errors: [],
+          skipped: totalSkipped,
+          errors,
           elapsed: Date.now() - startedAt
         }
       })
@@ -593,7 +610,9 @@ export async function runImport(
             const stream = await deps.createVcfMappedStream(fileSpec.filePath, {
               selectedSample,
               genomeBuild,
-              filters: start.files.length > 1 && i === 0 ? undefined : importFilters,
+              // Every file, the first included: same records as SQLite (#484).
+              filters: importFilters,
+              appendedTo: i > 0 ? { genomeBuild } : undefined,
               onSkip: (reason) => {
                 totalSkipped += 1
                 recordParseSkip({

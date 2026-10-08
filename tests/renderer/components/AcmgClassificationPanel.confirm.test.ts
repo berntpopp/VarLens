@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -50,5 +50,25 @@ describe('AcmgClassificationPanel confirm step', () => {
     grid.vm.$emit('code-click', 'PVS1')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
+  })
+
+  it('keeps the draft pending when the save fails and rolls back', async () => {
+    const wrapper = mountPanel()
+    // A failed write shows its optimistic evidence, then restores the previous one.
+    const save = async (draft: { evidenceJson: string }): Promise<boolean> => {
+      await wrapper.setProps({ evidenceJson: draft.evidenceJson })
+      await wrapper.setProps({ evidenceJson: null })
+      return false
+    }
+    await wrapper.setProps({ save })
+    wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('[data-testid="acmg-apply"]').trigger('click')
+    await flushPromises()
+
+    const bar = wrapper.find('[data-testid="acmg-apply-bar"]')
+    expect(bar.exists()).toBe(true)
+    expect(bar.text()).toContain('PVS1')
   })
 })

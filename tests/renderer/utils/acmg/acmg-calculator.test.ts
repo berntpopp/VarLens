@@ -5,6 +5,7 @@ import {
   calculateClassification
 } from '../../../../src/renderer/src/utils/acmg/acmg-calculator'
 import type { AcmgEvidenceCode } from '../../../../src/renderer/src/utils/acmg/types'
+import { strengthOptionsFor } from '../../../../src/renderer/src/utils/acmg/types'
 
 function makeCode(code: string, strength: string): AcmgEvidenceCode {
   return {
@@ -291,5 +292,50 @@ describe('calculateClassification', () => {
     const pathogenic = [makeCode('PVS1', 'very_strong')]
     const result = calculateClassification(pathogenic, [])
     expect(result.classification).toBe('Uncertain significance')
+  })
+})
+
+// #497: a strength change must not drop a criterion from the rule check.
+describe('benign criteria at a non-default strength', () => {
+  it('BP4 raised to Moderate still counts as supporting: BP4 + BP7 stays Likely benign', () => {
+    const benign = [makeCode('BP4', 'moderate'), makeCode('BP7', 'supporting')]
+    expect(classifyByRules([], benign)).toBe('Likely benign')
+  })
+
+  it('BS1 raised to Very Strong still counts as strong: BS1 + BS2 stays Benign', () => {
+    const benign = [makeCode('BS1', 'very_strong'), makeCode('BS2', 'strong')]
+    expect(classifyByRules([], benign)).toBe('Benign')
+  })
+
+  it('offers Stand-Alone for BA1 only', () => {
+    const offered = (code: AcmgEvidenceCode['code']): string[] =>
+      strengthOptionsFor(code).map((o) => o.value)
+    expect(offered('BA1')).toContain('stand_alone')
+    expect(offered('PVS1')).toEqual(['very_strong', 'strong', 'moderate', 'supporting'])
+    expect(offered('BS1')).not.toContain('stand_alone')
+  })
+})
+
+// Evidence saved before the menu stopped offering Stand-Alone outside BA1
+describe('stored Stand-Alone on a criterion other than BA1', () => {
+  it('a benign one alone is not Benign: it counts as one BS', () => {
+    expect(classifyByRules([], [makeCode('BP4', 'stand_alone')])).toBe('Uncertain significance')
+  })
+
+  it('a benign one counts as BS in the benign rules', () => {
+    const sa = makeCode('BP4', 'stand_alone')
+    expect(classifyByRules([], [sa, makeCode('BP1', 'supporting')])).toBe('Likely benign')
+    expect(classifyByRules([], [sa, makeCode('BS1', 'strong')])).toBe('Benign')
+  })
+
+  it('a pathogenic one counts as very strong, matching its 8 points', () => {
+    const sa = makeCode('PS1', 'stand_alone')
+    expect(classifyByRules([sa], [])).toBe('Uncertain significance')
+    expect(classifyByRules([sa, makeCode('PM2', 'moderate')], [])).toBe('Likely pathogenic')
+    expect(classifyByRules([sa, makeCode('PS3', 'strong')], [])).toBe('Pathogenic')
+  })
+
+  it('BA1 at Stand-Alone is still Benign on its own', () => {
+    expect(classifyByRules([], [makeCode('BA1', 'stand_alone')])).toBe('Benign')
   })
 })

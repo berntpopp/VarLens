@@ -37,7 +37,7 @@ Don't duplicate — put shared logic in the shared module and wire both adapters
 
 | If you touch (case) | Also touch (cohort) | Logic belongs in |
 |---|---|---|
-| `useFilterState.ts` (add/change a filter field) | `useFilters.ts` | `composables/useFilterCore.ts` (+ `shared/types/filters.ts`, `shared/filters/filterDefaults.ts`) |
+| `useFilterState.ts` (add/change a filter field) | `useFilters.ts` | `shared/types/filters.ts`, `shared/filters/filterDefaults.ts`, `utils/filters/` |
 | `FilterToolbar.vue` (control/chip) | `cohort/CohortFilterBar.vue` | `SlimFilterToolbar.vue`, `PresetBar.vue`, `filters/FilterTypeNarrowingChip.vue`, `utils/filters/` |
 | `FilterDrawer.vue` + `filterDrawerTypes.ts` (new panel) | `cohort/CohortFilterDrawer.vue` + `cohort/cohortFilterDrawerTypes.ts` | shared `components/filters/*` + `ExtensionColumnFilters.vue` |
 | `variant-table/columns.ts` (+ `sv/cnv/str-columns.ts`) | `cohort/useCohortColumns.ts` | no shared list today — **edit both** (a real drift risk; consolidating is a good follow-up) |
@@ -47,8 +47,8 @@ Don't duplicate — put shared logic in the shared module and wire both adapters
 | backend `VariantFilterBuilder.ts` (new sortable col / WHERE / meta) | cohort query path `database/cohort.ts` + `storage/postgres/PostgresCohortRepository.ts` | `VariantFilterBuilder.ts` |
 
 **The seam that drifts:** the top-level filter composable is *not* shared — there are two
-thin adapters (`useFilterState.ts`, `useFilters.ts`) over one shared core
-(`useFilterCore.ts`). Add a shared filter field to `useFilterCore.ts`, then wire it into
+thin adapters (`useFilterState.ts`, `useFilters.ts`) over one shared `FilterState`
+(`shared/filters/filterDefaults.ts`). Add a shared filter field there, then wire it into
 **both** adapters. If you find yourself writing the same logic twice, stop and hoist it
 into the shared module instead.
 
@@ -74,7 +74,7 @@ into the shared module instead.
 | "I'll add cohort parity in a follow-up." | Deferring is the exact drift this rule prevents. Not allowed. |
 | "The cohort view rarely uses this filter." | Rarely ≠ never. Inconsistent behavior between surfaces is the bug. |
 | "It's a tiny change, cohort can catch up." | Small divergences compound. Hoist to the shared module; it's usually smaller than you think. |
-| "The two views are too different to share code." | They share `useFilterCore`, `VariantColumnHeader`, `useColumnFilters`, `table-cells`. Find the seam. |
+| "The two views are too different to share code." | They share `FilterState`, `utils/filters/`, `VariantColumnHeader`, `useColumnFilters`, `table-cells`. Find the seam. |
 | "I'm just relabeling one column." | Column lists are duplicated across `columns.ts` and `useCohortColumns.ts`. Relabel both. |
 
 ## Red flags — you are about to violate the rule
@@ -82,7 +82,7 @@ into the shared module instead.
 - Editing `useFilterState.ts` / `FilterToolbar.vue` / `VariantTable.vue` / `columns.ts`
   without an open plan for the cohort twin.
 - A PR/spec that names the case view but not the cohort view.
-- Copy-pasting filter logic instead of adding it to `useFilterCore.ts` / a shared util.
+- Copy-pasting filter logic instead of adding it to a shared util (`utils/filters/`).
 - A new test for the case side with no cohort-side assertion.
 
 All of these mean: widen the change to cohort now, or hoist the logic to the shared module — before you continue.

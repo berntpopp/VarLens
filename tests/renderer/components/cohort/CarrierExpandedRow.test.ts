@@ -14,6 +14,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import CarrierExpandedRow from '../../../../src/renderer/src/components/cohort/CarrierExpandedRow.vue'
 import type { CohortCarrier, CohortVariant } from '../../../../src/shared/types/cohort'
+import { ASSUMED_HET_HELP } from '../../../../src/shared/utils/genotype'
 import { invalidateCarriers } from '../../../../src/renderer/src/queries/carriers'
 import { invalidateServerData } from '../../../../src/renderer/src/queries/invalidation'
 import { useDatabaseStore } from '../../../../src/renderer/src/stores/databaseStore'
@@ -70,6 +71,29 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).toContain('het')
     expect(wrapper.text()).toContain('hom')
     expect(failed(wrapper)).toBe(false)
+  })
+
+  it('labels each carrier by the zygosity of its genotype', async () => {
+    getCarriers.mockResolvedValue([
+      carrier('A', '1/.'),
+      carrier('BB', '.|1'),
+      carrier('CCC', '1'),
+      carrier('DDDD', './.'),
+      carrier('EEEEE', '1|1')
+    ])
+    const wrapper = mountRow()
+    await flushPromises()
+
+    const chips = wrapper.findAll('.v-chip').map((chip) => chip.text())
+    // The other allele of a partly missing call is not known: het by assumption.
+    expect(chips).toEqual(['assumed het (1/.)', 'assumed het (.|1)', 'hemi', './.', 'hom'])
+    expect(wrapper.find('[data-testid="assumed-het-note"]').text()).toBe(ASSUMED_HET_HELP)
+  })
+
+  it('explains assumed het only when a carrier has such a call', async () => {
+    const wrapper = mountRow()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="assumed-het-note"]').exists()).toBe(false)
   })
 
   it('shares one request and the cached list between rows of the same variant', async () => {

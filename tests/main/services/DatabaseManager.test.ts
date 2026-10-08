@@ -9,6 +9,7 @@ import { unlinkSync, existsSync, writeFileSync } from 'fs'
 import { DatabaseManager } from '../../../src/main/services/DatabaseManager'
 import { RecentDatabasesService } from '../../../src/main/services/RecentDatabasesService'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { jobRunner } from '../../../src/main/services/jobs/runner'
 
 // Helper to create a unique temp file path
 function tempDbPath(suffix = ''): string {
@@ -170,6 +171,58 @@ describe('DatabaseManager', () => {
         manager.createDatabase('/nonexistent/directory/that/does/not/exist/test.db')
       ).rejects.toThrow(DatabaseError)
     })
+
+    it('keeps the previous database open when creation fails (#496)', async () => {
+      const db1 = tempDbPath('-1')
+      const notADb = tempDbPath('-bad')
+      writeFileSync(notADb, 'not a database')
+      try {
+        await manager.open(db1)
+
+        await expect(manager.createDatabase(notADb)).rejects.toThrow(DatabaseError)
+
+        expect(manager.getCurrentPath()).toBe(db1)
+        expect(manager.getCurrent().database.prepare('SELECT 1').get()).toBeDefined()
+      } finally {
+        await manager.close()
+        cleanupDb(db1)
+        cleanupDb(notADb)
+      }
+    })
+  })
+
+  describe('while database work is running (#496)', () => {
+    it.each(['open', 'createDatabase', 'switchDatabase'] as const)(
+      '%s is refused and the current database stays open',
+      async (operation) => {
+        const db1 = tempDbPath('-1')
+        const db2 = tempDbPath('-2')
+        let release: () => void = () => undefined
+        try {
+          await manager.open(db1)
+          const job = jobRunner.enqueue(
+            'import_batch',
+            {},
+            () => new Promise<void>((resolve) => (release = resolve))
+          )
+          try {
+            await expect(manager[operation](db2)).rejects.toThrow(/in progress \(import batch\)/)
+            expect(manager.getCurrentPath()).toBe(db1)
+            expect(existsSync(db2)).toBe(false)
+          } finally {
+            release()
+            await job.result
+          }
+
+          await manager[operation](db2)
+          expect(manager.getCurrentPath()).toBe(db2)
+        } finally {
+          await manager.close()
+          cleanupDb(db1)
+          cleanupDb(db2)
+        }
+      }
+    )
   })
 
   describe('switchDatabase()', () => {
@@ -308,6 +361,16 @@ describe('DatabaseManager', () => {
       expect(() => {
         manager.openDetectEncryption('/nonexistent/bad.db')
       }).toThrow(DatabaseError)
+    })
+
+    it('throws for a missing file in an existing folder and does not create it (#489)', () => {
+      const missing = tempDbPath('-missing')
+      try {
+        expect(() => manager.openDetectEncryption(missing)).toThrow(DatabaseError)
+        expect(existsSync(missing)).toBe(false)
+      } finally {
+        cleanupDb(missing)
+      }
     })
 
     it('treats an unreadable/corrupted file as needing a password -- SQLite cannot distinguish it from a wrong-key encrypted file', () => {

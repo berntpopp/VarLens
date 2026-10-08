@@ -326,6 +326,23 @@ describe('VariantSearchService — applySearchFilter with UNION-backed FTS', () 
     expect(rows.some((r) => r.id === 1)).toBe(true)
   })
 
+  it('takes _ and % in an HGVS token literally', () => {
+    db.prepare("UPDATE variants SET cdna = 'c.1_2del' WHERE id = 1").run()
+    db.prepare("UPDATE variants SET cdna = 'c.112del' WHERE id = 2").run()
+    db.prepare("UPDATE variants SET cdna = 'c.1%2del' WHERE id = 3").run()
+    const found = (query: string): unknown[] => {
+      const builder = kysely.selectFrom('variants').selectAll('variants').where('case_id', '=', 1)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const compiled = service.applySearchFilter(builder as any, query).compile()
+      const rows = db.prepare(compiled.sql).all(...compiled.parameters) as { id: number }[]
+      return rows.map((row) => row.id).sort()
+    }
+
+    expect(found('c.1_2del')).toEqual([1])
+    expect(found('c.1%2del')).toEqual([3])
+    expect(found('c.1')).toEqual([1, 2, 3])
+  })
+
   it('BRCA1 AND c.76A>T mixes FTS union + base LIKE', () => {
     db.prepare("UPDATE variants SET cdna = 'c.76A>T' WHERE id = 1").run()
     const builder = kysely.selectFrom('variants').selectAll('variants').where('case_id', '=', 1)

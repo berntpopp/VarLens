@@ -137,6 +137,7 @@ import ColorSwatchPicker from './ColorSwatchPicker.vue'
 import type { Tag } from '../../../shared/types/database-entities'
 import { mdiAlert, mdiClose, mdiDelete, mdiPencil, mdiPlus, mdiTagMultiple } from '@mdi/js'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 const { loadTags, getTags, createTag, updateTag, deleteTag, getTagUsageCount } = useTags()
 
@@ -219,10 +220,7 @@ const saveEdit = async (): Promise<void> => {
     }
     cancelEdit()
   } catch (error) {
-    logService.error(
-      'Failed to save tag: ' + (error instanceof Error ? error.message : String(error)),
-      'tags'
-    )
+    logService.error('Failed to save tag: ' + formatError(error), 'tags')
   } finally {
     isSaving.value = false
   }
@@ -234,10 +232,7 @@ const confirmDeleteTag = async (tag: Tag): Promise<void> => {
   try {
     deleteUsageCount.value = await getTagUsageCount(tag.id)
   } catch (e) {
-    logService.warn(
-      'Failed to get tag usage count: ' + (e instanceof Error ? e.message : String(e)),
-      'tags'
-    )
+    logService.warn('Failed to get tag usage count: ' + formatError(e), 'tags')
     deleteUsageCount.value = 0
   }
   deleteDialog.value = true
@@ -254,10 +249,7 @@ const executeDelete = async (): Promise<void> => {
       cancelEdit()
     }
   } catch (error) {
-    logService.error(
-      'Failed to delete tag: ' + (error instanceof Error ? error.message : String(error)),
-      'tags'
-    )
+    logService.error('Failed to delete tag: ' + formatError(error), 'tags')
   } finally {
     isDeleting.value = false
     deleteDialog.value = false

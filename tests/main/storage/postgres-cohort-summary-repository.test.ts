@@ -1006,7 +1006,7 @@ describe.skipIf(!RUN)('cohort_summary_state lifecycle — C2 + C1', () => {
     )
   }, 60_000)
 
-  it('incrementalAdd does NOT touch is_stale', async () => {
+  it('incrementalAdd leaves a stale summary, and its flag, to the rebuild', async () => {
     // Force is_stale=true, then add a case incrementally; the flag must remain.
     await withClient((client) =>
       repo.markStale({ schema, client: client as never, reason: 'pending' })
@@ -1021,8 +1021,10 @@ describe.skipIf(!RUN)('cohort_summary_state lifecycle — C2 + C1', () => {
     const after = await stateRow()
     expect(after.is_stale).toBe(true)
     expect(after.stale_reason).toBe('pending')
-    // Incremental maintenance is recorded but does not clear staleness.
-    expect(after.last_incremental_at).not.toBeNull()
+    // Nothing was patched: the rebuild writes every row (summaryAwaitsRebuild).
+    expect(after.last_incremental_at).toBeNull()
+    const rows = await probe.query(`SELECT 1 FROM "${schema}".cohort_variant_summary`)
+    expect(rows.rowCount).toBe(0)
   }, 60_000)
 
   it('getState maps TIMESTAMPTZ → epoch ms via EXTRACT(EPOCH)*1000 (Pass-9 #6)', async () => {

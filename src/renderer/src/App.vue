@@ -434,10 +434,7 @@ onMounted(() => {
   // Fire-and-forget: fetch database info without blocking the initial render.
   // The UI will show immediately and the data will arrive on the next tick.
   databaseStore.fetchInfo().catch((error) => {
-    logService.error(
-      'Failed to fetch database info: ' + (error instanceof Error ? error.message : String(error)),
-      'app'
-    )
+    logService.error('Failed to fetch database info: ' + formatError(error), 'app')
   })
 
   // Report to main process that renderer is interactive

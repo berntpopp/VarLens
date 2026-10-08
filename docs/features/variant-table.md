@@ -14,7 +14,7 @@ The table includes the following columns by default:
 | Chr | Chromosome |
 | Pos | Genomic position (formatted with separators) |
 | Ref / Alt | Reference and alternate alleles |
-| GT | Genotype (0/1 het, 1/1 hom) |
+| GT | Genotype (0/1 het, 1/1 hom, 1 hemizygous). `1/.` or `./1` is an **assumed het**: see [partly missing genotypes](./cohort-analysis.md#partly-missing-genotypes) |
 | Gene | Gene symbol |
 | OMIM | OMIM disease number |
 | Consequence | Sequence Ontology consequence term (`missense_variant`, `stop_gained`, …); for JSON imports the functional class (exonic, splicing, intronic, etc.) |

@@ -21,6 +21,7 @@ import {
   CLINVAR_COLORS
 } from '../../../shared/utils/protein-utils'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 /**
  * Check if WebGL is available in the current environment.
@@ -210,7 +211,7 @@ export function useMolstarViewer(
         await instance.clear()
       } catch (err) {
         logService.warn(
-          `Failed to clear pdbe-molstar instance: ${err instanceof Error ? err.message : String(err)}`,
+          `Failed to clear pdbe-molstar instance: ${formatError(err)}`,
           'MolstarViewer'
         )
       }
@@ -268,7 +269,7 @@ export function useMolstarViewer(
         '3D viewer component failed to load. ' +
         'Try restarting the application. If the problem persists, try launching with --disable-gpu flag.'
       logService.error(
-        `pdbe-molstar init failed: ${err instanceof Error ? err.message : String(err)} ` +
+        `pdbe-molstar init failed: ${formatError(err)} ` +
           `(webgl=${webglContext}, userAgent=${navigator.userAgent})`,
         'MolstarViewer'
       )
@@ -346,10 +347,7 @@ export function useMolstarViewer(
         nonSelectedColor: { r: 220, g: 220, b: 220 }
       })
     } catch (err) {
-      logService.error(
-        `Failed to highlight variants: ${err instanceof Error ? err.message : String(err)}`,
-        'MolstarViewer'
-      )
+      logService.error(`Failed to highlight variants: ${formatError(err)}`, 'MolstarViewer')
     }
   }
 
@@ -382,10 +380,7 @@ export function useMolstarViewer(
         nonSelectedColor: { r: 220, g: 220, b: 220 }
       })
     } catch (err) {
-      logService.error(
-        `Failed to focus residue ${position}: ${err instanceof Error ? err.message : String(err)}`,
-        'MolstarViewer'
-      )
+      logService.error(`Failed to focus residue ${position}: ${formatError(err)}`, 'MolstarViewer')
     }
   }
 
@@ -432,10 +427,7 @@ export function useMolstarViewer(
       viewerInstance.visual.reset({ camera: true, theme: true })
       void highlightVariants()
     } catch (err) {
-      logService.error(
-        `Failed to reset view: ${err instanceof Error ? err.message : String(err)}`,
-        'MolstarViewer'
-      )
+      logService.error(`Failed to reset view: ${formatError(err)}`, 'MolstarViewer')
     }
   }
 

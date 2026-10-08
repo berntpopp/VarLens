@@ -11,6 +11,9 @@ import { basename } from 'node:path'
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { detectFormat } from '../import/format-detection'
+import { loadImportFilters } from '../import/vcf/import-filters'
+import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
+import { resolveVcfSelectedSampleColumn } from '../import/vcf/vcf-line-parser'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import {
   openImportSummarySession,
@@ -159,6 +162,8 @@ export async function runImportSession(
           throw new Error(`File is not a regular file: ${file.filePath}`)
         }
         const fileSize = fileStat.size
+        // Before any case is created or replaced: an unreadable BED file fails the file.
+        const vcfFilters = await loadImportFilters(file.vcfFilters)
 
         // Handle duplicates (database + in-batch)
         const existing = stmts.getCaseByName.get(file.caseName) as { id: number } | undefined
@@ -176,6 +181,13 @@ export async function runImportSession(
             skipped++
             continue
           } else if (existing) {
+            // Fail on what the head of the file shows before the old case goes (#493).
+            // ponytail: a file that breaks further in still loses the old case;
+            // deleting it only after the new one is published would close that.
+            if ((await detectFormat(file.filePath)).format === 'vcf') {
+              const { header } = await parseVcfHeader(file.filePath)
+              resolveVcfSelectedSampleColumn(header.samples, file.vcfSelectedSamples?.[0])
+            }
             // Replacing a case: drop its contribution to the shared
             // frequency table before its variants disappear.
             frequencies.decrementFrequencies(existing.id)
@@ -238,6 +250,12 @@ export async function runImportSession(
             }
           }
 
+          const onSkip = (reason: string): void => {
+            if (skipTracker.record(reason)) {
+              console.warn(`[import-worker] Record skipped in ${fileName}:`, reason)
+            }
+          }
+
           stmts.beginBulkInsert()
           try {
             if (formatInfo.format === 'vcf') {
@@ -250,11 +268,9 @@ export async function runImportSession(
                 isCancelled,
                 file.vcfSelectedSamples,
                 onProgress,
-                (reason) => {
-                  if (skipTracker.record(reason)) {
-                    console.warn(`[import-worker] VCF line skipped in ${fileName}:`, reason)
-                  }
-                }
+                onSkip,
+                undefined,
+                vcfFilters
               )
             } else {
               variantCount = await streamInsertJson(
@@ -264,7 +280,9 @@ export async function runImportSession(
                 batchSize,
                 stmts,
                 isCancelled,
-                onProgress
+                onProgress,
+                undefined,
+                onSkip
               )
             }
           } finally {

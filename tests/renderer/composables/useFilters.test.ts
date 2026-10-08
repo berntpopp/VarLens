@@ -234,6 +234,22 @@ describe('useFilters', () => {
   })
 
   describe('clearFilter', () => {
+    it('clearing clinvars keeps the other drawer filters (#483)', () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.filters.value.maxGnomadAf = 0.001
+      result.filters.value.minCadd = 20
+      result.filters.value.acmgClassifications = ['LP']
+      result.filters.value.clinvars = ['Pathogenic']
+
+      result.clearFilter('clinvars')
+
+      expect(result.filters.value.clinvars).toEqual([])
+      expect(result.filters.value.maxGnomadAf).toBe(0.001)
+      expect(result.filters.value.minCadd).toBe(20)
+      expect(result.filters.value.acmgClassifications).toEqual(['LP'])
+    })
+
     it('clears gene filter', () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
@@ -306,6 +322,80 @@ describe('useFilters', () => {
   })
 
   describe('Bidirectional preset/custom sync', () => {
+    // '' is what v-model.number leaves in an emptied field, null is the clear (X) button
+    it.each([
+      ['emptying', ''],
+      ['the clear button on', null]
+    ])('%s the custom CADD field clears the filter (#504)', async (_how, empty) => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.customCadd.value = 22
+      await nextTick()
+
+      result.customCadd.value = empty as unknown as number
+      await nextTick()
+
+      expect(result.filters.value.minCadd).toBeNull()
+    })
+
+    it.each([
+      ['emptying', ''],
+      ['the clear button on', null]
+    ])('%s the custom AF field clears the filter', async (_how, empty) => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.customGnomadAf.value = 0.5
+      await nextTick()
+
+      result.customGnomadAf.value = empty as unknown as number
+      await nextTick()
+
+      expect(result.filters.value.maxGnomadAf).toBeNull()
+    })
+
+    it('a custom AF typed over an active preset stays applied', async () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.selectedAfPreset.value = 0.01
+      await nextTick()
+
+      result.customGnomadAf.value = 0.5
+      await nextTick()
+
+      expect(result.filters.value.maxGnomadAf).toBe(0.005)
+      expect(result.selectedAfPreset.value).toBeNull()
+      expect(result.customGnomadAf.value).toBe(0.5)
+    })
+
+    it('a custom CADD typed over an active preset stays applied', async () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.selectedCaddPreset.value = 20
+      await nextTick()
+
+      result.customCadd.value = 22
+      await nextTick()
+
+      expect(result.filters.value.minCadd).toBe(22)
+      expect(result.selectedCaddPreset.value).toBeNull()
+      expect(result.customCadd.value).toBe(22)
+    })
+
+    it('deselecting a preset chip removes its filter', async () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.selectedAfPreset.value = 0.01
+      result.selectedCaddPreset.value = 20
+      await nextTick()
+
+      result.selectedAfPreset.value = null
+      result.selectedCaddPreset.value = null
+      await nextTick()
+
+      expect(result.filters.value.maxGnomadAf).toBeNull()
+      expect(result.filters.value.minCadd).toBeNull()
+    })
+
     it('setting selectedAfPreset updates maxGnomadAf and clears customGnomadAf', async () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance

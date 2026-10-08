@@ -53,6 +53,29 @@ describe.skipIf(!isWebBuilt || !HAS_PG)('web auth gate', () => {
     }
   })
 
+  test('a percent-encoded /api prefix is gated like the plain one (#506)', async () => {
+    const isolated = await startIsolatedWebSchema('auth_gate_encoded_prefix')
+    try {
+      const { buildApp } = await import('../../../src/web/server')
+      const app = await buildApp()
+      try {
+        const res = (await app.inject({
+          method: 'POST',
+          url: '/%61pi/cases/deleteAll',
+          payload: { args: [] },
+          headers: SAME_ORIGIN_HEADERS
+        })) as unknown as InjectResult
+
+        expect(res.statusCode, res.body).toBe(401)
+        expect(res.json()).toMatchObject({ code: 'UNAUTHENTICATED' })
+      } finally {
+        await app.close()
+      }
+    } finally {
+      await isolated.close()
+    }
+  })
+
   test('missing-Origin unsafe API requests return JSON 403 before auth dispatch', async () => {
     const isolated = await startIsolatedWebSchema('auth_gate_missing_origin')
     try {

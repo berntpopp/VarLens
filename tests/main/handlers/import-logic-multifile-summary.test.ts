@@ -181,4 +181,31 @@ describe('SQLite multi-file import cohort summary', () => {
     expect(db.cohortSummary.getStatus().is_stale).toBe(false)
     expect(events).toEqual([])
   })
+
+  it('hands the import filters to the worker that imports the first file (#484)', async () => {
+    const executor = workerExecutor([])
+    const session = { capabilities: { backend: 'sqlite' }, getImportExecutor: () => executor }
+
+    await startMultiFileImport(
+      'merged',
+      [spec(file('first.vcf', []))],
+      undefined,
+      () => session as never,
+      () => db,
+      {},
+      undefined,
+      { bedFile: '/x/regions.bed', bedPadding: 20, passOnly: true, minQual: 30 }
+    )
+
+    expect(executor.importSingleFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          bedFilePath: '/x/regions.bed',
+          bedPadding: 20,
+          passOnly: true,
+          minQual: 30
+        })
+      })
+    )
+  })
 })

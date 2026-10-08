@@ -39,7 +39,7 @@
     :variant-label="acmgVariantLabel"
     :variant-cdna="selectedVariantForAcmg?.cdna ?? null"
     :variant-aa-change="selectedVariantForAcmg?.aa_change ?? null"
-    @change="handleAcmgEvidenceChange"
+    :save="handleAcmgEvidenceChange"
   />
 </template>
 
@@ -147,9 +147,10 @@ async function handleQuickAcmgSelect(
 
 async function handleAcmgEvidenceChange(
   payload: Parameters<typeof persistAcmgEvidenceChange>[0]
-): Promise<void> {
-  await persistAcmgEvidenceChange(payload)
+): Promise<boolean> {
+  const saved = await persistAcmgEvidenceChange(payload)
   emit('changed')
+  return saved
 }
 
 async function handleCommentSave(payload: Parameters<typeof persistCommentSave>[0]): Promise<void> {

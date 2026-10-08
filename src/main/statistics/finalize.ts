@@ -27,7 +27,7 @@ export function emptyAssociationResults(
 
 /**
  * Shared tail of an association run (desktop engine and web runner):
- * collect logistic warnings, apply Benjamini–Hochberg FDR on the primary
+ * collect logistic and missing-covariate warnings, apply Benjamini–Hochberg FDR on the primary
  * test, and sort by primary p-value (nulls last).
  */
 export function finalizeAssociationResults(
@@ -36,6 +36,14 @@ export function finalizeAssociationResults(
   startedAt: number
 ): AssociationResults {
   const warnings: string[] = []
+  // Every gene is fitted on the same samples, so this count is per run, not per gene.
+  const missing = rawResults[0]?.logistic_burden.n_missing_covariate ?? 0
+  if (missing > 0) {
+    warnings.push(
+      `MISSING_COVARIATE: ${missing} sample(s) lack a selected covariate (age or metric) ` +
+        'and were excluded from the logistic burden test'
+    )
+  }
   for (const result of rawResults) {
     if (result.logistic_burden.warning !== undefined && result.logistic_burden.warning !== '') {
       warnings.push(`${result.gene_symbol}: ${result.logistic_burden.warning}`)

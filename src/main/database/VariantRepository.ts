@@ -33,14 +33,13 @@ interface VariantExtensionFields {
 }
 
 import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../../shared/config'
+import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { VariantSearchService } from './VariantSearchService'
 import { VariantFrequencyService } from './VariantFrequencyService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
-
-const NUMERIC_COLUMNS = new Set(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_score'])
 
 /** Columns that are computed at query time (not physical table columns) -- excluded from getAllColumnMetas */
 const COMPUTED_COLUMNS = new Set(['internal_af'])
@@ -428,7 +427,7 @@ export class VariantRepository extends BaseRepository {
     filter: VariantFilter,
     limit: number
   ): { sql: string; parameters: readonly unknown[] } {
-    // Force OR chain for compiled queries — temp tables don't transfer to worker threads
+    // No temp table for compiled queries — they don't transfer to worker threads
     const query = this.filterBuilder
       .applySort(this.filterBuilder.build(filter, { forceOrChain: true }))
       .limit(limit)
@@ -456,7 +455,7 @@ export class VariantRepository extends BaseRepository {
     const selectParts: string[] = []
     for (const [key, sqlCol] of columns) {
       selectParts.push(`COUNT(DISTINCT "${sqlCol}") AS "cnt_${key}"`)
-      if (NUMERIC_COLUMNS.has(key)) {
+      if (NUMERIC_COLUMN_FILTER_KEYS.has(key)) {
         selectParts.push(`MIN("${sqlCol}") AS "min_${key}"`)
         selectParts.push(`MAX("${sqlCol}") AS "max_${key}"`)
       }
@@ -469,7 +468,7 @@ export class VariantRepository extends BaseRepository {
     const lowCardinalityColumns: [string, string][] = []
 
     for (const [key, sqlCol] of columns) {
-      const isNumeric = NUMERIC_COLUMNS.has(key)
+      const isNumeric = NUMERIC_COLUMN_FILTER_KEYS.has(key)
       const distinctCount = (aggRow[`cnt_${key}`] as number) ?? 0
 
       const entry: ColumnFilterMeta = {
@@ -568,7 +567,7 @@ export class VariantRepository extends BaseRepository {
     }
 
     const DISTINCT_THRESHOLD = 50
-    const isNumeric = NUMERIC_COLUMNS.has(columnKey)
+    const isNumeric = NUMERIC_COLUMN_FILTER_KEYS.has(columnKey)
     const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
     if (caseIds.length === 0) {
       return {

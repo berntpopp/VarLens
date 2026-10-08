@@ -26,8 +26,7 @@ export function registerHpoHandlers({ ipcMain, getDb }: HandlerDependencies): vo
   function getHpoClient(): HpoApiClient {
     if (!hpoClient) {
       if (!apiFixturesEnabled()) {
-        const db = getDb().database
-        apiCache = new ApiCache(db)
+        apiCache = new ApiCache(() => getDb().database)
       }
       hpoClient = new HpoApiClient(apiCache)
     }

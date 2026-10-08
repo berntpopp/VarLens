@@ -13,6 +13,7 @@ import Bottleneck from 'bottleneck'
 import { z } from 'zod'
 import { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 
 /**
  * Zod schema for SpliceAI Lookup API response
@@ -202,6 +203,7 @@ export class SpliceAIApiClient {
     const url = `${baseUrl}/spliceai/?hg=${assembly}&bc=basic&distance=500&mask=0&variant=${variantId}`
 
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json'
       }

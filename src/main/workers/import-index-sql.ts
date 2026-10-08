@@ -5,6 +5,8 @@
  * recreates them once at the end (see import-worker.ts). Re-exported from
  * import-pipeline.ts for existing callers.
  */
+import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
+
 import * as chrRank from '../database/chr-rank-indexes'
 
 export const DROP_INDEXES = `
@@ -32,6 +34,22 @@ export const RECREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_variants_gene_notnull ON variants(gene_symbol) WHERE gene_symbol IS NOT NULL;
   ${chrRank.CREATE_CHR_RANK_VARIANTS_INDEX_SQL};
 `
+
+/**
+ * True when an index the import session drops is absent. A session killed
+ * between dropping them and setting its open-session marker leaves no other
+ * trace (#505), so startup asks the schema, not the marker.
+ */
+export function sessionIndexesMissing(db: DatabaseType): boolean {
+  const names = [...DROP_INDEXES.matchAll(/IF EXISTS (\S+);/g)].map((m) => m[1])
+  const found = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM sqlite_master
+       WHERE type = 'index' AND name IN (${names.map(() => '?').join(', ')})`
+    )
+    .get(...names) as { c: number }
+  return found.c < names.length
+}
 
 /**
  * Dropping the indexes above and rebuilding them at the end pays off for a

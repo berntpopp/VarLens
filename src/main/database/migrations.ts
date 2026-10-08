@@ -17,7 +17,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 41
+export const LATEST_SQLITE_SCHEMA_VERSION = 42
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -65,6 +65,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 41
  * - 39: cohort_summary_meta.unique_variant_count — exact counter for the cohort tile (#460)
  * - 40: cases.import_status
  * - 41: impact_rank / clinvar_rank on variants and the cohort summary (#469)
+ * - 42: cohort summary het/hom counts follow the shared genotype classes (mirrors PG 0026)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -230,12 +231,23 @@ export function runMigrations(db: Database.Database): void {
 
   // v0.4.0 schema fix: Move starred and ACMG to per-case
   if (currentVersion < 3) {
+    // Each ALTER autocommits, so a kill before `user_version = 3` replays this
+    // over columns that already exist: add only the missing ones.
+    const cvaCols3 = new Set(
+      (db.pragma('table_info(case_variant_annotations)') as Array<{ name: string }>).map(
+        (c) => c.name
+      )
+    )
+    for (const [name, type] of [
+      ['starred', 'INTEGER NOT NULL DEFAULT 0'],
+      ['acmg_classification', 'TEXT'],
+      ['acmg_evidence', 'TEXT']
+    ]) {
+      if (!cvaCols3.has(name)) {
+        db.exec(`ALTER TABLE case_variant_annotations ADD COLUMN ${name} ${type}`)
+      }
+    }
     db.exec(`
-      -- Add starred and ACMG columns to case_variant_annotations (per-case)
-      ALTER TABLE case_variant_annotations ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE case_variant_annotations ADD COLUMN acmg_classification TEXT;
-      ALTER TABLE case_variant_annotations ADD COLUMN acmg_evidence TEXT;
-
       -- Create index for starred filter
       CREATE INDEX IF NOT EXISTS idx_case_variant_annotations_starred
         ON case_variant_annotations(starred) WHERE starred = 1;
@@ -1654,11 +1666,14 @@ export function runMigrations(db: Database.Database): void {
   // unified-shortlist rollout updates the repository to read/write `kind`
   // through its public CRUD interface.
   if (currentVersion < 27) {
-    db.exec(`
-      ALTER TABLE filter_presets ADD COLUMN kind TEXT NOT NULL DEFAULT 'filter'
-        CHECK (kind IN ('filter', 'shortlist'));
-      CREATE INDEX IF NOT EXISTS idx_filter_presets_kind ON filter_presets(kind);
-    `)
+    // Guarded: a kill before `user_version = 27` replays this over the column.
+    const presetCols27 = db.pragma('table_info(filter_presets)') as Array<{ name: string }>
+    if (!presetCols27.some((c) => c.name === 'kind')) {
+      db.exec(
+        "ALTER TABLE filter_presets ADD COLUMN kind TEXT NOT NULL DEFAULT 'filter' CHECK (kind IN ('filter', 'shortlist'))"
+      )
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_filter_presets_kind ON filter_presets(kind)')
 
     const now = Date.now()
     // INSERT OR IGNORE so the migration is safe to replay and does not fail
@@ -1891,6 +1906,24 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 41) {
     migrateSeverityRanks(db)
     db.exec('PRAGMA user_version = 41')
+  }
+
+  // v42: a split multi-allelic genotype (`1/.`) counts as het
+  // (src/shared/utils/genotype.ts). The stored counts predate that: flag a
+  // populated summary stale, the app start rebuilds it.
+  if (currentVersion < 42) {
+    const summaryTables = db
+      .prepare(
+        "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cohort_variant_summary', 'cohort_summary_meta')"
+      )
+      .get() as { c: number }
+    if (
+      summaryTables.c === 2 &&
+      db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
+    ) {
+      db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
+    }
+    db.exec('PRAGMA user_version = 42')
   }
 }
 

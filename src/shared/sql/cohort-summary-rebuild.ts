@@ -11,9 +11,8 @@ import {
   summaryColumnsOverWindow,
   transcriptOrderBy
 } from './cohort-representative'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from './genotype-dosage'
 
-const HET = "('0/1','1/0','0|1','1|0')"
-const HOM = "('1/1','1|1')"
 const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 
 /**
@@ -167,6 +166,20 @@ export const RECOUNT_UNIQUE_VARIANTS_SQL = `
 export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
 
 /**
+ * Meta key of a token that changes whenever summary rows change in a way the
+ * cohort column metadata reads (a star or comment flag does not count). Every
+ * writer of such rows runs TOUCH_SUMMARY_CONTENT_SQL in its transaction; the
+ * per-connection metadata cache (CohortService.getColumnMeta) rescans the
+ * summary only when the token moved. Random, so no rebuild can repeat a value.
+ */
+export const SUMMARY_CONTENT_STAMP_KEY = 'content_stamp'
+
+export const TOUCH_SUMMARY_CONTENT_SQL = `
+  INSERT OR REPLACE INTO cohort_summary_meta (key, value)
+  VALUES ('${SUMMARY_CONTENT_STAMP_KEY}', lower(hex(randomblob(8))));
+`
+
+/**
  * Last step of every full rebuild, in its transaction.
  *
  * The rebuild made the summary match every variant committed so far, so it
@@ -179,7 +192,7 @@ export const IMPORT_SESSION_OPEN_KEY = 'import_session_open'
 export const UPDATE_META_SQL = `
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('last_rebuilt_at', CAST(strftime('%s', 'now') AS TEXT));
-${RECOUNT_UNIQUE_VARIANTS_SQL}  DELETE FROM cohort_summary_meta WHERE key = '${IMPORT_SESSION_OPEN_KEY}';
+${RECOUNT_UNIQUE_VARIANTS_SQL}${TOUCH_SUMMARY_CONTENT_SQL}  DELETE FROM cohort_summary_meta WHERE key = '${IMPORT_SESSION_OPEN_KEY}';
   INSERT OR REPLACE INTO cohort_summary_meta (key, value)
   VALUES ('is_stale', '0');
 `
@@ -237,8 +250,8 @@ export const INCREMENTAL_REMOVE_SQL = `
     hom_count = cohort_variant_summary.hom_count - sub.hom_count
   FROM (
     SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
-      CASE WHEN MAX(v.gt_num) IN ('0/1','1/0','0|1','1|0') THEN 1 ELSE 0 END AS het_count,
-      CASE WHEN MAX(v.gt_num) IN ('1/1','1|1') THEN 1 ELSE 0 END AS hom_count
+      CASE WHEN MAX(v.gt_num) IN ${HET} THEN 1 ELSE 0 END AS het_count,
+      CASE WHEN MAX(v.gt_num) IN ${HOM} THEN 1 ELSE 0 END AS hom_count
     FROM variants v
     JOIN cases c ON c.id = v.case_id
     WHERE v.case_id = ?

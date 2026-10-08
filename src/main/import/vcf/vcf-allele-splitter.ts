@@ -23,6 +23,23 @@ function splitAlleleValues(value: string): string[] {
   return parts
 }
 
+/**
+ * The Number that AD is read with. Older GATK headers declare it as `.`; with
+ * one value per allele (REF + every ALT) it is `R`. No declaration: `R`.
+ */
+export function effectiveAdNumber(
+  declared: string | undefined,
+  value: string | undefined,
+  altCount: number
+): string {
+  if (declared === undefined) return 'R'
+  const perAllele =
+    declared === '.' &&
+    value !== undefined &&
+    splitBounded(value, ',', MAX_VCF_ALT_ALLELES + 1)?.length === altCount + 1
+  return perAllele ? 'R' : declared
+}
+
 function normalizeVectorToken(value: string | undefined): string {
   return value === undefined || value === '' ? '.' : value
 }
@@ -80,7 +97,10 @@ export function splitAlleleForSample(
   const sampleValues = record.samples.get(sampleName)
   const samples = new Map<string, string[]>()
   if (sampleValues !== undefined) {
-    samples.set(sampleName, splitOneSampleFields(record.format, sampleValues, formatDefs, altIdx))
+    samples.set(
+      sampleName,
+      splitOneSampleFields(record.format, sampleValues, formatDefs, altIdx, record.alt.length)
+    )
   }
   return {
     chrom: record.chrom,
@@ -163,7 +183,10 @@ function splitSampleFields(
   const result = new Map<string, string[]>()
 
   for (const [sampleName, values] of record.samples) {
-    result.set(sampleName, splitOneSampleFields(record.format, values, formatDefs, altIdx))
+    result.set(
+      sampleName,
+      splitOneSampleFields(record.format, values, formatDefs, altIdx, record.alt.length)
+    )
   }
 
   return result
@@ -173,7 +196,8 @@ function splitOneSampleFields(
   format: string[],
   values: string[],
   formatDefs: Map<string, FormatFieldDef>,
-  altIdx: number
+  altIdx: number,
+  altCount: number
 ): string[] {
   const newValues = [...values]
   const originalAltAllele = altIdx + 1
@@ -187,7 +211,9 @@ function splitOneSampleFields(
       continue
     }
 
-    const number = formatDefs.get(field)?.number ?? (field === 'AD' ? 'R' : '.')
+    const declared = formatDefs.get(field)?.number
+    const number =
+      field === 'AD' ? effectiveAdNumber(declared, values[fIdx], altCount) : (declared ?? '.')
     if (number === 'R') {
       const parts = splitAlleleValues(values[fIdx])
       if (parts.length > altIdx + 1) {
@@ -210,7 +236,8 @@ function splitOneSampleFields(
  * Remap a GT string for a specific ALT allele.
  * - The target allele (originalAltAllele) becomes 1
  * - REF (0) stays 0
- * - All other alleles become "." (missing)
+ * - All other alleles become "." (missing): `1/2` is `1/.` on the first ALT's
+ *   row, which every consumer reads as heterozygous (src/shared/utils/genotype.ts)
  *
  * @param gt - Original GT string (e.g. "0/2", "1/2")
  * @param originalAltAllele - 1-based allele number to keep (e.g. 2 for second ALT)

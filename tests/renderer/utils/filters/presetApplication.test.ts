@@ -14,6 +14,7 @@ import type { Ref } from 'vue'
 import type { FilterState } from '../../../../src/shared/types/filters'
 import {
   applyPresetStateToFilters,
+  buildPresetFilterJson,
   isPresetDiverged
 } from '../../../../src/renderer/src/utils/filters/presetApplication'
 import { createFilterState } from '../../../../src/shared/filters/filterDefaults'
@@ -132,3 +133,49 @@ describe.each([['case', caseView] as const, ['cohort', cohortView] as const])(
     })
   }
 )
+
+// #504: a preset saves exactly what applying it restores
+describe('buildPresetFilterJson', () => {
+  it('keeps only the set preset fields and saves the impact chips as consequences', () => {
+    const filters = createFilterState({
+      minCadd: 20,
+      clinvars: ['Pathogenic'],
+      activePanelIds: [3],
+      inheritanceModes: ['de_novo'],
+      tagIds: [7],
+      searchQuery: 'BRCA1'
+    })
+
+    expect(buildPresetFilterJson(filters, ['HIGH'])).toEqual({
+      minCadd: 20,
+      clinvars: ['Pathogenic'],
+      consequences: ['HIGH']
+    })
+  })
+
+  it('round-trips through applyPresetStateToFilters in the case and the cohort view', () => {
+    const saved = buildPresetFilterJson(
+      createFilterState({ maxGnomadAf: 0.001, starredOnly: true, minCarriers: 2 }),
+      ['HIGH', 'MODERATE']
+    )
+
+    const caseFilters = ref(createFilterState())
+    applyPresetStateToFilters({ filters: caseFilters, presetState: saved })
+    expect(caseFilters.value).toMatchObject({
+      maxGnomadAf: 0.001,
+      starredOnly: true,
+      consequences: ['HIGH', 'MODERATE']
+    })
+
+    const cohortFilters = ref(createFilterState())
+    const impact = ref<string[]>([])
+    applyPresetStateToFilters({
+      filters: cohortFilters,
+      presetState: saved,
+      consequencesTarget: impact,
+      includeCohortFields: true
+    })
+    expect(cohortFilters.value).toMatchObject({ maxGnomadAf: 0.001, minCarriers: 2 })
+    expect(impact.value).toEqual(['HIGH', 'MODERATE'])
+  })
+})

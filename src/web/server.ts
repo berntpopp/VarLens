@@ -36,6 +36,7 @@ import type { PostgresStorageSession } from '../main/storage/postgres/PostgresSt
 import type { StorageSession } from '../main/storage/session'
 import { AdminAlreadyExistsError, PostgresWebAuthService } from './auth/PostgresWebAuthService'
 import { resolveAuthUserCacheTtlMs } from './auth/user-lookup-cache'
+import { resolveTrustProxy } from './server/instance-settings'
 import { recordAuthAudit } from './server/audit'
 import { buildDispatcher, registerDispatcher } from './server/dispatcher'
 import { assertParityAtStartup } from './server/method-resolution'
@@ -51,7 +52,7 @@ import { registerPlatformIdentityRoutes } from './server/platform-identity-route
 import { registerWebRateLimit } from './server/rate-limit'
 import { serializeRequestForTechnicalLog } from './server/request-logging'
 import { registerExportDownloadRoutes } from './server/routes/export-download'
-import { registerImportUploadRoutes } from './server/routes/upload-staging'
+import { clearStagedUploads, registerImportUploadRoutes } from './server/routes/upload-staging'
 import { registerOpenApi } from './server/routes/openapi'
 import { registerStatic } from './server/static'
 import { registerResponseCompression } from './server/compression'
@@ -129,6 +130,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // collide log correlation. Stating it explicitly means a future Fastify
     // default flip cannot silently re-enable header trust.
     requestIdHeader: false,
+    // Off unless the operator names the reverse proxy; then `request.ip` (login
+    // rate-limit key, request log) is the forwarded client, not the proxy.
+    // Cast: Fastify's types omit the hop count its runtime (proxy-addr) accepts.
+    trustProxy: resolveTrustProxy(process.env) as false | string,
     logController: new LogController({ requestIdLogLabel: 'request_id' }),
     logger: {
       level: process.env.VARLENS_LOG_LEVEL ?? 'info',
@@ -242,6 +247,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     production: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
     warn: (message) => app.log.warn(message)
   })
+  // Staged uploads are indexed in memory: files left by a previous process are orphans.
+  await clearStagedUploads()
   registerImportUploadRoutes(app, dispatcherDeps)
   registerExportDownloadRoutes(app, dispatcherDeps)
   registerDispatcher(app, dispatcherDeps, overrides)

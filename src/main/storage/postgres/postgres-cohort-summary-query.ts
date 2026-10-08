@@ -402,8 +402,10 @@ export function buildSummaryQueryParts(
     const term = params.search_term.trim()
     const genomicMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
     if (genomicMatch !== null) {
+      // Import stores `chr` verbatim: match both spellings (#492).
+      const chr = genomicMatch[1].toUpperCase()
       whereParts.push(
-        `(cvs.chr = ${addParam(genomicMatch[1])} AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
+        `(cvs.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
       )
     } else {
       const searchPattern = `%${term}%`

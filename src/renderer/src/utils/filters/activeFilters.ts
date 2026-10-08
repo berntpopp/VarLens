@@ -11,6 +11,17 @@ import type { FilterState, ActiveFilter } from '../../../../shared/types/filters
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import { INHERITANCE_MODE_META } from '../../../../shared/types/inheritance'
 
+/**
+ * AF fraction as a percentage: two decimals when that is the exact value,
+ * otherwise every digit, so the chip never shows another threshold than the
+ * one applied.
+ */
+export function formatAfPercent(af: number): string {
+  const pct = Number((af * 100).toPrecision(12)) // drops binary noise (0.015000000000000001)
+  const twoDecimals = pct.toFixed(2)
+  return Number(twoDecimals) === pct ? twoDecimals : String(pct)
+}
+
 /** Human-readable labels for column filter keys */
 const COLUMN_LABELS: Record<string, string> = {
   chr: 'Chr',
@@ -103,11 +114,11 @@ export function buildActiveFiltersList(
 
   // Numeric filters - operator goes in value for cleaner chip display
   if (filters.maxGnomadAf !== null && filters.maxGnomadAf > 0) {
-    const pct = (filters.maxGnomadAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.maxGnomadAf)
     list.push({ id: 'frequency', label: 'AF', value: `<= ${pct}%` })
   }
   if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
-    const pct = (filters.maxInternalAf * 100).toFixed(2)
+    const pct = formatAfPercent(filters.maxInternalAf)
     list.push({ id: 'internal-frequency', label: 'Internal AF', value: `\u2264 ${pct}%` })
   }
   if (filters.minCadd !== null && filters.minCadd >= 0) {

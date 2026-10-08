@@ -12,6 +12,7 @@ import {
   REBUILD_GENE_BURDEN_SQL,
   UPDATE_META_SQL,
   MARK_STALE_SQL,
+  TOUCH_SUMMARY_CONTENT_SQL,
   UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL,
   INCREMENTAL_ADD_SQL,
   INCREMENTAL_REMOVE_SQL,
@@ -70,6 +71,7 @@ export class CohortSummaryService {
   incrementalAdd(caseId: number): void {
     const addTransaction = this.db.transaction(() => {
       this.db.prepare(INCREMENTAL_ADD_SQL).run(caseId)
+      this.db.exec(TOUCH_SUMMARY_CONTENT_SQL)
       this.db.exec(MARK_STALE_SQL) // gene_burden_summary not updated
     })
     addTransaction()
@@ -93,6 +95,7 @@ export class CohortSummaryService {
     const removeTransaction = this.db.transaction(() => {
       this.db.prepare(INCREMENTAL_REMOVE_SQL).run(caseId)
       this.db.exec(CLEANUP_ZERO_CARRIERS_SQL)
+      this.db.exec(TOUCH_SUMMARY_CONTENT_SQL)
       this.db.exec(MARK_STALE_SQL) // gene_burden_summary not updated
     })
     removeTransaction()

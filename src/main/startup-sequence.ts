@@ -9,6 +9,9 @@
  * renderer's lightweight "Opening database…" state appear first.
  */
 
+import type { DatabaseService } from './database/DatabaseService'
+import type { DatabaseManager } from './services/DatabaseManager'
+
 /** The slice of BrowserWindow this module needs (keeps it unit-testable). */
 export interface StartupWindow {
   once(event: 'ready-to-show', listener: () => void): unknown
@@ -20,6 +23,8 @@ export interface OpenDefaultDatabaseHooks {
   onOpenFailed: (error: unknown) => void
   /** Always runs once the attempt finished (success or failure). */
   onSettled: () => void
+  /** Runs after `onSettled` when the open succeeded: housekeeping for the opened database. */
+  onOpened?: () => void
   /** Upper bound for waiting on the first paint. */
   firstPaintTimeoutMs?: number
 }
@@ -48,11 +53,29 @@ export async function openDefaultDatabaseAfterWindow(
   hooks: OpenDefaultDatabaseHooks
 ): Promise<void> {
   await waitForFirstPaint(window, hooks.firstPaintTimeoutMs ?? FIRST_PAINT_TIMEOUT_MS)
+  let opened = false
   try {
     await hooks.openDefault()
+    opened = true
   } catch (error) {
     hooks.onOpenFailed(error)
   } finally {
     hooks.onSettled()
   }
+  if (opened) hooks.onOpened?.()
+}
+
+/**
+ * Startup housekeeping for the automatically opened database, as an
+ * interactive open runs it (database-lifecycle-logic.ts): discard interrupted
+ * imports and rebuild a cohort summary that is empty, flagged stale (e.g. by a
+ * migration) or left open by a dead import session. SQLite only — PostgreSQL
+ * refreshes a stale summary itself, and the app may start without a database.
+ */
+export function startSqliteHousekeeping(
+  manager: Pick<DatabaseManager, 'getCurrentSessionOrNull' | 'getCurrent'>,
+  trigger: (db: DatabaseService) => void
+): void {
+  if (manager.getCurrentSessionOrNull()?.capabilities.backend !== 'sqlite') return
+  trigger(manager.getCurrent())
 }

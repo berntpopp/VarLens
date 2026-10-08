@@ -53,6 +53,13 @@ describe('BedFilter', () => {
       expect(filter.contains('chr1', 998850)).toBe(false)
     })
 
+    it('rejects a padding that is not a non-negative integer', async () => {
+      // -1 would turn a one-base region into an inverted interval that matches nothing.
+      for (const padding of [-1, 0.5, Number.NaN]) {
+        await expect(BedFilter.fromFile(BED_PATH, padding)).rejects.toThrow(/padding/)
+      }
+    })
+
     it('rejects more valid BED rows than the configured entry cap', async () => {
       const tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-entries-'))
       const filePath = path.join(tmpDir, 'too-many.bed')
@@ -134,6 +141,22 @@ describe('BedFilter', () => {
 
     it('returns true at interval end (1-based inclusive)', () => {
       expect(filter.contains('chr1', 1010000)).toBe(true)
+    })
+
+    it('matches chromosome names with and without the chr prefix (#495)', async () => {
+      const tmpDir = mkdtempSync(path.join(tmpdir(), 'varlens-bed-contig-'))
+      try {
+        const bedPath = path.join(tmpDir, 'regions.bed')
+        writeFileSync(bedPath, '1\t99\t200\nchr2\t99\t200\nMT\t99\t200\n')
+        const bed = await BedFilter.fromFile(bedPath, 0)
+        expect(bed.contains('chr1', 150)).toBe(true)
+        expect(bed.contains('2', 150)).toBe(true)
+        expect(bed.contains('chrM', 150)).toBe(true)
+        expect(bed.containsRange('chr1', 190, 300)).toBe(true)
+        expect(bed.contains('chr3', 150)).toBe(false)
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true })
+      }
     })
 
     it('returns false for unknown chromosome', () => {

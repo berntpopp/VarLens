@@ -141,7 +141,7 @@
                   <AcmgClassificationPanel
                     :evidence-json="currentAcmgEvidence"
                     :variant-data="currentVariantData"
-                    @change="handleAcmgEvidenceChange"
+                    :save="handleAcmgEvidenceChange"
                   />
                 </v-expansion-panel-text>
               </v-expansion-panel>
@@ -216,6 +216,7 @@ import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } fr
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
+import { formatConsequence } from '../utils/formatters'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
@@ -462,12 +463,12 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
 const handleAcmgEvidenceChange = async (payload: {
   classification: AcmgClassification | null
   evidenceJson: string
-}) => {
-  if (props.variant === null) return
+}): Promise<boolean> => {
+  if (props.variant === null) return false
 
   if (props.mode === 'case' && props.caseId !== null) {
     const variantId = (props.variant as Variant).id
-    await setAcmgClassificationWithEvidence(
+    return setAcmgClassificationWithEvidence(
       props.caseId,
       variantId,
       props.variant.chr,
@@ -478,7 +479,7 @@ const handleAcmgEvidenceChange = async (payload: {
       payload.evidenceJson
     )
   } else {
-    await setGlobalAcmgClassificationWithEvidence(
+    return setGlobalAcmgClassificationWithEvidence(
       props.variant.chr,
       props.variant.pos,
       props.variant.ref,
@@ -529,10 +530,6 @@ function getConsequenceColor(consequence: string): string {
     return 'warning'
   }
   return 'grey'
-}
-
-function formatConsequence(consequence: string): string {
-  return consequence.replace(/_/g, ' ')
 }
 
 // Handle Escape key to close panel

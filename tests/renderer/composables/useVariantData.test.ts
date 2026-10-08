@@ -208,6 +208,38 @@ describe('useVariantData', () => {
       }
     })
 
+    // #504: header filters must scope the request, or a second one joins the first's promise
+    it('queries again when a header filter changes while the previous query is in flight', async () => {
+      const { result } = setup(1, {})
+      await flushPromises()
+      const query = vi.fn().mockReturnValue(new Promise(() => {}))
+      window.api.variants.query = query
+      const settle = async (): Promise<void> => {
+        vi.advanceTimersByTime(400)
+        for (let i = 0; i < 5; i++) await nextTick()
+      }
+
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        result.setColumnFilter('gene_symbol', { op: 'contains', value: 'BRCA' })
+        await nextTick()
+        await settle()
+        result.setColumnFilter('gene_symbol', { op: 'contains', value: 'TP53' })
+        await nextTick()
+        await settle()
+      } finally {
+        vi.useRealTimers()
+      }
+
+      const sent = query.mock.calls.map(
+        (call: unknown[]) => (call[1] as { column_filters?: unknown }).column_filters
+      )
+      expect(sent).toEqual([
+        { gene_symbol: { op: 'contains', value: 'BRCA' } },
+        { gene_symbol: { op: 'contains', value: 'TP53' } }
+      ])
+    })
+
     it('clears column filters on clearAllColumnFilters', async () => {
       const { result } = setup()
       await flushPromises()

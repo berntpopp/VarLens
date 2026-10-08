@@ -23,6 +23,7 @@
  * The remaining methods are stubbed for the subsequent Sprint A tasks.
  */
 import type { PoolClient } from 'pg'
+import { refreshAnnotationFlags } from './cohort-annotation-flags-sql'
 import {
   ANNOTATION_FLAG_COLUMNS,
   annotationFlagCtes,
@@ -30,6 +31,7 @@ import {
 } from './cohort-summary-flags-sql'
 import {
   addPreparedCaseToGeneSummary,
+  discardPreparedCaseGenePairs,
   prepareCaseGenePairs,
   rebuildGeneSummary,
   removeCaseFromGeneSummary
@@ -37,7 +39,8 @@ import {
 import {
   consumeSummaryRebuildRequests,
   getCohortSummaryState,
-  markCohortSummaryStale
+  markCohortSummaryStale,
+  summaryAwaitsRebuild
 } from './cohort-summary-state-sql'
 import {
   countAddedCoordinatesSql,
@@ -177,6 +180,10 @@ export class PostgresCohortSummaryRepository {
        SET is_stale = false, stale_reason = NULL, stale_at = NULL, last_rebuilt_at = now()
        WHERE id = 1`
     )
+
+    // Last: an annotation saved while the chunks above were written left an
+    // 'annotation' request instead of its flags (the lock was ours).
+    await refreshAnnotationFlags(client, schema)
   }
 
   /**
@@ -231,6 +238,14 @@ export class PostgresCohortSummaryRepository {
     prepared?: boolean
   }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    // A summary that waits for its rebuild is left to it (summaryAwaitsRebuild).
+    if (await summaryAwaitsRebuild({ schema, client })) {
+      if (prepared) {
+        await dropCaseAggregate(client)
+        await discardPreparedCaseGenePairs(client)
+      }
+      return
+    }
     if (!prepared) await this.prepareAdd({ schema, client, caseId, includeProvisional })
 
     // One statement: the upsert, and from what it inserted the unique-variant
@@ -287,6 +302,7 @@ export class PostgresCohortSummaryRepository {
     caseId
   }: ScopedClient & { caseId: number }): Promise<void> {
     const tbl = (t: string): string => `"${schema}"."${t}"`
+    if (await summaryAwaitsRebuild({ schema, client })) return
 
     await removeCaseFromSummary({
       schema,

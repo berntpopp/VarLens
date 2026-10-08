@@ -24,18 +24,22 @@ interface FieldMapperOptions {
   columnIndices?: ColumnIndices
   /** Source size of the next input record, when the JSON budget tracks it. */
   takeRecordBytes?: () => number
+  /** Told about every row dropped for a missing required field. */
+  onSkip?: (reason: string) => void
 }
 
 export class FieldMapper extends Transform {
   private dictionaries: DataDictionaries
   private cols: ColumnIndices
   private readonly takeRecordBytes?: () => number
+  private readonly onSkip?: (reason: string) => void
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
     this.dictionaries = options.dictionaries
     this.cols = options.columnIndices ?? COLUMN_INDICES
     this.takeRecordBytes = options.takeRecordBytes
+    this.onSkip = options.onSkip
   }
 
   _transform(
@@ -132,7 +136,7 @@ export class FieldMapper extends Transform {
         mapped.alt === null ||
         mapped.alt === ''
       ) {
-        // Skip invalid variants - will be counted as skipped
+        this.onSkip?.('JSON variant without chr, pos, ref or alt')
         callback(null)
         return
       }
@@ -285,7 +289,8 @@ export class FieldMapper extends Transform {
 export function createFieldMapper(
   dictionaries: DataDictionaries,
   columnIndices?: ColumnIndices,
-  takeRecordBytes?: () => number
+  takeRecordBytes?: () => number,
+  onSkip?: (reason: string) => void
 ): FieldMapper {
-  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes })
+  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes, onSkip })
 }

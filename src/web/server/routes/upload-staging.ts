@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, rm, stat } from 'node:fs/promises'
+import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { once } from 'node:events'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+
+import { ErrorCode } from '../../../shared/types/errors'
 
 import { recordApiWriteAudit } from '../audit'
 import { requireOperation } from '../security/secure'
@@ -16,6 +18,9 @@ const DEFAULT_RECOVERY_KEY_DIR = '/data'
 const DEFAULT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 const UPLOAD_REF_PREFIX = 'web-upload:'
+/** How long a staged upload survives the import that used it (see holdWebUploads). */
+export const UPLOAD_RELEASE_GRACE_MS = 5 * 60 * 1000
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1
 
 class UploadTooLargeError extends Error {
   constructor(maxBytes: number) {
@@ -39,6 +44,61 @@ interface UploadRouteBody extends FastifyRequest {
 }
 
 const stagedUploads = new Map<string, StagedUpload>()
+/** Upload id → imports currently reading it. A held upload is never swept. */
+const heldUploads = new Map<string, number>()
+
+/**
+ * Boot-time sweep. The index above is in memory, so whatever is on disk belongs
+ * to a previous process and can never be resolved again. Only the `<userId>/`
+ * directories this module creates are removed, in case the root is shared.
+ */
+export async function clearStagedUploads(): Promise<void> {
+  stagedUploads.clear()
+  heldUploads.clear()
+  const root = resolveUploadRoot()
+  const entries = await readdir(root, { withFileTypes: true }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  })
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+      .map((entry) => rm(join(root, entry.name), { recursive: true, force: true }))
+  )
+}
+
+/**
+ * Mark staged uploads as in use by an import; call the returned function when
+ * the import settles (success, failure or cancel). From then on the upload
+ * lives UPLOAD_RELEASE_GRACE_MS instead of the 24 h staging TTL — not zero,
+ * because a multi-sample VCF is imported with one call per sample on the same
+ * ref. Pass `false` for an import that failed or was cancelled: the upload
+ * then keeps its staging TTL, so a retry with corrected options needs no
+ * second upload. Values that are not known upload refs are ignored.
+ */
+export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) => void {
+  const ids = refs.flatMap((ref) => {
+    const id = typeof ref === 'string' ? parseWebUploadId(ref) : null
+    return id !== null && stagedUploads.has(id) ? [id] : []
+  })
+  for (const id of ids) heldUploads.set(id, (heldUploads.get(id) ?? 0) + 1)
+
+  return (imported = true) => {
+    for (const id of ids) {
+      const holds = (heldUploads.get(id) ?? 1) - 1
+      if (holds > 0) {
+        heldUploads.set(id, holds)
+        continue
+      }
+      heldUploads.delete(id)
+      const upload = stagedUploads.get(id)
+      if (upload !== undefined && imported) {
+        upload.expiresAt = Date.now() + UPLOAD_RELEASE_GRACE_MS
+      }
+    }
+    setTimeout(cleanupExpiredUploads, UPLOAD_RELEASE_GRACE_MS + 1).unref()
+  }
+}
 
 export function isWebUploadRef(value: string): boolean {
   return parseWebUploadId(value) !== null
@@ -51,7 +111,8 @@ export function resolveWebUploadRef(value: string, userId: number): StagedUpload
 
   const upload = stagedUploads.get(id)
   if (upload === undefined || upload.userId !== userId) return null
-  if (upload.expiresAt <= Date.now() || !existsSync(upload.storedPath)) {
+  const expired = upload.expiresAt <= Date.now() && !heldUploads.has(upload.id)
+  if (expired || !existsSync(upload.storedPath)) {
     void deleteUpload(upload)
     stagedUploads.delete(upload.id)
     return null
@@ -100,6 +161,20 @@ export function registerImportUploadRoutes(app: FastifyInstance, deps?: Dispatch
         failureClass: 'forbidden'
       })
       return reply
+    }
+    // Same pre-rotation gate as the dispatcher and the download route.
+    if (request.session.mustChangePassword === true) {
+      deps?.metrics?.recordOperationEvent({
+        operation: 'upload-stage',
+        result: 'error',
+        failureClass: 'forbidden'
+      })
+      reply.code(403)
+      return {
+        code: ErrorCode.UNKNOWN,
+        message: 'password-rotation-required',
+        userMessage: 'Your password must be changed before any other action.'
+      }
     }
 
     const originalName = headerString(request.headers['x-varlens-file-name'])
@@ -230,6 +305,11 @@ async function stageUpload(params: {
     expiresAt: createdAt + resolveUploadTtlMs()
   }
   stagedUploads.set(upload.id, upload)
+  // Sweep an upload nobody imports when it expires, not on some later request.
+  setTimeout(
+    cleanupExpiredUploads,
+    Math.min(upload.expiresAt - createdAt + 1, MAX_TIMER_DELAY_MS)
+  ).unref()
   return upload
 }
 
@@ -355,7 +435,7 @@ function headerString(value: string | string[] | undefined): string | undefined 
 function cleanupExpiredUploads(): void {
   const now = Date.now()
   for (const upload of stagedUploads.values()) {
-    if (upload.expiresAt > now) continue
+    if (upload.expiresAt > now || heldUploads.has(upload.id)) continue
     void deleteUpload(upload)
     stagedUploads.delete(upload.id)
   }

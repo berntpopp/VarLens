@@ -13,6 +13,7 @@ import Bottleneck from 'bottleneck'
 import { z } from 'zod'
 import { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 
 /**
  * Zod schema for myvariant.info dbnsfp response
@@ -193,6 +194,7 @@ export class MyVariantApiClient {
     const url = `${this.baseUrl}/variant/${encodeURIComponent(hgvs)}?fields=dbnsfp&assembly=${assembly}`
 
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json'
       }

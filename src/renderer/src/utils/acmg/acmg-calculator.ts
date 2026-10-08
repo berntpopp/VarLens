@@ -48,12 +48,19 @@ interface StrengthCounts {
 
 function countByStrength(codes: AcmgEvidenceCode[]): StrengthCounts {
   const confirmed = codes.filter((c) => c.confirmed)
+  const at = (strength: AcmgEvidenceCode['strength']): number =>
+    confirmed.filter((c) => c.strength === strength).length
+  // Stand-Alone is a rule for BA1 only. Evidence stored with it on another
+  // criterion counts as very strong, the level with the same 8 points.
+  const standAlone = confirmed.filter(
+    (c) => c.strength === 'stand_alone' && c.code === 'BA1'
+  ).length
   return {
-    veryStrong: confirmed.filter((c) => c.strength === 'very_strong').length,
-    strong: confirmed.filter((c) => c.strength === 'strong').length,
-    moderate: confirmed.filter((c) => c.strength === 'moderate').length,
-    supporting: confirmed.filter((c) => c.strength === 'supporting').length,
-    standAlone: confirmed.filter((c) => c.strength === 'stand_alone').length
+    veryStrong: at('very_strong') + at('stand_alone') - standAlone,
+    strong: at('strong'),
+    moderate: at('moderate'),
+    supporting: at('supporting'),
+    standAlone
   }
 }
 
@@ -95,7 +102,15 @@ export function classifyByRules(
   benign: AcmgEvidenceCode[]
 ): AcmgClassification {
   const p = countByStrength(pathogenic)
-  const b = countByStrength(benign)
+  const counted = countByStrength(benign)
+  // The benign rules know only BS and BP. A benign criterion raised to Very
+  // Strong still counts as BS, one set to Moderate as BP, so that changing a
+  // strength never drops the criterion from the rule check.
+  const b = {
+    standAlone: counted.standAlone,
+    strong: counted.strong + counted.veryStrong,
+    supporting: counted.supporting + counted.moderate
+  }
 
   // --- Benign stand-alone (BA1) and strong benign (≥2 BS) always win ---
   if (b.standAlone >= 1) return 'Benign'

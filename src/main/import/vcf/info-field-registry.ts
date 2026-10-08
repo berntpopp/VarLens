@@ -56,12 +56,16 @@ const COLUMN_TO_ANNOTATION_FIELD: Record<string, keyof AnnotationResult> = {
  * @param info - Raw INFO key-value pairs from VcfRawRecord
  * @param registry - Field mapping registry (default: DEFAULT_INFO_FIELD_MAPPINGS)
  * @param annotation - Annotation result (to check for already-populated columns)
+ * @param altIdx - 0-based index of this record's ALT in the source line
+ * @param altCount - Number of ALT alleles in the source line
  * @returns Mapped values and unmapped info_json
  */
 export function applyInfoFieldRegistry(
   info: Map<string, string>,
   registry: InfoFieldMapping[],
-  annotation: AnnotationResult
+  annotation: AnnotationResult,
+  altIdx = 0,
+  altCount = 1
 ): InfoFieldResult {
   const mappedValues = new Map<string, string | number | null>()
   const unmapped: Record<string, string> = {}
@@ -90,7 +94,10 @@ export function applyInfoFieldRegistry(
       }
 
       // Parse and map the value
-      const parsed = parseInfoValue(value, mapping.type)
+      const parsed = parseInfoValue(
+        mapping.type === 'string' ? value : alleleValue(value, altIdx, altCount),
+        mapping.type
+      )
       if (parsed !== undefined) {
         mappedValues.set(mapping.column, parsed)
       }
@@ -103,6 +110,17 @@ export function applyInfoFieldRegistry(
   const infoJson = Object.keys(unmapped).length > 0 ? unmapped : null
 
   return { mappedValues, infoJson }
+}
+
+/**
+ * A numeric field still holding a list was not split by the allele splitter:
+ * the header does not declare it (or declares Number=.). One value per ALT is
+ * read per allele; any other count is ambiguous and yields no value.
+ */
+function alleleValue(value: string, altIdx: number, altCount: number): string {
+  if (!value.includes(',')) return value
+  const parts = value.split(',', altCount + 1)
+  return parts.length === altCount ? parts[altIdx] : '.'
 }
 
 /**

@@ -4,11 +4,13 @@ import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
 import { removeCaseFromGeneSummary } from './cohort-gene-summary-sql'
 import { quoteIdentifier } from './identifiers'
+import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import {
   PostgresCohortSummaryRepository,
   SCOPED_DEDUPED_AGG_SQL
 } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from './cohort-summary-lock'
+import { summaryAwaitsRebuild } from './cohort-summary-state-sql'
 import { removeCaseFromSummary } from './cohort-summary-representative-sql'
 
 /** The subset of PostgresCohortSummaryRepository this repo drives (test seam). */
@@ -136,16 +138,21 @@ export class PostgresCaseLifecycleRepository {
 
   async hideCase(caseId: number): Promise<HideCaseResult> {
     const client = await this.pool.connect()
+    const restoreQueryTimeout = liftClientQueryTimeout(client)
+    let rollbackFailure: Error | undefined
     try {
       await client.query('BEGIN')
       await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
+      // NO KEY: this row is held while waiting for the summary lock below, and
+      // an annotation save that holds that lock needs the row's key-share lock
+      // for its foreign key (lock order: cohort-summary-lock.ts).
       const row = await client.query<{
         genome_build: string
         import_status: string
         variant_count: string | number
       }>(
         `SELECT genome_build, import_status, variant_count
-           FROM ${this.tbl('cases_all')} WHERE id = $1 FOR UPDATE`,
+           FROM ${this.tbl('cases_all')} WHERE id = $1 FOR NO KEY UPDATE`,
         [caseId]
       )
       const current = row.rows[0]
@@ -180,10 +187,11 @@ export class PostgresCaseLifecycleRepository {
       await client.query('COMMIT')
       return { state: 'hidden', genomeBuild: current.genome_build, variantCount }
     } catch (error) {
-      await rollbackQuietly(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      restoreQueryTimeout()
+      client.release(rollbackFailure)
     }
   }
 
@@ -251,29 +259,13 @@ export class PostgresCaseLifecycleRepository {
     client: Pick<PoolClient, 'query'>,
     caseId: number
   ): Promise<void> {
-    // Annotation flags: only coordinates where THIS case carried a per-case
-    // annotation can change; the hook excludes the case via v.case_id <> $1.
-    await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
-      schema: this.schema,
-      deletedCaseId: caseId
-    })
+    // A summary that waits for its rebuild is left to it: its rows do not
+    // hold what this case would subtract (summaryAwaitsRebuild).
+    if (!(await summaryAwaitsRebuild({ schema: this.schema, client }))) {
+      await this.subtractCaseFromSummaries(client, caseId)
+    }
 
-    // Summary rows: recompute the representative annotation this case held,
-    // subtract carrier/het/hom together (one carrier per coordinate per case —
-    // symmetric with incrementalAdd), drop the rows that lost their last
-    // carrier and keep the unique-variant counter in step. Scoped to this
-    // case's coordinates (no full scan).
     const tbl = (t: string): string => this.tbl(t)
-    await removeCaseFromSummary({
-      schema: this.schema,
-      client,
-      caseId,
-      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
-    })
-
-    // Per-gene aggregates: subtract the case while its rows are still visible.
-    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
-
     // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
     // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.
     const caseCoords = `SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1`
@@ -298,16 +290,36 @@ export class PostgresCaseLifecycleRepository {
     })
   }
 
+  private async subtractCaseFromSummaries(
+    client: Pick<PoolClient, 'query'>,
+    caseId: number
+  ): Promise<void> {
+    // Annotation flags: only coordinates where THIS case carried a per-case
+    // annotation can change; the hook excludes the case via v.case_id <> $1.
+    await applyAnnotationFlagsOnCaseDelete(client as unknown as Pool, {
+      schema: this.schema,
+      deletedCaseId: caseId
+    })
+
+    // Summary rows: recompute the representative annotation this case held,
+    // subtract carrier/het/hom together (one carrier per coordinate per case —
+    // symmetric with incrementalAdd), drop the rows that lost their last
+    // carrier and keep the unique-variant counter in step. Scoped to this
+    // case's coordinates (no full scan).
+    const tbl = (t: string): string => this.tbl(t)
+    await removeCaseFromSummary({
+      schema: this.schema,
+      client,
+      caseId,
+      aggregateCte: SCOPED_DEDUPED_AGG_SQL(tbl)
+    })
+
+    // Per-gene aggregates: subtract the case while its rows are still visible.
+    await removeCaseFromGeneSummary({ schema: this.schema, client, caseId })
+  }
+
   private tbl(table: string): string {
     return `${this.schemaName}."${table}"`
-  }
-}
-
-async function rollbackQuietly(client: Pick<PoolClient, 'query'>): Promise<void> {
-  try {
-    await client.query('ROLLBACK')
-  } catch {
-    // Preserve the original failure for callers.
   }
 }
 

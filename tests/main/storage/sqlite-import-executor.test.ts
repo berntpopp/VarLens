@@ -483,6 +483,33 @@ describe('SqliteImportExecutor', () => {
 })
 
 describe('SqliteImportExecutor.importMultiFile', () => {
+  it('the default delegate hands the first file the filters too', async () => {
+    const importSingleFile = vi.fn(async () => {
+      throw new Error('stop after the first file')
+    })
+    const executor = new SqliteImportExecutor({
+      getDatabaseService: () => ({}) as never,
+      getSession: () =>
+        ({
+          capabilities: { backend: 'sqlite' },
+          getImportExecutor: () => ({ importSingleFile, cancel: vi.fn() })
+        }) as never
+    })
+
+    await expect(
+      executor.importMultiFile({
+        caseName: 'MyCase',
+        files: [{ filePath: '/tmp/a.vcf', variantType: 'snv', caller: null }] as never,
+        vcfOptions: { selectedSample: 'S1', genomeBuild: 'GRCh38' },
+        filters: { passOnly: true, minQual: 30 }
+      })
+    ).rejects.toThrow('stop after the first file')
+
+    expect(importSingleFile).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ passOnly: true, minQual: 30 }) })
+    )
+  })
+
   function makeFakeResult(overrides?: Partial<MultiFileImportResult>): MultiFileImportResult {
     return {
       caseId: 42,

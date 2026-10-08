@@ -32,7 +32,8 @@ function makePool(
   const remaining = [...purgeBatches]
   const client = {
     query: vi.fn(async (arg: unknown) => {
-      if (sqlText(arg).includes('FOR UPDATE')) return { rows: caseRow === null ? [] : [caseRow] }
+      if (sqlText(arg).includes('FOR NO KEY UPDATE'))
+        return { rows: caseRow === null ? [] : [caseRow] }
       return { rows: [], rowCount: 0 }
     }),
     release: vi.fn()
@@ -234,7 +235,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     const boom = new Error('lock timeout')
     client.query.mockImplementation(async (arg: unknown) => {
       const sql = sqlText(arg)
-      if (sql.includes('FOR UPDATE')) {
+      if (sql.includes('FOR NO KEY UPDATE')) {
         return { rows: [{ genome_build: 'GRCh38', import_status: 'ready', variant_count: 1 }] }
       }
       if (sql.includes('s.carrier_count - k.carrier_delta')) throw boom
@@ -249,5 +250,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
 
     await expect(repo.deleteCase(7)).rejects.toBe(boom)
     expect(client.release).toHaveBeenCalledTimes(1)
+    // Still inside the transaction: the pool must destroy it, not hand it out again (#490).
+    expect(client.release).toHaveBeenCalledWith(new Error('rollback failed'))
   })
 })

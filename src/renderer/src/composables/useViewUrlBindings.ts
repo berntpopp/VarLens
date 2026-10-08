@@ -9,6 +9,7 @@ import type { AppStateReturn } from './useAppState'
 import { useUrlParam, type ViewRoute } from './useUrlState'
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { createFilterState } from '../../../shared/filters/filterDefaults'
 import type { FilterState } from '../../../shared/types/filters'
@@ -54,10 +55,7 @@ export function useCaseUrlParam(appState: AppStateReturn): void {
           createdAt: match.created_at
         })
       } catch (e) {
-        logService.error(
-          'Restoring case from URL failed: ' + (e instanceof Error ? e.message : String(e)),
-          'url-state'
-        )
+        logService.error('Restoring case from URL failed: ' + formatError(e), 'url-state')
       }
     }
   })
@@ -67,9 +65,7 @@ export function useCaseUrlParam(appState: AppStateReturn): void {
 export function useFilterUrlParam(
   route: ViewRoute,
   filters: Ref<FilterState>,
-  impactPresets: Ref<string[]>,
-  /** Optional hook after state is replaced (e.g. resync derived refs). */
-  afterApply?: () => void
+  impactPresets: Ref<string[]>
 ): void {
   useUrlParam({
     route,
@@ -82,7 +78,6 @@ export function useFilterUrlParam(
       // Search text is owned by the `q` binding; keep it across filter restores.
       filters.value = createFilterState({ ...state, searchQuery: filters.value.searchQuery })
       impactPresets.value = impact
-      afterApply?.()
     }
   })
 }

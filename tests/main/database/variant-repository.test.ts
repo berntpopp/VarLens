@@ -42,6 +42,22 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(meta.max).toBe(0.05)
     })
 
+    // #505: these were reported as text, turning the SV length filter into a LIKE.
+    it.each(['end_pos', 'sv_length'])('reports %s as a numeric column', (column) => {
+      const caseId = createTestCase(service, 'base-sv-numeric')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: '<DEL>', end_pos: 900, sv_length: 800 },
+        { chr: '1', pos: 200, ref: 'A', alt: '<DEL>', end_pos: 10200, sv_length: 10000 }
+      ])
+
+      const single = service.variants.getColumnMeta({ caseId }, column)
+      expect(single.dataType).toBe('numeric')
+      expect([single.min, single.max]).toEqual(column === 'end_pos' ? [900, 10200] : [800, 10000])
+
+      const all = service.variants.getFilterOptions(caseId).columnMeta
+      expect(all?.find((m) => m.key === column)?.dataType).toBe('numeric')
+    })
+
     it('returns distinctValues for a low-cardinality text column', () => {
       const caseId = createTestCase(service, 'base-text')
       service.variants.insertVariantsBatch(caseId, [

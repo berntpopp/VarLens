@@ -167,7 +167,7 @@ import type { ColumnFilter, ColumnFiltersParam } from '../../../shared/types/col
 import type { ActiveFilter } from '../../../shared/types/filters'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import { ACMG_FILTER_OPTIONS, applyPresetStateToFilters, isPresetDiverged } from '../utils/filters'
-import { stripVueProxies } from '../utils/stripVueProxies'
+import { buildPresetFilterJson } from '../utils/filters/presetApplication'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { usePermissions } from '../composables/usePermissions'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
@@ -202,6 +202,8 @@ interface Props {
   columns?: ColumnDef[]
   /** Additional active filter chips from column filters (appended to drawer filter chips) */
   columnActiveFilters?: ActiveFilter[]
+  /** The table's own query filters, so the export matches the table (#485) */
+  getExportFilters?: () => Omit<VariantFilter, 'case_id'>
 }
 
 const props = defineProps<Props>()
@@ -455,12 +457,8 @@ async function handleSavePreset(data: { name: string; description: string | null
   savingPreset.value = true
   savePresetError.value = null
   try {
-    const plainFilters = stripVueProxies(filters.value)
-    await savePreset({
-      name: data.name,
-      description: data.description,
-      filterJson: plainFilters
-    })
+    const filterJson = buildPresetFilterJson(filters.value, selectedImpactPresets.value)
+    await savePreset({ name: data.name, description: data.description, filterJson })
     showSavePresetDialog.value = false
   } catch (e) {
     savePresetError.value = formatError(e, 'The preset could not be saved.')
@@ -579,7 +577,8 @@ watch(
 const { writeBlockedReason } = usePermissions()
 
 const exportToExcel = async (format?: ExportFormat) => {
-  const result = await composableExportToExcel(props.caseId, props.caseName, format)
+  const tableFilters = props.getExportFilters?.()
+  const result = await composableExportToExcel(props.caseId, props.caseName, format, tableFilters)
 
   if (result === null) return
 

@@ -778,7 +778,8 @@ describe('PostgresCohortRepository', () => {
     expect(poolQuery).toHaveBeenCalledWith(
       'SELECT COUNT(*)::bigint AS total_cases FROM "public"."cases"'
     )
-    const streamArg = query.mock.calls[0][0] as { cursor?: { text?: string; values?: unknown[] } }
+    // calls[0] lifts the statement timeout for the stream (#490).
+    const streamArg = query.mock.calls[1][0] as { cursor?: { text?: string; values?: unknown[] } }
     // The export reads the summary, like the page: same representative row (#469).
     expect(streamArg.cursor?.text).toContain('FROM "public"."cohort_variant_summary" cvs')
     expect(streamArg.cursor?.text).not.toContain('GROUP BY v.chr')

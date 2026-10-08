@@ -264,6 +264,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 import { useCapabilityStore } from '../../stores/capabilityStore'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
@@ -381,13 +382,7 @@ function formatDate(dateStr: string | number): string {
   try {
     return new Date(dateStr).toLocaleDateString()
   } catch (e) {
-    logService.warn(
-      'Failed to format date "' +
-        String(dateStr) +
-        '": ' +
-        (e instanceof Error ? e.message : String(e)),
-      'panels'
-    )
+    logService.warn('Failed to format date "' + String(dateStr) + '": ' + formatError(e), 'panels')
     return String(dateStr)
   }
 }

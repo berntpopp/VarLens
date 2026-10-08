@@ -6,6 +6,7 @@
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import {
   DEFAULT_THEME_PREFERENCE,
   SETTINGS_STORAGE_KEY,
@@ -68,10 +69,7 @@ function load(): PersistedSettings {
       return merged
     }
   } catch (e) {
-    logService.warn(
-      'Failed to load settings from localStorage: ' + (e instanceof Error ? e.message : String(e)),
-      'settings'
-    )
+    logService.warn('Failed to load settings from localStorage: ' + formatError(e), 'settings')
   }
   return { ...DEFAULTS }
 }

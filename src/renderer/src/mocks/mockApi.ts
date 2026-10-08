@@ -11,6 +11,7 @@ import type { StorageCapabilities } from '../../../shared/types/storage-capabili
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
 import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
+import { genotypeZygosity } from '../../../shared/utils/genotype'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -455,8 +456,7 @@ export const mockApi: WindowAPI = {
 
       // Convert to CohortVariant array with annotation columns
       let cohortVariants = Array.from(variantMap.entries()).map(([key, v]) => {
-        const hetCount = v.carriers.filter((c) => c.gt_num === '0/1').length
-        const homCount = v.carriers.filter((c) => c.gt_num === '1/1').length
+        const zygosities = v.carriers.map((c) => genotypeZygosity(c.gt_num))
         return {
           chr: v.chr,
           pos: v.pos,
@@ -468,8 +468,8 @@ export const mockApi: WindowAPI = {
           carrier_count: v.carriers.length,
           total_cases: totalCases,
           cohort_frequency: totalCases > 0 ? v.carriers.length / totalCases : 0,
-          het_count: hetCount,
-          hom_count: homCount,
+          het_count: zygosities.filter((z) => z === 'het').length,
+          hom_count: zygosities.filter((z) => z === 'hom').length,
           variant_key: key,
           // Annotation columns
           consequence: v.consequence,

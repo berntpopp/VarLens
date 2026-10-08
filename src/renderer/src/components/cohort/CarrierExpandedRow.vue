@@ -2,6 +2,15 @@
   <tr>
     <td :colspan="colspan" class="pa-0">
       <v-table density="compact" class="nested-carriers-table bg-grey-lighten-3">
+        <caption
+          v-if="carriers.some((carrier) => isAssumedHetGenotype(carrier.gt_num))"
+          class="assumed-het-note text-caption text-medium-emphasis text-left pa-2"
+          data-testid="assumed-het-note"
+        >
+          {{
+            ASSUMED_HET_HELP
+          }}
+        </caption>
         <thead>
           <tr>
             <th class="text-left">Case</th>
@@ -27,11 +36,7 @@
           <tr v-for="carrier in carriers" :key="carrier.case_id">
             <td>{{ carrier.case_name }}</td>
             <td>
-              <v-chip
-                size="x-small"
-                :color="isHomozygous(carrier.gt_num) ? 'error' : 'warning'"
-                label
-              >
+              <v-chip size="x-small" :color="zygosityColor(carrier.gt_num)" label>
                 {{ formatZygosity(carrier.gt_num) }}
               </v-chip>
             </td>
@@ -62,6 +67,11 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
 import type { CohortVariant } from '../../../../shared/types/cohort'
+import {
+  ASSUMED_HET_HELP,
+  genotypeZygosity,
+  isAssumedHetGenotype
+} from '../../../../shared/utils/genotype'
 import { mdiOpenInApp } from '@mdi/js'
 import { carriersQuery } from '../../queries/carriers'
 
@@ -81,17 +91,30 @@ const { data, status, refetch } = useQuery(() => carriersQuery(props.variant))
 const error = computed(() => status.value === 'error')
 const carriers = computed(() => (error.value ? [] : (data.value ?? [])))
 
-// Zygosity helper functions
-const isHomozygous = (gt: string): boolean => {
-  return gt.includes('1/1') || gt.includes('1|1')
+const ZYGOSITY_COLORS = { hom: 'error', het: 'warning', hemi: 'info' } as const
+
+const zygosityColor = (gt: string): string | undefined => {
+  const zygosity = genotypeZygosity(gt)
+  return zygosity === null ? undefined : ZYGOSITY_COLORS[zygosity]
 }
 
+/**
+ * The shared zygosity class. A partly missing genotype is het by assumption
+ * (its other allele is not known) and keeps its stored call; a genotype
+ * without a class is shown as stored.
+ */
 const formatZygosity = (gt: string): string => {
-  return isHomozygous(gt) ? 'hom' : 'het'
+  const zygosity = genotypeZygosity(gt)
+  if (zygosity === null) return gt || '?'
+  return isAssumedHetGenotype(gt) ? `assumed het (${gt})` : zygosity
 }
 </script>
 
 <style scoped>
+.assumed-het-note {
+  caption-side: bottom;
+}
+
 .nested-carriers-table {
   border-top: 1px solid rgba(0, 0, 0, 0.12);
 }

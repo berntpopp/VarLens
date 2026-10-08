@@ -15,6 +15,7 @@ import type { VariantFilter, Variant } from '../../../shared/types/api'
 import { APP_CONFIG } from '../../../shared/config/app.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { useApiService } from '../composables/useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
@@ -144,11 +145,7 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
   } catch (error) {
     logService.error(
       'Failed to load variant type counts: ' +
-        (isIpcError(error)
-          ? (error.userMessage ?? error.message)
-          : error instanceof Error
-            ? error.message
-            : String(error)),
+        (isIpcError(error) ? (error.userMessage ?? error.message) : formatError(error)),
       'case'
     )
     typeCounts.value = {}
@@ -283,8 +280,7 @@ onActivated(async () => {
         await variantTableRef.value?.refresh()
       } catch (error) {
         logService.error(
-          'Failed to refresh variant table on activation: ' +
-            (error instanceof Error ? error.message : String(error)),
+          'Failed to refresh variant table on activation: ' + formatError(error),
           'case'
         )
       }
@@ -444,6 +440,7 @@ defineExpose({
           :initial-search="initialSearch"
           :columns="variantTableRef?.columns"
           :column-active-filters="variantTableRef?.columnActiveFilters"
+          :get-export-filters="variantTableRef?.buildQueryFilters"
           @update:filters="handleFiltersUpdate"
           @reset-sort="handleResetSort"
           @export-success="handleExportSuccess"

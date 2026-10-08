@@ -12,7 +12,7 @@ import type {
   VcfMappedVariant,
   InfoFieldMapping
 } from './types'
-import { splitAlleleForSample } from './vcf-allele-splitter'
+import { effectiveAdNumber, splitAlleleForSample } from './vcf-allele-splitter'
 import { parseAnnotationsForAlleles } from './vcf-annotation-parser'
 import { isVepClinSigAlleleSpecific, normalizeVepClinSig } from './vep-clin-sig'
 import { parseGenotype } from './vcf-genotype-parser'
@@ -59,12 +59,26 @@ export function mapVcfRecord(
   const gtIdx = record.format.indexOf('GT')
   const rawGt = gtIdx >= 0 && gtIdx < selectedValues.length ? selectedValues[gtIdx] : '.'
   const carriedAlleles = carriedAltAlleles(rawGt)
+  // Thrown, so the import paths count the row as skipped; an empty result means hom-ref.
+  for (const allele of carriedAlleles) {
+    if (allele > record.alt.length) {
+      throw new Error(
+        `GT "${rawGt}" names allele ${allele} but the row has ${record.alt.length} ALT allele(s)`
+      )
+    }
+  }
   const isNoCallGt = rawGt === '.' || rawGt === './.' || rawGt === '.|.'
   const targetAltIndexes: number[] = []
 
   for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
     const rawAlt = record.alt[altIdx]
-    if (rawAlt === '<NON_REF>' || rawAlt === '<*>' || rawAlt.toUpperCase() === '<NON_REF>') {
+    // `*`: the allele is missing here because of an upstream deletion, which has its own record.
+    if (
+      rawAlt === '*' ||
+      rawAlt === '<NON_REF>' ||
+      rawAlt === '<*>' ||
+      rawAlt.toUpperCase() === '<NON_REF>'
+    ) {
       continue
     }
 
@@ -108,7 +122,11 @@ export function mapVcfRecord(
       sampleValues,
       rec.format,
       1,
-      header.formatDefs.get('AD')?.number ?? 'R'
+      effectiveAdNumber(
+        header.formatDefs.get('AD')?.number,
+        selectedValues[record.format.indexOf('AD')],
+        record.alt.length
+      )
     )
 
     // Step 3: Select the pre-grouped annotation result for this ALT.
@@ -116,7 +134,13 @@ export function mapVcfRecord(
     const annotation = annotationByTarget[targetIndex]
 
     // Step 4: Apply INFO field registry
-    const infoResult = applyInfoFieldRegistry(rec.info, registry, annotation)
+    const infoResult = applyInfoFieldRegistry(
+      rec.info,
+      registry,
+      annotation,
+      altIdx,
+      record.alt.length
+    )
 
     // Step 5: Build sample raw FORMAT values for extension parsers
     const sampleRawValues = new Map<string, string>()

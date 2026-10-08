@@ -77,9 +77,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useDebounce } from '../composables/useDebounce'
-import { useApiService } from '../composables/useApiService'
-import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { useHpoBundled } from '../composables/useHpoBundled'
 import type { CaseHpoTerm } from '../../../shared/types/api'
 import { runtimeFeatureUnavailableReason } from '../utils/runtime-features'
 
@@ -98,7 +96,8 @@ const emit = defineEmits<{
   'remove:term': [hpoId: string]
 }>()
 
-const { api } = useApiService()
+// The bundled term list: works offline, on desktop and web alike.
+const { search: searchBundledTerms, loadError } = useHpoBundled()
 
 /** Name the suggestion listbox and make its scroll region keyboard-reachable (axe). */
 const HPO_LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
@@ -114,7 +113,7 @@ const searchError = ref('')
 
 onMounted(() => {
   // Availability comes from the capability document, not `typeof` detection.
-  hpoApiAvailable.value = hpoUnavailableReason === null && api != null
+  hpoApiAvailable.value = hpoUnavailableReason === null
 })
 
 // Search function for debouncing
@@ -127,26 +126,12 @@ async function performSearch(query: string) {
   loading.value = true
   searchError.value = ''
   try {
-    const result = unwrapIpcResult(await api!.hpo.search(query, 20))
-    if (result.success) {
-      // Filter out already assigned terms
-      const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
-      searchResults.value = result.terms.filter((t) => !assignedIds.has(t.id))
-    } else {
-      searchResults.value = []
-    }
-  } catch (error) {
-    logService.error(
-      'HPO search failed: ' +
-        (error instanceof Error
-          ? error.message
-          : isIpcError(error)
-            ? (error.userMessage ?? error.message)
-            : String(error)),
-      'hpo'
-    )
-    searchError.value = 'HPO search failed. Try again later.'
-    searchResults.value = []
+    const terms = await searchBundledTerms(query, 20)
+    // Filter out already assigned terms
+    const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
+    searchResults.value = terms.filter((t) => !assignedIds.has(t.id))
+    // The composable logs a failed load of the list and returns no terms.
+    if (loadError.value !== null) searchError.value = 'HPO search failed. Try again later.'
   } finally {
     loading.value = false
   }

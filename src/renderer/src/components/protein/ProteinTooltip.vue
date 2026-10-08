@@ -144,6 +144,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TooltipData } from '../../composables/useLollipopPlot'
+import { formatConsequence } from '../../utils/formatters'
 
 const MAX_DISPLAY = 5
 
@@ -184,10 +185,6 @@ const tooltipStyle = computed(() => {
     top: `${y}px`
   }
 })
-
-function formatConsequence(consequence: string): string {
-  return consequence.replace(/_/g, ' ')
-}
 </script>
 
 <style scoped>

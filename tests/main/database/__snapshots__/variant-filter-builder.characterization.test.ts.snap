@@ -564,47 +564,54 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
     "Pathogenic",
     2,
     0.5,
-    2,
     4,
-    2,
+    4,
+    4,
     4,
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin))) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
 }
 `;
 
@@ -648,47 +655,54 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
     2,
     "Pathogenic",
     0.5,
-    2,
     4,
-    2,
+    4,
+    4,
     4,
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin))) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
 }
 `;
 
@@ -732,47 +746,54 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
     2,
     "Pathogenic",
     0.5,
-    2,
     4,
-    2,
+    4,
+    4,
     4,
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1', '0|1', '1|0') OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          )) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and ("vf"."case_count" is null or CAST(vf.case_count AS REAL) / ? <= ?) and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin))) order by cnv.copy_number ASC NULLS LAST, variants.pos DESC NULLS LAST, id ASC",
 }
 `;
 
@@ -1040,7 +1061,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
     "%c.123A>G%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (cdna LIKE ? OR aa_change LIKE ?)",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (cdna LIKE ? ESCAPE '\\' OR aa_change LIKE ? ESCAPE '\\')",
 }
 `;
 
@@ -1261,21 +1282,22 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
     7,
     2,
-    2,
     7,
-    2,
+    7,
+    7,
     7,
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1') OR variants.gt_num IN ('0/1', '0|1', '1|0') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')) OR (variants.gene_symbol IN (
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1','1|1') OR variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1','1|1','1')) OR (variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
             WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
-          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')) OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
+          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')) OR (
+            variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
@@ -1283,7 +1305,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1293,11 +1315,11 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ) OR (
-            variants.gt_num IN ('1/1', '1|1')
+            variants.gt_num IN ('1/1','1|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_par
@@ -1305,43 +1327,50 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants par
                 ON par.case_id = agm_par.case_id
                 AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
-                AND par.gt_num IN ('1/1', '1|1')
+                AND par.gt_num IN ('1/1','1|1')
               WHERE p.case_id = ?
             )
-          ) OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          ))",
+          ) OR (variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin)))",
 }
 `;
 
@@ -1352,13 +1381,14 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1') OR variants.gt_num IN ('0/1', '0|1', '1|0') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')) OR (variants.gene_symbol IN (
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1','1|1') OR variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1','1|1','1')) OR (variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
             WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
-          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')))",
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
+          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
 }
 `;
 
@@ -1372,15 +1402,15 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
     7,
     2,
-    2,
     7,
-    2,
+    7,
+    7,
     7,
     2,
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
-            variants.gt_num IN ('0/1', '0|1', '1|0')
+            variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
@@ -1388,7 +1418,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1398,11 +1428,11 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ) OR (
-            variants.gt_num IN ('1/1', '1|1')
+            variants.gt_num IN ('1/1','1|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_par
@@ -1410,43 +1440,50 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants par
                 ON par.case_id = agm_par.case_id
                 AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
-                AND par.gt_num IN ('1/1', '1|1')
+                AND par.gt_num IN ('1/1','1|1')
               WHERE p.case_id = ?
             )
-          ) OR (
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          ))",
+          ) OR (variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin)))",
 }
 `;
 
@@ -1466,7 +1503,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1', '0|1', '1|0'))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1'))",
 }
 `;
 
@@ -1480,10 +1517,11 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.gene_symbol IN (
             SELECT v2.gene_symbol FROM variants v2
             WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1', '0|1', '1|0')
+              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
               AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol HAVING COUNT(*) >= 2
-          ) AND variants.gt_num IN ('0/1', '0|1', '1|0')))",
+            GROUP BY v2.gene_symbol
+            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
+          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
 }
 `;
 
@@ -1493,7 +1531,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1', '0|1', '1|0'))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1'))",
 }
 `;
 
@@ -1503,7 +1541,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1', '1|1'))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and (variants.gt_num IN ('1/1','1|1'))",
 }
 `;
 
@@ -1513,7 +1551,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1', '1|1', '1')))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr IN ('X', 'chrX') AND variants.gt_num IN ('1/1','1|1','1')))",
 }
 `;
 
@@ -1526,7 +1564,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
-            variants.gt_num IN ('1/1', '1|1')
+            variants.gt_num IN ('1/1','1|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_par
@@ -1534,7 +1572,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants par
                 ON par.case_id = agm_par.case_id
                 AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
-                AND par.gt_num IN ('1/1', '1|1')
+                AND par.gt_num IN ('1/1','1|1')
               WHERE p.case_id = ?
             )
           ))",
@@ -1555,47 +1593,54 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
 {
   "parameters": [
     2,
-    2,
     7,
-    2,
+    7,
+    7,
     7,
     2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
-            variants.gt_num IN ('0/1', '0|1', '1|0')
-            AND variants.gene_symbol IS NOT NULL
-            AND variants.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM variants v_inner
-              WHERE v_inner.case_id = ?
-                AND v_inner.gt_num IN ('0/1', '0|1', '1|0')
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol HAVING COUNT(*) >= 2
-            )
-            AND variants.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM variants pf
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ? AND agm_f.role = 'father'
-              INNER JOIN variants f ON f.case_id = agm_f.case_id
-                AND f.chr = pf.chr AND f.pos = pf.pos AND f.ref = pf.ref AND f.alt = pf.alt
-                AND f.gt_num IN ('0/1', '0|1', '1|0')
-              INNER JOIN variants pm
-                ON pm.case_id = ?
-                AND pm.gene_symbol = pf.gene_symbol
-                AND pm.gt_num IN ('0/1', '0|1', '1|0')
-                AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ? AND agm_m.role = 'mother'
-              INNER JOIN variants m ON m.case_id = agm_m.case_id
-                AND m.chr = pm.chr AND m.pos = pm.pos AND m.ref = pm.ref AND m.alt = pm.alt
-                AND m.gt_num IN ('0/1', '0|1', '1|0')
-              WHERE pf.case_id = ?
-                AND pf.gt_num IN ('0/1', '0|1', '1|0')
-                AND pf.gene_symbol IS NOT NULL
-            )
-          ))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.id IN (SELECT o.id FROM (
+      SELECT t.id, t.origin,
+        MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
+        MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
+      FROM (
+        SELECT p.id, p.gene_symbol,
+          CASE
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'father'
+            WHEN EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'mother' AND par.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1/1','1|1','1')
+        ) AND NOT EXISTS (
+          SELECT 1 FROM analysis_group_members agm
+          INNER JOIN variants par
+            ON par.case_id = agm.case_id
+           AND par.chr = p.chr AND par.pos = p.pos AND par.ref = p.ref AND par.alt = p.alt
+          WHERE agm.group_id = ? AND agm.role = 'father' AND (par.gt_num IS NULL OR par.gt_num NOT IN ('0/0','0|0','0'))
+        ) THEN 'mother'
+          END AS origin
+        FROM variants p
+        WHERE p.case_id = ?
+          AND p.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
+          AND p.gene_symbol IS NOT NULL
+      ) t
+    ) o
+    WHERE o.origin IS NOT NULL AND o.first_origin <> o.last_origin)))",
 }
 `;
 
@@ -1620,7 +1665,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((
-            variants.gt_num IN ('0/1', '0|1', '1|0')
+            variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
             AND variants.id NOT IN (
               SELECT p.id FROM variants p
               INNER JOIN analysis_group_members agm_f
@@ -1628,7 +1673,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_f.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
             AND variants.id NOT IN (
@@ -1638,7 +1683,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
               INNER JOIN variants f
                 ON f.case_id = agm_m.case_id
                 AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND f.gt_num NOT IN ('0/0', '0|0', './.', '', '0')
+                AND (f.gt_num IS NULL OR f.gt_num NOT IN ('0/0','0|0','0'))
               WHERE p.case_id = ?
             )
           ))",
@@ -1877,159 +1922,12 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
 {
   "parameters": [
     2,
-    "1",
-    1500,
-    1000,
-    "2",
-    2500,
-    2000,
-    "3",
-    3500,
-    3000,
-    "4",
-    4500,
-    4000,
-    "5",
-    5500,
-    5000,
-    "6",
-    6500,
-    6000,
-    "7",
-    7500,
-    7000,
-    "8",
-    8500,
-    8000,
-    "9",
-    9500,
-    9000,
-    "10",
-    10500,
-    10000,
-    "11",
-    11500,
-    11000,
-    "12",
-    12500,
-    12000,
-    "13",
-    13500,
-    13000,
-    "14",
-    14500,
-    14000,
-    "15",
-    15500,
-    15000,
-    "16",
-    16500,
-    16000,
-    "17",
-    17500,
-    17000,
-    "18",
-    18500,
-    18000,
-    "19",
-    19500,
-    19000,
-    "20",
-    20500,
-    20000,
-    "21",
-    21500,
-    21000,
-    "22",
-    22500,
-    22000,
-    "1",
-    23500,
-    23000,
-    "2",
-    24500,
-    24000,
-    "3",
-    25500,
-    25000,
-    "4",
-    26500,
-    26000,
-    "5",
-    27500,
-    27000,
-    "6",
-    28500,
-    28000,
-    "7",
-    29500,
-    29000,
-    "8",
-    30500,
-    30000,
-    "9",
-    31500,
-    31000,
-    "10",
-    32500,
-    32000,
-    "11",
-    33500,
-    33000,
-    "12",
-    34500,
-    34000,
-    "13",
-    35500,
-    35000,
-    "14",
-    36500,
-    36000,
-    "15",
-    37500,
-    37000,
-    "16",
-    38500,
-    38000,
-    "17",
-    39500,
-    39000,
-    "18",
-    40500,
-    40000,
-    "19",
-    41500,
-    41000,
-    "20",
-    42500,
-    42000,
-    "21",
-    43500,
-    43000,
-    "22",
-    44500,
-    44000,
-    "1",
-    45500,
-    45000,
-    "2",
-    46500,
-    46000,
-    "3",
-    47500,
-    47000,
-    "4",
-    48500,
-    48000,
-    "5",
-    49500,
-    49000,
-    "6",
-    50500,
-    50000,
+    "[{"chr":"1","start":1000,"end":1500},{"chr":"2","start":2000,"end":2500},{"chr":"3","start":3000,"end":3500},{"chr":"4","start":4000,"end":4500},{"chr":"5","start":5000,"end":5500},{"chr":"6","start":6000,"end":6500},{"chr":"7","start":7000,"end":7500},{"chr":"8","start":8000,"end":8500},{"chr":"9","start":9000,"end":9500},{"chr":"10","start":10000,"end":10500},{"chr":"11","start":11000,"end":11500},{"chr":"12","start":12000,"end":12500},{"chr":"13","start":13000,"end":13500},{"chr":"14","start":14000,"end":14500},{"chr":"15","start":15000,"end":15500},{"chr":"16","start":16000,"end":16500},{"chr":"17","start":17000,"end":17500},{"chr":"18","start":18000,"end":18500},{"chr":"19","start":19000,"end":19500},{"chr":"20","start":20000,"end":20500},{"chr":"21","start":21000,"end":21500},{"chr":"22","start":22000,"end":22500},{"chr":"1","start":23000,"end":23500},{"chr":"2","start":24000,"end":24500},{"chr":"3","start":25000,"end":25500},{"chr":"4","start":26000,"end":26500},{"chr":"5","start":27000,"end":27500},{"chr":"6","start":28000,"end":28500},{"chr":"7","start":29000,"end":29500},{"chr":"8","start":30000,"end":30500},{"chr":"9","start":31000,"end":31500},{"chr":"10","start":32000,"end":32500},{"chr":"11","start":33000,"end":33500},{"chr":"12","start":34000,"end":34500},{"chr":"13","start":35000,"end":35500},{"chr":"14","start":36000,"end":36500},{"chr":"15","start":37000,"end":37500},{"chr":"16","start":38000,"end":38500},{"chr":"17","start":39000,"end":39500},{"chr":"18","start":40000,"end":40500},{"chr":"19","start":41000,"end":41500},{"chr":"20","start":42000,"end":42500},{"chr":"21","start":43000,"end":43500},{"chr":"22","start":44000,"end":44500},{"chr":"1","start":45000,"end":45500},{"chr":"2","start":46000,"end":46500},{"chr":"3","start":47000,"end":47500},{"chr":"4","start":48000,"end":48500},{"chr":"5","start":49000,"end":49500},{"chr":"6","start":50000,"end":50500}]",
+    2,
+    2,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?))",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and variants.id IN (WITH iv(chr, s, e) AS MATERIALIZED (SELECT value ->> 'chr', value ->> 'start', value ->> 'end' FROM json_each(?)) SELECT pv.id FROM iv CROSS JOIN variants pv WHERE pv.case_id = ? AND pv.chr = iv.chr AND pv.pos BETWEEN iv.s AND iv.e AND COALESCE(pv.end_pos, pv.pos) >= iv.s UNION ALL SELECT pv.id FROM variants pv WHERE pv.case_id = ? AND pv.end_pos IS NOT NULL AND EXISTS (SELECT 1 FROM iv WHERE iv.chr = pv.chr AND pv.end_pos >= iv.s AND pv.pos < iv.s))",
 }
 `;
 

@@ -1,4 +1,9 @@
+import { randomBytes } from 'node:crypto'
+
+import { Pool } from 'pg'
 import { describe, expect, it, vi } from 'vitest'
+import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
+import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { chrRankSql } from '../../../src/shared/sql/chromosome-order'
 
 import {
@@ -212,6 +217,24 @@ describe('PostgresVariantReadRepository', () => {
     expect(toPrefixTsQueryForTest('BRCA1')).toBe('BRCA1:*')
     expect(toPrefixTsQueryForTest('chr1:1000 A>G')).toBe('chr11000:* & AG:*')
     expect(toPrefixTsQueryForTest('***')).toBe('')
+    // The 'simple' parser keeps the dot inside a lexeme ('007294.4', 'c.5266dupc').
+    expect(toPrefixTsQueryForTest('NM_007294.4')).toBe('NM_007294.4:*')
+    // HGVS tokens are matched by ILIKE instead, like SQLite (#503).
+    expect(toPrefixTsQueryForTest('BRCA1 c.5266dupC')).toBe('BRCA1:*')
+  })
+
+  it('matches c. and p. search tokens on cdna and aa_change like SQLite', async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const repository = new PostgresVariantReadRepository(pool as never, 'public')
+
+    await repository.searchVariants(1, 'c.5266dupC', 20)
+
+    const { text, values } = pool.query.mock.calls[0][0] as { text: string; values: unknown[] }
+    expect(text).toMatch(
+      /\(v\.cdna ILIKE (\$\d+) ESCAPE '\\' OR v\.aa_change ILIKE \1 ESCAPE '\\'\)/
+    )
+    expect(text).not.toContain('search_document @@')
+    expect(values).toContain('%c.5266dupC%')
   })
 
   it('adds STR extension projections for str variant queries', async () => {
@@ -345,4 +368,42 @@ describe('PostgresVariantReadRepository', () => {
     ).rejects.toThrow('Unsupported PostgreSQL column filter(s): sv.does_not_exist')
     expect(pool.query).not.toHaveBeenCalled()
   })
+})
+
+const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
+const PG_URL =
+  process.env.VARLENS_PG_URL ??
+  'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
+
+describe.skipIf(!RUN)('HGVS search against a real Postgres', () => {
+  it('takes _, % and \\ in a c./p. token literally', async () => {
+    const schema = `varlens_test_hgvs_search_${Date.now()}_${randomBytes(4).toString('hex')}`
+    const pool = new Pool({ connectionString: PG_URL, max: 2 })
+    try {
+      await pool.query(`CREATE SCHEMA "${schema}"`)
+      await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+      const created = await pool.query<{ id: number }>(
+        `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, genome_build)
+           VALUES ('hgvs', '/tmp/hgvs.json', 0, 0, 'GRCh38') RETURNING id`
+      )
+      const caseId = created.rows[0].id
+      await pool.query(
+        `INSERT INTO "${schema}".variants (case_id, chr, pos, ref, alt, variant_type, cdna)
+           SELECT $1, '1', n, 'A', 'T', 'snv', c
+           FROM unnest($2::text[]) WITH ORDINALITY AS t(c, n)`,
+        [caseId, ['c.1_2del', 'c.112del', 'c.1%2del', 'c.1\\2del']]
+      )
+      const repository = new PostgresVariantReadRepository(pool, schema)
+      const found = async (query: string): Promise<(string | null)[]> =>
+        (await repository.searchVariants(caseId, query, 20)).map((variant) => variant.cdna).sort()
+
+      expect(await found('c.1_2del')).toEqual(['c.1_2del'])
+      expect(await found('c.1%2del')).toEqual(['c.1%2del'])
+      expect(await found('c.1\\2del')).toEqual(['c.1\\2del'])
+      expect(await found('c.1')).toHaveLength(4)
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+      await pool.end()
+    }
+  }, 60_000)
 })

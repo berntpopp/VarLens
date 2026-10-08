@@ -159,6 +159,7 @@ import {
   mdiPencil
 } from '@mdi/js'
 import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 
 const props = defineProps<{
@@ -190,11 +191,7 @@ const errorSnackbarText = ref('')
 
 /** Extract a user-facing message from a caught IPC/JS error. */
 function describeError(err: unknown): string {
-  return isIpcError(err)
-    ? (err.userMessage ?? err.message)
-    : err instanceof Error
-      ? err.message
-      : String(err)
+  return isIpcError(err) ? (err.userMessage ?? err.message) : formatError(err)
 }
 
 // Cohort name validation

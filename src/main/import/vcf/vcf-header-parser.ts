@@ -300,3 +300,36 @@ export async function parseVcfHeader(
     stream.on('error', settle)
   })
 }
+
+/**
+ * The sample every file of one multi-file import is read for: the requested
+ * one, else the first sample of the first file. Left to itself each file falls
+ * back to its own first column, which need not be the same person.
+ */
+export async function resolveCaseSample(
+  firstFilePath: string | undefined,
+  requested: string | undefined
+): Promise<string | undefined> {
+  if (requested !== undefined && requested !== '') return requested
+  if (firstFilePath === undefined) return undefined
+  // An unreadable first file fails in the import itself, with its own error.
+  const parsed = await parseVcfHeader(firstFilePath).catch(() => undefined)
+  return parsed?.header.samples[0]
+}
+
+/**
+ * One case, one reference assembly: refuse a file whose header declares another
+ * build than the case is locked to. A header that declares none passes.
+ */
+export function assertGenomeBuildMatches(
+  lockedBuild: string | null | undefined,
+  declaredBuild: string | null | undefined,
+  filePath: string
+): void {
+  if (lockedBuild == null || declaredBuild == null || declaredBuild === lockedBuild) return
+  throw new Error(
+    `Genome build mismatch: case is locked to ${lockedBuild} but ` +
+      `${filePath} declares ${declaredBuild}. All files in a multi-file ` +
+      `import must share the same reference assembly.`
+  )
+}

@@ -74,7 +74,7 @@
               </template>
               <v-list density="compact" nav>
                 <v-list-item
-                  v-for="opt in STRENGTH_OPTIONS"
+                  v-for="opt in strengthOptionsFor(entry.code)"
                   :key="opt.value"
                   :active="entry.strength === opt.value"
                   @click="handleStrengthChange(entry.code, opt.value)"
@@ -151,14 +151,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { evidenceFingerprint, summarizeAcmgDraft } from '../utils/acmg/acmg-undo'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg/types'
 import {
   PATHOGENIC_CODES,
   BENIGN_CODES,
-  STRENGTH_OPTIONS,
+  strengthOptionsFor,
   EVIDENCE_POINTS
 } from '../utils/acmg/types'
 import type { VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
@@ -167,21 +167,23 @@ import AcmgSummaryBar from './acmg/AcmgSummaryBar.vue'
 import AcmgEvidenceGrid from './acmg/AcmgEvidenceGrid.vue'
 import { mdiChevronDown } from '@mdi/js'
 
+interface AcmgDraft {
+  classification: AcmgClassification | null
+  evidenceJson: string
+}
+
 const props = defineProps<{
   /** Current acmg_evidence JSON string from database */
   evidenceJson: string | null
   /** Variant annotation data for auto-suggestions */
   variantData: VariantAnnotationData | null
+  /** Persists an applied draft; the draft stays pending unless it resolves true. */
+  save?: (draft: AcmgDraft) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
   /** Emitted when evidence changes. Payload: { classification, evidenceJson } */
-  change: [
-    payload: {
-      classification: AcmgClassification | null
-      evidenceJson: string
-    }
-  ]
+  change: [payload: AcmgDraft]
 }>()
 
 /** Color per strength level for active code chips/buttons */
@@ -312,9 +314,7 @@ function handleOverride(classification: AcmgClassification | null): void {
  * a draft; nothing is written (and no classification changes in the table)
  * until "Apply classification". Applying is then undoable via the snackbar.
  */
-const pending = ref<{ classification: AcmgClassification | null; evidenceJson: string } | null>(
-  null
-)
+const pending = ref<AcmgDraft | null>(null)
 
 /** Serialized saved state; a draft equal to it is not pending. */
 let baselineJson = ''
@@ -335,10 +335,25 @@ function emitChange(): void {
       : { classification: effectiveClassification.value, evidenceJson }
 }
 
-function applyPending(): void {
-  if (pending.value === null) return
-  emit('change', pending.value)
-  baselineJson = evidenceFingerprint(pending.value.evidenceJson)
+async function applyPending(): Promise<void> {
+  const draft = pending.value
+  if (draft === null) return
+  if (props.save) {
+    const variantData = props.variantData
+    const saved = await props.save(draft)
+    await nextTick()
+    // Another variant was opened while saving: its state is already loaded.
+    if (props.variantData !== variantData) return
+    if (!saved) {
+      // The failed write's rollback reloaded the saved evidence: put the draft back.
+      loadState(draft.evidenceJson)
+      pending.value = draft
+      return
+    }
+  } else {
+    emit('change', draft)
+  }
+  baselineJson = evidenceFingerprint(draft.evidenceJson)
   pending.value = null
 }
 

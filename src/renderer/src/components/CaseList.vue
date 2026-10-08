@@ -153,6 +153,7 @@ import type { CaseWithCohorts, CaseSex, AffectedStatus } from '../../../shared/t
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { refreshNewestRows } from '../utils/refreshNewestRows'
 
 const VALID_AFFECTED: Set<string> = new Set(['affected', 'unaffected', 'unknown'])
@@ -484,10 +485,7 @@ const handleDelete = async (): Promise<void> => {
       snackbarRef.value?.show(`Deleted "${deletedName}"`)
     })
     .catch((error) => {
-      logService.error(
-        `Failed to delete case ${deletedId}: ${error instanceof Error ? error.message : String(error)}`,
-        'case-list'
-      )
+      logService.error(`Failed to delete case ${deletedId}: ${formatError(error)}`, 'case-list')
       // Roll back: re-insert at the original position.
       if (priorSnapshot !== null) {
         const next = [...cases.value]
@@ -496,9 +494,7 @@ const handleDelete = async (): Promise<void> => {
         cases.value = markRaw(next)
         totalCaseCount.value += 1
       }
-      snackbarRef.value?.show(
-        `Failed to delete "${deletedName}": ${error instanceof Error ? error.message : String(error)}`
-      )
+      snackbarRef.value?.show(`Failed to delete "${deletedName}": ${formatError(error)}`)
     })
 }
 
@@ -557,9 +553,7 @@ const handleDeleteSelected = async (): Promise<void> => {
     })
     .catch((error) => {
       logService.error(
-        `Failed to delete cases [${ids.join(', ')}]: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Failed to delete cases [${ids.join(', ')}]: ${formatError(error)}`,
         'case-list'
       )
       // Roll back: re-insert all affected cases. Order is approximate
@@ -568,9 +562,7 @@ const handleDeleteSelected = async (): Promise<void> => {
         cases.value = markRaw([...priorSnapshots, ...cases.value])
         totalCaseCount.value += priorSnapshots.length
       }
-      snackbarRef.value?.show(
-        `Failed to delete cases: ${error instanceof Error ? error.message : String(error)}`
-      )
+      snackbarRef.value?.show(`Failed to delete cases: ${formatError(error)}`)
     })
 }
 

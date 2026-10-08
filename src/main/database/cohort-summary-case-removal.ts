@@ -35,6 +35,7 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
+  TOUCH_SUMMARY_CONTENT_SQL,
   variantSummaryInsertSql
 } from '../../shared/sql/cohort-summary-rebuild'
 import {
@@ -91,6 +92,7 @@ export function openCaseSummaryRemoval(db: DatabaseType): CaseSummaryRemoval | n
       s.decrementGenes.run({ build: genomeBuild })
       s.dropEmptyGenes.run()
       countRemovedCaseUniqueVariants(db)
+      db.exec(TOUCH_SUMMARY_CONTENT_SQL)
     }
   }
 }

@@ -22,6 +22,7 @@ import { serverPathImportDisabled, serverPathImportDisabledResponse } from './se
 import { jobViewerOf } from './jobs'
 import type { OverrideHandler } from './types'
 import {
+  holdWebUploads,
   isWebUploadRef,
   replaceWebUploadPathWithRef,
   resolveWebUploadPath,
@@ -116,8 +117,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         if (userId !== undefined) {
           events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
         }
+        const releaseUploads = holdWebUploads([validatedFilePath.data])
+        let imported = false
         try {
-          return await startImport(
+          const result = await startImport(
             resolved.path,
             validatedCaseName.data,
             normalizeImportVcfOptions(vcfOptions),
@@ -130,7 +133,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
               }
             }
           )
+          imported = true
+          return result
         } finally {
+          releaseUploads(imported)
           if (userId !== undefined) {
             events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }
@@ -213,6 +219,11 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         if (userId !== undefined) {
           events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
         }
+        const releaseUploads = holdWebUploads([
+          ...pathToRef.values(),
+          (filters as { bedFile?: unknown } | null | undefined)?.bedFile
+        ])
+        let imported = false
         try {
           const result = await startMultiFileImport(
             validatedCaseName.data,
@@ -232,11 +243,13 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
             undefined,
             normalizedFilters
           )
+          imported = result.files.every((file) => file.error === undefined)
           return {
             ...result,
             files: result.files.map((file) => replaceWebUploadPathWithRef(file, pathToRef))
           }
         } finally {
+          releaseUploads(imported)
           if (userId !== undefined) {
             events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }

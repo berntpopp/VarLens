@@ -253,6 +253,7 @@ import { useApiService } from '../composables/useApiService'
 import { APP_CONFIG } from '../../../shared/config/app.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 import { isWebRuntime } from '../utils/runtime-mode'
 import BackgroundJobsToggle from './jobs/BackgroundJobsToggle.vue'
 import {
@@ -370,10 +371,7 @@ const openGitHub = async (): Promise<void> => {
         logService.error('Failed to open GitHub URL: ' + String(result.error), 'app')
       }
     } catch (error) {
-      logService.error(
-        'Failed to open GitHub URL: ' + (error instanceof Error ? error.message : String(error)),
-        'app'
-      )
+      logService.error('Failed to open GitHub URL: ' + formatError(error), 'app')
     }
   }
 }
@@ -386,11 +384,7 @@ const openDocs = async (): Promise<void> => {
         logService.error('Failed to open documentation URL: ' + String(result.error), 'app')
       }
     } catch (error) {
-      logService.error(
-        'Failed to open documentation URL: ' +
-          (error instanceof Error ? error.message : String(error)),
-        'app'
-      )
+      logService.error('Failed to open documentation URL: ' + formatError(error), 'app')
     }
   }
 }
@@ -403,10 +397,7 @@ const openLicense = async (): Promise<void> => {
         logService.error('Failed to open license URL: ' + String(result.error), 'app')
       }
     } catch (error) {
-      logService.error(
-        'Failed to open license URL: ' + (error instanceof Error ? error.message : String(error)),
-        'app'
-      )
+      logService.error('Failed to open license URL: ' + formatError(error), 'app')
     }
   }
 }

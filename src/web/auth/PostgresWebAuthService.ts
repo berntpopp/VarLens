@@ -15,6 +15,8 @@
  * src/shared/auth/auth-constants — the constants module is process-agnostic
  * and the only thing the two implementations share.
  */
+import { randomBytes } from 'node:crypto'
+
 import type { Pool } from 'pg'
 
 import {
@@ -30,7 +32,12 @@ import {
   normalizeUserRole,
   type UserRole
 } from '../../shared/auth/auth-constants'
-import { assertUserExists, reactivateUser, setUserRole } from './postgres-user-admin'
+import {
+  adminSetLockKey,
+  assertUserExists,
+  reactivateUser,
+  setUserRole
+} from './postgres-user-admin'
 import { assertArgon2idHashMatchesProviderPolicy, isLikelyArgon2idHash } from './argon2id-phc'
 
 /**
@@ -176,6 +183,8 @@ export class PostgresWebAuthService {
   private readonly schemaQuoted: string
   private readonly passwordProvider: PasswordProvider
   private readonly userCache: UserLookupCache<User | undefined>
+  /** Hash of a random secret, verified against when no account matches a login. */
+  private dummyHash: Promise<string> | undefined
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
@@ -289,9 +298,7 @@ export class PostgresWebAuthService {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `${sch}:first-admin-bootstrap`
-      ])
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [adminSetLockKey(sch)])
       const existingAdmin = await client.query(
         `SELECT 1 FROM ${sch}."users" WHERE role = $1 AND is_active = TRUE LIMIT 1`,
         [ROLE_ADMIN]
@@ -342,13 +349,26 @@ export class PostgresWebAuthService {
       `SELECT * FROM ${sch}."users" WHERE username = $1 AND is_active = TRUE`,
       [username]
     )
+    // Unknown and locked accounts pay the same Argon2 verify as a wrong
+    // password, so response time does not reveal which usernames exist.
     if ((sel.rowCount ?? 0) === 0) {
+      // A failed hash is not kept: every later unknown username would fail
+      // with it while known ones work, which tells the two apart again.
+      this.dummyHash ??= this.passwordProvider
+        .hashPassword(randomBytes(16).toString('hex'))
+        .catch((error: unknown) => {
+          this.dummyHash = undefined
+          throw error
+        })
+      await this.passwordProvider.verifyPassword(await this.dummyHash, password)
       return { success: false, user: null }
     }
     const user = mapPgRowToUser(sel.rows[0])
 
     if (user.locked_until !== null && user.locked_until !== '') {
       if (new Date(user.locked_until).getTime() > Date.now()) {
+        await this.passwordProvider.verifyPassword(user.password_hash, password)
+        // `locked` is for the server-side audit only; routes/auth.ts strips it.
         return { success: false, user: null, locked: true }
       }
     }

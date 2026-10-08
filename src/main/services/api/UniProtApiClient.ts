@@ -12,6 +12,7 @@ import { ApiCache } from './ApiCache'
 import { UniProtResponseSchema } from './schemas/protein-response'
 import type { ProteinMappingResult, ProteinApiError } from '../../../shared/types/protein'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
 
 export class UniProtApiClient {
@@ -151,6 +152,7 @@ export class UniProtApiClient {
     const url = `${this.baseUrl}/uniprotkb/search?query=${query}&fields=${fields}&format=json&size=1`
 
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'User-Agent': 'VarLens/1.0 (Electron desktop app)'
       }
