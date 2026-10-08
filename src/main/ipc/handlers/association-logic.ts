@@ -14,7 +14,7 @@ import type {
   AssociationConfig,
   AssociationResults,
   GeneAssociationResult,
-  GeneContingencyData
+  AssociationBuildResult
 } from '../../statistics/types'
 
 const DEFAULT_BATCH_SIZE = 25
@@ -43,22 +43,23 @@ function yieldToEventLoop(): Promise<void> {
 
 export async function runAssociationInProcess(
   config: AssociationConfig,
-  buildData: (config: AssociationConfig) => Promise<GeneContingencyData[]>,
+  buildData: (config: AssociationConfig) => Promise<AssociationBuildResult>,
   options: InProcessAssociationOptions = {}
 ): Promise<AssociationResults> {
   const startedAt = Date.now()
   assertDisjointGroups(config)
 
-  const genes = await buildData(config)
+  const built = await buildData(config)
+  const { genes, non_autosomal_variants } = built
   if (genes.length === 0) {
-    return emptyAssociationResults(config, 'No genes with qualifying variants', startedAt)
+    return emptyAssociationResults(config, 'No genes with qualifying variants', startedAt, non_autosomal_variants)
   }
 
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE)
   const raw: GeneAssociationResult[] = []
   for (let i = 0; i < genes.length; i++) {
     if (options.signal?.aborted === true) {
-      return emptyAssociationResults(config, 'Analysis cancelled', startedAt)
+      return emptyAssociationResults(config, 'Analysis cancelled', startedAt, non_autosomal_variants)
     }
     // A failing gene is skipped, as in the desktop worker (which logs and continues).
     try {
@@ -73,9 +74,9 @@ export async function runAssociationInProcess(
   }
 
   if (options.signal?.aborted === true) {
-    return emptyAssociationResults(config, 'Analysis cancelled', startedAt)
+    return emptyAssociationResults(config, 'Analysis cancelled', startedAt, non_autosomal_variants)
   }
-  return finalizeAssociationResults(raw, config, startedAt)
+  return finalizeAssociationResults(raw, config, startedAt, non_autosomal_variants)
 }
 
 /**

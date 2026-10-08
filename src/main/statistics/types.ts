@@ -45,6 +45,12 @@ export interface VariantFilters {
   column_filters?: ColumnFiltersParam
 }
 
+/** Why a selected site is left out of a gene's burden score and Fisher table. */
+export type SiteExclusionReason = 'missing_call' | 'conflicting_calls' | 'no_called_alleles'
+
+/** Excluded sites of one gene, per reason. Every key is always present. */
+export type SiteExclusionCounts = Record<SiteExclusionReason, number>
+
 /** Per-gene data passed to worker threads */
 export interface GeneContingencyData {
   gene_symbol: string
@@ -52,6 +58,7 @@ export interface GeneContingencyData {
   groupA_non_carrier_count: number
   groupB_carrier_count: number
   groupB_non_carrier_count: number
+  sites_excluded: SiteExclusionCounts
   samples: SampleBurdenData[]
 }
 
@@ -88,7 +95,9 @@ export interface LogisticBurdenResult {
 /** Combined result for one gene */
 export interface GeneAssociationResult {
   gene_symbol: string
+  /** Sites used: eligible sites with a known call in every selected sample. */
   n_variants: number
+  sites_excluded: SiteExclusionCounts
   groupA_carriers: number
   groupB_carriers: number
   groupA_total: number
@@ -97,12 +106,21 @@ export interface GeneAssociationResult {
   logistic_burden: LogisticBurdenResult
 }
 
+/** What an AssociationDataBuilder returns for one run. */
+export interface AssociationBuildResult {
+  genes: GeneContingencyData[]
+  /** Qualifying variants left out because they are not on an autosome (1..22). */
+  non_autosomal_variants: number
+}
+
 /** Final results with FDR correction applied */
 export interface AssociationResults {
   results: GeneAssociationResultWithFDR[]
   primary_test: PrimaryTest
   config: AssociationConfig
   warnings: string[]
+  /** Qualifying variants left out because they are not on an autosome (1..22). */
+  non_autosomal_variants: number
   elapsed_ms: number
 }
 

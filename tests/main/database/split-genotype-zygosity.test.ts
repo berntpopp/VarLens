@@ -148,7 +148,7 @@ describe('split multi-allelic genotypes on SQLite', () => {
       const ids = SAMPLES.map((sample) => caseIds[sample])
       const data = new AssociationDataBuilder(service.database)
         .build(ids.slice(0, 2), ids.slice(2), {}, [])
-        .find((g) => g.gene_symbol === gene)
+        .genes.find((g) => g.gene_symbol === gene)
       expect(data).toBeDefined()
       return Object.fromEntries(SAMPLES.map((sample, i) => [sample, data!.samples[i].dosages]))
     }
@@ -168,13 +168,23 @@ describe('split multi-allelic genotypes on SQLite', () => {
       const ids = SAMPLES.map((sample) => caseIds[sample])
       const gene = new AssociationDataBuilder(service.database)
         .build([ids[0], ids[3]], [ids[1], ids[2], ids[4]], {}, [])
-        .find((g) => g.gene_symbol === 'GENEA')
+        .genes.find((g) => g.gene_symbol === 'GENEA')
       // S1 and S4 have split genotypes only: both are carriers.
       expect(gene).toMatchObject({ groupA_carrier_count: 2, groupA_non_carrier_count: 0 })
     })
 
-    it('a hemizygous call is one copy', () => {
-      expect(dosagesByCase('GENEX')).toMatchObject({ S1: [1], S2: [1], S3: [2] })
+    it('chrX is not in the burden test (phase 1: autosomes only), and is counted', () => {
+      const ids = SAMPLES.map((sample) => caseIds[sample])
+      const built = new AssociationDataBuilder(service.database).build(
+        ids.slice(0, 2),
+        ids.slice(2),
+        {},
+        []
+      )
+      expect(built.genes.find((g) => g.gene_symbol === 'GENEA')).toBeDefined()
+      expect(built.genes.find((g) => g.gene_symbol === 'GENEX')).toBeUndefined()
+      // chrX:5000 G>A is the fixture's one non-autosomal variant.
+      expect(built.non_autosomal_variants).toBe(1)
     })
   })
 

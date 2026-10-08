@@ -1,8 +1,8 @@
 import type {
+  AssociationBuildResult,
   AssociationConfig,
   AssociationResults,
-  GeneAssociationResult,
-  GeneContingencyData
+  GeneAssociationResult
 } from './types'
 import { AssociationDataBuilder } from '../database/AssociationDataBuilder'
 import { emptyAssociationResults, finalizeAssociationResults } from './finalize'
@@ -40,23 +40,24 @@ export class AssociationEngine {
     this.aborted = false
 
     // 1. Build per-gene contingency data (off main thread when pool available)
-    let genes: GeneContingencyData[]
+    let built: AssociationBuildResult
     if (this.dbPool) {
-      genes = await this.dbPool.run<GeneContingencyData[]>({
+      built = await this.dbPool.run<AssociationBuildResult>({
         type: 'association:build',
         params: [config.groupA_ids, config.groupB_ids, config.filters, config.covariates]
       })
     } else {
       const builder = new AssociationDataBuilder(this.db)
-      genes = builder.build(config.groupA_ids, config.groupB_ids, config.filters, config.covariates)
+      built = builder.build(config.groupA_ids, config.groupB_ids, config.filters, config.covariates)
     }
+    const { genes, non_autosomal_variants: skipped } = built
 
     if (genes.length === 0) {
-      return emptyAssociationResults(config, 'No genes with qualifying variants', start)
+      return emptyAssociationResults(config, 'No genes with qualifying variants', start, skipped)
     }
 
     // Check abort after the (potentially async) build step completes
-    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start)
+    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start, skipped)
 
     // 2. Run tests in parallel across worker threads
     this.pool = new WorkerPool(config.max_threads > 0 ? config.max_threads : undefined)
@@ -67,10 +68,10 @@ export class AssociationEngine {
       this.pool = null
     }
 
-    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start)
+    if (this.aborted) return emptyAssociationResults(config, 'Analysis cancelled', start, skipped)
 
     // 3. Warnings, FDR correction and sorting (shared with the web runner)
-    return finalizeAssociationResults(rawResults, config, start)
+    return finalizeAssociationResults(rawResults, config, start, skipped)
   }
 
   abort(): void {

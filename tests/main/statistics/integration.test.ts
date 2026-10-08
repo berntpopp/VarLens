@@ -56,7 +56,7 @@ describe('Association analysis integration', () => {
 
   it('detects BRCA1 enrichment with Fisher test', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, [])
+    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, []).genes
 
     const brca1 = genes.find((g) => g.gene_symbol === 'BRCA1')
     expect(brca1).toBeDefined()
@@ -74,7 +74,7 @@ describe('Association analysis integration', () => {
 
   it('runs full pipeline with FDR correction', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, [])
+    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, []).genes
 
     expect(genes.length).toBeGreaterThanOrEqual(2) // BRCA1 + TP53 + EGFR
 
@@ -108,7 +108,7 @@ describe('Association analysis integration', () => {
 
   it('runs logistic burden test on gene data', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, [])
+    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, []).genes
 
     const brca1 = genes.find((g) => g.gene_symbol === 'BRCA1')!
     const result = logisticBurdenTest(brca1.samples, 'uniform')
@@ -119,7 +119,7 @@ describe('Association analysis integration', () => {
 
   it('respects gnomAD AF filter', () => {
     const builder = new AssociationDataBuilder(db)
-    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], { gnomad_af_max: 0.005 }, [])
+    const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], { gnomad_af_max: 0.005 }, []).genes
 
     // BRCA1 (AF=0.001) should pass, TP53 (AF=0.01) and EGFR (AF=0.1) should be filtered
     const geneNames = genes.map((g) => g.gene_symbol)
@@ -234,7 +234,7 @@ describe('AssociationEngine with DbPool (off-thread build)', () => {
     // AssociationEngine.run() → DbPool.run() → db-worker-dispatch without
     // touching the dispatch line. The engine should pass config.filters
     // through verbatim, so column_filters + clinvars show up in params[2].
-    const mockPoolRun = vi.fn().mockResolvedValue([])
+    const mockPoolRun = vi.fn().mockResolvedValue({ genes: [], non_autosomal_variants: 0 })
     const mockDbPool = {
       run: mockPoolRun
     } as unknown as import('../../../src/main/database/DbPool').DbPool
@@ -313,6 +313,42 @@ describe('AssociationEngine with DbPool (off-thread build)', () => {
     expect(mockWorkerRun).toHaveBeenCalledOnce()
   })
 })
+
+  it('the run result carries the qualifying variants that are not on an autosome', async () => {
+    db.prepare(
+      "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, gt_num) VALUES (1, 'chrX', 5000, 'G', 'A', 'DMD', '1')"
+    ).run()
+    const mockWorkerRun = vi.fn().mockResolvedValue([])
+    vi.resetModules()
+    vi.doMock('../../../src/main/statistics/WorkerPool', () => {
+      function WorkerPool() {
+        return { run: mockWorkerRun, abort: vi.fn() }
+      }
+      return { WorkerPool }
+    })
+    const { AssociationEngine } = await import('../../../src/main/statistics/AssociationEngine')
+    const config = {
+      groupA_ids: [1, 2, 3, 4, 5],
+      groupB_ids: [6, 7, 8, 9, 10],
+      primary_test: 'fisher' as const,
+      weight_scheme: 'uniform' as const,
+      covariates: [],
+      filters: {},
+      max_threads: 2
+    }
+
+    const results = await new AssociationEngine(db, undefined, null).run(config)
+    expect(results.non_autosomal_variants).toBe(1)
+
+    // A run that finds only chrX variants is empty, and says how many it left out.
+    const onlyX = await new AssociationEngine(db, undefined, null).run({
+      ...config,
+      filters: { gene_list: ['DMD'] }
+    })
+    expect(onlyX.results).toEqual([])
+    expect(onlyX.warnings).toEqual(['No genes with qualifying variants'])
+    expect(onlyX.non_autosomal_variants).toBe(1)
+  })
 
 describe('AssociationEngine parallel execution', () => {
   let db: Database.Database

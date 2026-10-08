@@ -1,8 +1,9 @@
 // @vitest-environment node
 /**
  * Several rows of one case for one variant with different genotypes resolve
- * to ONE call — the highest dosage — in the cohort summary, the carrier list
- * and the burden test, whatever the row order (#516).
+ * to ONE call — the highest dosage — in the cohort summary and the carrier
+ * list, whatever the row order (#516). The burden test picks no winner: calls
+ * that disagree in dosage are missing and the site is excluded (#520).
  * Decision record: .planning/docs/SPLIT-GENOTYPE-ZYGOSITY.md.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -47,8 +48,18 @@ describe('conflicting duplicate genotype calls on SQLite', () => {
         expect(counts()).toEqual(expected)
         expect(service.cohort.getCarriers('1', 100, 'A', 'G')[0].gt_num).toBe(resolved)
 
-        const [gene] = new AssociationDataBuilder(service.database).build([caseId], [], {}, [])
-        expect(gene.samples[0].dosages).toEqual([het + 2 * hom])
+        const [gene] = new AssociationDataBuilder(service.database).build(
+          [caseId],
+          [],
+          {},
+          []
+        ).genes
+        expect(gene.samples[0].dosages).toEqual([])
+        expect(gene.sites_excluded).toEqual({
+          missing_call: 0,
+          conflicting_calls: 1,
+          no_called_alleles: 0
+        })
 
         // The legacy per-case paths subtract and add the same call.
         service.cohortSummary.incrementalRemove(caseId)

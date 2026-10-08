@@ -55,14 +55,17 @@ function rows() {
   return out
 }
 
-const genes = () =>
-  buildGeneContingencyData(rows(), CONFIG.groupA_ids, CONFIG.groupB_ids, new Map())
+const built = () => ({
+  genes: buildGeneContingencyData(rows(), CONFIG.groupA_ids, CONFIG.groupB_ids, new Map()),
+  non_autosomal_variants: 2
+})
+  
 
 describe('association-logic (web in-process runner)', () => {
   it('matches the desktop pipeline: per-gene tests + shared FDR/sort tail', async () => {
-    const result = await runAssociationInProcess(CONFIG, async () => genes(), { batchSize: 1 })
+    const result = await runAssociationInProcess(CONFIG, async () => built(), { batchSize: 1 })
     const expected = finalizeAssociationResults(
-      genes().map((g) => computeGeneAssociation(g, 'uniform')),
+      built().genes.map((g) => computeGeneAssociation(g, 'uniform')),
       CONFIG,
       Date.now()
     )
@@ -76,7 +79,7 @@ describe('association-logic (web in-process runner)', () => {
     const onProgress = vi.fn()
     const controller = new AbortController()
     onProgress.mockImplementation(() => controller.abort())
-    const result = await runAssociationInProcess(CONFIG, async () => genes(), {
+    const result = await runAssociationInProcess(CONFIG, async () => built(), {
       batchSize: 1,
       onProgress,
       signal: controller.signal
@@ -91,13 +94,14 @@ describe('association-logic (web in-process runner)', () => {
       'Groups overlap: case IDs 2 appear in both groups'
     )
     await expect(
-      runAssociationInProcess({ ...CONFIG, groupB_ids: [1] }, async () => genes())
+      runAssociationInProcess({ ...CONFIG, groupB_ids: [1] }, async () => built())
     ).rejects.toThrow(/Groups overlap/)
   })
 
   it('no qualifying genes → empty result with a warning', async () => {
-    const result = await runAssociationInProcess(CONFIG, async () => [])
+    const result = await runAssociationInProcess(CONFIG, async () => ({ genes: [], non_autosomal_variants: 5 }))
     expect(result.warnings).toEqual(['No genes with qualifying variants'])
+    expect(result.non_autosomal_variants).toBe(5)
   })
 })
 

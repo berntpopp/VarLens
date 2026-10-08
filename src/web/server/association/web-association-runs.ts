@@ -9,7 +9,7 @@
  * event name the desktop renderer subscribes to.
  */
 import type { PostgresAssociationDataBuilder } from '../../../main/storage/postgres/PostgresAssociationDataBuilder'
-import type { AssociationConfig, GeneContingencyData } from '../../../main/statistics/types'
+import type { AssociationConfig, AssociationBuildResult } from '../../../main/statistics/types'
 import type { WebEventHub } from '../events'
 import { WEB_EVENT_ASSOCIATION_PROGRESS } from '../web-event-types'
 
@@ -25,7 +25,7 @@ export class AssociationBusyError extends Error {
 export interface AssociationRunContext {
   signal: AbortSignal
   onProgress: (progress: { completed: number; total: number }) => void
-  buildData: (config: AssociationConfig) => Promise<GeneContingencyData[]>
+  buildData: (config: AssociationConfig) => Promise<AssociationBuildResult>
 }
 
 export class WebAssociationRuns {

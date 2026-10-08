@@ -39,7 +39,7 @@ function sampleGenes() {
   ]
 }
 
-function harness(build = vi.fn(async () => sampleGenes())) {
+function harness(build = vi.fn(async () => ({ genes: sampleGenes(), non_autosomal_variants: 2 }))) {
   const base = makeDeps()
   const publish = vi.fn()
   const association = new WebAssociationRuns({ builder: { build }, events: { publish } })
@@ -63,6 +63,7 @@ describe('web cohort association', () => {
     const body = result as { results: Array<{ gene_symbol: string; q_value: number | null }> }
     expect(body.results.map((r) => r.gene_symbol)).toEqual(['GENE1'])
     expect(body.results[0].q_value).not.toBeNull()
+    expect((body as any).non_autosomal_variants).toBe(2)
     expect(publish).toHaveBeenCalledWith(7, 'cohort:geneBurdenProgress', {
       completed: 1,
       total: 1
@@ -84,7 +85,7 @@ describe('web cohort association', () => {
     })
     const build = vi.fn(async () => {
       await gate
-      return sampleGenes()
+      return { genes: sampleGenes(), non_autosomal_variants: 2 }
     })
     const { call } = harness(build)
 

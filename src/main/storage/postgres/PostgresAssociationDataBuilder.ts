@@ -12,14 +12,16 @@ import type { Pool } from 'pg'
 import { buildBaseWhere, type BaseFilterInput } from '../../database/variant-where-builder'
 import { buildExtensionJoinClauses } from '../../database/variant-extension-registry'
 import {
+  assertSingleGenomeBuild,
   buildCovariateMap,
   buildGeneContingencyData,
   type AssociationVariantRow,
   type CaseMetaRow,
   type CaseMetricRow
 } from '../../statistics/contingency'
-import type { GeneContingencyData, VariantFilters } from '../../statistics/types'
+import type { AssociationBuildResult, VariantFilters } from '../../statistics/types'
 import { gtDosageSql } from '../../../shared/sql/genotype-dosage'
+import { autosomeSql } from '../../../shared/sql/chromosome-order'
 import { quoteIdentifier } from './identifiers'
 
 type Queryable = Pick<Pool, 'query'>
@@ -66,18 +68,72 @@ export class PostgresAssociationDataBuilder {
     groupB_ids: number[],
     filters: VariantFilters,
     covariateNames: string[]
-  ): Promise<GeneContingencyData[]> {
+  ): Promise<AssociationBuildResult> {
     const allIds = [...groupA_ids, ...groupB_ids]
-    if (allIds.length === 0) return []
+    if (allIds.length === 0) return { genes: [], non_autosomal_variants: 0 }
 
+    const builds = await this.pool.query<{ genome_build: string | null }>(
+      `SELECT DISTINCT genome_build FROM ${this.schemaName}.cases WHERE id = ANY($1::bigint[])`,
+      [allIds]
+    )
+    assertSingleGenomeBuild(builds.rows.map((r) => r.genome_build))
+
+    const non_autosomal_variants = await this.countNonAutosomalVariants(allIds, filters)
     const rows = await this.loadVariantRows(allIds, filters)
-    if (rows.length === 0) return []
+    if (rows.length === 0) return { genes: [], non_autosomal_variants }
 
     const covariateMap =
       covariateNames.length > 0
         ? await this.loadCovariates(allIds, covariateNames)
         : new Map<number, number[]>()
-    return buildGeneContingencyData(rows, groupA_ids, groupB_ids, covariateMap)
+    return {
+      genes: buildGeneContingencyData(rows, groupA_ids, groupB_ids, covariateMap),
+      non_autosomal_variants
+    }
+  }
+
+  private async countNonAutosomalVariants(
+    allIds: number[],
+    filters: VariantFilters
+  ): Promise<number> {
+    const baseInput: BaseFilterInput = {
+      gnomad_af_max: filters.gnomad_af_max,
+      cadd_min: filters.cadd_min,
+      consequences: filters.consequences,
+      clinvars: filters.clinvars,
+      funcs: filters.funcs,
+      gene_list: filters.gene_list,
+      column_filters: filters.column_filters
+    }
+    const base = buildBaseWhere(baseInput, { baseAlias: 'v', scope: 'cohort-burden' })
+    const ext = buildExtensionJoinClauses(filters.column_filters ?? {}, 'v')
+
+    const params: unknown[] = [allIds]
+    const whereParts = ['v.case_id = ANY($1::bigint[])', `NOT (${autosomeSql('v.chr')})`]
+    let next = 2
+    if (base.sql !== '') {
+      const converted = toPostgresFragment(base.sql, next, this.schemaName)
+      whereParts.push(converted.sql)
+      next = converted.next
+      params.push(...base.params)
+    }
+    if (ext.whereClause !== '') {
+      const converted = toPostgresFragment(ext.whereClause, next, this.schemaName)
+      whereParts.push(converted.sql)
+      params.push(...ext.params)
+    }
+    const joins = toPostgresFragment(ext.joins, next, this.schemaName).sql
+
+    const result = await this.pool.query<{ count: string }>(
+      `SELECT COUNT(*) FROM (
+         SELECT DISTINCT v.chr, v.pos, v.ref, v.alt
+         FROM ${this.schemaName}."variants" v
+         ${joins}
+        WHERE ${whereParts.join(' AND ')}
+      ) t`,
+      params
+    )
+    return Number(result.rows[0].count)
   }
 
   private async loadVariantRows(
@@ -91,15 +147,13 @@ export class PostgresAssociationDataBuilder {
       clinvars: filters.clinvars,
       funcs: filters.funcs,
       gene_list: filters.gene_list,
-      acmg_classifications: filters.acmg_classifications,
-      max_internal_af: filters.max_internal_af,
       column_filters: filters.column_filters
     }
     const base = buildBaseWhere(baseInput, { baseAlias: 'v', scope: 'cohort-burden' })
     const ext = buildExtensionJoinClauses(filters.column_filters ?? {}, 'v')
 
     const params: unknown[] = [allIds]
-    const whereParts = ['v.case_id = ANY($1::bigint[])']
+    const whereParts = ['v.case_id = ANY($1::bigint[])', autosomeSql('v.chr')]
     let next = 2
     if (base.sql !== '') {
       const converted = toPostgresFragment(base.sql, next, this.schemaName)
@@ -115,17 +169,24 @@ export class PostgresAssociationDataBuilder {
     const joins = toPostgresFragment(ext.joins, next, this.schemaName).sql
 
     const result = await this.pool.query<Record<string, unknown>>(
-      `SELECT v.gene_symbol,
-              v.case_id,
-              v.chr || ':' || v.pos::text || ':' || v.ref || ':' || v.alt AS variant_key,
-              v.gt_num,
-              ${gtDosageSql('v.gt_num')} AS dosage,
-              v.gnomad_af,
-              v.cadd
+      `WITH picked AS (SELECT unnest($1::bigint[]) AS id),
+       selected AS (
+         SELECT DISTINCT v.gene_symbol, v.chr, v.pos, v.ref, v.alt
          FROM ${this.schemaName}."variants" v
          ${joins}
-        WHERE ${whereParts.join(' AND ')}
-        ORDER BY v.gene_symbol, variant_key, v.case_id`,
+         WHERE ${whereParts.join(' AND ')}
+       )
+       SELECT s.gene_symbol,
+              r.case_id,
+              r.chr || ':' || r.pos::text || ':' || r.ref || ':' || r.alt AS variant_key,
+              r.gt_num,
+              ${gtDosageSql('r.gt_num')} AS dosage,
+              r.gnomad_af,
+              r.cadd
+         FROM selected s
+         JOIN ${this.schemaName}."variants" r ON r.chr = s.chr AND r.pos = s.pos AND r.ref = s.ref AND r.alt = s.alt
+        WHERE r.case_id IN (SELECT id FROM picked)
+        ORDER BY s.gene_symbol, variant_key, r.case_id`,
       params
     )
 
@@ -134,8 +195,8 @@ export class PostgresAssociationDataBuilder {
       case_id: Number(row.case_id),
       variant_key: String(row.variant_key),
       gt_num: typeof row.gt_num === 'string' ? row.gt_num : null,
-      // NULL dosage (unparsed GT) behaves as non-carrier, as in SQLite's numeric compare.
-      dosage: toNumberOrNull(row.dosage) ?? 0,
+      // NULL dosage is carried as it is; contingency.ts decides what is missing (rowDosage).
+      dosage: toNumberOrNull(row.dosage),
       gnomad_af: toNumberOrNull(row.gnomad_af),
       cadd: toNumberOrNull(row.cadd)
     }))

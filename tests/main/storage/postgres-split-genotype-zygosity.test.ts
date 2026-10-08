@@ -194,16 +194,17 @@ describe.skipIf(!RUN)('split multi-allelic genotypes on PostgreSQL', () => {
       {},
       []
     )
-    expect(strip(pg)).toEqual(strip(lite))
+    expect(strip(pg.genes)).toEqual(strip(lite.genes))
     // Variants in key order: chr1:1000 A>G, chr1:1000 A>T, chr1:2000 C>T; samples S1..S5.
-    expect(pg.find((g) => g.gene_symbol === 'GENEA')!.samples.map((s) => s.dosages)).toEqual([
+    expect(pg.genes.find((g) => g.gene_symbol === 'GENEA')!.samples.map((s) => s.dosages)).toEqual([
       [1, 1, 1],
       [1, 0, 1],
       [2, 0, 0],
       [1, 1, 0],
       [0, 1, 1]
     ])
-    expect(pg.find((g) => g.gene_symbol === 'GENEX')!.samples[0].dosages).toEqual([1])
+    expect(pg.genes.find((g) => g.gene_symbol === 'GENEX')).toBeUndefined()
+    expect(pg.non_autosomal_variants).toBe(1)
   }, 60_000)
 
   it('the inheritance filters select the rows SQLite selects', async () => {
