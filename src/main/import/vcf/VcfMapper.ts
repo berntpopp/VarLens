@@ -64,7 +64,13 @@ export function mapVcfRecord(
 
   for (let altIdx = 0; altIdx < record.alt.length; altIdx++) {
     const rawAlt = record.alt[altIdx]
-    if (rawAlt === '<NON_REF>' || rawAlt === '<*>' || rawAlt.toUpperCase() === '<NON_REF>') {
+    // `*`: the allele is missing here because of an upstream deletion, which has its own record.
+    if (
+      rawAlt === '*' ||
+      rawAlt === '<NON_REF>' ||
+      rawAlt === '<*>' ||
+      rawAlt.toUpperCase() === '<NON_REF>'
+    ) {
       continue
     }
 
