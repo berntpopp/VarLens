@@ -270,6 +270,26 @@ describe('createAppState', () => {
       expect(state.confirmPanelLeave()).toBeNull()
     })
 
+    it('a deleted case is cleared without asking, and what the prompt held is dropped', async () => {
+      let answer!: (leave: boolean) => void
+      const { state, guard } = openWithDraft(new Promise<boolean>((r) => (answer = r)))
+      state.selectedCaseId.value = 7
+      state.selectCase({ caseId: 9, caseName: 'Case 9' }) // held by the open prompt
+      guard.mockClear()
+
+      state.closePanelWithoutAsking()
+      state.resetCaseContext()
+
+      expect(guard).not.toHaveBeenCalled()
+      expect(state.panelOpen.value).toBe(false)
+      expect(state.selectedPanelVariant.value).toBeNull()
+      expect(state.selectedCaseId.value).toBeNull()
+
+      answer(true)
+      await flushPromises()
+      expect(state.selectedCaseId.value).toBeNull()
+    })
+
     it('a database switch closes the panel without asking', () => {
       const { state, guard } = openWithDraft(new Promise<boolean>(() => {}))
 

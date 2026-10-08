@@ -352,5 +352,15 @@ describe('useTableKeyboardNav', () => {
       expect(isTextEntryFocused()).toBe(false)
       document.body.removeChild(link)
     })
+
+    it('returns true while a dialog is open, whatever has focus', () => {
+      document.body.innerHTML = '' // inputs the tests above left focused
+      const dialog = document.createElement('div')
+      dialog.className = 'v-overlay v-overlay--active v-dialog'
+      document.body.appendChild(dialog)
+      expect(isInputFocused()).toBe(true)
+      dialog.remove()
+      expect(isInputFocused()).toBe(false)
+    })
   })
 })

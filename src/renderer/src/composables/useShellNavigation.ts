@@ -14,6 +14,7 @@ interface UseShellNavigationOptions {
   router: Router
   /** App state's unsaved-draft check: null = nothing to ask, false = stay. */
   confirmPanelLeave: () => Promise<boolean> | null
+  closePanelWithoutAsking: () => void
 }
 
 /** Resolves after the next frame has been rendered (two rAF ticks). */
@@ -31,7 +32,8 @@ export function useShellNavigation({
   selectedPanelVariant,
   transitioning,
   router,
-  confirmPanelLeave
+  confirmPanelLeave,
+  closePanelWithoutAsking
 }: UseShellNavigationOptions): void {
   let syncingFromRoute = false
 
@@ -51,6 +53,8 @@ export function useShellNavigation({
       const routeTab = path.startsWith('/cohort') ? 'cohort' : 'case'
       if (activeTab.value === routeTab) return
 
+      // Back/forward: the open panel belongs to the view being left (asked in beforeEach).
+      closePanelWithoutAsking()
       syncingFromRoute = true
       activeTab.value = routeTab
       syncingFromRoute = false

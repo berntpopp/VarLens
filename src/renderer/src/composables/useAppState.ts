@@ -71,6 +71,8 @@ export interface AppStateReturn {
   resetCaseFilters: () => void
   resetCaseContext: () => void
   resetForDatabaseSwitch: (options?: { keepView?: boolean }) => void
+  /** Closes the details panel and drops its draft and any held change, without the prompt. */
+  closePanelWithoutAsking: () => void
   returnToCaseHome: () => void
   selectCase: (input: SelectedCaseInput) => void
 
@@ -223,6 +225,15 @@ export function createAppState(): AppStateReturn {
     guardLeave(() => setSelectedCaseId(null))
   }
 
+  // For when the draft cannot or must not be saved any more: database switch,
+  // deleted case, a route change whose prompt was already answered.
+  function closePanelWithoutAsking(): void {
+    panelOpenRaw.value = false
+    leaveEpoch++
+    leaving = null
+    selectedPanelVariant.value = null
+  }
+
   function setCaseCount(count: number): void {
     caseCount.value = count
     casesLoaded.value = true
@@ -271,15 +282,11 @@ export function createAppState(): AppStateReturn {
    * the case tab there turned a direct load of `/cohort` into `/case`.
    */
   function resetForDatabaseSwitch(options: { keepView?: boolean } = {}): void {
-    // The old database's draft cannot be saved any more: close without asking.
-    panelOpenRaw.value = false
-    leaveEpoch++
-    leaving = null
+    closePanelWithoutAsking()
     void invalidateServerData('database-switch')
     incrementDataGeneration()
     resetCaseContext()
     if (options.keepView !== true) setActiveTab('case')
-    selectedPanelVariant.value = null
   }
 
   function returnToCaseHome(): void {
@@ -348,6 +355,7 @@ export function createAppState(): AppStateReturn {
     resetCaseFilters,
     resetCaseContext,
     resetForDatabaseSwitch,
+    closePanelWithoutAsking,
     returnToCaseHome,
     selectCase,
     setPanelLeaveGuard,
