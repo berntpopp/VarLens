@@ -26,6 +26,7 @@ import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
+import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -461,8 +462,8 @@ export class CohortService {
 
   /** Cached column metadata — invalidated on summary rebuild */
   private _columnMetaCache: ColumnFilterMeta[] | null = null
-  /** `PRAGMA data_version` the cache was read at: it moves when another connection commits. */
-  private _columnMetaDataVersion: unknown = null
+  /** Summary content stamp the cache was read at (SUMMARY_CONTENT_STAMP_KEY). */
+  private _columnMetaStamp: unknown = null
 
   /** Clear cached column metadata (call after cohort summary rebuild) */
   invalidateColumnMetaCache(): void {
@@ -478,9 +479,15 @@ export class CohortService {
    */
   getColumnMeta(): ColumnFilterMeta[] {
     // DB worker threads are never told about an import or rebuild made by
-    // another connection, so the cache checks for foreign commits itself.
-    const dataVersion = this.db.pragma('data_version', { simple: true })
-    if (this._columnMetaCache !== null && dataVersion === this._columnMetaDataVersion) {
+    // another connection, so the cache checks the stamp every summary writer
+    // moves. Not `PRAGMA data_version`: that moves on any commit (a star, a
+    // lookup-cache write), and the rescan below takes ~20 s on 2M summary rows.
+    const stamp = this.getStatement(
+      `SELECT value FROM cohort_summary_meta WHERE key = '${SUMMARY_CONTENT_STAMP_KEY}'`
+    )
+      .pluck()
+      .get()
+    if (this._columnMetaCache !== null && stamp === this._columnMetaStamp) {
       return this._columnMetaCache
     }
 
@@ -564,7 +571,7 @@ export class CohortService {
     }
 
     this._columnMetaCache = meta
-    this._columnMetaDataVersion = dataVersion
+    this._columnMetaStamp = stamp
     return meta
   }
 

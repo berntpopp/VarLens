@@ -59,6 +59,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import {
   CHECK_TABLE_EXISTS_SQL,
   MARK_STALE_SQL,
+  TOUCH_SUMMARY_CONTENT_SQL,
   UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL
 } from '../../shared/sql/cohort-summary-rebuild'
 import {
@@ -324,6 +325,7 @@ export function openImportSummarySession(
             s.incrementCarriers.run()
             s.mergeRepresentative.run()
             s.insertNewVariantSummary.run({ build: params.build })
+            db.exec(TOUCH_SUMMARY_CONTENT_SQL)
             applyPerCaseFlags()
             s.markCaseReady.run(caseId)
           }).immediate()
