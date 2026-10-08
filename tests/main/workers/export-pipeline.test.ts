@@ -217,6 +217,13 @@ describe('buildMetadataSheet', () => {
     expect(flat).toContain(20)
   })
 
+  it('includes carrier_count_max filter when provided', () => {
+    const sheet = buildMetadataSheet('Case', 0, { carrier_count_max: 3 })
+    const flat = sheet.flat()
+    expect(flat).toContain('Max Carrier Cases')
+    expect(flat).toContain(3)
+  })
+
   it('omits filter rows when summary is empty', () => {
     const sheet = buildMetadataSheet('Case', 0, {})
     const flat = sheet.flat()

@@ -115,7 +115,11 @@ describe.skipIf(!RUN)('carrier cap (#455): PostgreSQL case view and cohort view'
       const fromCases = new Set<string>()
       let caseTotal = 0
       for (const caseId of caseIds) {
-        const page = await variants.queryVariants({ case_id: caseId, carrier_count_max: max }, 50, 0)
+        const page = await variants.queryVariants(
+          { case_id: caseId, carrier_count_max: max },
+          50,
+          0
+        )
         expect(page.total_count).toBe(page.data.length)
         caseTotal += page.total_count
         for (const v of page.data) fromCases.add(coordKey(v))

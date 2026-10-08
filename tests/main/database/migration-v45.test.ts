@@ -70,7 +70,9 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
       }
     ])
     const classic = db
-      .prepare("SELECT name FROM filter_presets WHERE is_built_in = 1 AND kind = 'filter' ORDER BY sort_order")
+      .prepare(
+        "SELECT name FROM filter_presets WHERE is_built_in = 1 AND kind = 'filter' ORDER BY sort_order"
+      )
       .all() as Array<{ name: string }>
     expect(classic.map((row) => row.name)).toEqual(BUILT_IN_PRESETS.map((p) => p.name))
     expect(classic).toHaveLength(9)

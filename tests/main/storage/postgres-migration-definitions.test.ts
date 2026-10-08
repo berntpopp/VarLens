@@ -154,5 +154,4 @@ describe('Postgres migration definitions', () => {
     expect(migration?.sql).toContain('ON CONFLICT (name) DO NOTHING')
     expect(migration?.afterApply).toBeUndefined()
   })
-
 })

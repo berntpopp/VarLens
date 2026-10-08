@@ -366,7 +366,7 @@ describe('useCohortData', () => {
         cadd_min: 20,
         max_internal_af: 0.5,
         carrier_count_min: 2,
-      carrier_count_max: 3
+        carrier_count_max: 3
       })
     )
   })

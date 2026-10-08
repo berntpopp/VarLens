@@ -56,7 +56,10 @@ describe('carrier cap (#455), SQLite', () => {
 
   function caseView(caseId: number, max?: number): { positions: number[]; total: number } {
     const result = service.variants.getVariants({ case_id: caseId, carrier_count_max: max }, 50, 0)
-    return { positions: result.data.map((v) => v.pos).sort((a, b) => a - b), total: result.total_count }
+    return {
+      positions: result.data.map((v) => v.pos).sort((a, b) => a - b),
+      total: result.total_count
+    }
   }
 
   describe('case view', () => {
@@ -161,7 +164,11 @@ describe('carrier cap (#455), SQLite', () => {
 
       const fromCases = new Set<string>()
       for (const caseId of caseIds) {
-        const page = service.variants.getVariants({ case_id: caseId, carrier_count_max: max }, 50, 0)
+        const page = service.variants.getVariants(
+          { case_id: caseId, carrier_count_max: max },
+          50,
+          0
+        )
         for (const v of page.data) fromCases.add(coordKey(v))
       }
       const cohort = cohortView({ carrier_count_max: max })

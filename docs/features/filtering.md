@@ -43,6 +43,7 @@ Click **Filters** or press `Ctrl+Shift+F` to open the drawer. Filters are groupe
 
 - **Frequency** — gnomAD allele frequency threshold (presets: ≤ 1%, ≤ 0.1%, ≤ 0.01%) with custom input
 - **CADD** — Minimum CADD Phred score (presets: ≥ 10, ≥ 15, ≥ 20, ≥ 25) with custom input
+- **Seen in at most N cases** — Keeps variants carried by at most N cases in the database (including the current case). In the cohort view, it can be combined with a minimum carrier count.
 
 Numeric filters are **NULL-inclusive** by default: variants without annotation data (e.g., novel variants with no gnomAD entry) pass through frequency and CADD filters.
 

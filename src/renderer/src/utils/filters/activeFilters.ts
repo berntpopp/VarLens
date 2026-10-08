@@ -1,4 +1,4 @@
-import { activeMaxCarriers, maxCarriersLabel } from "./maxCarriers"
+import { activeMaxCarriers, maxCarriersLabel } from './maxCarriers'
 /**
  * Active filters list computation
  *

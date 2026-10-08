@@ -1,4 +1,4 @@
-import { activeMaxCarriers } from "./maxCarriers"
+import { activeMaxCarriers } from './maxCarriers'
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import type { VariantFilter } from '../../../../shared/types/api'
 import type { FilterIpcParams, FilterState } from '../../../../shared/types/filters'

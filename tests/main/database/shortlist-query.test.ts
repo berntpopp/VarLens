@@ -348,7 +348,9 @@ describe('queryVariantsByType()', () => {
 describe('toShortlistVariantFilter: carrier cap (#455)', () => {
   it('passes the cap of the base filters to the case query', () => {
     expect(toShortlistVariantFilter(1, 'snv', { maxCarriers: 3 }).carrier_count_max).toBe(3)
-    expect(toShortlistVariantFilter(1, 'snv', { maxCarriers: null }).carrier_count_max).toBeUndefined()
+    expect(
+      toShortlistVariantFilter(1, 'snv', { maxCarriers: null }).carrier_count_max
+    ).toBeUndefined()
     expect(toShortlistVariantFilter(1, 'snv', {}).carrier_count_max).toBeUndefined()
   })
 })

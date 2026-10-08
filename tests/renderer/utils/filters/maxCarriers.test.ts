@@ -106,9 +106,7 @@ describe('carrier cap chip, summary and clearing', () => {
   it('summarizes the internal filters of the drawer panel', () => {
     expect(summarizeInternalFilters({ maxInternalAf: null, maxCarriers: null })).toBe('')
     expect(summarizeInternalFilters({ maxInternalAf: 0.05, maxCarriers: null })).toBe('<= 5.00%')
-    expect(summarizeInternalFilters({ maxInternalAf: null, maxCarriers: 3 })).toBe(
-      '≤ 3 cases'
-    )
+    expect(summarizeInternalFilters({ maxInternalAf: null, maxCarriers: 3 })).toBe('≤ 3 cases')
     expect(summarizeInternalFilters({ maxInternalAf: 0.05, maxCarriers: 1 })).toBe(
       '<= 5.00%, ≤ 1 case'
     )

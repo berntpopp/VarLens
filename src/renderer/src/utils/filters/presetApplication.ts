@@ -120,7 +120,13 @@ export function buildPresetFilterJson(
   impactPresets: string[] = []
 ): Partial<FilterState> {
   const json: Partial<FilterState> = {}
-  for (const key of ['maxGnomadAf', 'maxInternalAf', 'maxCarriers', 'minCadd', 'minCarriers'] as const) {
+  for (const key of [
+    'maxGnomadAf',
+    'maxInternalAf',
+    'maxCarriers',
+    'minCadd',
+    'minCarriers'
+  ] as const) {
     const value = filters[key]
     if (typeof value === 'number') json[key] = value
   }

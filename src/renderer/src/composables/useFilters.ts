@@ -195,7 +195,6 @@ export function createFilters(): UseFiltersReturn {
     filters.value.minCadd = null
     filters.value.maxInternalAf = null
     filters.value.maxCarriers = null
-    filters.value.maxCarriers = null
     filters.value.acmgClassifications = []
     filters.value.geneSymbol = ''
     filters.value.minCarriers = null
