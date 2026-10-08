@@ -534,6 +534,11 @@ export const mockApi: WindowAPI = {
         cohortVariants = cohortVariants.filter((v) => v.carrier_count >= params.carrier_count_min!)
       }
 
+      // Apply carrier count max filter (a cap below 1 is off)
+      if (params?.carrier_count_max !== undefined && params.carrier_count_max >= 1) {
+        cohortVariants = cohortVariants.filter((v) => v.carrier_count <= params.carrier_count_max!)
+      }
+
       const totalCount = cohortVariants.length
 
       // Apply sorting
