@@ -1,25 +1,38 @@
 <template>
   <div>
-    <div class="d-flex align-center mb-2">
+    <!-- Toolbar: Search + Export -->
+    <div class="d-flex align-center gap-2 mb-2">
       <v-text-field
         v-model="searchTerm"
-        label="Search genes"
+        placeholder="Search gene..."
         density="compact"
-        variant="outlined"
         hide-details
+        style="max-width: 250px"
         clearable
         :prepend-inner-icon="mdiMagnify"
-        style="max-width: 300px"
-        class="mr-2"
       />
       <v-spacer />
-      <v-chip size="small" variant="tonal" class="mr-2">
-        {{ filteredResults.length }} genes
-      </v-chip>
-      <v-btn variant="outlined" size="small" :prepend-icon="mdiDownload" @click="exportResults">
+      <v-btn
+        size="small"
+        variant="outlined"
+        :prepend-icon="mdiDownload"
+        :disabled="results.length === 0"
+        @click="exportResults"
+      >
         Export
       </v-btn>
     </div>
+
+    <p class="text-caption text-medium-emphasis mb-2" data-testid="burden-reference-note">
+      {{ BURDEN_REFERENCE_NOTE }}
+    </p>
+    <p
+      v-if="skippedNote"
+      class="text-caption text-medium-emphasis mb-2"
+      data-testid="burden-non-autosomal-note"
+    >
+      {{ skippedNote }}
+    </p>
 
     <v-data-table
       v-model:items-per-page="itemsPerPage"
@@ -36,9 +49,11 @@
         <span class="gene-symbol font-weight-medium">{{ value }}</span>
       </template>
 
-      <!-- Sites count -->
-      <template #[`item.sites`]="{ item }">
-        {{ item.n_variants - (item.sites_excluded ?? 0) }}
+      <!-- Sites left out of this gene; the tooltip names the reasons -->
+      <template #[`item.sites_excluded`]="{ item }">
+        <span data-testid="sites-excluded" :title="excludedSitesLabel(item.sites_excluded)">
+          {{ excludedSiteCount(item.sites_excluded) }}
+        </span>
       </template>
 
       <!-- Significant row highlighting -->
@@ -99,36 +114,20 @@
 import { ref, computed, watch } from 'vue'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { mdiAlertCircleOutline, mdiDownload, mdiMagnify } from '@mdi/js'
-
-interface AssociationResult {
-  gene_symbol: string
-  n_variants: number
-  groupA_carriers: number
-  groupB_carriers: number
-  groupA_total: number
-  groupB_total: number
-  sites_excluded?: number
-  fisher: {
-    p_value: number | null
-    odds_ratio: number | null
-    ci_lower: number | null
-    ci_upper: number | null
-  }
-  logistic_burden: {
-    p_value: number | null
-    beta: number | null
-    se: number | null
-    ci_lower: number | null
-    ci_upper: number | null
-    used_firth: boolean
-    warning?: string
-  }
-  q_value: number | null
-}
+import {
+  BURDEN_REFERENCE_NOTE,
+  buildAssociationTsv,
+  excludedSiteCount,
+  excludedSitesLabel,
+  nonAutosomalNote,
+  type AssociationResultRow
+} from '../../utils/association-results'
 
 const props = defineProps<{
-  results: AssociationResult[]
+  results: AssociationResultRow[]
   primaryTest: string
+  /** Qualifying variants the run left out because they are not on an autosome. */
+  nonAutosomalVariants?: number
 }>()
 
 const settingsStore = useSettingsStore()
@@ -139,10 +138,12 @@ watch(itemsPerPage, (v) => {
   settingsStore.itemsPerPage = v
 })
 
+const skippedNote = computed(() => nonAutosomalNote(props.nonAutosomalVariants ?? 0))
+
 const headers = [
   { title: 'Gene', key: 'gene_symbol', sortable: true },
-  { title: 'Sites', key: 'sites', sortable: true, align: 'end' as const },
   { title: 'Variants', key: 'n_variants', sortable: true, align: 'end' as const },
+  { title: 'Excluded sites', key: 'sites_excluded', sortable: false, align: 'end' as const },
   {
     title: 'Cases A',
     key: 'groupA_carriers',
@@ -188,41 +189,7 @@ function formatNumber(val: number | null | undefined): string {
 }
 
 function exportResults(): void {
-  // Build TSV content
-  const header = [
-    'Gene',
-    'Variants',
-    'Cases_A',
-    'Cases_B',
-    'Fisher_OR',
-    'Fisher_CI_Lower',
-    'Fisher_CI_Upper',
-    'Fisher_p',
-    'Burden_beta',
-    'Burden_SE',
-    'Burden_p',
-    'q_value'
-  ].join('\t')
-  const rows = props.results.map((r) =>
-    [
-      r.gene_symbol,
-      r.n_variants,
-      r.groupA_carriers,
-      r.groupB_carriers,
-      r.fisher.odds_ratio ?? '',
-      r.fisher.ci_lower ?? '',
-      r.fisher.ci_upper ?? '',
-      r.fisher.p_value ?? '',
-      r.logistic_burden.beta ?? '',
-      r.logistic_burden.se ?? '',
-      r.logistic_burden.p_value ?? '',
-      r.q_value ?? ''
-    ].join('\t')
-  )
-
-  const tsv = [header, ...rows].join('\n')
-
-  // Download as file
+  const tsv = buildAssociationTsv(props.results, props.nonAutosomalVariants ?? 0)
   const blob = new Blob([tsv], { type: 'text/tab-separated-values' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

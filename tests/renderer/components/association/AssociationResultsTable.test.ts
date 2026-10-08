@@ -1,44 +1,58 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import AssociationResultsTable from '../../../../src/renderer/src/components/association/AssociationResultsTable.vue'
 import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
 
-const vuetify = createVuetify()
+import AssociationResultsTable from '../../../../src/renderer/src/components/association/AssociationResultsTable.vue'
+import { BURDEN_REFERENCE_NOTE } from '../../../../src/renderer/src/utils/association-results'
+
+const vuetify = createVuetify({ components, directives })
+
+const result = {
+  gene_symbol: 'GENE1',
+  n_variants: 2,
+  sites_excluded: { missing_call: 2, conflicting_calls: 1, no_called_alleles: 0 },
+  groupA_carriers: 3,
+  groupB_carriers: 1,
+  groupA_total: 5,
+  groupB_total: 5,
+  fisher: { p_value: 0.04, odds_ratio: 6, ci_lower: null, ci_upper: null },
+  logistic_burden: {
+    p_value: 0.03,
+    beta: 1.2,
+    se: 0.5,
+    ci_lower: 0.2,
+    ci_upper: 2.2,
+    used_firth: false
+  },
+  q_value: 0.08
+}
 
 describe('AssociationResultsTable', () => {
-  it('renders Sites column calculating correctly', () => {
-    const results = [
-      {
-        gene_symbol: 'BRCA1',
-        n_variants: 10,
-        sites_excluded: 2,
-        groupA_carriers: 1,
-        groupB_carriers: 2,
-        groupA_total: 10,
-        groupB_total: 10,
-        fisher: { p_value: 0.1, odds_ratio: 1, ci_lower: 0.5, ci_upper: 1.5 },
-        logistic_burden: {
-          p_value: 0.2,
-          beta: 0.5,
-          se: 0.1,
-          ci_lower: 0.1,
-          ci_upper: 0.9,
-          used_firth: false
-        },
-        q_value: 0.5
-      }
-    ]
-
-    const wrapper = mount(AssociationResultsTable as any, {
-      props: { results, primaryTest: 'fisher' },
-      global: {
-        plugins: [createPinia(), vuetify]
-      }
+  it('states the reference assumption and shows the excluded sites of each gene', () => {
+    const wrapper = mount(AssociationResultsTable, {
+      global: { plugins: [vuetify, createPinia()] },
+      props: { results: [result], primaryTest: 'fisher' }
     })
 
-    const html = wrapper.html()
-    expect(html).toContain('BRCA1')
-    expect(html).toContain('8') // 10 - 2
+    expect(wrapper.get('[data-testid="burden-reference-note"]').text()).toBe(BURDEN_REFERENCE_NOTE)
+    const excluded = wrapper.get('[data-testid="sites-excluded"]')
+    expect(excluded.text()).toBe('3')
+    expect(excluded.attributes('title')).toBe(
+      'Missing call: 2, conflicting calls: 1, no called alleles: 0'
+    )
+    expect(wrapper.find('[data-testid="burden-non-autosomal-note"]').exists()).toBe(false)
+  })
+
+  it('an empty result on chrX says why it is empty', () => {
+    const wrapper = mount(AssociationResultsTable, {
+      global: { plugins: [vuetify, createPinia()] },
+      props: { results: [], primaryTest: 'fisher', nonAutosomalVariants: 2 }
+    })
+    expect(wrapper.get('[data-testid="burden-non-autosomal-note"]').text()).toBe(
+      '2 qualifying variants were left out because they are not on chromosomes 1-22.'
+    )
   })
 })

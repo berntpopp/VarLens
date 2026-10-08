@@ -128,16 +128,15 @@ describe('complete-site rule (#520)', () => {
     expect(ba.groupB_carrier_count).toBe(ab.groupA_carrier_count)
   })
 
-  it('a site no tested sample calls still keeps its frequency via allIds fallback', () => {
-    // Neither sample has its covariate, so nobody is left to compute a frequency from testedIds.
+  it('a site no tested sample calls is excluded: no_called_alleles', () => {
+    // Neither sample has its covariate, so nobody is left to compute a frequency from.
     const covariates = new Map([
       [1, [NaN]],
       [2, [NaN]]
     ])
     const [gene] = buildGeneContingencyData([row(1, '0/1')], [1], [2], covariates)
-    // The fallback frequency now uses allIds, so it is not excluded for Fisher.
-    expect(gene.sites_excluded).toEqual({ ...NONE, no_called_alleles: 0 })
-    expect(gene.samples.map((s) => s.dosages)).toEqual([[1], [0]])
+    expect(gene.sites_excluded).toEqual({ ...NONE, no_called_alleles: 1 })
+    expect(gene.samples.map((s) => s.dosages)).toEqual([[], []])
   })
 
   it('a gene whose every site is excluded is reported, not tested', () => {

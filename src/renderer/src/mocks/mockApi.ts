@@ -216,11 +216,12 @@ export const mockApi: WindowAPI = {
             : []
       const set = new Set<string>()
       for (const v of variants) {
-        if (!ids.includes(v.case_id)) continue
-        set.add(v.variant_type ?? 'snv')
+        if (ids.includes(v.case_id)) set.add(v.variant_type ?? 'snv')
       }
       return [...set]
     },
+    // Wave 4 — unified shortlist: minimal stub so browser dev mode has a
+    // placeholder. Real data flows through the main-process handler.
     shortlist: async () => ({
       rows: [],
       totalCandidates: 0,
@@ -706,10 +707,9 @@ export const mockApi: WindowAPI = {
     runAssociation: async () => ({
       results: [],
       warnings: [],
+      non_autosomal_variants: 0,
       elapsed_ms: 0,
-      primary_test: 'fisher',
-      sites_excluded: 0,
-      non_autosomal_variants: 0
+      primary_test: 'fisher'
     }),
     cancelAssociation: async () => {},
     onAssociationProgress: () => () => {}

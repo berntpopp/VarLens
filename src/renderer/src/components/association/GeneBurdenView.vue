@@ -38,18 +38,6 @@
       {{ error }}
     </v-alert>
 
-    <!-- Non-Autosomal Warning -->
-    <v-alert
-      v-if="results && results.non_autosomal_variants > 0"
-      type="warning"
-      variant="tonal"
-      density="compact"
-      class="mb-3"
-      :icon="mdiAlertCircleOutline"
-    >
-      {{ results.non_autosomal_variants }} non-autosomal variants were excluded from the analysis.
-    </v-alert>
-
     <!-- Warnings -->
     <v-alert
       v-if="results && results.warnings.length > 0"
@@ -94,7 +82,11 @@
 
     <v-tabs-window v-if="results" v-model="activeTab">
       <v-tabs-window-item value="table">
-        <AssociationResultsTable :results="results.results" :primary-test="results.primary_test" />
+        <AssociationResultsTable
+          :results="results.results"
+          :primary-test="results.primary_test"
+          :non-autosomal-variants="results.non_autosomal_variants"
+        />
       </v-tabs-window-item>
       <v-tabs-window-item value="volcano">
         <VolcanoPlot :results="results.results" :primary-test="results.primary_test" />
@@ -115,7 +107,6 @@ import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import { formatError } from '../../utils/ipc-result'
-import { mdiAlertCircleOutline } from '@mdi/js'
 
 interface CaseInfo {
   id: number
@@ -133,6 +124,7 @@ interface CohortGroup {
 interface AssociationResult {
   gene_symbol: string
   n_variants: number
+  sites_excluded: { missing_call: number; conflicting_calls: number; no_called_alleles: number }
   groupA_carriers: number
   groupB_carriers: number
   groupA_total: number
@@ -160,7 +152,6 @@ interface AssociationResultsData {
   warnings: string[]
   elapsed_ms: number
   primary_test: string
-  sites_excluded: number
   non_autosomal_variants: number
 }
 
@@ -174,83 +165,86 @@ const {
 
 const cases = ref<CaseInfo[]>([])
 const cohortGroups = ref<CohortGroup[]>([])
-const results = ref<AssociationResultsData | null>(null)
 const isRunning = ref(false)
+const progressCompleted = ref(0)
+const progressTotal = ref(0)
+const results = ref<AssociationResultsData | null>(null)
 const error = ref<string | null>(null)
 const showWarnings = ref(false)
 const activeTab = ref('table')
-const progressCompleted = ref(0)
-const progressTotal = ref(0)
 
-const progressPercent = computed(() =>
-  progressTotal.value > 0 ? (progressCompleted.value / progressTotal.value) * 100 : 0
-)
+const progressPercent = computed(() => {
+  if (progressTotal.value === 0) return 0
+  return Math.round((progressCompleted.value / progressTotal.value) * 100)
+})
 
-const significantCount = computed(
-  () => results.value?.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length ?? 0
-)
+const significantCount = computed(() => {
+  if (!results.value) return 0
+  return results.value.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length
+})
 
-let cleanupProgress: (() => void) | null = null
+let unsubProgress: (() => void) | null = null
 
-async function loadCases(): Promise<void> {
+onMounted(async () => {
   try {
-    const data = await loadCasesWithMetadata()
-    cases.value = data.cases
-    cohortGroups.value = data.cohortGroups
-  } catch (err) {
-    error.value = `Failed to load cases: ${formatError(err, 'unknown error')}`
+    const raw = await loadCasesWithMetadata()
+    const allCases = unwrapIpcResult(raw)
+    cases.value = (allCases || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status ?? null,
+      sex: c.sex ?? null,
+      cohortIds: c.cohortIds ?? []
+    }))
+  } catch (e) {
+    error.value = `Failed to load cases: ${formatError(e)}`
   }
-}
 
-async function runAnalysis(config: unknown): Promise<void> {
+  try {
+    const groupsRaw = await window.api.cases.cohortGroups()
+    cohortGroups.value = unwrapIpcResult(groupsRaw) || []
+  } catch (e) {
+    error.value = `Failed to load cohort groups: ${formatError(e)}`
+  }
+
+  unsubProgress = onAssociationProgress((data) => {
+    progressCompleted.value = data.completed
+    progressTotal.value = data.total
+  })
+})
+
+onBeforeUnmount(() => {
+  if (unsubProgress) unsubProgress()
+})
+
+async function runAnalysis(config: any): Promise<void> {
+  isRunning.value = true
   error.value = null
   results.value = null
-  isRunning.value = true
   progressCompleted.value = 0
   progressTotal.value = 0
 
-  // Listen for progress
-  cleanupProgress = onAssociationProgress((progress: { completed: number; total: number }) => {
-    progressCompleted.value = progress.completed
-    progressTotal.value = progress.total
-  })
-
   try {
-    results.value = unwrapIpcResult(await apiRunAssociation(config)) as AssociationResultsData
-  } catch (err) {
-    error.value = `Analysis failed: ${formatError(err, 'unknown error')}`
+    const raw = await apiRunAssociation(config)
+    results.value = unwrapIpcResult(raw) as AssociationResultsData
+  } catch (e) {
+    error.value = formatError(e)
   } finally {
     isRunning.value = false
-    if (cleanupProgress !== null) {
-      cleanupProgress()
-      cleanupProgress = null
-    }
   }
 }
 
-function cancelAnalysis(): void {
-  apiCancelAssociation()
-}
-
-onMounted(loadCases)
-
-onBeforeUnmount(() => {
-  if (cleanupProgress) {
-    cleanupProgress()
-    cleanupProgress = null
+async function cancelAnalysis(): Promise<void> {
+  try {
+    await apiCancelAssociation()
+  } catch (e) {
+    error.value = formatError(e)
   }
-})
-
-const refresh = async (): Promise<void> => {
-  await loadCases()
 }
-
-defineExpose({ refresh })
 </script>
 
 <style scoped>
 .gene-burden-view {
-  overflow-y: auto;
-  max-height: calc(100vh - 120px);
+  max-width: 1200px;
 }
 </style>

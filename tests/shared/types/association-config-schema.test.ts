@@ -1,50 +1,23 @@
 import { describe, expect, it } from 'vitest'
+
 import { AssociationConfigSchema } from '../../../src/shared/types/ipc-schemas'
 
 describe('AssociationConfigSchema', () => {
-  it('accepts valid configuration', () => {
-    const config = {
-      groupA_ids: [1, 2],
-      groupB_ids: [3, 4],
+  it('carries only filters the burden test applies (#510)', () => {
+    const parsed = AssociationConfigSchema.parse({
+      groupA_ids: [1],
+      groupB_ids: [2],
       primary_test: 'fisher',
       weight_scheme: 'uniform',
-      covariates: ['cov1'],
+      covariates: [],
       filters: {
+        gnomad_af_max: 0.01,
         clinvars: ['Pathogenic'],
-        funcs: ['missense_variant']
-      }
-    }
-    const result = AssociationConfigSchema.parse(config)
-    expect(result).toEqual({ ...config, max_threads: 4 })
-  })
-
-  it('rejects acmg_classifications', () => {
-    const config = {
-      groupA_ids: [1, 2],
-      groupB_ids: [3, 4],
-      primary_test: 'fisher',
-      weight_scheme: 'uniform',
-      covariates: [],
-      filters: {
-        // @ts-expect-error simulating invalid input
-        acmg_classifications: ['Pathogenic']
-      }
-    }
-    expect(() => AssociationConfigSchema.parse(config)).toThrow()
-  })
-
-  it('rejects max_internal_af', () => {
-    const config = {
-      groupA_ids: [1, 2],
-      groupB_ids: [3, 4],
-      primary_test: 'fisher',
-      weight_scheme: 'uniform',
-      covariates: [],
-      filters: {
-        // @ts-expect-error simulating invalid input
+        acmg_classifications: ['Pathogenic'],
         max_internal_af: 0.1
       }
-    }
-    expect(() => AssociationConfigSchema.parse(config)).toThrow()
+    })
+    // The two cohort-summary filters were accepted and then dropped: they are not accepted now.
+    expect(parsed.filters).toEqual({ gnomad_af_max: 0.01, clinvars: ['Pathogenic'] })
   })
 })

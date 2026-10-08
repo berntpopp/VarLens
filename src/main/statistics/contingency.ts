@@ -179,10 +179,7 @@ function eligibleSites(
   }
   for (const calls of variantMap.values()) {
     const reason = siteExclusion(calls, allIds)
-    const frequency =
-      reason === null
-        ? (altAlleleFrequency(calls, frequencyIds) ?? altAlleleFrequency(calls, allIds))
-        : null
+    const frequency = reason === null ? altAlleleFrequency(calls, frequencyIds) : null
     if (frequency === null) sites_excluded[reason ?? 'no_called_alleles']++
     else sites.push({ calls, frequency })
   }

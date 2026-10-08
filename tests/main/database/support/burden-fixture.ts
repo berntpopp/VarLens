@@ -54,7 +54,7 @@ export const BURDEN_ROWS: BurdenRow[] = [
   conflict('S2', '0/1', 99),
   conflict('S2', '1/1', 2),
   conflict('S4', '0/1'),
-  // chr1:400 — S1 stored twice, unphased and phased: the same call.
+  // chr1:90 — S1 stored twice, unphased and phased: the same call.
   phased('S1', '0/1'),
   phased('S1', '0|1'),
   // chr1:500 — the shipped classes: assumed het (one copy), reference half-call (no copy).

@@ -731,8 +731,7 @@ export const AssociationConfigSchema = z.object({
       clinvars: z.array(z.string()).optional(),
       funcs: z.array(z.string()).optional(),
       column_filters: z.record(z.string(), ColumnFilterSchema).optional()
-    })
-    .strict(),
+    }),
   max_threads: z.number().int().min(1).max(64).default(4)
 })
 
