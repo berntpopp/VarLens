@@ -1,4 +1,5 @@
-import type { BedFilter } from './bed-filter'
+import type { FileImportRequest } from '../../../shared/types/import-worker'
+import { BedFilter } from './bed-filter'
 import type { VcfRawRecord, VcfMappedVariant } from './types'
 
 /** Variant type discriminator */
@@ -142,4 +143,28 @@ export function passesPostMappingFilters(
     return false
   }
   return true
+}
+
+/**
+ * Build the filters of one worker file request. The BED file is loaded here,
+ * in the worker; a BED file that cannot be read fails the import rather than
+ * importing unfiltered.
+ */
+export async function loadImportFilters(
+  request: FileImportRequest['vcfFilters']
+): Promise<ImportFilters | undefined> {
+  if (request === undefined) return undefined
+  const bedPadding = request.bedPadding ?? 0
+  const bedPath = request.bedFilePath
+  return {
+    bedFilter:
+      bedPath !== undefined && bedPath !== null && bedPath !== ''
+        ? await BedFilter.fromFile(bedPath, bedPadding)
+        : undefined,
+    bedPadding,
+    passOnly: request.passOnly ?? false,
+    minQual: request.minQual ?? null,
+    minGq: request.minGq ?? null,
+    minDp: request.minDp ?? null
+  }
 }

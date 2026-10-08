@@ -299,6 +299,74 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       }
     })
 
+    // #493: what can be parsed up front is parsed before the old case goes.
+    it.each([
+      ['a JSON file truncated before its first key', 'cut.json', '{"vari', undefined],
+      [
+        'a VCF without the selected sample',
+        'other.vcf',
+        '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n' +
+          'chr1\t100\t.\tA\tT\t50\tPASS\t.\tGT\t0/1\n',
+        ['S2']
+      ]
+    ])(
+      'keeps the existing case and its annotations when overwriting with %s',
+      async (_what, name, content, vcfSelectedSamples) => {
+        const workerDb = openWorkerDatabase(dbPath)
+        const stmts = prepareStatements(workerDb)
+        const caseId = Number(
+          stmts.insertCase.run('existing-sample', '/path/to/old.json', 1024, Date.now(), 'GRCh38')
+            .lastInsertRowid
+        )
+        stmts.insertBatch(caseId, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'C' }])
+        workerDb.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
+        workerDb
+          .prepare(
+            `INSERT INTO case_variant_annotations (case_id, variant_id, created_at, updated_at)
+             SELECT case_id, id, 1, 1 FROM variants WHERE case_id = ?`
+          )
+          .run(caseId)
+        workerDb.close()
+
+        const filePath = join(tmpdir(), `${randomUUID()}-${name}`)
+        writeFileSync(filePath, content)
+        const messages: WorkerMessage[] = []
+        try {
+          await runImportSession(
+            {
+              type: 'start',
+              dbPath,
+              throttleMs: 0,
+              files: [
+                {
+                  filePath,
+                  caseName: 'existing-sample',
+                  isDuplicate: true,
+                  duplicateStrategy: 'overwrite',
+                  vcfSelectedSamples
+                }
+              ]
+            },
+            { postMessage: (m) => messages.push(m) }
+          )
+        } finally {
+          unlinkSync(filePath)
+        }
+
+        const complete = messages.find((m) => m.type === 'complete')
+        expect(complete?.type === 'complete' && complete.results.failed).toBe(1)
+        const verifyDb = openWorkerDatabase(dbPath)
+        const count = (sql: string): number =>
+          (verifyDb.prepare(sql).get(caseId) as { c: number }).c
+        expect(count('SELECT COUNT(*) AS c FROM cases WHERE id = ?')).toBe(1)
+        expect(count('SELECT COUNT(*) AS c FROM variants WHERE case_id = ?')).toBe(1)
+        expect(count('SELECT COUNT(*) AS c FROM case_variant_annotations WHERE case_id = ?')).toBe(
+          1
+        )
+        verifyDb.close()
+      }
+    )
+
     it('successfully overwrites existing case when the new file exists and is valid', async () => {
       // 1. Pre-populate an existing case
       const workerDb = openWorkerDatabase(dbPath)

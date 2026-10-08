@@ -24,6 +24,8 @@ export interface StorageImportSingleFileParams {
   filePath: string
   caseName: string
   vcfOptions?: StorageImportVcfOptions
+  /** SQLite only: the first file of a multi-file import. PostgreSQL rejects it here. */
+  filters?: StorageImportFileFilters
   throttleMs: number
   onProgress?: (data: StorageImportProgress) => void
   /**

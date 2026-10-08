@@ -132,7 +132,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
     const worker = this.createWorkerClient()
     this.workerClient = worker
 
-    const { filePath, caseName, vcfOptions, throttleMs, onProgress, onSummaryStale } = params
+    const { filePath, caseName, vcfOptions, filters, throttleMs, onProgress, onSummaryStale } =
+      params
 
     return new Promise<StorageImportSingleFileResult>((resolve, reject) => {
       let capturedCaseId = 0
@@ -153,7 +154,8 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 vcfOptions?.selectedSample != null && vcfOptions.selectedSample !== ''
                   ? [vcfOptions.selectedSample]
                   : undefined,
-              vcfGenomeBuild: vcfOptions?.genomeBuild
+              vcfGenomeBuild: vcfOptions?.genomeBuild,
+              vcfFilters: filters
             }
           ],
           dbPath: db.getPath(),

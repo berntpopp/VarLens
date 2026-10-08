@@ -4,6 +4,17 @@ import { readBedEntries } from './bed-reader'
 
 export const MAX_BED_FILTER_DECOMPRESSED_BYTES = 256 * 1024 * 1024 // 256 MiB
 
+/**
+ * `1` and `chr1`, `M` and `MT` name the same contig: a BED file in the other
+ * naming would otherwise filter every variant out.
+ * ponytail: not shared with VepApiClient.normalizeChromosome, whose module is
+ * not worker-safe; move both to src/shared if a third caller appears.
+ */
+function contigKey(chr: string): string {
+  const bare = chr.replace(/^chr/i, '')
+  return bare.toUpperCase() === 'M' ? 'MT' : bare
+}
+
 interface Interval {
   start: number // 1-based inclusive
   end: number // 1-based inclusive
@@ -43,7 +54,7 @@ export class BedFilter {
     const maxBytes = Math.min(resolveMaxDecompressedBytes(), MAX_BED_FILTER_DECOMPRESSED_BYTES)
 
     for await (const entry of readBedEntries(filePath, maxBytes)) {
-      const chr = entry.chr
+      const chr = contigKey(entry.chr)
       // BED is 0-based half-open -> convert to 1-based inclusive, then apply padding.
       // Reject malformed rows where columns 2 or 3 don't parse as integers
       // (`Number.isInteger` catches both NaN and fractional values) and skip
@@ -92,7 +103,7 @@ export class BedFilter {
   /** Check if a 1-based position falls within any interval on this chromosome */
   contains(chr: string, pos: number): boolean {
     if (this._isEmpty) return true
-    const ivs = this.intervals.get(chr)
+    const ivs = this.intervals.get(contigKey(chr))
     if (!ivs || ivs.length === 0) return false
     return this.binarySearchContains(ivs, pos)
   }
@@ -100,7 +111,7 @@ export class BedFilter {
   /** Check if a range [start, end] (1-based inclusive) overlaps any interval */
   containsRange(chr: string, start: number, end: number): boolean {
     if (this._isEmpty) return true
-    const ivs = this.intervals.get(chr)
+    const ivs = this.intervals.get(contigKey(chr))
     if (!ivs || ivs.length === 0) return false
     return this.binarySearchOverlaps(ivs, start, end)
   }

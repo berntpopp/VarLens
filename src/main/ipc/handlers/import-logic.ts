@@ -243,7 +243,8 @@ async function startMultiFileImportSqlite(
   getDb: () => DatabaseService,
   callbacks: ImportCallbacks,
   importFilters?: ImportFilters,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  filtersPayload?: ImportFiltersPayload
 ): Promise<MultiFileImportResult> {
   const startTime = Date.now()
   const isCancelled = (): boolean => signal?.aborted === true
@@ -290,6 +291,10 @@ async function startMultiFileImportSqlite(
       filePath: firstFile.filePath,
       caseName,
       vcfOptions,
+      // The worker loads the BED file itself, so it gets the path (#484).
+      ...(filtersPayload !== undefined
+        ? { filters: translateFiltersPayloadToStorage(filtersPayload) }
+        : {}),
       throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
       onProgress: firstCallbacks.onProgress,
       onSummaryStale: () => stale.announce()
@@ -571,7 +576,8 @@ export async function startMultiFileImport(
         getDb,
         callbacks,
         importFilters,
-        controller.signal
+        controller.signal,
+        filtersPayload
       )
     }
   )
