@@ -7,6 +7,25 @@ import type { ColumnFiltersParam } from './column-filters'
  */
 
 /**
+ * The six fields that identify one cohort row: the primary key of
+ * `cohort_variant_summary` on both backends.
+ */
+export interface CohortVariantIdentity {
+  /** Chromosome */
+  chr: string
+  /** Genomic position */
+  pos: number
+  /** Reference allele */
+  ref: string
+  /** Alternate allele */
+  alt: string
+  /** Stored variant type: snv, indel, sv, cnv or str */
+  variant_type: string
+  /** Genome build of the carrying cases, e.g. GRCh38 */
+  genome_build: string
+}
+
+/**
  * Aggregated variant across all cases in the cohort
  */
 export interface CohortVariant {
