@@ -21,7 +21,8 @@ describe('PostgresExportRepository', () => {
     }
 
     expect(rows).toHaveLength(1)
-    const queryArg = query.mock.calls[0]?.[0] as
+    // calls[0] lifts the statement timeout for the stream (#490).
+    const queryArg = query.mock.calls[1]?.[0] as
       { cursor?: { text?: string; values?: unknown[] } } | undefined
     expect(queryArg?.cursor?.text).toContain('WHERE v.case_id = $1')
     expect(queryArg?.cursor?.text).toContain('v.gene_symbol ILIKE')

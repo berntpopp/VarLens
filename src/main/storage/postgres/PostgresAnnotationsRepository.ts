@@ -10,7 +10,8 @@ import { globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../
 import {
   applyAnnotationFlagsGlobal,
   applyAnnotationFlagsOnCaseDelete,
-  applyAnnotationFlagsPerCase
+  applyAnnotationFlagsPerCase,
+  beginAnnotationWrite
 } from './cohort-annotation-flags-sql'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
@@ -93,7 +94,8 @@ async function rollbackTransaction(client: Pick<PoolClient, 'query'>): Promise<v
 export class PostgresAnnotationsRepository {
   constructor(
     private readonly pool: QueryablePool,
-    private readonly schema: string
+    private readonly schema: string,
+    private readonly summaryLockWaitMs?: number
   ) {}
 
   async getGlobalAnnotation(
@@ -126,9 +128,9 @@ export class PostgresAnnotationsRepository {
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const result = await this._upsertGlobalAnnotationOn(client, chr, pos, ref, alt, updates)
-      await applyAnnotationFlagsGlobal(client, { schema: this.schema, chr, pos, ref, alt })
+      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -222,7 +224,7 @@ export class PostgresAnnotationsRepository {
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt)
@@ -234,7 +236,7 @@ export class PostgresAnnotationsRepository {
       )) {
         await audit.append(entry)
       }
-      await applyAnnotationFlagsGlobal(client, { schema: this.schema, chr, pos, ref, alt })
+      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -248,9 +250,9 @@ export class PostgresAnnotationsRepository {
   async deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): Promise<void> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       await this._deleteGlobalAnnotationOn(client, chr, pos, ref, alt)
-      await applyAnnotationFlagsGlobal(client, { schema: this.schema, chr, pos, ref, alt })
+      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
       await client.query('COMMIT')
     } catch (error) {
       await rollbackTransaction(client)
@@ -306,9 +308,9 @@ export class PostgresAnnotationsRepository {
   ): Promise<CaseVariantAnnotation> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
-      await applyAnnotationFlagsPerCase(client, { schema: this.schema, caseId, variantId })
+      await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -392,7 +394,7 @@ export class PostgresAnnotationsRepository {
   ): Promise<CaseVariantAnnotation> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
@@ -405,7 +407,7 @@ export class PostgresAnnotationsRepository {
       )) {
         await audit.append(entry)
       }
-      await applyAnnotationFlagsPerCase(client, { schema: this.schema, caseId, variantId })
+      await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -419,9 +421,9 @@ export class PostgresAnnotationsRepository {
   async deletePerCaseAnnotation(caseId: number, variantId: number): Promise<void> {
     const client = await this.connect()
     try {
-      await client.query('BEGIN')
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       await this._deletePerCaseAnnotationOn(client, caseId, variantId)
-      await applyAnnotationFlagsPerCase(client, { schema: this.schema, caseId, variantId })
+      await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
       await client.query('COMMIT')
     } catch (error) {
       await rollbackTransaction(client)

@@ -74,7 +74,8 @@ describe('PostgresAuditLogRepository', () => {
     expect(result).toEqual({ data: [], total_count: 2 })
     expect(countSql).toContain('FROM varlens_audit."audit_log"')
     expect(countSql).toContain('project_schema = $1')
-    expect(dataSql).toContain('ORDER BY created_at DESC')
+    // Entries of one millisecond need a unique tiebreaker to page stably (#503).
+    expect(dataSql).toContain('ORDER BY created_at DESC, id DESC')
     expect(dataSql).not.toContain('OR TRUE')
     expect(dataSql).not.toContain('tenant')
     expect(params).toEqual([

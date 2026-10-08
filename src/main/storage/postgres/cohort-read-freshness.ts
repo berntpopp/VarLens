@@ -38,6 +38,7 @@ import {
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
+import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import { scheduleSeverityRankBackfill } from './severity-rank-backfill-job'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
@@ -104,7 +105,13 @@ function needsBootstrap(probe: FreshnessProbe): boolean {
 }
 
 /** Null when the schema has no summary state row (nothing to reconcile against). */
-async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessProbe | null> {
+async function probeFreshness({
+  pool,
+  schema
+}: {
+  pool: Pick<Pool, 'query'>
+  schema: string
+}): Promise<FreshnessProbe | null> {
   const tbl = (t: string): string => `"${schema}"."${t}"`
   const result = await pool.query<{
     never_rebuilt: boolean
@@ -153,12 +160,22 @@ async function probeFreshness({ pool, schema }: ScopedPool): Promise<FreshnessPr
 async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<boolean> {
   const repository = new PostgresCohortSummaryRepository()
   const client = (await pool.connect()) as PoolClient
+  // Only the background path raises the server timeout, so only it outlives the client one.
+  const restoreQueryTimeout = wait ? liftClientQueryTimeout(client) : () => undefined
+  let rollbackFailure: Error | undefined
   try {
     await client.query('BEGIN')
     if (wait) {
       await client.query('SET LOCAL lock_timeout = 0')
       await client.query(`SET LOCAL statement_timeout = ${BACKGROUND_REBUILD_STATEMENT_TIMEOUT_MS}`)
       await lockSummaryForWrite(client, schema)
+      // Whoever held the lock may have rebuilt already: do not do it twice.
+      // On this client: the pool may have no second connection to give.
+      const probe = await probeFreshness({ pool: client, schema })
+      if (probe !== null && !needsBootstrap(probe) && !probe.is_stale) {
+        await client.query('ROLLBACK')
+        return true
+      }
     } else if (!(await tryLockSummaryForWrite(client, schema))) {
       await client.query('ROLLBACK')
       return false
@@ -167,14 +184,11 @@ async function runRebuild({ pool, schema }: ScopedPool, wait: boolean): Promise<
     await client.query('COMMIT')
     return true
   } catch (error) {
-    try {
-      await client.query('ROLLBACK')
-    } catch {
-      // ignore rollback failure; surface the original error below
-    }
+    rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
     throw error
   } finally {
-    client.release()
+    restoreQueryTimeout()
+    client.release(rollbackFailure)
   }
 }
 

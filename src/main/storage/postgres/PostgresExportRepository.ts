@@ -1,13 +1,12 @@
-import type { Pool, PoolClient } from 'pg'
-import QueryStream from 'pg-query-stream'
+import type { Pool } from 'pg'
 
 import type { VariantFilter } from '../../../shared/types/database'
 import { quoteIdentifier } from './identifiers'
+import { streamLongQuery } from './long-running-client'
 import { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
 import { buildPostgresVariantQueryParts } from './PostgresVariantReadRepository'
 
 type ExportPool = Pick<Pool, 'connect' | 'query'>
-type ExportClient = Pick<PoolClient, 'query' | 'release'>
 
 export class PostgresExportRepository {
   private readonly schemaName: string
@@ -33,22 +32,12 @@ export class PostgresExportRepository {
       filter,
       this.schemaName
     )
-    const client: ExportClient = await this.pool.connect()
-    const stream = client.query(
-      new QueryStream(
-        `SELECT ${projections.join(', ')}
+    yield* streamLongQuery(
+      this.pool,
+      `SELECT ${projections.join(', ')}
          ${fromAndWhereSql}
          ${orderBySql}`,
-        params
-      )
-    ) as AsyncIterable<Record<string, unknown>>
-
-    try {
-      for await (const row of stream) {
-        yield row
-      }
-    } finally {
-      client.release()
-    }
+      params
+    )
   }
 }

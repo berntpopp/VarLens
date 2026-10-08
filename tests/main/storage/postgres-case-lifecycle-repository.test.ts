@@ -249,5 +249,7 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
 
     await expect(repo.deleteCase(7)).rejects.toBe(boom)
     expect(client.release).toHaveBeenCalledTimes(1)
+    // Still inside the transaction: the pool must destroy it, not hand it out again (#490).
+    expect(client.release).toHaveBeenCalledWith(new Error('rollback failed'))
   })
 })

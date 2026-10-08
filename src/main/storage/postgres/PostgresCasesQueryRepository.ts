@@ -84,7 +84,7 @@ export class PostgresCasesQueryRepository {
         c.genome_build,
         cm.affected_status,
         cm.sex
-      ORDER BY ${orderColumn} ${orderDirection}
+      ORDER BY ${orderColumn} ${orderDirection}, c.id
       LIMIT $${values.length + 1}
       OFFSET $${values.length + 2}
     `

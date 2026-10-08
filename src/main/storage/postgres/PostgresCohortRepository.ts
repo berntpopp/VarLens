@@ -1,5 +1,4 @@
-import type { Pool, PoolClient } from 'pg'
-import QueryStream from 'pg-query-stream'
+import type { Pool } from 'pg'
 
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type {
@@ -18,6 +17,7 @@ import {
   type CohortReadWarnings
 } from './cohort-read-freshness'
 import { quoteIdentifier } from './identifiers'
+import { streamLongQuery } from './long-running-client'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
@@ -34,7 +34,6 @@ import {
 import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
-type CohortClient = Pick<PoolClient, 'query' | 'release'>
 
 type Queryable = Pick<Pool, 'query'>
 
@@ -380,28 +379,18 @@ export class PostgresCohortRepository {
       values.push(resolvedParams.offset)
       limitOffset.push(`OFFSET $${values.length}`)
     }
-    const client: CohortClient = await this.pool.connect()
-    const stream = client.query(
-      new QueryStream(
-        buildSummaryExportSql(
-          this.tbl('cohort_variant_summary'),
-          parts.whereParts,
-          parts.orderBy,
-          totalCases,
-          summaryBuildTotalsJoin(this.tbl('cases')),
-          limitOffset.join('\n    ')
-        ),
-        values
-      )
-    ) as AsyncIterable<Record<string, unknown>>
-
-    try {
-      for await (const row of stream) {
-        yield row
-      }
-    } finally {
-      client.release()
-    }
+    yield* streamLongQuery(
+      this.pool,
+      buildSummaryExportSql(
+        this.tbl('cohort_variant_summary'),
+        parts.whereParts,
+        parts.orderBy,
+        totalCases,
+        summaryBuildTotalsJoin(this.tbl('cases')),
+        limitOffset.join('\n    ')
+      ),
+      values
+    )
   }
 
   private async getTotalCases(pool: Queryable, params: CohortSearchParams = {}): Promise<number> {

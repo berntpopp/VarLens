@@ -549,6 +549,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       await client.query('BEGIN')
       await applyAnnotationFlagsGlobal(client as never, {
         schema,
+        summaryLocked: true,
         chr: '1',
         pos: 100,
         ref: 'A',
@@ -556,6 +557,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
       })
       await applyAnnotationFlagsPerCase(client as never, {
         schema,
+        summaryLocked: true,
         caseId: pgCaseIds[0],
         variantId: pgTargetId
       })

@@ -277,6 +277,39 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
     expect(await summaryRowCount()).toBe(2)
   }, 60_000)
 
+  it('does not rebuild again when the summary became current while it waited for the lock', async () => {
+    const caseA = await seedCase('redundant-a')
+    await seedVariant(caseA, '9', 900)
+    await prepareCohortRead({ pool, schema })
+    await probe.query(
+      `UPDATE "${schema}".cohort_summary_state
+         SET is_stale = true, stale_reason = 'test', stale_at = now() WHERE id = 1`
+    )
+
+    // Another writer holds the lock and leaves the summary current, as a
+    // rebuild started elsewhere (a second server process) would.
+    const other = new Client({ connectionString: PG_URL })
+    await other.connect()
+    const marker = new Date('2020-01-01T00:00:00Z')
+    try {
+      await other.query('BEGIN')
+      await lockSummaryForWrite(other, schema)
+      expect((await prepareCohortRead({ pool, schema })).warnings).toEqual({ staleSummary: true })
+      await other.query(
+        `UPDATE "${schema}".cohort_summary_state
+            SET is_stale = false, last_rebuilt_at = $1 WHERE id = 1`,
+        [marker]
+      )
+    } finally {
+      await other.query('COMMIT')
+      await other.end()
+    }
+
+    await awaitBackgroundRebuild(schema)
+    expect(await isStale()).toBe(false)
+    expect(await lastRebuiltAt()).toEqual(marker)
+  }, 60_000)
+
   it('keeps the previous rows visible to other sessions while a rebuild runs', async () => {
     const caseA = await seedCase('visible-a')
     await seedVariant(caseA, '8', 800)

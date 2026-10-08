@@ -57,6 +57,10 @@ describe('PostgresMigrationRunner', () => {
       expect.stringContaining('CREATE SCHEMA IF NOT EXISTS "app_schema"')
     )
     expect(pool.client.query).toHaveBeenCalledWith(expect.stringContaining('BEGIN'))
+    // Only 0023 lifted the server timeout itself; a long backfill in any other must survive too.
+    expect(pool.client.query).toHaveBeenCalledWith(
+      "SELECT set_config('statement_timeout', '0', true)"
+    )
     expect(pool.client.query).toHaveBeenCalledWith(
       expect.stringContaining('pg_advisory_xact_lock'),
       ['app_schema']

@@ -4,6 +4,7 @@ import { InvalidParametersError } from '../../ipc/errors'
 import { applyAnnotationFlagsOnCaseDelete } from './cohort-annotation-flags-sql'
 import { removeCaseFromGeneSummary } from './cohort-gene-summary-sql'
 import { quoteIdentifier } from './identifiers'
+import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import {
   PostgresCohortSummaryRepository,
   SCOPED_DEDUPED_AGG_SQL
@@ -136,6 +137,8 @@ export class PostgresCaseLifecycleRepository {
 
   async hideCase(caseId: number): Promise<HideCaseResult> {
     const client = await this.pool.connect()
+    const restoreQueryTimeout = liftClientQueryTimeout(client)
+    let rollbackFailure: Error | undefined
     try {
       await client.query('BEGIN')
       await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
@@ -180,10 +183,11 @@ export class PostgresCaseLifecycleRepository {
       await client.query('COMMIT')
       return { state: 'hidden', genomeBuild: current.genome_build, variantCount }
     } catch (error) {
-      await rollbackQuietly(client)
+      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error
     } finally {
-      client.release()
+      restoreQueryTimeout()
+      client.release(rollbackFailure)
     }
   }
 
@@ -300,14 +304,6 @@ export class PostgresCaseLifecycleRepository {
 
   private tbl(table: string): string {
     return `${this.schemaName}."${table}"`
-  }
-}
-
-async function rollbackQuietly(client: Pick<PoolClient, 'query'>): Promise<void> {
-  try {
-    await client.query('ROLLBACK')
-  } catch {
-    // Preserve the original failure for callers.
   }
 }
 

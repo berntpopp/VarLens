@@ -12,6 +12,17 @@ const makePool = () => ({
   query: vi.fn()
 })
 
+/**
+ * The summary write lock an annotation write takes right after BEGIN (#503) is
+ * free in these tests; answering it here keeps it out of the scripted replies.
+ */
+const summaryLockFree =
+  (query: (...args: unknown[]) => unknown) =>
+  (...args: unknown[]): unknown =>
+    String(args[0]).includes('pg_try_advisory_xact_lock')
+      ? Promise.resolve({ rows: [{ locked: true }] })
+      : query(...args)
+
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
   process.env.VARLENS_PG_URL ??
@@ -83,7 +94,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // flag write-hook
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -172,7 +183,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [] })
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -239,7 +250,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockRejectedValueOnce(failure)
       .mockResolvedValueOnce({ rows: [] })
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -282,7 +293,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockRejectedValueOnce(failure)
       .mockRejectedValueOnce(rollbackFailure)
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -306,7 +317,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // flag write-hook
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -382,7 +393,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // flag write-hook
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -462,7 +473,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] })
       .mockResolvedValueOnce({ rows: [] })
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -525,7 +536,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockRejectedValueOnce(failure)
       .mockRejectedValueOnce(rollbackFailure)
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -549,7 +560,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // flag write-hook
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
@@ -719,7 +730,7 @@ describe('PostgresAnnotationsRepository', () => {
       .mockRejectedValueOnce(hookFailure) // flag write-hook throws
       .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
     const pool = {
-      connect: vi.fn(async () => ({ query, release }))
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 

@@ -212,6 +212,22 @@ describe('PostgresVariantReadRepository', () => {
     expect(toPrefixTsQueryForTest('BRCA1')).toBe('BRCA1:*')
     expect(toPrefixTsQueryForTest('chr1:1000 A>G')).toBe('chr11000:* & AG:*')
     expect(toPrefixTsQueryForTest('***')).toBe('')
+    // The 'simple' parser keeps the dot inside a lexeme ('007294.4', 'c.5266dupc').
+    expect(toPrefixTsQueryForTest('NM_007294.4')).toBe('NM_007294.4:*')
+    // HGVS tokens are matched by ILIKE instead, like SQLite (#503).
+    expect(toPrefixTsQueryForTest('BRCA1 c.5266dupC')).toBe('BRCA1:*')
+  })
+
+  it('matches c. and p. search tokens on cdna and aa_change like SQLite', async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const repository = new PostgresVariantReadRepository(pool as never, 'public')
+
+    await repository.searchVariants(1, 'c.5266dupC', 20)
+
+    const { text, values } = pool.query.mock.calls[0][0] as { text: string; values: unknown[] }
+    expect(text).toMatch(/\(v\.cdna ILIKE (\$\d+) OR v\.aa_change ILIKE \1\)/)
+    expect(text).not.toContain('search_document @@')
+    expect(values).toContain('%c.5266dupC%')
   })
 
   it('adds STR extension projections for str variant queries', async () => {

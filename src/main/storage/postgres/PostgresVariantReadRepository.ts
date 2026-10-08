@@ -84,11 +84,18 @@ function toNumber(value: unknown): number {
   return 0
 }
 
+/** `c.`/`p.` tokens are HGVS: matched by ILIKE on cdna / aa_change, like SQLite. */
+const HGVS_TOKEN = /^[cp]\./
+
+function searchTokens(query: string): string[] {
+  return query.trim().split(/\s+/)
+}
+
+// Dots stay: the 'simple' parser keeps them inside a lexeme ('007294.4').
 function toPrefixTsQuery(query: string): string {
-  return query
-    .trim()
-    .split(/\s+/)
-    .map((token) => token.replace(/[^A-Za-z0-9_]/g, ''))
+  return searchTokens(query)
+    .filter((token) => !HGVS_TOKEN.test(token))
+    .map((token) => token.replace(/[^A-Za-z0-9_.]/g, ''))
     .filter((token) => token.length > 0)
     .map((token) => `${token}:*`)
     .join(' & ')
@@ -188,7 +195,12 @@ export function buildPostgresVariantQueryParts(
     )
   }
 
-  const tsQuery = filter.search_query !== undefined ? toPrefixTsQuery(filter.search_query) : ''
+  const searchQuery = filter.search_query ?? ''
+  for (const token of searchTokens(searchQuery).filter((t) => HGVS_TOKEN.test(t))) {
+    const pattern = addParam(`%${token}%`)
+    addWhere(`(v.cdna ILIKE ${pattern} OR v.aa_change ILIKE ${pattern})`)
+  }
+  const tsQuery = toPrefixTsQuery(searchQuery)
   if (tsQuery !== '') {
     const tsParam = addParam(tsQuery)
     addWhere(`(
@@ -365,7 +377,9 @@ export class PostgresVariantReadRepository {
   }
 
   async searchVariants(caseId: number, query: string, limit: number): Promise<Variant[]> {
-    if (toPrefixTsQuery(query) === '') return []
+    if (toPrefixTsQuery(query) === '' && !searchTokens(query).some((t) => HGVS_TOKEN.test(t))) {
+      return []
+    }
     const result = await this.queryVariants(
       { case_id: caseId, search_query: query },
       limit,
