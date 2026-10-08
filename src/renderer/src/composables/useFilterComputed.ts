@@ -162,7 +162,7 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
     if (filters.value.consequences.length > 0) {
       list.push({
         id: 'consequences',
-        label: 'Consequences',
+        label: 'Impact',
         value: `${filters.value.consequences.length} selected`
       })
     }
