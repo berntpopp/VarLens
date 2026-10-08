@@ -3,6 +3,9 @@
  * as well as rows, and the requested batch size is validated. No database is
  * needed — the pg client and the COPY writer are stand-ins.
  */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -28,6 +31,8 @@ vi.mock('../../../src/main/storage/postgres/PostgresCohortSummaryRepository', ()
 }))
 
 import { setRecordBytes } from '../../../src/main/import/bounded-batcher'
+import { detectFormat } from '../../../src/main/import/format-detection'
+import { createMapperPipeline } from '../../../src/main/workers/import-pipeline'
 import type { RunImportDeps } from '../../../src/main/workers/postgres-import-worker'
 import { runImportBehindHealthyFence as runImport } from './support/healthy-import-fence'
 import { ErrorCode } from '../../../src/shared/types/errors'
@@ -192,5 +197,35 @@ describe('postgres-import-worker batchSize validation', () => {
     )
 
     expect(messages.at(-1)).toMatchObject({ type: 'complete', result: { variantCount: 2 } })
+  })
+})
+
+describe('postgres-import-worker JSON rows without required fields', () => {
+  // #495: the rows are rejected by the mapper; the result must say how many.
+  it('counts them as skipped and names the reasons', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-json-skips-'))
+    try {
+      const filePath = join(dir, 'case.json')
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          variants: [
+            { chr: 'chr1', pos: 100, ref: 'A', alt: 'T' },
+            { chr: 'chr1', ref: 'C', alt: 'G' },
+            { chr: 'chr1', pos: 300, ref: 'G' }
+          ]
+        })
+      )
+      const { messages } = await run(
+        { ...jsonStart, filePath },
+        { detectFormat, createMapperPipeline }
+      )
+
+      const done = messages.at(-1)
+      expect(done).toMatchObject({ type: 'complete', result: { variantCount: 1, skipped: 2 } })
+      expect(done?.type === 'complete' && done.result.errors).toHaveLength(2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

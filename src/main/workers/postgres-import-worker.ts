@@ -96,7 +96,11 @@ process.on('unhandledRejection', (reason) => {
 export interface RunImportDeps {
   createClient: (config: ClientConfig) => Client
   detectFormat: (filePath: string) => Promise<FormatInfo>
-  createMapperPipeline: (filePath: string, formatInfo: FormatInfo) => Promise<Readable>
+  createMapperPipeline: (
+    filePath: string,
+    formatInfo: FormatInfo,
+    onSkip?: (reason: string) => void
+  ) => Promise<Readable>
   statFile: (filePath: string) => { size: number }
   isCancellationRequested?: () => boolean
   /** Byte budget per batch; defaults to DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES. */
@@ -427,9 +431,14 @@ export async function runImport(
       )
 
       let totalInserted = 0
+      let totalSkipped = 0
+      const errors: string[] = []
       const writeVariants = async (session: PostgresJsonImportSession): Promise<void> => {
         if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
-        const stream = await deps.createMapperPipeline(filePath, formatInfo)
+        const stream = await deps.createMapperPipeline(filePath, formatInfo, (reason) => {
+          totalSkipped += 1
+          recordParseSkip({ reason, errors })
+        })
         const batch = createBoundedBatcher<Record<string, unknown>, Promise<void>>({
           maxRows: batchSize,
           maxBytes: maxBatchBytes,
@@ -503,8 +512,8 @@ export async function runImport(
         result: {
           caseId,
           variantCount,
-          skipped: 0,
-          errors: [],
+          skipped: totalSkipped,
+          errors,
           elapsed: Date.now() - startedAt
         }
       })
