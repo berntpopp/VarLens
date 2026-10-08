@@ -161,10 +161,7 @@ export const mockApi: WindowAPI = {
       const startIndex = offset ?? 0
       const data = filtered.slice(startIndex, startIndex + limit)
 
-      return {
-        data,
-        total_count: filtered.length
-      }
+      return { data, total_count: filtered.length }
     },
     geneSymbols: async (caseId: number, query: string, limit = 50) => {
       const queryLower = query.toLowerCase()
@@ -216,7 +213,8 @@ export const mockApi: WindowAPI = {
             : []
       const set = new Set<string>()
       for (const v of variants) {
-        if (ids.includes(v.case_id)) set.add(v.variant_type ?? 'snv')
+        if (!ids.includes(v.case_id)) continue
+        set.add(v.variant_type ?? 'snv')
       }
       return [...set]
     },

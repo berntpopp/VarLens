@@ -1,20 +1,24 @@
 <template>
   <div>
-    <!-- Toolbar: Search + Export -->
-    <div class="d-flex align-center gap-2 mb-2">
+    <div class="d-flex align-center mb-2">
       <v-text-field
         v-model="searchTerm"
-        placeholder="Search gene..."
+        label="Search genes"
         density="compact"
+        variant="outlined"
         hide-details
-        style="max-width: 250px"
         clearable
         :prepend-inner-icon="mdiMagnify"
+        style="max-width: 300px"
+        class="mr-2"
       />
       <v-spacer />
+      <v-chip size="small" variant="tonal" class="mr-2">
+        {{ filteredResults.length }} genes
+      </v-chip>
       <v-btn
-        size="small"
         variant="outlined"
+        size="small"
         :prepend-icon="mdiDownload"
         :disabled="results.length === 0"
         @click="exportResults"

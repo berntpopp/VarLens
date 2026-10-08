@@ -1,71 +1,61 @@
-What this change does: It limits the gene burden test to chromosomes 1–22 of one genome build. It drops any site where a selected sample has an unknown or conflicting call, weights by minor allele frequency, and reports how many sites were left out. Both database builders (SQLite and PostgreSQL) and the shared matrix code were changed; the result view got a new column and a warning.
+**What this change does:** The gene burden test now uses only variants on chromosomes 1-22, in cases of one genome build, at sites where every selected sample has a usable call. It weights by minor allele frequency and reports per gene how many sites were used and left out, and per run how many variants were skipped for not being on chromosomes 1-22. Both backends (SQLite and PostgreSQL) and the result table and export were changed.
 
-I could not run anything: `vitest`, `make typecheck` and `prettier` all need approval in this session. Every finding below comes from reading the code.
-
-The backend is sound and matches the spec on both SQLite and PostgreSQL. The result view, the export and the docs (plan Tasks 7 and 8) were not built as planned.
+I could not run `make typecheck` or any test here (the commands needed approval), so everything below comes from reading the code. Load assumed: one desktop user on SQLite, a few web users on PostgreSQL.
 
 ## Must fix
 
-1. **The new "Sites" column shows `NaN`** (`src/renderer/src/components/association/AssociationResultsTable.vue:41`, `:110`)
-   - **What this is:** A new table column that should show how many sites each gene's test used.
-   - **Problem:** It computes `n_variants - sites_excluded` as if `sites_excluded` were a number. The backend sends an object (`{ missing_call, conflicting_calls, no_called_alleles }`), so every row shows `NaN`. Even with a number it would be wrong, because `n_variants` already is "sites used". The test passes only because it feeds a fake `sites_excluded: 2` and checks that the page contains an "8" somewhere.
-   - **Fix:** Delete the "Sites" column and rename "Variants" to "Sites used". Add one "Excluded" column that prints the three counts. Give the test the real object shape and assert on the cell.
-   - **If we skip it:** Every burden result shows `NaN` next to each gene.
-
-2. **The required sentence and the exclusion counts are missing from view and export** (`AssociationResultsTable.vue:190-233`, `GeneBurdenView.vue:41-51`)
-   - **What this is:** Spec item 7 requires the view and the TSV export to state: "Samples without a stored call are treated as reference. Use data called and filtered the same way for both groups." It also requires the excluded sites per reason.
-   - **Problem:** The sentence appears nowhere in `src/`. The export is unchanged: no sites excluded, no non-autosomal count, no sentence. The per-reason counts are shown nowhere. The planned `src/renderer/src/utils/association-results.ts` and its test were not created.
-   - **Fix:** Implement plan Task 7 as written: one small util for the sentence, the labels and the TSV text, used by both the table and the export.
-   - **If we skip it:** A gene with all sites excluded appears with 0 sites and no p-value, and the user cannot see why. The one assumption the spec says must be stated is never stated.
-
-3. **The docs say the opposite of what the code does** (`docs/features/cohort-analysis.md:42-46`, `.planning/docs/SPLIT-GENOTYPE-ZYGOSITY.md:54-80`, `:94-95`)
-   - **What this is:** The user documentation and the decision record for genotype handling.
-   - **Problem:** The user doc says "Partial or missing calls … do not disqualify the variant". In the code a `./.` in any selected sample removes the site for everyone. The one-build rule, conflicting duplicates and the required sentence are not mentioned. The decision record got a new paragraph ("Phase 16", "boolean manner", "avoiding data loss") that is wrong, and four old statements were left in that are now false: the association test uses "highest dosage", it "has no missing dosage yet", "an explicit unknown call is dosage 0", and the weight "uses the ALT allele frequency".
-   - **Fix:** Replace both texts with the ones written out in plan Task 8, Steps 1 and 2.
-   - **If we skip it:** Users are told missing calls are harmless while their sites vanish. The next developer reads a decision record that contradicts the code.
+1. **The burden tab can no longer load its cases** (`src/renderer/src/components/association/GeneBurdenView.vue:L186-248`)
+   - **What this is:** The screen where the user picks two groups of cases and starts the burden test. The plan asked for three small additions here; the last commit (`c262b6de`) rewrote the whole script block instead.
+   - **Problem:** Four things break:
+     - `loadCasesWithMetadata()` returns `{ cases, cohortGroups }`, but the new code calls `.map` on it. That throws, so the case list stays empty and "Failed to load cases" shows.
+     - It calls `window.api.cases.cohortGroups()`, which does not exist anywhere in the preload or shared contracts.
+     - `defineExpose({ refresh })` is gone, but `CohortView.vue:152` still calls `burdenViewRef.value?.refresh()`. That throws when the burden tab is active.
+     - Two `any` types were added (`no-explicit-any` is an error in the ESLint config), and the scroll style (`overflow-y`, `max-height`) was removed.
+   - **Fix:** Restore the script and style blocks from the merge base (`a5e18286a`). Then re-add only the planned lines: `sites_excluded` and `non_autosomal_variants` in the two interfaces, and the `:non-autosomal-variants` prop.
+   - **If we skip it:** Nobody can pick groups, so the burden test cannot be started from the app. Typecheck and lint should also fail.
 
 ## Should fix
 
-4. **The `no_called_alleles` reason can never be counted** (`src/main/statistics/contingency.ts:181-185`, `tests/main/statistics/contingency.test.ts:131-141`)
-   - **What this is:** A site should be excluded when no tested sample calls an allele. Plan Review Focus 4 says that when no sample has complete covariates, every site is `no_called_alleles`.
-   - **Problem:** The code adds a fallback (`?? altAlleleFrequency(calls, allIds)`) that the plan does not have, and the plan's test was rewritten to assert the opposite. With the fallback the counter is always 0. Example: the covariate "age" is recorded for nobody. The plan excludes and reports every site; the code keeps them, Fisher runs, and the logistic test returns `NO_SAMPLES`.
-   - **Fix:** Decide one way. Either remove the fallback and restore the plan's test (one line), or keep it and delete the dead reason from the type, the counts and the docs. Keeping Fisher alive is defensible, but it is your call to make.
-   - **If we skip it:** A reported counter that is always zero, and behaviour that silently differs from the approved plan.
+2. **No test mounts the burden screen** (`tests/renderer/components/association/`)
+   - **What this is:** The only `GeneBurdenView` test was added on this branch and deleted again in `c262b6de`.
+   - **Problem:** Finding 1 passed unnoticed because nothing loads this component in a test.
+   - **Fix:** Add one mount test with `useAssociation` mocked. Assert that the cases reach `AssociationConfigPanel` and that `refresh` is exposed.
+   - **If we skip it:** The next rewrite of this file breaks the feature the same way.
 
-5. **The new engine test is malformed** (`tests/main/statistics/integration.test.ts:320-354`, `:484`)
-   - **What this is:** A new test that the run result carries the non-autosomal count.
-   - **Problem:** Its body is not indented and its closing `})` is missing. An extra `})` at the end of the file balances it, which puts the whole "parallel execution" suite inside the "DbPool" suite, so that suite's setup now runs for both. Line 180 is also over 100 columns. `make format-check` covers `tests/`, so `make ci` will very likely fail (not run).
-   - **Fix:** Close the test where it ends, delete the last line of the file, and run prettier on the file.
-   - **If we skip it:** A red format gate, and two suites silently sharing setup.
+3. **Unplanned toolbar changes in the result table** (`src/renderer/src/components/association/AssociationResultsTable.vue:L3-24`)
+   - **What this is:** The search box, gene counter and Export button above the results.
+   - **Problem:** The same commit removed the "N genes" chip and replaced the field's label "Search genes" with a placeholder. A placeholder is not a label, so a screen reader announces an unnamed field. The plan asked for none of this.
+   - **Fix:** Restore the toolbar from the merge base. Keep the two note paragraphs and the "Excluded sites" column; the disabled-when-empty Export button is fine to keep.
+   - **If we skip it:** Users lose the gene count, and the field has no accessible name.
 
-6. **Renderer fields that do not exist** (`GeneBurdenView.vue:163`, `src/renderer/src/mocks/mockApi.ts:711`, `mockApi.ts:224`)
-   - **What this is:** The view's result type and the browser mock.
-   - **Problem:** Both add a run-level `sites_excluded: number`. The backend has no such field; it is per gene. The same commit also deleted an unrelated comment about the shortlist stub.
-   - **Fix:** Delete the two `sites_excluded` lines and restore the comment.
-   - **If we skip it:** The next person trusts the type and reads a field that is always undefined.
+4. **Two copies of the result row type** (`GeneBurdenView.vue:L124-147`, `src/renderer/src/utils/association-results.ts:L19-44`)
+   - **What this is:** The shape of one gene's result, written out once in the view and once in the new util.
+   - **Problem:** Both must change together. This branch already had to add `sites_excluded` in both places.
+   - **Fix:** Import `AssociationResultRow` in `GeneBurdenView.vue` and delete the local `AssociationResult` interface.
+   - **If we skip it:** The next new field is added in one copy and forgotten in the other.
 
 ## Nice to have
 
-7. **`.strict()` instead of dropping the two filters** (`src/shared/types/ipc-schemas.ts:735`)
-   - **What this is:** The plan removes two unused filters from the schema and lets zod drop unknown keys.
-   - **Problem:** The code rejects every unknown key instead. The config panel sends only allowed keys today, so nothing breaks now. But its payload type is the full shared filter set, so the first new shared filter that reaches it fails every run with a validation error. Any API client still sending the old fields gets HTTP 400.
-   - **Fix:** Remove `.strict()` and use the plan's test, or keep it on purpose and say so in the PR.
-   - **If we skip it:** A fragile coupling that surfaces as "burden test broken" after an unrelated filter change.
+5. **Removed filters are still dropped without a message** (`src/shared/types/ipc-schemas.ts:L724-734`)
+   - **What this is:** The check on a burden run request. `acmg_classifications` and `max_internal_af` were removed from it, as the plan says.
+   - **Problem:** A web API caller who sends `max_internal_af: 0.01` gets an unfiltered result and no error. That is still "accepted then dropped" (#510), only one layer earlier. The plan chose this, and the test comment "they are not accepted now" overstates it.
+   - **Fix:** Put `.strict()` back on the `filters` object so unknown keys are rejected. `c262b6de` removed it; I did not find out why, so check the panel's payload first.
+   - **If we skip it:** The app is unaffected, because the panel never sends these keys. Only direct API callers can be misled.
 
-8. **Wrong comment in the fixture** (`tests/main/database/support/burden-fixture.ts:57`)
-   - **What this is:** The shared test dataset for both backends.
-   - **Problem:** The comment says `chr1:400`, but the site is `chr1:90`.
-   - **Fix:** Change the comment.
-   - **If we skip it:** A reader miscounts the expected matrix columns.
+6. **Unrelated edits in the mock API** (`src/renderer/src/mocks/mockApi.ts:L216-224`)
+   - **What this is:** The fake API for browser dev mode.
+   - **Problem:** A loop was reshaped and a "Wave 4 — unified shortlist" comment was added. Neither belongs to this change.
+   - **Fix:** Revert both; keep only `non_autosomal_variants: 0`.
+   - **If we skip it:** Nothing breaks; the diff just carries noise.
 
-Verdict: fix 1, 2, 3 and 5 first.
+7. **`chr1` and `1` are still two different sites** (`AssociationDataBuilder.ts:L135-141`, `PostgresAssociationDataBuilder.ts:L173-179`)
+   - **What this is:** The site key is the stored text `chr:pos:ref:alt`. This is older than this branch.
+   - **Problem:** If group A's files say `chr1` and group B's say `1`, the same variant becomes two sites. "Variants used" doubles, each frequency is halved, and an unknown call in one spelling does not exclude the other. Carrier counts stay right.
+   - **Fix:** Compare the chromosome without its `chr` prefix in the join and the key. This is a follow-up, not part of this plan.
+   - **If we skip it:** Weights and site counts are slightly off when the two groups come from pipelines with different chromosome naming.
 
-Lean: about -10 lines possible (findings 4, 6, 7).
+The statistics code (`contingency.ts`, `weights.ts`, `gene-tests.ts`) and both SQL builders read correctly against the spec. Both backends do the build check, the autosome filter, select-then-collect and the skipped-variant count, and the mixed-build error reaches the user with its message.
 
-Not checked:
-- **No test or gate was run.** That includes the PostgreSQL parity test, which is gated behind `VARLENS_RUN_POSTGRES_E2E=1`.
-- **Query time of the new collect step is unmeasured.** For each selected site it reads the rows of every case in the database before filtering by case. A run with no filter on a small selection from a 10,000-exome database may be much slower than before. The plan itself left this for review.
-- **The two smaller adjusted test files were not read:** `conflicting-genotype-calls.test.ts` and `postgres-split-genotype-zygosity.test.ts`.
-- **The cohort view needs no counterpart.** The burden test only exists there, and the web client uses the same components.
-
-The empty untracked file `.planning/code-review/2026-10-08-burden-test-eligible-sites-ponytail-review.md` was already there; I left it untouched and changed no file.
+Verdict: fix 1 first; 2 and 3 belong in the same commit.
+Lean: -25 lines possible.
+Not checked: `make typecheck`, lint and every test, including the PostgreSQL-gated parity test. Also the query time of the new second read and the extra count query on a large database, which the plan itself leaves to review.
