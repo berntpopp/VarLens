@@ -7,9 +7,10 @@ import type { ColumnFiltersParam } from './column-filters'
  */
 
 /**
- * Aggregated variant across all cases in the cohort
+ * The six fields that identify one cohort row: the primary key of
+ * `cohort_variant_summary` on both backends.
  */
-export interface CohortVariant {
+export interface CohortVariantIdentity {
   /** Chromosome */
   chr: string
   /** Genomic position */
@@ -18,6 +19,16 @@ export interface CohortVariant {
   ref: string
   /** Alternate allele */
   alt: string
+  /** Stored variant type: snv, indel, sv, cnv or str */
+  variant_type: string
+  /** Genome build of the carrying cases, e.g. GRCh38 */
+  genome_build: string
+}
+
+/**
+ * Aggregated variant across all cases in the cohort
+ */
+export interface CohortVariant extends CohortVariantIdentity {
   /** Gene symbol (nullable) */
   gene_symbol: string | null
   /** cDNA HGVS notation (nullable) */
@@ -34,7 +45,7 @@ export interface CohortVariant {
   het_count: number
   /** Number of homozygous carriers */
   hom_count: number
-  /** Composite key for stable v-data-table tracking: "chr:pos:ref:alt" */
+  /** Opaque row key, built at read time by `cohortVariantKey`; never parse it */
   variant_key: string
 
   // Annotation columns (aggregated: MAX value across carriers)
@@ -168,6 +179,8 @@ export interface CohortSearchParams {
   max_internal_af?: number
   /** Minimum carrier count */
   carrier_count_min?: number
+  /** Maximum carrier count (integer >= 1; absent = off) */
+  carrier_count_max?: number
   /** Show only starred variants (global annotations) */
   starred_only?: boolean
   /** Show only variants with comments (global annotations) */

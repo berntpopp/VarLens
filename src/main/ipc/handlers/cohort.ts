@@ -1,10 +1,10 @@
-import { z } from 'zod'
 import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import {
   CohortSearchParamsSchema,
   AssociationConfigSchema
 } from '../../../shared/types/ipc-schemas'
+import { CohortCarriersParamsSchema } from '../../../shared/api/schemas/cohort'
 import { mainLogger } from '../../services/MainLogger'
 import { safeEmit } from '../utils/safeEmit'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -21,14 +21,6 @@ import {
 } from './cohort-logic'
 import { recoverInterruptedImportsAtStartup } from './import-interrupted-recovery'
 import type { CohortCallbacks } from './cohort-logic'
-
-// Schema for carriers query params
-const CarriersParamsSchema = z.object({
-  chr: z.string().min(1),
-  pos: z.number().int().positive(),
-  ref: z.string().min(1),
-  alt: z.string().min(1)
-})
 
 /** Shared callbacks that wire logic-layer events to renderer via safeEmit. */
 const cohortCallbacks: CohortCallbacks = {
@@ -87,29 +79,18 @@ export function registerCohortHandlers({
     })
   })
 
-  ipcMain.handle(
-    'cohort:carriers',
-    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
-      return wrapHandler(async () => {
-        // ANTI-07: Runtime validation at IPC boundary
-        const validated = CarriersParamsSchema.safeParse({ chr, pos, ref, alt })
-        if (!validated.success) {
-          mainLogger.error(`Invalid cohort:carriers params: ${validated.error.message}`, 'cohort')
-          throw new Error('Invalid carrier query parameters')
-        }
+  ipcMain.handle('cohort:carriers', async (_event, variant: unknown) => {
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = CohortCarriersParamsSchema.safeParse(variant)
+      if (!validated.success) {
+        mainLogger.error(`Invalid cohort:carriers params: ${validated.error.message}`, 'cohort')
+        throw new Error('Invalid carrier query parameters')
+      }
 
-        return getCarriers(
-          validated.data.chr,
-          validated.data.pos,
-          validated.data.ref,
-          validated.data.alt,
-          getDb,
-          getDbPool,
-          getSession
-        )
-      })
-    }
-  )
+      return getCarriers(validated.data, getDb, getDbPool, getSession)
+    })
+  })
 
   ipcMain.handle('cohort:geneBurden', async (_event) => {
     return wrapHandler(async () => {

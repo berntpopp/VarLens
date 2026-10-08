@@ -15,7 +15,8 @@ import type {
   CohortSearchParams,
   CohortCarrier,
   GeneBurden,
-  CohortPaginatedResult
+  CohortPaginatedResult,
+  CohortVariantIdentity
 } from '../../shared/types/cohort'
 import type { ColumnFilterMeta, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { capCohortDistinctCount } from '../../shared/types/column-filters'
@@ -28,6 +29,7 @@ import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
+import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -165,6 +167,7 @@ export class CohortService {
       has_comment: params.has_comment,
       acmg_classifications: params.acmg_classifications,
       carrier_count_min: params.carrier_count_min,
+      carrier_count_max: params.carrier_count_max,
       variant_type: params.variant_type,
       genome_build: params.genome_build,
       column_filters: remappedColumnFilters
@@ -269,7 +272,8 @@ export class CohortService {
         ${COHORT_FREQUENCY_SQL} AS cohort_frequency,
         cvs.het_count,
         cvs.hom_count,
-        cvs.variant_key,
+        cvs.variant_type,
+        cvs.genome_build,
         cvs.consequence,
         cvs.func,
         cvs.clinvar,
@@ -294,6 +298,8 @@ export class CohortService {
     const bound: unknown[] = [...paramsArray, limit, seeking ? 0 : offset]
     if (seeking && keyset !== null) bound.push(keyset.seekBindings)
     const results = stmt.all(...bound) as CohortVariant[]
+    // Built here, not read: the stored variant_key is the four-field form (#503).
+    for (const row of results) row.variant_key = cohortVariantKey(row)
     const paging = keyset?.finalize(results as unknown as Array<Record<string, unknown>>, limit)
 
     return {
@@ -409,9 +415,10 @@ export class CohortService {
   }
 
   /**
-   * Get carriers for a specific variant
+   * Get the carriers of one cohort row. The row is one variant type in one
+   * genome build, so both are part of the lookup (#503).
    */
-  getCarriers(chr: string, pos: number, ref: string, alt: string): CohortCarrier[] {
+  getCarriers(variant: CohortVariantIdentity): CohortCarrier[] {
     const sql = `
       SELECT
         v.case_id,
@@ -420,12 +427,20 @@ export class CohortService {
       FROM variants v
       JOIN cases c ON v.case_id = c.id
       WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
+        AND v.variant_type = ? AND c.genome_build = ?
       GROUP BY v.case_id, c.name
       ORDER BY c.name
     `
 
     const stmt = this.getStatement(sql)
-    return stmt.all(chr, pos, ref, alt) as CohortCarrier[]
+    return stmt.all(
+      variant.chr,
+      variant.pos,
+      variant.ref,
+      variant.alt,
+      variant.variant_type,
+      variant.genome_build
+    ) as CohortCarrier[]
   }
 
   /**

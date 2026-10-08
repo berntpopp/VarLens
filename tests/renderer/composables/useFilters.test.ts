@@ -574,3 +574,48 @@ describe('useFilters', () => {
     })
   })
 })
+
+describe('useFilters: carrier cap (#455)', () => {
+  it('is an active filter with a chip, and reaches the IPC params', () => {
+    const [result, app] = withSetup(() => createFilters())
+    try {
+      result.filters.value.maxCarriers = 3
+
+      expect(result.hasActiveFilters.value).toBe(true)
+      expect(result.activeFiltersList.value).toContainEqual({
+        id: 'max-carriers',
+        label: 'Seen in',
+        value: '≤ 3 cases'
+      })
+      expect(result.getIpcParams().carrier_count_max).toBe(3)
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('is turned off by its chip and by Clear all', () => {
+    const [result, app] = withSetup(() => createFilters())
+    try {
+      result.filters.value.maxCarriers = 3
+      result.clearFilter('max-carriers')
+      expect(result.filters.value.maxCarriers).toBeNull()
+
+      result.filters.value.maxCarriers = 3
+      result.clearAllFilters()
+      expect(result.filters.value.maxCarriers).toBeNull()
+      expect(result.hasActiveFilters.value).toBe(false)
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('the internal frequency alone is an active filter too', () => {
+    const [result, app] = withSetup(() => createFilters())
+    try {
+      result.filters.value.maxInternalAf = 0.05
+      expect(result.hasActiveFilters.value).toBe(true)
+    } finally {
+      app.unmount()
+    }
+  })
+})

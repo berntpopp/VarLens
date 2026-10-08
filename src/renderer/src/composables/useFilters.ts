@@ -22,6 +22,7 @@ import { buildFilterIpcParams } from '../utils/filters/filterSerialization'
 import {
   clearFilter as clearFilterUtil,
   buildActiveFiltersList,
+  summarizeInternalFilters,
   type FilterId,
   type ActiveFilter,
   type FilterIpcParams
@@ -193,6 +194,7 @@ export function createFilters(): UseFiltersReturn {
     filters.value.maxGnomadAf = null
     filters.value.minCadd = null
     filters.value.maxInternalAf = null
+    filters.value.maxCarriers = null
     filters.value.acmgClassifications = []
     filters.value.geneSymbol = ''
     filters.value.minCarriers = null
@@ -259,6 +261,7 @@ export function createFilters(): UseFiltersReturn {
       afActive ||
       caddActive ||
       (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
+      summarizeInternalFilters(filters.value) !== '' ||
       filters.value.starredOnly ||
       filters.value.hasCommentOnly ||
       filters.value.acmgClassifications.length > 0 ||

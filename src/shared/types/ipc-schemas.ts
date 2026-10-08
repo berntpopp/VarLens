@@ -128,6 +128,12 @@ export const CohortSearchParamsSchema = z.object({
     .nonnegative()
     .nullish()
     .transform((val) => val ?? undefined),
+  carrier_count_max: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((val) => val ?? undefined),
 
   // Annotation filters
   starred_only: z.boolean().optional(),
@@ -232,6 +238,12 @@ export const VariantFilterPartialSchema = z.object({
     .number()
     .min(0)
     .max(1)
+    .nullish()
+    .transform((val) => val ?? undefined),
+  carrier_count_max: z
+    .number()
+    .int()
+    .positive()
     .nullish()
     .transform((val) => val ?? undefined),
 
@@ -767,6 +779,7 @@ export const FilterStateSchema = z.object({
   minCarriers: z.number().int().nonnegative().nullable(),
   starredOnly: z.boolean(),
   hasCommentOnly: z.boolean(),
+  maxCarriers: z.number().int().positive().nullable(),
   acmgClassifications: z.array(z.string()),
   tagIds: z.array(z.number().int().positive()),
   annotationScope: z.enum(['case', 'all']),

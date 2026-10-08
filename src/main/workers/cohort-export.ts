@@ -77,6 +77,9 @@ function buildCohortMetadata(
       : []),
     ...(params.carrier_count_min !== undefined
       ? [['Min Carrier Count', params.carrier_count_min]]
+      : []),
+    ...(params.carrier_count_max !== undefined
+      ? [['Max Carrier Cases', params.carrier_count_max]]
       : [])
   ]
 }

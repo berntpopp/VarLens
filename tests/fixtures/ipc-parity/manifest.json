@@ -485,10 +485,14 @@
           "domain": "cohort",
           "method": "getCarriers",
           "args": [
-            "$variant.primary.chr",
-            "$variant.primary.pos",
-            "$variant.primary.ref",
-            "$variant.primary.alt"
+            {
+              "chr": "$variant.primary.chr",
+              "pos": "$variant.primary.pos",
+              "ref": "$variant.primary.ref",
+              "alt": "$variant.primary.alt",
+              "variant_type": "snv",
+              "genome_build": "GRCh38"
+            }
           ]
         },
         {

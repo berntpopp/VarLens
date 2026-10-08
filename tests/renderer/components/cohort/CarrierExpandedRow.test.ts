@@ -28,8 +28,16 @@ vi.mock('../../../../src/renderer/src/services/LogService', () => ({
 
 const vuetify = createVuetify({ components, directives })
 
-const variant = (pos: number): CohortVariant =>
-  ({ variant_key: `chr1-${pos}-A-T`, chr: 'chr1', pos, ref: 'A', alt: 'T' }) as CohortVariant
+const variant = (pos: number, genome_build: string = 'GRCh38'): CohortVariant =>
+  ({
+    variant_key: `chr1-${pos}-A-T-${genome_build}`,
+    chr: 'chr1',
+    pos,
+    ref: 'A',
+    alt: 'T',
+    variant_type: 'snv',
+    genome_build
+  }) as CohortVariant
 
 const carrier = (name: string, gt = '0/1'): CohortCarrier =>
   ({ case_id: name.length, case_name: name, gt_num: gt }) as CohortCarrier
@@ -66,7 +74,14 @@ describe('CarrierExpandedRow', () => {
     const wrapper = mountRow()
     await flushPromises()
 
-    expect(getCarriers).toHaveBeenCalledExactlyOnceWith('chr1', 100, 'A', 'T')
+    expect(getCarriers).toHaveBeenCalledExactlyOnceWith({
+      chr: 'chr1',
+      pos: 100,
+      ref: 'A',
+      alt: 'T',
+      variant_type: 'snv',
+      genome_build: 'GRCh38'
+    })
     expect(wrapper.text()).toContain('Case A')
     expect(wrapper.text()).toContain('het')
     expect(wrapper.text()).toContain('hom')
@@ -198,5 +213,21 @@ describe('CarrierExpandedRow', () => {
 
     await wrapper.find('tbody tr .v-btn').trigger('click')
     expect(wrapper.emitted('navigate-to-case')).toEqual([[6]])
+  })
+
+  it('respects the genome build of the variant row', async () => {
+    getCarriers.mockImplementation(async (asked: { genome_build: string }) => [
+      carrier(`Case ${asked.genome_build}`)
+    ])
+    const wrapper = mountRow(variant(100, 'GRCh38'))
+    await flushPromises()
+    expect(wrapper.text()).toContain('Case GRCh38')
+
+    await wrapper.setProps({ variant: variant(100, 'GRCh37') })
+    await flushPromises()
+
+    expect(getCarriers).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Case GRCh37')
+    expect(wrapper.text()).not.toContain('Case GRCh38')
   })
 })

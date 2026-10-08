@@ -292,6 +292,7 @@
             suffix="%"
             @click:clear="customInternalAf = ''"
           />
+          <MaxCarriersField v-model="filters.maxCarriers" scope="case" />
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -544,6 +545,7 @@ import { inject, ref, computed, watch, onMounted } from 'vue'
 import IconButton from './common/IconButton.vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
+import MaxCarriersField from './filters/MaxCarriersField.vue'
 import AnnotationScopeToggle from './AnnotationScopeToggle.vue'
 import DslSearchBar from './DslSearchBar.vue'
 import GroupedMultiSelect from './GroupedMultiSelect.vue'
@@ -553,6 +555,7 @@ import ExtensionColumnFilters from './filters/ExtensionColumnFilters.vue'
 import FilterTypeNarrowingChip from './filters/FilterTypeNarrowingChip.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG, formatAfPercent } from '../utils/filters'
+import { summarizeInternalFilters } from '../utils/filters/activeFilters'
 import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
 import { useAnalysisGroups } from '../composables/useAnalysisGroups'
 import type { Tag } from '../../../shared/types/database-entities'
@@ -750,13 +753,7 @@ watch(
   }
 )
 
-const internalFrequencySummary = computed(() => {
-  if (filters.value.maxInternalAf !== null && filters.value.maxInternalAf > 0) {
-    const pct = formatAfPercent(filters.value.maxInternalAf)
-    return `<= ${pct}%`
-  }
-  return ''
-})
+const internalFrequencySummary = computed(() => summarizeInternalFilters(filters.value))
 
 const caddSummary = computed(() => {
   if (filters.value.minCadd !== null && filters.value.minCadd >= 0) {

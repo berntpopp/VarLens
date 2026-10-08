@@ -320,3 +320,23 @@ describe('summary SQL with read-time cohort frequency', () => {
     expect(count.indexOf(JOIN)).toBeLessThan(count.indexOf('WHERE'))
   })
 })
+
+describe('carrier_count_max (#455)', () => {
+  // Review Focus 3
+  it('caps the stored count next to the minimum, without build totals', () => {
+    const result = buildSummaryQueryParts(
+      { carrier_count_min: 2, carrier_count_max: 3 },
+      TOTAL_CASES
+    )
+    expect(result.parts.whereParts).toEqual(['cvs.carrier_count >= $1', 'cvs.carrier_count <= $2'])
+    expect(result.parts.values).toEqual([2, 3])
+    expect(result.parts.needsBuildTotals).toBe(false)
+  })
+
+  // Review Focus 2
+  it('ignores a cap below 1', () => {
+    const result = buildSummaryQueryParts({ carrier_count_max: 0 }, TOTAL_CASES)
+    expect(result.parts.whereParts).toEqual([])
+    expect(result.parts.values).toEqual([])
+  })
+})

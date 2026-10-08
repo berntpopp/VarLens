@@ -373,3 +373,32 @@ describe('bare column_filters key allowlist for variants-table scopes (S7 info f
     expect(result.params).toEqual([2])
   })
 })
+
+describe('carrier_count_max (#455)', () => {
+  it('is dropped for case and cohort-burden scopes', () => {
+    for (const scope of ['case', 'cohort-burden'] as const) {
+      const result = buildBaseWhere({ carrier_count_max: 3 }, { baseAlias: 'v', scope })
+      expect(result.sql).not.toContain('carrier_count')
+      expect(result.params).toEqual([])
+    }
+  })
+
+  it('caps the stored count in cohort-listing scope, after the minimum', () => {
+    const result = buildBaseWhere(
+      { carrier_count_min: 2, carrier_count_max: 3 },
+      { baseAlias: 'cvs', scope: 'cohort-listing' }
+    )
+    expect(result.sql).toContain('cvs.carrier_count >= ?')
+    expect(result.sql).toContain('cvs.carrier_count <= ?')
+    expect(result.params).toEqual([2, 3])
+    expect(result.needsBuildTotals).toBe(false)
+  })
+
+  it('ignores a cap below 1', () => {
+    const result = buildBaseWhere(
+      { carrier_count_max: 0 },
+      { baseAlias: 'cvs', scope: 'cohort-listing' }
+    )
+    expect(result.sql).toBe('')
+  })
+})

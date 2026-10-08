@@ -1,7 +1,7 @@
 /**
  * Built-in filter presets shipped with VarLens.
  *
- * These are seeded into the filter_presets table on migration v15.
+ * These are seeded into the filter_presets table on migration v15 (v45 adds "Rare, not recurrent" to existing databases).
  * Users can hide them but not delete them. The filter_json stores
  * a Partial<FilterState> object matching the shared FilterState type.
  *
@@ -20,6 +20,9 @@ interface BuiltInPresetDef {
 }
 
 const CLINVAR_PATHOGENIC = ['Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic']
+
+/** Added by SQLite v45 / PostgreSQL 0028 (#455). */
+export const RARE_NOT_RECURRENT_PRESET_NAME = 'Rare, not recurrent'
 
 export const BUILT_IN_PRESETS: readonly BuiltInPresetDef[] = [
   // ── Combo presets (common clinical workflows) ──
@@ -71,5 +74,12 @@ export const BUILT_IN_PRESETS: readonly BuiltInPresetDef[] = [
     description: 'CADD Phred score at least 20',
     filterJson: { minCadd: 20 },
     sortOrder: 7
+  },
+  // K counts every case in the database, including the open one (#455).
+  {
+    name: RARE_NOT_RECURRENT_PRESET_NAME,
+    description: 'gnomAD AF <= 1% + seen in at most 3 cases',
+    filterJson: { maxGnomadAf: 0.01, maxCarriers: 3 },
+    sortOrder: 8
   }
 ] as const

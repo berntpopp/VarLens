@@ -246,6 +246,28 @@ describe('useFilterPresetStore', () => {
     }
   )
 
+  it.each(['case', 'cohort'] as const)(
+    'getActiveFilterState carries maxCarriers for the %s view (last preset wins)',
+    async (scope) => {
+      mockApi.list.mockResolvedValueOnce([
+        { ...mockPresets[0], filterJson: { maxGnomadAf: 0.01, maxCarriers: 3 } },
+        { ...mockPresets[1], filterJson: { consequences: ['HIGH'], maxCarriers: 1 } }
+      ])
+      const { togglePreset, getActiveFilterState, loadPresets } = useFilterPresetStore(scope)
+      await loadPresets()
+
+      togglePreset(1)
+      expect(getActiveFilterState()).toMatchObject({ maxGnomadAf: 0.01, maxCarriers: 3 })
+
+      togglePreset(2)
+      expect(getActiveFilterState().maxCarriers).toBe(1)
+
+      togglePreset(1)
+      togglePreset(2)
+      expect(getActiveFilterState().maxCarriers).toBeUndefined()
+    }
+  )
+
   it('merges two user presets that were saved with explicit defaults (#504)', async () => {
     const saved = (id: number, filterJson: FilterPreset['filterJson']): FilterPreset => ({
       ...mockPresets[0],

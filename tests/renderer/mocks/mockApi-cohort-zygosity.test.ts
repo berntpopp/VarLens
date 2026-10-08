@@ -1,3 +1,6 @@
+import type { CohortVariant } from '../../../src/shared/types/cohort'
+import { cohortVariantKey } from '../../../src/shared/utils/cohort-variant-key'
+
 /**
  * The dev-mode mock aggregates the cohort itself; its het/hom counts must use
  * the shared genotype classes, like both real backends.
@@ -23,6 +26,32 @@ describe('mock cohort het/hom counts', () => {
       expect(row).toMatchObject({ carrier_count: 2, het_count: 1, hom_count: 0 })
     } finally {
       mockVariants.splice(-2)
+    }
+  })
+})
+
+describe('mock cohort row identity', () => {
+  it('keys every row by the six fields and keeps the genome builds apart', async () => {
+    const { mockApi } = await import('../../../src/renderer/src/mocks/mockApi')
+    const { data } = (await mockApi.cohort.getVariants({ limit: 1000 } as never)) as unknown as {
+      data: CohortVariant[]
+    }
+    expect(new Set(data.map((row) => row.genome_build))).toEqual(new Set(['GRCh37', 'GRCh38']))
+    for (const row of data) expect(row.variant_key).toBe(cohortVariantKey(row))
+    expect(new Set(data.map((row) => row.variant_key)).size).toBe(data.length)
+  })
+
+  it('lists as many carriers as each row counts', async () => {
+    const { mockApi } = await import('../../../src/renderer/src/mocks/mockApi')
+    const { data } = (await mockApi.cohort.getVariants({ limit: 1000 } as never)) as unknown as {
+      data: CohortVariant[]
+    }
+    for (const row of data) {
+      const carriers = (await mockApi.cohort.getCarriers(row)) as unknown as Array<{
+        case_id: number
+      }>
+      // The mock counts a case once, also when it holds the variant twice.
+      expect(new Set(carriers.map((carrier) => carrier.case_id)).size).toBe(row.carrier_count)
     }
   })
 })

@@ -47,7 +47,7 @@ export function buildCohortOpenApiPaths(): Record<string, OpenApiPathItem> {
     }),
     '/api/cohort/getCarriers': dispatcherMethodOperation({
       tag: 'cohort',
-      summary: 'Return carriers for a cohort variant coordinate',
+      summary: 'Return carriers for one cohort row (coordinate, variant type, genome build)',
       body: CohortInvokeBodySchemas.getCarriers,
       response: CohortUnknownResponseSchema
     }),

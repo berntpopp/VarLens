@@ -62,6 +62,8 @@ export interface FilterState {
   panelPaddingBp: number
   /** Maximum internal database allele frequency (0-1) */
   maxInternalAf: number | null
+  /** Seen in at most this many cases of the database (integer >= 1; null = off) */
+  maxCarriers: number | null
   /** Selected inheritance mode filters (multi-select) */
   inheritanceModes: string[]
   /** Active analysis group ID for trio filtering */
@@ -96,6 +98,7 @@ export interface FilterIpcParams {
   active_panel_ids?: number[]
   panel_padding_bp?: number
   max_internal_af?: number
+  carrier_count_max?: number
   inheritance_modes?: string[]
   analysis_group_id?: number
   consider_phasing?: boolean

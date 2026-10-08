@@ -231,4 +231,25 @@ describe('CohortTable paging', () => {
     await flushPromises()
     expect(shownRows()).toEqual([`v${2 * limit}`])
   })
+
+  // #455: the cap of the cohort drawer reaches the table query and the export.
+  it('sends the carrier cap with the table query and the export', async () => {
+    const exportCohort = vi.fn(async () => ({ success: true, filePath: '/tmp/cohort.xlsx' }))
+    window.api.export.cohort = exportCohort as never
+
+    const bar = wrapper.findComponent({ name: 'CohortFilterBar' })
+
+    filtersCtx.filters.value.maxCarriers = 3
+    // What the real filter bar does after a state change.
+    await bar.vm.$emit('filter-change')
+    await vi.waitFor(() => expect(queries().at(-1)).toMatchObject({ carrier_count_max: 3 }))
+
+    await bar.vm.$emit('export')
+    await flushPromises()
+    expect(exportCohort.mock.calls[0][0]).toMatchObject({ carrier_count_max: 3 })
+
+    filtersCtx.filters.value.maxCarriers = null
+    await bar.vm.$emit('filter-change')
+    await vi.waitFor(() => expect(queries().at(-1)).not.toHaveProperty('carrier_count_max'))
+  })
 })

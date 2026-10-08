@@ -293,6 +293,7 @@
             suffix="%"
             @click:clear="customInternalAf = ''"
           />
+          <MaxCarriersField v-model="filters.maxCarriers" scope="cohort" />
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -411,6 +412,7 @@ import { inject, ref, computed, watch } from 'vue'
 import IconButton from '../common/IconButton.vue'
 import FilterDrawerShell from '../filters/FilterDrawerShell.vue'
 import FilterPanelTitle from '../filters/FilterPanelTitle.vue'
+import MaxCarriersField from '../filters/MaxCarriersField.vue'
 import DslSearchBar from '../DslSearchBar.vue'
 import GroupedMultiSelect from '../GroupedMultiSelect.vue'
 import PanelManagerDialog from '../panels/PanelManagerDialog.vue'
@@ -419,6 +421,7 @@ import ExtensionColumnFilters from '../filters/ExtensionColumnFilters.vue'
 import FilterTypeNarrowingChip from '../filters/FilterTypeNarrowingChip.vue'
 import { consequenceGroups, clinvarGroups } from '../../config/filterGroups'
 import { ACMG_FILTER_OPTIONS, formatAfPercent } from '../../utils/filters'
+import { summarizeInternalFilters } from '../../utils/filters/activeFilters'
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
 import {
   mdiAlertCircle,
@@ -609,13 +612,7 @@ watch(
   }
 )
 
-const internalFrequencySummary = computed(() => {
-  if (filters.value.maxInternalAf !== null && filters.value.maxInternalAf > 0) {
-    const pct = formatAfPercent(filters.value.maxInternalAf)
-    return `<= ${pct}%`
-  }
-  return ''
-})
+const internalFrequencySummary = computed(() => summarizeInternalFilters(filters.value))
 
 const frequencySummary = computed(() => {
   if (filters.value.maxGnomadAf !== null && filters.value.maxGnomadAf > 0) {

@@ -6,7 +6,7 @@ export function createCohortApi(): CohortDomainContract {
     getVariants: (params) => ipcRenderer.invoke('cohort:variants', params),
     getColumnMeta: () => ipcRenderer.invoke('cohort:columnMeta'),
     getSummary: () => ipcRenderer.invoke('cohort:summary'),
-    getCarriers: (chr, pos, ref, alt) => ipcRenderer.invoke('cohort:carriers', chr, pos, ref, alt),
+    getCarriers: (variant) => ipcRenderer.invoke('cohort:carriers', variant),
     getGeneBurden: () => ipcRenderer.invoke('cohort:geneBurden'),
     getSummaryStatus: () => ipcRenderer.invoke('cohort:summaryStatus'),
     rebuildSummary: () => ipcRenderer.invoke('cohort:rebuildSummary'),

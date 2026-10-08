@@ -106,13 +106,18 @@ describe('cohort-logic PostgreSQL session routing', () => {
     const { execute, session } = makePostgresSession([{ case_id: 7n }])
     const getDb = vi.fn()
     const getDbPool = vi.fn()
+    const variant = {
+      chr: 'chr1',
+      pos: 123,
+      ref: 'A',
+      alt: 'T',
+      variant_type: 'snv',
+      genome_build: 'GRCh38'
+    }
 
-    const result = await logic.getCarriers('chr1', 123, 'A', 'T', getDb, getDbPool, () => session)
+    const result = await logic.getCarriers(variant, getDb, getDbPool, () => session)
 
-    expect(execute).toHaveBeenCalledWith({
-      type: 'cohort:carriers',
-      params: ['chr1', 123, 'A', 'T']
-    })
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:carriers', params: [variant] })
     expect(result).toEqual([{ case_id: 7 }])
     expect(getDb).not.toHaveBeenCalled()
     expect(getDbPool).not.toHaveBeenCalled()
@@ -169,5 +174,69 @@ describe('cohort IPC PostgreSQL session routing', () => {
       type: 'cohort:query',
       params: [{ limit: 25, offset: 0, genome_build: 'GRCh38' }]
     })
+  })
+})
+
+describe('cohort:carriers IPC validation (#503)', () => {
+  const VARIANT = {
+    chr: 'chr1',
+    pos: 100,
+    ref: 'A',
+    alt: 'T',
+    variant_type: 'snv',
+    genome_build: 'GRCh38'
+  }
+
+  function registerCarriers(): {
+    execute: ReturnType<typeof vi.fn<[StorageReadTask], Promise<unknown>>>
+    carriers: (...args: unknown[]) => Promise<unknown>
+  } {
+    const execute = vi.fn<[StorageReadTask], Promise<unknown>>().mockResolvedValue([])
+    const registered = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    registerCohortHandlers({
+      ipcMain: {
+        handle: (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
+          registered.set(channel, handler)
+        }
+      } as never,
+      getDb: (() => {
+        throw new Error('getDb should not be called for postgres cohort IPC')
+      }) as never,
+      getDbPool: (() => {
+        throw new Error('getDbPool should not be called for postgres cohort IPC')
+      }) as never,
+      getDbManager: (() => ({
+        getCurrentSession: () =>
+          ({
+            capabilities: { backend: 'postgres' },
+            getReadExecutor: () => ({ execute })
+          }) as unknown as StorageSession
+      })) as never
+    })
+    return { execute, carriers: registered.get('cohort:carriers')! }
+  }
+
+  it('passes the six identity fields to storage', async () => {
+    const { execute, carriers } = registerCarriers()
+
+    await expect(carriers(undefined, { ...VARIANT, carrier_count: 2 })).resolves.toEqual([])
+
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:carriers', params: [VARIANT] })
+  })
+
+  it.each([
+    ['no genome build', [{ ...VARIANT, genome_build: undefined }]],
+    ['no variant type', [{ ...VARIANT, variant_type: undefined }]],
+    ['an empty genome build', [{ ...VARIANT, genome_build: '' }]],
+    ['an empty variant type', [{ ...VARIANT, variant_type: '' }]],
+    ['the old four positional arguments', ['chr1', 100, 'A', 'T']]
+  ])('rejects a request with %s before it reaches storage', async (_label, args) => {
+    const { execute, carriers } = registerCarriers()
+
+    await expect(carriers(undefined, ...args)).resolves.toMatchObject({
+      message: 'Invalid carrier query parameters'
+    })
+
+    expect(execute).not.toHaveBeenCalled()
   })
 })

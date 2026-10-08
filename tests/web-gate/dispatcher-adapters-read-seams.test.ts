@@ -164,21 +164,21 @@ describe('web dispatcher adapters: read seams', () => {
     await overrides['cohort:getSummary'].handle([], {} as never, reply as never, deps)
     await overrides['cohort:getColumnMeta'].handle([], {} as never, reply as never, deps)
     await overrides['cohort:getGeneBurden'].handle([], {} as never, reply as never, deps)
-    await overrides['cohort:getCarriers'].handle(
-      ['chr22', 12345, 'A', 'T'],
-      {} as never,
-      reply as never,
-      deps
-    )
+    const variant = {
+      chr: 'chr22',
+      pos: 12345,
+      ref: 'A',
+      alt: 'T',
+      variant_type: 'snv',
+      genome_build: 'GRCh38'
+    }
+    await overrides['cohort:getCarriers'].handle([variant], {} as never, reply as never, deps)
 
     expect(reply.code).not.toHaveBeenCalled()
     expect(execute).toHaveBeenCalledWith({ type: 'cohort:summary', params: [] })
     expect(execute).toHaveBeenCalledWith({ type: 'cohort:columnMeta', params: [] })
     expect(execute).toHaveBeenCalledWith({ type: 'cohort:geneBurden', params: [] })
-    expect(execute).toHaveBeenCalledWith({
-      type: 'cohort:carriers',
-      params: ['chr22', 12345, 'A', 'T']
-    })
+    expect(execute).toHaveBeenCalledWith({ type: 'cohort:carriers', params: [variant] })
   })
 
   test('desktop-only database methods are not served in web mode (parity manifest)', () => {
@@ -348,5 +348,31 @@ describe('web dispatcher adapters: read seams', () => {
     expect(reply.code).not.toHaveBeenCalled()
     expect(execute).toHaveBeenCalledWith({ type: 'cohort:summaryStatus', params: [] })
     expect(result).toEqual({ is_stale: false, last_rebuilt_at: 0 })
+  })
+  test.each([
+    ['no genome build', [{ chr: 'chr22', pos: 12345, ref: 'A', alt: 'T', variant_type: 'snv' }]],
+    ['no variant type', [{ chr: 'chr22', pos: 12345, ref: 'A', alt: 'T', genome_build: 'GRCh38' }]],
+    [
+      'an empty genome build',
+      [{ chr: 'chr22', pos: 12345, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: '' }]
+    ],
+    ['the old four positional arguments', ['chr22', 12345, 'A', 'T']]
+  ])('cohort.getCarriers rejects a request with %s before storage execution', async (_l, args) => {
+    const { deps, execute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+
+    const result = await overrides['cohort:getCarriers'].handle(
+      args,
+      {} as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({
+      error: 'invalid-carrier-params',
+      message: 'Invalid carrier query parameters'
+    })
+    expect(execute).not.toHaveBeenCalled()
   })
 })

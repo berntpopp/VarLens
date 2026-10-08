@@ -160,7 +160,10 @@ export function buildFilterSummary(filters: Partial<VariantFilter>): ExportFilte
       ? { clinvars: filters.clinvars }
       : {}),
     ...(filters.gnomad_af_max !== undefined ? { gnomad_af_max: filters.gnomad_af_max } : {}),
-    ...(filters.cadd_min !== undefined ? { cadd_min: filters.cadd_min } : {})
+    ...(filters.cadd_min !== undefined ? { cadd_min: filters.cadd_min } : {}),
+    ...(filters.carrier_count_max !== undefined
+      ? { carrier_count_max: filters.carrier_count_max }
+      : {})
   }
 }
 

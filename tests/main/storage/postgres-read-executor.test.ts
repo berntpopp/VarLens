@@ -323,6 +323,14 @@ describe('PostgresReadExecutor', () => {
       variants: {} as never
     } as never)
 
+    const carrierVariant = {
+      chr: 'chr1',
+      pos: 100,
+      ref: 'A',
+      alt: 'T',
+      variant_type: 'snv',
+      genome_build: 'GRCh38'
+    }
     const cohortParams = { search_term: 'BRCA1', limit: 25, offset: 0 }
 
     await expect(
@@ -338,7 +346,7 @@ describe('PostgresReadExecutor', () => {
       executor.execute({ type: 'cohort:columnMeta', params: [] })
     ).resolves.toStrictEqual([{ key: 'gene_symbol' }])
     await expect(
-      executor.execute({ type: 'cohort:carriers', params: ['chr1', 100, 'A', 'T'] })
+      executor.execute({ type: 'cohort:carriers', params: [carrierVariant] })
     ).resolves.toStrictEqual([{ case_id: 1 }])
     await expect(
       executor.execute({ type: 'cohort:geneBurden', params: [] })
@@ -351,7 +359,7 @@ describe('PostgresReadExecutor', () => {
     expect(cohort.getSummary).toHaveBeenCalledWith()
     expect(cohort.getSummaryStatus).toHaveBeenCalledWith()
     expect(cohort.getColumnMeta).toHaveBeenCalledWith()
-    expect(cohort.getCarriers).toHaveBeenCalledWith('chr1', 100, 'A', 'T')
+    expect(cohort.getCarriers).toHaveBeenCalledWith(carrierVariant)
     expect(cohort.getGeneBurden).toHaveBeenCalledWith()
     expect(cohort.streamCohortRows).toHaveBeenCalledWith(cohortParams)
   })

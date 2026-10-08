@@ -1,3 +1,5 @@
+import { cohortVariantKey } from '../../../../src/shared/utils/cohort-variant-key'
+
 import { describe, it, expect } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useResultSetKeys } from '../../../../src/renderer/src/components/table-state/useResultSetKeys'
@@ -9,6 +11,24 @@ interface Row {
 }
 
 describe('useResultSetKeys', () => {
+  it('gives an opaque cohort key back unchanged, also as an expanded row', () => {
+    const id = cohortVariantKey({
+      chr: '2',
+      pos: 321681,
+      ref: 'G',
+      alt: ']13:123456]T#1',
+      variant_type: 'sv',
+      genome_build: 'GRCh38'
+    })
+    const { rows, keys, app } = setup([{ key: id }])
+    const renderKey = keys.rowKey(rows.value[0])
+    expect(keys.idOfKey(renderKey)).toBe(id)
+    const expanded = ref<string[]>([])
+    keys.keyedModel(expanded).value = [renderKey]
+    expect(expanded.value).toEqual([id])
+    app.unmount()
+  })
+
   function setup(initial: Row[]) {
     const rows = ref<Row[]>(initial)
     const [keys, app] = withSetup(() =>

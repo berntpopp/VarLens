@@ -44,6 +44,7 @@ const VariantFilterOpenApiSchema = z.object({
   gnomad_af_max: z.number().min(0).max(1).nullable().optional(),
   cadd_min: z.number().min(0).max(100).nullable().optional(),
   max_internal_af: z.number().min(0).max(1).nullable().optional(),
+  carrier_count_max: z.number().int().min(1).nullable().optional(),
   chr: NullishStringOpenApiSchema,
   pos: z.number().int().positive().nullable().optional(),
   ref: NullishStringOpenApiSchema,

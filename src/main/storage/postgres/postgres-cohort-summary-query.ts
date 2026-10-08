@@ -95,6 +95,8 @@ function summarySelectList(totalCases: number): string {
       cvs.pos,
       cvs.ref,
       cvs.alt,
+      cvs.variant_type,
+      cvs.genome_build,
       cvs.gene_symbol,
       cvs.cdna,
       cvs.aa_change,
@@ -103,7 +105,6 @@ function summarySelectList(totalCases: number): string {
       ${SUMMARY_FREQUENCY_SQL} AS cohort_frequency,
       cvs.het_count,
       cvs.hom_count,
-      cvs.variant_key,
       cvs.consequence,
       cvs.func,
       cvs.clinvar,
@@ -517,6 +518,9 @@ export function buildSummaryQueryParts(
 
   if (params.carrier_count_min !== undefined) {
     whereParts.push(`cvs.carrier_count >= ${addParam(params.carrier_count_min)}`)
+  }
+  if (params.carrier_count_max !== undefined && params.carrier_count_max >= 1) {
+    whereParts.push(`cvs.carrier_count <= ${addParam(params.carrier_count_max)}`)
   }
 
   const sortKey =

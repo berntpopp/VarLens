@@ -315,17 +315,17 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
             params: [structuredClone(withPanels(base, sqlitePanels()))]
           } as never
         ) as { data: Array<{ variant_key: string }> }
-        return result.data.map((row) => row.variant_key)
+        return result.data.map((row) => keyOf(row as never))
       }),
       'web cohort': outcome(async () => {
         const repo = new PostgresCohortRepository(pool, schema)
-        return (await repo.queryVariants(pgParams())).data.map((row) => row.variant_key)
+        return (await repo.queryVariants(pgParams())).data.map((row) => keyOf(row as never))
       }),
       'web cohort live': outcome(async () => {
         const repo = new PostgresCohortRepository(pool, schema)
         const keys: string[] = []
         for await (const row of repo.streamCohortRows(pgParams())) {
-          keys.push(String(row.variant_key))
+          keys.push(keyOf(row as never))
         }
         return keys
       })
@@ -586,6 +586,30 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     } finally {
       await setStored('NULL')
     }
+  }, 120_000)
+
+  // ── Carrier cap (#455) ────────────────────────────────────────────────────
+
+  it('carrier cap: every read path of a view returns the same rows on both backends', async () => {
+    // A.inGene is carried by cases A and B; every other variant by one case.
+    // A.padding has no frequency row: the case view keeps it.
+    const rareA = A_ALL.filter((v) => v !== A.inGene)
+    await expectAll(casePaths(0, { carrier_count_max: 1 }), ok(rareA))
+    await expectAll(casePaths(0, { carrier_count_max: 2 }), ok(A_ALL))
+    await expectAll(casePaths(1, { carrier_count_max: 1 }), ok([B.padding, B.unrelated]))
+    await expectAll(shortlistPaths(0, { maxCarriers: 1 }), ok(rareA))
+
+    const grch38 = [...A_ALL, B.padding, B.unrelated]
+    const params = { genome_build: 'GRCh38' }
+    await expectAll(
+      cohortPaths({ ...params, carrier_count_max: 1 }),
+      ok(grch38.filter((v) => v !== A.inGene))
+    )
+    await expectAll(cohortPaths({ ...params, carrier_count_max: 2 }), ok(grch38))
+    await expectAll(
+      cohortPaths({ ...params, carrier_count_min: 2, carrier_count_max: 2 }),
+      ok([A.inGene])
+    )
   }, 120_000)
 
   // ── Numeric-looking value on a text column ────────────────────────────────

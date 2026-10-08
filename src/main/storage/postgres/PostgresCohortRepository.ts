@@ -7,8 +7,10 @@ import type {
   CohortSearchParams,
   CohortSummary,
   CohortVariant,
-  GeneBurden
+  GeneBurden,
+  CohortVariantIdentity
 } from '../../../shared/types/cohort'
+import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
 import { cohortVariantTotalsSql, geneBurdenSql } from './cohort-gene-summary-sql'
 import {
   prepareCohortRead,
@@ -287,12 +289,8 @@ export class PostgresCohortRepository {
     }
   }
 
-  async getCarriers(
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ): Promise<CohortCarrierWithDepth[]> {
+  /** Carriers of one cohort row: one variant type in one genome build (#503). */
+  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrierWithDepth[]> {
     const result = await this.pool.query(
       `SELECT
          v.case_id,
@@ -303,9 +301,17 @@ export class PostgresCohortRepository {
        FROM ${this.schemaName}."variants" v
        JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
        WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
+         AND v.variant_type = $5 AND c.genome_build = $6
        GROUP BY v.case_id, c.name
        ORDER BY c.name`,
-      [chr, pos, ref, alt]
+      [
+        variant.chr,
+        variant.pos,
+        variant.ref,
+        variant.alt,
+        variant.variant_type,
+        variant.genome_build
+      ]
     )
 
     return (result.rows as Array<Record<string, unknown>>).map((row) => ({
@@ -426,17 +432,18 @@ export class PostgresCohortRepository {
   }
 
   private toCohortVariant(row: Record<string, unknown>, fallbackTotalCases: number): CohortVariant {
-    const chr = String(row.chr ?? '')
-    const pos = toNumber(row.pos)
-    const ref = String(row.ref ?? '')
-    const alt = String(row.alt ?? '')
+    const identity = {
+      chr: String(row.chr ?? ''),
+      pos: toNumber(row.pos),
+      ref: String(row.ref ?? ''),
+      alt: String(row.alt ?? ''),
+      variant_type: String(row.variant_type ?? ''),
+      genome_build: String(row.genome_build ?? '')
+    }
     const totalCases = toNumber(row.total_cases) || fallbackTotalCases
 
     return {
-      chr,
-      pos,
-      ref,
-      alt,
+      ...identity,
       gene_symbol:
         row.gene_symbol === null || row.gene_symbol === undefined ? null : String(row.gene_symbol),
       cdna: row.cdna === null || row.cdna === undefined ? null : String(row.cdna),
@@ -447,10 +454,8 @@ export class PostgresCohortRepository {
       cohort_frequency: toNullableNumber(row.cohort_frequency) ?? 0,
       het_count: toNumber(row.het_count),
       hom_count: toNumber(row.hom_count),
-      variant_key:
-        row.variant_key === null || row.variant_key === undefined
-          ? `${chr}:${pos}:${ref}:${alt}`
-          : String(row.variant_key),
+      // Built here, not read: the stored variant_key is the four-field form (#503).
+      variant_key: cohortVariantKey(identity),
       consequence:
         row.consequence === null || row.consequence === undefined ? null : String(row.consequence),
       func: row.func === null || row.func === undefined ? null : String(row.func),
