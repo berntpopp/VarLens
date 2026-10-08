@@ -5,6 +5,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CohortSearchParams } from '../../../src/shared/types/cohort'
 
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import * as XLSX from 'xlsx'
+import { runCohortExport } from '../../../src/main/workers/cohort-export'
+
 import { DatabaseService } from '../../../src/main/database'
 import { makeVariant as _makeVariant } from '../../utils/make-variant'
 
@@ -162,6 +168,28 @@ describe('carrier cap (#455), SQLite', () => {
 
       expect([...fromCases].sort()).toEqual(cohort.keys)
       expect(cohort.total).toBe(fromCases.size)
+    })
+  })
+  describe('cohort export', () => {
+    it('holds the rows of the table and names the cap', () => {
+      importThreeCases()
+      service.cohortSummary.rebuild()
+      const dir = mkdtempSync(join(tmpdir(), 'varlens-max-carriers-'))
+      try {
+        const file = join(dir, 'cohort.xlsx')
+        const result = runCohortExport(service.db, { carrier_count_max: 1 }, file, () => {})
+        const book = XLSX.read(readFileSync(file))
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+          book.Sheets['Cohort Variants']
+        )
+        expect(rows.map((row) => row['Position'])).toEqual([200])
+        expect(result.rowCount).toBe(1)
+
+        const info = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets['Export Info'], { header: 1 })
+        expect(info).toContainEqual(['Max Carrier Cases', 1])
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
     })
   })
 })
