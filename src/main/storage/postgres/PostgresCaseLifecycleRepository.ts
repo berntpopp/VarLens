@@ -143,13 +143,16 @@ export class PostgresCaseLifecycleRepository {
     try {
       await client.query('BEGIN')
       await client.query(`SET LOCAL statement_timeout = ${MAINTENANCE_STATEMENT_TIMEOUT_MS}`)
+      // NO KEY: this row is held while waiting for the summary lock below, and
+      // an annotation save that holds that lock needs the row's key-share lock
+      // for its foreign key (lock order: cohort-summary-lock.ts).
       const row = await client.query<{
         genome_build: string
         import_status: string
         variant_count: string | number
       }>(
         `SELECT genome_build, import_status, variant_count
-           FROM ${this.tbl('cases_all')} WHERE id = $1 FOR UPDATE`,
+           FROM ${this.tbl('cases_all')} WHERE id = $1 FOR NO KEY UPDATE`,
         [caseId]
       )
       const current = row.rows[0]

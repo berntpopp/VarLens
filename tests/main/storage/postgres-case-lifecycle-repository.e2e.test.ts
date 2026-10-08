@@ -22,6 +22,10 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import {
+  lockSummaryForWrite,
+  tryLockSummaryForWrite
+} from '../../../src/main/storage/postgres/cohort-summary-lock'
 import { rebuildVariantFrequencyForCase } from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
 import { COHORT_FREQUENCY_SELECT, summaryWithFrequencyFrom } from './helpers/cohort-read-frequency'
 
@@ -409,6 +413,47 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
       holder.release()
     }
     await repo.completeHiddenDeletion(victim, hidden, { batchSize: 100 })
+  }, 60_000)
+
+  it('hideCase lets a first annotation on the case through while it waits for the summary lock', async () => {
+    const victim = await seedCaseWithVariants('annotated-while-deleting', 1)
+    const variant = await probe.query<{ id: number }>(
+      `SELECT id FROM "${schema}".variants WHERE case_id = $1`,
+      [victim]
+    )
+    const variantId = variant.rows[0].id
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+    // An annotation save: the summary lock first, then its rows.
+    await probe.query('BEGIN')
+    await lockSummaryForWrite(probe, schema)
+    const hiding = repo.hideCase(victim)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await probe.query(`SET LOCAL lock_timeout = '1s'`)
+    // The foreign key to the case needs a key-share lock on the case row.
+    await probe.query(
+      `INSERT INTO "${schema}".case_variant_annotations
+         (case_id, variant_id, starred, created_at, updated_at) VALUES ($1, $2, 1, 0, 0)`,
+      [victim, variantId]
+    )
+    await probe.query('COMMIT')
+
+    expect((await hiding).state).toBe('hidden')
+  }, 60_000)
+
+  it('hideCase does not hold the summary lock while it waits for a publishing import', async () => {
+    const victim = await seedCaseWithVariants('published-while-deleting', 1)
+    const repo = new PostgresCaseLifecycleRepository(pool, schema)
+
+    // A publication: its case row first, then the summary lock.
+    await probe.query('BEGIN')
+    await probe.query(`UPDATE "${schema}".cases_all SET variant_count = 1 WHERE id = $1`, [victim])
+    const hiding = repo.hideCase(victim)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(await tryLockSummaryForWrite(probe, schema)).toBe(true)
+    await probe.query('COMMIT')
+
+    expect((await hiding).state).toBe('hidden')
   }, 60_000)
 })
 
