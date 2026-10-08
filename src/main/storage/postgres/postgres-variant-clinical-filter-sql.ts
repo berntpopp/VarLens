@@ -4,7 +4,7 @@ import {
   HOM_OR_HEMI_GT_SQL as HOM_OR_HEMI,
   notReferenceGtSql
 } from '../../../shared/sql/genotype-dosage'
-import { variantIdentitySql } from '../../../shared/sql/inheritance-sql'
+import { compoundHetPairIdsSql, variantIdentitySql } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
 
 export interface PostgresClinicalVariantFilterSqlContext {
@@ -236,50 +236,12 @@ function addTrioInheritanceFilters(
   }
 
   if (modes.includes('compound_het')) {
-    conditions.push(`(
-            v.gt_num IN ${HET}
-            AND v.gene_symbol IS NOT NULL
-            AND v.gene_symbol IN (
-              SELECT v_inner.gene_symbol
-              FROM ${schemaName}."variants" v_inner
-              WHERE v_inner.case_id = ${caseParam}
-                AND v_inner.gt_num IN ${HET}
-                AND v_inner.gene_symbol IS NOT NULL
-              GROUP BY v_inner.gene_symbol
-              HAVING COUNT(*) >= 2
-            )
-            AND v.gene_symbol IN (
-              SELECT pf.gene_symbol
-              FROM ${schemaName}."variants" pf
-              INNER JOIN ${schemaName}."analysis_group_members" agm_f
-                ON agm_f.group_id = ${groupParam}
-               AND agm_f.role = 'father'
-              INNER JOIN ${schemaName}."variants" f
-                ON f.case_id = agm_f.case_id
-               AND f.chr = pf.chr
-               AND f.pos = pf.pos
-               AND f.ref = pf.ref
-               AND f.alt = pf.alt
-               AND f.gt_num IN ${HET}
-              INNER JOIN ${schemaName}."variants" pm
-                ON pm.case_id = ${caseParam}
-               AND pm.gene_symbol = pf.gene_symbol
-               AND pm.gt_num IN ${HET}
-               AND (pm.chr != pf.chr OR pm.pos != pf.pos OR pm.ref != pf.ref OR pm.alt != pf.alt)
-              INNER JOIN ${schemaName}."analysis_group_members" agm_m
-                ON agm_m.group_id = ${groupParam}
-               AND agm_m.role = 'mother'
-              INNER JOIN ${schemaName}."variants" m
-                ON m.case_id = agm_m.case_id
-               AND m.chr = pm.chr
-               AND m.pos = pm.pos
-               AND m.ref = pm.ref
-               AND m.alt = pm.alt
-               AND m.gt_num IN ${HET}
-              WHERE pf.case_id = ${caseParam}
-                AND pf.gt_num IN ${HET}
-                AND pf.gene_symbol IS NOT NULL
-            )
-          )`)
+    const ids = compoundHetPairIdsSql({
+      variants: `${schemaName}."variants"`,
+      members: `${schemaName}."analysis_group_members"`,
+      caseParam,
+      groupParam
+    })
+    conditions.push(`(v.id IN (${ids}))`)
   }
 }

@@ -399,6 +399,43 @@ describe.skipIf(!RUN)('trio and duplicate-row inheritance filters on both backen
     return pg
   }
 
+  it('compound_het: a split 1/2 site inherited from opposite parents, without bystanders', async () => {
+    await seed([
+      ['proband', 100, 'G', '1/.'],
+      ['proband', 100, 'T', './1'],
+      ['proband', 200, 'G', '1/.'],
+      ['father', 100, 'G', '0/1'],
+      ['mother', 100, 'T', '1/0']
+    ])
+    expect(await matching('compound_het')).toEqual(['100>G', '100>T'])
+  }, 60_000)
+
+  it('compound_het: no pair from one parent, from both parents, or with an uncalled parent', async () => {
+    await seed([
+      ['proband', 100, 'G', '0/1'],
+      ['proband', 200, 'G', '0/1'],
+      ['proband', 300, 'G', '0/1'],
+      ['proband', 400, 'G', '0/1'],
+      // 100 and 200: both from the father. 300: both parents. 400: mother, father uncalled.
+      ['father', 100, 'G', '0/1'],
+      ['father', 200, 'G', '1/1'],
+      ['father', 300, 'G', '0/1'],
+      ['mother', 300, 'G', '0/1'],
+      ['mother', 400, 'G', '0/1'],
+      ['father', 400, 'G', './.']
+    ])
+    expect(await matching('compound_het')).toEqual([])
+  }, 60_000)
+
+  it('a variant stored twice is one variant for compound het', async () => {
+    await seed([
+      ['proband', 100, 'G', '1/.'],
+      ['proband', 100, 'G', '1/.'],
+      ['father', 100, 'G', '0/1']
+    ])
+    expect(await matching('compound_het')).toEqual([])
+  }, 60_000)
+
   it('candidate compound het counts a variant stored twice once', async () => {
     await seed([
       ['proband', 100, 'G', '1/.'],

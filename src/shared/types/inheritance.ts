@@ -90,7 +90,7 @@ export const INHERITANCE_MODE_META: Record<
   compound_het: {
     mode: 'compound_het',
     abbr: 'CH',
-    label: 'Compound het (confirmed)',
+    label: 'Compound het (one from each parent)',
     requiresFamily: true,
     color: 'deep-orange'
   }

@@ -263,6 +263,46 @@ describe('split genotypes in the trio filters on SQLite', () => {
   const row = (pos: number, alt: string, gt: string | null): ReturnType<typeof makeVariant> =>
     makeVariant({ pos, alt, gt_num: gt })
 
+  it('compound_het returns only the variants of a pair inherited from opposite parents', () => {
+    service.variants.insertVariantsBatch(probandId, [
+      row(100, 'G', '1/.'),
+      row(100, 'T', './1'),
+      // In the same gene, but in neither parent: not part of an inherited pair.
+      row(200, 'G', '1/.')
+    ])
+    service.variants.insertVariantsBatch(fatherId, [row(100, 'G', '0/1')])
+    service.variants.insertVariantsBatch(motherId, [row(100, 'T', '0/1')])
+    expect(matching('compound_het')).toEqual(['100>G', '100>T'])
+  })
+
+  it('compound_het needs one variant from each parent, not two that both parents carry', () => {
+    service.variants.insertVariantsBatch(probandId, [row(100, 'G', '0/1'), row(200, 'G', '0/1')])
+    for (const parent of [fatherId, motherId]) {
+      service.variants.insertVariantsBatch(parent, [row(100, 'G', '0/1'), row(200, 'G', '0/1')])
+    }
+    expect(matching('compound_het')).toEqual([])
+  })
+
+  it('compound_het does not pair two variants inherited from the same parent', () => {
+    service.variants.insertVariantsBatch(probandId, [row(100, 'G', '0/1'), row(200, 'G', '0/1')])
+    service.variants.insertVariantsBatch(fatherId, [row(100, 'G', '0/1'), row(200, 'G', '1/1')])
+    expect(matching('compound_het')).toEqual([])
+  })
+
+  it('compound_het does not take an uncalled parent for a non-carrier', () => {
+    service.variants.insertVariantsBatch(probandId, [row(100, 'G', '0/1'), row(200, 'G', '0/1')])
+    service.variants.insertVariantsBatch(fatherId, [row(100, 'G', '0/1'), row(200, 'G', './.')])
+    service.variants.insertVariantsBatch(motherId, [row(200, 'G', '0/1')])
+    expect(matching('compound_het')).toEqual([])
+  })
+
+  it('a variant stored twice is one variant for compound het, with or without parents', () => {
+    service.variants.insertVariantsBatch(probandId, [row(100, 'G', '1/.'), row(100, 'G', '1/.')])
+    service.variants.insertVariantsBatch(fatherId, [row(100, 'G', '0/1')])
+    expect(matching('compound_het')).toEqual([])
+    expect(matching('candidate_compound_het')).toEqual([])
+  })
+
   describe('de_novo and the call of a parent at the variant', () => {
     const withFather = (gt: string | null | undefined): string[] => {
       service.variants.insertVariantsBatch(probandId, [row(100, 'G', '1/.')])
