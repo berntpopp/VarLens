@@ -147,10 +147,11 @@ export async function runSessionBatchImport(params: {
     params.ctx?.reportProgress(progress.finishedFiles, files.length, message)
   }
 
+  const remove = (params: Extract<StorageWriteTask, { type: 'cases:delete' }>['params']) =>
+    session.getWriteExecutor().execute({ type: DELETE_CASE_TASK_TYPE, params })
+
   /** Delete the old case and give its name to the imported replacement, in one transaction. */
   const swapIn = async (oldId: number, newId: number, name: string): Promise<void> => {
-    const remove = (params: Extract<StorageWriteTask, { type: 'cases:delete' }>['params']) =>
-      session.getWriteExecutor().execute({ type: DELETE_CASE_TASK_TYPE, params })
     try {
       await remove([oldId, { id: newId, name }])
     } catch (error) {
@@ -201,6 +202,13 @@ export async function runSessionBatchImport(params: {
       // The old case keeps its (UNIQUE) name until its replacement is imported (#493).
       const importName =
         existingId === undefined ? caseName : `${caseName} (replacing #${existingId})`
+      // An overwrite that died before its swap left a case under this name: it
+      // would block every retry on the UNIQUE name and count the person twice.
+      const leftoverId = existingId === undefined ? undefined : existingIds.get(importName)
+      if (leftoverId !== undefined) {
+        await remove([leftoverId])
+        existingIds.delete(importName)
+      }
       const imported = await importOne(file, importName, (fileProgress) =>
         progress.update(index, fileProgress)
       )
