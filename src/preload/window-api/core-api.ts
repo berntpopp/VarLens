@@ -156,7 +156,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       getVariants: (params) => cohortDomain.getVariants(params),
       getColumnMeta: () => cohortDomain.getColumnMeta(),
       getSummary: () => cohortDomain.getSummary(),
-      getCarriers: (chr, pos, ref, alt) => cohortDomain.getCarriers(chr, pos, ref, alt),
+      getCarriers: (variant) => cohortDomain.getCarriers(variant),
       getGeneBurden: () => cohortDomain.getGeneBurden(),
       runAssociation: (config) => cohortDomain.runAssociation(config),
       cancelAssociation: () => cohortDomain.cancelAssociation(),

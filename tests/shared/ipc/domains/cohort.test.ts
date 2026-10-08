@@ -46,7 +46,7 @@ describe('cohort preload domain behavior', () => {
       total_count: 0,
       has_x_chromosome: false
     })
-    await expect(api.getCarriers('chr22', 1000, 'A', 'T')).resolves.toEqual([])
+    await expect(api.getCarriers({ chr: 'chr22', pos: 1000, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: 'GRCh38' })).resolves.toEqual([])
     await expect(api.getGeneBurden()).resolves.toEqual([])
     await expect(api.getSummaryStatus()).resolves.toEqual({
       is_stale: false,
@@ -62,7 +62,7 @@ describe('cohort preload domain behavior', () => {
     expect(invoke).toHaveBeenNthCalledWith(1, 'cohort:variants', { limit: 50, offset: 0 })
     expect(invoke).toHaveBeenNthCalledWith(2, 'cohort:columnMeta')
     expect(invoke).toHaveBeenNthCalledWith(3, 'cohort:summary')
-    expect(invoke).toHaveBeenNthCalledWith(4, 'cohort:carriers', 'chr22', 1000, 'A', 'T')
+    expect(invoke).toHaveBeenNthCalledWith(4, 'cohort:carriers', { chr: 'chr22', pos: 1000, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: 'GRCh38' })
     expect(invoke).toHaveBeenNthCalledWith(5, 'cohort:geneBurden')
     expect(invoke).toHaveBeenNthCalledWith(6, 'cohort:summaryStatus')
     expect(invoke).toHaveBeenNthCalledWith(7, 'cohort:rebuildSummary')
@@ -110,7 +110,7 @@ describe('cohort preload domain behavior', () => {
         getVariants: (params: unknown) => Promise<unknown>
         getColumnMeta: () => Promise<unknown>
         getSummary: () => Promise<unknown>
-        getCarriers: (chr: string, pos: number, ref: string, alt: string) => Promise<unknown>
+        getCarriers: (variant: { chr: string; pos: number; ref: string; alt: string; variant_type: string; genome_build: string }) => Promise<unknown>
         getGeneBurden: () => Promise<unknown>
         getSummaryStatus: () => Promise<unknown>
         rebuildSummary: () => Promise<unknown>
@@ -128,7 +128,7 @@ describe('cohort preload domain behavior', () => {
       variants: [],
       total_count: 0
     })
-    await expect(api.cohort.getCarriers('chr22', 1000, 'A', 'T')).resolves.toEqual([])
+    await expect(api.cohort.getCarriers({ chr: 'chr22', pos: 1000, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: 'GRCh38' })).resolves.toEqual([])
     await expect(api.cohort.getGeneBurden()).resolves.toEqual([])
     await expect(api.cohort.getSummaryStatus()).resolves.toMatchObject({
       is_stale: false,
@@ -144,7 +144,7 @@ describe('cohort preload domain behavior', () => {
     expect(invoke).toHaveBeenCalledWith('cohort:variants', { limit: 50, offset: 0 })
     expect(invoke).toHaveBeenCalledWith('cohort:columnMeta')
     expect(invoke).toHaveBeenCalledWith('cohort:summary')
-    expect(invoke).toHaveBeenCalledWith('cohort:carriers', 'chr22', 1000, 'A', 'T')
+    expect(invoke).toHaveBeenCalledWith('cohort:carriers', { chr: 'chr22', pos: 1000, ref: 'A', alt: 'T', variant_type: 'snv', genome_build: 'GRCh38' })
     expect(invoke).toHaveBeenCalledWith('cohort:geneBurden')
     expect(invoke).toHaveBeenCalledWith('cohort:summaryStatus')
     expect(invoke).toHaveBeenCalledWith('cohort:rebuildSummary')

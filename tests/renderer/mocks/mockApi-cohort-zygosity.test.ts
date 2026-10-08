@@ -40,4 +40,18 @@ describe('mock cohort row identity', () => {
     for (const row of data) expect(row.variant_key).toBe(cohortVariantKey(row))
     expect(new Set(data.map((row) => row.variant_key)).size).toBe(data.length)
   })
+
+  it('lists as many carriers as each row counts', async () => {
+    const { mockApi } = await import('../../../src/renderer/src/mocks/mockApi')
+    const { data } = (await mockApi.cohort.getVariants({ limit: 1000 } as never)) as unknown as {
+      data: CohortVariant[]
+    }
+    for (const row of data) {
+      const carriers = (await mockApi.cohort.getCarriers(row)) as unknown as Array<{
+        case_id: number
+      }>
+      // The mock counts a case once, also when it holds the variant twice.
+      expect(new Set(carriers.map((carrier) => carrier.case_id)).size).toBe(row.carrier_count)
+    }
+  })
 })

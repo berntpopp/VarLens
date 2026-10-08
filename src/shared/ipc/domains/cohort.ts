@@ -1,6 +1,7 @@
 import type {
   CohortSearchParams,
   CohortVariant,
+  CohortVariantIdentity,
   CohortSummary,
   CohortCarrier,
   GeneBurden
@@ -22,12 +23,7 @@ export interface CohortDomainContract {
   >
   getColumnMeta: () => Promise<IpcResult<ColumnFilterMeta[]>>
   getSummary: () => Promise<IpcResult<CohortSummary>>
-  getCarriers: (
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ) => Promise<IpcResult<CohortCarrier[]>>
+  getCarriers: (variant: CohortVariantIdentity) => Promise<IpcResult<CohortCarrier[]>>
   getGeneBurden: () => Promise<IpcResult<GeneBurden[]>>
   getSummaryStatus: () => Promise<IpcResult<{ is_stale: boolean; last_rebuilt_at: number }>>
   rebuildSummary: () => Promise<IpcResult<void>>

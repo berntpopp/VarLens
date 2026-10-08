@@ -62,6 +62,7 @@ import type { ProgressUpdate, ImportResult } from './import'
 import type { IpcResult } from './errors'
 import type {
   CohortVariant,
+  CohortVariantIdentity,
   CohortSummary,
   CohortSearchParams,
   CohortCarrier,
@@ -131,6 +132,7 @@ export type {
   ProgressUpdate,
   ImportResult,
   CohortVariant,
+  CohortVariantIdentity,
   CohortSummary,
   CohortSearchParams,
   VepFetchResult,
@@ -428,12 +430,7 @@ export interface CohortAPI {
     }>
   >
   getSummary: () => Promise<IpcResult<CohortSummary>>
-  getCarriers: (
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ) => Promise<IpcResult<CohortCarrier[]>>
+  getCarriers: (variant: CohortVariantIdentity) => Promise<IpcResult<CohortCarrier[]>>
   getGeneBurden: () => Promise<IpcResult<GeneBurden[]>>
   getColumnMeta: () => Promise<IpcResult<ColumnFilterMeta[]>>
   getSummaryStatus: () => Promise<IpcResult<{ is_stale: boolean; last_rebuilt_at: number }>>

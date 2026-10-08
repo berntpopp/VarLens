@@ -631,10 +631,10 @@ export const mockApi: WindowAPI = {
       }
     },
 
-    getCarriers: async (chr: string, pos: number, ref: string, alt: string) => {
-      // Find all cases carrying this specific variant
+    getCarriers: async (variant) => {
+      // Find all cases carrying this cohort row
       const carriers = variants
-        .filter((v) => v.chr === chr && v.pos === pos && v.ref === ref && v.alt === alt)
+        .filter((v) => cohortVariantKey(mockCohortIdentity(v, cases)) === cohortVariantKey(variant))
         .map((v) => {
           const caseInfo = cases.find((c) => c.id === v.case_id)
           return {
