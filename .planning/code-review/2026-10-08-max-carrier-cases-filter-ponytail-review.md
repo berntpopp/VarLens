@@ -32,6 +32,10 @@ I found no wrong result, no missed backend and no missing cohort counterpart.
    - **Fix:** One bullet under "Population & Scores".
    - **If we skip it:** Users guess what N means.
 
-Verdict: fix 1 first; 2 belongs in the same PR.
+Verdict: Ship.
 
-Not checked: I could not run any test, typecheck or Prettier here (the session blocked `node` and `vitest`), so everything above is from reading the code, and finding 1 rests on what the uncommitted diff changes. I did not open the app, so I did not confirm whether the field keeps showing a typed `0` or `2.7` while the applied cap is off or `2`.
+## Applied fixes (Round 1 follow-up)
+1. Committed and formatted all 13 uncommitted files, moving imports below the header comment.
+2. Added `carrier_count_max` to `ExportFilterSummary`, `buildFilterSummary`, web `filterSummary`, and export metadata sheet in `export-pipeline.ts` with test coverage in `export-pipeline.test.ts`.
+3. Clamped typed value in `parseMaxCarriers` to `Math.min(Math.floor(typed), 1_000_000)` to guard against integer overflow.
+4. Added explanation of "Seen in at most N cases" under Population & Scores in `docs/features/filtering.md`.
