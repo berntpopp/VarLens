@@ -91,6 +91,8 @@ interface FreshnessProbe {
   summary_present: boolean
   gene_summary_missing: boolean
   is_stale: boolean
+  /** The state row's own flag, without pending rebuild requests. */
+  state_stale: boolean
   /** Annotation saves that could not get the lock: flags to refresh, counts valid. */
   flags_pending: boolean
   total_cases: number
@@ -102,7 +104,8 @@ interface FreshnessProbe {
 function needsBootstrap(probe: FreshnessProbe): boolean {
   return (
     (probe.variants_present && !probe.summary_present) ||
-    (probe.never_rebuilt && probe.is_stale) ||
+    // Not a pending request: that is ordinary staleness, under the size rule.
+    (probe.never_rebuilt && probe.state_stale) ||
     probe.gene_summary_missing
   )
 }
@@ -122,6 +125,7 @@ async function probeFreshness({
     summary_present: boolean
     gene_summary_missing: boolean
     is_stale: boolean
+    state_stale: boolean
     flags_pending: boolean
     total_cases: string
     rank_backfill_pending: boolean | null
@@ -134,6 +138,7 @@ async function probeFreshness({
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
                      WHERE gene_symbol IS NOT NULL LIMIT 1)) AS gene_summary_missing,
        ${summaryIsStaleSql(tbl, 's')} AS is_stale,
+       s.is_stale AS state_stale,
        EXISTS (SELECT 1 FROM ${tbl('cohort_summary_rebuild_requests')}
                 WHERE reason = 'annotation') AS flags_pending,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases,
@@ -150,6 +155,7 @@ async function probeFreshness({
     summary_present: row.summary_present,
     gene_summary_missing: row.gene_summary_missing,
     is_stale: row.is_stale,
+    state_stale: row.state_stale,
     flags_pending: row.flags_pending,
     total_cases: Number(row.total_cases),
     rank_backfill_pending: row.rank_backfill_pending === true
