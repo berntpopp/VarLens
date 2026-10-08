@@ -1,3 +1,4 @@
+import { activeMaxCarriers, maxCarriersLabel } from "./maxCarriers"
 /**
  * Active filters list computation
  *
@@ -20,6 +21,20 @@ export function formatAfPercent(af: number): string {
   const pct = Number((af * 100).toPrecision(12)) // drops binary noise (0.015000000000000001)
   const twoDecimals = pct.toFixed(2)
   return Number(twoDecimals) === pct ? twoDecimals : String(pct)
+}
+
+/** Collapsed summary of the "Internal Frequency" drawer panel (both drawers). */
+export function summarizeInternalFilters(
+  filters: Pick<FilterState, 'maxInternalAf' | 'maxCarriers'>
+): string {
+  const parts: string[] = []
+  if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
+    parts.push(`<= ${formatAfPercent(filters.maxInternalAf)}%`)
+  }
+
+  const maxCarriers = activeMaxCarriers(filters.maxCarriers)
+  if (maxCarriers !== null) parts.push(maxCarriersLabel(maxCarriers))
+  return parts.join(', ')
 }
 
 /** Human-readable labels for column filter keys */
@@ -120,6 +135,11 @@ export function buildActiveFiltersList(
   if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
     const pct = formatAfPercent(filters.maxInternalAf)
     list.push({ id: 'internal-frequency', label: 'Internal AF', value: `\u2264 ${pct}%` })
+  }
+
+  const maxCarriers = activeMaxCarriers(filters.maxCarriers)
+  if (maxCarriers !== null) {
+    list.push({ id: 'max-carriers', label: 'Seen in', value: maxCarriersLabel(maxCarriers) })
   }
   if (filters.minCadd !== null && filters.minCadd >= 0) {
     list.push({ id: 'cadd', label: 'CADD', value: `>= ${filters.minCadd}` })

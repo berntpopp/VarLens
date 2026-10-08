@@ -108,6 +108,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
       // Scalar fields: last wins
       if (fj.maxGnomadAf !== undefined) merged.maxGnomadAf = fj.maxGnomadAf
       if (fj.maxInternalAf !== undefined) merged.maxInternalAf = fj.maxInternalAf
+      if (fj.maxCarriers !== undefined) merged.maxCarriers = fj.maxCarriers
       if (fj.minCadd !== undefined) merged.minCadd = fj.minCadd
       if (fj.minCarriers !== undefined) merged.minCarriers = fj.minCarriers
       if (fj.starredOnly !== undefined) merged.starredOnly = fj.starredOnly

@@ -27,6 +27,7 @@ export type FilterId =
   | 'acmg'
   | 'panels'
   | 'internal-frequency'
+  | 'max-carriers'
   | 'inheritance'
 
 /**
@@ -75,6 +76,8 @@ export function clearFilter(filterId: FilterId): Partial<FilterState> {
       }
     case 'internal-frequency':
       return { maxInternalAf: FILTER_DEFAULTS.maxInternalAf }
+    case 'max-carriers':
+      return { maxCarriers: FILTER_DEFAULTS.maxCarriers }
     case 'inheritance':
       return {
         inheritanceModes: [...FILTER_DEFAULTS.inheritanceModes],
