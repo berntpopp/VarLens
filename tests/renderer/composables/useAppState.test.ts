@@ -162,4 +162,74 @@ describe('createAppState', () => {
 
     expect(invalidateServerData).toHaveBeenCalledExactlyOnceWith('database-switch')
   })
+
+  describe('unsaved ACMG draft guard', () => {
+    const variant = (id: number) => ({ id }) as never
+
+    function openWithDraft(answer: Promise<boolean> | null) {
+      const state = createAppState()
+      state.selectedPanelVariant.value = variant(1)
+      state.panelOpen.value = true
+      const guard = vi.fn(() => answer)
+      state.setPanelLeaveGuard(guard)
+      return { state, guard }
+    }
+
+    it('holds a selection change, close, tab and case switch until the prompt is answered', async () => {
+      let answer!: (leave: boolean) => void
+      const { state, guard } = openWithDraft(new Promise<boolean>((r) => (answer = r)))
+
+      state.selectedPanelVariant.value = variant(2)
+      state.panelOpen.value = false
+      state.setActiveTab('cohort')
+      state.selectCase({ caseId: 9, caseName: 'Case 9' })
+
+      expect(guard).toHaveBeenCalledTimes(1)
+      expect(state.selectedPanelVariant.value).toEqual({ id: 1 })
+      expect(state.panelOpen.value).toBe(true)
+      expect(state.activeTab.value).toBe('case')
+      expect(state.selectedCaseName.value).toBe('')
+
+      // Apply (after a successful save) and Discard both answer "leave".
+      answer(true)
+      await Promise.resolve()
+
+      expect(state.selectedPanelVariant.value).toEqual({ id: 2 })
+      expect(state.panelOpen.value).toBe(false)
+      expect(state.selectedCaseId.value).toBe(9)
+    })
+
+    it('Cancel keeps the panel on the current variant', async () => {
+      const { state } = openWithDraft(Promise.resolve(false))
+
+      state.selectedPanelVariant.value = variant(2)
+      await Promise.resolve()
+
+      expect(state.selectedPanelVariant.value).toEqual({ id: 1 })
+      expect(state.panelOpen.value).toBe(true)
+
+      // The next attempt asks again instead of staying queued.
+      state.panelOpen.value = false
+      expect(state.panelOpen.value).toBe(true)
+    })
+
+    it('changes the selection at once when there is no draft', () => {
+      const { state, guard } = openWithDraft(null)
+
+      state.selectedPanelVariant.value = variant(2)
+
+      expect(guard).toHaveBeenCalledTimes(1)
+      expect(state.selectedPanelVariant.value).toEqual({ id: 2 })
+    })
+
+    it('a database switch closes the panel without asking', () => {
+      const { state, guard } = openWithDraft(new Promise<boolean>(() => {}))
+
+      state.resetForDatabaseSwitch()
+
+      expect(guard).not.toHaveBeenCalled()
+      expect(state.panelOpen.value).toBe(false)
+      expect(state.selectedPanelVariant.value).toBeNull()
+    })
+  })
 })

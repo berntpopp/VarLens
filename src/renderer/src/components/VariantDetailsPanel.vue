@@ -139,6 +139,7 @@
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <AcmgClassificationPanel
+                    ref="acmgPanelRef"
                     :evidence-json="currentAcmgEvidence"
                     :variant-data="currentVariantData"
                     :save="handleAcmgEvidenceChange"
@@ -212,7 +213,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent, inject } from 'vue'
+import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
@@ -532,6 +534,11 @@ function getConsequenceColor(consequence: string): string {
   return 'grey'
 }
 
+// Selection changes and closes wait for the evidence editor's unsaved-draft prompt
+const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)
+const appState = inject(AppStateKey, null)
+appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
+
 // Handle Escape key to close panel
 const handleKeydown = (e: KeyboardEvent): void => {
   if (e.key === 'Escape' && props.open) {
@@ -547,6 +554,7 @@ onMounted(() => {
 // Clean up Escape listener on unmount
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  appState?.setPanelLeaveGuard(null)
 })
 </script>
 
