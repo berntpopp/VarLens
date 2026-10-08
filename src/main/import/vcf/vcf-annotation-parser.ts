@@ -390,9 +390,15 @@ function buildCsqAlleleTargetIndex(
   originalAltAlleles: string[],
   ref: string
 ): Map<string, number[]> {
+  // A derived spelling ('-', first base trimmed) never claims an allele that
+  // another ALT spells exactly: G>A,GA keeps `A` for the SNV.
+  const exactAlts = new Set(originalAltAlleles)
+  const spellingsOf = (alt: string): string[] =>
+    [...csqAlleleSpellings(alt, ref)].filter((s) => s === alt || !exactAlts.has(s))
+
   const spellingCounts = new Map<string, number>()
   for (const originalAlt of originalAltAlleles) {
-    for (const spelling of csqAlleleSpellings(originalAlt, ref)) {
+    for (const spelling of spellingsOf(originalAlt)) {
       spellingCounts.set(spelling, (spellingCounts.get(spelling) ?? 0) + 1)
     }
   }
@@ -401,7 +407,7 @@ function buildCsqAlleleTargetIndex(
   for (let targetIndex = 0; targetIndex < altAlleles.length; targetIndex += 1) {
     const originalAlt = originalAltAlleles[originalAltIndexes[targetIndex]]
     if (originalAlt === undefined) continue
-    for (const spelling of csqAlleleSpellings(originalAlt, ref)) {
+    for (const spelling of spellingsOf(originalAlt)) {
       if (spellingCounts.get(spelling) === 1) addTarget(targets, spelling, targetIndex)
     }
   }

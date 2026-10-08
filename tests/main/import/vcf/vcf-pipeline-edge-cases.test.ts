@@ -24,4 +24,17 @@ describe('VCF pipeline edge cases', () => {
     const mapped = mapRow([], 'chr1 100 . A *,T 50 PASS . GT 1/2')
     expect(mapped.map((v) => v.alt)).toEqual(['T'])
   })
+
+  it('annotates an SNV next to an insertion whose trimmed spelling collides with it', () => {
+    const csq =
+      '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL">'
+    const mapped = mapRow(
+      [csq],
+      'chr1 100 . G A,GA 50 PASS CSQ=A|missense_variant|MODERATE|GENE1,GA|frameshift_variant|HIGH|GENE1 GT 1/2'
+    )
+    expect(mapped.map((v) => [v.alt, v.func, v.consequence])).toEqual([
+      ['A', 'missense_variant', 'MODERATE'],
+      ['GA', 'frameshift_variant', 'HIGH']
+    ])
+  })
 })
