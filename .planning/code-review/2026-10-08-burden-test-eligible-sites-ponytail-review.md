@@ -1,61 +1,54 @@
-**What this change does:** The gene burden test now uses only variants on chromosomes 1-22, in cases of one genome build, at sites where every selected sample has a usable call. It weights by minor allele frequency and reports per gene how many sites were used and left out, and per run how many variants were skipped for not being on chromosomes 1-22. Both backends (SQLite and PostgreSQL) and the result table and export were changed.
+**What this change does:** The gene burden test now uses only variants on chromosomes 1-22, in cases of one genome build, at sites where every selected sample has a usable call. It weights by minor allele frequency, reports per gene the sites used and left out, and reports per run the variants skipped for not being on chromosomes 1-22. Both backends (SQLite and PostgreSQL), the result table and the export are changed.
 
-I could not run `make typecheck` or any test here (the commands needed approval), so everything below comes from reading the code. Load assumed: one desktop user on SQLite, a few web users on PostgreSQL.
-
-## Must fix
-
-1. **The burden tab can no longer load its cases** (`src/renderer/src/components/association/GeneBurdenView.vue:L186-248`)
-   - **What this is:** The screen where the user picks two groups of cases and starts the burden test. The plan asked for three small additions here; the last commit (`c262b6de`) rewrote the whole script block instead.
-   - **Problem:** Four things break:
-     - `loadCasesWithMetadata()` returns `{ cases, cohortGroups }`, but the new code calls `.map` on it. That throws, so the case list stays empty and "Failed to load cases" shows.
-     - It calls `window.api.cases.cohortGroups()`, which does not exist anywhere in the preload or shared contracts.
-     - `defineExpose({ refresh })` is gone, but `CohortView.vue:152` still calls `burdenViewRef.value?.refresh()`. That throws when the burden tab is active.
-     - Two `any` types were added (`no-explicit-any` is an error in the ESLint config), and the scroll style (`overflow-y`, `max-height`) was removed.
-   - **Fix:** Restore the script and style blocks from the merge base (`a5e18286a`). Then re-add only the planned lines: `sites_excluded` and `non_autosomal_variants` in the two interfaces, and the `:non-autosomal-variants` prop.
-   - **If we skip it:** Nobody can pick groups, so the burden test cannot be started from the app. Typecheck and lint should also fail.
+I found no wrong result and no broken caller, but I could not run anything: `make typecheck`, `npx vitest` and `node -e` all needed approval. Everything below comes from reading the code. Load assumed: one desktop user on SQLite, a few web users on PostgreSQL.
 
 ## Should fix
 
-2. **No test mounts the burden screen** (`tests/renderer/components/association/`)
-   - **What this is:** The only `GeneBurdenView` test was added on this branch and deleted again in `c262b6de`.
-   - **Problem:** Finding 1 passed unnoticed because nothing loads this component in a test.
-   - **Fix:** Add one mount test with `useAssociation` mocked. Assert that the cases reach `AssociationConfigPanel` and that `refresh` is exposed.
-   - **If we skip it:** The next rewrite of this file breaks the feature the same way.
+1. **The two removed filters are still accepted and then ignored** (`src/shared/types/ipc-schemas.ts:724-732`)
+   - **What this is:** The check on a burden run request. `acmg_classifications` and `max_internal_af` were removed from it.
+   - **Problem:** The schema silently strips unknown keys. A web API caller who sends `max_internal_af: 0.01` gets an unfiltered result and no error, and `tests/shared/types/association-config-schema.test.ts` asserts exactly that. The spec says this closes the "accepted then dropped" item of #510; it does not.
+   - **Fix:** Add `acmg_classifications: z.never().optional()` and `max_internal_af: z.never().optional()` to `filters`, and flip the test to expect a rejection. `.strict()` is not an option, because the config panel sends other keys of the shared filter shape; it never sets these two.
+   - **If we skip it:** The app is unaffected. Only direct API callers are misled, and #510 is closed on a false claim.
 
-3. **Unplanned toolbar changes in the result table** (`src/renderer/src/components/association/AssociationResultsTable.vue:L3-24`)
-   - **What this is:** The search box, gene counter and Export button above the results.
-   - **Problem:** The same commit removed the "N genes" chip and replaced the field's label "Search genes" with a placeholder. A placeholder is not a label, so a screen reader announces an unnamed field. The plan asked for none of this.
-   - **Fix:** Restore the toolbar from the merge base. Keep the two note paragraphs and the "Excluded sites" column; the disabled-when-empty Export button is fine to keep.
-   - **If we skip it:** Users lose the gene count, and the field has no accessible name.
+2. **The reason `no_called_alleles` can never be counted** (`src/main/statistics/contingency.ts:157-167`, `:259`)
+   - **What this is:** One of the three reasons a site is left out, shown in the tooltip, the export column and the docs.
+   - **Problem:** Since the last commit (`83e1bd71`) the frequency falls back to all samples when no sample has complete covariates. Every sample then adds at least one called allele, so the count is always 0. No test expects a non-zero value. The plan (Review Focus 4) and `SPLIT-GENOTYPE-ZYGOSITY.md` still say this case is reported under that reason.
+   - **Fix:** Delete the reason: the union member, the counter, the null return of `altAlleleFrequency`, the label part and the TSV column. Or keep it as a guard and correct the doc. Either way, add the fallback to the "Frequency" line of the doc.
+   - **If we skip it:** Users see a column and a tooltip entry that are always 0, and the doc describes behaviour the code does not have.
 
-4. **Two copies of the result row type** (`GeneBurdenView.vue:L124-147`, `src/renderer/src/utils/association-results.ts:L19-44`)
-   - **What this is:** The shape of one gene's result, written out once in the view and once in the new util.
-   - **Problem:** Both must change together. This branch already had to add `sites_excluded` in both places.
-   - **Fix:** Import `AssociationResultRow` in `GeneBurdenView.vue` and delete the local `AssociationResult` interface.
-   - **If we skip it:** The next new field is added in one copy and forgotten in the other.
+3. **No test shows the mixed-build message reaching the user** (`tests/web-gate/web-association-route.test.ts`, `tests/main/statistics/integration.test.ts`)
+   - **What this is:** A run with cases of two genome builds is rejected with a clear message. Both builders are tested for the throw.
+   - **Problem:** The message then crosses the desktop worker boundary or the web route's `catch`, and nothing tests that path.
+   - **Fix:** One test in the web route file: `build` throws `InvalidParametersError`, expect HTTP 400 and the message in `userMessage`.
+   - **If we skip it:** A later change to the route's `catch` could turn the message into "unknown error" unnoticed.
 
 ## Nice to have
 
-5. **Removed filters are still dropped without a message** (`src/shared/types/ipc-schemas.ts:L724-734`)
-   - **What this is:** The check on a burden run request. `acmg_classifications` and `max_internal_af` were removed from it, as the plan says.
-   - **Problem:** A web API caller who sends `max_internal_af: 0.01` gets an unfiltered result and no error. That is still "accepted then dropped" (#510), only one layer earlier. The plan chose this, and the test comment "they are not accepted now" overstates it.
-   - **Fix:** Put `.strict()` back on the `filters` object so unknown keys are rejected. `c262b6de` removed it; I did not find out why, so check the panel's payload first.
-   - **If we skip it:** The app is unaffected, because the panel never sends these keys. Only direct API callers can be misled.
+4. **An empty result cannot be exported** (`src/renderer/src/components/association/AssociationResultsTable.vue:23`)
+   - **What this is:** The Export button is now disabled when there are no result rows. The plan did not ask for this.
+   - **Problem:** A chrX-only run is empty, and its export would carry the line that says why. `buildAssociationTsv([], 7)` is tested, but the app cannot reach it.
+   - **Fix:** Remove the `:disabled` line.
+   - **If we skip it:** The user sees the reason on screen but cannot save it.
 
-6. **Unrelated edits in the mock API** (`src/renderer/src/mocks/mockApi.ts:L216-224`)
-   - **What this is:** The fake API for browser dev mode.
-   - **Problem:** A loop was reshaped and a "Wave 4 — unified shortlist" comment was added. Neither belongs to this change.
-   - **Fix:** Revert both; keep only `non_autosomal_variants: 0`.
-   - **If we skip it:** Nothing breaks; the diff just carries noise.
+5. **"N genes tested" counts genes that were not tested** (`src/renderer/src/components/association/GeneBurdenView.vue:71`)
+   - **What this is:** The green summary line above the results.
+   - **Problem:** A gene whose every site was left out is now listed with 0 sites and no p-value, yet it is counted as tested.
+   - **Fix:** Count only rows with `n_variants > 0`, or say "genes listed".
+   - **If we skip it:** The number is slightly too high when sites are excluded.
 
-7. **`chr1` and `1` are still two different sites** (`AssociationDataBuilder.ts:L135-141`, `PostgresAssociationDataBuilder.ts:L173-179`)
-   - **What this is:** The site key is the stored text `chr:pos:ref:alt`. This is older than this branch.
-   - **Problem:** If group A's files say `chr1` and group B's say `1`, the same variant becomes two sites. "Variants used" doubles, each frequency is halved, and an unknown call in one spelling does not exclude the other. Carrier counts stay right.
-   - **Fix:** Compare the chromosome without its `chr` prefix in the join and the key. This is a follow-up, not part of this plan.
-   - **If we skip it:** Weights and site counts are slightly off when the two groups come from pipelines with different chromosome naming.
+## What I checked and found in order
 
-The statistics code (`contingency.ts`, `weights.ts`, `gene-tests.ts`) and both SQL builders read correctly against the spec. Both backends do the build check, the autosome filter, select-then-collect and the skipped-variant count, and the mixed-build error reaches the user with its message.
+- **Backends:** both builders do the build check, the autosome filter, select-then-collect and the skipped-variant count with the same SQL shape. Row order is bytewise on both, and a NULL dosage is carried through on both.
+- **Callers:** the desktop engine, the database worker, the in-process web runner and the mock API all take the new `{ genes, non_autosomal_variants }` shape. The statistics worker's new import chain pulls in nothing from Electron.
+- **Cohort view:** no counterpart is missing. The burden tab is part of the cohort view; the cohort summary and carrier list keep "highest dosage" on purpose, and the docs say so.
+- **Statistics:** the conflict rule, the complete-site rule, the label-swap symmetry, `min(p, 1 - p)` and "no Fisher test without a site" read correctly and have tests.
 
-Verdict: fix 1 first; 2 and 3 belong in the same commit.
-Lean: -25 lines possible.
-Not checked: `make typecheck`, lint and every test, including the PostgreSQL-gated parity test. Also the query time of the new second read and the extra count query on a large database, which the plan itself leaves to review.
+Verdict: Ship.
+
+## Applied fixes (Round 3 follow-up)
+1. Rejected cohort-summary filters (`acmg_classifications`, `max_internal_af`) explicitly in `AssociationConfigSchema` with `z.never().optional()`, verified via test.
+2. Updated `SPLIT-GENOTYPE-ZYGOSITY.md` to document fallback to all samples for burden allele frequency. Guard retained.
+3. Caught `InvalidParametersError` in `cohort:runAssociation` returning HTTP 400 with `userMessage`, tested via `web-association-route.test.ts`.
+4. Removed `:disabled` on Export button in `AssociationResultsTable.vue` to allow export of 0-result runs.
+5. Used `testedCount` in `GeneBurdenView.vue` for genes tested count.
+

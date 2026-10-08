@@ -68,9 +68,8 @@
 
     <!-- Results summary -->
     <v-alert v-if="results" type="success" variant="tonal" density="compact" class="mb-3">
-      Analysis complete: {{ results.results.length }} genes tested,
-      {{ significantCount }} significant (FDR &lt; 0.05) in
-      {{ (results.elapsed_ms / 1000).toFixed(1) }}s
+      Analysis complete: {{ testedCount }} genes tested, {{ significantCount }} significant (FDR
+      &lt; 0.05) in {{ (results.elapsed_ms / 1000).toFixed(1) }}s
     </v-alert>
 
     <!-- Results tabs -->
@@ -154,6 +153,10 @@ const progressPercent = computed(() =>
 
 const significantCount = computed(
   () => results.value?.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length ?? 0
+)
+
+const testedCount = computed(
+  () => results.value?.results.filter((r) => r.n_variants > 0).length ?? 0
 )
 
 let cleanupProgress: (() => void) | null = null

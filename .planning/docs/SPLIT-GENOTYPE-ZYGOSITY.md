@@ -81,7 +81,8 @@ Spec: `.planning/specs/2026-10-08-burden-test-eligible-sites.md`. Code:
   `no_called_alleles`. The run reports `non_autosomal_variants`: qualifying variants on chrX,
   chrY, MT or another contig, so a chrX gene list is not empty without a reason.
 - **Frequency** p = ALT copies / called alleles (`calledAlleleCount`: haploid 1, diploid 2, no
-  row 2) among the samples with complete covariates. **Weight** = Beta(min(p, 1 − p); 1, 25).
+  row 2) among the samples with complete covariates (or all samples when no sample has complete
+  covariates). **Weight** = Beta(min(p, 1 − p); 1, 25).
 
 ## Known limits
 

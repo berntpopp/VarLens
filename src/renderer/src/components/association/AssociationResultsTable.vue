@@ -16,13 +16,7 @@
       <v-chip size="small" variant="tonal" class="mr-2">
         {{ filteredResults.length }} genes
       </v-chip>
-      <v-btn
-        variant="outlined"
-        size="small"
-        :prepend-icon="mdiDownload"
-        :disabled="results.length === 0"
-        @click="exportResults"
-      >
+      <v-btn variant="outlined" size="small" :prepend-icon="mdiDownload" @click="exportResults">
         Export
       </v-btn>
     </div>

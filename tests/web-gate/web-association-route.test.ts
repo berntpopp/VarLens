@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { buildDispatcher } from '../../src/web/server/dispatcher'
 import type { DispatcherDeps } from '../../src/web/server/dispatcher'
 import { WebAssociationRuns } from '../../src/web/server/association/web-association-runs'
+import { InvalidParametersError } from '../../src/main/ipc/errors'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
 /**
@@ -76,6 +77,18 @@ describe('web cohort association', () => {
     const overlap = await call('cohort:runAssociation', [{ ...CONFIG, groupB_ids: [2, 3] }])
     expect(overlap.reply.code).toHaveBeenCalledWith(400)
     expect(overlap.result).toMatchObject({ error: 'association-groups-overlap' })
+
+    const mixedBuild = harness(
+      vi.fn(async () => {
+        throw new InvalidParametersError('Mixed genome builds: hg19 and hg38', 'Mixed genome builds: hg19 and hg38')
+      })
+    )
+    const mixed = await mixedBuild.call('cohort:runAssociation', [CONFIG])
+    expect(mixed.reply.code).toHaveBeenCalledWith(400)
+    expect(mixed.result).toMatchObject({
+      error: 'invalid-parameters',
+      message: expect.stringContaining('Mixed genome builds')
+    })
   })
 
   test('a second run for the same user is refused; cancel stops only the caller', async () => {
