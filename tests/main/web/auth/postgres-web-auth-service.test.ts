@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { randomBytes } from 'node:crypto'
 import { Client } from 'pg'
 
@@ -457,6 +457,24 @@ describe('PostgresWebAuthService — authenticate', () => {
     const r = await svc.authenticate('alice', 'pw')
     expect(r.success).toBe(false)
     expect(r.locked).toBe(true)
+  })
+
+  // #507: an unknown or locked account must cost the same Argon2 verify as a
+  // wrong password, or response time tells an anonymous caller which names exist.
+  it('still runs one password verification for an unknown or locked username', async () => {
+    const verify = vi.spyOn(fakePasswordProvider, 'verifyPassword')
+    try {
+      pool.enqueueResponse({ rows: [], rowCount: 0 })
+      expect((await svc.authenticate('ghost', 'pw')).success).toBe(false)
+      expect(verify).toHaveBeenCalledTimes(1)
+
+      const future = new Date(Date.now() + 60_000)
+      pool.enqueueResponse({ rows: [pgUserRow({ locked_until: future })], rowCount: 1 })
+      expect((await svc.authenticate('alice', 'pw')).success).toBe(false)
+      expect(verify).toHaveBeenCalledTimes(2)
+    } finally {
+      verify.mockRestore()
+    }
   })
 
   it('uses an atomic UPDATE+CASE on failed login (no read-modify-write race)', async () => {

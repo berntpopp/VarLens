@@ -115,13 +115,15 @@ describe('web dispatcher adapters: auth and import', () => {
     }))
     const { overrides } = buildDispatcher(deps)
 
-    await overrides['auth:login'].handle(
+    const response = await overrides['auth:login'].handle(
       ['admin@example.test', 'wrong'],
       { session: {} } as never,
       reply as never,
       deps
     )
 
+    // #507: an anonymous caller must not learn that the account exists.
+    expect(response).toEqual({ success: false, user: null })
     expect(writeExecute).toHaveBeenCalledWith({
       type: 'audit:append',
       params: [

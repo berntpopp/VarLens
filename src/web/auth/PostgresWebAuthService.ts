@@ -15,6 +15,8 @@
  * src/shared/auth/auth-constants — the constants module is process-agnostic
  * and the only thing the two implementations share.
  */
+import { randomBytes } from 'node:crypto'
+
 import type { Pool } from 'pg'
 
 import {
@@ -176,6 +178,8 @@ export class PostgresWebAuthService {
   private readonly schemaQuoted: string
   private readonly passwordProvider: PasswordProvider
   private readonly userCache: UserLookupCache<User | undefined>
+  /** Hash of a random secret, verified against when no account matches a login. */
+  private dummyHash: Promise<string> | undefined
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
@@ -342,13 +346,19 @@ export class PostgresWebAuthService {
       `SELECT * FROM ${sch}."users" WHERE username = $1 AND is_active = TRUE`,
       [username]
     )
+    // Unknown and locked accounts pay the same Argon2 verify as a wrong
+    // password, so response time does not reveal which usernames exist.
     if ((sel.rowCount ?? 0) === 0) {
+      this.dummyHash ??= this.passwordProvider.hashPassword(randomBytes(16).toString('hex'))
+      await this.passwordProvider.verifyPassword(await this.dummyHash, password)
       return { success: false, user: null }
     }
     const user = mapPgRowToUser(sel.rows[0])
 
     if (user.locked_until !== null && user.locked_until !== '') {
       if (new Date(user.locked_until).getTime() > Date.now()) {
+        await this.passwordProvider.verifyPassword(user.password_hash, password)
+        // `locked` is for the server-side audit only; routes/auth.ts strips it.
         return { success: false, user: null, locked: true }
       }
     }
