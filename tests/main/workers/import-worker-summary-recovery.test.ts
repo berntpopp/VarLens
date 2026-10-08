@@ -100,25 +100,51 @@ describe('import worker: cohort summary recovery', () => {
     })
   })
 
-  it('takes a merged case out of the summary again when reporting it fails', async () => {
+  // #493: once published, a case is not taken back — the case it replaced is already gone.
+  it('keeps a published case, and the summary exact, when reporting it fails', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const frequencies = (): unknown[] =>
-      h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
-
-    // B is inserted and merged; then telling the main process throws.
-    const messages = await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])], {
-      onMessage: (m) => {
+    const failReport = {
+      onMessage: (m: { type: string }): void => {
         if (m.type === 'file-complete') throw new Error('port closed')
       }
-    })
+    }
+    const published = (): unknown[] =>
+      h.db.prepare('SELECT name, import_status, variant_count FROM cases ORDER BY name').all()
+    const expectConsistent = (): void => {
+      expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
+      expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+      const counted = h.db.prepare(
+        'SELECT COALESCE(SUM(case_count), 0) AS c FROM variant_frequency'
+      )
+      const carried = h.db.prepare(
+        'SELECT COUNT(*) AS c FROM (SELECT DISTINCT case_id, chr, pos, ref, alt FROM variants)'
+      )
+      expect(counted.get()).toEqual(carried.get())
+    }
 
-    expect(sessionStatuses(messages)).toEqual(['B:failed'])
-    expect(h.db.prepare("SELECT 1 FROM cases WHERE name = 'B'").get()).toBeUndefined()
-    expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
-    expect(snapshotSummary(h.db)).toEqual(before.summary)
-    expect(frequencies()).toEqual(before.frequencies)
-    expect(summaryMeta(h.db, 'is_stale')).toBe('0')
+    // B is inserted and merged; then telling the main process throws.
+    const fresh = await h.run(
+      [h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])],
+      failReport
+    )
+    expect(sessionStatuses(fresh)).toEqual(['B:failed'])
+    expect(published()).toEqual([
+      { name: 'A', import_status: 'ready', variant_count: 2 },
+      { name: 'B', import_status: 'ready', variant_count: 2 }
+    ])
+    expectConsistent()
+
+    // The same while replacing A: neither the old A nor nothing, but the new A.
+    const replaced = await h.run(
+      [h.file('A', [variantAt(400, 'CCC')], { isDuplicate: true, duplicateStrategy: 'overwrite' })],
+      failReport
+    )
+    expect(sessionStatuses(replaced)).toEqual(['A:failed'])
+    expect(published()).toEqual([
+      { name: 'A', import_status: 'ready', variant_count: 1 },
+      { name: 'B', import_status: 'ready', variant_count: 2 }
+    ])
+    expectConsistent()
   })
 
   it('tells the main process when it stops keeping the summary current', async () => {

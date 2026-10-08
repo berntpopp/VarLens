@@ -207,10 +207,7 @@ export async function runImportSession(
         const startTime = Date.now()
         let variantCount = 0
         const skipTracker = new ImportSkipTracker()
-        // What the case has contributed outside its own rows so far: nothing
-        // until it is published, then its frequencies (if counted) and its
-        // part of the cohort summary.
-        let frequenciesCounted = false
+        // Until it is published the case has contributed nothing outside its own rows.
         let published = false
 
         try {
@@ -312,7 +309,7 @@ export async function runImportSession(
 
           // The file's rows are committed and it was not cancelled: publish
           // the case before anyone is told the file is done.
-          frequenciesCounted = publishCase(db, caseId, frequencies, () => {
+          publishCase(db, caseId, frequencies, () => {
             if (existing) {
               // In the publishing transaction: the old case goes, with its
               // frequencies and summary contribution, only if the new one arrives.
@@ -361,20 +358,9 @@ export async function runImportSession(
           succeeded++
           importedInBatch.add(file.caseName)
         } catch (importError) {
-          // The case goes, and with it everything it already contributed.
-          if (frequenciesCounted) {
-            try {
-              frequencies.decrementFrequencies(caseId)
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to revert variant frequencies:',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-          }
-          const deleteCase = (): void => void stmts.deleteCase.run(caseId)
-          if (published) summary.replaceCase(caseId, deleteCase)
-          else summary.discardCase(deleteCase)
+          // A published case stays, though its file is reported failed: the
+          // case it replaced is gone, and readers may already have seen it (#493).
+          if (!published) summary.discardCase(() => void stmts.deleteCase.run(caseId))
           throw importError
         }
       } catch (error) {
@@ -491,31 +477,26 @@ if (parentPort) {
  * 'provisional' to 'ready'. Readers divide the frequency counts by the number
  * of ready cases, and crash recovery deletes a provisional case without
  * touching either table — both rely on a provisional case having contributed
- * nothing. A throw rolls all of it back. Returns whether the frequencies were
- * counted (a failure there is logged, as before, and does not fail the file).
+ * nothing. A throw rolls all of it back. A failure to count the frequencies
+ * is logged, as before, and does not fail the file.
  */
 function publishCase(
   db: DatabaseType,
   caseId: number,
   frequencies: VariantFrequencyService,
   publishInSummary: () => void
-): boolean {
-  return db
-    .transaction(() => {
-      let counted = false
-      try {
-        db.transaction(() => frequencies.updateFrequencies(caseId))()
-        counted = true
-      } catch (e) {
-        console.warn(
-          '[import-worker] Failed to update variant frequencies:',
-          e instanceof Error ? e.message : String(e)
-        )
-      }
-      publishInSummary()
-      return counted
-    })
-    .immediate()
+): void {
+  db.transaction(() => {
+    try {
+      db.transaction(() => frequencies.updateFrequencies(caseId))()
+    } catch (e) {
+      console.warn(
+        '[import-worker] Failed to update variant frequencies:',
+        e instanceof Error ? e.message : String(e)
+      )
+    }
+    publishInSummary()
+  }).immediate()
 }
 
 /** Recreate the indexes dropped for the bulk insert (idempotent, best-effort). */
