@@ -202,7 +202,12 @@ export async function runImportSession(
           genomeBuild
         )
         const caseId = Number(caseResult.lastInsertRowid)
-        port.postMessage({ type: 'case-started', fileIndex, caseId })
+        port.postMessage({
+          type: 'case-started',
+          fileIndex,
+          caseId,
+          ...(existing ? { replacement: true } : {})
+        })
 
         const startTime = Date.now()
         let variantCount = 0

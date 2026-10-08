@@ -101,6 +101,17 @@ describe('runSessionBatchImport', () => {
     expect(result.succeeded).toBe(1)
   })
 
+  it('overwrite first removes a replacement an interrupted overwrite left behind', async () => {
+    const { session, cases, events } = fakeSession([
+      { id: 5, name: 'HG001' },
+      { id: 9, name: 'HG001 (replacing #5)' }
+    ])
+    const result = await overwrite(session, ['HG001.json'])
+    expect(events).toEqual(['delete:9', 'import:HG001 (replacing #5)', 'delete:5'])
+    expect(cases).toEqual([{ id: 100, name: 'HG001' }])
+    expect(result.succeeded).toBe(1)
+  })
+
   it('overwrite keeps the existing case when the replacement fails to import', async () => {
     const { session, writeExecute, cases } = fakeSession([{ id: 5, name: 'broken' }])
     const result = await overwrite(session, ['broken.json'])

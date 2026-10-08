@@ -264,6 +264,10 @@ describe('PostgreSQL clinical variant filters', () => {
       25
     )
     expect(calls.join('\n')).toContain(`v.gt_num IN ${HET_OR_HEMI_GT_SQL}`)
+    // ...and a chrX 1/1 of a case recorded as male (a caller that writes it diploid).
+    expect(calls.join('\n')).toContain(xHemizygousSql('v', '"public"."case_metadata"', true))
+    expect(xHemizygousSql('v', 'cm_table', true)).toContain('AND EXISTS (')
+    expect(xHemizygousSql('v', 'cm_table', true)).toContain("cm.sex = 'male'")
   })
 
   it('accepts consider_phasing as an inheritance no-op', async () => {

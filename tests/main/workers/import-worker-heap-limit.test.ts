@@ -48,8 +48,14 @@ parentPort.on('message', (msg) => {
     })
     return
   }
-  if (msg.files && msg.files[0] && msg.files[0].caseName === 'partial') {
-    parentPort.postMessage({ type: 'case-started', fileIndex: 0, caseId: ${PARTIAL_CASE_ID} })
+  const first = msg.files && msg.files[0] && msg.files[0].caseName
+  if (first === 'partial' || first === 'replacement') {
+    parentPort.postMessage({
+      type: 'case-started',
+      fileIndex: 0,
+      caseId: ${PARTIAL_CASE_ID},
+      ...(first === 'replacement' ? { replacement: true } : {})
+    })
   }
   const hog = []
   for (;;) hog.push(new Array(1000000).fill(1.5))
@@ -112,6 +118,15 @@ describe('import worker heap limit', () => {
     // The recovery run finished before onError fired.
     expect(JSON.parse(readFileSync(`${dbPath}.discarded`, 'utf8'))).toEqual([PARTIAL_CASE_ID])
     expect(client.isRunning).toBe(false)
+  })
+
+  it('SQLite client does not name a replacement case for discarding', async () => {
+    // It may already be published in place of the case it overwrote; recovery
+    // still deletes it by itself while it is provisional.
+    const { error } = await runSqliteClient('replacement')
+
+    expect(error.errorCode).toBe(ErrorCode.RESOURCE_LIMIT)
+    expect(JSON.parse(readFileSync(`${dbPath}.discarded`, 'utf8'))).toEqual([])
   })
 
   it('SQLite executor rejects the import with ImportResourceLimitError', async () => {

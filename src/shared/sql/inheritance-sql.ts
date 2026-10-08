@@ -44,24 +44,26 @@ function parentRowSql(ctx: TrioSqlContext, role: 'father' | 'mother', condition:
  * A parent with a reference, homozygous or haploid call, or without a row,
  * fails the variant: that pattern points to a de novo second hit, uniparental
  * disomy or a deletion. A parent whose genotype is uncalled passes, so that a
- * parental dropout does not hide a recessive candidate. A group without a
- * parent does not constrain.
+ * parental dropout does not hide a recessive candidate. A parent with several
+ * rows is read by its highest dosage: one hom or haploid row fails it. A group
+ * without a parent does not constrain.
  */
 export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string {
+  const parentRow = (alias: string, condition: string): string => `EXISTS (
+                SELECT 1 FROM ${ctx.variants} ${alias}
+                WHERE ${alias}.case_id = agm.case_id
+                  AND ${alias}.chr = ${row}.chr AND ${alias}.pos = ${row}.pos
+                  AND ${alias}.ref = ${row}.ref AND ${alias}.alt = ${row}.alt
+                  AND ${condition}
+              )`
   return `(
           ${row}.gt_num IN ${HOM_GT_SQL}
           AND ${row}.case_id = ${ctx.caseParam}
           AND NOT EXISTS (
             SELECT 1 FROM ${ctx.members} agm
             WHERE agm.group_id = ${ctx.groupParam} AND agm.role IN ('father', 'mother')
-              AND NOT EXISTS (
-                SELECT 1 FROM ${ctx.variants} par
-                WHERE par.case_id = agm.case_id
-                  AND par.chr = ${row}.chr AND par.pos = ${row}.pos
-                  AND par.ref = ${row}.ref AND par.alt = ${row}.alt
-                  AND ${notReferenceGtSql('par.gt_num')}
-                  AND (par.gt_num IS NULL OR par.gt_num NOT IN ${HOM_OR_HEMI_GT_SQL})
-              )
+              AND (NOT ${parentRow('par', `${notReferenceGtSql('par.gt_num')} AND (par.gt_num IS NULL OR par.gt_num NOT IN ${HOM_OR_HEMI_GT_SQL})`)}
+                OR ${parentRow('hom', `hom.gt_num IN ${HOM_OR_HEMI_GT_SQL}`)})
           )
         )`
 }
@@ -69,14 +71,15 @@ export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string 
 /**
  * Row `row` is a hemizygous chrX call: haploid, or `1/1` from a caller that
  * wrote it diploid — unless the case is recorded as female, whose `1/1` is
- * homozygous. Pseudoautosomal regions are not told apart.
+ * homozygous. Pseudoautosomal regions are not told apart. With `maleOnly`, a
+ * `1/1` counts only for a case recorded as male (de novo: one copy must be sure).
  */
-export function xHemizygousSql(row: string, caseMetadata: string): string {
+export function xHemizygousSql(row: string, caseMetadata: string, maleOnly = false): string {
   return `(${row}.chr IN ('X', 'chrX') AND (
           ${row}.gt_num IN ${HEMI_GT_SQL}
-          OR (${row}.gt_num IN ${HOM_GT_SQL} AND NOT EXISTS (
+          OR (${row}.gt_num IN ${HOM_GT_SQL} AND ${maleOnly ? '' : 'NOT '}EXISTS (
             SELECT 1 FROM ${caseMetadata} cm
-            WHERE cm.case_id = ${row}.case_id AND cm.sex = 'female'
+            WHERE cm.case_id = ${row}.case_id AND cm.sex = '${maleOnly ? 'male' : 'female'}'
           ))
         ))`
 }

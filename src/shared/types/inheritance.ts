@@ -83,7 +83,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'de_novo',
     abbr: 'DN',
     label: 'De novo',
-    help: 'Het (including assumed het calls) or haploid (1) in the proband, and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier: reference and uncovered sites are not stored. An uncalled parent withholds the variant.',
+    help: 'Het (including assumed het calls) or haploid (1) in the proband, or 1/1 on chrX when the sex of the case is male, and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier: reference and uncovered sites are not stored. An uncalled parent withholds the variant.',
     requiresFamily: true,
     color: 'red'
   },

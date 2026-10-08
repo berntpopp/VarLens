@@ -123,6 +123,8 @@ export type WorkerMessage =
       type: 'case-started'
       fileIndex: number
       caseId: number
+      /** The case overwrites an existing one; once published it must not be discarded. */
+      replacement?: boolean
     }
   | {
       type: 'file-complete'

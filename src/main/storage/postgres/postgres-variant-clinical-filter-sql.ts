@@ -189,8 +189,9 @@ function addTrioInheritanceFilters(
   groupParam: string
 ): void {
   if (modes.includes('de_novo')) {
+    // A male chrX call written diploid (1/1) is one copy too.
     conditions.push(`(
-            v.gt_num IN ${HET_OR_HEMI}
+            (v.gt_num IN ${HET_OR_HEMI} OR ${xHemizygousSql('v', `${schemaName}."case_metadata"`, true)})
             AND v.id NOT IN (
               SELECT p.id
               FROM ${schemaName}."variants" p
