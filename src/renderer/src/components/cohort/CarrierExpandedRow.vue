@@ -2,6 +2,15 @@
   <tr>
     <td :colspan="colspan" class="pa-0">
       <v-table density="compact" class="nested-carriers-table bg-grey-lighten-3">
+        <caption
+          v-if="carriers.some((carrier) => isAssumedHetGenotype(carrier.gt_num))"
+          class="assumed-het-note text-caption text-medium-emphasis text-left pa-2"
+          data-testid="assumed-het-note"
+        >
+          {{
+            ASSUMED_HET_HELP
+          }}
+        </caption>
         <thead>
           <tr>
             <th class="text-left">Case</th>
@@ -58,7 +67,11 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
 import type { CohortVariant } from '../../../../shared/types/cohort'
-import { genotypeZygosity } from '../../../../shared/utils/genotype'
+import {
+  ASSUMED_HET_HELP,
+  genotypeZygosity,
+  isAssumedHetGenotype
+} from '../../../../shared/utils/genotype'
 import { mdiOpenInApp } from '@mdi/js'
 import { carriersQuery } from '../../queries/carriers'
 
@@ -86,18 +99,22 @@ const zygosityColor = (gt: string): string | undefined => {
 }
 
 /**
- * The shared zygosity class. A partly missing genotype (one allele of a split
- * multi-allelic site, or a half-call) keeps its stored call next to the
- * class; a genotype without a class is shown as stored.
+ * The shared zygosity class. A partly missing genotype is het by assumption
+ * (its other allele is not known) and keeps its stored call; a genotype
+ * without a class is shown as stored.
  */
 const formatZygosity = (gt: string): string => {
   const zygosity = genotypeZygosity(gt)
   if (zygosity === null) return gt || '?'
-  return gt.includes('.') ? `${zygosity} (${gt})` : zygosity
+  return isAssumedHetGenotype(gt) ? `assumed het (${gt})` : zygosity
 }
 </script>
 
 <style scoped>
+.assumed-het-note {
+  caption-side: bottom;
+}
+
 .nested-carriers-table {
   border-top: 1px solid rgba(0, 0, 0, 0.12);
 }

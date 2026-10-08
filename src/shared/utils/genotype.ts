@@ -36,6 +36,28 @@ export function genotypeZygosity(gt: string | null | undefined): Zygosity | null
 }
 
 /**
+ * Het by assumption: one copy of the allele was called and the other allele
+ * is missing. The stored text does not say whether that is a split `1/2` or a
+ * half-call from the source file, so no view may present it as a known het.
+ */
+export function isAssumedHetGenotype(gt: string | null | undefined): boolean {
+  return genotypeZygosity(gt) === 'het' && gt!.includes('.')
+}
+
+/** What "assumed het" means, for every view that shows or counts such a call. */
+export const ASSUMED_HET_HELP =
+  'Assumed het: one copy of this allele was called and the other allele is missing (1/. or ./1). ' +
+  'Either the sample carries a different alternate allele at a multi-allelic site (1/2, split ' +
+  'on import), or the source file held a half-call whose other allele is unknown. It is ' +
+  'counted as heterozygous with one copy; for a half-call that is a lower bound.'
+
+/** Help for the cohort het / hom / other counts. */
+export const COHORT_ZYGOSITY_HELP =
+  'Carriers by zygosity. Het includes assumed het calls. ' +
+  ASSUMED_HET_HELP +
+  ' Other: hemizygous, or a genotype without a called zygosity.'
+
+/**
  * Carriers of a cohort row that are neither het nor hom: hemizygous, or a
  * genotype that names no zygosity (no-call SV, missing). Never negative.
  */

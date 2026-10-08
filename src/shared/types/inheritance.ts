@@ -37,6 +37,8 @@ export interface InheritanceModeMeta {
   mode: InheritanceMode
   abbr: string
   label: string
+  /** What the filter selects and what it does not establish. */
+  help: string
   requiresFamily: boolean
   color: string
 }
@@ -49,6 +51,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'homozygous',
     abbr: 'HOM',
     label: 'Homozygous',
+    help: 'Both alleles called as this variant (1/1).',
     requiresFamily: false,
     color: 'purple'
   },
@@ -56,6 +59,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'heterozygous',
     abbr: 'HET',
     label: 'Heterozygous',
+    help: 'One copy of the variant (0/1), including assumed het calls (1/. or ./1), whose other allele is missing.',
     requiresFamily: false,
     color: 'blue'
   },
@@ -63,6 +67,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'x_hemizygous',
     abbr: 'X_HEMI',
     label: 'X-linked hemizygous',
+    help: 'On chrX: a haploid call (1) or 1/1. The sex of the case is not checked.',
     requiresFamily: false,
     color: 'pink'
   },
@@ -70,6 +75,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'candidate_compound_het',
     abbr: 'CH?',
     label: 'Candidate compound het',
+    help: 'Het variants, including assumed het calls, in a gene with at least two different ones. Their phase is not known.',
     requiresFamily: false,
     color: 'orange'
   },
@@ -77,6 +83,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'de_novo',
     abbr: 'DN',
     label: 'De novo',
+    help: 'Het in the proband (including assumed het calls), and neither parent has a call at the variant other than reference. A parent without a row counts as a non-carrier: reference and uncovered sites are not stored. An uncalled parent withholds the variant.',
     requiresFamily: true,
     color: 'red'
   },
@@ -84,6 +91,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'autosomal_recessive',
     abbr: 'AR',
     label: 'Autosomal recessive',
+    help: 'Homozygous in the proband and in neither parent. The parents are not required to be carriers.',
     requiresFamily: true,
     color: 'deep-purple'
   },
@@ -91,6 +99,7 @@ export const INHERITANCE_MODE_META: Record<
     mode: 'compound_het',
     abbr: 'CH',
     label: 'Compound het (one from each parent)',
+    help: 'Het variants (including assumed het calls) of one gene inherited from opposite parents: one parent carries the variant and the other has a reference call or is without a row. Variants both parents carry, or with an uncalled parent, are left out.',
     requiresFamily: true,
     color: 'deep-orange'
   }

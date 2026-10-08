@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ASSUMED_HET_HELP,
   genotypeZygosity,
   gtToDosage,
+  isAssumedHetGenotype,
   otherZygosityCount
 } from '../../../src/shared/utils/genotype'
 
@@ -113,5 +115,21 @@ describe('otherZygosityCount', () => {
 
   it('is never negative while a summary is being refreshed', () => {
     expect(otherZygosityCount({ carrier_count: 1, het_count: 2, hom_count: 0 })).toBe(0)
+  })
+})
+
+describe('assumed het', () => {
+  it.each(['1/.', './1', '1|.', '.|1'])('%s: the other allele is not known', (gt) => {
+    expect(isAssumedHetGenotype(gt)).toBe(true)
+  })
+
+  it.each(['0/1', '1/0', '1/1', '1', './.', '0/.', null])('%s is not an assumption', (gt) => {
+    expect(isAssumedHetGenotype(gt)).toBe(false)
+  })
+
+  it('the help names both origins and the lower bound', () => {
+    expect(ASSUMED_HET_HELP).toMatch(/multi-allelic/)
+    expect(ASSUMED_HET_HELP).toMatch(/half-call/)
+    expect(ASSUMED_HET_HELP).toMatch(/lower bound/)
   })
 })

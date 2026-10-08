@@ -1,3 +1,4 @@
+import { COHORT_ZYGOSITY_HELP } from '../../../src/shared/utils/genotype'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
@@ -417,6 +418,10 @@ describe('CohortTableRow', () => {
       })
 
       expect(wrapper.text()).toContain('2 het / 1 hom / 1 other')
+      // The cell says what its het count includes.
+      expect(wrapper.find('[data-testid="zygosity-counts"]').attributes('title')).toBe(
+        COHORT_ZYGOSITY_HELP
+      )
     })
 
     it('renders het count without hom when hom is zero', () => {

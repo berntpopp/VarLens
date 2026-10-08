@@ -145,14 +145,16 @@
     </span>
 
     <!-- Het / Hom combined column -->
-    <span v-else-if="column === 'het_count'" class="text-body-small">
+    <span
+      v-else-if="column === 'het_count'"
+      class="text-body-small"
+      data-testid="zygosity-counts"
+      :title="COHORT_ZYGOSITY_HELP"
+    >
       {{ item.het_count }} het<template v-if="item.hom_count > 0">
         / {{ item.hom_count }} hom</template
-      ><span
-        v-if="otherZygosityCount(item) > 0"
-        title="Hemizygous, or a genotype without a called zygosity"
-      >
-        / {{ otherZygosityCount(item) }} other</span
+      ><template v-if="otherZygosityCount(item) > 0">
+        / {{ otherZygosityCount(item) }} other</template
       >
     </span>
 
@@ -177,7 +179,7 @@
  */
 
 import type { CohortVariant } from '../../../../shared/types/cohort'
-import { otherZygosityCount } from '../../../../shared/utils/genotype'
+import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import { clinvarColorToken, clinvarDisplayText } from '../../../../shared/config/severity.config'
 import AcmgMenu from '../AcmgMenu.vue'
