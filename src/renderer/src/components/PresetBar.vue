@@ -1,28 +1,30 @@
 <template>
   <!-- No expand transition: animating the row height shifted the table below
        it on every frame of the animation (layout shift). -->
-  <div v-if="visiblePresets.length > 0" class="preset-bar px-3 py-1 d-flex align-center ga-1">
+  <div v-if="visiblePresets.length > 0 || hasActiveFilters" class="preset-bar px-3 py-1 d-flex align-center ga-1">
     <!-- Preset toggle chips -->
-    <v-chip
-      v-for="preset in visiblePresets"
-      :key="preset.id"
-      :color="isPresetActive(preset.id) ? 'primary' : undefined"
-      :variant="isPresetActive(preset.id) ? 'flat' : 'outlined'"
-      size="small"
-      label
-      role="button"
-      :aria-pressed="isPresetActive(preset.id)"
-      :aria-label="`Filter preset: ${preset.name}`"
-      @click="emit('toggle', preset.id)"
-    >
-      <v-icon v-if="!preset.isBuiltIn" start size="x-small" :icon="mdiAccount" />
-      {{ preset.name }}
-      <v-tooltip activator="parent" location="bottom">
-        {{ preset.description || 'No description' }}
-      </v-tooltip>
-    </v-chip>
+    <template v-if="visiblePresets.length > 0">
+      <v-chip
+        v-for="preset in visiblePresets"
+        :key="preset.id"
+        :color="isPresetActive(preset.id) ? 'primary' : undefined"
+        :variant="isPresetActive(preset.id) ? 'flat' : 'outlined'"
+        size="small"
+        label
+        role="button"
+        :aria-pressed="isPresetActive(preset.id)"
+        :aria-label="`Filter preset: ${preset.name}`"
+        @click="emit('toggle', preset.id)"
+      >
+        <v-icon v-if="!preset.isBuiltIn" start size="x-small" :icon="mdiAccount" />
+        {{ preset.name }}
+        <v-tooltip activator="parent" location="bottom">
+          {{ preset.description || 'No description' }}
+        </v-tooltip>
+      </v-chip>
+    </template>
 
-    <v-divider v-if="hasActiveFilters" vertical class="mx-1" />
+    <v-divider v-if="hasActiveFilters && visiblePresets.length > 0" vertical class="mx-1" />
 
     <!-- Save current filters as preset -->
     <v-btn
