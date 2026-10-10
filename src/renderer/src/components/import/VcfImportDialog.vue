@@ -295,20 +295,8 @@ const phase = ref<Phase>('select')
 const errorMessage = ref<string | null>(null)
 
 const phaseLabels = ['Select', 'Review', 'Import', 'Done']
-const currentPhaseIndex = computed<number>(() => {
-  switch (phase.value) {
-    case 'select':
-      return 0
-    case 'review':
-      return 1
-    case 'progress':
-      return 2
-    case 'summary':
-      return 3
-    default:
-      return 0
-  }
-})
+const phaseOrder: Record<Phase, number> = { select: 0, review: 1, progress: 2, summary: 3 }
+const currentPhaseIndex = computed<number>(() => phaseOrder[phase.value] ?? 0)
 
 // ---------------------------------------------------------------------------
 // Select phase
@@ -364,11 +352,7 @@ const largeFilesMessage = computed(() => {
   return `${largeFiles.length} large files detected (~${totalCount.toLocaleString()} variants total). Consider adding a BED region filter for faster imports.`
 })
 
-const suggestedBedFile = computed(() => {
-  if (previewResult.value === null) return null
-  if (previewResult.value.siblingBedFiles.length === 0) return null
-  return previewResult.value.siblingBedFiles[0]
-})
+const suggestedBedFile = computed(() => previewResult.value?.siblingBedFiles[0] ?? null)
 
 const isBedApplied = computed(
   () => filters.value.bedPath !== undefined && filters.value.bedPath !== ''
@@ -500,7 +484,14 @@ function resetToSelect(): void {
   previewResult.value = null
   caseName.value = ''
   overrides.value = new Map()
-  filters.value = { passOnly: false, minQual: null, minGq: null, minDp: null, bedPath: undefined, bedPadding: 50 }
+  filters.value = {
+    passOnly: false,
+    minQual: null,
+    minGq: null,
+    minDp: null,
+    bedPath: undefined,
+    bedPadding: 50
+  }
   fileStatuses.value = new Map()
   currentFile.value = null
   overallPercent.value = 0
