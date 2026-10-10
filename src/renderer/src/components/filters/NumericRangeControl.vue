@@ -1,7 +1,7 @@
 <template>
   <div class="d-flex ga-2 align-center">
     <v-select
-      :model-value="operator"
+      :model-value="selectedOperator"
       :items="operatorItems"
       item-title="label"
       item-value="value"
@@ -19,11 +19,10 @@
       hide-details
       placeholder="Value"
       style="max-width: 140px"
-      :disabled="operator === undefined"
       @update:model-value="updateValue"
     />
     <v-btn
-      v-if="operator !== undefined || value !== undefined"
+      v-if="modelValue !== undefined"
       :icon="mdiClose"
       size="x-small"
       variant="text"
@@ -53,7 +52,7 @@
  *   - `cnv.copy_number` = 0  (homozygous deletion)
  *   - `str.repeat_count` >= 5
  */
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { mdiClose } from '@mdi/js'
 import type {
   ColumnFilter,
@@ -77,13 +76,24 @@ const operatorItems: Array<{ value: ColumnFilterOperator; label: string }> = [
   { value: '!=', label: '≠' }
 ]
 
-const operator = computed<ColumnFilterOperator | undefined>(() => {
-  const op = props.modelValue?.operator
-  if (op === '>=' || op === '<=' || op === '=' || op === '!=') {
-    return op
+const validOperators: ColumnFilterOperator[] = ['>=', '<=', '=', '!=']
+
+function isValidOp(op: unknown): op is ColumnFilterOperator {
+  return typeof op === 'string' && (validOperators as string[]).includes(op)
+}
+
+const selectedOperator = ref<ColumnFilterOperator>(
+  isValidOp(props.modelValue?.operator) ? props.modelValue.operator : '>='
+)
+
+watch(
+  () => props.modelValue?.operator,
+  (newOp) => {
+    if (isValidOp(newOp)) {
+      selectedOperator.value = newOp
+    }
   }
-  return undefined
-})
+)
 
 const value = computed<number | undefined>(() => {
   const v = props.modelValue?.value
@@ -97,18 +107,14 @@ function updateOperator(nextOp: ColumnFilterOperator | null): void {
     emit('update:modelValue', undefined)
     return
   }
-  if (value.value === undefined) {
-    // Operator picked but no numeric value yet — wait for the user to type
-    // the bound. Emitting a ColumnFilter with an invalid value would cause the
-    // main-side translateColumnFilter to drop the clause, but we'd also send
-    // a stale operator downstream.
-    return
+  selectedOperator.value = nextOp
+  if (value.value !== undefined) {
+    emit('update:modelValue', {
+      operator: nextOp,
+      value: value.value,
+      includeEmpty: false
+    })
   }
-  emit('update:modelValue', {
-    operator: nextOp,
-    value: value.value,
-    includeEmpty: false
-  })
 }
 
 function updateValue(v: string | null): void {
@@ -118,9 +124,8 @@ function updateValue(v: string | null): void {
   }
   const num = Number(v)
   if (Number.isNaN(num)) return
-  const op: ColumnFilterOperator = operator.value ?? '>='
   emit('update:modelValue', {
-    operator: op,
+    operator: selectedOperator.value,
     value: num,
     includeEmpty: false
   })
