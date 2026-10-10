@@ -111,3 +111,15 @@ export interface VcfMultiPreviewResult {
   /** Derived case name from sample ID (stripped of path + extension) */
   suggestedCaseName: string
 }
+
+/** File format types supported by import pipelines */
+export type FileFormat = 'columnar' | 'object' | 'simple' | 'vcf'
+
+/** Format detection result from detectFormat() */
+export interface FormatInfo {
+  format: FileFormat
+  /** For columnar: case ID key. For object: first sample ID. For simple: 'variants' */
+  caseKey: string
+  /** For columnar: whether data/header are wrapped under caseKey (default true) */
+  wrapped?: boolean
+}

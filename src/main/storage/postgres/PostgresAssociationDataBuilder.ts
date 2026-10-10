@@ -39,7 +39,8 @@ export function toPostgresFragment(
   schemaName: string
 ): { sql: string; next: number } {
   let index = firstIndex
-  let out = sql.replace(/ LIKE \? COLLATE NOCASE/g, ' ILIKE ?')
+  let out = sql.replace(/ LIKE \? ESCAPE '\\\\' COLLATE NOCASE/g, " ILIKE ? ESCAPE '\\\\'")
+  out = out.replace(/ LIKE \? COLLATE NOCASE/g, ' ILIKE ?')
   out = out.replace(/\?/g, () => `$${index++}`)
   for (const table of EXTENSION_TABLES) {
     out = out.replace(new RegExp(`JOIN ${table} `, 'g'), `JOIN ${schemaName}."${table}" `)

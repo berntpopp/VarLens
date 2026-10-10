@@ -466,8 +466,24 @@ function handleEsc(): void {
   }
 }
 
+function discardStagedUploads(): void {
+  if (phase.value === 'progress' || phase.value === 'summary') return
+  const refs: string[] = []
+  if (previewResult.value !== null) {
+    for (const f of previewResult.value.files) {
+      if (typeof f.filePath === 'string' && f.filePath.length > 0) refs.push(f.filePath)
+    }
+  }
+  if (typeof filters.value.bedPath === 'string' && filters.value.bedPath.length > 0) {
+    refs.push(filters.value.bedPath)
+  }
+  if (refs.length === 0) return
+  window.dispatchEvent(new CustomEvent('varlens:web-upload-discard', { detail: { refs } }))
+}
+
 function handleClose(): void {
   if (phase.value === 'progress') return
+  discardStagedUploads()
   emit('update:open', false)
   emit('close')
 }

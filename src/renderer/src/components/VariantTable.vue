@@ -518,12 +518,30 @@ const {
   }
 })
 
+if (appState) {
+  watch(
+    () => appState.selectedPanelVariant.value,
+    (variant) => {
+      if (variant && 'id' in variant) {
+        selectByClick(variant)
+        selectedVariantId.value = variant.id
+      } else {
+        clearSelection()
+        selectedVariantId.value = null
+      }
+    },
+    { immediate: true }
+  )
+}
+
 // Row click handler
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
-  selectByClick(item)
-  selectedVariantId.value = item.id
+  if (!appState) {
+    selectByClick(item)
+    selectedVariantId.value = item.id
+  }
   emit('row-click', item)
 }
 

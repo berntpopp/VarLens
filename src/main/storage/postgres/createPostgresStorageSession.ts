@@ -5,6 +5,7 @@ import { classifyPostgresFailureMessage } from './PostgresHealthDiagnostics'
 import { PostgresStorageSession } from './PostgresStorageSession'
 import { POSTGRES_MIGRATIONS } from './migrations/definitions'
 import { PostgresMigrationRunner } from './migrations/PostgresMigrationRunner'
+import { mainLogger } from '../../services/MainLogger'
 import { wrapPoolForCounters } from './query-counters'
 
 export async function createPostgresStorageSession(
@@ -21,11 +22,22 @@ export async function createPostgresStorageSession(
 
     const wrappedPool = wrapPoolForCounters(pool)
 
-    return new PostgresStorageSession({
+    const session = new PostgresStorageSession({
       config,
       pool: wrappedPool,
       migrationResult
     })
+
+    try {
+      await session.resumePendingDeletions()
+    } catch (resumeError) {
+      mainLogger.warn(
+        `Failed to resume pending deletions on postgres startup: ${resumeError instanceof Error ? resumeError.message : String(resumeError)}`,
+        'storage'
+      )
+    }
+
+    return session
   } catch (error) {
     try {
       await pool.end()

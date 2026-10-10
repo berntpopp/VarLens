@@ -33,6 +33,7 @@ export type CaseDeletionLifecycle = Pick<
   PostgresCaseLifecycleRepository,
   'getCaseStatus' | 'hideCase' | 'completeHiddenDeletion' | 'listPendingDeletions'
 > & {
+  hideAbandonedReplacements?: () => Promise<number[]>
   /** Ids of every visible ('ready') case, for `{ mode: 'all' }`. */
   listReadyCaseIds: () => Promise<number[]>
 }
@@ -120,6 +121,9 @@ export class PostgresCaseDeleteJobs {
 
   /** Re-run deletions interrupted by a crash or shutdown (cases already hidden). */
   async resumePending(): Promise<JobHandle<CaseDeleteJobResult> | undefined> {
+    if (typeof this.options.lifecycle.hideAbandonedReplacements === 'function') {
+      await this.options.lifecycle.hideAbandonedReplacements()
+    }
     const pending = await this.options.lifecycle.listPendingDeletions()
     if (pending.length === 0) return undefined
     const ids = pending.map((p) => p.caseId)
