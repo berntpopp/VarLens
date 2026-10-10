@@ -432,9 +432,9 @@ function applyActivePresets(): void {
 }
 
 // Auto-deactivate presets when user manually changes filter values
-// Serialized key avoids deep reactive traversal — only fires when
-// actual filter values change, not on every nested property access
-const presetDivergenceKey = computed(() => JSON.stringify(toRaw(filters.value)))
+const presetDivergenceKey = computed(() =>
+  JSON.stringify([filters.value, selectedImpactPresets.value])
+)
 watch(presetDivergenceKey, () => {
   if (applyingPresets || activePresetIds.value.size === 0) return
   const idsToDeactivate: number[] = []
@@ -442,7 +442,11 @@ watch(presetDivergenceKey, () => {
     const preset = allPresets.value.find((p) => p.id === id)
     if (
       preset !== undefined &&
-      isPresetDiverged({ filters: filters.value, presetFilterJson: preset.filterJson })
+      isPresetDiverged({
+        filters: filters.value,
+        presetFilterJson: preset.filterJson,
+        consequencesValue: selectedImpactPresets.value
+      })
     ) {
       idsToDeactivate.push(id)
     }
