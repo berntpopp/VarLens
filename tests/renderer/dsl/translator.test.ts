@@ -90,4 +90,20 @@ describe('translateAst', () => {
     const result = translateAst(ast)
     expect(result.columnFilters.cadd.includeEmpty).toBe(true)
   })
+
+  it('warns when multiple conditions target the same column in an AND group', () => {
+    const ast: DslNode = {
+      type: 'group',
+      combinator: 'AND',
+      children: [
+        { type: 'rule', column: 'cadd', operator: '>=', value: 20 },
+        { type: 'rule', column: 'cadd', operator: '<=', value: 30 }
+      ]
+    }
+    const result = translateAst(ast)
+    expect(result.columnFilters.cadd.operator).toBe('<=')
+    expect(result.columnFilters.cadd.value).toBe(30)
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toContain("Multiple conditions on column 'cadd' are not supported")
+  })
 })
