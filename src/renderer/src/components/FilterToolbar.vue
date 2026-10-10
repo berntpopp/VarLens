@@ -437,7 +437,6 @@ const presetDivergenceKey = computed(() =>
 )
 watch(presetDivergenceKey, () => {
   if (applyingPresets || activePresetIds.value.size === 0) return
-  const idsToDeactivate: number[] = []
   for (const id of activePresetIds.value) {
     const preset = allPresets.value.find((p) => p.id === id)
     if (
@@ -448,11 +447,8 @@ watch(presetDivergenceKey, () => {
         consequencesValue: selectedImpactPresets.value
       })
     ) {
-      idsToDeactivate.push(id)
+      togglePreset(id)
     }
-  }
-  for (const id of idsToDeactivate) {
-    togglePreset(id)
   }
 })
 

@@ -455,30 +455,22 @@ onUnmounted(() => {
 })
 
 function onDialogUpdate(value: boolean): void {
-  if (!value) {
-    handleClose()
-  }
+  if (!value) handleClose()
 }
 
 function handleEsc(): void {
-  if (phase.value !== 'progress') {
-    handleClose()
-  }
+  if (phase.value !== 'progress') handleClose()
 }
 
 function discardStagedUploads(): void {
   if (phase.value === 'progress' || phase.value === 'summary') return
-  const refs: string[] = []
-  if (previewResult.value !== null) {
-    for (const f of previewResult.value.files) {
-      if (typeof f.filePath === 'string' && f.filePath.length > 0) refs.push(f.filePath)
-    }
+  const refs = [
+    ...(previewResult.value?.files.map((f) => f.filePath) ?? []),
+    filters.value.bedPath
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0)
+  if (refs.length > 0) {
+    window.dispatchEvent(new CustomEvent('varlens:web-upload-discard', { detail: { refs } }))
   }
-  if (typeof filters.value.bedPath === 'string' && filters.value.bedPath.length > 0) {
-    refs.push(filters.value.bedPath)
-  }
-  if (refs.length === 0) return
-  window.dispatchEvent(new CustomEvent('varlens:web-upload-discard', { detail: { refs } }))
 }
 
 function handleClose(): void {
@@ -508,14 +500,7 @@ function resetToSelect(): void {
   previewResult.value = null
   caseName.value = ''
   overrides.value = new Map()
-  filters.value = {
-    passOnly: false,
-    minQual: null,
-    minGq: null,
-    minDp: null,
-    bedPath: undefined,
-    bedPadding: 50
-  }
+  filters.value = { passOnly: false, minQual: null, minGq: null, minDp: null, bedPath: undefined, bedPadding: 50 }
   fileStatuses.value = new Map()
   currentFile.value = null
   overallPercent.value = 0
