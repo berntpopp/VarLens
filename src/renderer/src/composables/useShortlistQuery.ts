@@ -127,7 +127,12 @@ export function useShortlistQuery(caseId: Ref<number>) {
   // Re-fetch when the selected preset id or the case id changes. `immediate`
   // is intentionally false — the auto-select watcher below will assign
   // `selectedPresetId` on first run, which in turn wakes this watcher.
+  let previousCaseId: number | null = caseId.value
   watch([selectedPresetId, caseId], () => {
+    if (caseId.value !== previousCaseId) {
+      previousCaseId = caseId.value
+      result.value = null
+    }
     void fetch()
   })
 
