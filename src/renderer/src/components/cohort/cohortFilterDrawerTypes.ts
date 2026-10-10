@@ -32,6 +32,7 @@ export interface CohortFilterDrawerState {
     maxGnomadAf: number | null
     minCadd: number | null
     maxInternalAf: number | null
+    maxCarriers: number | null
     starredOnly: boolean
     hasCommentOnly: boolean
     acmgClassifications: string[]

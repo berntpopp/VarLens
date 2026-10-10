@@ -18,7 +18,8 @@ export { clearFilter, clearAllFilters, type FilterId } from './filterClearing'
 export { buildFilterIpcParams, buildIpcParams } from './filterSerialization'
 
 // Active filters computation
-export { buildActiveFiltersList, formatAfPercent } from './activeFilters'
+export { buildActiveFiltersList, formatAfPercent, summarizeInternalFilters } from './activeFilters'
+export { activeMaxCarriers, maxCarriersLabel, parseMaxCarriers } from './maxCarriers'
 
 // Custom input handlers
 export {

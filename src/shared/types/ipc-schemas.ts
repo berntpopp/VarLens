@@ -128,6 +128,12 @@ export const CohortSearchParamsSchema = z.object({
     .nonnegative()
     .nullish()
     .transform((val) => val ?? undefined),
+  carrier_count_max: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((val) => val ?? undefined),
 
   // Annotation filters
   starred_only: z.boolean().optional(),
@@ -232,6 +238,12 @@ export const VariantFilterPartialSchema = z.object({
     .number()
     .min(0)
     .max(1)
+    .nullish()
+    .transform((val) => val ?? undefined),
+  carrier_count_max: z
+    .number()
+    .int()
+    .positive()
     .nullish()
     .transform((val) => val ?? undefined),
 
@@ -726,12 +738,11 @@ export const AssociationConfigSchema = z.object({
     cadd_min: z.number().min(0).max(DOMAIN_CONFIG.MAX_CADD_SCORE).optional(),
     consequences: z.array(z.string()).optional(),
     gene_list: z.array(z.string()).optional(),
-    // Parity fields with Paths 1/2 (FilterIpcParams subset)
     clinvars: z.array(z.string()).optional(),
     funcs: z.array(z.string()).optional(),
-    acmg_classifications: z.array(z.string()).optional(),
-    max_internal_af: z.number().min(0).max(1).optional(),
-    column_filters: z.record(z.string(), ColumnFilterSchema).optional()
+    column_filters: z.record(z.string(), ColumnFilterSchema).optional(),
+    acmg_classifications: z.never().optional(),
+    max_internal_af: z.never().optional()
   }),
   max_threads: z.number().int().min(1).max(64).default(4)
 })
@@ -767,6 +778,7 @@ export const FilterStateSchema = z.object({
   minCarriers: z.number().int().nonnegative().nullable(),
   starredOnly: z.boolean(),
   hasCommentOnly: z.boolean(),
+  maxCarriers: z.number().int().positive().nullable(),
   acmgClassifications: z.array(z.string()),
   tagIds: z.array(z.number().int().positive()),
   annotationScope: z.enum(['case', 'all']),

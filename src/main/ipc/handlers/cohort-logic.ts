@@ -21,6 +21,7 @@ import { resolveCohortPanelOnCallingThread } from './panelIntervalHelper'
 import { DEFAULT_PANEL_GENOME_BUILD } from '../../../shared/filters/panel-intervals'
 import { convertBigInts } from '../../utils/convertBigInts'
 import type { ValidatedCohortSearchParams } from '../../../shared/types/ipc-schemas'
+import type { CohortVariantIdentity } from '../../../shared/types/cohort'
 import type { AssociationConfig } from '../../statistics/types'
 
 type GetSession = () => StorageSession
@@ -171,17 +172,14 @@ export async function getCohortSummaryViaSession(
   return convertBigInts(summary)
 }
 
-/** Postgres-backed cohort carriers for a variant via the storage read executor. */
+/** Postgres-backed carriers of one cohort row via the storage read executor. */
 export async function getCohortCarriersViaSession(
-  chr: string,
-  pos: number,
-  ref: string,
-  alt: string,
+  variant: CohortVariantIdentity,
   getSession: () => StorageSession
 ): Promise<unknown> {
   const carriers = await getSession()
     .getReadExecutor()
-    .execute({ type: 'cohort:carriers', params: [chr, pos, ref, alt] })
+    .execute({ type: 'cohort:carriers', params: [variant] })
   return convertBigInts(carriers)
 }
 
@@ -284,20 +282,17 @@ export async function getCohortSummary(
 }
 
 /**
- * Get carriers for a specific variant.
+ * Get the carriers of one cohort row.
  */
 export async function getCarriers(
-  chr: string,
-  pos: number,
-  ref: string,
-  alt: string,
+  variant: CohortVariantIdentity,
   getDb: () => DatabaseService,
   getDbPool?: () => DbPool | null,
   getSession?: GetSession
 ): Promise<unknown> {
   const postgresSession = getPostgresSession(getSession)
   if (postgresSession !== undefined) {
-    return getCohortCarriersViaSession(chr, pos, ref, alt, () => postgresSession)
+    return getCohortCarriersViaSession(variant, () => postgresSession)
   }
 
   const pool = getDbPool?.()
@@ -305,11 +300,11 @@ export async function getCarriers(
   if (pool) {
     carriers = await pool.run({
       type: 'cohort:carriers',
-      params: [chr, pos, ref, alt]
+      params: [variant]
     })
   } else {
     const db = getDb()
-    carriers = db.cohort.getCarriers(chr, pos, ref, alt)
+    carriers = db.cohort.getCarriers(variant)
   }
   // Ensure data is serializable (convert any BigInt to Number)
   return convertBigInts(carriers)

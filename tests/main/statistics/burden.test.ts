@@ -146,4 +146,53 @@ describe('missing covariates (#499)', () => {
     )
     expect(withMissing.warnings).toEqual([expect.stringMatching(/^MISSING_COVARIATE: 1 sample/)])
   })
+
+  it('frequencies and weights describe the tested samples (#520)', () => {
+    // Case 41: a homozygous carrier in group A whose age and metric were never recorded.
+    const carrier41: AssociationVariantRow = {
+      gene_symbol: 'GENE1',
+      case_id: 41,
+      variant_key: '1:100:A:T',
+      gt_num: '1/1',
+      dosage: 2,
+      gnomad_af: null,
+      cadd: null
+    }
+    const gene = (a: number[], metaRows: CaseMetaRow[], extra: AssociationVariantRow[] = []) => {
+      const all = [...a, ...groupB]
+      const covariates = buildCovariateMap(all, config.covariates, metaRows, metrics)
+      return buildGeneContingencyData([...rowsFor(all), ...extra], a, groupB, covariates)[0]
+    }
+
+    const reference = gene(groupA, meta)
+    const withMissing = gene(
+      [...groupA, 41],
+      [...meta, { case_id: 41, sex: null, age: null }],
+      [carrier41]
+    )
+
+    expect(withMissing.samples[0].variant_mafs).toEqual(reference.samples[0].variant_mafs)
+    expect(logisticBurdenTest(withMissing.samples, 'beta_maf').beta).toBe(
+      logisticBurdenTest(reference.samples, 'beta_maf').beta
+    )
+    // Fisher's test needs no covariates and still counts the sample.
+    expect(withMissing.groupA_carrier_count).toBe(reference.groupA_carrier_count + 1)
+  })
+
+  it('CADD weights exclude samples missing a selected covariate', () => {
+    const rows = rowsFor(ids).map((row) => ({ ...row, cadd: 20 }))
+    const covariates = buildCovariateMap([...ids, 41], config.covariates, meta, metrics)
+    const reference = buildGeneContingencyData(rows, groupA, groupB, covariates)[0]
+    const withMissing = buildGeneContingencyData(
+      [...rows, { ...rows[0], case_id: 41, cadd: 40 }],
+      [...groupA, 41],
+      groupB,
+      covariates
+    )[0]
+
+    expect(withMissing.samples[0].variant_cadds).toEqual([20])
+    expect(logisticBurdenTest(withMissing.samples, 'beta_maf_cadd').beta).toBe(
+      logisticBurdenTest(reference.samples, 'beta_maf_cadd').beta
+    )
+  })
 })

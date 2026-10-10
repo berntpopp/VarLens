@@ -45,6 +45,7 @@ export interface ExportFilterSummary {
   funcs?: string[]
   clinvars?: string[]
   gnomad_af_max?: number
+  carrier_count_max?: number
   cadd_min?: number
 }
 

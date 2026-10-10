@@ -139,6 +139,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0027',
     name: 'summary_conflicting_calls',
     fileName: '0027_summary_conflicting_calls.sql'
+  },
+  {
+    version: '0028',
+    name: 'rare_not_recurrent_preset',
+    fileName: '0028_rare_not_recurrent_preset.sql'
   }
 ]
 

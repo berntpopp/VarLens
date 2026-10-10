@@ -93,8 +93,8 @@ describe('Migration v41: annotation severity ranks', () => {
   })
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(44)
-    expect(db.pragma('user_version', { simple: true })).toBe(44)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(45)
+    expect(db.pragma('user_version', { simple: true })).toBe(45)
   })
 
   it('a new database has NOT NULL rank columns defaulting to 0', () => {
@@ -108,7 +108,7 @@ describe('Migration v41: annotation severity ranks', () => {
 
     runMigrations(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(44)
+    expect(db.pragma('user_version', { simple: true })).toBe(45)
     expect(ranks(db)).toEqual(EXPECTED)
     // Not all zero, or the comparison above would prove nothing.
     expect(EXPECTED.slice(0, 5)).toEqual([
@@ -174,7 +174,7 @@ describe('Migration v41: annotation severity ranks', () => {
     expect(triggers()).toEqual(before)
 
     runMigrations(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(44)
+    expect(db.pragma('user_version', { simple: true })).toBe(45)
     expect(triggers()).toEqual(before)
     expect(ranks(db)).toEqual(EXPECTED)
   })
@@ -209,7 +209,7 @@ describe('Migration v41: annotation severity ranks', () => {
 
       runMigrations(legacy)
 
-      expect(legacy.pragma('user_version', { simple: true })).toBe(44)
+      expect(legacy.pragma('user_version', { simple: true })).toBe(45)
       expect(legacy.prepare('SELECT impact_rank, clinvar_rank FROM variants').all()).toEqual([
         { impact_rank: 4, clinvar_rank: 0 }
       ])
@@ -223,7 +223,7 @@ describe('Migration v41: annotation severity ranks', () => {
     try {
       empty.pragma('user_version = 40')
       expect(() => runMigrations(empty)).not.toThrow()
-      expect(empty.pragma('user_version', { simple: true })).toBe(44)
+      expect(empty.pragma('user_version', { simple: true })).toBe(45)
     } finally {
       empty.close()
     }
@@ -251,7 +251,7 @@ describe('Migration v41: annotation severity ranks', () => {
       const reopened = new DatabaseService(path, KEY)
       try {
         expect(reopened.isEncrypted()).toBe(true)
-        expect(reopened.database.pragma('user_version', { simple: true })).toBe(44)
+        expect(reopened.database.pragma('user_version', { simple: true })).toBe(45)
         expect(ranks(reopened.database)).toEqual(EXPECTED)
         // The summary built on the upgraded rows carries the ranks.
         reopened.cohortSummary.rebuild()

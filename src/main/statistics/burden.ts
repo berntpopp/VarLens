@@ -1,4 +1,5 @@
 import type { LogisticBurdenResult, SampleBurdenData, WeightScheme } from './types'
+import { hasCompleteCovariates } from './contingency'
 import { computeBurdenScore } from './weights'
 import { logisticRegression, firthLogisticRegression } from './logistic'
 
@@ -7,7 +8,8 @@ export function logisticBurdenTest(
   weightScheme: WeightScheme
 ): LogisticBurdenResult {
   // A sample lacking a selected covariate (NaN; null once serialised) must not enter the fit.
-  const complete = samples.filter((s) => s.covariate_values.every(Number.isFinite))
+  // contingency.ts computes the frequencies over the same samples.
+  const complete = samples.filter((s) => hasCompleteCovariates(s.covariate_values))
   const result = fitLogisticBurden(complete, weightScheme)
   const missing = samples.length - complete.length
   return missing > 0 ? { ...result, n_missing_covariate: missing } : result

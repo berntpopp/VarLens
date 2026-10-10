@@ -353,3 +353,41 @@ describe('useFilterComputed', () => {
     })
   })
 })
+
+describe('useFilterComputed: carrier cap (#455)', () => {
+  it('counts, lists, groups and clears the cap', () => {
+    const [result, app] = withSetup(() => {
+      const filters = ref(makeFilters({ maxCarriers: 3 }))
+      return { filters, ...useFilterComputed(makeOptions(filters)) }
+    })
+    try {
+      expect(result.hasActiveFilters.value).toBe(true)
+      expect(result.activeFilterCount.value).toBe(1)
+      expect(result.activeFiltersList.value).toEqual([
+        { id: 'max-carriers', label: 'Seen in', value: '≤ 3 cases' }
+      ])
+      expect(result.isFilterGroupActive('internal-frequency')).toBe(true)
+
+      result.clearFilter('max-carriers')
+
+      expect(result.filters.value.maxCarriers).toBeNull()
+      expect(result.hasActiveFilters.value).toBe(false)
+      expect(result.isFilterGroupActive('internal-frequency')).toBe(false)
+    } finally {
+      app.unmount()
+    }
+  })
+
+  it('treats an invalid stored cap as off', () => {
+    const [result, app] = withSetup(() => {
+      const filters = ref(makeFilters({ maxCarriers: 0 }))
+      return useFilterComputed(makeOptions(filters))
+    })
+    try {
+      expect(result.hasActiveFilters.value).toBe(false)
+      expect(result.activeFiltersList.value).toEqual([])
+    } finally {
+      app.unmount()
+    }
+  })
+})

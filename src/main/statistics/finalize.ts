@@ -14,13 +14,15 @@ function primaryP(config: AssociationConfig, r: GeneAssociationResult): number |
 export function emptyAssociationResults(
   config: AssociationConfig,
   warning: string,
-  startedAt: number
+  startedAt: number,
+  nonAutosomalVariants = 0
 ): AssociationResults {
   return {
     results: [],
     primary_test: config.primary_test,
     config,
     warnings: [warning],
+    non_autosomal_variants: nonAutosomalVariants,
     elapsed_ms: Date.now() - startedAt
   }
 }
@@ -33,7 +35,8 @@ export function emptyAssociationResults(
 export function finalizeAssociationResults(
   rawResults: GeneAssociationResult[],
   config: AssociationConfig,
-  startedAt: number
+  startedAt: number,
+  nonAutosomalVariants = 0
 ): AssociationResults {
   const warnings: string[] = []
   // Every gene is fitted on the same samples, so this count is per run, not per gene.
@@ -69,6 +72,7 @@ export function finalizeAssociationResults(
     primary_test: config.primary_test,
     config,
     warnings,
+    non_autosomal_variants: nonAutosomalVariants,
     elapsed_ms: Date.now() - startedAt
   }
 }

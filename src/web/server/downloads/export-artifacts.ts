@@ -161,7 +161,8 @@ function filterSummary(filters: Record<string, unknown>): ExportFilterSummary {
     funcs: pick('funcs'),
     clinvars: pick('clinvars'),
     gnomad_af_max: pick('gnomad_af_max'),
-    cadd_min: pick('cadd_min')
+    cadd_min: pick('cadd_min'),
+    carrier_count_max: pick('carrier_count_max')
   }
 }
 

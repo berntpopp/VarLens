@@ -560,7 +560,9 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     })
     const cohort = new PostgresCohortRepository(pool, schema)
     expect(
-      (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map((v) => v.variant_key)
+      (await cohort.queryVariants({ consequences: ['HIGH'] })).data.map(
+        (v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+      )
     ).toEqual(['1:100:A:T'])
     await expectExact()
 
@@ -677,7 +679,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     for (const filter of [{ clinvars: ['Pathogenic'] }, { consequences: ['HIGH'] }]) {
       const page = await cohort.queryVariants(filter)
       expect(page.data).toEqual([
-        expect.objectContaining({ variant_key: '1:100:A:T', gnomad_af: 0.5, clinvar: 'Pathogenic' })
+        expect.objectContaining({ chr: '1', pos: 100, gnomad_af: 0.5, clinvar: 'Pathogenic' })
       ])
     }
 
@@ -723,7 +725,7 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     expect(await snapshotSummary()).toEqual(await rebuiltSummary())
     const cohort = new PostgresCohortRepository(pool, schema)
     const filtered = await cohort.queryVariants({ clinvars: ['Pathogenic/Likely_pathogenic'] })
-    expect(filtered.data.map((v) => v.variant_key)).toEqual(['1:100:A:T'])
+    expect(filtered.data.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`)).toEqual(['1:100:A:T'])
   }, 120_000)
 
   it('page, extension-filtered page and export show the same representative row (#469)', async () => {
@@ -760,7 +762,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     }
     const cohort = new PostgresCohortRepository(pool, schema)
     const representative = {
-      variant_key: '7:1000:N:<DEL>',
+      chr: '7',
+      alt: '<DEL>',
       gene_symbol: 'BRCA1',
       consequence: 'HIGH',
       gnomad_af: 0.01, // the lowest frequency any carrier has

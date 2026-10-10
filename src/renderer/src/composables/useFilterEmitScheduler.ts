@@ -21,6 +21,7 @@ export const TYPED_FILTER_FIELDS: ReadonlySet<string> = new Set([
   'minCadd',
   'minCarriers',
   'maxInternalAf',
+  'maxCarriers',
   'panelPaddingBp'
 ])
 

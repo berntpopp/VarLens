@@ -209,6 +209,8 @@ export interface VariantFilter {
   panel_padding_bp?: number
   /** Maximum internal allele frequency (0-1) */
   max_internal_af?: number
+  /** Keep variants carried by at most this many cases (integer >= 1; absent = off) */
+  carrier_count_max?: number
   /** Inheritance mode filters */
   inheritance_modes?: string[]
   /** Analysis group ID for trio-based inheritance filtering */

@@ -126,12 +126,7 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         return repos.cohort.getCohortSummary()
 
       case 'cohort:carriers':
-        return repos.cohort.getCarriers(
-          params[0] as string,
-          params[1] as number,
-          params[2] as string,
-          params[3] as string
-        )
+        return repos.cohort.getCarriers(params[0] as Parameters<typeof repos.cohort.getCarriers>[0])
 
       case 'cohort:geneBurden':
         return repos.cohort.getGeneBurden()

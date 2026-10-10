@@ -2,13 +2,15 @@ import { jStat } from 'jstat'
 import type { WeightScheme } from './types'
 
 /**
- * Compute variant weight given MAF and optional CADD score.
+ * Variant weight from the ALT allele frequency `maf` among the analysed
+ * samples and an optional CADD score. The Beta(1,25) weight is defined on the
+ * minor allele frequency, so it is taken at min(p, 1 - p).
  */
 export function computeWeight(scheme: WeightScheme, maf: number, cadd: number | null): number {
   if (scheme === 'uniform') return 1.0
 
-  const clippedMaf = Math.max(1e-8, Math.min(maf, 1 - 1e-8))
-  const betaWeight = jStat.beta.pdf(clippedMaf, 1, 25)
+  const minorAf = Math.max(1e-8, Math.min(maf, 1 - maf))
+  const betaWeight = jStat.beta.pdf(minorAf, 1, 25)
 
   if (scheme === 'beta_maf') return betaWeight
 

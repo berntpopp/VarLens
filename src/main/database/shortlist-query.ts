@@ -65,6 +65,7 @@ export function toShortlistVariantFilter(
     active_panel_ids: filters.activePanelIds,
     panel_padding_bp: filters.panelPaddingBp,
     max_internal_af: filters.maxInternalAf ?? undefined,
+    carrier_count_max: filters.maxCarriers ?? undefined,
     inheritance_modes: filters.inheritanceModes,
     analysis_group_id: filters.analysisGroupId ?? undefined,
     consider_phasing: filters.considerPhasing,

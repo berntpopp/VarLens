@@ -165,6 +165,7 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { stripVueProxies } from '../utils/stripVueProxies'
+import { activeMaxCarriers } from '../utils/filters/maxCarriers'
 import { useCapabilityStore } from '../stores/capabilityStore'
 
 // Emit for navigation and row click
@@ -272,6 +273,7 @@ const buildCohortQueryParams = (): Omit<
   gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
   cadd_min: filters.value.minCadd ?? undefined,
   max_internal_af: filters.value.maxInternalAf ?? undefined,
+  carrier_count_max: activeMaxCarriers(filters.value.maxCarriers) ?? undefined,
   starred_only: filters.value.starredOnly || undefined,
   has_comment: filters.value.hasCommentOnly || undefined,
   acmg_classifications:

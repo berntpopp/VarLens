@@ -58,6 +58,7 @@ export interface CohortQueryParams {
   max_internal_af?: number
   /** Minimum carrier count */
   carrier_count_min?: number
+  carrier_count_max?: number
   /** Show only starred variants (global annotations) */
   starred_only?: boolean
   /** Show only variants with comments (global annotations) */
@@ -323,6 +324,9 @@ export function useCohortData(): UseCohortDataReturn {
     if (params.carrier_count_min !== undefined) {
       ipcParams.carrier_count_min = params.carrier_count_min
     }
+    if (params.carrier_count_max !== undefined) {
+      ipcParams.carrier_count_max = params.carrier_count_max
+    }
     if (params.starred_only === true) {
       ipcParams.starred_only = true
     }
@@ -457,6 +461,7 @@ export function useCohortData(): UseCohortDataReturn {
         cadd_min: params.cadd_min,
         max_internal_af: params.max_internal_af,
         carrier_count_min: params.carrier_count_min,
+        carrier_count_max: params.carrier_count_max,
         starred_only: params.starred_only,
         has_comment: params.has_comment,
         acmg_classifications: params.acmg_classifications,

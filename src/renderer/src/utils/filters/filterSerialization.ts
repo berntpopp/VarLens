@@ -1,3 +1,4 @@
+import { activeMaxCarriers } from './maxCarriers'
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import type { VariantFilter } from '../../../../shared/types/api'
 import type { FilterIpcParams, FilterState } from '../../../../shared/types/filters'
@@ -86,6 +87,11 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
     params.max_internal_af = Math.min(plainState.maxInternalAf, 1)
   }
 
+  const maxCarriers = activeMaxCarriers(plainState.maxCarriers)
+  if (maxCarriers !== null) {
+    params.carrier_count_max = maxCarriers
+  }
+
   if ((plainState.inheritanceModes?.length ?? 0) > 0) {
     params.inheritance_modes = [...plainState.inheritanceModes]
   }
@@ -142,6 +148,10 @@ export function buildVariantFilterFromState(
   }
   if (ipcParams.max_internal_af !== undefined) {
     variantFilter.max_internal_af = ipcParams.max_internal_af
+  }
+
+  if (ipcParams.carrier_count_max !== undefined) {
+    variantFilter.carrier_count_max = ipcParams.carrier_count_max
   }
   if (ipcParams.inheritance_modes !== undefined) {
     variantFilter.inheritance_modes = ipcParams.inheritance_modes

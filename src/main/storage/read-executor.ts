@@ -1,6 +1,6 @@
 import type { SortItem, VariantFilter } from '../../shared/types/database'
 import type { VariantPageRequest } from '../../shared/types/variant-paging'
-import type { CohortSearchParams } from '../../shared/types/cohort'
+import type { CohortSearchParams, CohortVariantIdentity } from '../../shared/types/cohort'
 import type { PanelResolutionRequest } from '../../shared/types/panels'
 import type { ValidatedCaseSearchParams } from '../../shared/types/ipc-schemas'
 import type { VariantCoords, VariantKey } from '../ipc/handlers/annotations-logic'
@@ -59,7 +59,7 @@ export type StorageReadTask =
   | { type: 'cohort:summary'; params: [] }
   | { type: 'cohort:summaryStatus'; params: [] }
   | { type: 'cohort:columnMeta'; params: [] }
-  | { type: 'cohort:carriers'; params: [chr: string, pos: number, ref: string, alt: string] }
+  | { type: 'cohort:carriers'; params: [variant: CohortVariantIdentity] }
   | { type: 'cohort:geneBurden'; params: [] }
   | { type: 'database:overview'; params: [] }
   | { type: 'export:variants'; params: [filter: VariantFilter] }

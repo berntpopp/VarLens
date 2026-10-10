@@ -94,9 +94,18 @@ describe('provisional cases and their readers', () => {
         [100, 1, 1],
         [500, 1, 1]
       ])
-      expect(service.cohort.getCarriers('1', 100, 'A', 'G').map((c) => c.case_name)).toEqual([
-        'ready'
-      ])
+      expect(
+        service.cohort
+          .getCarriers({
+            chr: '1',
+            pos: 100,
+            ref: 'A',
+            alt: 'G',
+            variant_type: 'snv',
+            genome_build: 'GRCh38'
+          })
+          .map((c) => c.case_name)
+      ).toEqual(['ready'])
     })
 
     it('cohort extension-column filter (EXISTS over variants)', () => {

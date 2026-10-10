@@ -16,6 +16,7 @@ import {
   runAssociationInProcess
 } from '../../../main/ipc/handlers/association-logic'
 import { AssociationBusyError } from '../association/web-association-runs'
+import { InvalidParametersError } from '../../../main/ipc/errors'
 import { badRequest, serviceNotConfigured } from './common'
 import type { OverrideHandler } from './types'
 
@@ -77,6 +78,9 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
             reply.code(409)
             return { error: 'association-running', message: error.message }
           }
+          if (error instanceof InvalidParametersError) {
+            return badRequest(reply, 'invalid-parameters', error.userMessage ?? error.message)
+          }
           if (error instanceof Error && error.message.startsWith('Groups overlap')) {
             return badRequest(reply, 'association-groups-overlap', error.message)
           }
@@ -99,20 +103,13 @@ export function buildCohortOverrides(): Record<string, OverrideHandler> {
 
     'cohort:getCarriers': {
       async handle(args, _request, reply, { session }) {
-        const [chr, pos, ref, alt] = args
-        const validated = CohortCarriersParamsSchema.safeParse({ chr, pos, ref, alt })
+        const validated = CohortCarriersParamsSchema.safeParse(args[0])
         if (!validated.success) {
           reply.code(400)
           return { error: 'invalid-carrier-params', message: 'Invalid carrier query parameters' }
         }
 
-        return await getCohortCarriersViaSession(
-          validated.data.chr,
-          validated.data.pos,
-          validated.data.ref,
-          validated.data.alt,
-          () => session
-        )
+        return await getCohortCarriersViaSession(validated.data, () => session)
       }
     },
 
