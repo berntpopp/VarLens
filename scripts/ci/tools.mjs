@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -129,7 +130,16 @@ export function createToolManager(options = {}) {
 const manager = createToolManager()
 export const { ensureTool, runTool, toolFingerprint } = manager
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+    } catch {
+      return false
+    }
+  })()
+if (isMain) {
   const [name, ...args] = process.argv.slice(2)
   try {
     if (name === 'setup') {

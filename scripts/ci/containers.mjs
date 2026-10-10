@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes, randomUUID } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -401,7 +402,16 @@ export function createContainerServices(dependencies = {}) {
 export const { startPostgres, buildAndSmokeContainer, smokeContainer, scanContainer } =
   createContainerServices()
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+    } catch {
+      return false
+    }
+  })()
+if (isMain) {
   const [command, image] = process.argv.slice(2)
   try {
     const options = { cwd: process.cwd(), env: process.env }

@@ -15,7 +15,7 @@
  * TypeScript sources with the TypeScript compiler API, so this script has no
  * build step. Usage: node scripts/parity/check-renderer-gates.mjs [--json]
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -137,4 +137,13 @@ function main() {
   console.log(`Renderer parity gate OK (${gatedMethodCount} desktop-only/pending methods checked)`)
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+    } catch {
+      return false
+    }
+  })()
+if (isMain) main()

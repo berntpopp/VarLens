@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
@@ -425,7 +426,16 @@ export async function runPreflight({
     }
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url
+    } catch {
+      return false
+    }
+  })()
+if (isMain) {
   try {
     const { values } = parseArgs({
       options: {

@@ -106,4 +106,10 @@ function main() {
   }
 }
 
-if (process.argv[1] === import.meta.filename) main()
+import { realpathSync } from 'node:fs'
+
+const isDirectRun = process.argv[1] && (() => {
+  try { return realpathSync(process.argv[1]) === import.meta.filename } catch { return false }
+})()
+
+if (isDirectRun) main()

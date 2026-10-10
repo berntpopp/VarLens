@@ -204,7 +204,13 @@ async function main() {
   process.stdout.write(`Windows artifacts verified: ${rows.length} executable(s) inspected\n`)
 }
 
-if (process.argv[1] === import.meta.filename) {
+import { realpathSync } from 'node:fs'
+
+const isDirectRun = process.argv[1] && (() => {
+  try { return realpathSync(process.argv[1]) === import.meta.filename } catch { return false }
+})()
+
+if (isDirectRun) {
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error)
     for (const line of message.split('\n')) process.stderr.write(`::error::${line}\n`)
