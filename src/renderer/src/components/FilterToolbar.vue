@@ -146,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, provide, nextTick, toRaw } from 'vue'
+import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
 import { useFilterState } from '../composables/useFilterState'
