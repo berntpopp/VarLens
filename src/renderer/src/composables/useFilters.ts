@@ -205,6 +205,7 @@ export function createFilters(): UseFiltersReturn {
     filters.value.inheritanceModes = []
     filters.value.analysisGroupId = null
     filters.value.considerPhasing = false
+    filters.value.columnFilters = {}
     selectedImpactPresets.value = []
     selectedAfPreset.value = null
     selectedCaddPreset.value = null
