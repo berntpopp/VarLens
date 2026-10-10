@@ -98,4 +98,14 @@ describe('association result text', () => {
     ])
     expect(buildAssociationTsv([row]).split('\n')).toHaveLength(3)
   })
+
+  it.each([
+    ['=1+1', "'=1+1"],
+    ['@SUM(A1)', "'@SUM(A1)"],
+    ['GENE\tOTHER', '"GENE\tOTHER"'],
+    ['GENE\n"OTHER"', '"GENE\n""OTHER"""']
+  ])('exports imported gene %j as one inert spreadsheet cell', (gene, escaped) => {
+    const tsv = buildAssociationTsv([{ ...row, gene_symbol: gene }])
+    expect(tsv).toContain(`\n${escaped}\t2\t3\t1\t6\t`)
+  })
 })

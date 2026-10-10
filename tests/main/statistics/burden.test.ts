@@ -178,4 +178,21 @@ describe('missing covariates (#499)', () => {
     // Fisher's test needs no covariates and still counts the sample.
     expect(withMissing.groupA_carrier_count).toBe(reference.groupA_carrier_count + 1)
   })
+
+  it('CADD weights exclude samples missing a selected covariate', () => {
+    const rows = rowsFor(ids).map((row) => ({ ...row, cadd: 20 }))
+    const covariates = buildCovariateMap([...ids, 41], config.covariates, meta, metrics)
+    const reference = buildGeneContingencyData(rows, groupA, groupB, covariates)[0]
+    const withMissing = buildGeneContingencyData(
+      [...rows, { ...rows[0], case_id: 41, cadd: 40 }],
+      [...groupA, 41],
+      groupB,
+      covariates
+    )[0]
+
+    expect(withMissing.samples[0].variant_cadds).toEqual([20])
+    expect(logisticBurdenTest(withMissing.samples, 'beta_maf_cadd').beta).toBe(
+      logisticBurdenTest(reference.samples, 'beta_maf_cadd').beta
+    )
+  })
 })

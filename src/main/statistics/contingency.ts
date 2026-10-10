@@ -130,9 +130,15 @@ function groupRows(rows: AssociationVariantRow[]): GeneVariantMap {
     // Duplicate rows of one case: equal dosages agree (0/1 and 0|1). No row wins otherwise.
     // Association test only; the cohort summary keeps "highest dosage" (genotypeCallKey).
     if (kept.dosage !== dosage) kept.conflict = true
-    // The greatest call key names the ploidy of an agreed call (frequency denominator).
-    if (genotypeCallKey(row.gt_num) > genotypeCallKey(kept.gt_num)) kept.gt_num = row.gt_num
-    kept.cadd ??= row.cadd
+    // Keep the representative call's ploidy and annotation; break annotation ties deterministically.
+    const callKey = genotypeCallKey(row.gt_num)
+    const keptKey = genotypeCallKey(kept.gt_num)
+    if (callKey > keptKey) {
+      kept.gt_num = row.gt_num
+      kept.cadd = row.cadd
+    } else if (callKey === keptKey && row.cadd !== null) {
+      kept.cadd = Math.max(kept.cadd ?? row.cadd, row.cadd)
+    }
   }
   return geneMap
 }
@@ -227,12 +233,13 @@ function meanCadd(calls: CaseCalls, allIds: number[]): number | null {
 function geneSamples(
   sites: Site[],
   allIds: number[],
+  frequencyIds: number[],
   groupASet: Set<number>,
   covariateMap: Map<number, number[]>
 ): SampleBurdenData[] {
   // ALT allele frequency p; computeWeight takes the weight at min(p, 1 - p).
   const variantMafs = sites.map((site) => Math.max(site.frequency, 1e-8))
-  const variantCadds = sites.map((site) => meanCadd(site.calls, allIds))
+  const variantCadds = sites.map((site) => meanCadd(site.calls, frequencyIds))
   return allIds.map((caseId) => ({
     group: groupASet.has(caseId) ? 1 : 0,
     dosages: sites.map((site) => site.calls.get(caseId)?.dosage ?? 0),
@@ -265,7 +272,7 @@ export function buildGeneContingencyData(
       gene_symbol: geneSymbol,
       ...carrierCounts(sites, groupA_ids, groupB_ids),
       sites_excluded,
-      samples: geneSamples(sites, allIds, groupASet, covariateMap)
+      samples: geneSamples(sites, allIds, frequencyIds, groupASet, covariateMap)
     })
   }
   return results

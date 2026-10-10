@@ -328,7 +328,10 @@ describe('carrier_count_max (#455)', () => {
       { carrier_count_min: 2, carrier_count_max: 3 },
       TOTAL_CASES
     )
-    expect(result.parts.whereParts).toEqual(['cvs.carrier_count >= $1', 'cvs.carrier_count <= $2'])
+    expect(result.parts.whereParts).toEqual([
+      'cvs.carrier_count >= $1',
+      'cvs.carrier_count <= $2::bigint'
+    ])
     expect(result.parts.values).toEqual([2, 3])
     expect(result.parts.needsBuildTotals).toBe(false)
   })

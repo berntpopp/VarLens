@@ -51,7 +51,7 @@ describe('mock cohort row identity', () => {
         case_id: number
       }>
       // The mock counts a case once, also when it holds the variant twice.
-      expect(new Set(carriers.map((carrier) => carrier.case_id)).size).toBe(row.carrier_count)
+      expect(carriers).toHaveLength(row.carrier_count)
     }
   })
 })

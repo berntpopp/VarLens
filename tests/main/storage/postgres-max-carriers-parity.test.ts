@@ -105,6 +105,9 @@ describe.skipIf(!RUN)('carrier cap (#455): PostgreSQL case view and cohort view'
     [1, ['1:200:C:T']],
     [2, ['1:200:C:T']],
     [3, ['1:100:A:G', '1:200:C:T']],
+    // API callers may send any positive safe integer, beyond PostgreSQL int4.
+    [3_000_000_000, ['1:100:A:G', '1:200:C:T']],
+    [Number.MAX_SAFE_INTEGER, ['1:100:A:G', '1:200:C:T']],
     [undefined, ['1:100:A:G', '1:200:C:T']]
   ] as const)(
     'K = %s: both views, their counts and the export agree',

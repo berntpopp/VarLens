@@ -2,6 +2,7 @@
  * Text of a gene burden result: the assumption every result states, the
  * excluded sites of a gene, and the TSV export.
  */
+import { escapeDelimitedCell } from '../../../shared/utils/delimited-text'
 
 /** Shown with every result and written into every export. VarLens stores no callability. */
 export const BURDEN_REFERENCE_NOTE =
@@ -87,7 +88,7 @@ export function buildAssociationTsv(
 ): string {
   const rows = results.map((r) =>
     [
-      r.gene_symbol,
+      escapeDelimitedCell(r.gene_symbol, '\t'),
       r.n_variants,
       r.groupA_carriers,
       r.groupB_carriers,

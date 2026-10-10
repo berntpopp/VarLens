@@ -160,6 +160,21 @@ describe('complete-site rule (#520)', () => {
 
 describe('duplicate rows of one case (#516, #520)', () => {
   it.each([
+    ['0|1', 10],
+    ['0/1', 35]
+  ])('keeps CADD weights stable when duplicate %s rows arrive in either order', (gt, cadd) => {
+    const rows = [
+      { ...row(1, '0/1'), cadd: 35 },
+      { ...row(1, gt), cadd: 10 }
+    ]
+    for (const order of [rows, [...rows].reverse()]) {
+      const gene = build(order, [1], [2])
+      expect(gene.sites_excluded).toEqual(NONE)
+      expect(gene.samples[0].variant_cadds).toEqual([cadd])
+    }
+  })
+
+  it.each([
     [['0/1', '1/1']],
     [['1/.', '1/1']],
     [['./1', '0/.']],

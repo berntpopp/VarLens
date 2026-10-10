@@ -10,7 +10,12 @@ import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
-import { mockCohortIdentity } from './cohortIdentityMock'
+import {
+  addMockCarrier,
+  mockAvailableBuilds,
+  mockCohortCarriers,
+  mockCohortIdentity
+} from './cohortIdentityMock'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { genotypeZygosity } from '../../../shared/utils/genotype'
@@ -120,7 +125,7 @@ export const mockApi: WindowAPI = {
       removeCases((id) => target.mode === 'all' || target.ids.includes(id))
       return { jobId: 'mock-delete-job' }
     },
-    availableBuilds: async () => [{ build: 'GRCh38', caseCount: cases.length }]
+    availableBuilds: async () => mockAvailableBuilds(cases)
   },
 
   variants: {
@@ -379,6 +384,8 @@ export const mockApi: WindowAPI = {
 
   cohort: {
     getVariants: async (params?: CohortSearchParams) => {
+      const genomeBuild = params?.genome_build ?? ''
+      const variantType = params?.variant_type ?? ''
       // Aggregate variants by the six-field cohort identity
       const variantMap = new Map<
         string,
@@ -393,12 +400,19 @@ export const mockApi: WindowAPI = {
           cadd_phred: number | null
           transcript: string | null
           omim_id: string | null
-          carriers: Array<{ case_id: number; gt_num: string }>
+          carriers: Map<number, string>
         }
       >()
 
       for (const v of variants) {
         const identity = mockCohortIdentity(v, cases)
+        if (genomeBuild !== '' && identity.genome_build !== genomeBuild) continue
+        if (
+          variantType !== '' &&
+          identity.variant_type !== variantType &&
+          !(variantType === 'snv' && identity.variant_type === 'indel')
+        )
+          continue
         const key = cohortVariantKey(identity)
         if (!variantMap.has(key)) {
           variantMap.set(key, {
@@ -413,14 +427,11 @@ export const mockApi: WindowAPI = {
             cadd_phred: v.cadd ?? null,
             transcript: v.transcript ?? null,
             omim_id: v.omim_mim_number ?? null,
-            carriers: []
+            carriers: new Map()
           })
         }
         const entry = variantMap.get(key)!
-        // Only add if this case isn't already a carrier (dedupe per case)
-        if (!entry.carriers.some((c) => c.case_id === v.case_id)) {
-          entry.carriers.push({ case_id: v.case_id, gt_num: v.gt_num ?? '0/1' })
-        }
+        addMockCarrier(entry.carriers, v.case_id, v.gt_num)
         // Update annotation values if they were null but this variant has them
         if (entry.consequence === null && v.consequence !== undefined) {
           entry.consequence = v.consequence
@@ -434,11 +445,16 @@ export const mockApi: WindowAPI = {
           entry.omim_id = v.omim_mim_number
       }
 
-      const totalCases = cases.length
+      const builds = mockAvailableBuilds(cases)
+      const totalCases =
+        genomeBuild !== ''
+          ? (builds.find((b) => b.build === genomeBuild)?.caseCount ?? 0)
+          : cases.length
 
       // Convert to CohortVariant array with annotation columns
       let cohortVariants = Array.from(variantMap.entries()).map(([key, v]) => {
-        const zygosities = v.carriers.map((c) => genotypeZygosity(c.gt_num))
+        const zygosities = [...v.carriers.values()].map(genotypeZygosity)
+        const buildTotal = builds.find((b) => b.build === v.genome_build)?.caseCount ?? 0
         return {
           chr: v.chr,
           pos: v.pos,
@@ -449,9 +465,9 @@ export const mockApi: WindowAPI = {
           gene_symbol: v.gene_symbol,
           cdna: v.cdna,
           aa_change: v.aa_change,
-          carrier_count: v.carriers.length,
+          carrier_count: v.carriers.size,
           total_cases: totalCases,
-          cohort_frequency: totalCases > 0 ? v.carriers.length / totalCases : 0,
+          cohort_frequency: buildTotal > 0 ? v.carriers.size / buildTotal : 0,
           het_count: zygosities.filter((z) => z === 'het').length,
           hom_count: zygosities.filter((z) => z === 'hom').length,
           variant_key: key,
@@ -637,20 +653,7 @@ export const mockApi: WindowAPI = {
       }
     },
 
-    getCarriers: async (variant) => {
-      // Find all cases carrying this cohort row
-      const carriers = variants
-        .filter((v) => cohortVariantKey(mockCohortIdentity(v, cases)) === cohortVariantKey(variant))
-        .map((v) => {
-          const caseInfo = cases.find((c) => c.id === v.case_id)
-          return {
-            case_id: v.case_id,
-            case_name: caseInfo?.name ?? `Case ${v.case_id}`,
-            gt_num: v.gt_num ?? '0/1'
-          }
-        })
-      return carriers
-    },
+    getCarriers: async (variant) => mockCohortCarriers(variant, variants, cases),
 
     getGeneBurden: async () => {
       // Aggregate per-gene statistics

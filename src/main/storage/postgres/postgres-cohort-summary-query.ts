@@ -520,7 +520,7 @@ export function buildSummaryQueryParts(
     whereParts.push(`cvs.carrier_count >= ${addParam(params.carrier_count_min)}`)
   }
   if (params.carrier_count_max !== undefined && params.carrier_count_max >= 1) {
-    whereParts.push(`cvs.carrier_count <= ${addParam(params.carrier_count_max)}`)
+    whereParts.push(`cvs.carrier_count <= ${addParam(params.carrier_count_max)}::bigint`)
   }
 
   const sortKey =
