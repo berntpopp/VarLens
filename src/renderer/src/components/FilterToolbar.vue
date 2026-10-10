@@ -146,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, provide, nextTick, toRaw } from 'vue'
+import { ref, computed, watch, onMounted, provide, nextTick } from 'vue'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
 import { useFilterState } from '../composables/useFilterState'
@@ -432,23 +432,23 @@ function applyActivePresets(): void {
 }
 
 // Auto-deactivate presets when user manually changes filter values
-// Serialized key avoids deep reactive traversal — only fires when
-// actual filter values change, not on every nested property access
-const presetDivergenceKey = computed(() => JSON.stringify(toRaw(filters.value)))
+const presetDivergenceKey = computed(() =>
+  JSON.stringify([filters.value, selectedImpactPresets.value])
+)
 watch(presetDivergenceKey, () => {
   if (applyingPresets || activePresetIds.value.size === 0) return
-  const idsToDeactivate: number[] = []
   for (const id of activePresetIds.value) {
     const preset = allPresets.value.find((p) => p.id === id)
     if (
       preset !== undefined &&
-      isPresetDiverged({ filters: filters.value, presetFilterJson: preset.filterJson })
+      isPresetDiverged({
+        filters: filters.value,
+        presetFilterJson: preset.filterJson,
+        consequencesValue: selectedImpactPresets.value
+      })
     ) {
-      idsToDeactivate.push(id)
+      togglePreset(id)
     }
-  }
-  for (const id of idsToDeactivate) {
-    togglePreset(id)
   }
 })
 

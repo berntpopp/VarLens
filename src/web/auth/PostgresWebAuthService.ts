@@ -23,6 +23,7 @@ import {
   defaultPasswordProvider,
   type PasswordProvider
 } from '../../main/auth/providers/argon2-provider'
+import { quoteIdentifier } from '../../main/storage/postgres/identifiers'
 import {
   LOCKOUT_DURATION_MINUTES,
   MAX_FAILED_ATTEMPTS,
@@ -170,14 +171,6 @@ function mapPgRowToUser(raw: Record<string, unknown>): User {
   }
 }
 
-function quoteSchema(schema: string): string {
-  // Defence against unsanitised schema names. Postgres identifiers
-  // can be arbitrary unicode; the only safe quoting is doubling
-  // embedded `"`. A schema with `"` in its name is pathological but
-  // valid SQL — we handle it instead of refusing.
-  return `"${schema.replace(/"/g, '""')}"`
-}
-
 export class PostgresWebAuthService {
   private readonly pool: Pool
   private readonly schemaQuoted: string
@@ -188,7 +181,7 @@ export class PostgresWebAuthService {
 
   constructor(options: PostgresWebAuthServiceOptions) {
     this.pool = options.pool
-    this.schemaQuoted = quoteSchema(options.schema)
+    this.schemaQuoted = quoteIdentifier(options.schema)
     this.passwordProvider = options.passwordProvider ?? defaultPasswordProvider
     this.userCache = new UserLookupCache({ ttlMs: options.userCacheTtlMs ?? 0 })
   }

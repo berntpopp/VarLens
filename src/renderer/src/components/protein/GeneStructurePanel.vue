@@ -229,6 +229,7 @@ import type {
   ClinVarSignificance
 } from '../../../../shared/types/protein'
 import { CLINVAR_COLORS, getClinVarCategory } from '../../../../shared/utils/protein-utils'
+import { downloadBlob } from '../../utils/download'
 import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 
 interface Props {
@@ -334,24 +335,14 @@ function handleExportSvg(): void {
   if (svgString === undefined || svgString === '') return
 
   const blob = new Blob([svgString], { type: 'image/svg+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${props.geneSymbol ?? 'gene'}_structure.svg`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${props.geneSymbol ?? 'gene'}_structure.svg`)
 }
 
 async function handleExportPng(): Promise<void> {
   const blob = await plotRef.value?.exportPng()
   if (!blob) return
 
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${props.geneSymbol ?? 'gene'}_structure.png`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${props.geneSymbol ?? 'gene'}_structure.png`)
 }
 </script>
 

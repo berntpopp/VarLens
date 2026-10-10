@@ -9,6 +9,7 @@ import {
   HGVS_TOKEN,
   hgvsSearchSql
 } from './postgres-variant-column-filters'
+import { booleanSearchSql } from '../../../shared/utils/boolean-search'
 import type { Pool } from 'pg'
 
 import { BASE_SORTABLE_COLUMNS } from '../../database/VariantFilterBuilder'
@@ -20,7 +21,7 @@ import type {
 } from '../../../shared/types/database'
 import type { FilterOptions } from '../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
-import { quoteIdentifier } from './identifiers'
+import { quoteIdentifier, toNumber } from './identifiers'
 import {
   columnMetaRowToFilterMeta,
   emptyColumnMeta,
@@ -80,12 +81,6 @@ const NUMERIC_VARIANT_FIELDS = new Set([
   '_str_pathologic_min'
 ])
 
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
-}
-
 function searchTokens(query: string): string[] {
   return query.trim().split(/\s+/)
 }
@@ -98,6 +93,47 @@ function toPrefixTsQuery(query: string): string {
     .filter((token) => token.length > 0)
     .map((token) => `${token}:*`)
     .join(' & ')
+}
+
+function emitCaseSearchTermSql(
+  term: string,
+  schemaName: string,
+  addParam: (value: unknown) => string
+): string {
+  const coordMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
+  if (coordMatch) {
+    const chr = coordMatch[1].toUpperCase()
+    return `(v.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND v.pos = ${addParam(Number(coordMatch[2]))})`
+  }
+  const tokens = searchTokens(term)
+  const hgvsTokens = tokens.filter((t) => HGVS_TOKEN.test(t))
+  const nonHgvsQuery = tokens.filter((t) => !HGVS_TOKEN.test(t)).join(' ')
+  const conditions: string[] = []
+
+  for (const hgvs of hgvsTokens) {
+    conditions.push(`COALESCE(${hgvsSearchSql('v', hgvs, addParam)}, FALSE)`)
+  }
+
+  const tsQuery = toPrefixTsQuery(nonHgvsQuery)
+  if (tsQuery !== '') {
+    const tsParam = addParam(tsQuery)
+    conditions.push(`(
+        v.search_document @@ to_tsquery('simple', ${tsParam})
+        OR EXISTS (
+          SELECT 1 FROM ${schemaName}."variant_sv" sv_search
+          WHERE sv_search.variant_id = v.id
+            AND sv_search.search_document @@ to_tsquery('simple', ${tsParam})
+        )
+        OR EXISTS (
+          SELECT 1 FROM ${schemaName}."variant_str" str_search
+          WHERE str_search.variant_id = v.id
+            AND str_search.search_document @@ to_tsquery('simple', ${tsParam})
+        )
+      )`)
+  }
+
+  if (conditions.length === 0) return 'TRUE'
+  return conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`
 }
 
 export const toPrefixTsQueryForTest = toPrefixTsQuery
@@ -197,26 +233,14 @@ export function buildPostgresVariantQueryParts(
     addWhere(`(vf.case_count IS NULL OR vf.case_count <= ${addParam(filter.carrier_count_max)})`)
   }
 
-  const searchQuery = filter.search_query ?? ''
-  for (const token of searchTokens(searchQuery).filter((t) => HGVS_TOKEN.test(t))) {
-    addWhere(hgvsSearchSql('v', token, addParam))
-  }
-  const tsQuery = toPrefixTsQuery(searchQuery)
-  if (tsQuery !== '') {
-    const tsParam = addParam(tsQuery)
-    addWhere(`(
-        v.search_document @@ to_tsquery('simple', ${tsParam})
-        OR EXISTS (
-          SELECT 1 FROM ${schemaName}."variant_sv" sv_search
-          WHERE sv_search.variant_id = v.id
-            AND sv_search.search_document @@ to_tsquery('simple', ${tsParam})
-        )
-        OR EXISTS (
-          SELECT 1 FROM ${schemaName}."variant_str" str_search
-          WHERE str_search.variant_id = v.id
-            AND str_search.search_document @@ to_tsquery('simple', ${tsParam})
-        )
-      )`)
+  const searchQuery = (filter.search_query ?? '').trim()
+  if (searchQuery !== '') {
+    const searchSql = booleanSearchSql(searchQuery, (term) =>
+      emitCaseSearchTermSql(term, schemaName, addParam)
+    )
+    if (searchSql !== '' && searchSql !== 'TRUE') {
+      addWhere(searchSql)
+    }
   }
 
   if (filter.chr !== undefined && filter.chr !== '') {
@@ -378,7 +402,11 @@ export class PostgresVariantReadRepository {
   }
 
   async searchVariants(caseId: number, query: string, limit: number): Promise<Variant[]> {
-    if (toPrefixTsQuery(query) === '' && !searchTokens(query).some((t) => HGVS_TOKEN.test(t))) {
+    if (
+      toPrefixTsQuery(query) === '' &&
+      !searchTokens(query).some((t) => HGVS_TOKEN.test(t)) &&
+      !/\b(AND|OR|NOT)\b/.test(query)
+    ) {
       return []
     }
     const result = await this.queryVariants(

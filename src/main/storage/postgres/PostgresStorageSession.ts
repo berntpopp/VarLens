@@ -148,12 +148,15 @@ export class PostgresStorageSession implements StorageSession {
   private readonly readExecutor: StorageReadExecutor
   private readonly writeExecutor: StorageWriteExecutor
   private readonly importExecutor: StorageImportExecutor
+  private readonly caseLifecycle: PostgresCaseLifecycleRepository
   private readonly migrationResult: PostgresMigrationResult | undefined
   private cases: PostgresCaseListRepository | null = null
 
   constructor(options: PostgresStorageSessionOptions) {
     this.pool = options.pool
     this.migrationResult = options.migrationResult
+    const caseLifecycle = new PostgresCaseLifecycleRepository(options.pool, options.config.schema)
+    this.caseLifecycle = caseLifecycle
     const caseMetadata = new PostgresCaseMetadataRepository(options.pool, options.config.schema)
     const tags = new PostgresTagsRepository(options.pool, options.config.schema)
     const annotations = new PostgresAnnotationsRepository(options.pool, options.config.schema)
@@ -193,20 +196,16 @@ export class PostgresStorageSession implements StorageSession {
       caseMetadata,
       variants
     })
-    this.writeExecutor = new PostgresWriteExecutor(
-      caseMetadata,
-      new PostgresCaseLifecycleRepository(options.pool, options.config.schema),
-      {
-        tags,
-        annotations,
-        commentsMetrics,
-        panels,
-        filterPresets,
-        analysisGroups,
-        audit,
-        transcripts
-      }
-    )
+    this.writeExecutor = new PostgresWriteExecutor(caseMetadata, this.caseLifecycle, {
+      tags,
+      annotations,
+      commentsMetrics,
+      panels,
+      filterPresets,
+      analysisGroups,
+      audit,
+      transcripts
+    })
     this.importExecutor = new PostgresImportExecutor({
       schema: options.config.schema,
       // buildPostgresClientConfig always sets connectionString = config.url (a string),
@@ -269,6 +268,19 @@ export class PostgresStorageSession implements StorageSession {
 
   async rekey(_newPassword: string): Promise<void> {
     unsupported('SQLite rekey is not supported for postgres sessions')
+  }
+
+  async resumePendingDeletions(): Promise<number[]> {
+    const pending = await this.caseLifecycle.listPendingDeletions()
+    const resumed: number[] = []
+    for (const item of pending) {
+      await this.caseLifecycle.completeHiddenDeletion(item.caseId, {
+        genomeBuild: item.genomeBuild,
+        variantCount: item.variantCount
+      })
+      resumed.push(item.caseId)
+    }
+    return resumed
   }
 
   async close(): Promise<void> {

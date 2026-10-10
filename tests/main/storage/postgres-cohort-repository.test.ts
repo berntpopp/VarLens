@@ -351,7 +351,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).not.toContain('COUNT(DISTINCT')
     expect(dataSql).not.toContain('OR TRUE')
     expect(dataParams).toEqual([
-      `%BRCA%' OR TRUE --%`,
+      `%BRCA\\%' OR TRUE --%`,
       2,
       0.5,
       20,

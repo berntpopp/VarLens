@@ -1,6 +1,7 @@
 import { offeredFilterValues } from '../../../shared/config/severity.config'
 import type { FilterOptions } from '../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
+import { toNumber } from './identifiers'
 
 /**
  * Sprint A PR-3 C4 — read-side helpers for the per-case `cohort_column_meta`
@@ -69,12 +70,6 @@ export interface ColumnMetaRow {
   max_value: number | null
   distinct_count: number | string | null
   distinct_values: string[] | null
-}
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
 }
 
 function toOptionalNumber(value: unknown): number | undefined {

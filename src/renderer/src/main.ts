@@ -13,10 +13,14 @@ import type { WindowAPI } from '../../shared/types/api'
 // Auto-inject mock API when running in browser mode (no Electron preload)
 async function initializeMockApi(): Promise<void> {
   if (window.api === undefined) {
-    console.log('[DEV] Browser mode detected - loading mock API...')
-    const { mockApi } = await import('./mocks/mockApi')
-    ;(window as Window & { api: WindowAPI }).api = mockApi
-    console.log('[DEV] Mock API injected - ready for UI development')
+    if (import.meta.env.DEV) {
+      console.log('[DEV] Browser mode detected - loading mock API...')
+      const { mockApi } = await import('./mocks/mockApi')
+      ;(window as Window & { api: WindowAPI }).api = mockApi
+      console.log('[DEV] Mock API injected - ready for UI development')
+    } else {
+      throw new Error('Fatal: Electron preload API (window.api) is unavailable in production')
+    }
   }
 }
 

@@ -2,9 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { resolve } from 'node:path'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
-import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
-import type { ImportOptions } from '../../../../src/main/import/types'
-import type { StrategyContext } from '../../../../src/main/import/strategies/ImportStrategy'
+import { prepareStatements, streamInsertVcf } from '../../../../src/main/workers/import-pipeline'
 
 const SYNTHETIC_VCF = resolve(__dirname, '../../../test-data/vcf/synthetic-unit-test.vcf')
 
@@ -20,7 +18,7 @@ describe('VCF import worker integration', () => {
   })
 
   it('imports multiple samples sequentially (multi-sample workflow)', async () => {
-    const strategy = new VcfStrategy()
+    const stmts = prepareStatements(db.database)
     const samples = ['HG005', 'HG006', 'HG007']
     const caseIds: number[] = []
     const variantCounts: number[] = []
@@ -29,20 +27,19 @@ describe('VCF import worker integration', () => {
       const caseId = db.cases.createCase(`case-${sample}`, SYNTHETIC_VCF, 1000)
       caseIds.push(caseId)
 
-      const options: ImportOptions = { caseName: `case-${sample}` }
-      const context: StrategyContext = {
-        db,
-        formatInfo: { format: 'vcf', caseKey: '' },
+      const count = await streamInsertVcf(
+        SYNTHETIC_VCF,
+        { format: 'vcf', caseKey: '' },
         caseId,
-        startTime: Date.now()
-      }
+        1000,
+        stmts,
+        () => false,
+        [sample],
+        () => {}
+      )
 
-      const result = await strategy.import(SYNTHETIC_VCF, options, context, {
-        selectedSamples: [sample]
-      })
-
-      variantCounts.push(result.variantCount)
-      expect(result.variantCount).toBeGreaterThan(0)
+      variantCounts.push(count)
+      expect(count).toBeGreaterThan(0)
     }
 
     // Each sample should have variants (counts may differ by genotype)
@@ -60,19 +57,19 @@ describe('VCF import worker integration', () => {
   })
 
   it('populates variant_transcripts for CSQ-annotated variants', async () => {
-    const strategy = new VcfStrategy()
+    const stmts = prepareStatements(db.database)
     const caseId = db.cases.createCase('test-transcripts', SYNTHETIC_VCF, 1000)
 
-    const context: StrategyContext = {
-      db,
-      formatInfo: { format: 'vcf', caseKey: '' },
+    await streamInsertVcf(
+      SYNTHETIC_VCF,
+      { format: 'vcf', caseKey: '' },
       caseId,
-      startTime: Date.now()
-    }
-
-    await strategy.import(SYNTHETIC_VCF, { caseName: 'test-transcripts' }, context, {
-      selectedSamples: ['HG005']
-    })
+      1000,
+      stmts,
+      () => false,
+      ['HG005'],
+      () => {}
+    )
 
     // Check that variant_transcripts were created
     const transcripts = db.database
@@ -89,12 +86,6 @@ describe('VCF import worker integration', () => {
     const selectedCount = transcripts.filter((t) => t.is_selected === 1).length
     expect(selectedCount).toBeGreaterThan(0)
 
-    // Canonical model (D1 / issue C4 / Codex F-02): every transcript row's
-    // `consequence` must be an IMPACT level (or null), never the raw SO term,
-    // and `func` (when populated) must be the SO term the VEP CSQ annotation
-    // carried — exercised end-to-end through the real VcfStrategy import path
-    // (not a unit-level parser call), so a missed column-list update or a
-    // reverted field swap fails loudly here.
     const IMPACT_LEVELS = new Set(['HIGH', 'MODERATE', 'LOW', 'MODIFIER'])
     for (const t of transcripts) {
       if (t.consequence !== null) {
@@ -108,46 +99,39 @@ describe('VCF import worker integration', () => {
     }
   })
 
-  it('handles cancellation via AbortSignal', async () => {
-    const strategy = new VcfStrategy()
+  it('handles cancellation via isCancelled callback', async () => {
+    const stmts = prepareStatements(db.database)
     const caseId = db.cases.createCase('test-cancel', SYNTHETIC_VCF, 1000)
-    const controller = new AbortController()
 
-    // Cancel immediately
-    controller.abort()
-
-    const context: StrategyContext = {
-      db,
-      formatInfo: { format: 'vcf', caseKey: '' },
-      caseId,
-      startTime: Date.now()
-    }
-
-    const result = await strategy.import(
+    const count = await streamInsertVcf(
       SYNTHETIC_VCF,
-      { caseName: 'test-cancel', signal: controller.signal },
-      context,
-      { selectedSamples: ['HG005'] }
+      { format: 'vcf', caseKey: '' },
+      caseId,
+      1000,
+      stmts,
+      () => true,
+      ['HG005'],
+      () => {}
     )
 
-    // Should complete with 0 variants (cancelled before processing)
-    expect(result.errors).toContain('Import cancelled by user')
+    // Should complete with 0 variants (cancelled immediately)
+    expect(count).toBe(0)
   })
 
   it('stores VCF-specific fields (gq, dp, filter, source_format)', async () => {
-    const strategy = new VcfStrategy()
+    const stmts = prepareStatements(db.database)
     const caseId = db.cases.createCase('test-vcf-fields', SYNTHETIC_VCF, 1000)
 
-    const context: StrategyContext = {
-      db,
-      formatInfo: { format: 'vcf', caseKey: '' },
+    await streamInsertVcf(
+      SYNTHETIC_VCF,
+      { format: 'vcf', caseKey: '' },
       caseId,
-      startTime: Date.now()
-    }
-
-    await strategy.import(SYNTHETIC_VCF, { caseName: 'test-vcf-fields' }, context, {
-      selectedSamples: ['HG005']
-    })
+      1000,
+      stmts,
+      () => false,
+      ['HG005'],
+      () => {}
+    )
 
     // Verify VCF-specific columns are populated
     const variants = db.database

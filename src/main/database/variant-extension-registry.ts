@@ -19,6 +19,7 @@ import {
   resolveExtensionColumnKey,
   type ExtensionTypeKey
 } from '../../shared/types/variant-extension-registry-data'
+import { escapeLikePattern } from './search/search-clause-emitter'
 
 export * from '../../shared/types/variant-extension-registry-data'
 
@@ -291,8 +292,8 @@ function translateExtensionFilter(
   }
   if (operator === 'like' && typeof value === 'string') {
     if (value.trim() === '') return null
-    params.push(`%${value}%`)
-    return `${col} LIKE ? COLLATE NOCASE`
+    params.push(`%${escapeLikePattern(value)}%`)
+    return `${col} LIKE ? ESCAPE '\\' COLLATE NOCASE`
   }
   if ((operator === '=' || operator === '!=') && !Array.isArray(value)) {
     params.push(value)

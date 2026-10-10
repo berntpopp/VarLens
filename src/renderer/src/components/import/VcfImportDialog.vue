@@ -295,20 +295,8 @@ const phase = ref<Phase>('select')
 const errorMessage = ref<string | null>(null)
 
 const phaseLabels = ['Select', 'Review', 'Import', 'Done']
-const currentPhaseIndex = computed<number>(() => {
-  switch (phase.value) {
-    case 'select':
-      return 0
-    case 'review':
-      return 1
-    case 'progress':
-      return 2
-    case 'summary':
-      return 3
-    default:
-      return 0
-  }
-})
+const phaseOrder: Record<Phase, number> = { select: 0, review: 1, progress: 2, summary: 3 }
+const currentPhaseIndex = computed<number>(() => phaseOrder[phase.value] ?? 0)
 
 // ---------------------------------------------------------------------------
 // Select phase
@@ -364,11 +352,7 @@ const largeFilesMessage = computed(() => {
   return `${largeFiles.length} large files detected (~${totalCount.toLocaleString()} variants total). Consider adding a BED region filter for faster imports.`
 })
 
-const suggestedBedFile = computed(() => {
-  if (previewResult.value === null) return null
-  if (previewResult.value.siblingBedFiles.length === 0) return null
-  return previewResult.value.siblingBedFiles[0]
-})
+const suggestedBedFile = computed(() => previewResult.value?.siblingBedFiles[0] ?? null)
 
 const isBedApplied = computed(
   () => filters.value.bedPath !== undefined && filters.value.bedPath !== ''
@@ -455,19 +439,27 @@ onUnmounted(() => {
 })
 
 function onDialogUpdate(value: boolean): void {
-  if (!value) {
-    handleClose()
-  }
+  if (!value) handleClose()
 }
 
 function handleEsc(): void {
-  if (phase.value !== 'progress') {
-    handleClose()
+  if (phase.value !== 'progress') handleClose()
+}
+
+function discardStagedUploads(): void {
+  if (phase.value === 'progress' || phase.value === 'summary') return
+  const refs = [
+    ...(previewResult.value?.files.map((f) => f.filePath) ?? []),
+    filters.value.bedPath
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0)
+  if (refs.length > 0) {
+    window.dispatchEvent(new CustomEvent('varlens:web-upload-discard', { detail: { refs } }))
   }
 }
 
 function handleClose(): void {
   if (phase.value === 'progress') return
+  discardStagedUploads()
   emit('update:open', false)
   emit('close')
 }

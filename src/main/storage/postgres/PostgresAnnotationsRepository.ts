@@ -9,11 +9,10 @@ import type {
 import { globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../annotation-audit'
 import {
   applyAnnotationFlagsGlobal,
-  applyAnnotationFlagsOnCaseDelete,
   applyAnnotationFlagsPerCase,
   beginAnnotationWrite
 } from './cohort-annotation-flags-sql'
-import { quoteIdentifier } from './identifiers'
+import { quoteIdentifier, toNumber } from './identifiers'
 // A failed ROLLBACK leaves the summary write lock held: release(failure) destroys the connection.
 import { runOrDestroy } from './long-running-client'
 import { runNamed } from './named-query'
@@ -39,13 +38,6 @@ type PerCaseAnnotationUpdates = Partial<
 type VariantKey = { chr: string; pos: number; ref: string; alt: string }
 
 const nowExpression = '(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint'
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'bigint' || typeof value === 'string') return Number(value)
-  if (typeof value === 'boolean') return value ? 1 : 0
-  return 0
-}
 
 function toStarredNumber(value: unknown): number {
   return toNumber(value) === 0 ? 0 : 1
@@ -477,20 +469,6 @@ export class PostgresAnnotationsRepository {
         : await this.getPerCaseAnnotation(caseId, toNumber(variantId))
 
     return { global, perCase }
-  }
-
-  /**
-   * On-case-delete annotation write-hook (C5a / Pass-5 HIGH #1). Public (unlike
-   * the global/per-case hooks, which only fire from this class's own methods)
-   * because C3's PostgresCaseLifecycleRepository invokes it across the class
-   * boundary BEFORE deleting the case. Thin delegate to the shared executor in
-   * cohort-annotation-flags-sql.ts; see that module for the exclusion semantics.
-   */
-  async _applyAnnotationFlagsOnCaseDelete(
-    client: QueryablePool,
-    args: { schema: string; deletedCaseId: number }
-  ): Promise<void> {
-    await applyAnnotationFlagsOnCaseDelete(client, args)
   }
 
   private async connect(): Promise<PoolClient> {

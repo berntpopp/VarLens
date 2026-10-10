@@ -113,13 +113,22 @@ describe('translateColumnFilter branches', () => {
     expect(result.params).toEqual([])
   })
 
-  it('column_filter operator=like produces LIKE with NOCASE', () => {
+  it('column_filter operator=like produces LIKE with ESCAPE and NOCASE', () => {
     const result = buildBaseWhere(
       { column_filters: { gene_symbol: { operator: 'like', value: 'brca' } } },
       { baseAlias: 'v', scope: 'case' }
     )
-    expect(result.sql).toContain('v.gene_symbol LIKE ? COLLATE NOCASE')
+    expect(result.sql).toContain("v.gene_symbol LIKE ? ESCAPE '\\' COLLATE NOCASE")
     expect(result.params).toEqual(['%brca%'])
+  })
+
+  it('column_filter operator=like escapes underscore and percent wildcards', () => {
+    const result = buildBaseWhere(
+      { column_filters: { cdna: { operator: 'like', value: 'c.1_2del' } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(result.sql).toContain("v.cdna LIKE ? ESCAPE '\\' COLLATE NOCASE")
+    expect(result.params).toEqual(['%c.1\\_2del%'])
   })
 
   it('column_filter operator=like with whitespace is dropped', () => {

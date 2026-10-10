@@ -340,4 +340,35 @@ describe('useShortlistQuery', () => {
     expect(h.composable.result.value?.elapsedMs).toBe(3)
     expect(h.composable.loading.value).toBe(false)
   })
+
+  it('clears result immediately when caseId switches', async () => {
+    const h = harness(1)
+    app = h.app
+    await flushPromises()
+    expect(h.composable.result.value).not.toBeNull()
+
+    let resolveCase2!: (value: unknown) => void
+    h.shortlistMock.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveCase2 = r
+        })
+    )
+
+    h.caseIdRef.value = 2
+    await nextTick()
+
+    // Immediately after case switch, previous case rows must be cleared
+    expect(h.composable.result.value).toBeNull()
+
+    resolveCase2({
+      rows: [{ id: 100, rank: 1, rank_score: 0.8 }],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 5
+    })
+    await flushPromises()
+
+    expect(h.composable.result.value?.rows[0].id).toBe(100)
+  })
 })

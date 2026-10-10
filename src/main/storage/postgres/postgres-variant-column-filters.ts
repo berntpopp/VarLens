@@ -68,7 +68,7 @@ export function addPostgresColumnFilters(
       if (value.trim() === '') continue
       // Numeric columns need the cast: `double precision ILIKE text` does not exist.
       const textColumn = definition.kind === 'numeric' ? `${sqlColumn}::text` : sqlColumn
-      addWhere(`${textColumn} ILIKE ${addParam(`%${value}%`)}`)
+      addWhere(`${textColumn} ILIKE ${addParam(`%${escapeLikePattern(value)}%`)} ESCAPE '\\'`)
     } else if (
       (operator === '=' || operator === '!=') &&
       (typeof value === 'string' || typeof value === 'number')

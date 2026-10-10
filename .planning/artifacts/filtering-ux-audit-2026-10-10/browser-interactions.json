@@ -1,0 +1,37 @@
+{
+  "appliedDsl": {
+    "toolbar": "DSL\nP\nLP\nVUS\nLB\nB\n0\n/\n50\nClear\nFilters\n1\nColumns\nExport\nRare Pathogenic\nRare HIGH\nRare HIGH+MOD\nUltra Rare HIGH\nClinVar P/LP\nHIGH Impact\nRare (1%)\nCADD >= 20\nRare, not recurrent\nSave\nNo filters applied"
+  },
+  "autocomplete": {
+    "role": null,
+    "expanded": null,
+    "controls": null,
+    "activeDescendant": null
+  },
+  "escapeBlurs": true,
+  "queryFailure": {
+    "rowsBefore": 25,
+    "rowsAfter": 25,
+    "alerts": [],
+    "toolbar": "P\nLP\nVUS\nLB\nB\n50\n/\n50\nClear\nFilters\n1\nColumns\nExport\nRare Pathogenic\nRare HIGH\nRare HIGH+MOD\nUltra Rare HIGH\nClinVar P/LP\nHIGH Impact\nRare (1%)\nCADD >= 20\nRare, not recurrent\nSave\nStarred\nonly\nClear all"
+  },
+  "cohortShortcut": {
+    "tag": "BUTTON",
+    "label": "Close sidebar"
+  },
+  "cohortCadd": "DSL\nP\nLP\nVUS\nLB\nB\n50\n/\n50\nClear\nFilters\n1\nColumns\nExport\nRare Pathogenic\nRare HIGH\nRare HIGH+MOD\nUltra Rare HIGH\nClinVar P/LP\nHIGH Impact\nRare (1%)\nCADD >= 20\nRare, not recurrent\nSave\nNo filters applied",
+  "numeric": {
+    "operator": "",
+    "valueDisabled": true
+  },
+  "narrowDrawer": {
+    "x": 224,
+    "y": 48,
+    "width": 156,
+    "height": 796
+  },
+  "presets": {
+    "hidden": 12,
+    "manageCount": 0
+  }
+}

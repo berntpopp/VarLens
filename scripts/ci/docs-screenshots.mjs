@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
@@ -167,4 +168,13 @@ function main() {
   else throw new Error(`Unknown docs-screenshots command: ${command}`)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main()
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url
+    } catch {
+      return false
+    }
+  })()
+if (isMain) main()

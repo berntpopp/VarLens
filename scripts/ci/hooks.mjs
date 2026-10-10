@@ -1,4 +1,12 @@
-import { copyFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync
+} from 'node:fs'
 import { resolve, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { git } from './process.mjs'
@@ -100,7 +108,16 @@ export async function prePush({ cwd = process.cwd(), input, remote = 'origin' })
   }
   return result
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url
+    } catch {
+      return false
+    }
+  })()
+if (isMain) {
   try {
     if (process.argv[2] === 'install')
       process.stdout.write(`Installed worktree hooks: ${installHooks()}\n`)

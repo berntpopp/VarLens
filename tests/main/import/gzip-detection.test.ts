@@ -13,9 +13,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
-import { ImportService } from '../../../src/main/import/ImportService'
 import { isGzipped } from '../../../src/main/import/stream-utils'
 import { detectFormat } from '../../../src/main/import/format-detection'
+import { prepareStatements, streamInsertJson } from '../../../src/main/workers/import-pipeline'
 
 const FIXTURES_DIR = join(__dirname, '../../fixtures/import')
 
@@ -116,16 +116,16 @@ describe('detectFormat with plain JSON', () => {
   })
 })
 
-describe('ImportService with plain JSON files', () => {
+describe('streamInsertJson with plain JSON files', () => {
   let tmpDir: string
   let db: DatabaseService
-  let importService: ImportService
+  let stmts: ReturnType<typeof prepareStatements>
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'varlens-import-test-'))
     const dbPath = join(tmpDir, 'test.db')
     db = new DatabaseService(dbPath)
-    importService = new ImportService(db)
+    stmts = prepareStatements(db.database)
   })
 
   afterEach(() => {
@@ -133,14 +133,26 @@ describe('ImportService with plain JSON files', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
+  async function importJson(filePath: string, caseName: string) {
+    const caseId = db.cases.createCase(caseName, filePath, 1000)
+    const formatInfo = await detectFormat(filePath)
+    const variantCount = await streamInsertJson(
+      filePath,
+      formatInfo,
+      caseId,
+      1000,
+      stmts,
+      () => false,
+      () => {}
+    )
+    return { caseId, variantCount }
+  }
+
   it('should import simple format from plain JSON', async () => {
-    const result = await importService.importVariants(join(FIXTURES_DIR, 'simple-format.json'), {
-      caseName: 'Simple Plain JSON'
-    })
+    const result = await importJson(join(FIXTURES_DIR, 'simple-format.json'), 'Simple Plain JSON')
 
     expect(result.caseId).toBeGreaterThan(0)
     expect(result.variantCount).toBe(3)
-    expect(result.skipped).toBe(0)
 
     const variants = db.variants.getVariants({ case_id: result.caseId }, 10)
     expect(variants.data).toHaveLength(3)
@@ -148,21 +160,19 @@ describe('ImportService with plain JSON files', () => {
   })
 
   it('should import simple format from gzipped JSON', async () => {
-    const result = await importService.importVariants(join(FIXTURES_DIR, 'simple-format.json.gz'), {
-      caseName: 'Simple Gzipped JSON'
-    })
+    const result = await importJson(
+      join(FIXTURES_DIR, 'simple-format.json.gz'),
+      'Simple Gzipped JSON'
+    )
 
     expect(result.variantCount).toBe(3)
   })
 
   it('should import object format from plain JSON', async () => {
-    const result = await importService.importVariants(join(FIXTURES_DIR, 'object-format.json'), {
-      caseName: 'Object Plain JSON'
-    })
+    const result = await importJson(join(FIXTURES_DIR, 'object-format.json'), 'Object Plain JSON')
 
     expect(result.caseId).toBeGreaterThan(0)
     expect(result.variantCount).toBe(2)
-    expect(result.skipped).toBe(0)
 
     const variants = db.variants.getVariants({ case_id: result.caseId }, 10)
     expect(variants.data).toHaveLength(2)
@@ -171,43 +181,37 @@ describe('ImportService with plain JSON files', () => {
   })
 
   it('should import object format from gzipped JSON', async () => {
-    const result = await importService.importVariants(join(FIXTURES_DIR, 'object-format.json.gz'), {
-      caseName: 'Object Gzipped JSON'
-    })
+    const result = await importJson(
+      join(FIXTURES_DIR, 'object-format.json.gz'),
+      'Object Gzipped JSON'
+    )
 
     expect(result.variantCount).toBe(2)
   })
 
   it('should import columnar format from plain JSON', async () => {
-    const result = await importService.importVariants(join(FIXTURES_DIR, 'columnar-format.json'), {
-      caseName: 'Columnar Plain JSON'
-    })
+    const result = await importJson(
+      join(FIXTURES_DIR, 'columnar-format.json'),
+      'Columnar Plain JSON'
+    )
 
     expect(result.caseId).toBeGreaterThan(0)
     expect(result.variantCount).toBeGreaterThan(0)
-    expect(result.skipped).toBe(0)
   })
 
   it('should import columnar format from gzipped JSON', async () => {
-    const result = await importService.importVariants(
+    const result = await importJson(
       join(FIXTURES_DIR, 'columnar-format.json.gz'),
-      { caseName: 'Columnar Gzipped JSON' }
+      'Columnar Gzipped JSON'
     )
 
     expect(result.variantCount).toBeGreaterThan(0)
   })
 
   it('should produce identical results for plain and gzipped simple format', async () => {
-    const plainResult = await importService.importVariants(
-      join(FIXTURES_DIR, 'simple-format.json'),
-      { caseName: 'Plain Compare' }
-    )
-    const gzipResult = await importService.importVariants(
-      join(FIXTURES_DIR, 'simple-format.json.gz'),
-      { caseName: 'Gzip Compare' }
-    )
+    const plainResult = await importJson(join(FIXTURES_DIR, 'simple-format.json'), 'Plain Compare')
+    const gzipResult = await importJson(join(FIXTURES_DIR, 'simple-format.json.gz'), 'Gzip Compare')
 
     expect(plainResult.variantCount).toBe(gzipResult.variantCount)
-    expect(plainResult.skipped).toBe(gzipResult.skipped)
   })
 })

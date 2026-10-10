@@ -49,7 +49,7 @@
 
       <!-- Preset chips (below Search, above remaining filters) -->
       <div
-        v-if="visiblePresets && visiblePresets.length > 0"
+        v-if="onPresetManage || (visiblePresets && visiblePresets.length > 0)"
         class="preset-drawer-section px-3 pt-2 pb-1"
       >
         <div class="d-flex align-center mb-1">
@@ -68,7 +68,7 @@
           </v-btn>
           <IconButton label="Manage presets" :icon="mdiCogOutline" @click="onPresetManage?.()" />
         </div>
-        <div class="d-flex ga-1 flex-wrap pb-1">
+        <div v-if="visiblePresets && visiblePresets.length > 0" class="d-flex ga-1 flex-wrap pb-1">
           <v-chip
             v-for="preset in visiblePresets"
             :key="preset.id"

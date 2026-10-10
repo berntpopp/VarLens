@@ -5,7 +5,7 @@
  * databases that have accounts enabled.
  */
 
-import { nanoid } from 'nanoid'
+import { randomBytes } from 'node:crypto'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 
 import {
@@ -58,7 +58,7 @@ export class AuthService {
     if (existing) throw new Error('Admin user already exists')
 
     const passwordHash = await this.passwordProvider.hashPassword(password)
-    const recoveryKey = nanoid(32)
+    const recoveryKey = randomBytes(24).toString('base64url')
     const recoveryKeyHash = await this.passwordProvider.hashPassword(recoveryKey)
 
     const result = (await this.writer({

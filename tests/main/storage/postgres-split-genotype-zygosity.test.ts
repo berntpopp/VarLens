@@ -18,7 +18,7 @@ import { makeVariant } from '../../utils/make-variant'
 
 import { DatabaseService } from '../../../src/main/database'
 import { AssociationDataBuilder } from '../../../src/main/database/AssociationDataBuilder'
-import { VcfStrategy } from '../../../src/main/import/vcf/VcfStrategy'
+import { prepareStatements, streamInsertVcf } from '../../../src/main/workers/import-pipeline'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
@@ -63,15 +63,19 @@ describe.skipIf(!RUN)('split multi-allelic genotypes on PostgreSQL', () => {
 
     // Import the fixture with the real importer, then store its rows in PostgreSQL.
     sqlite = new DatabaseService(':memory:')
-    const strategy = new VcfStrategy()
+    const stmts = prepareStatements(sqlite.database)
     for (const sample of SAMPLES) {
       const caseId = sqlite.cases.createCase(sample, VCF, 1000)
       sqliteIds[sample] = caseId
-      await strategy.import(
+      await streamInsertVcf(
         VCF,
-        { caseName: sample },
-        { db: sqlite, formatInfo: { format: 'vcf', caseKey: '' }, caseId, startTime: Date.now() },
-        { selectedSamples: [sample], genomeBuild: 'GRCh38' }
+        { format: 'vcf', caseKey: '' },
+        caseId,
+        1000,
+        stmts,
+        () => false,
+        [sample],
+        () => {}
       )
       const inserted = await pool.query<{ id: string }>(
         `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, genome_build)

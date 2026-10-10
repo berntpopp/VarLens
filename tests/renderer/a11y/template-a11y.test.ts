@@ -7,10 +7,8 @@ const rendererRoot = resolve(repoRoot, 'src/renderer/src')
 
 /**
  * Files exempt from the scan. Keep this list short and justified.
- * - CohortTableRow.vue: deprecated, unmounted ("DO NOT modify"); its cells
- *   were replaced by table-cells/AnnotationsCell.vue.
  */
-const EXEMPT = new Set(['src/renderer/src/components/cohort/CohortTableRow.vue'])
+const EXEMPT = new Set<string>()
 
 const findings = scanTemplates(rendererRoot, repoRoot).filter((f) => !EXEMPT.has(f.file))
 

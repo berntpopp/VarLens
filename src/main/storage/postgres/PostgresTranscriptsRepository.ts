@@ -10,16 +10,10 @@ import { addVariantToGeneSummary, beginVariantGeneChange } from './cohort-gene-s
 import { lockSummaryForWrite, lockSummaryForWriteWithin } from './cohort-summary-lock'
 import { recomputeSummaryForVariant } from './cohort-summary-representative-sql'
 import { requestSummaryRebuildForVariant } from './cohort-summary-state-sql'
-import { quoteIdentifier } from './identifiers'
+import { quoteIdentifier, toNumber } from './identifiers'
+import { withTransaction, type TransactionCapablePool } from './transaction'
 
 type QueryablePool = Pick<Pool, 'query'> & Partial<Pick<Pool, 'connect'>>
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'bigint') return Number(value)
-  if (typeof value === 'string') return Number(value)
-  return 0
-}
 
 function toBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') return value
@@ -84,9 +78,10 @@ export class PostgresTranscriptsRepository {
     variantId: number,
     transcriptId: string
   ): Promise<{ success: true }> {
-    const client = await this.connect()
-    try {
-      await client.query('BEGIN')
+    if (this.pool.connect === undefined) {
+      throw new Error('Postgres transcript writes require a transaction-capable pool')
+    }
+    return await withTransaction(this.pool as TransactionCapablePool, async (client) => {
       const summaryLocked = await this.lockSummaryBriefly(client)
       await client.query(
         `UPDATE ${this.schemaName}.variant_transcripts SET is_selected = 0 WHERE variant_id = $1`,
@@ -94,23 +89,18 @@ export class PostgresTranscriptsRepository {
       )
       const selectedRow = await this.selectTranscript(client, variantId, transcriptId)
       await this.updateVariantFromSelectedTranscript(client, variantId, selectedRow, summaryLocked)
-      await client.query('COMMIT')
       return { success: true }
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   async insertTranscriptAndSwitch(
     variantId: number,
     transcript: TranscriptInsertRow
   ): Promise<{ success: true }> {
-    const client = await this.connect()
-    try {
-      await client.query('BEGIN')
+    if (this.pool.connect === undefined) {
+      throw new Error('Postgres transcript writes require a transaction-capable pool')
+    }
+    return await withTransaction(this.pool as TransactionCapablePool, async (client) => {
       const summaryLocked = await this.lockSummaryBriefly(client)
       await client.query(
         `INSERT INTO ${this.schemaName}.variant_transcripts
@@ -137,14 +127,8 @@ export class PostgresTranscriptsRepository {
       )
       const selectedRow = await this.selectTranscript(client, variantId, transcript.transcript_id)
       await this.updateVariantFromSelectedTranscript(client, variantId, selectedRow, summaryLocked)
-      await client.query('COMMIT')
       return { success: true }
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   private async selectTranscript(
@@ -235,13 +219,6 @@ export class PostgresTranscriptsRepository {
         impactRank(semantics.consequence)
       ]
     )
-  }
-
-  private async connect(): Promise<PoolClient> {
-    if (this.pool.connect === undefined) {
-      throw new Error('Postgres transcript writes require a transaction-capable pool')
-    }
-    return await this.pool.connect()
   }
 
   private toTranscriptAnnotation(row: Record<string, unknown>): TranscriptAnnotation {

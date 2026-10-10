@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -61,4 +61,13 @@ function main() {
   process.stdout.write('Workflow policy passed.\n')
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main()
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url
+    } catch {
+      return false
+    }
+  })()
+if (isMain) main()

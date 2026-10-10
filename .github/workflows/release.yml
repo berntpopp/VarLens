@@ -135,52 +135,51 @@ jobs:
           exit 1
 
       - name: Generate release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+          PREV_TAG=$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)
           if [ -n "$PREV_TAG" ]; then
             echo "## Changes since ${PREV_TAG}" > release_notes.md
             echo "" >> release_notes.md
-            git log "${PREV_TAG}..${{ github.ref_name }}" --pretty=format:"- %s" --no-merges \
-              | grep -v "Co-Authored-By" >> release_notes.md || true
+            git log "${PREV_TAG}..${RELEASE_TAG}" --pretty=format:"- %s" --no-merges >> release_notes.md || true
           else
             echo "Initial release" > release_notes.md
           fi
 
       - name: Create draft release
         id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           BODY=$(cat release_notes.md)
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
-            -f tag_name="${{ github.ref_name }}" \
-            -f name="${{ github.ref_name }}" \
+          RELEASE_ID=$(gh api "repos/${REPO}/releases" \
+            -f tag_name="${RELEASE_TAG}" \
+            -f name="${RELEASE_TAG}" \
             -f body="$BODY" \
             -F draft=true \
             -F prerelease=false \
             --jq '.id')
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GITLEAKS_VERSION: 8.30.1
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks
-        run: |
-          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.nvmrc'
 
-      - name: Run gitleaks
-        run: gitleaks git --no-banner --redact --report-format sarif --report-path gitleaks-results.sarif --exit-code 1 .
+      - name: Scan history with checksum-verified Gitleaks
+        run: node scripts/ci/tools.mjs gitleaks git --no-banner --redact --report-format sarif --report-path gitleaks-results.sarif --exit-code 1 .
 
   promote-unix:
     name: Promote Linux + macOS installers
@@ -370,8 +369,13 @@ jobs:
         shell: pwsh
         run: |
           $csVersion = "v1.3.2"
+          $expectedHash = "4afc32e8b7f79bbe1de7e4e7049aaad4e0f754357613b9bbec0e3052f06fd36b"
           $url = "https://github.com/SSLcom/CodeSignTool/releases/download/$csVersion/CodeSignTool-$csVersion-windows.zip"
           Invoke-WebRequest -Uri $url -OutFile codesigntool.zip
+          $actualHash = (Get-FileHash -Path codesigntool.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) {
+            throw "CodeSignTool checksum mismatch! Expected $expectedHash but got $actualHash"
+          }
           Expand-Archive -Path codesigntool.zip -DestinationPath codesigntool -Force
           # Zip extracts flat: codesigntool/jar/, codesigntool/conf/, etc.
           # Find the root by locating the jar file
@@ -539,7 +543,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ github.ref_name }}" artifacts/* --clobber
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release upload "$RELEASE_TAG" artifacts/* --clobber
 
       # Last correctable moment: refuse to flip the release public if the tag
       # moved during the promote/sign jobs above.
@@ -554,12 +559,14 @@ jobs:
           fi
 
       - name: Publish draft release and mark as latest
-        run: |
-          gh api -X PATCH repos/${{ github.repository }}/releases/${{ needs.create-release.outputs.release_id }} \
-            -F draft=false \
-            -F make_latest=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/${GH_REPO}/releases/${RELEASE_ID}" \
+            -F draft=false \
+            -F make_latest=true
 
       # Runs after the release is public so the summary describes what was
       # actually published (issue #365, gap 1). Anything other than an explicit

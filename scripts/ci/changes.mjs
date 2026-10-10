@@ -1,6 +1,5 @@
-import { readFileSync, appendFileSync } from 'node:fs'
+import { readFileSync, appendFileSync, realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { git } from './process.mjs'
 
@@ -94,7 +93,16 @@ export function resolveChanges({
     }
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+const isMain =
+  process.argv[1] &&
+  (() => {
+    try {
+      return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url
+    } catch {
+      return false
+    }
+  })()
+if (isMain) {
   const { values } = parseArgs({
     options: {
       base: { type: 'string' },

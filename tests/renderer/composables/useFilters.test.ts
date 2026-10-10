@@ -194,6 +194,9 @@ describe('useFilters', () => {
       result.filters.value.consequences = ['missense_variant']
       result.filters.value.maxGnomadAf = 0.01
       result.filters.value.minCadd = 20
+      result.filters.value.columnFilters = {
+        'sv.vaf': { operator: '>=', value: 0.5 }
+      }
       result.searchTerm.value = 'test'
 
       result.clearAllFilters()
@@ -202,6 +205,7 @@ describe('useFilters', () => {
       expect(result.filters.value.consequences).toEqual([])
       expect(result.filters.value.maxGnomadAf).toBeNull()
       expect(result.filters.value.minCadd).toBeNull()
+      expect(result.filters.value.columnFilters).toEqual({})
       expect(result.searchTerm.value).toBe('')
     })
 

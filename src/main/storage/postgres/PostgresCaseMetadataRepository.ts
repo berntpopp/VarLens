@@ -7,6 +7,7 @@ import type {
   MetadataUpdates
 } from '../case-metadata-types'
 import { quoteIdentifier } from './identifiers'
+import { withTransaction } from './transaction'
 
 type Queryable = Pick<Pool, 'query' | 'connect'>
 type Row = Record<string, unknown>
@@ -193,9 +194,7 @@ export class PostgresCaseMetadataRepository {
   }
 
   async setCaseCohorts(caseId: number, cohortIds: number[]): Promise<void> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
+    await withTransaction(this.pool, async (client) => {
       await client.query(`DELETE FROM ${this.table('case_cohort_links')} WHERE case_id = $1`, [
         caseId
       ])
@@ -208,13 +207,7 @@ export class PostgresCaseMetadataRepository {
         `,
         [caseId, cohortIds]
       )
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   async getCaseHpoTerms(caseId: number): Promise<unknown[]> {

@@ -1,0 +1,58 @@
+[
+  {
+    "theme": "light",
+    "state": "home",
+    "passes": 29,
+    "incomplete": 2,
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "state": "case-table",
+    "passes": 34,
+    "incomplete": 3,
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "state": "case-details-panel",
+    "passes": 34,
+    "incomplete": 3,
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "state": "cohort",
+    "passes": 32,
+    "incomplete": 3,
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "state": "home",
+    "passes": 29,
+    "incomplete": 2,
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "state": "case-table",
+    "passes": 34,
+    "incomplete": 3,
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "state": "case-details-panel",
+    "passes": 34,
+    "incomplete": 3,
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "state": "cohort",
+    "passes": 32,
+    "incomplete": 3,
+    "violations": []
+  }
+]

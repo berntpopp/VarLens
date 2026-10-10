@@ -35,7 +35,8 @@ export default [
       'coverage/**',
       // Third-party bundles shipped directly to the renderer's public
       // folder — not authored in this repo, never meant to be linted.
-      'src/renderer/public/**'
+      'src/renderer/public/**',
+      '.worktrees/**'
     ]
   },
   eslint.configs.recommended,

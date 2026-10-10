@@ -180,7 +180,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { AppStateKey } from '../composables/useAppState'
 import {
   evidenceFingerprint,
   hasMeaningfulAcmgEvidence,
@@ -199,6 +200,8 @@ import { useAcmgEvidence } from '../composables/useAcmgEvidence'
 import AcmgSummaryBar from './acmg/AcmgSummaryBar.vue'
 import AcmgEvidenceGrid from './acmg/AcmgEvidenceGrid.vue'
 import { mdiChevronDown } from '@mdi/js'
+
+const appState = inject(AppStateKey, null)
 
 interface AcmgDraft {
   classification: AcmgClassification | null
@@ -381,6 +384,7 @@ async function applyPending(): Promise<void> {
       // The failed write's rollback reloaded the saved evidence: put the draft back.
       loadState(draft.evidenceJson)
       pending.value = draft
+      appState?.showSnack('Failed to save ACMG classification', 'error')
       return
     }
   } else {
@@ -429,6 +433,8 @@ async function answerLeave(answer: 'apply' | 'discard' | 'cancel'): Promise<void
   try {
     if (answer === 'apply') await applyPending()
     else if (answer === 'discard') discardPending()
+  } catch {
+    appState?.showSnack('Failed to save ACMG classification', 'error')
   } finally {
     // Also after a rejected save: the held selection change must not wait forever.
     resolve(pending.value === null)

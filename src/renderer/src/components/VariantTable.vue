@@ -518,12 +518,34 @@ const {
   }
 })
 
+if (appState) {
+  watch(
+    () => appState.selectedPanelVariant.value,
+    (variant) => {
+      if (variant && 'id' in variant && variants.value.some((v) => v.id === variant.id)) {
+        selectByClick(variant)
+        selectedVariantId.value = variant.id
+      } else {
+        clearSelection()
+        selectedVariantId.value = null
+      }
+    },
+    { immediate: true }
+  )
+}
+
 // Row click handler
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
-  selectByClick(item)
-  selectedVariantId.value = item.id
+  const currentPanelId =
+    appState?.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value
+      ? appState.selectedPanelVariant.value.id
+      : null
+  if (!appState || currentPanelId === item.id) {
+    selectByClick(item)
+    selectedVariantId.value = item.id
+  }
   emit('row-click', item)
 }
 

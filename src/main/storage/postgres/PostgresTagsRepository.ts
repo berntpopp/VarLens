@@ -1,8 +1,9 @@
-import type { Pool, PoolClient } from 'pg'
+import type { Pool } from 'pg'
 
 import { DatabaseError, NotFoundError, UniqueConstraintError } from '../../database/errors'
 import type { Tag } from '../../database/types'
 import { quoteIdentifier } from './identifiers'
+import { withTransaction, type TransactionCapablePool } from './transaction'
 
 interface TagRow {
   id: unknown
@@ -17,7 +18,6 @@ interface CountRow {
 
 type QueryPool = Pick<Pool, 'query'>
 type TransactionPool = Pick<Pool, 'connect'>
-type TransactionClient = Pick<PoolClient, 'query' | 'release'>
 
 export class PostgresTagsRepository {
   private readonly schemaName: string
@@ -170,10 +170,10 @@ export class PostgresTagsRepository {
   }
 
   async setVariantTags(caseId: number, variantId: number, tagIds: number[]): Promise<void> {
-    const client = await this.connect()
-
-    try {
-      await client.query('BEGIN')
+    if (!this.pool.connect) {
+      throw new DatabaseError('Postgres tags repository requires a transaction-capable pool')
+    }
+    await withTransaction(this.pool as TransactionCapablePool, async (client) => {
       await client.query(
         `DELETE FROM ${this.table('variant_tags')} WHERE case_id = $1 AND variant_id = $2`,
         [caseId, variantId]
@@ -189,31 +189,13 @@ export class PostgresTagsRepository {
           [caseId, variantId, tagId, now]
         )
       }
-
-      await client.query('COMMIT')
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK')
-      } catch {
-        // Preserve the original transaction failure for callers.
-      }
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   private async getRequiredTag(id: number): Promise<Tag> {
     const tag = await this.getTag(id)
     if (!tag) throw new NotFoundError('Tag', id)
     return tag
-  }
-
-  private async connect(): Promise<TransactionClient> {
-    if (!this.pool.connect) {
-      throw new DatabaseError('Postgres tags repository requires a transaction-capable pool')
-    }
-    return this.pool.connect()
   }
 
   private table(name: 'tags' | 'variant_tags'): string {

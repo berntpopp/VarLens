@@ -163,7 +163,7 @@ export function isAllowedUnsafeApiRequest(params: {
   })
 }
 
-function resolveRecoveryKeyDir(): string {
+export function resolveRecoveryKeyDir(): string {
   const raw = process.env.VARLENS_RECOVERY_KEY_DIR
   const dir = typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : DEFAULT_RECOVERY_KEY_DIR
   if (!isAbsolute(dir)) {

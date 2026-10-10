@@ -11,6 +11,7 @@ declare module '*.vue' {
 import type { WindowAPI } from '../../shared/types/api'
 
 declare global {
+  const __APP_VERSION__: string
   interface Window {
     api: WindowAPI
     __VARLENS_WEB__?: boolean

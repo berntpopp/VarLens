@@ -6,7 +6,6 @@
  * table covers exactly the manifest's adapter methods.
  */
 import type { WindowAPI } from '../../shared/types/api'
-import { ALLOWED_DOMAINS } from '../../shared/config/allowed-domains'
 import { isIpcError } from '../../shared/types/errors'
 import { startBatchImportRun } from './batch-import-run'
 import {
@@ -24,32 +23,9 @@ export type LocalApi = { readonly [D in keyof WindowAPI]?: Partial<WindowAPI[D]>
 
 const IMPORT_ACCEPT = '.vcf,.vcf.gz,.json,.json.gz,.gz'
 
-// ---------------------------------------------------------------------------
-// shell: same rules as src/main/utils/url-validation.ts (https + allowlist,
-// plus the user's external-link domains from shell.updateDomains).
-// ---------------------------------------------------------------------------
+import { isUrlSafeForExternal, setUserDomains } from '../../shared/utils/url-validation'
 
-let userDomains: string[] = []
-
-function isValidHostname(hostname: string): boolean {
-  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(hostname)
-}
-
-function isDomainAllowed(hostname: string): boolean {
-  const normalized = hostname.toLowerCase()
-  return [...ALLOWED_DOMAINS, ...userDomains].some(
-    (domain) => normalized === domain || normalized.endsWith(`.${domain}`)
-  )
-}
-
-export function isUrlSafeForExternal(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' && isDomainAllowed(parsed.hostname)
-  } catch {
-    return false
-  }
-}
+export { isUrlSafeForExternal }
 
 const shell: WindowAPI['shell'] = {
   openExternal: (url) => {
@@ -60,12 +36,7 @@ const shell: WindowAPI['shell'] = {
     return Promise.resolve({ success: true })
   },
   updateDomains: (domains) => {
-    userDomains = Array.isArray(domains)
-      ? domains
-          .slice(0, 100)
-          .filter((domain) => typeof domain === 'string' && isValidHostname(domain))
-          .map((domain) => domain.toLowerCase())
-      : []
+    setUserDomains(domains)
     return Promise.resolve()
   }
 }

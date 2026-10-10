@@ -28,7 +28,7 @@ import {
   LineTooLongError,
   DecompressedSizeExceededError
 } from '../../../src/main/import/stream-utils'
-import type { FormatInfo } from '../../../src/main/import/strategies/ImportStrategy'
+import type { FormatInfo } from '../../../src/main/import/types'
 import { VcfHeaderLimitExceededError } from '../../../src/main/import/vcf/vcf-header-limits'
 import {
   JsonRecordLimitError,

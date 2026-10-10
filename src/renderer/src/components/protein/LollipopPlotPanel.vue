@@ -100,6 +100,7 @@ import { useApiService } from '../../composables/useApiService'
 import { useCapabilityStore } from '../../stores/capabilityStore'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import { downloadBlob } from '../../utils/download'
 
 interface Props {
   proteinLength: number
@@ -358,23 +359,13 @@ function handleExportSvg(): void {
   if (svgString === undefined || svgString === '') return
 
   const blob = new Blob([svgString], { type: 'image/svg+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${props.geneSymbol ?? 'protein'}_lollipop.svg`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${props.geneSymbol ?? 'protein'}_lollipop.svg`)
 }
 
 async function handleExportPng(): Promise<void> {
   const blob = await plotRef.value?.exportPng()
   if (!blob) return
 
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${props.geneSymbol ?? 'protein'}_lollipop.png`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(blob, `${props.geneSymbol ?? 'protein'}_lollipop.png`)
 }
 </script>
