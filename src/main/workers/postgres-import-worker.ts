@@ -2,7 +2,7 @@ import { parentPort } from 'node:worker_threads'
 import { basename } from 'node:path'
 import { statSync } from 'node:fs'
 import type { Readable } from 'node:stream'
-import { Client, type ClientConfig, type Pool, type PoolClient } from 'pg'
+import { Client, type ClientConfig, type PoolClient } from 'pg'
 
 import {
   POSTGRES_IMPORT_CANCELLATION_MESSAGE,
@@ -49,7 +49,7 @@ import {
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
-import type { FormatInfo } from '../import/strategies/ImportStrategy'
+import type { FormatInfo } from '../import/types'
 import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pipeline'
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
@@ -425,10 +425,7 @@ export async function runImport(
         // ignore — used only for provenance
       }
 
-      const repo = new PostgresJsonImportRepository(
-        { connect: async () => client as unknown as PoolClient } as Pick<Pool, 'connect'>,
-        start.schema
-      )
+      const repo = new PostgresJsonImportRepository(start.schema)
 
       let totalInserted = 0
       let totalSkipped = 0

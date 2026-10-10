@@ -9,7 +9,6 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
-import { ImportService } from '../../../../src/main/import/ImportService'
 import { importAdditionalFileToCase } from '../../../../src/main/ipc/handlers/import-logic-append'
 import { startMultiFileImport } from '../../../../src/main/ipc/handlers/import-logic'
 import { mergeUnrankedClinvar } from '../../../../src/main/import/unranked-clinvar'
@@ -74,34 +73,6 @@ describe('unrecognised ClinVar values: SQLite main-thread paths', () => {
 
     expect(result.variantCount).toBe(2)
     expect(result.unrankedClinvar).toBeUndefined()
-  })
-
-  it('ImportService reports the unrecognised values of a main-thread import', async () => {
-    const filePath = join(tmpDir, 'service.json')
-    const variant = (pos: number, clinvar: string): Record<string, unknown> => ({
-      chr: 'chr1',
-      pos,
-      ref: 'A',
-      alt: 'G',
-      gene_symbol: 'GENEA',
-      gt_num: '0/1',
-      func: 'missense_variant',
-      consequence: 'HIGH',
-      clinvar
-    })
-    writeFileSync(
-      filePath,
-      JSON.stringify({
-        variants: [variant(100, 'Pathogenic'), variant(200, 'totally_made_up_term')]
-      })
-    )
-
-    const result = await new ImportService(svc).importVariants(filePath, {
-      caseName: 'service-case'
-    })
-
-    expect(result.variantCount).toBe(2)
-    expect(result.unrankedClinvar).toEqual(['totally_made_up_term'])
   })
 })
 

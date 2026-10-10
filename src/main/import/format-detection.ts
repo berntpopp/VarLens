@@ -4,7 +4,7 @@ import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 import { createJsonRecordBudget } from './json-resource-budget'
 import { compose, type Readable } from 'node:stream'
-import type { FileFormat, FormatInfo } from './strategies/ImportStrategy'
+import type { FileFormat, FormatInfo } from './types'
 import { createCappedLineStream, createDecompressedStream } from './stream-utils'
 
 const MAX_FORMAT_DETECTION_TOP_LEVEL_KEYS = 4_096
@@ -399,9 +399,8 @@ export async function createDataPipeline(filePath: string): Promise<{
 
     case 'vcf':
       // VCF files are not JSON — createDataPipeline is not applicable.
-      // Use VcfStrategy.import() directly instead.
       throw new Error(
-        'VCF files cannot be processed through the JSON data pipeline. Use VcfStrategy instead.'
+        'VCF files cannot be processed through the JSON data pipeline. Use the VCF import pipeline instead.'
       )
   }
 

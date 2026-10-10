@@ -11,7 +11,7 @@ import { DATABASE_CONFIG } from '../../shared/config'
 import { deleteCaseSqls } from '../database/case-dependents'
 import { clinvarRankForImport, impactRank } from '../../shared/config/severity.config'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
-import type { FormatInfo } from '../import/strategies/ImportStrategy'
+import type { FormatInfo } from '../import/types'
 import { createCappedLineStream } from '../import/stream-utils'
 import { parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import {
@@ -319,12 +319,13 @@ export async function streamInsertJson(
   limits?: ImportBatchLimits,
   onSkip?: (reason: string) => void
 ): Promise<number> {
+  const isCancelledFn = typeof isCancelled === 'function' ? isCancelled : () => false
   const mapperStream = await createMapperPipeline(filePath, formatInfo, onSkip)
   const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {
     for await (const chunk of mapperStream) {
-      if (isCancelled()) {
+      if (isCancelledFn()) {
         mapperStream.destroy()
         break
       }
@@ -335,7 +336,7 @@ export async function streamInsertJson(
     }
   } finally {
     // Flush remaining items
-    if (!isCancelled()) batch.flush()
+    if (!isCancelledFn()) batch.flush()
   }
 
   return batch.inserted()
@@ -379,6 +380,7 @@ export async function streamInsertVcf(
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
   rl.on('error', () => undefined)
 
+  const isCancelledFn = typeof isCancelled === 'function' ? isCancelled : () => false
   const headerLines: string[] = []
   const headerBudget = new VcfHeaderBudget()
   let header: VcfHeader | null = null
@@ -389,7 +391,7 @@ export async function streamInsertVcf(
 
   try {
     for await (const line of rl) {
-      if (isCancelled()) {
+      if (isCancelledFn()) {
         rl.close()
         break
       }
@@ -443,14 +445,14 @@ export async function streamInsertVcf(
       if (full) batch.flush()
     }
     // A file without rows never reached the header check above.
-    if (header === null && !isCancelled())
+    if (header === null && !isCancelledFn())
       resolveVcfSelectedSampleColumn(
         parseVcfHeaderFromLines(headerLines).samples,
         vcfSelectedSamples?.[0]
       )
   } finally {
     // Flush remaining items
-    if (!isCancelled()) batch.flush()
+    if (!isCancelledFn()) batch.flush()
     // Ensure stream resources are released
     stream.destroy()
   }

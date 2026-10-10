@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
-import { VcfStrategy } from '../../../../src/main/import/vcf/VcfStrategy'
+import { prepareStatements, streamInsertVcf } from '../../../../src/main/workers/import-pipeline'
 import {
   resetUnrankedClinvar,
   takeUnrankedClinvar
@@ -79,11 +79,16 @@ describe('VEP CLIN_SIG fallback through the real import pipeline', () => {
 
   async function importVcf(filePath: string, sample: string): Promise<ClinvarRow[]> {
     const caseId = db.cases.createCase(`case-${sample}`, filePath, 1000)
-    await new VcfStrategy().import(
+    const stmts = prepareStatements(db.database)
+    await streamInsertVcf(
       filePath,
-      { caseName: `case-${sample}` },
-      { db, formatInfo: { format: 'vcf', caseKey: '' }, caseId, startTime: Date.now() },
-      { selectedSamples: [sample] }
+      { format: 'vcf', caseKey: '' },
+      caseId,
+      1000,
+      stmts,
+      () => false,
+      [sample],
+      () => {}
     )
     return db.database
       .prepare('SELECT pos, ref, alt, clinvar FROM variants WHERE case_id = ? ORDER BY pos, alt')

@@ -13,10 +13,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import { DatabaseService } from '../../../src/main/database/DatabaseService'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
-import { VcfStrategy } from '../../../src/main/import/vcf/VcfStrategy'
 import { runImportSession } from '../../../src/main/workers/import-worker'
 import { clinvarRank, impactRank } from '../../../src/shared/config/severity.config'
 import type { MainMessage, WorkerMessage } from '../../../src/shared/types/import-worker'
@@ -213,32 +211,6 @@ describe('SQLite import stores severity ranks (#469)', () => {
       expect(rowsOf(db, 'odd').map((row) => row.clinvar_rank)).toEqual([15, 15, 0, 0, 0])
     } finally {
       warn.mockRestore()
-    }
-  })
-
-  it('main-thread path: VcfStrategy through VariantRepository', async () => {
-    db.close()
-    const service = new DatabaseService(dbPath)
-    try {
-      const caseId = service.cases.createCase('main-thread', SYNTHETIC_VCF, 1000)
-      await new VcfStrategy().import(
-        SYNTHETIC_VCF,
-        { caseName: 'main-thread' },
-        {
-          db: service,
-          formatInfo: { format: 'vcf', caseKey: '' },
-          caseId,
-          startTime: Date.now()
-        },
-        { selectedSamples: ['HG005'] }
-      )
-      const rows = rowsOf(service.database, 'main-thread')
-      expectRanksMatchStrings(rows)
-      expect(distinct(rows, 'impact_rank').filter((rank) => rank > 0).length).toBeGreaterThan(1)
-      expect(distinct(rows, 'clinvar_rank').some((rank) => rank > 0)).toBe(true)
-    } finally {
-      service.close()
-      db = new Database(dbPath)
     }
   })
 })

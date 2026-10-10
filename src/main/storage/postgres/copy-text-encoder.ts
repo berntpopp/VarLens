@@ -91,49 +91,6 @@ export const encodeFloat: CopyColumnEncoder = (value) => {
   return String(value)
 }
 
-export const encodeBoolean: CopyColumnEncoder = (value) => {
-  if (value === null || value === undefined) return NULL_TOKEN
-  if (typeof value !== 'boolean') {
-    throw new EncoderInvalidValueError(undefined, `expected boolean, got ${typeof value}`)
-  }
-  return value ? 't' : 'f'
-}
-
-/**
- * Reserved encoder — no Phase 16 caller (info_json is currently TEXT, not jsonb).
- * Documents the safe path for any future migration.
- */
-export const encodeJsonb: CopyColumnEncoder = (value) => {
-  if (value === null || value === undefined) return NULL_TOKEN
-  let s = JSON.stringify(value)
-  // Strip U+0000 — JSONB rejects it, and JSON.stringify allows it through.
-  // eslint-disable-next-line no-control-regex
-  s = s.replace(/\u0000/g, '')
-  // Double-escape every backslash so the COPY decoder un-escapes back to the
-  // JSON-legal form before the JSONB caster sees it.
-  s = s.replace(/\\/g, '\\\\')
-  // Then escape COPY's transport metacharacters.
-  return s.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-}
-
-export const encodeBytea: CopyColumnEncoder = (value) => {
-  if (value === null || value === undefined) return NULL_TOKEN
-  if (!Buffer.isBuffer(value)) {
-    throw new EncoderInvalidValueError(undefined, 'expected Buffer for bytea encoder')
-  }
-  return '\\\\x' + value.toString('hex')
-}
-
-export const encodeArray: CopyColumnEncoder = (value) => {
-  if (value === null || value === undefined) return NULL_TOKEN
-  if (!Array.isArray(value)) {
-    throw new EncoderInvalidValueError(undefined, 'expected array for array encoder')
-  }
-  if (value.length === 0) return '{}'
-  return '{' + value.map((v) => (v === null ? NULL : encodeText(String(v)))).join(',') + '}'
-}
-const NULL = 'NULL'
-
 export interface CopyColumn {
   name: string
   encoder: CopyColumnEncoder

@@ -4,10 +4,6 @@ import {
   encodeText,
   encodeInteger,
   encodeFloat,
-  encodeBoolean,
-  encodeJsonb,
-  encodeBytea,
-  encodeArray,
   encodeRowsToCopyText,
   EncoderInvalidValueError
 } from '../../../src/main/storage/postgres/copy-text-encoder'
@@ -152,65 +148,6 @@ describe('encodeFloat', () => {
   })
 })
 
-describe('encodeBoolean', () => {
-  it('null → \\N', () => {
-    expect(encodeBoolean(null)).toBe('\\N')
-  })
-  it('undefined → \\N', () => {
-    expect(encodeBoolean(undefined)).toBe('\\N')
-  })
-  it('true → "t"', () => {
-    expect(encodeBoolean(true)).toBe('t')
-  })
-  it('false → "f"', () => {
-    expect(encodeBoolean(false)).toBe('f')
-  })
-  it('throws EncoderInvalidValueError on numeric input (regression: was silently "f")', () => {
-    expect(() => encodeBoolean(1)).toThrow(EncoderInvalidValueError)
-    expect(() => encodeBoolean(0)).toThrow(EncoderInvalidValueError)
-  })
-  it('throws EncoderInvalidValueError on string input', () => {
-    expect(() => encodeBoolean('true')).toThrow(EncoderInvalidValueError)
-    expect(() => encodeBoolean('t')).toThrow(EncoderInvalidValueError)
-  })
-})
-
-describe('encodeJsonb (reserved — no Phase 16 caller, but must be correct)', () => {
-  it('null → \\N', () => {
-    expect(encodeJsonb(null)).toBe('\\N')
-  })
-  it('strips U+0000 from string values', () => {
-    expect(encodeJsonb({ a: 'x\u0000y' })).not.toContain('\u0000')
-  })
-  it('double-escapes backslashes so wire bytes survive COPY decoder', () => {
-    // JSON.stringify({a: '\\'}) = '{"a":"\\\\"}' (a 6-char string)
-    // After our double-escape, every \ becomes \\, then the COPY-text \-escape pass
-    // produces the wire form below.
-    expect(encodeJsonb({ a: '\\' })).toBe('{"a":"\\\\\\\\"}')
-  })
-})
-
-describe('encodeBytea', () => {
-  it('null → \\N', () => {
-    expect(encodeBytea(null)).toBe('\\N')
-  })
-  it('Buffer → \\x<hex>', () => {
-    expect(encodeBytea(Buffer.from([0xab, 0xcd]))).toBe('\\\\xabcd')
-  })
-})
-
-describe('encodeArray', () => {
-  it('null → \\N', () => {
-    expect(encodeArray(null)).toBe('\\N')
-  })
-  it('empty array → "{}"', () => {
-    expect(encodeArray([])).toBe('{}')
-  })
-  it('text array → escaped form', () => {
-    expect(encodeArray(['a', 'b'])).toBe('{a,b}')
-  })
-})
-
 describe('encodeRowsToCopyText (async generator)', () => {
   it('emits one tab-separated line per row, terminated by \\n', async () => {
     const cols = [
@@ -243,80 +180,7 @@ describe('property: encodeText round-trip', () => {
   })
 })
 
-describe('property: encodeJsonb round-trip', () => {
-  it('JSON.parse(decode(encode(v))) === stripNul(v) for arbitrary JSON values', () => {
-    const stripNul = (v: unknown): unknown => {
-      // eslint-disable-next-line no-control-regex
-      if (typeof v === 'string') return v.replace(/\u0000/g, '')
-      if (Array.isArray(v)) return v.map(stripNul)
-      if (v && typeof v === 'object') {
-        const out: Record<string, unknown> = {}
-        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-          out[stripNul(k) as string] = stripNul(val)
-        }
-        return out
-      }
-      return v
-    }
-    // Filter NUL-containing values from the generator: JSON.stringify escapes
-    // NULs to the 6-char sequence \u0000, which survives the encoder's raw-NUL
-    // regex strip. Round-trip therefore only holds on the NUL-free subset; the
-    // raw encodeJsonb NUL-strip path is exercised by the boundary test above.
-    const containsNul = (v: unknown): boolean => {
-      if (typeof v === 'string') return v.includes('\u0000')
-      if (Array.isArray(v)) return v.some(containsNul)
-      if (v && typeof v === 'object') {
-        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-          if (k.includes('\u0000') || containsNul(val)) return true
-        }
-      }
-      return false
-    }
-    // Also filter `__proto__` keys: JSON.parse turns them into own enumerable
-    // properties on the parsed object, but our structural-equality reference
-    // walks via Object.entries which skips them — a JS-runtime asymmetry,
-    // not an encoder issue.
-    const containsProtoKey = (v: unknown): boolean => {
-      if (Array.isArray(v)) return v.some(containsProtoKey)
-      if (v && typeof v === 'object') {
-        for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-          if (k === '__proto__' || containsProtoKey(val)) return true
-        }
-      }
-      return false
-    }
-    // Also filter -0: JSON.stringify(-0) is '0', JSON.parse('0') is +0, but
-    // toEqual distinguishes -0 from +0. This is a JSON-spec asymmetry, not an
-    // encoder issue — the encoder faithfully preserves whatever JSON.stringify
-    // emits.
-    const containsNegativeZero = (v: unknown): boolean => {
-      if (typeof v === 'number') return Object.is(v, -0)
-      if (Array.isArray(v)) return v.some(containsNegativeZero)
-      if (v && typeof v === 'object') {
-        for (const val of Object.values(v as Record<string, unknown>)) {
-          if (containsNegativeZero(val)) return true
-        }
-      }
-      return false
-    }
-    fc.assert(
-      fc.property(
-        fc
-          .jsonValue()
-          .filter((v) => !containsNul(v) && !containsProtoKey(v) && !containsNegativeZero(v)),
-        (v) => {
-          const wire = encodeJsonb(v)
-          const decoded = decodeCopyText(wire)
-          if (decoded === null) return // null → \N path
-          expect(JSON.parse(decoded)).toEqual(stripNul(v))
-        }
-      ),
-      { numRuns: 200 }
-    )
-  })
-})
-
-describe('property: encodeInteger / encodeFloat / encodeBoolean round-trip', () => {
+describe('property: encodeInteger / encodeFloat round-trip', () => {
   it('integers within safe range round-trip', () => {
     fc.assert(
       fc.property(
@@ -346,10 +210,6 @@ describe('property: encodeInteger / encodeFloat / encodeBoolean round-trip', () 
         expect(t === '\\N' || Number(t) === n).toBe(true)
       })
     )
-  })
-  it('booleans round-trip', () => {
-    expect(encodeBoolean(true)).toBe('t')
-    expect(encodeBoolean(false)).toBe('f')
   })
 })
 
@@ -386,18 +246,6 @@ describe('boundary fillers for 100% coverage', () => {
 
   it('encodeFloat non-number fallback via String(value)', () => {
     expect(encodeFloat('1.25')).toBe('1.25')
-  })
-
-  it('encodeBytea throws EncoderInvalidValueError on non-Buffer', () => {
-    expect(() => encodeBytea('not a buffer')).toThrow(EncoderInvalidValueError)
-  })
-
-  it('encodeArray throws EncoderInvalidValueError on non-array', () => {
-    expect(() => encodeArray('not an array')).toThrow(EncoderInvalidValueError)
-  })
-
-  it('encodeArray with null element emits NULL token', () => {
-    expect(encodeArray(['a', null, 'b'])).toBe('{a,NULL,b}')
   })
 
   it('encodeRowsToCopyText wraps EncoderInvalidValueError with column name', async () => {

@@ -7,6 +7,7 @@ import { InvalidParametersError } from '../../../src/main/ipc/errors'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresAnnotationsRepository } from '../../../src/main/storage/postgres/PostgresAnnotationsRepository'
+import { applyAnnotationFlagsOnCaseDelete } from '../../../src/main/storage/postgres/cohort-annotation-flags-sql'
 
 const makePool = () => ({
   query: vi.fn()
@@ -961,11 +962,10 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
 
     // The on-case-delete hook is invoked by C3 across the class boundary; call
     // it directly here to verify its exclusion semantics.
-    const repo = new PostgresAnnotationsRepository(pool, schema)
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      await repo._applyAnnotationFlagsOnCaseDelete(client, { schema, deletedCaseId: caseA })
+      await applyAnnotationFlagsOnCaseDelete(client, { schema, deletedCaseId: caseA })
       await client.query('COMMIT')
     } finally {
       client.release()

@@ -12,7 +12,7 @@ import { resolve } from 'node:path'
 import { DatabaseService } from '../../../src/main/database'
 import { AssociationDataBuilder } from '../../../src/main/database/AssociationDataBuilder'
 import { openCaseSummaryRemoval } from '../../../src/main/database/cohort-summary-case-removal'
-import { VcfStrategy } from '../../../src/main/import/vcf/VcfStrategy'
+import { prepareStatements, streamInsertVcf } from '../../../src/main/workers/import-pipeline'
 import { deleteCasesIncrementally } from '../../../src/main/workers/delete-operations'
 import { openSummarySessionHarness, variantAt } from '../workers/support/summary-session-harness'
 import { makeVariant } from '../../utils/make-variant'
@@ -51,15 +51,19 @@ describe('split multi-allelic genotypes on SQLite', () => {
 
   beforeEach(async () => {
     service = new DatabaseService(':memory:')
-    const strategy = new VcfStrategy()
+    const stmts = prepareStatements(service.database)
     for (const sample of SAMPLES) {
       const caseId = service.cases.createCase(sample, VCF, 1000)
       caseIds[sample] = caseId
-      await strategy.import(
+      await streamInsertVcf(
         VCF,
-        { caseName: sample },
-        { db: service, formatInfo: { format: 'vcf', caseKey: '' }, caseId, startTime: Date.now() },
-        { selectedSamples: [sample], genomeBuild: 'GRCh38' }
+        { format: 'vcf', caseKey: '' },
+        caseId,
+        1000,
+        stmts,
+        () => false,
+        [sample],
+        () => {}
       )
     }
   })
