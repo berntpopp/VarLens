@@ -522,7 +522,7 @@ if (appState) {
   watch(
     () => appState.selectedPanelVariant.value,
     (variant) => {
-      if (variant && 'id' in variant) {
+      if (variant && 'id' in variant && variants.value.some((v) => v.id === variant.id)) {
         selectByClick(variant)
         selectedVariantId.value = variant.id
       } else {
@@ -538,7 +538,11 @@ if (appState) {
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
-  if (!appState || appState.selectedPanelVariant.value === item) {
+  const currentPanelId =
+    appState?.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value
+      ? appState.selectedPanelVariant.value.id
+      : null
+  if (!appState || currentPanelId === item.id) {
     selectByClick(item)
     selectedVariantId.value = item.id
   }
