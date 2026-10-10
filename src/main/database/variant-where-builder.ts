@@ -14,6 +14,7 @@ import {
   NUMERIC_COLUMN_FILTER_KEYS
 } from '../../shared/filters/column-filter-validation'
 import { COHORT_FREQUENCY_KEY, COHORT_FREQUENCY_SQL } from './cohort-frequency-sql'
+import { escapeLikePattern } from './search/search-clause-emitter'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -257,8 +258,8 @@ function translateColumnFilter(
   }
   if (operator === 'like' && typeof value === 'string') {
     if (value.trim() === '') return null
-    params.push(`%${value}%`)
-    return `${col} LIKE ? COLLATE NOCASE`
+    params.push(`%${escapeLikePattern(value)}%`)
+    return `${col} LIKE ? ESCAPE '\\' COLLATE NOCASE`
   }
   if ((operator === '=' || operator === '!=') && !Array.isArray(value)) {
     params.push(bindComparisonValue(column, value))

@@ -479,7 +479,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
     "%brc%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."gene_symbol" COLLATE NOCASE like ?",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."gene_symbol" COLLATE NOCASE LIKE ? ESCAPE '\\'",
 }
 `;
 
@@ -504,7 +504,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
     5,
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."gene_symbol" COLLATE NOCASE like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and "variants"."cadd" >= ? and "variants"."pos" != ?",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" where "variants"."case_id" = ? and "variants"."gene_symbol" COLLATE NOCASE LIKE ? ESCAPE '\\' and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and "variants"."cadd" >= ? and "variants"."pos" != ?",
 }
 `;
 
@@ -1133,7 +1133,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
     "%x%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and sv.support >= ? AND cnv.copy_number = ? AND str.disease LIKE ? COLLATE NOCASE",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and sv.support >= ? AND cnv.copy_number = ? AND str.disease LIKE ? ESCAPE '\\' COLLATE NOCASE",
 }
 `;
 
@@ -1145,7 +1145,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
     "%A%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'cnv' AND cnv.copy_number <= ? and "variants"."gene_symbol" COLLATE NOCASE like ?",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'cnv' AND cnv.copy_number <= ? and "variants"."gene_symbol" COLLATE NOCASE LIKE ? ESCAPE '\\'",
 }
 `;
 
@@ -1156,7 +1156,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
     "%hunt%",
   ],
   "prepareError": null,
-  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'str' AND str.disease LIKE ? COLLATE NOCASE",
+  "sql": "select "variants".*, CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0) as "internal_af" from "variants" left join "variant_frequency" as "vf" on "vf"."chr" = "variants"."chr" and "vf"."pos" = "variants"."pos" and "vf"."ref" = "variants"."ref" and "vf"."alt" = "variants"."alt" left join "variant_str" as "str" on "str"."variant_id" = "variants"."id" where "variants"."case_id" = ? and variants.variant_type = 'str' AND str.disease LIKE ? ESCAPE '\\' COLLATE NOCASE",
 }
 `;
 

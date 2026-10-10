@@ -353,11 +353,11 @@ function buildColumnFilterCondition(
 
   if (operator === 'like' && typeof value === 'string') {
     if (value.trim() === '') return ''
-    const pattern = `%${value}%`
+    const pattern = `%${escapeLikePattern(value)}%`
     if (isNumeric) {
-      return `${expression}::text ILIKE ${addParam(pattern)}`
+      return `${expression}::text ILIKE ${addParam(pattern)} ESCAPE '\\'`
     }
-    return `${expression} ILIKE ${addParam(pattern)}`
+    return `${expression} ILIKE ${addParam(pattern)} ESCAPE '\\'`
   }
 
   if (

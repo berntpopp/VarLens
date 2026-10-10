@@ -2,6 +2,7 @@ import { isSeverityKey } from '../../../shared/config/severity.config'
 import { severityFilterOperands } from '../../../shared/filters/severity-filter'
 import { whereSeverity } from './severity-filter'
 import { sql } from 'kysely'
+import { escapeLikePattern } from '../search/search-clause-emitter'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import type { Variant, VariantFilter } from '../types'
@@ -48,7 +49,10 @@ function whereLike(
   value: string
 ): VariantQueryBuilder {
   if (value.trim() === '') return query
-  return query.where(sql`${sql.ref(sqlColumn)} COLLATE NOCASE`, 'like', `%${value}%`)
+  const pattern = `%${escapeLikePattern(value)}%`
+  return query.where(
+    sql<boolean>`${sql.ref(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`
+  )
 }
 
 /** Range comparison — includeEmpty defaults to true (don't lose unannotated variants). */
