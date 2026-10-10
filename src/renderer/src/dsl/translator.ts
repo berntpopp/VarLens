@@ -84,7 +84,7 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
 
   const includeEmpty = isNumericColumn(column) && ['<', '>', '<=', '>='].includes(operator)
 
-  if (result.columnFilters[column]) {
+  if (result.columnFilters[column] !== undefined) {
     result.warnings.push(
       `Multiple conditions on column '${column}' are not supported — only the last condition was applied.`
     )

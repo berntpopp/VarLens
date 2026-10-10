@@ -50,9 +50,7 @@ function whereLike(
 ): VariantQueryBuilder {
   if (value.trim() === '') return query
   const pattern = `%${escapeLikePattern(value)}%`
-  return query.where(
-    sql<boolean>`${sql.ref(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`
-  )
+  return query.where(sql<boolean>`${sql.ref(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`)
 }
 
 /** Range comparison — includeEmpty defaults to true (don't lose unannotated variants). */

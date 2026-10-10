@@ -1,7 +1,10 @@
 <template>
   <!-- No expand transition: animating the row height shifted the table below
        it on every frame of the animation (layout shift). -->
-  <div v-if="visiblePresets.length > 0 || hasActiveFilters" class="preset-bar px-3 py-1 d-flex align-center ga-1">
+  <div
+    v-if="visiblePresets.length > 0 || hasActiveFilters"
+    class="preset-bar px-3 py-1 d-flex align-center ga-1"
+  >
     <!-- Preset toggle chips -->
     <template v-if="visiblePresets.length > 0">
       <v-chip

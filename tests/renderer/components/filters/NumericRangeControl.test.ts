@@ -25,7 +25,6 @@ describe('NumericRangeControl', () => {
   it('allows picking an operator before entering a value and emits once value is entered', async () => {
     const wrapper = mountControl()
     const select = wrapper.findComponent({ name: 'VSelect' })
-    const textField = wrapper.findComponent({ name: 'VTextField' })
 
     // Select '='
     select.vm.$emit('update:modelValue', '=')
