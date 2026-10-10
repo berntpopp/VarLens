@@ -538,7 +538,7 @@ if (appState) {
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
-  if (!appState) {
+  if (!appState || appState.selectedPanelVariant.value === item) {
     selectByClick(item)
     selectedVariantId.value = item.id
   }

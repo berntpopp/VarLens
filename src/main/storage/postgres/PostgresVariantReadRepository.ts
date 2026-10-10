@@ -111,7 +111,7 @@ function emitCaseSearchTermSql(
   const conditions: string[] = []
 
   for (const hgvs of hgvsTokens) {
-    conditions.push(hgvsSearchSql('v', hgvs, addParam))
+    conditions.push(`COALESCE(${hgvsSearchSql('v', hgvs, addParam)}, FALSE)`)
   }
 
   const tsQuery = toPrefixTsQuery(nonHgvsQuery)
