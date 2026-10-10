@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from 'pg'
+import type { PoolClient } from 'pg'
 
 import { UniqueConstraintError } from '../../database/errors'
 import { quoteIdentifier } from './identifiers'
@@ -203,11 +203,10 @@ function normalizeRecordsetPayload(
 export class PostgresJsonImportRepository {
   private readonly schemaName: string
 
-  // `_pool` is retained for API compatibility with Task 6's postgres-import-worker,
-  // which constructs the repository with a stubbed pool and passes its own Client
-  // through writeJsonImport(client, ...). The repository itself never opens a
-  // connection; the executor (or worker) owns the transaction lifecycle.
-  constructor(_pool: Pick<Pool, 'connect'>, schema: string) {
+  constructor(schema: string)
+  constructor(_pool: unknown, schema: string)
+  constructor(poolOrSchema: unknown, maybeSchema?: string) {
+    const schema = typeof poolOrSchema === 'string' ? poolOrSchema : (maybeSchema as string)
     this.schemaName = quoteIdentifier(schema)
   }
 

@@ -73,6 +73,7 @@ export const COHORT_PANEL_INTERVAL_CONDITION = `cvs.rowid IN (
  * Provides cohort-level aggregation queries reading from summary tables.
  */
 export class CohortService {
+  private static readonly MAX_STATEMENT_CACHE_SIZE = 50
   private db: Database.Database
   private statementCache: Map<string, Statement>
 
@@ -87,6 +88,12 @@ export class CohortService {
   private getStatement(sql: string): Statement {
     let stmt = this.statementCache.get(sql)
     if (stmt === undefined) {
+      if (this.statementCache.size >= CohortService.MAX_STATEMENT_CACHE_SIZE) {
+        const oldestKey = this.statementCache.keys().next().value
+        if (oldestKey !== undefined) {
+          this.statementCache.delete(oldestKey)
+        }
+      }
       stmt = this.db.prepare(sql)
       this.statementCache.set(sql, stmt)
     }

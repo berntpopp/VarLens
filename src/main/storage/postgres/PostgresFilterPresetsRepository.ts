@@ -9,6 +9,7 @@ import type {
 } from '../../../shared/types/filter-presets'
 import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
+import { withTransaction, type TransactionCapablePool } from './transaction'
 
 interface PresetRow extends QueryResultRow {
   id: unknown
@@ -193,10 +194,7 @@ export class PostgresFilterPresetsRepository {
       throw new DatabaseError('Postgres pool does not support transactions')
     }
 
-    const client = await this.pool.connect()
-
-    try {
-      await client.query('BEGIN')
+    await withTransaction(this.pool as TransactionCapablePool, async (client) => {
       const now = Date.now()
       for (const item of items) {
         await client.query(
@@ -204,17 +202,7 @@ export class PostgresFilterPresetsRepository {
           [item.sortOrder, now, item.id]
         )
       }
-      await client.query('COMMIT')
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK')
-      } catch {
-        // Preserve the original transaction failure for callers.
-      }
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   private async getPresetRow(id: number): Promise<PresetRow | null> {

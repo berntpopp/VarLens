@@ -32,6 +32,7 @@ import {
   COHORT_DISTINCT_VALUES_LIMIT,
   type ColumnFilterMeta
 } from '../../../shared/types/column-filters'
+import { toNumber } from './identifiers'
 import { runNamed, runNamedDynamic } from './named-query'
 
 /** Rows the probe reads; any prefix is a valid lower bound. */
@@ -45,12 +46,6 @@ export interface CohortColumnMetaSpec {
   numericKeys: ReadonlySet<string>
   /** `cohort_variant_summary cvs` joined with the build totals `bt`. */
   from: string
-}
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
 }
 
 function toNullableNumber(value: unknown): number | null {

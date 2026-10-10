@@ -3,7 +3,7 @@
  * Provides level-specific methods with automatic sanitization
  */
 
-import { saveAs } from 'file-saver'
+import { downloadBlob } from '../utils/download'
 import { useLogStore } from '../stores/logStore'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { sanitizeLogMessage } from '../utils/sanitizers'
@@ -101,7 +101,7 @@ export class LogService {
     const store = getStore()
     const exportData = {
       exportedAt: new Date().toISOString(),
-      appVersion: '0.2.0',
+      appVersion: __APP_VERSION__,
       stats: store.stats,
       entries: store.entries
     }
@@ -110,7 +110,7 @@ export class LogService {
       type: 'application/json;charset=utf-8'
     })
 
-    saveAs(blob, `varlens-logs-${Date.now()}.json`)
+    downloadBlob(blob, `varlens-logs-${Date.now()}.json`)
   }
 
   /**

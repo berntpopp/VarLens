@@ -1,11 +1,8 @@
 import type { Pool } from 'pg'
 
 import type { Case } from '../../../shared/types/database'
+import { quoteIdentifier } from './identifiers'
 import { runNamed } from './named-query'
-
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.split('"').join('""')}"`
-}
 
 export class PostgresCaseListRepository {
   constructor(

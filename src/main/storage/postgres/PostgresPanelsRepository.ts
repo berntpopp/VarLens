@@ -9,6 +9,7 @@ import type {
   PanelWithCount
 } from '../../../shared/types/panels'
 import { quoteIdentifier } from './identifiers'
+import { withTransaction } from './transaction'
 import { MAX_BED_FILTER_DECOMPRESSED_BYTES } from '../../import/vcf/bed-filter'
 import { readBedEntries, type BedEntry, type BedReaderOptions } from '../../import/vcf/bed-reader'
 import { resolveMaxDecompressedBytes } from '../../import/stream-utils'
@@ -501,19 +502,8 @@ export class PostgresPanelsRepository {
     )
   }
 
-  private async withTransaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
-      const result = await operation(client)
-      await client.query('COMMIT')
-      return result
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
+  private withTransaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    return withTransaction(this.pool, operation)
   }
 
   private table(name: string): string {

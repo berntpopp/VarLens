@@ -11,10 +11,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ErrorCode } from '../../../shared/types/errors'
 
 import { recordApiWriteAudit } from '../audit'
+import { resolveRecoveryKeyDir } from '../auth'
 import { requireOperation } from '../security/secure'
 import type { DispatcherDeps } from './types'
 
-const DEFAULT_RECOVERY_KEY_DIR = '/data'
 const DEFAULT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 const DEFAULT_MAX_STAGED_BYTES_PER_USER = 20 * 1024 * 1024 * 1024
@@ -437,15 +437,6 @@ function resolveUploadRoot(): string {
     throw new Error(`VARLENS_WEB_UPLOAD_DIR must be an absolute path; got ${JSON.stringify(root)}`)
   }
   return root
-}
-
-function resolveRecoveryKeyDir(): string {
-  const raw = process.env.VARLENS_RECOVERY_KEY_DIR
-  const dir = typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : DEFAULT_RECOVERY_KEY_DIR
-  if (!isAbsolute(dir)) {
-    throw new Error(`VARLENS_RECOVERY_KEY_DIR must be an absolute path; got ${JSON.stringify(dir)}`)
-  }
-  return dir
 }
 
 function resolveUploadTtlMs(): number {

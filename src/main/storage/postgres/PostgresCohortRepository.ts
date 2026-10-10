@@ -18,7 +18,7 @@ import {
   requireCurrentCohortSummary,
   type CohortReadWarnings
 } from './cohort-read-freshness'
-import { quoteIdentifier } from './identifiers'
+import { quoteIdentifier, toNumber } from './identifiers'
 import { streamLongQuery } from './long-running-client'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
@@ -113,12 +113,6 @@ const SUPPORTED_COLUMN_FILTERS = new Set<string>([
   'hom_count',
   ...Object.keys(POSTGRES_VARIANT_COLUMN_DEFINITIONS).filter((key) => key.includes('.'))
 ])
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
-}
 
 function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null

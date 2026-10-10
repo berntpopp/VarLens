@@ -10,6 +10,7 @@ import {
   serializeAuditContractMetadata,
   serializeAuditContractValue
 } from '../../../shared/audit/audit-contract'
+import { toNumber } from './identifiers'
 
 /**
  * The audit trail lives in the shared `varlens_audit` schema (migration
@@ -22,12 +23,6 @@ import {
 const AUDIT_TABLE = 'varlens_audit."audit_log"'
 
 type AuditRow = Record<string, unknown>
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
-}
 
 function toNullableString(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value)

@@ -1,16 +1,13 @@
 import type { Pool } from 'pg'
 
 import type { UserRole } from '../../shared/auth/auth-constants'
+import { quoteIdentifier } from '../../main/storage/postgres/identifiers'
 
 const DISABLED_LOCAL_PASSWORD_HASH = 'platform-identity-disabled-local-password'
 
 interface PostgresError extends Error {
   code?: string
   constraint?: string
-}
-
-function quoteSchema(schema: string): string {
-  return `"${schema.replace(/"/g, '""')}"`
 }
 
 export class PostgresPlatformUserStore {
@@ -20,7 +17,7 @@ export class PostgresPlatformUserStore {
     private readonly pool: Pool,
     schema: string
   ) {
-    this.schemaQuoted = quoteSchema(schema)
+    this.schemaQuoted = quoteIdentifier(schema)
   }
 
   async upsert(input: {

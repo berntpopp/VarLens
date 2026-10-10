@@ -1,6 +1,7 @@
 import type { Pool } from 'pg'
 
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
+import { toNumber } from './identifiers'
 import { runNamedDynamic } from './named-query'
 import type { PostgresVariantColumnDefinition } from './postgres-variant-columns'
 
@@ -14,12 +15,6 @@ import type { PostgresVariantColumnDefinition } from './postgres-variant-columns
  */
 
 const DISTINCT_THRESHOLD = 50
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value)
-  return 0
-}
 
 function toOptionalNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined
