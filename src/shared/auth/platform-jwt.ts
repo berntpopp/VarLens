@@ -1,3 +1,10 @@
+/**
+ * Platform identity token checks shared by the web server and the desktop
+ * main process: RS256 signature against the issuer's JWKS, the standard
+ * claims and the platform MFA contract (acr, amr, auth_time).
+ *
+ * Node only (node:crypto). The renderer must not import this module.
+ */
 import { createHash, createPublicKey, createVerify } from 'node:crypto'
 
 export const JWT_CLOCK_SKEW_SECONDS = 60

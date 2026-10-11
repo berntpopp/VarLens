@@ -13,7 +13,7 @@ import {
   buildPkceChallenge,
   requireStringClaim,
   verifyPlatformJwt
-} from './platform-jwt'
+} from '../../shared/auth/platform-jwt'
 
 export {
   type Jwk,
