@@ -3,10 +3,10 @@
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
 
-/* Thin, unobtrusive scrollbars with stable gutter to prevent layout shift */
+/* Thin, unobtrusive scrollbars. No scrollbar-gutter: the app shell never
+   scrolls the document, so a reserved gutter was a dead strip on the right. */
 html {
   scrollbar-width: thin; /* Firefox: show a thin scrollbar instead of hiding it */
-  scrollbar-gutter: stable;
 }
 
 html::-webkit-scrollbar {
