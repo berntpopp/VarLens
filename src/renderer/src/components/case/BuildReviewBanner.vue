@@ -80,7 +80,7 @@
               <v-select
                 v-model="choices[item.review.caseId]"
                 class="col-choice"
-                :items="buildItems"
+                :items="rowBuildItems"
                 :aria-label="`${COPY.reviewChoice} of ${item.review.caseName}`"
                 :disabled="!canWrite"
                 density="compact"
@@ -153,6 +153,8 @@ const choices = reactive<Record<number, string>>({})
 const selected = ref(new Set<number>())
 const bulkBuild = ref<string | null>(null)
 const buildItems = IMPORTABLE_GENOME_BUILDS.map((b) => ({ title: b.label, value: b.id }))
+// Rows are narrow: the id alone (GRCh38); the menu and the bulk control show the label.
+const rowBuildItems = IMPORTABLE_GENOME_BUILDS.map((b) => ({ title: b.id, value: b.id }))
 
 // Preselect what the evidence says: the header's build, else the stored one.
 watch(reviews, (list) => {
