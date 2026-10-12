@@ -34,7 +34,7 @@ const EVIDENCE_TYPES: readonly VariantTypeKey[] = variantTypes
 /** Dotted key of a path (`groups.0.rules.1.when`), used to look problems up. */
 export const problemKey = (path: ProblemPath): string => path.join('.')
 
-/** A group's catch-all reference bin (spec §11.1): pinned last, 0 points. */
+/** A group's catch-all reference bin (spec §11.1, §14–15): pinned last; its points may be tuned. */
 export const isReferenceRule = (rule: Pick<EvidenceRule, 'id'>): boolean =>
   rule.id.endsWith(referenceRuleSuffix)
 
@@ -92,8 +92,6 @@ function groupProblems(rs: EvidenceRuleset): EvidenceProblem[] {
           message: 'the reference rule must be the last rule of its group'
         })
       }
-      if (r.points !== 0)
-        problems.push({ path: [...at, 'points'], message: 'the reference rule scores 0 points' })
     })
   })
   if (count > limits.rulesTotal) {

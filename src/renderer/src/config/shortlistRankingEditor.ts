@@ -62,7 +62,7 @@ export const SHORTLIST_RANKING_EDITOR = {
       'Checked in this fixed order: the first matching mode applies and its points are added once.',
     groups: 'Evidence groups',
     groupsHelp:
-      'In each group the first matching rule wins. The reference rule catches the rest at 0 points.',
+      'In each group the first matching rule wins. The pinned reference rule catches everything else.',
     preview: 'Preview on the open case',
     previewHelp: 'Top rows under the edited ranking; Δ is the change against the saved ranking.',
     previewNoCase: 'Open a case to preview this ranking.',

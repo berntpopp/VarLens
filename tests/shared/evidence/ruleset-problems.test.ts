@@ -40,15 +40,21 @@ describe('rulesetProblems', () => {
     )
   })
 
-  it('pins the reference rule last at 0 points', () => {
+  it('pins the reference rule last', () => {
     const rs = clone()
     const freq = rs.groups[0].rules
     freq.unshift(freq.pop()!)
-    freq[0].points = 1
-    expect(keys(rs)).toEqual(
-      expect.arrayContaining(['groups.0.rules.0', 'groups.0.rules.0.points'])
-    )
+    expect(keys(rs)).toEqual(expect.arrayContaining(['groups.0.rules.0']))
     expect(isReferenceRule(freq[0])).toBe(true)
+  })
+
+  // Tuned rulesets anchor points at the best-supported bin (spec §14–15), so
+  // the catch-all reference rule carries its own estimate.
+  it('lets the reference rule carry points', () => {
+    const rs = clone()
+    const freq = rs.groups[0].rules
+    freq[freq.length - 1].points = -1.5
+    expect(keys(rs)).not.toContain(`groups.0.rules.${freq.length - 1}.points`)
   })
 
   it('does not double-report a condition that already fails the schema', () => {

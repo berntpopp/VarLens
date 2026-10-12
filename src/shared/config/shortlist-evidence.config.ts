@@ -69,7 +69,7 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
 
   /**
    * Rule ids ending in this suffix are a group's catch-all reference bin
-   * (spec §11.1): last in the group and fixed at 0 points.
+   * (spec §11.1, §14–15): last in the group; its points may be tuned.
    */
   referenceRuleSuffix: '_ref',
   /** Catch-all condition of the reference rule of a group added in the editor. */

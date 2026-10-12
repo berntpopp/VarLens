@@ -81,7 +81,7 @@ const name = (field: string): string => `${rule.value.label} — ${field}`
       v-model="rule.points"
       :label="name(COPY.fields.points)"
       :error-messages="editor.messagesAt(`${key}.points`)"
-      :readonly="readOnly || reference"
+      :readonly="readOnly"
       :data-problem-key="`${key}.points`"
     />
     <div class="rule-row__remove">
