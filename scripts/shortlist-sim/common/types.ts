@@ -38,6 +38,8 @@ export interface CaseResult {
   bg: string
   gene: string
   newSince2024: boolean
+  /** Every causal allele is an SNV (CADD is real for all of them; the CADD-imputation check). */
+  snvOnly?: boolean
   /** One entry per causal allele (two for AR_COMPHET). */
   alleles: AlleleRank[]
   /** Benign decoys among the first 10 rows. */
@@ -53,6 +55,10 @@ export interface BinSupport {
   group: string
   bin: string
   isReference: boolean
+  /** Best-supported bin of its group (0 points by construction, spec §11.9). */
+  isAnchor?: boolean
+  /** false: a non-tuned template prior (ClinVar bins other than P/LP, spec §15). */
+  tuned?: boolean
   a: number
   b: number
   points: number

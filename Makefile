@@ -203,6 +203,13 @@ perf-build-compare: ## Compare two build perf baselines (BEFORE=a AFTER=b)
 		echo "usage: make perf-build-compare BEFORE=<label> AFTER=<label>"; exit 2; fi
 	node scripts/perf/compare-build.mjs $(BEFORE) $(AFTER)
 
+.PHONY: shortlist-sim
+shortlist-sim: ## Simulation benchmark for the evidence shortlist (local data; not part of CI). RUN=<name> SIM_ARGS=--quick
+	npm run rebuild:node
+	$(eval SIM_RUN := $(or $(RUN),$(shell date +%Y%m%d-%H%M)))
+	npx jiti scripts/shortlist-sim/run.ts --run $(SIM_RUN) $(SIM_ARGS)
+	npx jiti scripts/shortlist-sim/report/report.ts --run $(SIM_RUN)
+
 #---------------------------------------------------------------------------
 # Phase 1 web-migration gate (see .planning/web/completed/testing/desktop-to-web-parity.md)
 #---------------------------------------------------------------------------

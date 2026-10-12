@@ -1,7 +1,8 @@
 // Simulation report: run directory (results.jsonl + manifest.json) → report.md, SVGs, metrics.json.
 // Usage: npx jiti scripts/shortlist-sim/report/report.ts --run <name|latest> [--runs-dir <dir>] [--out <dir>]
+//        [--cadd-off <run>] [--notes <findings.md>]
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 import type { CaseResult, RunManifest } from '../common/types'
 import { analyze, type ReportData } from './analysis'
@@ -19,6 +20,9 @@ import {
   verdictSection
 } from './markdown'
 import { hitBarsSvg, rankCdfSvg } from './svg'
+import { caddCheckSection } from './cadd-check'
+import { caddOffSection, macroSensitivitySection } from './extra'
+import { DEFAULT_REPS } from '../stats/bootstrap'
 
 const DEFAULT_RUNS_DIR = '/home/bernt-popp/development/VarLens-wt/_data/shortlist-sim/runs'
 
@@ -35,7 +39,7 @@ export function readResults(file: string): CaseResult[] {
     })
 }
 
-export function renderMarkdown(data: ReportData, m: RunManifest): string {
+export function renderMarkdown(data: ReportData, m: RunManifest, afterVerdict = ''): string {
   const header = [
     `# Evidence shortlist simulation — ${m.run}`,
     `Created ${m.createdAt}${m.quick ? ' · **quick run (not for decisions)**' : ''}. Reference scorer \`${m.scorers.reference}\`, candidate \`${m.scorers.candidate}\`. All numbers are aggregates over simulated cases; no background row is reported.`
@@ -44,6 +48,7 @@ export function renderMarkdown(data: ReportData, m: RunManifest): string {
     [
       header,
       verdictSection(data),
+      ...(afterVerdict ? [afterVerdict] : []),
       primarySection(data, m.scorers.reference),
       strataSection(data),
       scenarioSection(data),
@@ -58,11 +63,69 @@ export function renderMarkdown(data: ReportData, m: RunManifest): string {
   )
 }
 
-export function renderReport(runDir: string, outDir: string): ReportData {
+export interface ReportExtras {
+  /** Run directory of the CADD-imputation-off sensitivity rerun. */
+  caddOffDir?: string
+  /** Hand-written findings, run history and data-protection notes (markdown). */
+  notesFile?: string
+}
+
+export function renderReport(
+  runDir: string,
+  outDir: string,
+  extras: ReportExtras = {}
+): ReportData {
   const manifest = JSON.parse(readFileSync(join(runDir, 'manifest.json'), 'utf8')) as RunManifest
-  const data = analyze(readResults(join(runDir, 'results.jsonl')), manifest)
+  const results = readResults(join(runDir, 'results.jsonl'))
+  const data = analyze(results, manifest)
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(join(outDir, 'report.md'), renderMarkdown(data, manifest))
+  const cadd = caddCheckSection(
+    results,
+    manifest,
+    manifest.bootstrapReps || DEFAULT_REPS,
+    manifest.seeds.bootstrap ?? 1
+  )
+  // Spec §15: the ship rule is evaluated for the fully pre-registered hand-set points too;
+  // the tuned preset ships only if it passes, the hand-set one if only it passes.
+  const hand = analyze(results, {
+    ...manifest,
+    scorers: { ...manifest.scorers, candidate: 'evidence_hand' }
+  })
+  const handVerdict = verdictSection(hand)
+    .replace(
+      '## Ship verdict',
+      '## Ship verdict — hand-set points (`evidence_hand`, pre-registered)'
+    )
+    .replace('the tuned preset may be seeded', 'the hand-set preset may be seeded')
+  const decision = data.ship.ship
+    ? 'Decision: ship the tuned preset.'
+    : hand.ship.ship
+      ? 'Decision: the tuned preset fails and the hand-set preset passes — ship the hand-set points.'
+      : 'Decision: neither preset passes — nothing is seeded.'
+  const reps = manifest.bootstrapReps || DEFAULT_REPS
+  const seed = manifest.seeds.bootstrap ?? 1
+  const notes = extras.notesFile ? readFileSync(extras.notesFile, 'utf8').trim() : ''
+  const tail = [
+    macroSensitivitySection(results, reps, seed),
+    ...(extras.caddOffDir
+      ? [
+          caddOffSection(
+            readResults(join(extras.caddOffDir, 'results.jsonl')),
+            basename(extras.caddOffDir),
+            reps,
+            seed
+          )
+        ]
+      : []),
+    cadd
+  ]
+  writeFileSync(
+    join(outDir, 'report.md'),
+    renderMarkdown(data, manifest, [handVerdict, decision, notes].filter(Boolean).join('\n\n')) +
+      '\n' +
+      tail.join('\n\n') +
+      '\n'
+  )
   writeFileSync(join(outDir, 'rank-cdf.svg'), rankCdfSvg(data.cdf))
   writeFileSync(
     join(outDir, 'hit-at-10.svg'),
@@ -94,7 +157,11 @@ function main(argv: string[]): void {
   const requested = arg('--run') ?? 'latest'
   const run = requested === 'latest' ? latestRun(runsDir) : requested
   const out = resolve(arg('--out') ?? join('.planning/artifacts/shortlist-sim', run))
-  const data = renderReport(join(runsDir, run), out)
+  const caddOff = arg('--cadd-off')
+  const data = renderReport(join(runsDir, run), out, {
+    caddOffDir: caddOff ? join(runsDir, caddOff) : undefined,
+    notesFile: arg('--notes')
+  })
   console.log(
     `report: ${join(out, 'report.md')} — verdict ${data.ship.ship ? 'SHIP' : 'DO NOT SHIP'}`
   )
