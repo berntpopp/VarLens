@@ -66,6 +66,7 @@ import * as composableMod from '../../../../src/renderer/src/composables/useShor
 import ShortlistPanel from '../../../../src/renderer/src/components/shortlist/ShortlistPanel.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { installCapabilities } from '../../helpers/capabilities'
+import { useShortlistRankingDialog } from '../../../../src/renderer/src/composables/useShortlistRankingDialog'
 
 // Fresh Pinia per test: ShortlistTable resolves its Links column through the
 // external-links store, and the star is role-gated (usePermissions reads the
@@ -123,6 +124,15 @@ function resetState(): void {
 describe('ShortlistPanel', () => {
   beforeEach(() => {
     resetState()
+  })
+
+  it('opens the ranking settings on the selected preset', async () => {
+    const wrapper = mount(ShortlistPanel, {
+      props: { caseId: 1 },
+      global: { plugins: [vuetify] }
+    })
+    await wrapper.find('[data-testid="shortlist-edit-ranking"]').trigger('click')
+    expect(useShortlistRankingDialog().state).toEqual({ open: true, presetId: 1 })
   })
 
   it('shows the skeleton before the first query has started (no empty-body frame)', () => {

@@ -32,6 +32,7 @@
 import { ref, shallowRef, markRaw, watch, onBeforeUnmount, type Ref } from 'vue'
 import { useFilterPresetStore } from './useFilterPresetStore'
 import { useApiService } from './useApiService'
+import { useSettingsStore } from '../stores/settingsStore'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { ShortlistResult } from '../../../shared/types/shortlist'
@@ -136,14 +137,17 @@ export function useShortlistQuery(caseId: Ref<number>) {
     void fetch()
   })
 
-  // Auto-select first shortlist preset when they load (async). Runs with
-  // `immediate: true` so the initial render path doesn't wait for a preset
-  // store round-trip before kicking off the fetch pipeline.
+  // Auto-select the default ranking (Settings → Shortlist ranking), else the
+  // first shortlist preset, when they load (async). Runs with `immediate: true`
+  // so the initial render path doesn't wait for a preset store round-trip
+  // before kicking off the fetch pipeline.
+  const settings = useSettingsStore()
   watch(
     shortlistPresets,
     (presets) => {
       if (selectedPresetId.value == null && presets.length > 0) {
-        selectedPresetId.value = presets[0].id
+        const preferred = presets.find((p) => p.id === settings.defaultShortlistPresetId)
+        selectedPresetId.value = (preferred ?? presets[0]).id
       }
     },
     { immediate: true }
