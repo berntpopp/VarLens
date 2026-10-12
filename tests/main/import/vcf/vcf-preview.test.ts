@@ -50,6 +50,24 @@ describe('vcf-preview', () => {
     expect(ann).toBeUndefined()
   })
 
+  it('returns the build detection, with data positions excluding a build', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vcf-preview-build-'))
+    try {
+      const file = join(dir, 'positions.vcf')
+      writeFileSync(
+        file,
+        '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n' +
+          'chr21\t47000000\t.\tA\tG\t.\tPASS\t.\n'
+      )
+      const result = await getVcfPreview(file)
+      expect(result.detectedGenomeBuild).toBeNull()
+      expect(result.buildDetection.confidence).toBe('none')
+      expect(result.buildDetection.excluded.map((e) => e.build)).toContain('GRCh38')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('rejects for non-existent file', async () => {
     await expect(getVcfPreview('/tmp/does-not-exist.vcf')).rejects.toThrow('ENOENT')
   })

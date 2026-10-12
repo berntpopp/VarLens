@@ -133,6 +133,7 @@ describe('VcfImportDialog — startImport error surfacing', () => {
     variantCountEstimate: 10,
     annotationType: 'none' as const,
     detectedGenomeBuild: null,
+    buildDetection: { suggested: null, confidence: 'none' as const, evidence: [], excluded: [] },
     infoFields: [],
     callerName: null,
     callerVersion: null,

@@ -177,6 +177,7 @@ export function createMockApi(): MockApi {
         variantCountEstimate: 0,
         annotationType: 'none',
         detectedGenomeBuild: null,
+        buildDetection: { suggested: null, confidence: 'none', evidence: [], excluded: [] },
         infoFields: [],
         callerName: null,
         callerVersion: null,
