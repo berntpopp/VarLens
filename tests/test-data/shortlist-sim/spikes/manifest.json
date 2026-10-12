@@ -1,0 +1,45 @@
+{
+  "clinvarRelease": "2026-04-26",
+  "hpoaRelease": "2026-09-02",
+  "seed": 20261012,
+  "poolVariants": 5427,
+  "poolFile": "pool.json.gz (PoolFile incl. funnel)",
+  "normalization": {
+    "ok": 5427
+  },
+  "annotations": {
+    "file": "annotations.jsonl.gz",
+    "n": 5427,
+    "withErrors": 0,
+    "provenance": {
+      "vep.mostSevere/consequenceTerms/impact/transcript/isMane/gene": "local-vep",
+      "vep.caddPhred": "local-vep (dbNSFP CADD_phred; missense/splice SNVs only)",
+      "gnomad.jointAf/popmaxAf": "local-vep (dbNSFP gnomAD4.1_joint_AF / _POPMAX_AF; nsSNVs only)",
+      "gnomad.exomeAf/genomeAf/exomePopmaxAf/genomePopmaxAf": "local-vep (VEP 115 cache gnomAD v4.1 exome/genome)",
+      "vep.hgvsc/hgvsp": "not available (null)"
+    },
+    "vepMane": 5418,
+    "inGnomad": 4022,
+    "sha256": "097352c6ec1253065634e701296dc1b0c0413a2a60863ec50c6edd83721aa1e1"
+  },
+  "crossCheck": {
+    "file": "genefoundry-crosscheck.jsonl.gz",
+    "n": 505,
+    "byStratum": {
+      "AR": 125,
+      "benign": 130,
+      "AD": 125,
+      "XLD": 37,
+      "XLR": 88
+    },
+    "source": "genefoundry",
+    "endpoints": {
+      "vep": "https://vep-link.genefoundry.org/mcp annotate_variants_batch (response_mode=full; MANE Select > canonical; CADD from position_scores)",
+      "gnomad": "https://gnomad-link.genefoundry.org/mcp get_variant_frequencies (gnomad_r4 v4.1.1, exclude_zero_populations=false; popmax excludes ami/asj/fin/mid/remaining)"
+    },
+    "fetchedFrom": "2026-10-12T09:46:46.626Z",
+    "fetchedTo": "2026-10-12T11:32:54.571Z",
+    "sha256": "743c6e5551b7ea5b54b1de803dd8e7f8f2724964f32a22757741cbef46682a8b"
+  },
+  "localVep": "VEP 115.2 offline cache + dbNSFP 5.3.1a (CADD_phred, gnomAD4.1_joint_AF, gnomAD4.1_joint_POPMAX_AF); --everything, pick order mane_select,canonical,appris,tsl,biotype,ccds,rank,length"
+}

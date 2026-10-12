@@ -1,6 +1,6 @@
 /**
- * Frozen spike annotations: genefoundry where it succeeded, otherwise the local VEP 115 +
- * dbNSFP run, with per-field provenance (coordinator policy for the Ensembl GRCh38 outage).
+ * Frozen spike annotations. All spike fields come from the local VEP 115 + dbNSFP run; the
+ * genefoundry fetch is kept only as an independent cross-check subset (frozen separately).
  */
 import type { LocalVepRecord } from './local-vep'
 import type { NormalizedAllele } from './normalize'
@@ -40,31 +40,25 @@ export function gnomadFromLocal(l: LocalVepRecord): SpikeGnomad {
   }
 }
 
+/** Spike annotations come from the local VEP run for every field (coordinator decision). */
 export function freezeSpikes(
   alleles: NormalizedAllele[],
-  cache: Map<string, SpikeAnnotation>,
   local: Map<string, LocalVepRecord>
 ): FrozenSpike[] {
   return alleles
     .filter((a) => a.status === 'ok')
     .map((a): FrozenSpike => {
-      const gf = cache.get(a.key)
       const l = local.get(a.key)
-      const vep = gf?.vep ?? (l ? vepFromLocal(l) : null)
-      const gnomad = gf?.gnomad ?? (l ? gnomadFromLocal(l) : null)
+      const source: Source = l ? 'local-vep' : 'none'
       return {
         key: a.key,
         poolKey: a.input,
-        vep,
-        gnomad,
-        fetchedAt: gf?.fetchedAt ?? '',
-        // Errors that a local fallback resolved are not carried over.
-        errors: (gf?.errors ?? []).filter(
-          (e) =>
-            (e.startsWith('vep') && vep === null) || (e.startsWith('gnomad') && gnomad === null)
-        ),
-        vepSource: gf?.vep ? 'genefoundry' : l ? 'local-vep' : 'none',
-        gnomadSource: gf?.gnomad ? 'genefoundry' : l ? 'local-vep' : 'none'
+        vep: l ? vepFromLocal(l) : null,
+        gnomad: l ? gnomadFromLocal(l) : null,
+        fetchedAt: '',
+        errors: l ? [] : ['local-vep: no record'],
+        vepSource: source,
+        gnomadSource: source
       }
     })
     .sort((x, y) => x.key.localeCompare(y.key))
