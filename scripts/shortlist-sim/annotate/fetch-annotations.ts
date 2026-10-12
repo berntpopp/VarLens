@@ -19,6 +19,7 @@ import {
   REPO_ROOT
 } from '../common/paths'
 import type { PoolFile } from '../pool/select-pool'
+import { rng, shuffle } from '../common/rng'
 import { callTool, GenefoundryToolError, pool } from './genefoundry'
 import { runLocalVep, type LocalVepRecord } from './local-vep'
 import { countBy, freezeSpikes } from './freeze'
@@ -30,6 +31,8 @@ const VEP_BATCH = 50
 const MIN_VEP_BATCH = 12
 /** `--skip-vep`: fetch gnomAD only (e.g. while Ensembl GRCh38 REST is degraded). */
 const SKIP_VEP = process.argv.includes('--skip-vep')
+const PER_STRATUM_ARG = process.argv.indexOf('--per-stratum')
+const CROSS_CHECK_PER_STRATUM = PER_STRATUM_ARG > -1 ? Number(process.argv[PER_STRATUM_ARG + 1]) : 0
 const VEP_CONCURRENCY = 2
 // Per batch; with VEP_CONCURRENCY = 2 batches at most 6 gnomAD requests are in flight.
 const GNOMAD_CONCURRENCY = 3
@@ -153,13 +156,44 @@ async function waitForUpstream(): Promise<void> {
   throw new Error('vep-link GRCh38 upstream down for 30 min; aborting')
 }
 
+/**
+ * `--per-stratum N`: only a cross-check subset of N variants per stratum (AD, AR, XL, benign);
+ * already complete variants count first, the rest is a seeded shuffle.
+ */
+function crossCheckSample(
+  all: NormalizedAllele[],
+  complete: (k: string) => boolean
+): NormalizedAllele[] {
+  const poolFile = readJson<PoolFile>(POOL_FILE)
+  const stratum = new Map(
+    poolFile.variants.map((v) => [
+      v.key,
+      v.moi === null ? 'benign' : v.moi.startsWith('XL') ? 'XL' : v.moi
+    ])
+  )
+  const rnd = rng(poolFile.seed)
+  const out: NormalizedAllele[] = []
+  for (const s of ['AD', 'AR', 'XL', 'benign']) {
+    const members = all.filter((a) => stratum.get(a.input) === s)
+    const done = members.filter((a) => complete(a.key))
+    const rest = shuffle(
+      members.filter((a) => !complete(a.key)),
+      rnd
+    )
+    out.push(...[...done, ...rest].slice(0, CROSS_CHECK_PER_STRATUM))
+  }
+  return out
+}
+
 async function fetchAll(): Promise<void> {
   mkdirSync(GENEFOUNDRY_CACHE_DIR, { recursive: true })
   if (!SKIP_VEP) await waitForUpstream()
-  const pending = loadNormalized().filter((a) => {
-    const p = cachePath(a.key)
-    return !existsSync(p) || readJson<SpikeAnnotation>(p).errors.length > 0
-  })
+  const complete = (key: string): boolean =>
+    existsSync(cachePath(key)) && readJson<SpikeAnnotation>(cachePath(key)).errors.length === 0
+  const all = loadNormalized()
+  const pending = (CROSS_CHECK_PER_STRATUM > 0 ? crossCheckSample(all, complete) : all).filter(
+    (a) => !complete(a.key)
+  )
   const batches: NormalizedAllele[][] = []
   for (let i = 0; i < pending.length; i += VEP_BATCH) batches.push(pending.slice(i, i + VEP_BATCH))
   console.log(`fetching ${pending.length} variants in ${batches.length} batches`)
@@ -182,46 +216,70 @@ async function localVep(): Promise<void> {
 
 function freeze(): void {
   const alleles = readJson<NormalizedAllele[]>(POOL_NORMALIZED_FILE)
-  const cache = new Map<string, SpikeAnnotation>()
-  for (const a of alleles)
-    if (existsSync(cachePath(a.key))) cache.set(a.key, readJson<SpikeAnnotation>(cachePath(a.key)))
   const local = new Map(readJson<LocalVepRecord[]>(POOL_LOCAL_VEP_FILE).map((r) => [r.key, r]))
-  const anns = freezeSpikes(alleles, cache, local)
+  const anns = freezeSpikes(alleles, local)
+  // Cross-check subset: genefoundry records with both VEP and gnomAD.
+  const crossCheck = alleles
+    .filter((a) => existsSync(cachePath(a.key)))
+    .map((a) => readJson<SpikeAnnotation>(cachePath(a.key)))
+    .filter((a) => a.vep !== null && a.gnomad !== null)
+    .sort((x, y) => x.key.localeCompare(y.key))
   const poolFile = readJson<PoolFile>(POOL_FILE)
+  const stratum = new Map(poolFile.variants.map((v) => [v.key, v.moi ?? 'benign']))
   mkdirSync(SPIKES_DIR, { recursive: true })
-  const jsonl = anns.map((a) => JSON.stringify(a)).join('\n') + '\n'
-  writeFileSync(join(SPIKES_DIR, 'annotations.jsonl.gz'), gzipSync(jsonl, { level: 9 }))
-  const fetched = anns
-    .filter((a) => a.fetchedAt !== '')
-    .map((a) => a.fetchedAt)
-    .sort()
+  const jsonl = (rows: object[]): string => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
+  const spikes = jsonl(anns)
+  const cross = jsonl(crossCheck)
+  // JSONL (line 1: metadata + funnel, then one variant per line); *.json.gz is git-ignored as a
+  // guard against committing patient data, so public files use other extensions.
+  const { variants, ...meta } = poolFile
+  writeFileSync(
+    join(SPIKES_DIR, 'pool.jsonl.gz'),
+    gzipSync(jsonl([meta, ...variants]), { level: 9 })
+  )
+  writeFileSync(join(SPIKES_DIR, 'annotations.jsonl.gz'), gzipSync(spikes, { level: 9 }))
+  writeFileSync(join(SPIKES_DIR, 'genefoundry-crosscheck.jsonl.gz'), gzipSync(cross, { level: 9 }))
+  const fetched = crossCheck.map((a) => a.fetchedAt).sort()
   const manifest = {
     clinvarRelease: poolFile.clinvarRelease,
     hpoaRelease: poolFile.hpoaRelease,
     seed: poolFile.seed,
     poolVariants: poolFile.variants.length,
+    poolFile: 'pool.jsonl.gz (line 1: release/seed/funnel; then PoolVariant per line)',
     normalization: countBy(alleles, (a) => a.status),
-    annotated: anns.length,
-    withErrors: anns.filter((a) => a.errors.length > 0).length,
-    provenance: {
-      vep: countBy(anns, (a) => a.vepSource),
-      gnomad: countBy(anns, (a) => a.gnomadSource)
+    annotations: {
+      file: 'annotations.jsonl.gz',
+      n: anns.length,
+      withErrors: anns.filter((a) => a.errors.length > 0).length,
+      provenance: {
+        'vep.mostSevere/consequenceTerms/impact/transcript/isMane/gene': 'local-vep',
+        'vep.caddPhred': 'local-vep (dbNSFP CADD_phred; missense/splice SNVs only)',
+        'gnomad.jointAf/popmaxAf':
+          'local-vep (dbNSFP gnomAD4.1_joint_AF / _POPMAX_AF; nsSNVs only)',
+        'gnomad.exomeAf/genomeAf/exomePopmaxAf/genomePopmaxAf':
+          'local-vep (VEP 115 cache gnomAD v4.1 exome/genome)',
+        'vep.hgvsc/hgvsp': 'not available (null)'
+      },
+      vepMane: anns.filter((a) => a.vep?.isMane === true).length,
+      inGnomad: anns.filter((a) => a.gnomad?.found === true).length,
+      sha256: createHash('sha256').update(spikes).digest('hex')
     },
-    vepMane: anns.filter((a) => a.vep?.isMane === true).length,
-    gnomadFound: anns.filter((a) => a.gnomad?.found === true).length,
-    gnomadAbsent: anns.filter((a) => a.gnomad?.found === false).length,
-    sources: {
-      genefoundry: {
+    crossCheck: {
+      file: 'genefoundry-crosscheck.jsonl.gz',
+      n: crossCheck.length,
+      byStratum: countBy(crossCheck, (a) => stratum.get(a.poolKey) ?? 'unknown'),
+      source: 'genefoundry',
+      endpoints: {
         vep: 'https://vep-link.genefoundry.org/mcp annotate_variants_batch (response_mode=full; MANE Select > canonical; CADD from position_scores)',
         gnomad:
           'https://gnomad-link.genefoundry.org/mcp get_variant_frequencies (gnomad_r4 v4.1.1, exclude_zero_populations=false; popmax excludes ami/asj/fin/mid/remaining)'
       },
-      'local-vep':
-        'VEP 115.2 offline cache + dbNSFP 5.3.1a (CADD_phred, gnomAD4.1_joint_AF, gnomAD4.1_joint_POPMAX_AF); pick order mane_select,canonical,…; dbNSFP covers missense/splice SNVs only, so CADD and joint AF are null for indels and other SNVs there'
+      fetchedFrom: fetched[0] ?? null,
+      fetchedTo: fetched[fetched.length - 1] ?? null,
+      sha256: createHash('sha256').update(cross).digest('hex')
     },
-    fetchedFrom: fetched[0] ?? null,
-    fetchedTo: fetched[fetched.length - 1] ?? null,
-    sha256: createHash('sha256').update(jsonl).digest('hex')
+    localVep:
+      'VEP 115.2 offline cache + dbNSFP 5.3.1a (CADD_phred, gnomAD4.1_joint_AF, gnomAD4.1_joint_POPMAX_AF); --everything, pick order mane_select,canonical,appris,tsl,biotype,ccds,rank,length'
   }
   writeFileSync(join(SPIKES_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
   console.log('frozen', manifest)

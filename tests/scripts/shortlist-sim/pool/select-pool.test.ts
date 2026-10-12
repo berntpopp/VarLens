@@ -7,8 +7,8 @@ import { rng } from '../../../../scripts/shortlist-sim/common/rng'
 const DATA = resolve(process.cwd(), 'tests/test-data/shortlist-sim')
 const build = (seed = 1) =>
   buildPool({
-    clinvar: `${DATA}/clinvar-mini.vcf`,
-    clinvar2024: `${DATA}/clinvar-mini-2024.vcf`,
+    clinvar: `${DATA}/clinvar-mini.vcf.txt`,
+    clinvar2024: `${DATA}/clinvar-mini-2024.vcf.txt`,
     hpoa: `${DATA}/hpoa-mini.tsv`,
     seed
   })

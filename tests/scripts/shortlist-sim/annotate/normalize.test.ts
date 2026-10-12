@@ -36,5 +36,5 @@ describe.skipIf(!available)('normalizeAlleles (bcftools norm)', () => {
     expect(out[1]).toMatchObject({ status: 'ok', pos: START + 40, ref: snvRef })
     expect(out[2].status).toBe('ref_mismatch')
     expect(out[3].status).toBe('multiallelic')
-  })
+  }, 300_000) // the FASTA sits on a CIFS share; bcftools can be slow under load
 })

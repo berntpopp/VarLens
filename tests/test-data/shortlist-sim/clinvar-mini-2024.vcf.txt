@@ -1,0 +1,5 @@
+##fileformat=VCFv4.1
+##fileDate=2024-01-07
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	1000	1	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	2000	2	C	T	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Uncertain_significance;CLNVC=single_nucleotide_variant;GENEINFO=GENEB:2;ORIGIN=1

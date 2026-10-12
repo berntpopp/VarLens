@@ -52,17 +52,15 @@ describe('callTool', () => {
   })
 
   it('surfaces a non-retryable tool failure (e.g. not_found) without retrying', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        ok({
-          jsonrpc: '2.0',
-          id: 1,
-          result: {
-            structuredContent: { success: false, error_code: 'not_found', retryable: false }
-          }
-        })
-      )
+    const fetchMock = vi.fn().mockResolvedValue(
+      ok({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          structuredContent: { success: false, error_code: 'not_found', retryable: false }
+        }
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
     const err = await callTool('gnomad-link', 'x', {}, fast).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(GenefoundryToolError)
