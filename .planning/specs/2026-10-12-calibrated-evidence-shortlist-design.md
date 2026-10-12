@@ -75,6 +75,7 @@ interface EvidenceRuleset { version: 1; id: string; sha256: string; modes: ModeP
 - **Explanation = exact contributions:** `rank_evidence` lists the mode points and each contributing rule; their sum equals `rank_score` (asserted).
 - **Compound het:** `ar_comphet` rows return `rank_partners` (IDs of the other het alleles in the gene). The UI says "possible compound heterozygous" (no phase).
 - **Pins:** starred pin as today. The ClinVar pin is configurable; the built-in evidence preset leaves it off (ClinVar is a scored group).
+- **Gate (fixed, pre-registered):** the evidence preset's Stage-1 filter is `maxGnomadAf: 0.01` (missing AF passes, as in the SQL filter) and `consequences: [HIGH, MODERATE, LOW]` (MODIFIER = intergenic/upstream/downstream excluded; varvis labels intronic LOW, so LOW is kept to preserve intronic and synonymous-splice positives).
 - **Validation:** unique IDs, every `when` compiles, |points| ≤ 20, ≤ 40 groups, ≤ 200 rules, `variantTypeScope ⊆ {snv, indel}`, and **no `inheritanceModes`/`analysisGroupId` in `baseFilters`** (modes are scored, not filtered). A stored preset that fails validation raises the existing `DatabaseError` path.
 
 ### 3.5 Contracts, UI, provenance
