@@ -79,4 +79,16 @@ describe('cohort carrier frequency — case and cohort agree', () => {
     const freqs = rows.map((r) => r.cohort_frequency ?? -1)
     expect(freqs).toEqual([...freqs].sort((x, y) => y - x))
   })
+
+  it('counts a JSON GTNum-Index code such as 0 as a carrier: only no-calls are not carriers', () => {
+    // GTNum-Index (JSON import) stores an undocumented numeric code as text;
+    // only the VCF no-call forms are known to mean "not carried".
+    const json = service.cases.createCase('json38', '/j.json', 1, 'GRCh38')
+    service.variants.insertVariantsBatch(json, [v({ ...SNV, gt_num: '0' })])
+    service.cohortSummary.rebuild()
+    service.cohort.invalidateColumnMetaCache()
+    const snv = byType(cohortRows({ genome_build: 'GRCh38' }), 'snv')
+    expect(snv?.carrier_count).toBe(3)
+    expect(byType(caseRows(json), 'snv')?.internal_af).toBeCloseTo(1)
+  })
 })

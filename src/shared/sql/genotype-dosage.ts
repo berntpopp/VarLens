@@ -26,8 +26,8 @@ export const REF_GT_SQL = sqlList(REF_GENOTYPES)
 export const ALT_GT_SQL = sqlList([...HET_GENOTYPES, ...HOM_GENOTYPES, ...HEMI_GENOTYPES])
 
 /**
- * Variant row `alias` is a carrier: its genotype is not a no-call or a
- * reference call (NULL — a file without GT — counts as carried). Every
+ * Variant row `alias` is a carrier: its genotype is not a no-call
+ * (NON_CARRIER_GENOTYPES; NULL — a file without GT — counts as carried). Every
  * cohort-summary contribution keeps carrier rows only, so carrier, het and
  * hom counts never include a no-call SV/CNV/STR row.
  */

@@ -22,21 +22,14 @@ export const HEMI_GENOTYPES = ['1'] as const
  */
 export const REF_GENOTYPES = ['0/0', '0|0', '0'] as const
 
-/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
-const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
-
 /**
- * Genotypes that name no copy of the row's allele: a no-call (an SV/CNV/STR
- * no-call row is imported, small no-calls are not), a reference call, or a
- * reference half-call. Such a row is not a carrier.
+ * Genotypes of a row that is not a carrier: the VCF no-call forms, which the
+ * VCF import keeps for SV/CNV/STR rows only (VcfMapper; small no-calls and
+ * reference calls are never stored). Anything else counts as carried — a
+ * JSON `GTNum-Index` value is an undocumented numeric code (0, 1, 2, …), so
+ * even '0' is a reported variant, not a reference call.
  */
-export const NON_CARRIER_GENOTYPES = [
-  '.',
-  './.',
-  '.|.',
-  ...REF_GENOTYPES,
-  ...REF_HALF_CALLS
-] as const
+export const NON_CARRIER_GENOTYPES = ['.', './.', '.|.'] as const
 
 export type Zygosity = 'het' | 'hom' | 'hemi'
 
@@ -80,6 +73,9 @@ export function genotypeCallKey(gt: string | null | undefined): string {
             : 0
   return `${rank}${gt ?? ''}`
 }
+
+/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
+const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
 
 /**
  * Alleles a genotype calls, for an allele-frequency denominator: 1 for a
