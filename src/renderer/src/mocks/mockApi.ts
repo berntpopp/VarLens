@@ -124,8 +124,8 @@ export const mockApi: WindowAPI = {
       return { jobId: 'mock-delete-job' }
     },
     availableBuilds: async () => mockAvailableBuilds(cases),
-    buildReviews: async () => [],
-    resolveBuildReview: async () => undefined
+    buildReviews: async () => ({ reviews: [], renameInProgress: false }),
+    resolveBuildReviews: async (choices) => choices.length
   },
 
   variants: {

@@ -11,7 +11,6 @@ export function createCasesApi(): CasesDomainContract {
     startDelete: (target) => ipcRenderer.invoke('cases:startDelete', target),
     availableBuilds: () => ipcRenderer.invoke('cases:availableBuilds'),
     buildReviews: () => ipcRenderer.invoke('cases:buildReviews'),
-    resolveBuildReview: (caseId, build) =>
-      ipcRenderer.invoke('cases:resolveBuildReview', caseId, build)
+    resolveBuildReviews: (choices) => ipcRenderer.invoke('cases:resolveBuildReviews', choices)
   }
 }

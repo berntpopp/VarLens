@@ -15,10 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
-import {
-  renameCaseContigsPg,
-  runContigNamingStep
-} from '../../../src/main/storage/postgres/postgres-contig-naming'
+import { runContigNamingStep } from '../../../src/main/storage/postgres/postgres-contig-naming'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -159,7 +156,7 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
         .rows
     ).toEqual([{ case_id: c, reason: 'no_evidence' }])
     expect(await annotation('chr1', 100)).toEqual({
-      global_comment: 'b\n\na',
+      global_comment: 'a\n\nb',
       starred: 1,
       acmg_classification: 'Pathogenic'
     })
@@ -176,7 +173,7 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
     expect(
       (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t('cohort_summary_rebuild_requests')}`))
         .rows[0].n
-    ).toBeGreaterThan(0)
+    ).toBe(1) // one rebuild, asked when the queue emptied
     expect(
       (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t('contig_naming_pending')}`)).rows[0].n
     ).toBe(0)
@@ -201,35 +198,134 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
     ).toEqual(annotations)
   }, 60_000)
 
-  it('cases:resolveBuildReview stores the build, renames and clears the review', async () => {
-    const { c } = await seed()
-    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+  const migrate = (): Promise<unknown> =>
+    new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+  const count = async (table: string): Promise<number> =>
+    (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t(table)}`)).rows[0].n
+
+  it('a GRCh38 1 / hg19 chr1 swap keeps each note with its own locus', async () => {
+    const a = await addCase('A', 'GRCh38', GRCH38_HEADER)
+    const c = await addCase('C', 'GRCh37', GRCH37_TAG)
+    await addVariant(a, '1', 100)
+    await addVariant(c, 'chr1', 100)
+    await annotate('1', 100, 'GRCh38 note', 0, 'Benign', 1)
+    await annotate('chr1', 100, 'GRCh37 note', 0, 'Pathogenic', 2)
+    await migrate()
     await runJob()
-    const repo = new PostgresBuildReviewRepository(pool, schema)
-    expect(await repo.listBuildReviews()).toMatchObject([{ caseId: c, caseName: 'C' }])
-    await repo.resolveBuildReview(c, 'GRCh37')
+    expect(await chrsOf(a)).toEqual(['chr1'])
     expect(await chrsOf(c)).toEqual(['1'])
-    expect(
-      (await probe.query(`SELECT genome_build FROM ${t('cases')} WHERE id = $1`, [c])).rows[0]
-    ).toEqual({ genome_build: 'GRCh37' })
-    expect(await repo.listBuildReviews()).toEqual([])
-    await expect(repo.resolveBuildReview(c, 'GRCh38')).rejects.toThrow(/no genome build/)
+    expect(await annotation('chr1', 100)).toMatchObject({ global_comment: 'GRCh38 note' })
+    expect(await annotation('1', 100)).toMatchObject({ global_comment: 'GRCh37 note' })
   }, 60_000)
 
-  it('a confirmed review renames the flagged case with the same rules', async () => {
-    const { c } = await seed()
-    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+  it('a shared note stays with a renamed GRCh37 case that keeps its key (1 + chrMT)', async () => {
+    const a = await addCase('A', 'GRCh38', GRCH38_HEADER)
+    const e = await addCase('E', 'GRCh37', GRCH37_TAG)
+    await addVariant(a, '1', 100)
+    await addVariant(e, '1', 100)
+    await addVariant(e, 'chrMT', 50)
+    await annotate('1', 100, 'shared note', 0, null, 1)
+    await migrate()
     await runJob()
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await renameCaseContigsPg(client, schema, c, [{ from: '1', to: 'chr1' }])
-      await client.query('COMMIT')
-    } finally {
-      client.release()
+    expect(await chrsOf(e)).toEqual(['1', 'MT'])
+    expect(await annotation('1', 100)).toMatchObject({ global_comment: 'shared note' })
+    expect(await annotation('chr1', 100)).toMatchObject({ global_comment: 'shared note' })
+  }, 60_000)
+
+  it('resolveBuildReviews confirms many cases in one write, audit-logged, renamed by the job', async () => {
+    const ids: number[] = []
+    for (const name of ['P1', 'P2', 'P3']) {
+      const id = await addCase(name, 'GRCh38', null)
+      await addVariant(id, '1', 100)
+      ids.push(id)
     }
-    expect(await chrsOf(c)).toEqual(['chr1'])
-    expect(await annotation('1', 100)).toBeUndefined()
+    await migrate()
+    await runJob()
+    const repo = new PostgresBuildReviewRepository(pool, schema)
+    const listed = await repo.listBuildReviews()
+    expect(listed.reviews.map((r) => r.caseId)).toEqual(ids)
+    expect(listed.renameInProgress).toBe(false)
+    expect(await repo.resolveBuildReviews(ids.map((caseId) => ({ caseId, build: 'GRCh37' })))).toBe(
+      3
+    )
+    expect((await repo.listBuildReviews()).renameInProgress).toBe(true)
+    await runJob()
+    for (const id of ids) expect(await chrsOf(id)).toEqual(['1'])
+    expect(await repo.listBuildReviews()).toEqual({ reviews: [], renameInProgress: false })
+    const audit = await probe.query(
+      `SELECT entity_key, old_value, new_value FROM varlens_audit."audit_log"
+        WHERE project_schema = $1 AND action_type = 'api_write' ORDER BY id`,
+      [schema]
+    )
+    expect(audit.rows).toHaveLength(3)
+    expect(audit.rows[0]).toMatchObject({ entity_key: `cases:${ids[0]}:genome_build` })
+    expect(JSON.parse(audit.rows[0].new_value)).toMatchObject({ genome_build: 'GRCh37' })
+    await expect(repo.resolveBuildReviews([{ caseId: ids[0], build: 'GRCh38' }])).rejects.toThrow(
+      /no genome build/
+    )
+  }, 60_000)
+
+  it('a job killed mid-case rolls that case back and resumes on the next run', async () => {
+    const { a } = await seed()
+    await migrate()
+    let failOnce = true
+    const flaky = {
+      connect: async () => {
+        const client = await pool.connect()
+        const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>
+        ;(client as unknown as { query: unknown }).query = (...args: unknown[]) => {
+          const text = typeof args[0] === 'string' ? args[0] : ''
+          if (failOnce && text.includes('"variants_all" SET chr')) {
+            failOnce = false
+            return Promise.reject(new Error('killed mid-case'))
+          }
+          return query(...args)
+        }
+        return client
+      }
+    }
+    await expect(
+      (async () => {
+        while (await runContigNamingStep({ pool: flaky as never, schema })) {
+          // until the injected failure
+        }
+      })()
+    ).rejects.toThrow('killed mid-case')
+    expect(await chrsOf(a)).toEqual(['1', 'MT']) // rolled back, still queued
+    expect(await count('contig_naming_pending')).toBeGreaterThan(0)
+    await runJob()
+    expect(await chrsOf(a)).toEqual(['chr1', 'chrM'])
+    expect(await frequencies()).toEqual(await recount())
+    expect(await count('contig_naming_pending')).toBe(0)
+  }, 60_000)
+
+  it('an import and an annotation edit during the job are kept', async () => {
+    const { a } = await seed()
+    await migrate()
+    // Plan every case, then let a user act before annotations move.
+    while (
+      (await probe.query(`SELECT 1 FROM ${t('contig_naming_pending')} WHERE pairs IS NULL`)).rows
+        .length > 0 ||
+      (await count('contig_naming_pending')) === 4
+    ) {
+      if (!(await runContigNamingStep({ pool, schema }))) break
+    }
+    const late = await addCase('LATE', 'GRCh38', null)
+    await addVariant(late, 'chr1', 300)
+    // What a publication counts for the new case (it is not queued: already canonical).
+    await probe.query(
+      `INSERT INTO ${t('variant_frequency')} (chr, pos, ref, alt, case_count)
+       VALUES ('chr1', 300, 'A', 'G', 1)
+       ON CONFLICT (coord_hash) DO UPDATE SET case_count = ${t('variant_frequency')}.case_count + 1`
+    )
+    await probe.query(
+      `UPDATE ${t('variant_annotations')} SET global_comment = 'edited', updated_at = 5
+        WHERE chr = '1' AND pos = 300`
+    )
+    await runJob()
+    expect(await chrsOf(a)).toEqual(['chr1', 'chrM'])
+    expect(await chrsOf(late)).toEqual(['chr1'])
+    expect(await annotation('chr1', 300)).toMatchObject({ global_comment: 'edited' })
     expect(await frequencies()).toEqual(await recount())
   }, 60_000)
 })

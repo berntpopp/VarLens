@@ -33,7 +33,7 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         return this.databaseService.cases.getAvailableGenomeBuilds()
 
       case 'cases:buildReviews':
-        return this.databaseService.cases.listBuildReviews()
+        return { reviews: this.databaseService.cases.listBuildReviews(), renameInProgress: false }
 
       case 'case-metadata:get':
         if (this.dbPool !== null) {

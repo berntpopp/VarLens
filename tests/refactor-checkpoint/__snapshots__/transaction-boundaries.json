@@ -48,8 +48,8 @@
       "assignedTo": null
     },
     {
-      "file": "src/main/database/contig-naming-migration.ts",
-      "callerFunction": "resolveBuildReview",
+      "file": "src/main/database/contig-rename-sqlite.ts",
+      "callerFunction": "resolveBuildReviews",
       "assignedTo": null
     },
     {

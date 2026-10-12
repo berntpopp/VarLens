@@ -4,9 +4,12 @@ import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { readVcfHeaderLinesSync } from '../../../../src/main/import/vcf/read-vcf-header-sync'
+import {
+  readVcfHeaderLines,
+  readVcfHeaderLinesSync
+} from '../../../../src/main/import/vcf/read-vcf-header'
 
-describe('readVcfHeaderLinesSync', () => {
+describe('readVcfHeaderLines(Sync)', () => {
   let dir: string
   const vcf = [
     '##fileformat=VCFv4.2',
@@ -41,6 +44,14 @@ describe('readVcfHeaderLinesSync', () => {
   it('drops a header line cut off by the read limit', () => {
     writeFileSync(join(dir, 'cut.vcf'), vcf)
     expect(readVcfHeaderLinesSync(join(dir, 'cut.vcf'), 40)).toEqual(['##fileformat=VCFv4.2'])
+  })
+
+  it('the async reader gives the same lines (PostgreSQL job)', async () => {
+    writeFileSync(join(dir, 'a.vcf.gz'), gzipSync(vcf))
+    expect(await readVcfHeaderLines(join(dir, 'a.vcf.gz'))).toEqual(
+      readVcfHeaderLinesSync(join(dir, 'a.vcf.gz'))
+    )
+    expect(await readVcfHeaderLines(join(dir, 'gone.vcf'))).toEqual([])
   })
 
   it('a missing or empty path gives no evidence', () => {

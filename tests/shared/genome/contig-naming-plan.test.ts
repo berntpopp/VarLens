@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { GENOME_BUILDS, type GenomeBuildDef } from '../../../src/shared/config/genome-builds.config'
 import {
   contigRenamePairs,
-  mergeGlobalAnnotations,
   planCaseContigNaming
 } from '../../../src/shared/genome/contig-naming-plan'
 
@@ -92,45 +91,5 @@ describe('contigRenamePairs', () => {
     expect(contigRenamePairs(['1', 'chr2', 'chrM', 'KI270706.1'], 'GRCh37')).toEqual([
       { from: 'chr2', to: '2' }
     ])
-  })
-})
-
-describe('mergeGlobalAnnotations', () => {
-  const row = (over: Partial<Parameters<typeof mergeGlobalAnnotations>[0]>) => ({
-    global_comment: null,
-    starred: 0,
-    acmg_classification: null,
-    acmg_evidence: null,
-    updated_at: 1,
-    ...over
-  })
-
-  it('keeps the star, joins the comments and keeps the newer classification', () => {
-    expect(
-      mergeGlobalAnnotations(
-        row({ global_comment: 'a', starred: 1, acmg_classification: 'Benign', updated_at: 1 }),
-        row({
-          global_comment: 'b',
-          acmg_classification: 'Pathogenic',
-          acmg_evidence: '{}',
-          updated_at: 2
-        })
-      )
-    ).toEqual({
-      global_comment: 'a\n\nb',
-      starred: 1,
-      acmg_classification: 'Pathogenic',
-      acmg_evidence: '{}',
-      discardedAcmg: 'Benign'
-    })
-  })
-
-  it('an identical comment appears once; a missing newer classification keeps the older', () => {
-    expect(
-      mergeGlobalAnnotations(
-        row({ global_comment: 'same', acmg_classification: 'Benign', updated_at: 1 }),
-        row({ global_comment: 'same ', updated_at: 5 })
-      )
-    ).toMatchObject({ global_comment: 'same', acmg_classification: 'Benign', discardedAcmg: null })
   })
 })

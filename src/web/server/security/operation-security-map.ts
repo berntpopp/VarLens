@@ -69,7 +69,7 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'cases:query': read(),
   'cases:availableBuilds': read(),
   'cases:buildReviews': read(),
-  'cases:resolveBuildReview': write('analyst'),
+  'cases:resolveBuildReviews': write('analyst'),
   'cases:delete': write('analyst'),
   'cases:startDelete': write('analyst'),
   'cases:deleteBatch': write('analyst'),

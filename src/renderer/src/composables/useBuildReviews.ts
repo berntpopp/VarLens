@@ -4,7 +4,7 @@
  */
 import { ref } from 'vue'
 
-import type { BuildReview } from '../../../shared/types/build-review'
+import type { BuildReview, BuildReviewChoice } from '../../../shared/types/build-review'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { useApiService } from './useApiService'
@@ -12,12 +12,15 @@ import { useApiService } from './useApiService'
 export function useBuildReviews() {
   const { api } = useApiService()
   const reviews = ref<BuildReview[]>([])
+  const renameInProgress = ref(false)
   const applying = ref(false)
 
   async function load(): Promise<void> {
     if (api === undefined) return
     try {
-      reviews.value = unwrapIpcResult(await api.cases.buildReviews())
+      const list = unwrapIpcResult(await api.cases.buildReviews())
+      reviews.value = list.reviews
+      renameInProgress.value = list.renameInProgress
     } catch (error) {
       // The notice is optional: a failed check must not break the shell.
       reviews.value = []
@@ -25,22 +28,17 @@ export function useBuildReviews() {
     }
   }
 
-  /** Apply the chosen builds one case at a time; the list is reloaded afterwards. */
-  async function apply(choices: ReadonlyMap<number, string>): Promise<number> {
-    if (api === undefined) return 0
+  /** Confirm the chosen builds in one write; the list is reloaded afterwards. */
+  async function apply(choices: BuildReviewChoice[]): Promise<number> {
+    if (api === undefined || choices.length === 0) return 0
     applying.value = true
-    let applied = 0
     try {
-      for (const [caseId, build] of choices) {
-        unwrapIpcResult(await api.cases.resolveBuildReview(caseId, build))
-        applied++
-      }
+      return unwrapIpcResult(await api.cases.resolveBuildReviews(choices))
     } finally {
       applying.value = false
       await load()
     }
-    return applied
   }
 
-  return { reviews, applying, load, apply }
+  return { reviews, renameInProgress, applying, load, apply }
 }

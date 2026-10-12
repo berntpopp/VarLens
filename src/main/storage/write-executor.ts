@@ -19,6 +19,7 @@ import type {
 } from '../ipc/handlers/annotations-logic'
 import type { AuditAppendParams } from './audit-log-types'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
+import type { BuildReviewChoice } from '../../shared/types/build-review'
 
 export type StorageWriteTask =
   | {
@@ -26,7 +27,7 @@ export type StorageWriteTask =
       /** `successor`: a published case that takes the deleted one's name in the same transaction. */
       params: [caseId: number, successor?: { id: number; name: string }]
     }
-  | { type: 'cases:resolveBuildReview'; params: [caseId: number, build: string] }
+  | { type: 'cases:resolveBuildReviews'; params: [choices: BuildReviewChoice[]] }
   | { type: 'case-metadata:upsert'; params: [caseId: number, updates: MetadataUpdates] }
   | { type: 'case-metadata:createCohort'; params: [params: CohortCreateParams] }
   | {

@@ -1974,7 +1974,7 @@ export function runMigrations(db: Database.Database): void {
     db.exec('PRAGMA user_version = 46')
   }
 
-  // v47: chromosome names per build (mirrors PG 0030 + contig-naming-job).
+  // v47: chromosome names per build (mirrors PG 0030 + postgres-contig-naming.ts).
   if (currentVersion < 47) {
     migrateContigNaming(db)
     db.exec('PRAGMA user_version = 47')

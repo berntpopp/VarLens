@@ -74,6 +74,8 @@ function sanitizeAuditField(key: string, value: unknown): unknown {
       return typeof value === 'number' ? value : String(value)
     case 'role':
       return normalizeUserRole(value) ?? 'unknown'
+    case 'genome_build':
+      return typeof value === 'string' && value.length <= 40 ? value : null
     case 'method':
     case 'reason':
       return typeof value === 'string' && value.length <= 120 ? value : undefined

@@ -34,8 +34,11 @@ export interface GenomeBuildDef {
     /** Mito names (upper case, `chr` stripped) that are this build's rCRS mitochondrion. */
     mitoAliases: readonly string[]
   }
-  /** External-link placeholders `{build_ucsc}` and `{dataset_gnomad}`. */
-  links?: { ucscDb: string; gnomadDataset: string }
+  /**
+   * External-link placeholders: `{build_ucsc}`, `{dataset_gnomad}`, and the
+   * UCSC name of this build's rCRS mitochondrion (`{chr_ucsc}` of MT).
+   */
+  links?: { ucscDb: string; gnomadDataset: string; ucscRcrsMito: string }
 }
 
 export const GENOME_BUILDS = [
@@ -56,7 +59,7 @@ export const GENOME_BUILDS = [
     ],
     mito: { chrM: 16_569, MT: 16_569 },
     naming: { primaryPrefix: 'chr', mito: 'chrM', mitoAliases: ['M', 'MT'] },
-    links: { ucscDb: 'hg38', gnomadDataset: 'gnomad_r4' },
+    links: { ucscDb: 'hg38', gnomadDataset: 'gnomad_r4', ucscRcrsMito: 'chrM' },
     contigs: {
       1: 248_956_422,
       2: 242_193_529,
@@ -104,7 +107,8 @@ export const GENOME_BUILDS = [
     mito: { MT: 16_569, chrM: 16_571 },
     // hg19 chrM / M (NC_001807) is a different sequence: never renamed to MT.
     naming: { primaryPrefix: '', mito: 'MT', mitoAliases: ['MT'] },
-    links: { ucscDb: 'hg19', gnomadDataset: 'gnomad_r2_1' },
+    // hg19's chrM is NC_001807; its rCRS is chrMT (hg19.p13.plusMT).
+    links: { ucscDb: 'hg19', gnomadDataset: 'gnomad_r2_1', ucscRcrsMito: 'chrMT' },
     contigs: {
       1: 249_250_621,
       2: 243_199_373,
@@ -279,8 +283,17 @@ export const BUILD_COPY = {
   reviewStored: 'Stored',
   reviewSuggested: 'Header',
   reviewChoice: 'Build',
-  reviewApply: 'Apply',
+  reviewSetSelected: 'Set selected to',
+  reviewSelectGroup: (reason: string) => `Select all: ${reason}`,
+  reviewApplySelected: (count: number) => `Confirm selected (${count})`,
+  reviewApplyAll: (count: number) => `Confirm all (${count})`,
+  renameInProgress:
+    'Chromosome names are being updated in the background. Until it finishes, cohort counts can mix old and new names.',
   reviewLater: 'Later',
+  migrationNoSpace: (needed: string, free: string) =>
+    `Updating the chromosome names of this database needs about ${needed} of free disk space next to it (a backup copy and the change log), but only ${free} is free. Free some space and open the database again; nothing has been changed.`,
+  migrationBusy:
+    'The database is open in another program, so VarLens cannot take the backup it needs before updating chromosome names. Close the other program and open the database again; nothing has been changed.',
   reviewApplied: (count: number) =>
     `Genome build confirmed for ${count} case${count === 1 ? '' : 's'}.`
 } as const
@@ -302,7 +315,7 @@ export const IMPORTABLE_GENOME_BUILDS: readonly GenomeBuildDef[] = GENOME_BUILDS
 )
 
 /** Link placeholders of a build; an unknown build gets GRCh38's. */
-export function genomeBuildLinks(id: string): { ucscDb: string; gnomadDataset: string } {
+export function genomeBuildLinks(id: string): NonNullable<GenomeBuildDef['links']> {
   const builds: readonly GenomeBuildDef[] = GENOME_BUILDS
   return (builds.find((b) => b.id === id) ?? builds[0]).links ?? builds[0].links!
 }

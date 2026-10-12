@@ -48,9 +48,8 @@ export async function executeSqliteWriteTask(
       repos.cases.deleteCase(task.params[0])
       return undefined
 
-    case 'cases:resolveBuildReview':
-      repos.cases.resolveBuildReview(task.params[0], task.params[1])
-      return undefined
+    case 'cases:resolveBuildReviews':
+      return repos.cases.resolveBuildReviews(task.params[0])
 
     case 'case-metadata:upsert':
       return repos.metadata.upsertCaseMetadata(task.params[0], task.params[1])

@@ -68,7 +68,7 @@ export const READ_TASK_TYPES = [
 
 export const WRITE_TASK_TYPES = [
   'cases:delete',
-  'cases:resolveBuildReview',
+  'cases:resolveBuildReviews',
   'case-metadata:upsert',
   'case-metadata:createCohort',
   'case-metadata:updateCohort',

@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository'
-import { listBuildReviews, resolveBuildReview } from './contig-naming-migration'
-import type { BuildReview } from '../../shared/types/build-review'
+import { listBuildReviews, resolveBuildReviews } from './contig-rename-sqlite'
+import type { BuildReview, BuildReviewChoice } from '../../shared/types/build-review'
 import type {
   AvailableBuild,
   Case,
@@ -114,9 +114,9 @@ export class CaseRepository extends BaseRepository {
     return listBuildReviews(this.db)
   }
 
-  /** Confirm a flagged case's build and rename its contigs to that build's form. */
-  resolveBuildReview(caseId: number, build: string): void {
-    resolveBuildReview(this.db, caseId, build)
+  /** Confirm the builds of flagged cases and rename their contigs, in one transaction. */
+  resolveBuildReviews(choices: readonly BuildReviewChoice[]): number {
+    return resolveBuildReviews(this.db, choices)
   }
 
   /**

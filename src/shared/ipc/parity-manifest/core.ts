@@ -26,7 +26,7 @@ export const casesManifest = {
   startDelete: sharedWrite(),
   availableBuilds: sharedRead(),
   buildReviews: sharedRead(),
-  resolveBuildReview: sharedWrite()
+  resolveBuildReviews: sharedWrite()
 } satisfies DomainManifest<'cases'>
 
 export const variantsManifest = {

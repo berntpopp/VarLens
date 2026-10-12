@@ -12,3 +12,19 @@ export interface BuildReview {
   suggestedBuild: string | null
   reason: BuildReviewReason
 }
+
+/** The build the user confirmed for one flagged case (cases:resolveBuildReviews). */
+export interface BuildReviewChoice {
+  caseId: number
+  build: string
+}
+
+/** cases:buildReviews: the flagged cases, and whether a background rename still runs. */
+export interface BuildReviewList {
+  reviews: BuildReview[]
+  /**
+   * PostgreSQL only: stored cases are still being renamed in the background,
+   * so cohort counts can mix old and new names until it finishes.
+   */
+  renameInProgress: boolean
+}

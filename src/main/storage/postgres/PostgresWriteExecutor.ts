@@ -44,7 +44,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
     private readonly caseLifecycle: Pick<PostgresCaseLifecycleRepository, 'deleteCase'>,
     private readonly workflow: {
       audit: Pick<PostgresAuditLogRepository, 'append'>
-      buildReviews: Pick<PostgresBuildReviewRepository, 'resolveBuildReview'>
+      buildReviews: Pick<PostgresBuildReviewRepository, 'resolveBuildReviews'>
       tags: Pick<
         PostgresTagsRepository,
         | 'createTag'
@@ -121,8 +121,8 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         return await this.caseLifecycle.deleteCase(caseId, { successor })
       }
 
-      case 'cases:resolveBuildReview':
-        return await this.workflow.buildReviews.resolveBuildReview(task.params[0], task.params[1])
+      case 'cases:resolveBuildReviews':
+        return await this.workflow.buildReviews.resolveBuildReviews(task.params[0])
 
       case 'case-metadata:upsert':
         return await this.caseMetadata.upsertCaseMetadata(task.params[0], task.params[1])

@@ -9,11 +9,14 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  listBuildReviews,
-  migrateContigNaming,
-  renameCaseContigs,
-  resolveBuildReview
+  assertFreeSpaceForMigration,
+  migrateContigNaming
 } from '../../../src/main/database/contig-naming-migration'
+import {
+  listBuildReviews,
+  renameCases,
+  resolveBuildReviews
+} from '../../../src/main/database/contig-rename-sqlite'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { VariantFrequencyService } from '../../../src/main/database/VariantFrequencyService'
@@ -137,7 +140,7 @@ describe('migration v47: chromosome names per build', () => {
     ])
 
     expect(annotation('chr1', 100)).toEqual({
-      global_comment: 'b\n\na',
+      global_comment: 'a\n\nb',
       starred: 1,
       acmg_classification: 'Pathogenic'
     })
@@ -162,6 +165,42 @@ describe('migration v47: chromosome names per build', () => {
     expect(
       db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()
     ).toEqual({ value: '1' })
+  })
+
+  it('a shared annotation stays with a renamed case that keeps its key (GRCh37 1 + chrMT)', () => {
+    const a = addCase('A', 'GRCh38', GRCH38_HEADER)
+    const e = addCase('E', 'GRCh37', GRCH37_TAG)
+    addVariant(a, '1', 100)
+    addVariant(e, '1', 100)
+    addVariant(e, 'chrMT', 50) // E is renamed too (chrMT → MT) but keeps 1
+    annotate('1', 100, { comment: 'shared note' })
+    migrateContigNaming(db, vi.fn())
+    expect(chrsOf(e)).toEqual(['1', 'MT'])
+    expect(annotation('1', 100)).toMatchObject({ global_comment: 'shared note' })
+    expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'shared note' })
+  })
+
+  it('a GRCh38 1 / hg19 chr1 swap keeps each note with its own locus', () => {
+    const a = addCase('A', 'GRCh38', GRCH38_HEADER)
+    const c = addCase('C', 'GRCh37', GRCH37_TAG)
+    addVariant(a, '1', 100)
+    addVariant(c, 'chr1', 100)
+    annotate('1', 100, { comment: 'GRCh38 note', acmg: 'Benign' })
+    annotate('chr1', 100, { comment: 'GRCh37 note', acmg: 'Pathogenic' })
+    migrateContigNaming(db, vi.fn())
+    expect(chrsOf(a)).toEqual(['chr1'])
+    expect(chrsOf(c)).toEqual(['1'])
+    expect(annotation('chr1', 100)).toEqual({
+      global_comment: 'GRCh38 note',
+      starred: 0,
+      acmg_classification: 'Benign'
+    })
+    expect(annotation('1', 100)).toEqual({
+      global_comment: 'GRCh37 note',
+      starred: 0,
+      acmg_classification: 'Pathogenic'
+    })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM audit_log').get()).toEqual({ n: 0 })
   })
 
   it('is idempotent: a second run changes nothing and takes no backup', () => {
@@ -195,13 +234,13 @@ describe('migration v47: chromosome names per build', () => {
     })
   })
 
-  it('renameCaseContigs (a confirmed review) applies the same rules to one case', () => {
+  it('renaming a confirmed case later applies the same rules', () => {
     const { c } = seed()
     migrateContigNaming(db, vi.fn())
-    renameCaseContigs(db, c, [{ from: '1', to: 'chr1' }])
+    renameCases(db, new Map([[c, [{ from: '1', to: 'chr1' }]]]))
     expect(chrsOf(c)).toEqual(['chr1'])
     expect(annotation('1', 100)).toBeUndefined() // nobody uses 1:100 any more: merged and removed
-    expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'b\n\na', starred: 1 })
+    expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'a\n\nb', starred: 1 })
   })
 
   it('resolving a review stores the chosen build and renames to its form', () => {
@@ -212,14 +251,89 @@ describe('migration v47: chromosome names per build', () => {
     db.prepare("UPDATE variants SET chr = '1' WHERE case_id = ? AND chr = 'chr1'").run(x)
     migrateContigNaming(db, vi.fn())
     expect(listBuildReviews(db)).toMatchObject([{ caseId: x, suggestedBuild: 'GRCh37' }])
-    resolveBuildReview(db, x, 'GRCh37')
+    expect(resolveBuildReviews(db, [{ caseId: x, build: 'GRCh37' }])).toBe(1)
     expect(chrsOf(x)).toEqual(['1', '2'])
     expect(db.prepare('SELECT genome_build FROM cases WHERE id = ?').get(x)).toEqual({
       genome_build: 'GRCh37'
     })
     expect(listBuildReviews(db)).toEqual([])
-    expect(() => resolveBuildReview(db, x, 'GRCh37')).toThrow(/no genome build to confirm/)
-    expect(() => resolveBuildReview(db, x, 'hg17')).toThrow(/Unknown genome build/)
+    const audit = db
+      .prepare(
+        "SELECT entity_key, old_value, new_value, user_name FROM audit_log WHERE action_type = 'api_write'"
+      )
+      .all()
+    expect(audit).toEqual([
+      {
+        entity_key: `cases:${x}:genome_build`,
+        old_value: JSON.stringify({ genome_build: 'GRCh38' }),
+        new_value: JSON.stringify({ genome_build: 'GRCh37', reason: 'build_review' }),
+        user_name: 'local'
+      }
+    ])
+    expect(() => resolveBuildReviews(db, [{ caseId: x, build: 'GRCh37' }])).toThrow(
+      /no genome build to confirm/
+    )
+    expect(() => resolveBuildReviews(db, [{ caseId: x, build: 'hg17' }])).toThrow(
+      /Unknown genome build/
+    )
+  })
+
+  it('confirms many cases in one write, preselected builds included', () => {
+    const ids = ['P1', 'P2', 'P3'].map((name) => {
+      const id = addCase(name, 'GRCh38', null)
+      addVariant(id, '1', 100)
+      return id
+    })
+    annotate('1', 100, { comment: 'shared' })
+    migrateContigNaming(db, vi.fn())
+    expect(listBuildReviews(db)).toHaveLength(3)
+    resolveBuildReviews(
+      db,
+      ids.map((caseId) => ({ caseId, build: 'GRCh38' }))
+    )
+    expect(ids.map(chrsOf)).toEqual([['chr1'], ['chr1'], ['chr1']])
+    expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'shared' })
+    expect(annotation('1', 100)).toBeUndefined()
+    expect(listBuildReviews(db)).toEqual([])
+  })
+
+  it('refuses to start without room for the backup and the WAL, before changing anything', () => {
+    db.close()
+    const path = join(dir, 'full.db')
+    db = new Database(path)
+    initializeSchema(db)
+    runMigrations(db)
+    expect(() => assertFreeSpaceForMigration(path, () => 1024)).toThrow(
+      expect.objectContaining({
+        code: 'RESOURCE_LIMIT',
+        userMessage: expect.stringMatching(/free disk space/)
+      })
+    )
+    expect(() => assertFreeSpaceForMigration(path, () => Number.MAX_SAFE_INTEGER)).not.toThrow()
+  })
+
+  it('refuses to back up while another connection holds the WAL', () => {
+    db.close()
+    const path = join(dir, 'busy.db')
+    db = new Database(path)
+    db.pragma('journal_mode = WAL')
+    initializeSchema(db)
+    runMigrations(db)
+    seed()
+    const reader = new Database(path, { readonly: true })
+    try {
+      reader.prepare('BEGIN').run()
+      reader.prepare('SELECT COUNT(*) FROM variants').get()
+      db.prepare("UPDATE cases SET name = name || '' WHERE id = 1").run()
+      expect(() => migrateContigNaming(db)).toThrow(
+        expect.objectContaining({ userMessage: expect.stringMatching(/open in another program/) })
+      )
+      expect(existsSync(`${path}.pre-v47.bak`)).toBe(false)
+      expect(chrsOf(1)).toEqual(['1', 'MT', 'chrUn_KI270742v1'].sort())
+    } finally {
+      reader.prepare('COMMIT').run()
+      reader.close()
+    }
   })
 
   it('backs up the database file before renaming', () => {
