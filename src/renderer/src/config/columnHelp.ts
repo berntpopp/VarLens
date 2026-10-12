@@ -77,5 +77,5 @@ export const COLUMN_HELP: Readonly<Record<string, string>> = {
     'assay does not cover the position count as non-carriers. SV/CNV/STR: exact breakpoints only.' +
     COHORT_CAVEAT,
   het_count:
-    'Carriers that are heterozygous / homozygous alternate; + hemi: hemizygous (one copy, e.g. male chrX).'
+    'Carriers that are heterozygous / homozygous alternate; + other: hemizygous or no called zygosity.'
 }

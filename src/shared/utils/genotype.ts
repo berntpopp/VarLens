@@ -101,15 +101,19 @@ export const ASSUMED_HET_HELP =
 export const COHORT_ZYGOSITY_HELP =
   'Carriers by zygosity. Het includes assumed het calls. ' +
   ASSUMED_HET_HELP +
-  ' Hemi: carriers minus het minus hom, i.e. hemizygous (one copy, e.g. male chrX outside the ' +
-  'PAR) or a genotype without a called zygosity; no-calls are not carriers.'
+  ' Other: hemizygous, or a genotype without a called zygosity (e.g. a numeric JSON ' +
+  'genotype code); no-calls are not carriers.'
 
-/** Label of the carriers − het − hom remainder shown after Het / Hom. */
-export const ZYGOSITY_REMAINDER_LABEL = 'hemi'
+/**
+ * Label of the carriers − het − hom remainder shown after Het / Hom. Neutral:
+ * it also holds JSON GTNum-Index codes, whose meaning is not documented.
+ */
+export const ZYGOSITY_REMAINDER_LABEL = 'other'
 
 /**
  * Carriers of a cohort row that are neither het nor hom: hemizygous, or a
- * genotype that names no zygosity (missing GT). No-calls are not carriers.
+ * genotype that names no zygosity (missing GT, a JSON genotype code). No-calls
+ * are not carriers.
  * Never negative.
  */
 export function otherZygosityCount(row: {
