@@ -47,16 +47,24 @@
         </v-list-item>
       </v-list>
     </v-menu>
-    <span v-if="query && matches.length === 0" class="text-body-small text-medium-emphasis">
-      {{ PLOT_COPY.noMatch }}
+    <IconButton
+      v-if="stepping"
+      :icon="mdiChevronLeft"
+      label="Previous match"
+      size="x-small"
+      @click="step(-1)"
+    />
+    <!-- Always mounted, so screen readers hear "No match" and "n of m" as they change. -->
+    <span class="text-body-small text-medium-emphasis text-no-wrap" role="status">
+      {{ status }}
     </span>
-    <template v-else-if="chosen !== null && matches.length > 1">
-      <IconButton :icon="mdiChevronLeft" label="Previous match" size="x-small" @click="step(-1)" />
-      <span class="text-body-small text-no-wrap" aria-live="polite">
-        {{ chosen + 1 }} of {{ matches.length }}
-      </span>
-      <IconButton :icon="mdiChevronRight" label="Next match" size="x-small" @click="step(1)" />
-    </template>
+    <IconButton
+      v-if="stepping"
+      :icon="mdiChevronRight"
+      label="Next match"
+      size="x-small"
+      @click="step(1)"
+    />
   </div>
 </template>
 
@@ -83,6 +91,11 @@ const active = ref(0)
 const chosen = ref<number | null>(null)
 
 const matches = computed(() => searchTrack(parseTrackQuery(query.value ?? ''), props.context))
+const stepping = computed(() => chosen.value !== null && matches.value.length > 1)
+const status = computed(() => {
+  if ((query.value ?? '') !== '' && matches.value.length === 0) return PLOT_COPY.noMatch
+  return stepping.value ? `${chosen.value! + 1} of ${matches.value.length}` : ''
+})
 
 function onInput(): void {
   active.value = 0

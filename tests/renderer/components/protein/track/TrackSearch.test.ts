@@ -78,9 +78,15 @@ describe('TrackSearch', () => {
     expect((input.element as HTMLInputElement).value).toBe('')
   })
 
-  it('says when nothing matches', async () => {
+  it('one always-present status region announces "No match" and "n of m"', async () => {
     const { wrapper, input } = await mountSearch()
+    const status = () => wrapper.get('[role="status"]')
+    expect(status().text()).toBe('')
     await input.setValue('kinase')
-    expect(wrapper.text()).toContain('No match')
+    expect(status().text()).toBe('No match')
+    await input.setValue('coiled')
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(status().text()).toBe('1 of 2')
+    expect(wrapper.findAll('[role="status"]')).toHaveLength(1)
   })
 })
