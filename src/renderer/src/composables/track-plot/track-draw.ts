@@ -106,6 +106,7 @@ function mergeGroup(group: TrackMarker[]): TrackMarker {
     ...lead,
     weight: group.reduce((s, m) => s + m.weight, 0),
     label: `${lead.label} +${group.length - 1}`,
+    members: group,
     binnedKeys: group.flatMap((m) => m.binnedKeys ?? [m.key])
   }
 }

@@ -11,6 +11,12 @@
         <span class="track-tooltip-label">{{ label }}</span>
         <span>{{ value }}</span>
       </div>
+      <ul v-if="members.length > 0" class="track-tooltip-members">
+        <li v-for="m in members.slice(0, 5)" :key="m.key">{{ m.label }}</li>
+        <li v-if="members.length > 5" class="track-tooltip-label">
+          +{{ members.length - 5 }} more
+        </li>
+      </ul>
     </div>
   </Teleport>
 </template>
@@ -39,11 +45,14 @@ const title = computed(() => {
 const rows = computed<Array<[string, string]>>(() => {
   const { marker: m, feature: f } = props.data
   if (f) {
-    return [
+    const out: Array<[string, string]> = [
       ['Range', `${fmt(f.start)}–${fmt(f.end)} ${props.unit}`],
-      ['Length', `${fmt(f.end - f.start + 1)} ${props.unit}`],
-      ['Click', 'zoom to it']
+      ['Length', `${fmt(f.end - f.start + 1)} ${props.unit}`]
     ]
+    if (f.type !== undefined) out.push(['Type', f.type])
+    if (f.accession !== undefined) out.push(['Accession', f.accession])
+    out.push(['Click', 'zoom to it'])
+    return out
   }
   if (!m) return []
   const out: Array<[string, string]> = [['Track', TRACK_LABELS[m.track]]]
@@ -51,16 +60,26 @@ const rows = computed<Array<[string, string]>>(() => {
     'Position',
     props.unit === 'aa' ? `p.${fmt(m.position)}` : `${m.chr ?? ''}:${fmt(m.position)}`
   ])
-  if (m.binnedKeys !== undefined) out.push(['Here', `${m.binnedKeys.length} variants · zoom in`])
+  if (m.members !== undefined) out.push(['Here', `${m.members.length} variants at this position`])
+  else if (m.binnedKeys !== undefined) {
+    out.push(['Here', `${m.binnedKeys.length} variants · zoom in`])
+  }
   if (typeof m.consequence === 'string' && m.consequence !== '')
     out.push(['Consequence', formatConsequence(m.consequence)])
   if (m.clinvarClass) {
     out.push(['ClinVar', `${CLINVAR_CLASS_LABELS[m.clinvarClass]} ${'★'.repeat(m.stars ?? 0)}`])
   }
+  if (typeof m.clinvarId === 'string' && m.clinvarId !== '') out.push(['ClinVar ID', m.clinvarId])
+  if (m.cadd !== null && m.cadd !== undefined) out.push(['CADD', m.cadd.toFixed(1)])
   if (m.af !== null && m.af !== undefined) out.push(['gnomAD AF', m.af.toExponential(2)])
+  if (m.ac !== null && m.ac !== undefined && m.an !== null && m.an !== undefined) {
+    out.push(['AC / AN', `${fmt(m.ac)} / ${fmt(m.an)}`])
+  }
   if (m.isAnchor === true) out.push(['', 'Variant of interest'])
   return out
 })
+
+const members = computed(() => props.data.marker?.members ?? [])
 
 const style = computed(() => {
   const pad = 12
@@ -97,6 +116,11 @@ const style = computed(() => {
 .track-tooltip-row {
   display: flex;
   gap: 6px;
+}
+
+.track-tooltip-members {
+  margin: 4px 0 0 16px;
+  padding: 0;
 }
 
 .track-tooltip-label {

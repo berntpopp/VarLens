@@ -37,6 +37,8 @@ export function useTrackNavigator(opts: {
   const window = shallowRef<TrackWindow>({ ...extent.value })
   const highlighted = shallowRef<Set<string>>(new Set())
   const focusedKey = ref<string | null>(null)
+  /** The variants at the focused position, when several are drawn as one marker */
+  const focusedMembers = shallowRef<TrackMarker[]>([])
   const anchorOverride = ref<string | null>(null)
 
   const originalAnchor = computed(() => markers.value.find((m) => m.isAnchor === true) ?? null)
@@ -100,6 +102,7 @@ export function useTrackNavigator(opts: {
     )
     highlighted.value = new Set(match.markerKeys)
     focusedKey.value = match.markerKeys[0] ?? null
+    focusedMembers.value = []
   }
 
   function setAnchor(key: string): void {
@@ -160,6 +163,7 @@ export function useTrackNavigator(opts: {
     highlight,
     highlighted,
     focusedKey,
+    focusedMembers,
     stepFocus,
     anchor,
     originalAnchor,

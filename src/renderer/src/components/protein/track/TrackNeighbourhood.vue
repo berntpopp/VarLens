@@ -69,15 +69,21 @@
       </v-btn>
     </div>
 
-    <div v-if="focused" class="d-flex align-center ga-1 mb-2 text-body-small">
-      <span class="text-truncate">Focused: {{ focused.label }}</span>
+    <!-- The focused marker, or each variant at a focused position, can become the anchor. -->
+    <div
+      v-for="f in focusedList"
+      :key="f.key"
+      class="d-flex align-center ga-1 mb-1 text-body-small"
+    >
+      <span class="text-truncate">Focused: {{ f.label }}</span>
       <v-spacer />
       <v-btn
         size="x-small"
         variant="text"
         color="primary"
         class="text-none"
-        @click="nav.setAnchor(focused.key)"
+        :data-member-key="f.key"
+        @click="nav.setAnchor(f.key)"
       >
         {{ PLOT_COPY.setAnchor }}
       </v-btn>
@@ -134,9 +140,11 @@ const location = computed(() =>
 const line = computed(() =>
   n.value ? neighbourhoodLine(n.value, props.nav.half.value, props.unit) : ''
 )
-const focused = computed(() => {
+const focusedList = computed(() => {
+  const members = props.nav.focusedMembers.value
   const m = props.nav.displayMarkers.value.find((x) => x.key === props.nav.focusedKey.value)
-  return m && m.isAnchor !== true && m.track !== 'gnomad' ? m : null
+  const list = members.length > 1 ? members : m ? [m] : []
+  return list.filter((x) => x.isAnchor !== true && x.track !== 'gnomad')
 })
 
 const isOn = (keys: string[]): boolean =>

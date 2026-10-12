@@ -58,7 +58,9 @@ function variantMarker(v: LollipopVariant, position: number): TrackMarker {
     pos: v.pos,
     proteinPosition: v.proteinPosition,
     carriers: v.carrierCount ?? null,
-    consequence: v.consequence
+    consequence: v.consequence,
+    cadd: v.cadd,
+    af: v.gnomadAf
   }
 }
 
@@ -78,7 +80,8 @@ function clinvarMarker(cv: ClinVarVariant, position: number): TrackMarker {
     proteinPosition: cv.proteinPosition,
     clinvarClass: cls,
     stars: cv.goldStars,
-    consequence: cv.consequence
+    consequence: cv.consequence,
+    clinvarId: cv.clinvarVariationId
   }
 }
 
@@ -104,7 +107,9 @@ export function proteinTrackData(input: {
       aaChange: g.hgvsp,
       proteinPosition: g.proteinPosition,
       consequence: g.consequence,
-      af: g.alleleFrequency
+      af: g.alleleFrequency,
+      ac: g.alleleCount,
+      an: g.alleleNumber
     })
   }
   const features = input.domains.map((d) => ({
@@ -112,7 +117,9 @@ export function proteinTrackData(input: {
     name: d.name,
     start: d.start,
     end: d.end,
-    color: getDomainColor(d.type)
+    color: getDomainColor(d.type),
+    type: d.type,
+    accession: d.accession
   }))
   return { markers, features }
 }

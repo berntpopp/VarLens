@@ -39,8 +39,16 @@ export interface TrackMarker {
   stars?: number | null
   carriers?: number | null
   consequence?: string | null
-  /** gnomAD allele frequency (its track's height) */
+  /** gnomAD allele frequency (its track's height; a case variant's own gnomAD AF) */
   af?: number | null
+  cadd?: number | null
+  /** ClinVar variation ID */
+  clinvarId?: string | null
+  /** gnomAD allele count / number */
+  ac?: number | null
+  an?: number | null
+  /** Variants drawn at this one position (the tooltip lists them; re-anchor from the side panel) */
+  members?: TrackMarker[]
 }
 
 /** A domain (protein) or an exon (gene structure). */
@@ -50,6 +58,9 @@ export interface TrackFeature {
   start: number
   end: number
   color?: string
+  /** InterPro type (domain, region, …) and accession */
+  type?: string
+  accession?: string
 }
 
 const span = (w: TrackWindow): number => w.end - w.start

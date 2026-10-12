@@ -84,6 +84,20 @@ describe('proteinTrackData', () => {
     expect(d.markers.map((m) => m.label)).toEqual(['p.Met180Val', 'p.Thr285='])
   })
 
+  it('markers keep the detail their tooltip shows', () => {
+    const d = proteinTrackData({
+      variants: [lolli({ cadd: 24.5, gnomadAf: 0.0012 })],
+      clinvar: [clinvar({ clinvarVariationId: '12345' })],
+      gnomad: [gnomad({ alleleCount: 3, alleleNumber: 3000 })],
+      domains: [{ accession: 'IPR1', name: 'THO', type: 'domain', start: 1, end: 9 }]
+    })
+    const [v, cv, gn] = d.markers
+    expect([v.cadd, v.af]).toEqual([24.5, 0.0012])
+    expect(cv.clinvarId).toBe('12345')
+    expect([gn.ac, gn.an]).toEqual([3, 3000])
+    expect(d.features[0]).toMatchObject({ type: 'domain', accession: 'IPR1' })
+  })
+
   it('ClinVar and gnomAD rows without a protein position are left out', () => {
     expect(
       data.markers

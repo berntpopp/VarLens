@@ -106,6 +106,7 @@ export function useTrackPlot(opts: {
       .on('mouseleave', () => show(null, {}))
       .on('click', () => {
         nav.focusedKey.value = m.key
+        nav.focusedMembers.value = m.members ?? []
         ;(el.node() as SVGGElement | null)?.focus()
       })
     if (m.track === 'gnomad') return
@@ -117,6 +118,7 @@ export function useTrackPlot(opts: {
       .attr('aria-label', markerAriaLabel(m, opts.unit))
       .on('focus', () => {
         nav.focusedKey.value = m.key
+        nav.focusedMembers.value = m.members ?? []
         const box = (el.node() as SVGGElement).getBoundingClientRect()
         tooltip.value = { visible: true, x: box.right, y: box.top, marker: m }
       })
@@ -130,6 +132,10 @@ export function useTrackPlot(opts: {
         } else if (e.key === 'Enter' && m.binnedKeys === undefined) {
           e.preventDefault()
           nav.setAnchor(m.key)
+        } else if (e.key === 'Enter' && m.members !== undefined) {
+          // Several variants here: choose one in the side panel.
+          e.preventDefault()
+          document.querySelector<HTMLElement>('[data-member-key]')?.focus()
         } else if (e.key === 'Escape') {
           e.stopPropagation()
           ;(svgRef.value?.parentElement as HTMLElement | null)?.focus()
