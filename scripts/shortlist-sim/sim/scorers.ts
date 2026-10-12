@@ -14,6 +14,7 @@
  */
 import { BUILT_IN_SHORTLIST_PRESETS } from '../../../src/main/database/built-in-shortlist-presets'
 import { SHORTLIST_EVIDENCE_CONFIG } from '../../../src/shared/config/shortlist-evidence.config'
+import { evidenceShortlistConfig } from '../../../src/shared/evidence/evidence-shortlist-config'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-rulesets/varvis-template'
 import type { EvidenceRuleset, ModeId } from '../../../src/shared/types/evidence-ruleset'
 import type { RankWeights, ShortlistConfig } from '../../../src/shared/types/shortlist'
@@ -28,11 +29,6 @@ export interface ScorerDef {
 }
 
 const ZERO: RankWeights = { impact: 0, pathogenicity: 0, rarity: 0, clinvar: 0, phenotype: 0 }
-const TIE_BREAKERS: ShortlistConfig['tieBreakers'] = [
-  { key: 'cadd', order: 'desc' },
-  { key: 'chr', order: 'asc' },
-  { key: 'pos', order: 'asc' }
-]
 const gate = SHORTLIST_EVIDENCE_CONFIG.defaultGate
 export const EVIDENCE_GATE: ShortlistConfig['baseFilters'] = {
   maxGnomadAf: gate.maxGnomadAf,
@@ -45,25 +41,18 @@ const builtIn = (name: string): ShortlistConfig => {
   return structuredClone(preset.config) as ShortlistConfig
 }
 
-export function evidenceConfig(
+/** The product's evidence config builder, so benchmark and seeded preset cannot drift. */
+export const evidenceConfig = (
   ruleset: EvidenceRuleset,
-  baseFilters: ShortlistConfig['baseFilters'] = EVIDENCE_GATE
-): ShortlistConfig {
-  return {
-    variantTypeScope: [...SHORTLIST_EVIDENCE_CONFIG.variantTypes],
-    topN: SHORTLIST_EVIDENCE_CONFIG.defaultTopN,
-    baseFilters,
-    rankConfig: { weights: ZERO, ruleset, clinvarPinTop: false, pinStarredTop: false },
-    tieBreakers: TIE_BREAKERS
-  }
-}
+  baseFilters?: ShortlistConfig['baseFilters']
+): ShortlistConfig => evidenceShortlistConfig(ruleset, { baseFilters })
 
 const legacy = (weights: Partial<RankWeights>): ShortlistConfig => ({
   variantTypeScope: ['snv', 'indel'],
   topN: 100,
   baseFilters: EVIDENCE_GATE,
   rankConfig: { weights: { ...ZERO, ...weights }, clinvarPinTop: false, pinStarredTop: false },
-  tieBreakers: TIE_BREAKERS
+  tieBreakers: SHORTLIST_EVIDENCE_CONFIG.defaultTieBreakers.map((tb) => ({ ...tb }))
 })
 
 /** A copy with every rule of the named groups at 0 points. */
