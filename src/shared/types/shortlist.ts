@@ -10,6 +10,7 @@
  * (§3, §4, §5, §6)
  */
 
+import type { EvidenceRuleset } from './evidence-ruleset'
 import type { Variant, SortItem } from './database'
 import type { FilterState } from './filters'
 import type { FilterPreset } from './filter-presets'
@@ -70,6 +71,8 @@ export interface RankConfig {
   clinvarPinTop?: boolean
   /** When true, starred rows (per-case or global) are floated above all non-pinned rows. */
   pinStarredTop?: boolean
+  /** Evidence rules (spec §3.4); when set, rows are scored by the ruleset instead of `weights`. */
+  ruleset?: EvidenceRuleset
 }
 
 /**

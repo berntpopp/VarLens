@@ -34,10 +34,18 @@ export interface FilterColumnDef {
    * offer them in the cohort view.
    */
   caseOnly?: true
+  /**
+   * Derived per-row fields of the evidence shortlist (zygosity, gene hit
+   * counts). Only shortlist rules may use them; no filter bar can.
+   */
+  shortlistOnly?: true
 }
 
-/** Which variant view a filter is written for. */
-export type FilterScope = 'case' | 'cohort'
+/**
+ * Which variant view a filter is written for. `shortlist` is the evidence-rule
+ * language: the case fields plus the derived shortlist fields.
+ */
+export type FilterScope = 'case' | 'cohort' | 'shortlist'
 
 const NUMERIC_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
 // Note: '^' (starts with), '$' (ends with), '!~' (not contains), 'is:null', 'is:notnull'
@@ -190,8 +198,43 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     aliases: ['omim', 'mim'],
     type: 'text',
     operators: ['=', '!=', '~']
+  },
+  {
+    key: 'zygosity',
+    label: 'Zygosity (derived)',
+    aliases: [],
+    type: 'categorical',
+    operators: ['=', '!='],
+    caseOnly: true,
+    shortlistOnly: true,
+    commonValues: [
+      { value: 'het', label: 'het' },
+      { value: 'hom', label: 'hom' },
+      { value: 'hemi', label: 'hemi' }
+    ]
+  },
+  {
+    key: 'gene_het_hits',
+    label: 'Het candidates in gene (derived)',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'gene_hits',
+    label: 'Candidates in gene (derived)',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
   }
 ] as const
+
+/** Fields the shortlist computes per row; never stored, never filterable in a view. */
+export const SHORTLIST_DERIVED_COLUMNS = ['zygosity', 'gene_het_hits', 'gene_hits'] as const
 
 const COUNT_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
 
@@ -261,9 +304,13 @@ export function getCommonValues(nameOrAlias: string): CommonValue[] {
   return findColumn(nameOrAlias)?.commonValues ?? []
 }
 
-/** Whether a column can be filtered in the given view (case-only fields not in cohort). */
+/**
+ * Whether a column can be used in the given scope: case-only fields not in the
+ * cohort view, derived shortlist fields only in shortlist rules.
+ */
 export function isColumnInScope(col: FilterColumnDef, scope: FilterScope): boolean {
-  return scope === 'case' || col.caseOnly !== true
+  if (col.shortlistOnly === true) return scope === 'shortlist'
+  return scope !== 'cohort' || col.caseOnly !== true
 }
 
 /** Get all column keys and aliases for autocomplete matching */
