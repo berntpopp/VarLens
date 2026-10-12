@@ -102,13 +102,19 @@ html::-webkit-scrollbar-thumb {
 
 /* Enhanced focus visibility for all interactive elements */
 *:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
   outline-offset: 2px !important;
+}
+
+/* On the app bar a primary ring would vanish (1:1); its menus are teleported
+   out and keep the primary ring. */
+.v-app-bar {
+  --vl-focus: rgb(var(--v-theme-on-app-bar));
 }
 
 /* Focus ring for buttons */
 .v-btn:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 4px color-mix(in srgb, rgb(var(--v-theme-primary)) 20%, transparent) !important;
 }
@@ -120,13 +126,13 @@ html::-webkit-scrollbar-thumb {
 
 /* Focus ring for chips */
 .v-chip:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
   outline-offset: 1px !important;
 }
 
 /* Focus ring for table rows (keyboard navigation) */
 .v-data-table tbody tr:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary)) !important;
+  outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
   outline-offset: 2px !important;
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent) !important;
 }

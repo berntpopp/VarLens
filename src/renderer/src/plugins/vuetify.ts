@@ -54,6 +54,10 @@ const warmLight: ThemeDefinition = {
     'on-info': '#FFFFFF',
     'on-success': '#FFFFFF',
     'on-warning': '#FFFFFF',
+    // App bar: the light look of the old primary bar; its own token so the
+    // dark bar can be a calm surface instead of a light-blue slab.
+    'app-bar': '#1E3A5F',
+    'on-app-bar': '#FFFFFF',
     // Filled star (amber). Material amber is 1.6:1 on surface; this keeps the
     // hue at 4.1:1 so the starred state meets 3:1 non-text contrast (1.4.11).
     star: '#B26A00',
@@ -93,6 +97,8 @@ const warmDark: ThemeDefinition = {
     'on-warning': '#12141A',
     star: '#FFC107', // 10.4:1 on surface
     'clinvar-conflicting': '#B39DDB',
+    'app-bar': '#30353E',
+    'on-app-bar': '#E4E7EC',
     ...SEMANTIC_COLORS.dark
   }
 }
