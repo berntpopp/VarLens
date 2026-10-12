@@ -18,6 +18,7 @@ import {
   VEP_PLUGIN_DIR
 } from '../common/paths'
 import type { AlleleInput } from './normalize'
+import { mostSevereOf, severityRank } from './project-varvis'
 
 export interface LocalVepRecord {
   key: string
@@ -27,6 +28,8 @@ export interface LocalVepRecord {
   transcript: string | null
   isMane: boolean
   gene: string | null
+  /** 'pick' = VEP flag_pick; 'gene' = restricted to the allele's gene; 'unmapped_gene' = none. */
+  selection: 'pick' | 'gene' | 'unmapped_gene'
   caddPhred: number | null
   gnomadJointAf: number | null
   gnomadExomeAf: number | null
@@ -67,12 +70,65 @@ function maxPop(freqs: Json, prefix: string): number | null {
   return max
 }
 
+const RANKLESS = 999
+const termsOf = (t: Json | undefined): string[] =>
+  (t?.consequence_terms as string[] | undefined) ?? []
+
+/**
+ * Transcript choice. Without a gene: VEP's flag_pick transcript. With a gene (the ClinVar/varvis
+ * gene of the allele): only that gene's transcripts — MANE Select, then canonical, then the most
+ * severe — because VEP's pick can land on an overlapping gene. No transcript of the gene →
+ * `unmapped_gene`.
+ */
+export function selectTranscript(
+  tcs: Json[],
+  gene?: string | null
+): { picked: Json | undefined; selection: LocalVepRecord['selection'] } {
+  if (gene === undefined || gene === null) {
+    return { picked: tcs.find((t) => t.pick === 1) ?? tcs[0], selection: 'pick' }
+  }
+  const g = gene.toUpperCase()
+  const own = tcs.filter((t) => String(t.gene_symbol ?? '').toUpperCase() === g)
+  if (own.length === 0) return { picked: undefined, selection: 'unmapped_gene' }
+  const rank = (t: Json): number => {
+    const ms = mostSevereOf(termsOf(t))
+    return ms === null ? RANKLESS : severityRank(ms)
+  }
+  const picked =
+    own.find((t) => typeof t.mane_select === 'string') ??
+    own.find((t) => t.canonical === 1) ??
+    [...own].sort((a, b) => rank(a) - rank(b))[0]
+  return { picked, selection: 'gene' }
+}
+
+/** Parse with the allele's gene when a gene lookup is given. */
+export function parseVepFor(line: string, geneOf?: (key: string) => string | null): LocalVepRecord {
+  if (geneOf === undefined) return parseVepLine(line)
+  // The top-level id (VCF ID); colocated variants carry their own "id" fields.
+  const id = String((JSON.parse(line) as Json).id ?? '')
+  return parseVepLine(line, geneOf(id))
+}
+
+/** First finite dbNSFP value on any transcript (the plugin's values are allele-level). */
+function alleleLevel(tcs: Json[], picked: Json | undefined, field: string): number | null {
+  const own = dbnsfpNumber(picked?.[field])
+  if (own !== null) return own
+  for (const t of tcs) {
+    const v = dbnsfpNumber(t[field])
+    if (v !== null) return v
+  }
+  return null
+}
+
 /** Parse one VEP `--json` output line into the record for its input key (VCF ID). */
-export function parseVepLine(line: string): LocalVepRecord {
+export function parseVepLine(line: string, gene?: string | null): LocalVepRecord {
   const o = JSON.parse(line) as Json
   const tcs = (o.transcript_consequences as Json[] | undefined) ?? []
-  const picked = tcs.find((t) => t.pick === 1) ?? tcs[0]
-  const allele = (picked?.variant_allele as string | undefined) ?? null
+  const { picked, selection } = selectTranscript(tcs, gene)
+  const allele =
+    (picked?.variant_allele as string | undefined) ??
+    (tcs[0]?.variant_allele as string | undefined) ??
+    null
   let freqs: Json = {}
   for (const cv of (o.colocated_variants as Json[] | undefined) ?? []) {
     const f = cv.frequencies as Record<string, Json> | undefined
@@ -80,17 +136,20 @@ export function parseVepLine(line: string): LocalVepRecord {
   }
   const num = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) ? v : null
+  const terms = termsOf(picked)
   return {
     key: String(o.id),
-    mostSevere: String(o.most_severe_consequence ?? ''),
+    mostSevere:
+      selection === 'pick' ? String(o.most_severe_consequence ?? '') : (mostSevereOf(terms) ?? ''),
     impact: String(picked?.impact ?? ''),
-    terms: (picked?.consequence_terms as string[] | undefined) ?? [],
+    terms,
     transcript: (picked?.transcript_id as string | undefined) ?? null,
     isMane: typeof picked?.mane_select === 'string',
     gene: (picked?.gene_symbol as string | undefined) ?? null,
-    caddPhred: dbnsfpNumber(picked?.cadd_phred),
-    gnomadJointAf: dbnsfpNumber(picked?.['gnomad4.1_joint_af']),
-    popmaxAf: dbnsfpNumber(picked?.['gnomad4.1_joint_popmax_af']),
+    selection,
+    caddPhred: alleleLevel(tcs, picked, 'cadd_phred'),
+    gnomadJointAf: alleleLevel(tcs, picked, 'gnomad4.1_joint_af'),
+    popmaxAf: alleleLevel(tcs, picked, 'gnomad4.1_joint_popmax_af'),
     gnomadExomeAf: num(freqs.gnomade),
     gnomadGenomeAf: num(freqs.gnomadg),
     exomePopmaxAf: maxPop(freqs, 'gnomade'),
@@ -286,7 +345,13 @@ export async function dbnsfpLookup(
 export async function runLocalVep(
   alleles: AlleleInput[],
   outDir: string,
-  opts: { fork?: number; chunkSize?: number; dbnsfp?: boolean } = {}
+  opts: {
+    fork?: number
+    chunkSize?: number
+    dbnsfp?: boolean
+    /** Restrict the transcript choice to this gene per allele key (see selectTranscript). */
+    geneOf?: (key: string) => string | null
+  } = {}
 ): Promise<LocalVepRecord[]> {
   mkdirSync(outDir, { recursive: true })
   const sorted = [...alleles].sort((a, b) =>
@@ -297,7 +362,7 @@ export async function runLocalVep(
   for (let i = 0; i < sorted.length; i += size) {
     const outFile = runChunk(vcfText(sorted.slice(i, i + size)), outDir, opts.fork ?? 8)
     for (const line of readFileSync(outFile, 'utf8').split('\n'))
-      if (line.trim() !== '') records.push(parseVepLine(line))
+      if (line.trim() !== '') records.push(parseVepFor(line, opts.geneOf))
   }
   if (opts.dbnsfp === false) return records
   const values = await dbnsfpLookup(sorted, outDir)

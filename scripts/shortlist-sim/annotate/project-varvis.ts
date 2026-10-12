@@ -75,6 +75,10 @@ const VEP_ORDER = [
 ]
 const RANK = new Map(VEP_ORDER.map((t, i) => [t, i]))
 
+export function severityRank(term: string): number {
+  return RANK.get(term) ?? 999
+}
+
 export function mostSevereOf(terms: string[]): string | null {
   let best: string | null = null
   for (const t of terms)

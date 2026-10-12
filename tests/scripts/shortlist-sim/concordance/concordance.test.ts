@@ -48,7 +48,8 @@ function fakeLocal(
     popmaxAf: null,
     exomePopmaxAf: null,
     genomePopmaxAf: null,
-    inGnomadCache: af !== null
+    inGnomadCache: af !== null,
+    selection: 'gene'
   }
 }
 

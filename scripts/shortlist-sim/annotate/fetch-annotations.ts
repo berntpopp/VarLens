@@ -4,7 +4,7 @@
  * committed copy. Reads only pool.json — never patient data (this module imports nothing from
  * the simulation or concordance code).
  *
- *   npx jiti scripts/shortlist-sim/annotate/fetch-annotations.ts [normalize|fetch|local-vep|freeze]...
+ *   npx jiti scripts/shortlist-sim/annotate/fetch-annotations.ts [normalize|fetch|local-vep|reparse|freeze]...
  */
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -21,7 +21,7 @@ import {
 import type { PoolFile } from '../pool/select-pool'
 import { rng, shuffle } from '../common/rng'
 import { callTool, GenefoundryToolError, pool } from './genefoundry'
-import { runLocalVep, type LocalVepRecord } from './local-vep'
+import { parseVepFor, parseVepLine, runLocalVep, type LocalVepRecord } from './local-vep'
 import { countBy, freezeSpikes } from './freeze'
 import { normalizeAlleles, type NormalizedAllele } from './normalize'
 import { extractGnomad, extractVep, NOT_IN_GNOMAD, type SpikeAnnotation } from './spike-annotation'
@@ -207,17 +207,51 @@ async function fetchAll(): Promise<void> {
   })
 }
 
+/** Pool gene (ClinVar GENEINFO symbol) per normalised key. */
+function poolGeneOf(): (key: string) => string | null {
+  const poolFile = readJson<PoolFile>(POOL_FILE)
+  const geneByInput = new Map(poolFile.variants.map((v) => [v.key, v.gene]))
+  const byKey = new Map(loadNormalized().map((a) => [a.key, geneByInput.get(a.input) ?? null]))
+  return (key) => byKey.get(key) ?? null
+}
+
 async function localVep(): Promise<void> {
   const alleles = loadNormalized()
-  const records = await runLocalVep(alleles, join(CACHE_DIR, 'pool-vep'))
+  const records = await runLocalVep(alleles, join(CACHE_DIR, 'pool-vep'), { geneOf: poolGeneOf() })
   writeFileSync(POOL_LOCAL_VEP_FILE, JSON.stringify(records))
   console.log(`local VEP: ${records.length}/${alleles.length} records → ${POOL_LOCAL_VEP_FILE}`)
+}
+
+/**
+ * Re-select transcripts from an existing VEP JSON (all transcripts are present: --flag_pick, not
+ * --pick) with the pool-gene rule, keeping the dbNSFP values; reports wrong-gene picks before/after.
+ */
+function reparse(): void {
+  const geneOf = poolGeneOf()
+  const lines = readFileSync(join(CACHE_DIR, 'pool-vep', 'vep-out.json'), 'utf8')
+    .split('\n')
+    .filter((l) => l.trim() !== '')
+  const before = lines.map((l) => parseVepLine(l))
+  const after = lines.map((l) => parseVepFor(l, geneOf))
+  const wrong = (rs: LocalVepRecord[]): number =>
+    rs.filter((r) => r.selection !== 'unmapped_gene' && r.gene !== geneOf(r.key)).length
+  console.log({
+    records: after.length,
+    wrongGeneBefore: wrong(before),
+    wrongGeneAfter: wrong(after),
+    selection: countBy(after, (r) => r.selection)
+  })
+  writeFileSync(POOL_LOCAL_VEP_FILE, JSON.stringify(after))
 }
 
 function freeze(): void {
   const alleles = readJson<NormalizedAllele[]>(POOL_NORMALIZED_FILE)
   const local = new Map(readJson<LocalVepRecord[]>(POOL_LOCAL_VEP_FILE).map((r) => [r.key, r]))
   const anns = freezeSpikes(alleles, local)
+  const unmappedGene = alleles
+    .filter((a) => local.get(a.key)?.selection === 'unmapped_gene')
+    .map((a) => a.key)
+    .sort()
   // Cross-check subset: genefoundry records with both VEP and gnomAD.
   const crossCheck = alleles
     .filter((a) => existsSync(cachePath(a.key)))
@@ -260,6 +294,13 @@ function freeze(): void {
           'local-vep (VEP 115 cache gnomAD v4.1 exome/genome)',
         'vep.hgvsc/hgvsp': 'not available (null)'
       },
+      transcriptSelection:
+        "within the pool gene (ClinVar GENEINFO symbol) only: MANE Select, then canonical, then the most severe consequence; VEP's flag_pick is ignored because it can land on an overlapping gene",
+      excludedUnmappedGene: {
+        n: unmappedGene.length,
+        reason: 'no VEP transcript consequence for the pool gene',
+        keys: unmappedGene
+      },
       vepMane: anns.filter((a) => a.vep?.isMane === true).length,
       inGnomad: anns.filter((a) => a.gnomad?.found === true).length,
       sha256: createHash('sha256').update(spikes).digest('hex')
@@ -292,6 +333,7 @@ async function main(): Promise<void> {
   if (all || steps.includes('normalize')) await normalizePool()
   if (all || steps.includes('fetch')) await fetchAll()
   if (all || steps.includes('local-vep')) await localVep()
+  if (steps.includes('reparse')) reparse()
   if (all || steps.includes('freeze')) freeze()
 }
 
