@@ -102,17 +102,7 @@
     </v-toolbar>
 
     <!-- Loading bar -->
-    <!-- Overlays the edge instead of taking a row: arriving data shifts nothing. -->
-    <div class="position-relative">
-      <v-progress-linear
-        v-if="loading || clinvarLoading"
-        indeterminate
-        absolute
-        color="info"
-        height="2"
-        aria-label="Loading gene structure"
-      />
-    </div>
+    <TrackLoadingBar :active="loading || clinvarLoading" label="Loading gene structure" />
 
     <!-- Genome-build context (#539): the gene model is GRCh38 -->
     <v-alert
@@ -256,6 +246,7 @@ import {
   mdiDna
 } from '@mdi/js'
 import TrackView from './track/TrackView.vue'
+import TrackLoadingBar from './track/TrackLoadingBar.vue'
 import { drawGeneView } from '../../composables/track-plot/gene-view'
 import { useTrackNavigator } from '../../composables/useTrackNavigator'
 import { PLOT_COPY, ZOOM_STEP, geneCaption } from '../../config/proteinPlotConfig'

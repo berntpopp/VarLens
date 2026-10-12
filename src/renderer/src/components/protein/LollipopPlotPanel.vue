@@ -32,17 +32,10 @@
     </div>
 
     <!-- Loading bar for gnomAD / ClinVar fetch -->
-    <!-- Overlays the edge instead of taking a row: arriving data shifts nothing. -->
-    <div class="position-relative">
-      <v-progress-linear
-        v-if="gnomadLoading || clinvarLoading"
-        aria-label="Loading gnomAD and ClinVar variants"
-        indeterminate
-        absolute
-        color="info"
-        height="2"
-      />
-    </div>
+    <TrackLoadingBar
+      :active="gnomadLoading || clinvarLoading"
+      label="Loading gnomAD and ClinVar variants"
+    />
 
     <!-- Caption, search, plot + overview, neighbourhood of the variant of interest -->
     <TrackView
@@ -94,6 +87,7 @@
 import { ref, computed, watch } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
 import TrackView from './track/TrackView.vue'
+import TrackLoadingBar from './track/TrackLoadingBar.vue'
 import { drawProteinView } from '../../composables/track-plot/lollipop-view'
 import { useTrackNavigator } from '../../composables/useTrackNavigator'
 import { PLOT_COPY, ZOOM_STEP, proteinCaption } from '../../config/proteinPlotConfig'

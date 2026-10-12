@@ -57,12 +57,7 @@
       </v-toolbar>
 
       <!-- Loading state -->
-      <v-progress-linear
-        v-if="proteinData.loading.value"
-        indeterminate
-        color="primary"
-        aria-label="Loading protein data"
-      />
+      <TrackLoadingBar :active="proteinData.loading.value" label="Loading protein data" />
 
       <!-- Content area -->
       <div class="flex-grow-1" style="min-height: 0">
@@ -151,6 +146,7 @@ import { useProteinData } from '../../composables/useProteinData'
 import { useApiService } from '../../composables/useApiService'
 import { useCapabilityStore } from '../../stores/capabilityStore'
 import LollipopPlotPanel from './LollipopPlotPanel.vue'
+import TrackLoadingBar from './track/TrackLoadingBar.vue'
 import GeneStructurePanel from './GeneStructurePanel.vue'
 import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
