@@ -68,8 +68,12 @@
 
     <!-- Results summary -->
     <v-alert v-if="results" type="success" variant="tonal" density="compact" class="mb-3">
-      Analysis complete: {{ testedCount }} genes tested, {{ significantCount }} significant (FDR
-      &lt; 0.05) in {{ (results.elapsed_ms / 1000).toFixed(1) }}s
+      Analysis complete: {{ testedResults.length }} genes tested, {{ significantCount }} significant
+      (FDR &lt; 0.05) in {{ (results.elapsed_ms / 1000).toFixed(1) }}s
+      <span v-if="untestedCount > 0">
+        ({{ untestedCount }} {{ untestedCount === 1 ? 'gene' : 'genes' }} without qualifying
+        variants not shown)
+      </span>
     </v-alert>
 
     <!-- Results tabs -->
@@ -82,16 +86,16 @@
     <v-tabs-window v-if="results" v-model="activeTab">
       <v-tabs-window-item value="table">
         <AssociationResultsTable
-          :results="results.results"
+          :results="testedResults"
           :primary-test="results.primary_test"
           :non-autosomal-variants="results.non_autosomal_variants"
         />
       </v-tabs-window-item>
       <v-tabs-window-item value="volcano">
-        <VolcanoPlot :results="results.results" :primary-test="results.primary_test" />
+        <VolcanoPlot :results="testedResults" :primary-test="results.primary_test" />
       </v-tabs-window-item>
       <v-tabs-window-item value="manhattan">
-        <ManhattanPlot :results="results.results" :primary-test="results.primary_test" />
+        <ManhattanPlot :results="testedResults" :primary-test="results.primary_test" />
       </v-tabs-window-item>
     </v-tabs-window>
   </div>
@@ -155,8 +159,10 @@ const significantCount = computed(
   () => results.value?.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length ?? 0
 )
 
-const testedCount = computed(
-  () => results.value?.results.filter((r) => r.n_variants > 0).length ?? 0
+// Genes with no qualifying variant have no test; table, plots and summary all show the same set.
+const testedResults = computed(() => results.value?.results.filter((r) => r.n_variants > 0) ?? [])
+const untestedCount = computed(
+  () => (results.value?.results.length ?? 0) - testedResults.value.length
 )
 
 let cleanupProgress: (() => void) | null = null

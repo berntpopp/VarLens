@@ -13,9 +13,11 @@ const mockLoadCasesWithMetadata = vi.fn().mockResolvedValue({
   cohortGroups: mockGroups
 })
 
+const mockRunAssociation = vi.fn()
+
 vi.mock('../../../../src/renderer/src/composables/useAssociation', () => ({
   useAssociation: () => ({
-    runAssociation: vi.fn(),
+    runAssociation: mockRunAssociation,
     cancelAssociation: vi.fn(),
     onAssociationProgress: vi.fn(() => () => {}),
     loadCasesWithMetadata: mockLoadCasesWithMetadata,
@@ -25,6 +27,7 @@ vi.mock('../../../../src/renderer/src/composables/useAssociation', () => ({
 
 import GeneBurdenView from '../../../../src/renderer/src/components/association/GeneBurdenView.vue'
 import AssociationConfigPanel from '../../../../src/renderer/src/components/association/AssociationConfigPanel.vue'
+import AssociationResultsTable from '../../../../src/renderer/src/components/association/AssociationResultsTable.vue'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -46,5 +49,33 @@ describe('GeneBurdenView', () => {
     await vm.refresh()
     await flushPromises()
     expect(mockLoadCasesWithMetadata).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows only tested genes, so the summary count matches the table', async () => {
+    const gene = (gene_symbol: string, n_variants: number) => ({
+      gene_symbol,
+      n_variants,
+      q_value: null,
+      fisher: { p_value: null },
+      logistic_burden: { p_value: null }
+    })
+    mockRunAssociation.mockResolvedValue({
+      results: [gene('TESTED', 2), gene('EMPTY', 0)],
+      warnings: [],
+      elapsed_ms: 1000,
+      primary_test: 'fisher',
+      non_autosomal_variants: 0
+    })
+    const wrapper = mount(GeneBurdenView, {
+      global: { plugins: [vuetify, createPinia()], stubs: { AssociationResultsTable: true } }
+    })
+    await flushPromises()
+    wrapper.findComponent(AssociationConfigPanel).vm.$emit('run', {})
+    await flushPromises()
+
+    const rows = wrapper.findComponent(AssociationResultsTable).props('results') as unknown[]
+    expect(rows).toHaveLength(1)
+    expect(wrapper.text()).toContain('1 genes tested')
+    expect(wrapper.text()).toContain('1 gene without qualifying variants not shown')
   })
 })

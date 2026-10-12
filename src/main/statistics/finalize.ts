@@ -1,4 +1,8 @@
 import { benjaminiHochberg } from './fdr'
+import {
+  ASSOCIATION_MISSING_COVARIATE_TEXT,
+  ASSOCIATION_WARNING_TEXT
+} from '../../shared/config/domain.config'
 import type {
   AssociationConfig,
   AssociationResults,
@@ -42,14 +46,12 @@ export function finalizeAssociationResults(
   // Every gene is fitted on the same samples, so this count is per run, not per gene.
   const missing = rawResults[0]?.logistic_burden.n_missing_covariate ?? 0
   if (missing > 0) {
-    warnings.push(
-      `MISSING_COVARIATE: ${missing} sample(s) lack a selected covariate (age or metric) ` +
-        'and were excluded from the logistic burden test'
-    )
+    warnings.push(`${missing} ${ASSOCIATION_MISSING_COVARIATE_TEXT}`)
   }
   for (const result of rawResults) {
-    if (result.logistic_burden.warning !== undefined && result.logistic_burden.warning !== '') {
-      warnings.push(`${result.gene_symbol}: ${result.logistic_burden.warning}`)
+    const code = result.logistic_burden.warning
+    if (code !== undefined && code !== '') {
+      warnings.push(`${result.gene_symbol}: ${ASSOCIATION_WARNING_TEXT[code] ?? code}`)
     }
   }
 

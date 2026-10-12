@@ -37,3 +37,21 @@ export const ACMG_ABBREV: Record<AcmgClassification, string> = {
 export const DOMAIN_CONFIG = {
   MAX_CADD_SCORE: 60
 } as const
+
+/**
+ * Reader-facing text for the per-gene logistic burden warning codes
+ * (`src/main/statistics/burden.ts`), shown in the gene burden warning list.
+ */
+export const ASSOCIATION_WARNING_TEXT: Readonly<Record<string, string>> = {
+  NO_SAMPLES: 'no samples to test; logistic test skipped',
+  ZERO_BURDEN: 'no qualifying variants in either group; logistic test skipped',
+  PERFECT_SEPARATION:
+    'carriers occur in only one group (perfect separation); Firth-corrected logistic fit used',
+  QUASI_SEPARATION:
+    'carriers are nearly confined to one group (quasi-separation); Firth-corrected logistic fit used',
+  FIRTH_CONVERGE_FAIL: 'logistic (Firth) fit did not converge; no logistic p-value'
+}
+
+/** Run-level warning, prefixed with the number of excluded samples. */
+export const ASSOCIATION_MISSING_COVARIATE_TEXT =
+  'sample(s) lack a selected covariate (age or metric) and were excluded from the logistic burden test'
