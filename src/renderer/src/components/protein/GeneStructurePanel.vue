@@ -142,7 +142,13 @@
     </div>
 
     <!-- Plot area -->
-    <div v-else-if="geneStructure" class="flex-grow-1 position-relative" style="min-height: 0">
+    <v-theme-provider
+      v-else-if="geneStructure"
+      theme="warmLight"
+      with-background
+      class="bg-surface flex-grow-1 position-relative"
+      style="min-height: 0"
+    >
       <GeneStructurePlot
         ref="plotRef"
         :gene-structure="geneStructure"
@@ -151,10 +157,15 @@
         :clinvar-variants="clinvarVariants"
         :active-clinvar-categories="activeClinvarCategories"
       />
-    </div>
+    </v-theme-provider>
 
     <!-- Legend -->
-    <div v-if="geneStructure" class="gene-structure-legend pa-2 bg-grey-lighten-4">
+    <v-theme-provider
+      v-if="geneStructure"
+      theme="warmLight"
+      with-background
+      class="gene-structure-legend pa-2 bg-grey-lighten-4"
+    >
       <div class="d-flex align-center ga-1 flex-wrap mb-1">
         <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Legend:</span>
         <v-chip size="small" label variant="flat" color="primary">Exon</v-chip>
@@ -166,13 +177,8 @@
         }}</v-chip>
         <span v-if="clinvarVariants.length > 0" class="d-inline-flex align-center ga-1 ml-2">
           <span
-            style="
-              width: 8px;
-              height: 8px;
-              transform: rotate(45deg);
-              background: #d73027;
-              display: inline-block;
-            "
+            :style="{ background: CLINVAR_COLORS.pathogenic }"
+            style="width: 8px; height: 8px; transform: rotate(45deg); display: inline-block"
           />
           <span class="text-body-2">ClinVar</span>
         </span>
@@ -222,7 +228,7 @@
           All
         </v-chip>
       </div>
-    </div>
+    </v-theme-provider>
   </div>
 </template>
 

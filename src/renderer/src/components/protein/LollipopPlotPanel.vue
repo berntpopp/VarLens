@@ -37,8 +37,13 @@
       height="2"
     />
 
-    <!-- Plot area -->
-    <div class="flex-grow-1 position-relative" style="min-height: 0">
+    <!-- Plot area: a light "paper" figure in both themes, like its PNG export -->
+    <v-theme-provider
+      theme="warmLight"
+      with-background
+      class="bg-surface flex-grow-1 position-relative"
+      style="min-height: 0"
+    >
       <LollipopPlot
         ref="plotRef"
         :protein-length="proteinLength"
@@ -52,7 +57,7 @@
         :active-clinvar-consequences="activeClinVarConsequences"
         :gnomad-max-af="gnomadMaxAf"
       />
-    </div>
+    </v-theme-provider>
 
     <!-- Legend -->
     <LollipopLegend

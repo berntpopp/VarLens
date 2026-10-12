@@ -133,7 +133,12 @@ function onClinvarClick(cv: ClinVarVariant): void {
 </script>
 
 <template>
-  <div class="structure-3d-panel d-flex flex-column fill-height">
+  <!-- Light in both themes, matching the fixed light Mol* canvas. -->
+  <v-theme-provider
+    theme="warmLight"
+    with-background
+    class="structure-3d-panel bg-surface d-flex flex-column fill-height"
+  >
     <!-- Controls toolbar -->
     <StructureControls
       v-if="structureLoaded"
@@ -285,7 +290,7 @@ function onClinvarClick(cv: ClinVarVariant): void {
         </template>
       </div>
     </div>
-  </div>
+  </v-theme-provider>
 </template>
 
 <style scoped>
@@ -295,7 +300,6 @@ function onClinvarClick(cv: ClinVarVariant): void {
 }
 
 .structure-3d-panel {
-  background-color: #faf8f6;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -305,7 +309,7 @@ function onClinvarClick(cv: ClinVarVariant): void {
   flex-shrink: 0;
   border-left: 1px solid rgba(0, 0, 0, 0.08);
   overflow-y: auto;
-  background-color: #faf8f6;
+  background-color: rgb(var(--v-theme-surface));
 }
 
 .sidebar-header {
