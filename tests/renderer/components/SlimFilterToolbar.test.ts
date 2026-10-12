@@ -74,3 +74,25 @@ describe('SlimFilterToolbar count label', () => {
     noTotal.unmount()
   })
 })
+
+describe('SlimFilterToolbar on a phone', () => {
+  it('keeps the whole count and every action on screen: bare count, icon-only Clear/Filters', () => {
+    const width = window.innerWidth
+    window.innerWidth = 390
+    const wrapper = mount(SlimFilterToolbar, {
+      props: baseProps,
+      global: { plugins: [createVuetify({ components, directives })] }
+    })
+    window.innerWidth = width
+    const chip = wrapper.find('.results-chip')
+    expect(chip.text()).toContain('10')
+    expect(chip.text()).not.toContain('100')
+    expect(chip.attributes('aria-label')).toBe('10 of 100 variants shown')
+    for (const name of ['Clear', 'Filters']) {
+      const button = wrapper.find(`button[aria-label="${name}"]`)
+      expect(button.exists()).toBe(true)
+      expect(button.text()).not.toContain(name)
+    }
+    wrapper.unmount()
+  })
+})
