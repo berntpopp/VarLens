@@ -25,8 +25,10 @@
           :class="{ 'count-updated': countPulsing }"
           aria-live="polite"
           :aria-label="
-            `${filteredCount} of ${totalCount ?? 'unknown'} variants shown` +
-            (totalCountStale ? '; the total is being refreshed' : '')
+            totalCount === null
+              ? `${filteredCount} variants shown`
+              : `${filteredCount} of ${totalCount} variants shown` +
+                (totalCountStale ? '; the total is being refreshed' : '')
           "
         >
           <v-icon start size="small" :icon="mdiFilterVariant" />
