@@ -34,6 +34,7 @@ import { EMPTY_VALUE_PLACEHOLDER, UNKNOWN_VALUE_GLYPH } from '../../config/displ
 import { formatBpLength } from '../../utils/variant-interval'
 import {
   useTableKeyboardNav,
+  isControlFocused,
   isInputFocused,
   hasCommandModifier
 } from '../../composables/useTableKeyboardNav'
@@ -240,7 +241,7 @@ onKeyStroke(
   'Enter',
   (e: KeyboardEvent) => {
     if (props.interactive === false) return
-    if (isInputFocused() || !selectedItem.value) return
+    if (isInputFocused() || isControlFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
   },

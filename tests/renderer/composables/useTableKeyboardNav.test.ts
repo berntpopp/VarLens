@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { withSetup } from '../../utils/test-helpers'
 import {
+  isControlFocused,
   isInputFocused,
   isOverlayOpen,
   isTextEntryFocused,
@@ -379,5 +380,26 @@ describe('isOverlayOpen', () => {
     el.className = className
     document.body.appendChild(el)
     expect(isOverlayOpen()).toBe(expected)
+  })
+})
+
+describe('isControlFocused', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  it.each([
+    ['a button', '<button>Lollipop</button>', true],
+    ['an element inside a button', '<button><span tabindex="-1">x</span></button>', true],
+    ['a role=button element', '<div role="button" tabindex="0">x</div>', true],
+    ['a link', '<a href="https://example.org">x</a>', true],
+    ['a table cell', '<table><tr><td tabindex="0">x</td></tr></table>', false]
+  ])('%s → %s (Enter activates it, not the row panel)', (_label, html, expected) => {
+    document.body.innerHTML = html
+    const focusable = document.body.querySelectorAll<HTMLElement>('[tabindex], button, a')
+    focusable[focusable.length - 1].focus() // the innermost one
+    expect(isControlFocused()).toBe(expected)
+  })
+
+  it('is false with nothing focused', () => {
+    expect(isControlFocused()).toBe(false)
   })
 })
