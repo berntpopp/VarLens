@@ -5,7 +5,7 @@
  * Breakpoints follow Vuetify's default thresholds: md 840, lg 1145, xl 1545.
  */
 
-import { COLUMN_PRIORITY } from '../config/columnPriority'
+import { COLUMN_PRIORITY, MIN_AUTO_VISIBLE_COLUMNS } from '../config/columnPriority'
 
 /** Viewport width (CSS px) at which the details panel docks beside the table. */
 export const DETAIL_PANEL_DOCK_MIN_WIDTH = 1440
@@ -47,17 +47,6 @@ export function filterDrawerWidth(preferredWidth: number, viewportWidth: number)
   return Math.max(FILTER_DRAWER_MIN_WIDTH, Math.min(cap, preferredWidth))
 }
 
-/**
- * Number of data columns shown by default at a viewport width. Explicit user
- * column choices always win over this budget (see `isColumnVisible`).
- */
-export function getMaxAutoVisibleColumns(viewportWidth: number): number {
-  if (viewportWidth < 840) return 5
-  if (viewportWidth < 1145) return 10
-  if (viewportWidth < 1545) return 14
-  return Infinity
-}
-
 /** Structural columns that never count against the budget and are never auto-hidden. */
 const ALWAYS_SHOWN_COLUMNS: ReadonlySet<string> = new Set(['data-table-expand', 'annotations'])
 
@@ -66,23 +55,38 @@ export function getColumnPriority(key: string): number {
 }
 
 /**
- * Keys auto-hidden at the given budget: every column beyond the `maxVisible`
- * most important ones (ties keep their table order). Columns with an explicit
- * visibility preference are left out of the ranking entirely — they neither
- * consume nor receive budget — so a user choice is never overridden, and
- * showing one column never silently hides another.
+ * Keys auto-hidden when the table is `availableRem` wide. Data columns are
+ * taken in priority order (ties keep their table order) while they fit next to
+ * the structural columns; the first column that does not fit and everything
+ * ranked after it are hidden, so a default view never shows a column cut off at
+ * the table edge (a clipped "0.0193" reads as "0.0"). The top
+ * `MIN_AUTO_VISIBLE_COLUMNS` are kept even when they overflow (phones).
+ * Columns with an explicit visibility preference are left out entirely — they
+ * neither consume nor receive width — so a user choice is never overridden,
+ * and showing one column never silently hides another.
  */
 export function computeAutoHiddenColumns(
   keys: readonly string[],
-  maxVisible: number,
+  availableRem: number,
+  widthRem: (key: string) => number,
   explicit: Readonly<Record<string, boolean>> = {}
 ): Set<string> {
-  if (!Number.isFinite(maxVisible)) return new Set()
+  if (!Number.isFinite(availableRem)) return new Set()
+  let usedRem = keys
+    .filter((key) => ALWAYS_SHOWN_COLUMNS.has(key))
+    .reduce((sum, key) => sum + widthRem(key), 0)
   const ranked = keys
     .map((key, index) => ({ key, index }))
     .filter(({ key }) => !ALWAYS_SHOWN_COLUMNS.has(key) && !(key in explicit))
     .sort((a, b) => getColumnPriority(a.key) - getColumnPriority(b.key) || a.index - b.index)
-  return new Set(ranked.slice(Math.max(0, maxVisible)).map(({ key }) => key))
+  const hidden = new Set<string>()
+  for (const [rank, { key }] of ranked.entries()) {
+    usedRem += widthRem(key)
+    if (hidden.size > 0 || (rank >= MIN_AUTO_VISIBLE_COLUMNS && usedRem > availableRem)) {
+      hidden.add(key)
+    }
+  }
+  return hidden
 }
 
 /** Explicit preference first, then the responsive default. */

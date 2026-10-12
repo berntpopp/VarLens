@@ -1,9 +1,10 @@
-import { computed, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
+import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useDisplay } from 'vuetify'
+import { columnWidthRem } from '../components/variant-table/column-widths'
+import { readRootFontPx } from './useRootFontSize'
 import {
   computeAutoHiddenColumns,
   getColumnPriority,
-  getMaxAutoVisibleColumns,
   isColumnVisible,
   isDetailPanelDocked
 } from '../utils/responsive-layout'
@@ -41,9 +42,6 @@ export function useResponsiveLayout() {
   // Detail panel docks beside the table (shrinking v-main) on wide viewports
   const detailPanelDocked = computed(() => isDetailPanelDocked(width.value))
 
-  // Maximum data columns to auto-show at the current viewport width
-  const maxAutoVisibleColumns = computed(() => getMaxAutoVisibleColumns(width.value))
-
   return {
     tier,
     width,
@@ -53,24 +51,36 @@ export function useResponsiveLayout() {
     showFooterLinks,
     detailPanelFullWidth,
     detailPanelDocked,
-    maxAutoVisibleColumns,
     getColumnPriority
   }
 }
 
 /**
+ * Visible width (CSS px) of the mounted case/cohort table, published by
+ * `useTableScroll`'s resize observer. Null until a table has been measured.
+ */
+export const tableViewportWidthPx = ref<number | null>(null)
+
+/**
  * Responsive default column visibility. `autoHidden` holds the keys hidden by
- * default at the current viewport width, ranked by `COLUMN_PRIORITY`; columns
- * with an explicit user visibility choice are never part of it. `isVisible`
- * resolves the effective visibility (explicit choice first, then the default).
+ * default because they do not fit the table width (viewport width until the
+ * table is measured), ranked by `COLUMN_PRIORITY`; columns with an explicit
+ * user visibility choice are never part of it. `isVisible` resolves the
+ * effective visibility (explicit choice first, then the default).
  */
 export function useAutoHiddenColumns(
   keys: MaybeRefOrGetter<readonly string[]>,
   prefs: Readonly<Ref<{ visibility: Readonly<Record<string, boolean>> }>>
 ) {
-  const { maxAutoVisibleColumns } = useResponsiveLayout()
+  const { width } = useDisplay()
+  // ponytail: rem size read on resize only; a text-size change alone refits on the next resize
   const autoHidden = computed(() =>
-    computeAutoHiddenColumns(toValue(keys), maxAutoVisibleColumns.value, prefs.value.visibility)
+    computeAutoHiddenColumns(
+      toValue(keys),
+      (tableViewportWidthPx.value ?? width.value) / readRootFontPx(),
+      columnWidthRem,
+      prefs.value.visibility
+    )
   )
   const isVisible = (key: string): boolean =>
     isColumnVisible(key, prefs.value.visibility, autoHidden.value)

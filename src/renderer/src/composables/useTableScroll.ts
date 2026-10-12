@@ -46,6 +46,7 @@
 
 import { ref, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
+import { tableViewportWidthPx } from './useResponsiveLayout'
 
 /**
  * Return type for useTableScroll composable
@@ -199,8 +200,14 @@ export function useTableScroll(): UseTableScrollReturn {
     // initial notification performs the first sync after layout; reading
     // scrollWidth synchronously here forced an extra layout of the whole page
     // in the middle of the table's mount task.
+    // It also publishes the table width that sizes the default column set. The
+    // docked details panel is added back (v-main's right padding): docking must
+    // not swap columns, or every cell would shift (CLS gate).
+    const main = tableWrapper.closest<HTMLElement>('.v-main')
     const resizeObserver = new ResizeObserver(() => {
       updateScrollbarWidth()
+      const dockedPx = main ? parseFloat(getComputedStyle(main).paddingRight) || 0 : 0
+      tableViewportWidthPx.value = tableWrapper.clientWidth + dockedPx
     })
     resizeObserver.observe(tableWrapper)
     const table = tableWrapper.querySelector('table')
