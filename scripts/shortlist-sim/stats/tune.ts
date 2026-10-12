@@ -7,7 +7,7 @@
  * background. The ClinVar group is tuned on `clinvar_visible`, every other group and the modes
  * on `primary`. A mode-scoped group counts only rows scored under that mode.
  */
-import { REFERENCE_RULE_IDS } from '../../../src/shared/config/evidence-rulesets/varvis-template'
+import { isReferenceRule } from '../../../src/shared/evidence/ruleset-problems'
 import type {
   EvidenceGroup,
   EvidenceRuleset,
@@ -70,7 +70,7 @@ function cellsOf(template: EvidenceRuleset): Cell[] {
       cells.push({
         group: g.id,
         bin: r.id,
-        isReference: REFERENCE_RULE_IDS.has(r.id),
+        isReference: isReferenceRule(r),
         // ClinVar: only the first bin (P/LP) is identifiable from P/LP-only positives.
         prior: usesClinvar(g) && k > 0 ? r.points : null,
         inPopulation: (x) =>

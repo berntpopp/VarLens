@@ -14,10 +14,12 @@
  */
 import { BUILT_IN_SHORTLIST_PRESETS } from '../../../src/main/database/built-in-shortlist-presets'
 import { SHORTLIST_EVIDENCE_CONFIG } from '../../../src/shared/config/shortlist-evidence.config'
+import { evidenceShortlistConfig } from '../../../src/shared/evidence/evidence-shortlist-config'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-rulesets/varvis-template'
 import type { EvidenceRuleset, ModeId } from '../../../src/shared/types/evidence-ruleset'
 import type { RankWeights, ShortlistConfig } from '../../../src/shared/types/shortlist'
 import type { ScenarioId } from '../common/types'
+import { TEMPLATES, type TemplateId, type TunedByTemplate } from './templates'
 
 export interface ScorerDef {
   id: string
@@ -28,11 +30,6 @@ export interface ScorerDef {
 }
 
 const ZERO: RankWeights = { impact: 0, pathogenicity: 0, rarity: 0, clinvar: 0, phenotype: 0 }
-const TIE_BREAKERS: ShortlistConfig['tieBreakers'] = [
-  { key: 'cadd', order: 'desc' },
-  { key: 'chr', order: 'asc' },
-  { key: 'pos', order: 'asc' }
-]
 const gate = SHORTLIST_EVIDENCE_CONFIG.defaultGate
 export const EVIDENCE_GATE: ShortlistConfig['baseFilters'] = {
   maxGnomadAf: gate.maxGnomadAf,
@@ -45,25 +42,18 @@ const builtIn = (name: string): ShortlistConfig => {
   return structuredClone(preset.config) as ShortlistConfig
 }
 
-export function evidenceConfig(
+/** The product's evidence config builder, so benchmark and seeded preset cannot drift. */
+export const evidenceConfig = (
   ruleset: EvidenceRuleset,
-  baseFilters: ShortlistConfig['baseFilters'] = EVIDENCE_GATE
-): ShortlistConfig {
-  return {
-    variantTypeScope: [...SHORTLIST_EVIDENCE_CONFIG.variantTypes],
-    topN: SHORTLIST_EVIDENCE_CONFIG.defaultTopN,
-    baseFilters,
-    rankConfig: { weights: ZERO, ruleset, clinvarPinTop: false, pinStarredTop: false },
-    tieBreakers: TIE_BREAKERS
-  }
-}
+  baseFilters?: ShortlistConfig['baseFilters']
+): ShortlistConfig => evidenceShortlistConfig(ruleset, { baseFilters })
 
 const legacy = (weights: Partial<RankWeights>): ShortlistConfig => ({
   variantTypeScope: ['snv', 'indel'],
   topN: 100,
   baseFilters: EVIDENCE_GATE,
   rankConfig: { weights: { ...ZERO, ...weights }, clinvarPinTop: false, pinStarredTop: false },
-  tieBreakers: TIE_BREAKERS
+  tieBreakers: SHORTLIST_EVIDENCE_CONFIG.defaultTieBreakers.map((tb) => ({ ...tb }))
 })
 
 /** A copy with every rule of the named groups at 0 points. */
@@ -88,11 +78,15 @@ export const CANDIDATE_SCORER = 'evidence_tuned'
 
 /** All scorers; `tuned[fold]` is the fold's tuned ruleset (disabled groups already zeroed). */
 export function buildScorers(
-  tuned: readonly EvidenceRuleset[],
-  disabledGroups: string[]
+  tunedBy: TunedByTemplate,
+  disabledGroups: string[],
+  primaryTemplate: TemplateId = 'varvis'
 ): ScorerDef[] {
+  const template = TEMPLATES[primaryTemplate]
+  const tuned = tunedBy[primaryTemplate] ?? []
   const tier1 = builtIn('Tier 1 candidates')
-  const hand = zeroGroups(VARVIS_EVIDENCE_TEMPLATE, disabledGroups)
+  const hand = zeroGroups(template, disabledGroups)
+  const name = primaryTemplate === 'varvis' ? 'Evidence' : `Evidence (${primaryTemplate} template)`
   const fixed = (c: ShortlistConfig) => (): ShortlistConfig => c
   const all = 'all' as const
   const primary: ScenarioId[] = ['primary']
@@ -113,13 +107,13 @@ export function buildScorers(
     { id: 'af_asc', label: 'AF ascending', config: fixed(legacy({ rarity: 1 })), scenarios: all },
     {
       id: 'evidence_hand',
-      label: 'Evidence, hand-set points',
+      label: `${name}, hand-set points`,
       config: fixed(evidenceConfig(hand)),
       scenarios: all
     },
     {
       id: CANDIDATE_SCORER,
-      label: 'Evidence, tuned points',
+      label: `${name}, tuned points`,
       config: (f) => evidenceConfig(tuned[f]),
       scenarios: all
     },
@@ -136,7 +130,7 @@ export function buildScorers(
       scenarios: all
     }
   ]
-  for (const g of VARVIS_EVIDENCE_TEMPLATE.groups) {
+  for (const g of template.groups) {
     if (disabledGroups.includes(g.id)) continue
     scorers.push({
       id: `abl_group_${g.id}`,
@@ -145,7 +139,7 @@ export function buildScorers(
       scenarios: primary
     })
   }
-  const modeIds = VARVIS_EVIDENCE_TEMPLATE.modes.map((m) => m.id).filter((m) => m !== 'fallback')
+  const modeIds = template.modes.map((m) => m.id).filter((m) => m !== 'fallback')
   for (const m of modeIds) {
     scorers.push({
       id: `abl_mode_${m}`,
@@ -153,6 +147,24 @@ export function buildScorers(
       config: (f) => evidenceConfig(zeroModes(tuned[f], [m])),
       scenarios: primary
     })
+  }
+  if (primaryTemplate !== 'varvis') {
+    // Paired comparison with the 18-field varvis template on the same cases (#597).
+    const varvisTuned = tunedBy.varvis ?? []
+    scorers.push(
+      {
+        id: 'varvis_hand',
+        label: 'varvis template, hand-set points',
+        config: fixed(evidenceConfig(zeroGroups(VARVIS_EVIDENCE_TEMPLATE, disabledGroups))),
+        scenarios: all
+      },
+      {
+        id: 'varvis_tuned',
+        label: 'varvis template, tuned points',
+        config: (f) => evidenceConfig(varvisTuned[f]),
+        scenarios: all
+      }
+    )
   }
   scorers.push({
     id: 'abl_modes_all',

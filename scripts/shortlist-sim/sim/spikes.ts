@@ -15,6 +15,7 @@ import { spikeAf, type AfField } from '../concordance/metrics'
 import type { SpikeAnnotation, SpikeVep } from '../annotate/spike-annotation'
 import type { PoolVariant } from '../pool/select-pool'
 import { alleleClassOf, type BackgroundInfo } from './background-db'
+import { rng } from '../common/rng'
 
 export type CaddSource = 'cadd-api' | 'local-vep' | 'imputed' | 'none'
 
@@ -25,6 +26,8 @@ export interface SpikeSource {
   ann: SpikeAnnotation & { vep: SpikeVep }
   /** CADD API PHRED for SNVs: number, null ([] response) or undefined (not fetched). */
   caddApi: number | null | undefined
+  /** Canonical info fields for the full template (local resources; #597). */
+  extra?: Record<string, string>
 }
 
 export interface SpikeRow {
@@ -42,9 +45,14 @@ export interface SpikeOptions {
   impactByFunc: ImpactRow[]
   /** Impute missing spike CADD from background rows of the same func and allele class. */
   caddImpute: boolean
+  /** Seed of the per-allele imputation streams. */
+  imputeSeed: number
 }
 
 export type SpikeSkip = 'unmapped' | 'collision' | 'gene_absent'
+
+const seedOf = (text: string): number =>
+  [...text].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 0x9e3779b9)
 
 const pick = <T>(xs: readonly T[], rnd: () => number): T => xs[Math.floor(rnd() * xs.length)]
 
@@ -115,7 +123,10 @@ export function spikeRow(
   const encodings = bg.encodings[`${cls}:${zyg}`] ?? bg.encodings[`snv:${zyg}`] ?? []
   const [gt, qual] =
     encodings.length > 0 ? pick(encodings, rnd) : [zyg === 'hom' ? '1/1' : '0/1', null]
-  const { cadd, caddSource } = spikeCadd(src, proj.func, bg, rnd, opts.caddImpute)
+  // Imputation has its own stream (run seed + background + allele), so switching it off
+  // leaves genotype and decoy sampling unchanged.
+  const imputeRnd = rng(seedOf(`${opts.imputeSeed}|${bg.label}|${norm.key}`))
+  const { cadd, caddSource } = spikeCadd(src, proj.func, bg, imputeRnd, opts.caddImpute)
   const mapped = mapVarvisObject({
     chr: norm.chr,
     pos: norm.pos,
@@ -138,5 +149,7 @@ export function spikeRow(
   } as ObjectFormatVariant)
   // Gene-level moi is copied as the stored string (the mapper's input form is an object list).
   mapped.moi = gene.moi
+  if (src.extra !== undefined && Object.keys(src.extra).length > 0)
+    mapped.info_json = JSON.stringify(src.extra)
   return { poolKey: pv.key, key: norm.key, role, row: mapped, caddSource }
 }

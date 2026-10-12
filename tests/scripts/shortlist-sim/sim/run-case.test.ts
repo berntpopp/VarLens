@@ -42,7 +42,7 @@ const tuned = Array.from({ length: 5 }, () => VARVIS_EVIDENCE_TEMPLATE)
 describe('runCase', () => {
   it('ranks causal alleles with integer ranks and rolls the spikes back', () => {
     const before = variantCount(db)
-    const results = runCase(db, comphet, buildScorers(tuned, []), 0, rng(1))
+    const results = runCase(db, comphet, buildScorers({ varvis: tuned }, []), 0, rng(1))
     expect(variantCount(db)).toBe(before)
     const ev = results.find((r) => r.scorer === 'evidence_hand')!
     expect(ev.alleles).toHaveLength(2)

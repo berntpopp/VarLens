@@ -69,3 +69,37 @@ export function caddOffSection(
     )
   ].join('\n\n')
 }
+
+/** Paired full-template − varvis-template comparison on the same cases (#597). */
+export function templateComparisonSection(
+  results: CaseResult[],
+  reps: number,
+  seed: number
+): string | null {
+  if (!results.some((r) => r.scorer === 'varvis_hand')) return null
+  const rows: string[] = []
+  for (const scenario of ['primary', 'clinvar_visible'] as const) {
+    for (const [full, varvis] of [
+      ['evidence_hand', 'varvis_hand'],
+      ['evidence_tuned', 'varvis_tuned']
+    ]) {
+      const pick = (s: string): CaseResult[] =>
+        results.filter((r) => r.scorer === s && r.scenario === scenario)
+      const a = pick(full)
+      const b = pick(varvis)
+      if (a.length === 0 || b.length === 0) continue
+      rows.push(
+        `| ${scenario} | ${full} vs ${varvis} | ${ci(clusterBootstrap(a, byGene, hit10, reps, seed))} | ${ci(clusterBootstrap(b, byGene, hit10, reps, seed))} | ${dpts(pairedClusterBootstrap(a, b, byGene, hit10, reps, seed))} |`
+      )
+    }
+  }
+  return [
+    '## Full template vs varvis template (paired)',
+    'Same cases, same folds; `evidence_*` use the full template, `varvis_*` the 18-field varvis template. Hit@10 macro over classes, all modes; Δ = full − varvis, paired gene-cluster bootstrap.',
+    [
+      '| Scenario | Pair | Full Hit@10 | varvis Hit@10 | Δ |',
+      '| --- | --- | --- | --- | --- |',
+      ...rows
+    ].join('\n')
+  ].join('\n\n')
+}

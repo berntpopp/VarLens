@@ -3,11 +3,8 @@
  * background × scenario × slice of cases; the runner keeps the last background DB open.
  */
 import { compileRuleset } from '../../../src/main/services/scoring/evidence'
-import {
-  REFERENCE_RULE_IDS,
-  VARVIS_EVIDENCE_TEMPLATE
-} from '../../../src/shared/config/evidence-rulesets/varvis-template'
-import type { EvidenceRuleset, ModeId } from '../../../src/shared/types/evidence-ruleset'
+import { isReferenceRule } from '../../../src/shared/evidence/ruleset-problems'
+import type { ModeId } from '../../../src/shared/types/evidence-ruleset'
 import type { ShortlistRow } from '../../../src/shared/types/shortlist'
 import type { CaseResult, ScenarioId } from '../common/types'
 import { rng } from '../common/rng'
@@ -17,30 +14,42 @@ import { openBackgroundDb, type BackgroundDb } from './background-db'
 import type { SimCase } from './cases'
 import { rankAll, runCase, withSpikes } from './run-case'
 import { buildScorers, evidenceConfig } from './scorers'
+import { TEMPLATES, type TemplateId, type TunedByTemplate } from './templates'
 
 export interface WorkerInit {
   backgrounds: Background[]
   seed: number
   disabledGroups: string[]
+  /** Template whose rulesets are the evidence_* scorers. */
+  template: TemplateId
 }
 
+type PerTemplate<T> = Partial<Record<TemplateId, T>>
+
 export type Job =
-  | { kind: 'assign'; bg: string; scenario: ScenarioId; cases: SimCase[]; withBackground: boolean }
+  | {
+      kind: 'assign'
+      bg: string
+      scenario: ScenarioId
+      cases: SimCase[]
+      withBackground: boolean
+      templates: TemplateId[]
+    }
   | {
       kind: 'eval'
       bg: string
       scenario: ScenarioId
       cases: SimCase[]
       folds: number[]
-      tuned: EvidenceRuleset[]
+      tuned: TunedByTemplate
     }
 
 export type JobResult =
   | {
       kind: 'assign'
-      positives: Assignment[]
-      background: Assignment[]
-      overlaps: Record<string, number>
+      positives: PerTemplate<Assignment[]>
+      background: PerTemplate<Assignment[]>
+      overlaps: PerTemplate<Record<string, number>>
     }
   | { kind: 'eval'; results: CaseResult[] }
 
@@ -58,16 +67,17 @@ function assignmentOf(row: ShortlistRow, scenario: ScenarioId): Assignment {
   return { gene: row.gene_symbol ?? '', mode: row.rank_mode as ModeId, bins, scenario }
 }
 
-const ASSIGN_CONFIG = evidenceConfig(VARVIS_EVIDENCE_TEMPLATE)
-const COMPILED_TEMPLATE = compileRuleset(VARVIS_EVIDENCE_TEMPLATE)
+// First-match assignments do not depend on points: the template's own points are fine.
+const assignConfig = (t: TemplateId) => evidenceConfig(TEMPLATES[t])
 
 /** Rows matching more than one non-reference bin of a group (bins must be exclusive). */
-function countOverlaps(rows: readonly ShortlistRow[]): Record<string, number> {
+function countOverlaps(t: TemplateId, rows: readonly ShortlistRow[]): Record<string, number> {
+  const compiled = compileRuleset(TEMPLATES[t])
   const out: Record<string, number> = {}
   for (const row of rows) {
     const view = row as unknown as Record<string, unknown>
-    for (const g of COMPILED_TEMPLATE.groups) {
-      const n = g.rules.filter((r) => !REFERENCE_RULE_IDS.has(r.id) && r.test(view)).length
+    for (const g of compiled.groups) {
+      const n = g.rules.filter((r) => !isReferenceRule(r) && r.test(view)).length
       if (n > 1) out[g.id] = (out[g.id] ?? 0) + 1
     }
   }
@@ -94,28 +104,33 @@ export class JobRunner {
   }
 
   private assign(bg: BackgroundDb, job: Extract<Job, { kind: 'assign' }>): JobResult {
-    const positives: Assignment[] = []
+    const positives: PerTemplate<Assignment[]> = {}
+    for (const t of job.templates) positives[t] = []
     for (const c of job.cases) {
       withSpikes(bg, c, caseRng(this.init.seed, c.id, job.scenario), (ids) => {
-        const { rows } = rankAll(bg, ASSIGN_CONFIG)
-        for (const id of ids.causal) {
-          const row = rows.find((r) => r.id === id)
-          if (row !== undefined) positives.push(assignmentOf(row, job.scenario))
+        for (const t of job.templates) {
+          const { rows } = rankAll(bg, assignConfig(t))
+          for (const id of ids.causal) {
+            const row = rows.find((r) => r.id === id)
+            if (row !== undefined) positives[t]!.push(assignmentOf(row, job.scenario))
+          }
         }
       })
     }
-    if (!job.withBackground) return { kind: 'assign', positives, background: [], overlaps: {} }
-    const { rows } = rankAll(bg, ASSIGN_CONFIG)
-    return {
-      kind: 'assign',
-      positives,
-      background: rows.map((r) => assignmentOf(r, job.scenario)),
-      overlaps: countOverlaps(rows)
+    const background: PerTemplate<Assignment[]> = {}
+    const overlaps: PerTemplate<Record<string, number>> = {}
+    if (job.withBackground) {
+      for (const t of job.templates) {
+        const { rows } = rankAll(bg, assignConfig(t))
+        background[t] = rows.map((r) => assignmentOf(r, job.scenario))
+        overlaps[t] = countOverlaps(t, rows)
+      }
     }
+    return { kind: 'assign', positives, background, overlaps }
   }
 
   private evaluate(bg: BackgroundDb, job: Extract<Job, { kind: 'eval' }>): JobResult {
-    const scorers = buildScorers(job.tuned, this.init.disabledGroups)
+    const scorers = buildScorers(job.tuned, this.init.disabledGroups, this.init.template)
     const results = job.cases.flatMap((c, i) =>
       runCase(bg, c, scorers, job.folds[i], caseRng(this.init.seed, c.id, job.scenario))
     )

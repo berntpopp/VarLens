@@ -1,3 +1,5 @@
+> **Superseded** by [`2026-10-12-full-v2`](../2026-10-12-full-v2/report.md) (template `xl` mode fix and review fixes). The ship decision cites v2.
+
 # Evidence shortlist simulation — 2026-10-12-full
 
 Created 2026-10-12T16:02:02.414Z. Reference scorer `tier1`, candidate `evidence_tuned`. All numbers are aggregates over simulated cases; no background row is reported.

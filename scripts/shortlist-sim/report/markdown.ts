@@ -118,7 +118,7 @@ export function strataSection(d: ReportData): string {
     ),
     strataTable(
       'Per background',
-      'Leave-one-background-out is reported separately by the runner.',
+      'Per-background results of the cross-validated (gene-fold) evaluation; backgrounds are not held out. Leave-one-background-out was not performed: the shipped hand-set ruleset has no fitted parameters, so a background hold-out does not apply to it.',
       d,
       d.byBackground
     ),

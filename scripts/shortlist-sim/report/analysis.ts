@@ -170,6 +170,7 @@ interface Ctx {
   seed: number
   reference: string
   candidate: string
+  provisional: boolean
 }
 
 const pick = (ctx: Ctx, scorer: string, scenario: ScenarioId): CaseResult[] =>
@@ -227,7 +228,8 @@ function shipVerdict(
     modeCases,
     primary: { deltaHit10: cand?.deltaHit10 ?? nan, deltaDecoys: cand?.deltaDecoys ?? nan },
     clinvarVisible: { deltaHit10: visibleDelta(macroHit10), deltaDecoys: visibleDelta(meanDecoys) },
-    sensitivity: clusterSensitivityCounts(candPrimary)
+    sensitivity: clusterSensitivityCounts(candPrimary),
+    provisional: ctx.provisional
   })
 }
 
@@ -272,7 +274,8 @@ export function analyze(results: CaseResult[], manifest: RunManifest): ReportDat
     reps: manifest.bootstrapReps || DEFAULT_REPS,
     seed: manifest.seeds.bootstrap ?? 1,
     reference,
-    candidate
+    candidate,
+    provisional: manifest.provisional === true
   }
   const refPrimary = pick(ctx, reference, 'primary')
   const scorers = ctx.order.map((s) =>

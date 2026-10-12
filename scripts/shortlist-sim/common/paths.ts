@@ -1,6 +1,7 @@
 /** Paths for the shortlist simulation. Large and private data live outside the repository. */
+import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -41,3 +42,25 @@ export const ANNOTATE_ENV_BIN = process.env.VARLENS_SIM_ENV_BIN ?? ENV_BIN
 export const BCFTOOLS = join(ANNOTATE_ENV_BIN, 'bcftools')
 export const VEP = join(ANNOTATE_ENV_BIN, 'vep')
 export const VEP_PLUGIN_DIR = join(ANNOTATE_ENV_BIN, '../share/ensembl-vep-115.2-1')
+
+/**
+ * Throws unless `path` (symlinks resolved, also for a not-yet-existing tail) lies outside the
+ * repository: patient-derived files must never be written into the working tree.
+ */
+export function assertOutsideRepo(path: string, repoRoot = REPO_ROOT): string {
+  const target = resolve(path)
+  let existing = target
+  while (!existsSync(existing)) existing = dirname(existing)
+  const real = resolve(realpathSync(existing), relative(existing, target))
+  const repo = realpathSync(repoRoot)
+  if (real === repo || real.startsWith(repo + sep)) {
+    throw new Error(`refusing to write private simulation data inside the repository: ${real}`)
+  }
+  return target
+}
+
+/** The private directory, created after checking it is outside the repository. */
+export function ensurePrivateDir(dir = PRIVATE_DIR): string {
+  mkdirSync(assertOutsideRepo(dir), { recursive: true })
+  return dir
+}

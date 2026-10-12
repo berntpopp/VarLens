@@ -80,6 +80,8 @@ export interface RunManifest {
   run: string
   createdAt: string
   quick: boolean
+  /** Annotation acceptance was not fully evaluable (spec §11.4): never SHIP. */
+  provisional?: boolean
   seeds: Record<string, number>
   bootstrapReps: number
   inputHashes: Record<string, string>
