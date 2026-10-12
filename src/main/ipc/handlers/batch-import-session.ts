@@ -65,6 +65,8 @@ export interface SessionBatchParams {
   files: SessionBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText?: string
+  /** The build for files whose header decides none (always JSON). */
+  fallbackGenomeBuild?: string
   /** Client correlation id, echoed in the job params. */
   runId?: string
   session: StorageSession
@@ -119,6 +121,7 @@ export async function runSessionBatchImport(params: {
   files: SessionBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText?: string
+  fallbackGenomeBuild?: string
   session: StorageSession
   callbacks: SessionBatchCallbacks
   signal: AbortSignal
@@ -127,6 +130,10 @@ export async function runSessionBatchImport(params: {
   concurrency?: number
 }): Promise<BatchResult> {
   const { files, session, callbacks, signal } = params
+  const vcfOptions =
+    params.fallbackGenomeBuild === undefined
+      ? undefined
+      : { fallbackGenomeBuild: params.fallbackGenomeBuild }
 
   const existingIds = new Map((await session.listCases()).map((item) => [item.name, item.id]))
   // A case imported before `.vcf` was stripped resolves to its existing name.
@@ -245,6 +252,7 @@ export async function runSessionBatchImport(params: {
   if (parallel) {
     await runFilesInParallel({
       openBatch: () => executor.openBatch!(),
+      vcfOptions,
       chains: groupIntoChains(caseNames),
       concurrency,
       processFile,
@@ -253,7 +261,7 @@ export async function runSessionBatchImport(params: {
     if (signal.aborted) result.cancelled = true
   } else {
     const importOne: ImportOneFile = (file, caseName, onProgress) =>
-      startImport(file.storedPath, caseName, undefined, () => session, { onProgress })
+      startImport(file.storedPath, caseName, vcfOptions, () => session, { onProgress })
     for (let index = 0; index < files.length && !result.cancelled; index++) {
       await processFile(index, importOne)
     }
@@ -275,6 +283,7 @@ async function runFilesInParallel(args: {
   concurrency: number
   processFile: (index: number, importOne: ImportOneFile) => Promise<void>
   shouldStop: () => boolean
+  vcfOptions?: { fallbackGenomeBuild: string }
 }): Promise<void> {
   let batch: StorageImportBatch | null = null
   await withActiveImportOperation(
@@ -287,6 +296,7 @@ async function runFilesInParallel(args: {
           open.importFile({
             filePath: file.storedPath,
             caseName,
+            vcfOptions: args.vcfOptions,
             throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
             onProgress
           })

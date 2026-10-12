@@ -79,7 +79,7 @@ function authErrorFromTransport(error: unknown): SerializableError | null {
 }
 
 export async function startBatchImportRun(
-  args: [string[], DuplicateChoice, string | undefined, string],
+  args: [string[], DuplicateChoice, string | undefined, string, (string | undefined)?],
   deps: { invoke: Invoke; subscribe: Subscribe; pollMs?: number }
 ): Promise<IpcResult<BatchResult>> {
   const runId = args[3]

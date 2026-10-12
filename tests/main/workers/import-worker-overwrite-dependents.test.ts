@@ -55,7 +55,8 @@ describe('import worker: rows that depend on a replaced case', () => {
               filePath,
               caseName: 'patient',
               isDuplicate: strategy === 'overwrite',
-              duplicateStrategy: strategy
+              duplicateStrategy: strategy,
+              fallbackGenomeBuild: 'GRCh38'
             }
           ]
         },

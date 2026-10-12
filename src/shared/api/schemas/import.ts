@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { importFilterNumericFields } from '../../ipc/domains/import-schemas'
+import { GenomeBuildIdSchema, importFilterNumericFields } from '../../ipc/domains/import-schemas'
 
 export interface ImportVcfOptions {
   selectedSample?: string
@@ -21,7 +21,7 @@ export const ImportVariantTypeArgSchema = z.string().refine((value) => value.tri
 export const ImportVcfOptionsSchema = z
   .object({
     selectedSample: z.string().optional(),
-    genomeBuild: z.string().optional()
+    genomeBuild: GenomeBuildIdSchema.optional()
   })
   .passthrough()
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { join, parse } from 'node:path'
+import { join, parse, resolve } from 'node:path'
 import { ErrorCode, isIpcError } from '../../../../src/shared/types/errors'
 
 const { cleanupZipTemp, safeEmit } = vi.hoisted(() => ({
@@ -146,6 +146,30 @@ describe('batch-import IPC handlers', () => {
       expect(checkDuplicateFiles).toHaveBeenCalledWith(expect.any(Function), [filePath], undefined)
     })
 
+    it('reads each VCF header for its genome build only when asked', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      const filePath = resolve(__dirname, '../../../test-data/vcf/single-sample.vcf.gz')
+      addAllowedImportPath(filePath)
+      const item = { filePath, fileName: 'single-sample.vcf.gz', caseName: 's', isDuplicate: false }
+      vi.mocked(checkDuplicateFiles).mockReturnValue({ files: [item], duplicateCount: 0 })
+
+      const plain = await invokeHandler(ipcMain, 'batch-import:checkDuplicates', [filePath])
+      expect(plain).toEqual({ files: [item], duplicateCount: 0 })
+
+      const withBuilds = await invokeHandler(
+        ipcMain,
+        'batch-import:checkDuplicates',
+        [filePath],
+        undefined,
+        true
+      )
+      expect(withBuilds).toEqual({
+        files: [{ ...item, build: { suggested: 'GRCh38', confidence: 'definitive' } }],
+        duplicateCount: 0
+      })
+    })
+
     it('rejects a temp path that was never dialog-enrolled', async () => {
       // Filesystem location is not proof of dialog provenance.
       const ipcMain = makeIpcMain()
@@ -213,6 +237,20 @@ describe('batch-import IPC handlers', () => {
 
       expectInvalidParametersResult(result)
       expect(startBatchImport).not.toHaveBeenCalled()
+    })
+
+    it('forwards the build for files without one, and rejects an unknown build', async () => {
+      const ipcMain = makeIpcMain()
+      registerBatchImportHandlers(makeDeps(ipcMain) as never)
+      const filePath = join(EXTERNAL_ROOT, 'case1.json')
+      addAllowedImportPath(filePath)
+
+      const args = [[filePath], 'skip', undefined, 'run-fallback'] as const
+      const bad = await invokeHandler(ipcMain, 'batch-import:start', ...args, 'hg99')
+      expect(isIpcError(bad)).toBe(true)
+
+      await invokeHandler(ipcMain, 'batch-import:start', ...args, 'GRCh37')
+      expect(vi.mocked(startBatchImport).mock.calls.at(-1)?.[5]).toBe('GRCh37')
     })
 
     it('accepts a dialog-enrolled file path', async () => {

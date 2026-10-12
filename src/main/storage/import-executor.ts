@@ -2,7 +2,10 @@ import type { MultiFileImportSpec } from '../../shared/types/api'
 
 export interface StorageImportVcfOptions {
   selectedSample?: string
+  /** The build the user confirmed; wins over the file header. */
   genomeBuild?: string
+  /** Batch: the build for files whose header decides none. */
+  fallbackGenomeBuild?: string
 }
 
 /**

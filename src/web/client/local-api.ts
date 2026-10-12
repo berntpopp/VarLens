@@ -61,8 +61,8 @@ const importApi: Partial<WindowAPI['import']> = {
 
 const batchImportApi: Partial<WindowAPI['batchImport']> = {
   // Accepted at once with a job id; the result arrives by event (or status poll).
-  start: (filePaths, duplicateStrategy, stripText, runId) =>
-    startBatchImportRun([filePaths, duplicateStrategy, stripText, runId], {
+  start: (filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild) =>
+    startBatchImportRun([filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild], {
       invoke: httpInvoke,
       subscribe: subscribeWebEvent
     }),

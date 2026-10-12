@@ -829,6 +829,26 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(importSingleFile).not.toHaveBeenCalled()
   })
 
+  test('batch-import.start rejects an unknown fallback genome build before starting work', async () => {
+    const { deps, importSingleFile, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides['batch-import:start'].handle(
+      [[], 'skip', undefined, 'run-build', 'hg99'],
+      request as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({
+      error: 'invalid-genome-build',
+      message: 'fallbackGenomeBuild is invalid'
+    })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
   test('import.start routes a staged browser upload through shared import logic', async () => {
     const prevNodeEnv = process.env.NODE_ENV
     const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR

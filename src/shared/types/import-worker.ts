@@ -86,8 +86,10 @@ export interface FileImportRequest {
   duplicateStrategy: 'skip' | 'overwrite'
   /** VCF-specific: which samples to import */
   vcfSelectedSamples?: string[]
-  /** VCF-specific: genome build override */
+  /** Genome build the user confirmed for this file; wins over the header. */
   vcfGenomeBuild?: string
+  /** Batch: build for files whose header decides none (always JSON). */
+  fallbackGenomeBuild?: string
   /** VCF-specific: import filters; the worker loads the BED file itself. */
   vcfFilters?: {
     bedFilePath?: string | null

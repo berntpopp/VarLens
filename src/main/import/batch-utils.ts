@@ -1,12 +1,35 @@
 import { basename } from 'path'
 import type { DatabaseService } from '../database/DatabaseService'
 import { deriveCaseName, legacyCaseName, resolveCaseName } from '../../shared/utils/case-name'
+import type { DuplicateCheckItem } from '../../shared/types/api'
+import { detectFormat } from './format-detection'
+import { parseVcfHeader } from './vcf/vcf-header-parser'
 
-export interface DuplicateCheckItem {
-  filePath: string
-  fileName: string
-  caseName: string
-  isDuplicate: boolean
+export type { DuplicateCheckItem }
+
+/** The genome build a batch file's header suggests (header only, no data lines). */
+export async function detectFileBuild(
+  readablePath: string
+): Promise<NonNullable<DuplicateCheckItem['build']>> {
+  try {
+    if ((await detectFormat(readablePath)).format !== 'vcf') {
+      return { suggested: null, confidence: 'none' }
+    }
+    const { suggested, confidence } = (await parseVcfHeader(readablePath)).header.buildDetection
+    return { suggested, confidence }
+  } catch {
+    // An unreadable file fails in the import itself, with its own error.
+    return { suggested: null, confidence: 'none' }
+  }
+}
+
+/** Attach each file's header build; `readablePaths` is in the order of `files`. */
+export async function addDetectedBuilds(
+  files: DuplicateCheckItem[],
+  readablePaths: readonly string[]
+): Promise<DuplicateCheckItem[]> {
+  const builds = await Promise.all(readablePaths.map((path) => detectFileBuild(path)))
+  return files.map((file, index) => ({ ...file, build: builds[index] }))
 }
 
 /**

@@ -399,6 +399,7 @@ describe('lease and worker', () => {
         mode: 'single-file',
         caseName: 'superseded',
         filePath: '/tmp/a.vcf',
+        vcfOptions: { genomeBuild: 'GRCh38' },
         lease: { holderPid: 4242, generation: 7 }
       },
       (message) => messages.push(message)
@@ -451,6 +452,7 @@ describe('lease and worker', () => {
         files: [
           { filePath: '/tmp/a.vcf', variantType: 'snv-indel', annotationFormat: null, caller: null }
         ],
+        vcfOptions: { genomeBuild: 'GRCh38' },
         lease: { holderPid: 4242, generation: 7 }
       },
       (message) => messages.push(message)

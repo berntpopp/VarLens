@@ -100,6 +100,8 @@ export interface ImportResult {
 export interface VcfImportOptions {
   selectedSample?: string
   genomeBuild?: string
+  /** Batch only: build for files whose header decides none. */
+  fallbackGenomeBuild?: string
 }
 
 interface ActiveImportOperation {
@@ -347,7 +349,8 @@ async function startMultiFileImportSqlite(
   let totalSkipped = firstResult.skipped
 
   // Resolve the case-level locked genome build. Prefer the wizard-supplied
-  // value; otherwise read it back from the case row populated by the worker.
+  // value; otherwise read back the case row: the worker stored the build the
+  // first file's header decided (resolveImportGenomeBuild), never a default.
   let lockedGenomeBuild: string | null = vcfOptions?.genomeBuild ?? null
   if (lockedGenomeBuild === null) {
     try {
