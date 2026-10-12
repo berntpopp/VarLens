@@ -49,49 +49,80 @@ names. For every case whose primary contigs are not canonical for its stored bui
      or no evidence at all (`suggested_build` null). Never guess.
 4. Cases already canonical need no evidence and are never flagged.
 
-Flagged cases are listed to the user (dense banner above the case list + dialog, copy in
-`BUILD_COPY.review*`). The user picks a build per case; that sets `cases.genome_build` (if changed),
-renames the case's contigs for that build with the same merge rules, deletes the review row, updates
-frequencies and marks the summary stale. IPC: `cases:buildReviews` (read), `cases:resolveBuildReview`
-(write, analyst+ on web), shared on both backends.
+Flagged cases are listed to the user (dense banner + dialog, copy in `BUILD_COPY.review*`). The dialog
+is built for hundreds to thousands of cases: rows are grouped by evidence (reason), each row starts at
+the header's build or else the stored one (the user still confirms; nothing is applied unseen), a group
+or any selection can be set to one build, the list is virtually scrolled, and "Confirm all" /
+"Confirm selected" send **one** write: `cases:resolveBuildReviews(choices[])` (analyst+ on web).
+Every confirmation writes an audit row (`api_write` / `api_call`, key `cases:<id>:genome_build`,
+old → new build, the request's actor). SQLite renames the confirmed cases in that transaction; PostgreSQL
+stores the builds and queues the cases (`contig_naming_pending.confirmed`), and the job renames them.
+`cases:buildReviews` also reports `renameInProgress` (PG queue not empty): the shell then says that
+cohort counts can mix old and new names until the background update finishes.
 
 Until confirmed, a flagged case keeps its names. Search, the exact-variant filter and DSL `chr` equality
 match every spelling, so they still work; panel regions and BED-region filtering use the canonical form
 of the case build and do not match a flagged case's non-canonical contigs until it is confirmed.
 
-## Annotation merge rules (per renamed key `from → to`, in the rename transaction)
+## Annotation remap (`src/shared/genome/annotation-remap.ts`, both backends)
 
-Only `variant_annotations` rows whose key matches a variant of a renamed case are touched.
-- Target row absent → the source becomes the target. **Copy** (source kept) when a variant of any case
-  not being renamed still uses the source key (the row applied to both builds' loci before); else **move**.
-- Target row present → **merge** into the target: `starred = max`, comments joined (`a\n\nb`, identical
-  comments once), ACMG classification + evidence from the row with the newer `updated_at`; if both rows
-  have different classifications, the discarded one is written to `audit_log`. The source row is then
-  deleted or kept by the copy/move rule above.
+`variant_annotations` has no build in its key, so a row can serve cases of both builds. Rows are handled
+per **locus group** (every spelling of one contig at one pos/ref/alt) and decided from the **final**
+names of all cases renamed in the same pass, never case by case (case by case mixes loci: a GRCh38 `1`
+and an hg19 `chr1` at the same position swap keys):
+- Each row goes to every key the cases using its key will use afterwards (a copy when they differ); a
+  key no case uses keeps its row; a group where no case changes name is left alone.
+- Rows that land on one key are merged: `starred = max`, comments joined by paragraph in time order
+  (a paragraph appears once), ACMG classification + evidence of the newest row that has one; a different
+  classification that is dropped goes to `audit_log` (`acmg_classify`, reason `contig_merge of <keys>`).
+- SQLite: in the migration / confirmation transaction, before the variants are renamed. PostgreSQL: one
+  transaction for all planned cases, with the group rows locked `FOR UPDATE` (a concurrent edit waits).
 
 ## Order (per backend)
 
-SQLite (`PRAGMA user_version` 46, `src/main/database/contig-naming-migration.ts`, runs in the migration
-worker, one transaction):
-1. Discover: `SELECT c.id, c.genome_build, v.chr, MAX(v.pos) … GROUP BY c.id, v.chr`; plan per case.
-2. If any case will be renamed: checkpoint WAL and byte-copy the DB file to `<db>.pre-v46.bak`
-   (skipped for `:memory:`; failure aborts the migration, nothing changed). This is the rollback.
-3. In one transaction: per renamed case: decrement frequencies → merge annotations → `UPDATE variants`
-   → count frequencies; insert review rows for flagged cases; mark the summary stale; set user_version 46.
+SQLite (`PRAGMA user_version` 46, `src/main/database/contig-naming-migration.ts` +
+`contig-rename-sqlite.ts`, runs in the migration worker):
+1. Discover: `SELECT c.id, c.genome_build, v.chr, MAX(v.pos) … GROUP BY c.id, v.chr`; a case already in
+   its build's form is skipped (no file read, no row written); the others are planned.
+2. If any case will be renamed: check free space (`DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO`,
+   2.7 x the DB size: backup + peak WAL), `wal_checkpoint(TRUNCATE)` and require it complete (busy 0,
+   every frame checkpointed), then byte-copy the DB file to `<db>.pre-v46.bak`. Either check failing
+   stops with a user-facing message (`BUILD_COPY.migrationNoSpace` / `migrationBusy`, an `AppError` that
+   DatabaseService passes through) before anything changes. The copy keeps SQLCipher encryption.
+3. One transaction: annotation remap, then per renamed case decrement frequencies → `UPDATE variants SET
+   chr = to WHERE case_id = ? AND chr = from` (only rows under an old name are written) → recount;
+   review rows for flagged cases; summary marked stale; user_version 46.
 
-PostgreSQL (`0029_contig_naming.sql` + background job `contig-naming-job.ts`):
-1. Migration: create `contig_build_review` and `contig_naming_pending(case_id PK)`, seed the pending table
-   with every existing case (newer imports are canonical at import and are never queued).
-2. Job (scheduled like the severity backfill, from the cohort freshness probe): take one pending case
-   (`FOR UPDATE SKIP LOCKED`), plan, rename or flag, delete its pending row — **one transaction per case**,
-   so a crash resumes and readers see a case before or after its rewrite. When the queue empties and
-   anything was renamed, `markCohortSummaryStale('contig_naming')`.
+PostgreSQL (`0029_contig_naming.sql` + background job `src/main/storage/postgres/postgres-contig-naming.ts`):
+1. Migration: create `contig_build_review` and `contig_naming_pending(case_id, confirmed, pairs,
+   annotations_moved)`, queue every published case (newer imports are canonical and never queued).
+2. Job (scheduled from the cohort freshness probe and from `cases:buildReviews`; `FOR UPDATE SKIP
+   LOCKED` everywhere, one short transaction per step, so a crash resumes at the step in flight):
+   a. plan one case (re-check, async header read off the event loop; or take the confirmed build):
+      store `pairs`, or flag it, or dequeue a case that needs nothing;
+   b. once nothing is unplanned: one transaction remaps the annotations of all planned cases;
+   c. rename one case's variants per transaction (frequencies like a case delete/publish) and dequeue it.
+   The step that empties the queue asks for **one** cohort-summary rebuild (`cohort_summary_rebuild_requests`
+   `contig_naming`), not one per case.
 3. Backup: operator's responsibility (release notes); the job is resumable and idempotent.
+
+## Scale (measured by the independent review, 23-review-chr-migration.md)
+
+- SQLite: 2 M rows / 741 MB encrypted DB takes 34–36 s in one transaction, about 200 MB RSS, peak WAL
+  about 620 MB, so a 5 GB DB is about 4 min behind the migration splash. Rows already canonical are not
+  written, so time and WAL scale with the rows actually renamed. Run `VACUUM` afterwards only if the file
+  must shrink; it is not required.
+- PostgreSQL: about 3 s and 210 MB WAL per 100k-variant case renamed (dev container, `wal_level=minimal`):
+  10k renamed exomes is about 8 h serial and about 2 TB of WAL with production WAL settings, and the
+  renamed rows' old versions are dead tuples: let autovacuum catch up or run `VACUUM (ANALYZE)
+  variants_all` after the queue empties, and size `max_wal_size` / archiving for it. Databases whose
+  cases are already canonical write nothing. Locks are per row; cohort counts mix renamed and unrenamed
+  cases until the queue empties (the shell says so).
 
 ## Idempotency
 
 A second run finds every case canonical (or already flagged, which is skipped) and does nothing:
-SQLite by user_version and by the plan being empty; PG by the empty pending table. Resolving a review
+SQLite by user_version and by the plan being empty; PG by the empty pending table. Confirming a case
 twice fails cleanly (no review row).
 
 ## Import and query input (same PR)
@@ -101,9 +132,20 @@ twice fails cleanly (no review row).
 - Query input: coordinate search (3 sites), exact-variant filter, DSL `chr =` / OR → every spelling
   (`contigQueryNames`). Panel regions and panel BED export → `canonicalContig(…, build)`; the four
   "does this case use chr" probes and `getChrPrefix` are deleted.
-- APIs/links: `bareContig` replaces the five strip-`chr` copies. Links: `{chr}` = bare, new `{chr_ucsc}`;
-  the UCSC built-in template uses `{chr_ucsc}` (a stored old default is upgraded); Franklin `chr{chr}`
-  no longer yields `chrchr1`.
+- APIs/links: `bareContig` replaces the five strip-`chr` copies. Links: `{chr}` = bare, new `{chr_ucsc}`
+  (UCSC style per build from config `links.ucscRcrsMito`: GRCh38 MT → chrM, GRCh37 MT → chrMT, hg19 chrM
+  stays chrM); the UCSC built-in template uses `{chr_ucsc}` (a stored old default is upgraded); Franklin
+  `chr{chr}` no longer yields `chrchr1`.
+
+## Release notes (must say)
+
+- Chromosome names are now stored in each build's reference form (GRCh38 `chr1`, GRCh37 `1`); existing
+  data is converted on first open (desktop: after a backup next to the database; web: in the background,
+  back up PostgreSQL first, the change is one-way). Cases whose build cannot be confirmed are listed for
+  the user to confirm.
+- Custom external-link templates: `{chr}` is now always the bare name (`1`, `X`, `MT`); use `{chr_ucsc}`
+  for `chr1`-style names. Only the built-in UCSC template is updated automatically.
+- Global stars/comments/ACMG no longer bleed between a GRCh37 and a GRCh38 locus with the same numbers.
 
 ## Tests
 
@@ -113,8 +155,12 @@ twice fails cleanly (no review row).
 - SQLite migration: mixed-build DB → expected rows, frequencies, summary stale, backup file; collision
   merge (star, comments, newer ACMG, audit row); cross-build copy vs move; run twice = no-op; unresolved
   case untouched + review row; rank unchanged.
-- PG migration + job (`web-gate-postgres` style real-Postgres test): same scenarios, per-case resume.
-- Resolve: confirm/change build renames the case and removes the review.
+- The review's two loss scenarios on both backends: GRCh37 `1` + `chrMT` keeps its shared note; a
+  GRCh38 `1` / hg19 `chr1` swap keeps each note with its own locus.
+- PG job (real Postgres): same scenarios, one rebuild request, a step killed mid-case rolls back and
+  resumes, an import and an annotation edit during the job are kept.
+- SQLite: free-space refusal and incomplete-checkpoint refusal change nothing.
+- Resolve: one batched write confirms many cases, audit-logged, renames them, removes the reviews.
 - Links, panel BED export (bare for GRCh37), panel intervals per build.
 
 ## Rollback
