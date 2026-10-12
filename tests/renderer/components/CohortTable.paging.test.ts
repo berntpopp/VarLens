@@ -21,6 +21,7 @@ import CohortTable from '../../../src/renderer/src/components/CohortTable.vue'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
 import { _resetAnnotationsForTesting } from '../../../src/renderer/src/composables/useAnnotations'
+import { COHORT_CARRIER_LIMIT } from '../../../src/renderer/src/config/proteinViewConfig'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -170,6 +171,28 @@ describe('CohortTable paging', () => {
       column_filters: { cadd_phred: { operator: '>=', value: 25 } }
     })
     expect(exportCohort.mock.calls[0][0]).toEqual(tableFilters)
+  })
+
+  it('protein view: the gene carriers query keeps the active filters but not the search', async () => {
+    filtersCtx.filters.value.starredOnly = true
+    filtersCtx.searchTerm.value = 'chr22:29539391'
+    await flushPromises()
+
+    const exposed = wrapper.vm as unknown as {
+      queryGeneCarriers: (gene: string) => Promise<{ rows: unknown[]; total: number }>
+    }
+    const carriers = await exposed.queryGeneCarriers('THOC5')
+
+    // The total says when the plot shows only the top rows by carriers.
+    expect(carriers).toEqual({ rows: [row('v0')], total: 1000 })
+    const sent = queries().at(-1) as Query
+    expect(sent).toMatchObject({
+      gene_symbol: 'THOC5',
+      starred_only: true,
+      limit: COHORT_CARRIER_LIMIT,
+      _count_needed: true
+    })
+    expect(sent).not.toHaveProperty('search_term')
   })
 
   it('lets a DSL CADD condition replace the CADD header filter instead of conflicting', async () => {

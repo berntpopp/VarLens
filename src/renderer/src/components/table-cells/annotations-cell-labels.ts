@@ -52,6 +52,11 @@ export function acmgLabel(s: AnnotationDisplayState): string {
   return 'Set ACMG classification'
 }
 
+/** Viewer's ACMG button: shows the classification and opens the row menu (Protein view). */
+export function acmgReadOnlyLabel(s: AnnotationDisplayState): string {
+  return `ACMG: ${present(s.acmg) ? s.acmg : 'not classified'} (read only) · Protein view`
+}
+
 export function commentLabel(s: AnnotationDisplayState): string {
   if (!s.showGlobalIndicators) return s.hasComment ? 'Edit comment' : 'Add comment'
   const all = s.scope === 'all'

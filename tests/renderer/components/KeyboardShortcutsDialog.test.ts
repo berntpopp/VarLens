@@ -54,4 +54,10 @@ describe('KeyboardShortcutsDialog', () => {
     const expected = SHORTCUT_GROUPS.flatMap((g) => g.shortcuts.map((s) => s.key + s.description))
     expect(rows).toEqual(expected)
   })
+
+  it('lists p for the protein view', () => {
+    mountDialog()
+    const rows = [...document.body.querySelectorAll('tr')].map((tr) => tr.textContent ?? '')
+    expect(rows.some((t) => t.startsWith('p') && t.includes('protein view'))).toBe(true)
+  })
 })

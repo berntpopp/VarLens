@@ -70,6 +70,7 @@
           :annotation-scope="annotationScope"
           :read-only="!canWrite"
           :acmg-locked="annotationDialogsRef?.hasAcmgEvidence(item) === true"
+          :variant="item"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -259,7 +260,8 @@ import {
   onUnmounted,
   onActivated,
   onDeactivated,
-  nextTick
+  nextTick,
+  inject
 } from 'vue'
 import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
@@ -278,6 +280,7 @@ import { useAutoPageSize } from '../composables/useAutoPageSize'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
 import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
+import { useProteinViewShortcut } from '../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../config/keyboardShortcuts'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
@@ -290,7 +293,7 @@ import { useVariantColumns } from './variant-table/columns'
 import { useVariantData } from './variant-table/useVariantData'
 import { mdiFilterOff, mdiFilterOffOutline } from '@mdi/js'
 import { useApiService } from '../composables/useApiService'
-import { useAppState } from '../composables/useAppState'
+import { AppStateKey } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
 import {
   PositionCell,
@@ -353,12 +356,7 @@ const viewActive = ref(true)
 const acmgQuickMenu = provideAcmgQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
-let appState: ReturnType<typeof useAppState> | null = null
-try {
-  appState = useAppState()
-} catch {
-  // Safe fallback when mounted without AppState provider in isolated unit tests
-}
+const appState = inject(AppStateKey, null) // null without a provider (isolated unit tests)
 let cleanupAnnotationChanged: (() => void) | null = null
 
 // Annotations
@@ -630,6 +628,8 @@ for (const [key, action] of Object.entries(rowActionKeys)) {
     { dedupe: true }
   )
 }
+
+useProteinViewShortcut(() => (tableWorkActive.value ? selectedItem.value : null))
 
 // Scroll selected row into view
 watch(selectedIndex, async (newIndex) => {

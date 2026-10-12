@@ -30,7 +30,7 @@ function render(proteinLength: number) {
     global: {
       plugins: [vuetify],
       stubs: {
-        LollipopPlot: { name: 'LollipopPlot', template: '<div class="plot-stub" />' },
+        TrackView: { name: 'TrackView', template: '<div class="plot-stub" />' },
         LollipopToolbar: true,
         LollipopLegend: true
       }

@@ -16,6 +16,9 @@ import { useSharedMenu } from '../../../../src/renderer/src/components/table-cel
 import { provideAcmgQuickMenu } from '../../../../src/renderer/src/components/table-cells/acmg-quick-menu'
 import AnnotationsCell from '../../../../src/renderer/src/components/table-cells/AnnotationsCell.vue'
 import AcmgQuickMenu from '../../../../src/renderer/src/components/table-cells/AcmgQuickMenu.vue'
+import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
+import { PROTEIN_VIEW_COPY } from '../../../../src/renderer/src/config/proteinViewConfig'
+import { installCapabilities } from '../../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -141,6 +144,81 @@ describe('AnnotationsCell with a table-provided ACMG menu', () => {
     expect(document.body.textContent).not.toContain('Clear classification')
     expect(document.body.textContent).toContain('Evidence editor')
     expect(wrapper.emitted('acmg-select')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('Row quick menu: Protein view (case + cohort tables)', () => {
+  const variant = { chr: 'chr22', pos: 1, ref: 'A', alt: 'G', gene_symbol: 'THOC5' }
+
+  async function openMenu(aaChange: string | null, gene: string | null = 'THOC5') {
+    installCapabilities()
+    const state = createAppState()
+    const row = { ...variant, aa_change: aaChange, gene_symbol: gene }
+    const wrapper = mount(AnnotationsCell, {
+      props: {
+        isStarred: false,
+        acmgClassification: null,
+        hasComment: false,
+        variant: row as never
+      },
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      attachTo: document.body
+    })
+    await wrapper.findAll('button.annotation-btn')[1].trigger('click')
+    await flushPromises()
+    const item = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find((el) =>
+      el.textContent?.includes('Protein view')
+    )
+    return { wrapper, state, row, item: item! }
+  }
+
+  it('opens the protein view for the row', async () => {
+    const { wrapper, state, row, item } = await openMenu('p.Met180Val')
+    item.click()
+    expect(state.proteinViewRequest.value).toEqual({ variant: row, tab: 'lollipop' })
+    wrapper.unmount()
+  })
+
+  it('is disabled with the reason when the row has no gene', async () => {
+    const { wrapper, state, item } = await openMenu('p.Met180Val', null)
+    expect(item.classList).toContain('v-list-item--disabled')
+    expect(item.textContent).toContain(PROTEIN_VIEW_COPY.noGene)
+    item.click()
+    expect(state.proteinViewOpen.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('read-only viewers: the row menu opens with Protein view and read-only ACMG', async () => {
+    installCapabilities()
+    const state = createAppState()
+    const row = { ...variant, aa_change: 'p.Met180Val' }
+    const wrapper = mount(AnnotationsCell, {
+      props: {
+        isStarred: false,
+        acmgClassification: null,
+        hasComment: false,
+        readOnly: true,
+        variant: row as never
+      },
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      attachTo: document.body
+    })
+    const acmgButton = wrapper.findAll('button.annotation-btn')[1]
+    expect(acmgButton.attributes('disabled')).toBeUndefined()
+    expect(acmgButton.attributes('aria-label')).toContain('Protein view')
+    await acmgButton.trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).not.toContain('Evidence editor')
+    const chips = [...document.querySelectorAll('.v-menu .v-chip')]
+    expect(chips.length).toBeGreaterThan(0)
+    expect(chips.every((c) => c.classList.contains('v-chip--disabled'))).toBe(true)
+    const entry = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find((el) =>
+      el.textContent?.includes('Protein view')
+    )
+    entry!.click()
+    expect(state.proteinViewRequest.value?.variant).toEqual(row)
     wrapper.unmount()
   })
 })

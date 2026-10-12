@@ -1,0 +1,110 @@
+/** Protein view entry points: availability, the strip summary and the lollipop variants. */
+import { describe, expect, it } from 'vitest'
+
+import {
+  buildLollipopVariants,
+  proteinStripSummary,
+  proteinTabReason,
+  proteinViewBlockedReason,
+  proteinViewTabFor
+} from '../../../src/renderer/src/utils/protein-view'
+import { PROTEIN_VIEW_COPY } from '../../../src/renderer/src/config/proteinViewConfig'
+import type { CohortVariant } from '../../../src/shared/types/cohort'
+
+const row = (over: Partial<CohortVariant>): CohortVariant =>
+  ({
+    chr: 'chr22',
+    pos: 100,
+    ref: 'A',
+    alt: 'G',
+    gene_symbol: 'THOC5',
+    aa_change: 'p.Met180Val',
+    consequence: 'MODERATE',
+    carrier_count: 1,
+    gnomad_af: null,
+    clinvar: null,
+    ...over
+  }) as CohortVariant
+
+describe('proteinViewBlockedReason', () => {
+  it.each([
+    [
+      'lookups off: the server reason',
+      row({}),
+      'Turned off on this server',
+      'Turned off on this server'
+    ],
+    ['no gene', row({ gene_symbol: null }), null, PROTEIN_VIEW_COPY.noGene],
+    // SV / intronic / splice / UTR: the gene structure still shows them.
+    ['no protein position', row({ aa_change: null }), null, null],
+    ['available', row({}), null, null]
+  ])('%s', (_name, variant, lookupsReason, expected) => {
+    expect(proteinViewBlockedReason(variant, lookupsReason)).toBe(expected)
+  })
+
+  it('no variant: blocked', () => {
+    expect(proteinViewBlockedReason(null, null)).toBe(PROTEIN_VIEW_COPY.noVariant)
+  })
+})
+
+describe('protein tabs for a variant', () => {
+  const noPosition = row({ aa_change: null })
+
+  it.each([
+    ['lollipop', row({}), 'lollipop', null],
+    ['3d', row({}), '3d', null],
+    ['lollipop', noPosition, 'gene-structure', PROTEIN_VIEW_COPY.noProteinPosition],
+    ['3d', noPosition, 'gene-structure', PROTEIN_VIEW_COPY.noProteinPosition],
+    ['gene-structure', noPosition, 'gene-structure', null]
+  ] as const)('%s: opens %s', (tab, variant, opened, reason) => {
+    expect(proteinViewTabFor(variant, tab)).toBe(opened)
+    expect(proteinTabReason(variant, tab)).toBe(reason)
+  })
+
+  it('reads the protein position from the cDNA column when aa_change has none', () => {
+    const v = row({ aa_change: null, cdna: 'p.Arg42*' } as never)
+    expect(proteinViewTabFor(v, 'lollipop')).toBe('lollipop')
+  })
+})
+
+describe('proteinStripSummary', () => {
+  const domains = [
+    { accession: 'IPR1', name: 'THOC5 domain', type: 'domain', start: 150, end: 200 }
+  ]
+
+  it('names the domain the variant falls in', () => {
+    expect(proteinStripSummary(180, 683, domains)).toBe('Variant at p.180 of 683 in THOC5 domain')
+  })
+
+  it('says when no annotated domain covers the position', () => {
+    expect(proteinStripSummary(20, 683, domains)).toBe(
+      'Variant at p.20 of 683 in no annotated domain'
+    )
+  })
+})
+
+describe('buildLollipopVariants (cohort carriers)', () => {
+  const selected = row({ pos: 100, carrier_count: 3 })
+
+  it('marks the selected variant and carries every row its carrier count', () => {
+    const others = [selected, row({ pos: 200, aa_change: 'p.Arg300Gln', carrier_count: 5 })]
+    const result = buildLollipopVariants(selected, others, 'THOC5')
+    expect(result.map((v) => [v.proteinPosition, v.carrierCount, v.highlighted])).toEqual([
+      [180, 3, true],
+      [300, 5, false]
+    ])
+  })
+
+  it('leaves out rows without a protein position and rows of another gene', () => {
+    const others = [
+      row({ pos: 300, aa_change: null }),
+      row({ pos: 400, gene_symbol: 'OTHER', aa_change: 'p.Gly5Asp' })
+    ]
+    expect(buildLollipopVariants(selected, others, 'THOC5')).toHaveLength(1)
+  })
+
+  it('case variants carry no carrier count', () => {
+    const caseVariant = { ...row({}), carrier_count: undefined } as unknown as CohortVariant
+    expect(buildLollipopVariants(caseVariant, [], 'THOC5')[0].carrierCount).toBeUndefined()
+  })
+})

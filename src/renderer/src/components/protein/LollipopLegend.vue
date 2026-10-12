@@ -203,7 +203,7 @@ import type {
 import {
   CONSEQUENCE_COLORS,
   CLINVAR_COLORS,
-  DOMAIN_TYPE_COLORS
+  getDomainColor
 } from '../../../../shared/utils/protein-utils'
 
 interface Props {
@@ -251,7 +251,7 @@ const domainTypes = computed(() => {
     const key = domain.type.toLowerCase()
     if (!seen.has(key)) {
       seen.add(key)
-      result.push([domain.type, DOMAIN_TYPE_COLORS[key] ?? '#9E9E9E'])
+      result.push([domain.type, getDomainColor(key)])
     }
   }
   return result
