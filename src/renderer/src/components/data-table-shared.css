@@ -68,16 +68,7 @@
 
 /* HGVS notation monospace */
 .table-container .hgvs-notation {
-  font-family: var(
-    --font-mono,
-    ui-monospace,
-    SFMono-Regular,
-    'SF Mono',
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace
-  );
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 

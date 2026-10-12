@@ -40,7 +40,10 @@ function copyWebPublicAssets(): Plugin {
     'icon-192.png',
     'icon-512.png',
     'icon-maskable-512.png',
-    'manifest.webmanifest'
+    'manifest.webmanifest',
+    // OFL 1.1 requires the licence text to ship with the bundled fonts.
+    'OFL-Inter.txt',
+    'OFL-JetBrainsMono.txt'
   ]
   return {
     name: 'web-renderer:copy-public-assets',
