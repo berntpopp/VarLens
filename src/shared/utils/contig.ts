@@ -58,3 +58,15 @@ export function contigQueryNames(chr: string): string[] {
   if (mito) names.add('chrM') // hg19's own mitochondrion, stored verbatim
   return [...names]
 }
+
+/**
+ * The regions of a panel/region/BED filter, once per stored spelling of each
+ * region's contig (query side). A case flagged for build review keeps its
+ * non-canonical names until it is confirmed, and must still match; equality on
+ * `chr` stays index-friendly. Builds are restricted separately.
+ */
+export function intervalsForAllSpellings<T extends { chr: string }>(intervals: readonly T[]): T[] {
+  return intervals.flatMap((iv) =>
+    contigQueryNames(iv.chr).map((chr) => (chr === iv.chr ? iv : { ...iv, chr }))
+  )
+}

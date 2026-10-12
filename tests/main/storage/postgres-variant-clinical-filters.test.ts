@@ -55,7 +55,22 @@ describe('PostgreSQL clinical variant filters', () => {
     expect(sql).toContain('COALESCE(v.end_pos, v.pos)')
     expect(sql).toContain('v.pos <=')
     expect(sql).toContain('v.chr =')
-    expect(paramsByCall[0]).toStrictEqual([1, '1', 100, 200, '2', 300, 400])
+    // Each region once per stored spelling of its contig.
+    expect(paramsByCall[0]).toStrictEqual([
+      1,
+      'chr1',
+      100,
+      200,
+      '1',
+      100,
+      200,
+      'chr2',
+      300,
+      400,
+      '2',
+      300,
+      400
+    ])
   })
 
   it('filters by case-scoped variant tags with a bigint array parameter', async () => {

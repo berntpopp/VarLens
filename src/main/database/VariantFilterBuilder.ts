@@ -1,3 +1,4 @@
+import { intervalsForAllSpellings } from '../../shared/utils/contig'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
@@ -134,7 +135,7 @@ export class VariantFilterBuilder {
         for (const iv of items) insert.run(iv.chr, iv.start, iv.end)
       }
     )
-    insertMany(intervals)
+    insertMany(intervalsForAllSpellings(intervals))
   }
 
   /**

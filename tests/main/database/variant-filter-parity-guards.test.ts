@@ -93,6 +93,41 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     sqlite.close()
   })
 
+  describe('a case flagged for build review keeps bare names: panels still match it', () => {
+    const REGION = { chr: 'chr7', start: 95_000, end: 205_000 }
+    // >= PANEL_TEMP_TABLE_THRESHOLD regions switch the case view to the temp table.
+    const MANY = [
+      REGION,
+      ...Array.from({ length: 60 }, (_, i) => ({ chr: 'chr9', start: i * 10, end: i * 10 + 5 }))
+    ]
+    let flagged: number
+
+    beforeEach(() => {
+      flagged = sqlite.cases.createCase('flagged-38', '/tmp/flagged.json', 0, 'GRCh38')
+      sqlite.variants.insertVariantsBatch(flagged, [variant('7', 150_000), variant('7', 300_000)])
+      sqlite.cohortSummary.rebuild()
+    })
+
+    it.each([
+      ['few regions', [REGION]],
+      ['many regions', MANY]
+    ])('case view (%s)', (_label, panel_intervals) => {
+      const result = sqlite.variants.getVariants({ case_id: flagged, panel_intervals }, 100, 0)
+      expect(result.data.map((r) => r.pos)).toEqual([150_000])
+    })
+
+    it('cohort view', () => {
+      const result = sqlite.cohort.getCohortVariants({
+        genome_build: 'GRCh38',
+        panel_intervals: [REGION],
+        limit: 100,
+        offset: 0
+      })
+      expect(result.data.map(coord)).toContain('7:150000:A:T')
+      expect(result.data.map(coord)).not.toContain('7:300000:A:T')
+    })
+  })
+
   it('desktop export applies the active gene panel to the exported rows, not only to the pre-count', async () => {
     const prepared = await prepareVariantExport(() => sqlite, grch38Case, {
       active_panel_ids: [panelId],

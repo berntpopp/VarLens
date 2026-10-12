@@ -165,6 +165,10 @@ describe('PostgresCohortRepository', () => {
       `%TP53\\%' OR TRUE --%`,
       `%TP53\\%' OR TRUE --%`,
       `%TP53\\%' OR TRUE --%`,
+      // A region matches every stored spelling of its contig (flagged cases keep theirs).
+      'chr1',
+      200,
+      100,
       '1',
       200,
       100,
@@ -225,7 +229,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('COALESCE(cvs.end_pos, cvs.pos) >= $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['1', 200, 100, 'GRCh37', 10, 0])
+    expect(dataParams).toEqual(['chr1', 200, 100, '1', 200, 100, 'GRCh37', 10, 0])
   })
 
   it('propagates the error instead of silently running unfiltered when panel interval resolution fails', async () => {
@@ -292,7 +296,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('(cvs.chr = $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['chr1', 7000, 1, 10, 0])
+    expect(dataParams).toEqual(['chr1', 7000, 1, '1', 7000, 1, 10, 0])
   })
 
   it('uses resolved panel intervals instead of active panel IDs when both are present', async () => {
@@ -320,7 +324,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('COALESCE(cvs.end_pos, cvs.pos) >= $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['1', 200, 100, 10, 0])
+    expect(dataParams).toEqual(['chr1', 200, 100, '1', 200, 100, 10, 0])
   })
 
   it('supports whitelisted parameterized cohort column filters', async () => {

@@ -1,5 +1,5 @@
 import { isSeverityKey, type SeverityKey } from '../../../shared/config/severity.config'
-import { contigQueryNames } from '../../../shared/utils/contig'
+import { contigQueryNames, intervalsForAllSpellings } from '../../../shared/utils/contig'
 import {
   SEVERITY_RANK_COLUMN,
   severityFilterOperands,
@@ -464,7 +464,7 @@ export function buildSummaryQueryParts(
   if (isNonEmptyArray(params.panel_intervals)) {
     // Pass-9 #7: mirror PostgresCohortRepository.buildQueryParts verbatim so
     // spanning SV/CNV variants overlap correctly.
-    const intervalParts = params.panel_intervals.map(
+    const intervalParts = intervalsForAllSpellings(params.panel_intervals).map(
       (interval) =>
         `(cvs.chr = ${addParam(interval.chr)} AND cvs.pos <= ${addParam(interval.end)} AND COALESCE(cvs.end_pos, cvs.pos) >= ${addParam(interval.start)})`
     )

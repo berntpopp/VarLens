@@ -6,6 +6,7 @@ import {
   bareContig,
   canonicalContig,
   contigQueryNames,
+  intervalsForAllSpellings,
   isCanonicalContig
 } from '../../../src/shared/utils/contig'
 
@@ -110,5 +111,17 @@ describe('contigQueryNames', () => {
 
   it('other contigs only match themselves', () => {
     expect(contigQueryNames('chrUn_GL000220v1')).toEqual(['chrUn_GL000220v1'])
+  })
+})
+
+describe('intervalsForAllSpellings', () => {
+  it('repeats each region once per stored spelling of its contig, other fields kept', () => {
+    expect(intervalsForAllSpellings([{ chr: 'chr7', start: 1, end: 2 }])).toEqual([
+      { chr: 'chr7', start: 1, end: 2 },
+      { chr: '7', start: 1, end: 2 }
+    ])
+    expect(intervalsForAllSpellings([{ chr: 'chrUn_x', start: 1, end: 2 }])).toEqual([
+      { chr: 'chrUn_x', start: 1, end: 2 }
+    ])
   })
 })

@@ -61,8 +61,11 @@ stores the builds and queues the cases (`contig_naming_pending.confirmed`), and 
 cohort counts can mix old and new names until the background update finishes.
 
 Until confirmed, a flagged case keeps its names. Search, the exact-variant filter and DSL `chr` equality
-match every spelling, so they still work; panel regions and BED-region filtering use the canonical form
-of the case build and do not match a flagged case's non-canonical contigs until it is confirmed.
+match every spelling, and so do panel / region filters: every place that matches regions (SQLite case
+view OR chain, JSON form and temp table, cohort view and export; PostgreSQL case, cohort summary and
+export) repeats each region once per stored spelling of its contig (`intervalsForAllSpellings`), so a
+flagged case is never silently dropped by a panel. Matching stays an equality on `chr` (index seeks);
+the build restriction is applied separately, so the extra spelling cannot match another build.
 
 ## Annotation remap (`src/shared/genome/annotation-remap.ts`, both backends)
 
@@ -142,7 +145,8 @@ twice fails cleanly (no review row).
 - Import: SQLite `insertBatch` (all SQLite VCF/JSON/append paths) the PG VCF repository (PostgresVcfImportRepository) and the PG JSON worker batch store
   `canonicalContig(chr, caseBuild)`.
 - Query input: coordinate search (3 sites), exact-variant filter, DSL `chr =` / OR → every spelling
-  (`contigQueryNames`). Panel regions and panel BED export → `canonicalContig(…, build)`; the four
+  (`contigQueryNames`). Panel regions are built with `canonicalContig(…, build)` and matched with every
+  spelling (`intervalsForAllSpellings`); panel BED export → `canonicalContig(…, build)`; the four
   "does this case use chr" probes and `getChrPrefix` are deleted.
 - APIs/links: `bareContig` replaces the five strip-`chr` copies. Links: `{chr}` = bare, new `{chr_ucsc}`
   (UCSC style per build from config `links.ucscRcrsMito`: GRCh38 MT → chrM, GRCh37 MT → chrMT, hg19 chrM
