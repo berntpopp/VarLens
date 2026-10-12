@@ -58,4 +58,14 @@ describe('InlineEditableText', () => {
     expect(wrapper.text()).toBe(COMMENT_PLACEHOLDERS.default)
     for (const text of Object.values(COMMENT_PLACEHOLDERS)) expect(text).not.toMatch(/click/i)
   })
+
+  it.each(['Enter', ' '])('keeps %j from reaching window shortcuts (table Enter)', async (key) => {
+    const { wrapper } = mountEditor()
+    const onWindowKey = vi.fn()
+    window.addEventListener('keydown', onWindowKey)
+    await wrapper.find('.editable-text').trigger('keydown', { key })
+    window.removeEventListener('keydown', onWindowKey)
+    expect(onWindowKey).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 })

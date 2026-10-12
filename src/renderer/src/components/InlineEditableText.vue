@@ -10,8 +10,8 @@
       role="button"
       tabindex="0"
       @click="startEdit"
-      @keydown.enter.prevent="startEdit"
-      @keydown.space.prevent="startEdit"
+      @keydown.enter.prevent.stop="startEdit"
+      @keydown.space.prevent.stop="startEdit"
     >
       <span :class="{ 'text-muted': !modelValue }">
         {{ modelValue || placeholder }}
