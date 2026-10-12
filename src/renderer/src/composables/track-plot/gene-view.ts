@@ -135,7 +135,7 @@ export function drawGeneView(ctx: TrackDrawContext, model: GeneViewModel): void 
       .text(anchor?.label ?? a.label)
     if (anchor !== undefined) ctx.bindMarker(el, anchor)
   } else {
-    anchorMarker(g, ctx, exonY - EXON_PX / 2, TOP_PX)
+    anchorMarker(g, ctx, exonY - EXON_PX / 2, Math.max(TOP_PX, exonY - 190))
   }
 
   gutterLabel(ctx, (TOP_PX + baseY) / 2, model.cohort ? TRACK_LABELS.cohort : TRACK_LABELS.variant)

@@ -29,6 +29,7 @@ export interface ProteinViewModel {
 
 const LANE_PX = 13
 const TOP_PX = 46
+const ANCHOR_STEM_PX = 170
 
 export function drawProteinView(ctx: TrackDrawContext, model: ProteinViewModel): void {
   const { height, x } = ctx
@@ -83,7 +84,8 @@ export function drawProteinView(ctx: TrackDrawContext, model: ProteinViewModel):
   lollipopTrack(g, ctx, ['variant', 'cohort'], baseY, baseY - TOP_PX)
   if (model.hasClinvar) diamondTrack(g, ctx, clinvarY)
   if (model.showGnomad) dotTrack(g, ctx, gnomadTop, 32)
-  anchorMarker(g, ctx, baseY, TOP_PX)
+  // A tall but not page-high stem: unmistakable without dwarfing the other tracks.
+  anchorMarker(g, ctx, baseY, Math.max(TOP_PX, baseY - ANCHOR_STEM_PX))
 
   gutterLabel(ctx, (TOP_PX + baseY) / 2, model.cohort ? TRACK_LABELS.cohort : TRACK_LABELS.variant)
   gutterLabel(ctx, bandTop + (laneCount * LANE_PX) / 2, TRACK_LABELS.domains)

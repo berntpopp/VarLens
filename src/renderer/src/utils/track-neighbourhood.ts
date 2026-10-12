@@ -97,6 +97,11 @@ function last<T>(items: T[], score: (t: T) => number): T | null {
   )
 }
 
+/** "±25 aa", "±500 bp", "±2 kb" */
+export function formatHalfWidth(half: number, unit: string): string {
+  return unit === 'bp' && half >= 1000 ? `±${half / 1000} kb` : `±${half} ${unit}`
+}
+
 /** "±25 aa: 2 Pathogenic, 1 VUS · 2 cohort variants, 9 carriers" */
 export function neighbourhoodLine(n: Neighbourhood, half: number, unit: string): string {
   const parts = n.clinvar.map((g) => `${g.keys.length} ${g.label}`).join(', ')
@@ -105,7 +110,7 @@ export function neighbourhoodLine(n: Neighbourhood, half: number, unit: string):
       ? `${n.cohort.variants} cohort variant${n.cohort.variants === 1 ? '' : 's'}, ${n.cohort.carriers} carrier${n.cohort.carriers === 1 ? '' : 's'}`
       : ''
   const body = [parts, cohort].filter((p) => p !== '').join(' · ')
-  return `±${half} ${unit}: ${body === '' ? 'no other variants' : body}`
+  return `${formatHalfWidth(half, unit)}: ${body === '' ? 'no other variants' : body}`
 }
 
 /** "In THO domain · 30 aa to its edge" / "Between domains · 70 aa to Coiled coil" */

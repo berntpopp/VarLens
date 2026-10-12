@@ -30,7 +30,15 @@
           :unit="unit"
           :label="`Overview of ${plotLabel}`"
         />
-        <TrackVariantList v-if="list" :nav="nav" :rows="allRows" :unit="unit" height="100%" />
+        <div v-if="list" class="flex-grow-1 position-relative">
+          <TrackVariantList
+            class="track-list-fill"
+            :nav="nav"
+            :rows="allRows"
+            :unit="unit"
+            height="100%"
+          />
+        </div>
       </div>
       <TrackNeighbourhood
         :nav="nav"
@@ -91,6 +99,11 @@ defineExpose({
 <style scoped>
 .track-view {
   min-height: 0;
+}
+
+.track-list-fill {
+  position: absolute;
+  inset: 0;
 }
 
 .track-view-body,

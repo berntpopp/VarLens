@@ -39,7 +39,7 @@
       @update:model-value="(v: number) => nav.setHalfWidth(v)"
     >
       <v-btn v-for="h in nav.halfWidths" :key="h" :value="h" size="x-small" class="text-none">
-        ±{{ h.toLocaleString('en-US') }} {{ unit }}
+        {{ formatHalfWidth(h, unit) }}
       </v-btn>
     </v-btn-toggle>
 
@@ -105,7 +105,11 @@ import TrackVariantList from './TrackVariantList.vue'
 import { CLINVAR_COLORS } from '../../../../../shared/utils/protein-utils'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
-import { locationLine, neighbourhoodLine } from '../../../utils/track-neighbourhood'
+import {
+  formatHalfWidth,
+  locationLine,
+  neighbourhoodLine
+} from '../../../utils/track-neighbourhood'
 
 const props = defineProps<{
   nav: TrackNavigator

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   locationLine,
+  formatHalfWidth,
   neighbourhoodLine,
   neighbourhoodSummary
 } from '../../../src/renderer/src/utils/track-neighbourhood'
@@ -112,6 +113,15 @@ describe('summary lines', () => {
     expect(locationLine(none, 'aa', 'between domains', 'no annotated domains')).toBe(
       'No annotated domains'
     )
+  })
+
+  it.each([
+    [25, 'aa', '±25 aa'],
+    [500, 'bp', '±500 bp'],
+    [2000, 'bp', '±2 kb'],
+    [50000, 'bp', '±50 kb']
+  ] as const)('half-width %i %s reads %s', (half, unit, expected) => {
+    expect(formatHalfWidth(half, unit)).toBe(expected)
   })
 
   it('an empty window says so', () => {
