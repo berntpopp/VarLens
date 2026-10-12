@@ -1,19 +1,24 @@
 /**
  * Ensembl REST API client for gene structure (exon) data
  *
- * Fetches gene info with transcripts and exon coordinates using:
+ * Fetches the gene (no expand) and then only its canonical transcript with
+ * exons: `?expand=1` on the gene returns every transcript with its exons
+ * (TTN: 818 KB, 15–21 s), which ran into the timeout.
  * - Bottleneck rate limiting (500ms between requests, max 2 concurrent)
+ * - One retry with backoff on a timeout, 5xx or 429 (API_CONFIG.ENSEMBL_*)
  * - SQLite caching with 90-day TTL
  * - Zod response validation
  */
 
 import Bottleneck from 'bottleneck'
 import { ApiCache } from './ApiCache'
-import { EnsemblGeneLookupSchema } from './schemas/protein-response'
+import { EnsemblGeneLookupSchema, EnsemblTranscriptLookupSchema } from './schemas/protein-response'
 import type { GeneStructureResult, ProteinApiError } from '../../../shared/types/protein'
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 export class EnsemblApiClient {
   private cache: ApiCache | null
@@ -121,26 +126,48 @@ export class EnsemblApiClient {
   }
 
   /**
-   * Make HTTP request to Ensembl lookup API
+   * The gene (small, no expand) plus its canonical transcript with exons,
+   * combined into the gene-lookup shape the parser and the cache use.
    */
   private async makeRequest(geneSymbol: string): Promise<unknown> {
-    const url = `${this.baseUrl}/lookup/symbol/homo_sapiens/${encodeURIComponent(geneSymbol)}?expand=1&content-type=application/json`
+    const gene = EnsemblGeneLookupSchema.parse(
+      await this.getJson(`/lookup/symbol/homo_sapiens/${encodeURIComponent(geneSymbol)}`)
+    )
+    const canonical = gene.canonical_transcript?.split('.')[0]
+    if (canonical === undefined || canonical === '') return gene
+    const transcript = EnsemblTranscriptLookupSchema.parse(
+      await this.getJson(`/lookup/id/${encodeURIComponent(canonical)}?expand=1`)
+    )
+    return { ...gene, Transcript: [{ ...transcript, is_canonical: 1 }] }
+  }
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json' }
-    })
-
-    if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After') ?? 'unknown'
-      throw new Error(`429:${retryAfter}`)
+  /** GET with the Ensembl timeout; one retry (after a backoff) on a timeout, 5xx or 429. */
+  private async getJson(path: string): Promise<unknown> {
+    const url = `${this.baseUrl}${path}${path.includes('?') ? '&' : '?'}content-type=application/json`
+    const attempts = API_CONFIG.ENSEMBL_RETRIES + 1
+    let lastError: Error = new Error('Ensembl API error')
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (attempt > 1) await sleep(API_CONFIG.ENSEMBL_RETRY_BACKOFF_MS * (attempt - 1))
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(API_CONFIG.ENSEMBL_TIMEOUT_MS),
+          headers: { 'Content-Type': 'application/json' }
+        })
+        if (response.ok) return await response.json()
+        lastError = new Error(`Ensembl API error: ${response.status}`)
+        // 4xx (except 429) will not change on a retry.
+        if (response.status < 500 && response.status !== 429) throw lastError
+      } catch (error) {
+        if (error === lastError) throw error
+        const timedOut = error instanceof Error && error.name === 'TimeoutError'
+        if (!timedOut) throw error
+        lastError = new Error(
+          `Ensembl did not answer within ${API_CONFIG.ENSEMBL_TIMEOUT_MS / 1000} s (${attempts} attempts)`
+        )
+      }
+      mainLogger.warn(`Ensembl ${path}: ${lastError.message} (attempt ${attempt})`, 'ensembl')
     }
-
-    if (!response.ok) {
-      throw new Error(`Ensembl API error: ${response.status}`)
-    }
-
-    return await response.json()
+    throw lastError
   }
 
   /**

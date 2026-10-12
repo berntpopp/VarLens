@@ -88,6 +88,9 @@ export const PLOT_COPY = {
   list: 'List',
   plot: 'Plot',
   nearby: 'Nearby variants',
+  geneStructureUnavailable: 'Gene structure unavailable',
+  geneStructureSource: 'The Ensembl gene model could not be loaded:',
+  retry: 'Retry',
   noNearby: 'No other variants in this window',
   keyboardHint:
     'Tab to the plot · ← / → step variants · Shift+← / → pan · + / − zoom · Home reset · Enter = variant of interest · Esc leaves the variant'

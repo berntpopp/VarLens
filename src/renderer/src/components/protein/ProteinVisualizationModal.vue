@@ -117,6 +117,7 @@
           :gene-structure="proteinData.geneStructure.value"
           :loading="proteinData.geneStructureLoading.value"
           :error="proteinData.geneStructureError.value"
+          @retry="proteinData.refetchGeneStructure()"
           :variant="genomicVariant"
           :variant-build="genomeBuild"
           :gene-symbol="geneSymbol"

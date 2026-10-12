@@ -119,8 +119,19 @@
     <!-- Error state -->
     <div v-if="error" class="d-flex flex-column align-center justify-center flex-grow-1 pa-8">
       <v-icon size="48" color="warning" :icon="mdiAlertCircleOutline" class="mb-3" />
-      <div class="text-body-1 mb-1">Gene Structure Unavailable</div>
-      <div class="text-body-2 text-medium-emphasis">{{ error }}</div>
+      <div class="text-body-1 mb-1">{{ PLOT_COPY.geneStructureUnavailable }}</div>
+      <div class="text-body-2 text-medium-emphasis mb-3">
+        {{ PLOT_COPY.geneStructureSource }} {{ error }}
+      </div>
+      <v-btn
+        variant="outlined"
+        color="primary"
+        size="small"
+        class="text-none"
+        @click="emit('retry')"
+      >
+        {{ PLOT_COPY.retry }}
+      </v-btn>
     </div>
 
     <!-- No data state -->
@@ -280,6 +291,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), { variantBuild: null, variants: () => [] })
+const emit = defineEmits<{ retry: [] }>()
 
 // ClinVar significance filter - all active by default
 const activeClinvarCategories = ref<Set<ClinVarSignificance>>(
