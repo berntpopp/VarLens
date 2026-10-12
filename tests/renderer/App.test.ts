@@ -31,6 +31,9 @@ import App from '../../src/renderer/src/App.vue'
 import { AppStateKey } from '../../src/renderer/src/composables/useAppState'
 import type { AppStateReturn } from '../../src/renderer/src/composables/useAppState'
 import { createMockApi } from '../utils/mock-api'
+import { useDatabaseStore } from '../../src/renderer/src/stores/databaseStore'
+import { DATABASE_CONFIG } from '../../src/shared/config'
+import { installCapabilities } from './helpers/capabilities'
 
 const mockApi = createMockApi()
 
@@ -284,6 +287,40 @@ describe('App.vue', () => {
     wrapper.findComponent({ name: 'AppDialogHost' }).vm.$emit('batch-import-complete')
     await flushPromises()
     expect(handleBatchImportComplete).toHaveBeenCalledTimes(1)
+  })
+
+  it('every import entry says no database is open instead of opening a wizard', async () => {
+    useShellLifecycleSpy.mockReturnValue({})
+    const host = { showImportDialog: vi.fn(), showVcfImportDialog: vi.fn(), showSnackbar: vi.fn() }
+    const pinia = createPinia()
+    await router.push('/case')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [vuetify, pinia, router],
+        stubs: {
+          ...asyncComponentStubs,
+          AppDialogHost: {
+            template: '<div />',
+            setup: (_: unknown, { expose }: { expose: (exposed: object) => void }) => expose(host)
+          }
+        }
+      }
+    })
+    await flushPromises()
+    installCapabilities()
+    useDatabaseStore(pinia).$patch({ revision: 1, currentPath: null })
+
+    const toolbar = wrapper.findComponent({ name: 'AppToolbar' })
+    toolbar.vm.$emit('import-click')
+    toolbar.vm.$emit('vcf-import-click')
+    await flushPromises()
+
+    expect(host.showImportDialog).not.toHaveBeenCalled()
+    expect(host.showVcfImportDialog).not.toHaveBeenCalled()
+    expect(host.showSnackbar).toHaveBeenCalledWith(
+      DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN,
+      'error'
+    )
   })
 
   it('does not mount the details panel or shortcut dialog until first opened', async () => {

@@ -12,8 +12,8 @@
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
-      @import-click="dialogHostRef?.showImportDialog()"
-      @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
+      @import-click="openImportDialog"
+      @vcf-import-click="openVcfImportDialog"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
       @show-panel-manager="dialogHostRef?.showPanelManager()"
@@ -35,8 +35,8 @@
     >
       <AppSidebar
         :case-count="caseCount"
-        @import-click="dialogHostRef?.showImportDialog()"
-        @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
+        @import-click="openImportDialog"
+        @vcf-import-click="openVcfImportDialog"
       >
         <CaseList
           ref="caseListRef"
@@ -121,6 +121,7 @@ import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { filterShortcutCallbacks } from './composables/useFilterShortcutDispatch'
 import { useDatabaseStore } from './stores/databaseStore'
+import { DATABASE_CONFIG } from '../../shared/config'
 import { useCaseMetadata } from './composables/useCaseMetadata'
 import { useCaseDeletion } from './composables/useCaseDeletion'
 import { useColumnPreferences } from './composables/useColumnPreferences'
@@ -373,9 +374,23 @@ appState.setCaseMetadataHandler(() => {
   dialogHostRef.value?.showCaseMetadata()
 })
 
+/** Imports need an open database: say so instead of opening a wizard that fails. */
+function blockedWithoutDatabase(): boolean {
+  if (databaseStore.noDatabaseOpen) {
+    dialogHostRef.value?.showSnackbar(DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN, 'error')
+  }
+  return databaseStore.noDatabaseOpen
+}
+
 /** Open the import wizard. Viewers are read-only, so for them it does nothing. */
 function openImportDialog(): void {
-  if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
+  if (permissions.canWrite.value && !blockedWithoutDatabase()) {
+    dialogHostRef.value?.showImportDialog()
+  }
+}
+
+function openVcfImportDialog(): void {
+  if (!blockedWithoutDatabase()) void dialogHostRef.value?.showVcfImportDialog()
 }
 appState.setImportHandler(openImportDialog)
 

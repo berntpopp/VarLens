@@ -23,6 +23,11 @@
               Select a case from the sidebar to view variants
             </p>
           </template>
+          <template v-else-if="databaseStore.noDatabaseOpen">
+            <p class="text-body-medium text-muted">
+              {{ DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN }}
+            </p>
+          </template>
           <template v-else-if="casesLoaded && allowImport">
             <p class="text-body-medium text-muted mb-4">
               Get started by importing your first variant file
@@ -48,6 +53,8 @@
 import { computed, inject } from 'vue'
 import { mdiArrowLeft, mdiUpload } from '@mdi/js'
 import { AppStateKey } from '../composables/useAppState'
+import { DATABASE_CONFIG } from '../../../shared/config'
+import { useDatabaseStore } from '../stores/databaseStore'
 withDefaults(
   defineProps<{
     hasCases?: boolean
@@ -65,6 +72,7 @@ defineEmits<{
 // Optional injection: outside the app shell (isolated tests) treat the list as loaded.
 const appState = inject(AppStateKey, null)
 const casesLoaded = computed(() => appState?.casesLoaded.value ?? true)
+const databaseStore = useDatabaseStore()
 </script>
 
 <style scoped>
