@@ -1,6 +1,7 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
+import type { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
 import type { PostgresAnalysisGroupsRepository } from './PostgresAnalysisGroupsRepository'
 import type { PostgresAnnotationsRepository } from './PostgresAnnotationsRepository'
 import type { PostgresCaseMetadataRepository } from './PostgresCaseMetadataRepository'
@@ -20,6 +21,7 @@ import type { PostgresVariantReadRepository } from './PostgresVariantReadReposit
 interface PostgresReadExecutorRepositories {
   casesQuery: Pick<PostgresCasesQueryRepository, 'queryCases'>
   availableBuilds: Pick<PostgresAvailableBuildsRepository, 'getAvailableGenomeBuilds'>
+  buildReviews: Pick<PostgresBuildReviewRepository, 'listBuildReviews'>
   overview: Pick<PostgresOverviewRepository, 'getOverview'>
   export: Pick<PostgresExportRepository, 'streamVariantRows'>
   cohort: Pick<
@@ -97,6 +99,9 @@ export class PostgresReadExecutor implements StorageReadExecutor {
 
       case 'cases:availableBuilds':
         return await this.repositories.availableBuilds.getAvailableGenomeBuilds()
+
+      case 'cases:buildReviews':
+        return await this.repositories.buildReviews.listBuildReviews()
 
       case 'case-metadata:get':
         return await this.repositories.caseMetadata.getCaseMetadata(task.params[0])

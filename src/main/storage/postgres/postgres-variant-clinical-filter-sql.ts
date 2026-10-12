@@ -1,3 +1,4 @@
+import { intervalsForAllSpellings } from '../../../shared/utils/contig'
 import {
   HET_GT_SQL as HET,
   HET_OR_HEMI_GT_SQL as HET_OR_HEMI,
@@ -50,7 +51,7 @@ function addPanelFilter(
   { addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
 ): void {
   if ((filter.panel_intervals?.length ?? 0) > 0) {
-    const intervalClauses = filter.panel_intervals!.map((interval) => {
+    const intervalClauses = intervalsForAllSpellings(filter.panel_intervals!).map((interval) => {
       const chr = addParam(interval.chr)
       const start = addParam(interval.start)
       const end = addParam(interval.end)

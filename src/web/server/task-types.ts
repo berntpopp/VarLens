@@ -13,6 +13,7 @@ import type { StorageWriteTask } from '../../main/storage/write-executor'
 export const READ_TASK_TYPES = [
   'cases:query',
   'cases:availableBuilds',
+  'cases:buildReviews',
   'case-metadata:get',
   'case-metadata:listCohorts',
   'case-metadata:getCohortByName',
@@ -67,6 +68,7 @@ export const READ_TASK_TYPES = [
 
 export const WRITE_TASK_TYPES = [
   'cases:delete',
+  'cases:resolveBuildReviews',
   'case-metadata:upsert',
   'case-metadata:createCohort',
   'case-metadata:updateCohort',

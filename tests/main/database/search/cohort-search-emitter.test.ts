@@ -37,10 +37,11 @@ describe('emitCohortSearch', () => {
 
   it('handles genomic coordinate pattern', () => {
     const { sql, params } = emit('chr1:12345')
-    // Import stores `chr` verbatim, so both spellings must match (#492).
+    // Each build stores its own spelling, so both must match (#492).
     expect(sql).toBe('(cvs.chr IN (?, ?) AND cvs.pos = ?)')
-    expect(params).toEqual(['1', 'chr1', 12345])
-    expect(emit('x:5').params).toEqual(['X', 'chrX', 5])
+    expect(params).toEqual(['chr1', '1', 12345])
+    expect(emit('x:5').params).toEqual(['chrX', 'X', 5])
+    expect(emit('M:5').params).toEqual(['chrM', 'M', 'MT', 5])
   })
 
   it('handles HGVS pattern', () => {

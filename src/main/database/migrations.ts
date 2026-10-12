@@ -14,11 +14,13 @@ import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { migrateSeverityRanks } from './severity-rank-migration'
+import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
+import { repairSummaryKeys } from './summary-key-repair'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 46
+export const LATEST_SQLITE_SCHEMA_VERSION = 47
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -70,12 +72,17 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 46
  * - 43: cohort summary resolves a case's conflicting duplicate calls by dosage (mirrors PG 0027)
  * - 44: delete the rows (comments, tags, links …) the import worker left of replaced cases
  * - 45: built-in filter preset "Rare, not recurrent" (carrier cap, #455; mirrors PG 0028)
+ * - 46: no-call rows are not carriers in the cohort summary (mirrors PG 0029)
+ * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
 export function runMigrations(db: Database.Database): void {
   const result = db.prepare('PRAGMA user_version').get() as { user_version: number }
   const currentVersion = result.user_version
+
+  // Before anything changes: the file the previous release can open (v47 rewrites data).
+  backupBeforeMigrations(db, currentVersion)
 
   // v0.3.0 baseline - existing databases have no version set
   if (currentVersion < 1) {
@@ -1970,6 +1977,15 @@ export function runMigrations(db: Database.Database): void {
     markPopulatedSummaryStale(db)
     db.exec('PRAGMA user_version = 46')
   }
+
+  // v47: chromosome names per build (mirrors PG 0030 + postgres-contig-naming.ts).
+  if (currentVersion < 47) {
+    migrateContigNaming(db)
+    db.exec('PRAGMA user_version = 47')
+  }
+
+  // Not a version: derived summary keys that drifted on real data are restored on every open.
+  repairSummaryKeys(db)
 }
 
 function backfillMissingCaseDataInfo(db: Database.Database): void {

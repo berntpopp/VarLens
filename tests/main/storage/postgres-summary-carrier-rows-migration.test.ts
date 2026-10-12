@@ -83,7 +83,9 @@ describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebui
     await pool.query(`UPDATE "${schema}".cohort_variant_summary SET carrier_count = 2`)
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
-    expect(result.applied).toEqual(['0029'])
+    expect(result.applied).toEqual(
+      POSTGRES_MIGRATIONS.filter((m) => m.version >= '0029').map((m) => m.version)
+    )
     const state = await pool.query(
       `SELECT is_stale, stale_reason FROM "${schema}".cohort_summary_state WHERE id = 1`
     )

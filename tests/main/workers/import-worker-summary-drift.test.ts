@@ -321,11 +321,13 @@ describe('import worker: per-file cohort summary upkeep', () => {
       has_comment: 1,
       acmg_best: 'Pathogenic'
     })
+    // GRCh37 stores bare `1`: the GRCh38 `chr1:100` annotations are another
+    // locus and no longer bleed into the GRCh37 row (chr naming per build).
     expect(row(100, 'GRCh37')).toMatchObject({
       carrier_count: 1,
       cadd: 99,
-      has_star: 1,
-      acmg_best: 'Pathogenic'
+      has_star: 0,
+      acmg_best: null
     })
     expect(row(200)).toMatchObject({ carrier_count: 3, has_star: 1, acmg_best: 'Pathogenic' })
     expect(row(400)).toMatchObject({ carrier_count: 1, hom_count: 1, has_star: 1 })

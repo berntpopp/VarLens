@@ -3,6 +3,8 @@
  * Variants in PAR regions on chrX/chrY are treated as autosomal.
  */
 
+import { normalizeContigName } from '../sql/chromosome-order'
+
 interface Region {
   start: number
   end: number
@@ -36,16 +38,12 @@ const PAR_REGIONS: Record<string, BuildPARs> = {
   }
 }
 
-function normalizeChr(chr: string): string {
-  return chr.replace(/^chr/i, '').toUpperCase()
-}
-
 /**
  * Check if a genomic position falls within a pseudoautosomal region.
  * PAR variants on chrX/chrY should be treated as autosomal (diploid in males).
  */
 export function isInPAR(chr: string, pos: number, build: string): boolean {
-  const normalized = normalizeChr(chr)
+  const normalized = normalizeContigName(chr)
   if (normalized !== 'X' && normalized !== 'Y') return false
 
   const buildPARs: BuildPARs | undefined = PAR_REGIONS[build]
@@ -59,6 +57,6 @@ export function isInPAR(chr: string, pos: number, build: string): boolean {
  * Check if a chromosome is a sex chromosome (X or Y).
  */
 export function isSexChromosome(chr: string): boolean {
-  const normalized = normalizeChr(chr)
+  const normalized = normalizeContigName(chr)
   return normalized === 'X' || normalized === 'Y'
 }

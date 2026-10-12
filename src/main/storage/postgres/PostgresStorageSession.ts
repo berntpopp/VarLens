@@ -3,6 +3,7 @@ import type { Pool } from 'pg'
 import { mainLogger } from '../../services/MainLogger'
 import type { Case } from '../../../shared/types/database'
 import { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
+import { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
 import { PostgresAnalysisGroupsRepository } from './PostgresAnalysisGroupsRepository'
 import { PostgresAnnotationsRepository } from './PostgresAnnotationsRepository'
 import { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
@@ -178,9 +179,11 @@ export class PostgresStorageSession implements StorageSession {
       filterPresets,
       rows: exportRows
     })
+    const buildReviews = new PostgresBuildReviewRepository(options.pool, options.config.schema)
     this.readExecutor = new PostgresReadExecutor({
       casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
       availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema),
+      buildReviews,
       overview: new PostgresOverviewRepository(options.pool, options.config.schema),
       export: exportRows,
       cohort,
@@ -205,6 +208,7 @@ export class PostgresStorageSession implements StorageSession {
       filterPresets,
       analysisGroups,
       audit,
+      buildReviews,
       transcripts
     })
     this.importExecutor = new PostgresImportExecutor({

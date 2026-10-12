@@ -1,4 +1,5 @@
 import { isSeverityKey, type SeverityKey } from '../../../shared/config/severity.config'
+import { contigQueryNames, intervalsForAllSpellings } from '../../../shared/utils/contig'
 import {
   SEVERITY_RANK_COLUMN,
   severityFilterOperands,
@@ -425,9 +426,9 @@ function buildColumnFilterCondition(
 function summaryTermSql(term: string, addParam: (value: unknown) => string): string {
   const genomicMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
   if (genomicMatch !== null) {
-    // Import stores `chr` verbatim: match both spellings (#492).
-    const chr = genomicMatch[1].toUpperCase()
-    return `(cvs.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
+    // Every stored spelling of the typed contig, whatever the build (#492).
+    const names = contigQueryNames(genomicMatch[1]).map(addParam).join(', ')
+    return `(cvs.chr IN (${names}) AND cvs.pos = ${addParam(Number(genomicMatch[2]))})`
   }
   if (HGVS_TOKEN.test(term)) return hgvsSearchSql('cvs', term, addParam)
   const like = (column: string): string =>
@@ -463,7 +464,7 @@ export function buildSummaryQueryParts(
   if (isNonEmptyArray(params.panel_intervals)) {
     // Pass-9 #7: mirror PostgresCohortRepository.buildQueryParts verbatim so
     // spanning SV/CNV variants overlap correctly.
-    const intervalParts = params.panel_intervals.map(
+    const intervalParts = intervalsForAllSpellings(params.panel_intervals).map(
       (interval) =>
         `(cvs.chr = ${addParam(interval.chr)} AND cvs.pos <= ${addParam(interval.end)} AND COALESCE(cvs.end_pos, cvs.pos) >= ${addParam(interval.start)})`
     )

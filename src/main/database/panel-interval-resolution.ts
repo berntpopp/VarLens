@@ -7,15 +7,12 @@
  * service. The region rules themselves are shared with PostgreSQL in
  * `shared/filters/panel-intervals.ts`.
  */
-import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { mainLogger } from '../services/MainLogger'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import type { PanelRepository } from './PanelRepository'
-import type { VariantRepository } from './VariantRepository'
 
-/** The two repositories panel resolution reads from. */
+/** The repository panel resolution reads from. */
 export interface PanelResolutionRepositories {
-  variants: Pick<VariantRepository, 'getChrPrefix'>
   panels: Pick<PanelRepository, 'computeIntervals'>
 }
 
@@ -43,11 +40,9 @@ export interface PanelAwareFilter {
  * "nothing to resolve" case.
  *
  * @param filter    Query filter object (variants or cohort)
- * @param repos     Repository collection (for variant chr-prefix detection)
+ * @param repos     Repository collection
  * @param geneRefDb Gene reference database (for panel interval computation)
- * @param db        Raw database handle (for cohort-mode chr-prefix detection)
- * @param caseId    When set, chr prefix is derived from the specified case.
- *                  Omit for cohort mode — a sample variant row is queried instead.
+ * @param caseId    Set for a single-case query; omit for cohort mode.
  * @throws If a panel IS configured (`active_panel_ids` non-empty) but
  *         `geneRefDb` is unavailable, or if a configured panel's interval
  *         computation itself fails (e.g. a corrupt gene reference DB or a
@@ -62,7 +57,6 @@ export function resolvePanelIntervalsInPlace(
   filter: PanelAwareFilter,
   repos: PanelResolutionRepositories,
   geneRefDb: GeneReferenceDb | null,
-  db: DatabaseType,
   caseId?: number
 ): void {
   const panelIds = filter.active_panel_ids
@@ -91,29 +85,11 @@ export function resolvePanelIntervalsInPlace(
   const paddingBp = filter.panel_padding_bp ?? 5000
   const genomeBuild = filter.genome_build ?? 'GRCh38'
 
-  // Detect chr prefix
-  const chrPrefix: boolean =
-    caseId !== undefined
-      ? repos.variants.getChrPrefix(caseId)
-      : (() => {
-          // Cohort mode: sample any variant to detect chr prefix.
-          // Assumes uniform format — mixed chr/non-chr imports are unsupported.
-          const sampleRow = db.prepare('SELECT chr FROM variants LIMIT 1').get() as
-            { chr: string } | undefined
-          return sampleRow?.chr?.startsWith('chr') === true
-        })()
-
   // A panel IS active here (panelIds is non-empty and geneRefDb is available),
   // so a thrown error means the computation itself failed — it must propagate
   // rather than be swallowed into a silent unfiltered query.
   try {
-    const intervals = repos.panels.computeIntervals(
-      panelIds,
-      genomeBuild,
-      paddingBp,
-      geneRefDb,
-      chrPrefix
-    )
+    const intervals = repos.panels.computeIntervals(panelIds, genomeBuild, paddingBp, geneRefDb)
     if (intervals.length > 0) {
       filter.panel_intervals = intervals
     }

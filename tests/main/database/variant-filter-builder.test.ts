@@ -257,7 +257,8 @@ describe('VariantFilterBuilder', () => {
       const count = db.prepare('SELECT COUNT(*) as cnt FROM _panel_intervals').get() as {
         cnt: number
       }
-      expect(count.cnt).toBe(60)
+      // Each region once per stored spelling of its contig (`7` and `chr7`).
+      expect(count.cnt).toBe(120)
 
       builder.cleanupPanelIntervalsTable()
     })

@@ -33,6 +33,14 @@ export interface ExternalLinkConfig {
 }
 
 /**
+ * Built-in templates of earlier versions that a stored configuration may still
+ * hold. `{chr}` is now the bare name, so UCSC needs `{chr_ucsc}`.
+ */
+const RETIRED_DEFAULT_TEMPLATES: Readonly<Record<string, string>> = {
+  ucsc: 'https://genome.ucsc.edu/cgi-bin/hgTracks?db={build_ucsc}&position={chr}%3A{pos_start}-{pos_end}'
+}
+
+/**
  * Default link configurations matching current hardcoded behavior
  */
 function getDefaultLinks(): ExternalLinkConfig[] {
@@ -51,7 +59,7 @@ function getDefaultLinks(): ExternalLinkConfig[] {
       id: 'ucsc',
       name: 'UCSC',
       urlTemplate:
-        'https://genome.ucsc.edu/cgi-bin/hgTracks?db={build_ucsc}&position={chr}%3A{pos_start}-{pos_end}',
+        'https://genome.ucsc.edu/cgi-bin/hgTracks?db={build_ucsc}&position={chr_ucsc}%3A{pos_start}-{pos_end}',
       column: 'chr',
       requiredFields: ['chr', 'pos'],
       enabled: true,
@@ -149,8 +157,15 @@ function loadLinks(): ExternalLinkConfig[] {
       const defaultIds = new Set(defaults.map((l) => l.id))
       const storedIds = new Set(parsed.map((l) => l.id))
 
-      // Start with stored links
-      const merged = [...parsed]
+      // Start with stored links; a built-in still on a retired default gets the current one
+      const merged = parsed.map((link) => {
+        const current = defaults.find((d) => d.id === link.id)
+        return link.isBuiltIn &&
+          current !== undefined &&
+          RETIRED_DEFAULT_TEMPLATES[link.id] === link.urlTemplate
+          ? { ...link, urlTemplate: current.urlTemplate }
+          : link
+      })
 
       // Add any missing built-in links
       for (const defaultLink of defaults) {

@@ -5,6 +5,7 @@ import {
 import { carrierRanks } from './cohort-summary-representative-sql'
 import { caseCarrierFrequencySql } from './postgres-cohort-summary-query'
 import { carrierTotalsSql } from './postgres-carrier-totals'
+import { contigQueryNames } from '../../../shared/utils/contig'
 import {
   addPostgresColumnFilters,
   hasPostgresColumnFilterPrefix,
@@ -104,8 +105,8 @@ function emitCaseSearchTermSql(
 ): string {
   const coordMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
   if (coordMatch) {
-    const chr = coordMatch[1].toUpperCase()
-    return `(v.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND v.pos = ${addParam(Number(coordMatch[2]))})`
+    const names = contigQueryNames(coordMatch[1]).map(addParam).join(', ')
+    return `(v.chr IN (${names}) AND v.pos = ${addParam(Number(coordMatch[2]))})`
   }
   const tokens = searchTokens(term)
   const hgvsTokens = tokens.filter((t) => HGVS_TOKEN.test(t))
@@ -251,7 +252,7 @@ export function buildPostgresVariantQueryParts(
   }
 
   if (filter.chr !== undefined && filter.chr !== '') {
-    addWhere(`v.chr = ${addParam(filter.chr)}`)
+    addWhere(`v.chr IN (${contigQueryNames(filter.chr).map(addParam).join(', ')})`)
   }
   if (filter.pos !== undefined) {
     addWhere(`v.pos = ${addParam(filter.pos)}`)

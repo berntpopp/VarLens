@@ -541,9 +541,9 @@ describe('VariantFilterBuilder characterization (compiled SQL + parameters)', ()
         )
         .all()
     ).toMatchSnapshot()
-    // Re-preparing replaces rather than appends.
+    // Re-preparing replaces rather than appends (2 regions x 2 stored spellings).
     builder.setupPanelIntervalsTable(intervals(2))
-    expect(db.prepare('SELECT COUNT(*) AS n FROM _panel_intervals').get()).toEqual({ n: 2 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM _panel_intervals').get()).toEqual({ n: 4 })
     builder.cleanupPanelIntervalsTable()
     expect(
       db

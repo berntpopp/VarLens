@@ -1,4 +1,5 @@
 import { whereSeverity } from './severity-filter'
+import { contigQueryNames, intervalsForAllSpellings } from '../../../shared/utils/contig'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../../shared/types/database-schema'
 import type { VariantFilter } from '../types'
@@ -69,7 +70,7 @@ export function applyExactVariantMatch(
 ): VariantQueryBuilder {
   return query
     .$if(filter.chr != null && filter.chr !== '', (qb) =>
-      qb.where('variants.chr', '=', filter.chr!)
+      qb.where('variants.chr', 'in', contigQueryNames(filter.chr!))
     )
     .$if(filter.pos != null, (qb) => qb.where('variants.pos', '=', filter.pos!))
     .$if(filter.ref != null && filter.ref !== '', (qb) =>
@@ -118,8 +119,10 @@ export function applyPanelIntervalFilter(
   filter: VariantFilter,
   forceOrChain: boolean | undefined
 ): VariantQueryBuilder {
-  const panelIntervals = filter.panel_intervals
-  if (!panelIntervals || panelIntervals.length === 0) return query
+  if (!filter.panel_intervals || filter.panel_intervals.length === 0) return query
+  // Threshold on the requested regions, as preparePanelIntervals decides the temp table.
+  const requested = filter.panel_intervals.length
+  const panelIntervals = intervalsForAllSpellings(filter.panel_intervals)
   if (forceOrChain === true) {
     // Rows starting inside a region: region-driven, one two-sided index range
     // each (seeking `pos <= end` alone walks the case's chromosome per region).
@@ -129,7 +132,7 @@ export function applyPanelIntervalFilter(
       sql<boolean>`variants.id IN (WITH iv(chr, s, e) AS MATERIALIZED (SELECT value ->> 'chr', value ->> 'start', value ->> 'end' FROM json_each(${JSON.stringify(panelIntervals)})) SELECT pv.id FROM iv CROSS JOIN variants pv WHERE pv.case_id = ${filter.case_id} AND pv.chr = iv.chr AND pv.pos BETWEEN iv.s AND iv.e AND COALESCE(pv.end_pos, pv.pos) >= iv.s UNION ALL SELECT pv.id FROM variants pv WHERE pv.case_id = ${filter.case_id} AND pv.end_pos IS NOT NULL AND EXISTS (SELECT 1 FROM iv WHERE iv.chr = pv.chr AND pv.end_pos >= iv.s AND pv.pos < iv.s))`
     )
   }
-  if (panelIntervals.length < PANEL_TEMP_TABLE_THRESHOLD) {
+  if (requested < PANEL_TEMP_TABLE_THRESHOLD) {
     return query.where(({ or }) =>
       or(
         panelIntervals.map(

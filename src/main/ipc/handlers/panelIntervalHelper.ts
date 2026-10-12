@@ -14,7 +14,7 @@ import { DEFAULT_PANEL_GENOME_BUILD } from '../../../shared/filters/panel-interv
 
 /**
  * In-memory cache for computed panel intervals.
- * Keyed on JSON.stringify({ panelIds, assembly, paddingBp, chrPrefix }).
+ * Keyed on JSON.stringify({ panelIds, assembly, paddingBp }).
  * Invalidated via clearPanelIntervalCache() when panel/gene data changes.
  */
 const panelIntervalCache = new Map<string, GenomicInterval[]>()
@@ -43,8 +43,6 @@ export interface PanelIntervalParams {
  *
  * @param db - DatabaseService instance for accessing panels and variants
  * @param params - Panel IDs, padding, and genome build
- * @param caseId - Optional case ID for detecting chr prefix from variants.
- *                 If omitted, falls back to sampling any variant in the database.
  * @param source - Logging source identifier (e.g. 'variants', 'cohort')
  * @returns Array of genomic intervals. Empty ONLY when the active panel(s)
  *          contain no genes at all — there is nothing to restrict on, so that
@@ -65,28 +63,15 @@ export interface PanelIntervalParams {
 export function computePanelIntervals(
   db: DatabaseService,
   params: PanelIntervalParams,
-  caseId: number | undefined,
   source: string
 ): GenomicInterval[] {
   const paddingBp = params.panel_padding_bp ?? 5000
   const genomeBuild = params.genome_build ?? 'GRCh38'
 
-  // Detect chromosome prefix from existing variants
-  let chrPrefix: boolean
-  if (caseId !== undefined) {
-    chrPrefix = db.variants.getChrPrefix(caseId)
-  } else {
-    // Cohort mode: sample any variant in the database
-    const sampleRow = db.database.prepare('SELECT chr FROM variants LIMIT 1').get() as
-      { chr: string } | undefined
-    chrPrefix = sampleRow?.chr?.startsWith('chr') ?? false
-  }
-
   const cacheKey = JSON.stringify({
     panelIds: params.active_panel_ids,
     assembly: genomeBuild,
-    paddingBp,
-    chrPrefix
+    paddingBp
   })
 
   const cached = panelIntervalCache.get(cacheKey)
@@ -100,8 +85,7 @@ export function computePanelIntervals(
       params.active_panel_ids,
       genomeBuild,
       paddingBp,
-      geneRefDb,
-      chrPrefix
+      geneRefDb
     )
     panelIntervalCache.set(cacheKey, intervals)
     return intervals
@@ -155,7 +139,6 @@ export function resolveCohortPanelOnCallingThread<T extends CohortPanelRequest>(
         panel_padding_bp: resolved.panel_padding_bp,
         genome_build: resolved.genome_build
       },
-      undefined, // cohort mode: no specific case, sample any variant
       source
     )
   }

@@ -1,3 +1,4 @@
+import type { BuildReviewChoice, BuildReviewList } from '../../types/build-review'
 import type { Case, CaseSearchParams, CaseWithCohorts } from '../../types/database'
 import type { IpcResult } from '../../types/errors'
 import type { CaseDeleteJobHandle, CaseDeleteTarget } from '../../types/case-delete-job'
@@ -17,4 +18,12 @@ export interface CasesDomainContract {
    */
   startDelete: (target: CaseDeleteTarget) => Promise<IpcResult<CaseDeleteJobHandle>>
   availableBuilds: () => Promise<IpcResult<Array<{ build: string; caseCount: number }>>>
+  /** Cases whose genome build must be confirmed before their chromosome names are updated. */
+  buildReviews: () => Promise<IpcResult<BuildReviewList>>
+  /**
+   * Confirm the builds of flagged cases in one write; their chromosome names
+   * are renamed to each build's form (on PostgreSQL in the background).
+   * Returns the number of cases confirmed.
+   */
+  resolveBuildReviews: (choices: BuildReviewChoice[]) => Promise<IpcResult<number>>
 }

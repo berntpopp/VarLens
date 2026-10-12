@@ -10,6 +10,7 @@
  */
 
 import Bottleneck from 'bottleneck'
+import { bareContig } from '../../../shared/utils/contig'
 import { z } from 'zod'
 import { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
@@ -115,8 +116,7 @@ export class SpliceAIApiClient {
     alt: string,
     assembly: '38' | '37' = '38'
   ): Promise<SpliceAIResult> {
-    // Normalize chromosome (remove chr prefix)
-    const normalizedChr = chr.replace(/^chr/i, '')
+    const normalizedChr = bareContig(chr)
 
     // Format: 17-43092919-G-A
     const variantId = `${normalizedChr}-${pos}-${ref}-${alt}`

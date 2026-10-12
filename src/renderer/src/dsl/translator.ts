@@ -8,6 +8,7 @@
 import type { DslNode, DslFilterRule, DslGroup, DslOperator } from './types'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import { findColumn } from './column-registry'
+import { contigQueryNames } from '../../../shared/utils/contig'
 
 /** Result of translating a DSL AST */
 export interface TranslationResult {
@@ -64,6 +65,8 @@ function setFilter(
   result.columnFilters[column] = filter
 }
 
+const isChromosome = (column: string): boolean => findColumn(column)?.key === 'chr'
+
 function translateRule(rule: DslFilterRule, result: TranslationResult): void {
   const { column, operator, value } = rule
   const backendOp = BACKEND_OPERATORS[operator]
@@ -78,6 +81,17 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
       : { operator: backendOp, value: value ?? '' }
   if (findColumn(column)?.type === 'numeric' && ['<', '>', '<=', '>='].includes(operator)) {
     filter.includeEmpty = true
+  }
+  // Each build stores its own contig spelling: `chr:1` means chr1 or 1.
+  // ponytail: `chr != 1` stays a single-spelling comparison (no NOT IN operator).
+  if (isChromosome(column) && backendOp === '=') {
+    setFilter(
+      result,
+      column,
+      { operator: 'in', value: contigQueryNames(String(value)) },
+      formatRule(rule)
+    )
+    return
   }
   setFilter(result, column, filter, formatRule(rule))
 }
@@ -95,7 +109,13 @@ function translateOr(node: DslGroup, result: TranslationResult): void {
     )
     return
   }
-  const values = rules.map((r) => String(r.value))
+  const values = [
+    ...new Set(
+      rules.flatMap((r) =>
+        isChromosome(column) ? contigQueryNames(String(r.value)) : [String(r.value)]
+      )
+    )
+  ]
   setFilter(result, column, { operator: 'in', value: values }, describe(node))
 }
 
