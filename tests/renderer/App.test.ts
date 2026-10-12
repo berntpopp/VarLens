@@ -262,6 +262,30 @@ describe('App.vue', () => {
     })
   })
 
+  it('refreshes the case list when the import wizard reports completion on desktop', async () => {
+    const handleBatchImportComplete = vi.fn()
+    useShellLifecycleSpy.mockReturnValue({
+      handleDatabaseSwitched: vi.fn(),
+      handleImportComplete: vi.fn(),
+      handleBatchImportComplete
+    })
+    await router.push('/case')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [vuetify, createPinia(), router],
+        stubs: {
+          ...asyncComponentStubs,
+          AppDialogHost: { name: 'AppDialogHost', template: '<div />' }
+        }
+      }
+    })
+    await flushPromises()
+    // The single-VCF wizard reports only through this emit (no batch run ID on desktop).
+    wrapper.findComponent({ name: 'AppDialogHost' }).vm.$emit('batch-import-complete')
+    await flushPromises()
+    expect(handleBatchImportComplete).toHaveBeenCalledTimes(1)
+  })
+
   it('does not mount the details panel or shortcut dialog until first opened', async () => {
     const wrapper = await mountWithDisplay(1350)
     expect(wrapper.findComponent({ name: 'VariantDetailsPanel' }).exists()).toBe(false)
