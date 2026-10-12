@@ -203,6 +203,21 @@ describe('migration v47: chromosome names per build', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM audit_log').get()).toEqual({ n: 0 })
   })
 
+  it('a fresh database ends at v47; a v45 one runs v46 then v47 in order', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
+    const a = addCase('A', 'GRCh38', GRCH38_HEADER)
+    addVariant(a, '1', 100)
+    db.exec('PRAGMA user_version = 45')
+    runMigrations(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
+    expect(chrsOf(a)).toEqual(['chr1'])
+    expect(
+      db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()
+    ).toEqual({
+      value: '1'
+    })
+  })
+
   it('is idempotent: a second run changes nothing and takes no backup', () => {
     seed()
     migrateContigNaming(db, vi.fn())

@@ -80,20 +80,20 @@ and an hg19 `chr1` at the same position swap keys):
 
 ## Order (per backend)
 
-SQLite (`PRAGMA user_version` 46, `src/main/database/contig-naming-migration.ts` +
+SQLite (`PRAGMA user_version` 47, `src/main/database/contig-naming-migration.ts` +
 `contig-rename-sqlite.ts`, runs in the migration worker):
 1. Discover: `SELECT c.id, c.genome_build, v.chr, MAX(v.pos) … GROUP BY c.id, v.chr`; a case already in
    its build's form is skipped (no file read, no row written); the others are planned.
 2. If any case will be renamed: check free space (`DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO`,
    2.7 x the DB size: backup + peak WAL), `wal_checkpoint(TRUNCATE)` and require it complete (busy 0,
-   every frame checkpointed), then byte-copy the DB file to `<db>.pre-v46.bak`. Either check failing
+   every frame checkpointed), then byte-copy the DB file to `<db>.pre-v47.bak`. Either check failing
    stops with a user-facing message (`BUILD_COPY.migrationNoSpace` / `migrationBusy`, an `AppError` that
    DatabaseService passes through) before anything changes. The copy keeps SQLCipher encryption.
 3. One transaction: annotation remap, then per renamed case decrement frequencies → `UPDATE variants SET
    chr = to WHERE case_id = ? AND chr = from` (only rows under an old name are written) → recount;
-   review rows for flagged cases; summary marked stale; user_version 46.
+   review rows for flagged cases; summary marked stale; user_version 47.
 
-PostgreSQL (`0029_contig_naming.sql` + background job `src/main/storage/postgres/postgres-contig-naming.ts`):
+PostgreSQL (`0030_contig_naming.sql` + background job `src/main/storage/postgres/postgres-contig-naming.ts`):
 1. Migration: create `contig_build_review` and `contig_naming_pending(case_id, confirmed, pairs,
    annotations_moved)`, queue every published case (newer imports are canonical and never queued).
 2. Job (scheduled from the cohort freshness probe and from `cases:buildReviews`; `FOR UPDATE SKIP
@@ -165,5 +165,5 @@ twice fails cleanly (no review row).
 
 ## Rollback
 
-SQLite: close the app and replace the DB file with `<db>.pre-v46.bak` (it is the v45 database, so it
+SQLite: close the app and replace the DB file with `<db>.pre-v47.bak` (it is the v46 database, so it
 needs the previous app version). PG: restore the operator's backup.

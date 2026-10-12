@@ -1,6 +1,6 @@
 /**
- * Migration 0029 + the chromosome-name job against a real PostgreSQL
- * (mirrors SQLite v46, tests/main/database/migration-v46.test.ts).
+ * Migration 0030 + the chromosome-name job against a real PostgreSQL
+ * (mirrors SQLite v47, tests/main/database/migration-v47.test.ts).
  *
  * Gated by VARLENS_RUN_POSTGRES_E2E=1. Requires `make pg-up`.
  */
@@ -28,7 +28,7 @@ const PG_URL =
 const GRCH38_HEADER = '##fileformat=VCFv4.2\n##contig=<ID=1,length=248956422>\n#CHROM\tPOS\n'
 const GRCH37_TAG = '##fileformat=VCFv4.2\n##reference=file:///ref/hs37d5.fa\n#CHROM\tPOS\n'
 
-describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () => {
+describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () => {
   let schema: string
   let pool: Pool
   let probe: Client
@@ -36,7 +36,7 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
   const t = (table: string): string => `"${schema}"."${table}"`
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'pg-0029-'))
+    dir = mkdtempSync(join(tmpdir(), 'pg-0030-'))
     schema = `varlens_test_contig_${Date.now()}_${randomBytes(4).toString('hex')}`
     pool = new Pool({ connectionString: PG_URL, max: 3 })
     probe = new Client({ connectionString: PG_URL })
@@ -45,7 +45,7 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
     await new PostgresMigrationRunner(
       pool,
       schema,
-      POSTGRES_MIGRATIONS.filter((m) => m.version < '0029')
+      POSTGRES_MIGRATIONS.filter((m) => m.version < '0030')
     ).migrate()
   }, 120_000)
 

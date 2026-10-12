@@ -1,7 +1,7 @@
 /**
  * SQLite contig renames (spec: .planning/specs/2026-10-12-chr-naming-per-build.md):
  * the global-annotation remap, the per-case variant rename and the user's
- * build confirmations. Used by the v46 migration (contig-naming-migration.ts)
+ * build confirmations. Used by the v47 migration (contig-naming-migration.ts)
  * and by cases:resolveBuildReviews. PG twin: storage/postgres/postgres-contig-naming.ts.
  *
  * Callers run these inside one transaction.

@@ -105,7 +105,7 @@ interface FreshnessProbe {
   total_cases: number
   /** Variant rows from before migration 0025 still lack stored severity ranks. */
   rank_backfill_pending: boolean
-  /** Cases from before migration 0029 still wait for the chromosome-name check. */
+  /** Cases from before migration 0030 still wait for the chromosome-name check. */
   contig_naming_pending: boolean
 }
 

@@ -13,7 +13,7 @@ export const DATABASE_CONFIG = {
   /** Memory-mapped I/O size in bytes (1 GB — virtual address reservation is free on 64-bit) */
   MMAP_SIZE_BYTES: 1_073_741_824,
   /**
-   * Free disk space the v46 chromosome-name migration needs next to the
+   * Free disk space the v47 chromosome-name migration needs next to the
    * database, as a multiple of its size: the pre-migration backup (1x) plus the
    * peak WAL of the rename (measured 0.84x on a 741 MB database), with margin.
    */

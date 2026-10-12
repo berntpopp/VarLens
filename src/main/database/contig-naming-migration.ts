@@ -1,5 +1,5 @@
 /**
- * SQLite schema v46: chromosome names in each build's reference form
+ * SQLite schema v47: chromosome names in each build's reference form
  * (spec: .planning/specs/2026-10-12-chr-naming-per-build.md; PG twin:
  * storage/postgres/postgres-contig-naming.ts).
  *
@@ -8,7 +8,7 @@
  * `contig_build_review` row and keep their names until the user confirms a
  * build (cases:resolveBuildReviews, contig-rename-sqlite.ts). Before the first
  * rename the free space is checked and the database file is copied to
- * `<db>.pre-v46.bak`. A second run finds nothing to rename, so it is a no-op.
+ * `<db>.pre-v47.bak`. A second run finds nothing to rename, so it is a no-op.
  */
 import { copyFileSync, statSync, statfsSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -99,7 +99,7 @@ export function assertFreeSpaceForMigration(
   if (available < needed) {
     throw new AppError(
       ErrorCode.RESOURCE_LIMIT,
-      `v46 migration needs ${needed} bytes free, ${available} available`,
+      `v47 migration needs ${needed} bytes free, ${available} available`,
       BUILD_COPY.migrationNoSpace(gigabytes(needed), gigabytes(available))
     )
   }
@@ -121,11 +121,11 @@ function backupDatabase(db: Db): void {
   ) {
     throw new AppError(
       ErrorCode.CONFLICT,
-      `v46 backup: WAL checkpoint incomplete (${JSON.stringify(checkpoint)})`,
+      `v47 backup: WAL checkpoint incomplete (${JSON.stringify(checkpoint)})`,
       BUILD_COPY.migrationBusy
     )
   }
-  copyFileSync(db.name, `${db.name}.pre-v46.bak`)
+  copyFileSync(db.name, `${db.name}.pre-v47.bak`)
 }
 
 export function migrateContigNaming(db: Db, backup: (db: Db) => void = backupDatabase): void {

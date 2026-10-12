@@ -3,7 +3,7 @@
  * .planning/specs/2026-10-12-chr-naming-per-build.md; SQLite twin:
  * database/contig-naming-migration.ts + contig-rename-sqlite.ts).
  *
- * Migration 0029 queues every existing case in `contig_naming_pending`; a
+ * Migration 0030 queues every existing case in `contig_naming_pending`; a
  * build the user confirms queues the case again (`confirmed`). This
  * background job works through the queue in short transactions, each taking
  * its rows with FOR UPDATE SKIP LOCKED so two servers never do the same work:
