@@ -49,4 +49,20 @@ describe('index.html first paint (renderer + web)', () => {
       expect(existsSync(resolve(__dirname, '../../node_modules', url))).toBe(true)
     }
   })
+  it('ships each bundled font licence (OFL 1.1) in both builds', () => {
+    const webConfig = readFileSync(resolve(__dirname, '../../vite.web-renderer.config.ts'), 'utf-8')
+    for (const [pkg, file] of [
+      ['inter', 'OFL-Inter.txt'],
+      ['jetbrains-mono', 'OFL-JetBrainsMono.txt']
+    ]) {
+      // src/renderer/public is the Electron renderer's publicDir; the web build copies by name.
+      const shipped = readFileSync(resolve(__dirname, '../../src/renderer/public', file), 'utf-8')
+      const upstream = readFileSync(
+        resolve(__dirname, '../../node_modules/@fontsource-variable', pkg, 'LICENSE'),
+        'utf-8'
+      )
+      expect(shipped).toBe(upstream)
+      expect(webConfig).toContain(`'${file}'`)
+    }
+  })
 })
