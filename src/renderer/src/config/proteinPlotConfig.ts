@@ -90,7 +90,7 @@ export const PLOT_COPY = {
   nearby: 'Nearby variants',
   noNearby: 'No other variants in this window',
   keyboardHint:
-    '+ / − zoom · ← / → pan · Home reset · Tab to a variant, then ← / → step, Enter = variant of interest · Esc back to the plot'
+    'Tab to the plot · ← / → step variants · Shift+← / → pan · + / − zoom · Home reset · Enter = variant of interest · Esc leaves the variant'
 } as const
 
 /** Columns of the variant list (List view and Nearby variants). */

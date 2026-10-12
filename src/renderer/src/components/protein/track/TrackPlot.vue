@@ -5,27 +5,23 @@
     <div
       ref="containerRef"
       class="track-plot-frame"
-      tabindex="0"
+      :tabindex="frameIsTabStop ? 0 : -1"
       role="group"
       :aria-label="`${label}. ${PLOT_COPY.keyboardHint}`"
       @keydown="nav.onKeydown"
     >
       <svg ref="svgRef" class="track-plot-svg" />
     </div>
-    <div class="visually-hidden" aria-live="polite">{{ liveText }}</div>
+    <div class="visually-hidden" aria-live="polite">{{ announcement }}</div>
     <TrackTooltip :data="tooltip" :unit="unit" />
   </v-theme-provider>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import { useResizeObserver } from '../../../composables/useResizeObserver'
-import {
-  markerAriaLabel,
-  useTrackPlot,
-  type TrackDrawContext
-} from '../../../composables/track-plot/useTrackPlot'
+import { useTrackPlot, type TrackDrawContext } from '../../../composables/track-plot/useTrackPlot'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
 import TrackTooltip from './TrackTooltip.vue'
 
@@ -43,19 +39,13 @@ const containerRef = ref<HTMLElement | null>(null)
 const svgRef = ref<SVGSVGElement | null>(null)
 const { dimensions } = useResizeObserver(containerRef)
 
-const { tooltip, exportSvg, exportPng } = useTrackPlot({
+const { tooltip, announcement, frameIsTabStop, exportSvg, exportPng } = useTrackPlot({
   svgRef,
   dimensions,
   nav: props.nav,
   unit: props.unit,
   deps: () => props.deps,
   draw: (ctx) => props.draw(ctx)
-})
-
-/** Read out the focused marker (screen readers; the tooltip shows it visually). */
-const liveText = computed(() => {
-  const m = props.nav.displayMarkers.value.find((x) => x.key === props.nav.focusedKey.value)
-  return m === undefined ? '' : markerAriaLabel(m, props.unit)
 })
 
 defineExpose({ exportSvg, exportPng })

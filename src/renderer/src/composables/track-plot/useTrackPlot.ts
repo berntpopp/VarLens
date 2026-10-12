@@ -77,6 +77,11 @@ export function useTrackPlot(opts: {
   let pin = false
   /** Drawn markers (not gnomAD) left to right, and the element of each key (bins: every key in them). */
   let rendered: TrackMarker[] = []
+  /** Roving tabindex: the one marker Tab lands on (focused, else the anchor, else the first). */
+  let tabStop: string | null = null
+  /** Read out by the plot's live region: search / list jumps only (a focus move speaks itself). */
+  const announcement = ref('')
+  const frameIsTabStop = ref(true)
   const elementOf = new Map<string, SVGGElement>()
 
   const plotWidth = (): number => dimensions.value.width - TRACK_GUTTER_PX - PLOT_RIGHT_PX
@@ -106,7 +111,8 @@ export function useTrackPlot(opts: {
     if (m.track === 'gnomad') return
     for (const key of [m.key, ...(m.binnedKeys ?? [])]) elementOf.set(key, el.node() as SVGGElement)
     rendered.push(m)
-    el.attr('tabindex', 0)
+    const isStop = tabStop !== null && [m.key, ...(m.binnedKeys ?? [])].includes(tabStop)
+    el.attr('tabindex', isStop ? 0 : -1)
       .attr('role', 'button')
       .attr('aria-label', markerAriaLabel(m, opts.unit))
       .on('focus', () => {
@@ -116,7 +122,8 @@ export function useTrackPlot(opts: {
       })
       .on('blur', () => show(null, {}))
       .on('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // Shift+← / → bubbles to the frame and pans.
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.shiftKey) {
           e.preventDefault()
           e.stopPropagation()
           stepFocus(e.key === 'ArrowRight' ? 1 : -1)
@@ -170,6 +177,19 @@ export function useTrackPlot(opts: {
       maxUnbinned: MAX_MARKERS_UNBINNED,
       binPx: BIN_PX
     })
+    const focusable = markers.filter((mk) => mk.track !== 'gnomad')
+    const has = (key: string | null | undefined): boolean =>
+      key !== null &&
+      key !== undefined &&
+      focusable.some((mk) => mk.key === key || mk.binnedKeys?.includes(key) === true)
+    const sortedFirst = [...focusable].sort((a, b) => a.position - b.position)[0]?.key ?? null
+    const anchorKey = nav.anchor.value?.key
+    frameIsTabStop.value = focusable.length === 0
+    tabStop = has(nav.focusedKey.value)
+      ? nav.focusedKey.value
+      : has(anchorKey)
+        ? anchorKey!
+        : sortedFirst
     opts.draw({
       root,
       width,
@@ -184,8 +204,10 @@ export function useTrackPlot(opts: {
       bindFeature
     })
     const focusedEl = elementOf.get(nav.focusedKey.value ?? '') ?? null
-    if (refocus) focusedEl?.focus()
-    else if (pin && focusedEl !== null) {
+    if (refocus) {
+      focusedEl?.focus()
+      announcement.value = ''
+    } else if (pin && focusedEl !== null) {
       // A search hit or list row: pin its tooltip without moving the keyboard focus.
       const box = focusedEl.getBoundingClientRect()
       const marker = rendered.find(
@@ -193,7 +215,10 @@ export function useTrackPlot(opts: {
           m.key === nav.focusedKey.value ||
           m.binnedKeys?.includes(nav.focusedKey.value ?? '') === true
       )
-      if (marker !== undefined) tooltip.value = { visible: true, x: box.right, y: box.top, marker }
+      if (marker !== undefined) {
+        tooltip.value = { visible: true, x: box.right, y: box.top, marker }
+        announcement.value = markerAriaLabel(marker, opts.unit)
+      }
     }
     refocus = false
     pin = false
@@ -262,6 +287,9 @@ export function useTrackPlot(opts: {
 
   return {
     tooltip,
+    announcement,
+    /** No marker drawn: then the plot frame itself is the Tab stop */
+    frameIsTabStop,
     exportSvg: (): string => svgMarkup(svgRef.value),
     exportPng: (): Promise<Blob | null> =>
       svgToPng(svgRef.value, dimensions.value.width, dimensions.value.height)
