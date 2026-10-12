@@ -1383,3 +1383,17 @@ shortlist-sim: ## Simulation benchmark for the evidence shortlist (local data; n
 - [ ] Gates: `~/.cache/varlens-session/heavy.sh make lint-check format-check typecheck agent-check`, `make rebuild-node && make test`, PostgreSQL parity run, renderer visual check (Task 6), then `make preflight-full` from the session shell (memory: preflight cannot run under a detached systemd unit).
 - [ ] Codex final adversarial review of the whole branch diff (`git diff origin/main...HEAD`), fix findings, re-run affected gates.
 - [ ] Push branch, open a **draft** PR referencing the spec, plan and report; mark ready only after preflight passes.
+
+---
+
+## Amendments after spec v3 (supersede the tasks above where they differ)
+
+- **Task 2:** `compileRule` rejects unless `isDsl && ast !== null && errors.length === 0`; test `cadd:>:20 AND`.
+- **Task 3:** `alleleKey` = production identity: bare chr, upper-case, trim common suffix then prefix to minimal representation (≥ 1 base each side, pos adjusted); no left-alignment. Test `1:100:CTT:CT` ≡ `1:101:TT:T`.
+- **Task 4:** modes are a decision list in the fixed order `ar_hom, ar_comphet, xl, ad, fallback`; fallback only when no specific mode matches; score = mode points + global groups + groups scoped to that mode. `validateEvidenceConfig` checks every merged per-type filter.
+- **Task 5 (PostgreSQL):** both passes and `hydrateCandidates` run on one client inside `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` … `COMMIT` (ROLLBACK on error); add a test that inserts a partner row from a second connection between the passes and asserts the result equals the pre-insert snapshot. SQLite needs no transaction (one synchronous call, one connection); add a comment saying so.
+- **Task 12 `hand-v0.ts`:** every group ends with a catch-all **reference rule** (points 0) and bins are exclusive ranges, e.g. freq: `gnomad_af:is:null`, `gnomad_af:<:0.00001`, `gnomad_af:>=:0.00001 AND gnomad_af:<:0.0001`, `gnomad_af:>=:0.0001 AND gnomad_af:<:0.001`, reference `af_ref` = `gnomad_af:>=:0.001`; effect reference `func:is:notnull OR func:is:null`; cadd reference `cadd:<:15 OR cadd:is:null`; clinvar groups reference `clinvar:is:null OR clinvar:is:notnull` placed last; phenotype reference `hpo_sim_score:is:null OR hpo_sim_score:<=:0`; gene reference `omim_mim_number:is:null`. A test asserts that on the synthetic background every eligible row matches exactly one non-reference bin or the reference per group.
+- **Task 12 `tune.ts`:** spec §11.1 formula (pseudo-count ½, reference bin, unsupported → 0 for the whole group when `a_j+b_j<10` for that bin → that bin 0; reference with `a_ref<5` or `b_ref<5` → whole group 0), counts from actual first-match assignment, `B` = distinct eligible background rows of training genes once per background, ClinVar groups tuned on `clinvar_visible`, others and modes on `primary`. Mode points over the mode partition with reference `fallback`.
+- **Task 10/11:** annotation acceptance per spec §11.4; a failing field disables its rule group (points 0) everywhere, recorded in `protocol.lock.json`.
+- **Task 13 report:** ship verdict per spec §11.5 (power requirement, primary + visible-ClinVar safety, Clopper–Pearson sensitivity on gene clusters).
+- **Task 15:** `sha256` over canonical JSON without the `sha256` field; tests assert artifact = SQLite payload = PostgreSQL payload on fresh and upgraded DBs; never add the preset to `BUILT_IN_SHORTLIST_PRESETS`.
