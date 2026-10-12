@@ -29,7 +29,7 @@ export const COLUMN_WIDTHS_REM: Readonly<Record<string, number>> = {
   'data-table-expand': 2.5,
   annotations: ANNOTATIONS_COLUMN_WIDTH_REM,
   chr: 6.25,
-  pos: 8,
+  pos: 8.75, // fits an 11-char mono position ("248,956,422") + link icon
   ref: 5,
   alt: 5,
   gt_num: 6,
