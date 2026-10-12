@@ -23,6 +23,18 @@ For detailed format specifications, see [Supported Formats](../reference/support
 
 ![Import menu showing import options](/screenshots/import-menu.png)
 
+## Annotation fields
+
+VarLens keeps **every annotation field** of an import by default, not only the columns it shows in the tables. Fields VarLens knows (gene, consequence, gnomAD AF, CADD, ClinVar, genotype, …) fill their columns; every other field is stored with the variant and can be used in filters and ranking rules as `info.<KEY>` — for example `info.REVEL:>=:0.7`.
+
+Common evidence fields get one **canonical key** whatever their source, so the same rule works for varvis exports and for VCFs from the annotation pipeline: `REVEL`, `METARNN`, `BAYESDEL`, `ALPHAMISSENSE`, `SPLICEAI_MAX` (the highest of the four SpliceAI scores), `PANGOLIN`, `GNOMAD_POPMAX_AF`, `GNOMAD_HOM`, `LOEUF`, `LOF_OE`, `MISSENSE_Z` and `CLINVAR_REVSTAT`. Field names that are not valid keys are adjusted (`AltAF-Index` → `AltAF_Index`).
+
+**Choosing fields per import.** Step 2 of the import wizard lists the fields found in the file — for JSON with type, fill rate and sample values, for VCF including the CSQ/ANN subfields — and lets you keep, skip or rename each one. **Save as default** stores your choices.
+
+**Defaults.** **Settings → Application preferences → Import → Import fields** sets what happens to fields without a choice (*Keep*, *Keep evidence fields only*, *Skip*) and your saved per-field choices. New imports start from these defaults.
+
+Columnar files whose rows have a different number of values than the header are rejected with the row number, instead of importing shifted values.
+
 ## After Import
 
 Once import completes, the case appears in the sidebar. Click it to open the variant table.
