@@ -34,6 +34,7 @@ import {
   takeUnrankedClinvar,
   unrankedClinvarLogLine
 } from '../import/unranked-clinvar'
+import { resetAfOutOfRange, takeAfOutOfRange } from '../import/af-out-of-range'
 import { publishDerivedDataForImport } from './postgres-import-publication'
 import {
   acquireWorkspaceImportLock,
@@ -46,7 +47,7 @@ import {
   markImportConnection,
   type ImportFence
 } from '../storage/postgres/postgres-import-fence'
-import { DATABASE_CONFIG } from '../../shared/config'
+import { DATABASE_CONFIG, IMPORT_MESSAGES } from '../../shared/config'
 import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../import/bounded-batcher'
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/types'
@@ -186,15 +187,32 @@ export async function runImport(
 ): Promise<void> {
   cancelled = false // reset at entry; the parentPort handler also resets, this covers test/direct paths
   resetUnrankedClinvar()
+  resetAfOutOfRange()
   // The worker is terminated when its final message arrives, so ClinVar
-  // strings the import could not rank are reported just before it is sent.
+  // strings the import could not rank (and the out-of-range gnomAD AF count)
+  // are reported just before it is sent.
   const post = (msg: PostgresImportWorkerOutboundMessage): void => {
-    const unrankedClinvar = msg.type === 'complete' ? takeUnrankedClinvar() : undefined
-    if (msg.type !== 'complete' || unrankedClinvar === undefined) return postMessage(msg)
+    if (msg.type !== 'complete') return postMessage(msg)
+    const unrankedClinvar = takeUnrankedClinvar()
+    const afOutOfRange = takeAfOutOfRange()
     const name = start.caseName ?? start.filePath ?? 'import'
-    console.warn(`[postgres-import-worker] ${unrankedClinvarLogLine(name, unrankedClinvar)}`)
+    if (unrankedClinvar !== undefined) {
+      console.warn(`[postgres-import-worker] ${unrankedClinvarLogLine(name, unrankedClinvar)}`)
+    }
+    if (afOutOfRange !== undefined) {
+      console.warn(
+        `[postgres-import-worker] ${name}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
+      )
+    }
     // With the result too: the log alone never reaches the user.
-    postMessage({ ...msg, result: { ...msg.result, unrankedClinvar } })
+    postMessage({
+      ...msg,
+      result: {
+        ...msg.result,
+        ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+        ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
+      }
+    })
   }
   const startedAt = Date.now()
   let batchSize = POSTGRES_JSON_IMPORT_BATCH_SIZE

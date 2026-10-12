@@ -658,9 +658,7 @@ async function startImport(): Promise<void> {
     currentFile.value = null
     overallPercent.value = 100
     importResult.value = serverResult
-    logUnrankedClinvar([
-      { caseName: caseName.value.trim(), unrankedClinvar: serverResult.unrankedClinvar }
-    ])
+    logUnrankedClinvar([{ ...serverResult, caseName: caseName.value.trim() }])
     phase.value = 'summary'
 
     // Reset the shared store — the import is finished so the

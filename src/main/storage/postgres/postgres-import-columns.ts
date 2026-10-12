@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { annotationSeverityRanks } from '../../../shared/config/severity.config'
+import { noteGnomadAf } from '../../import/af-out-of-range'
 import { encodeText, encodeInteger, encodeFloat, type CopyColumnEncoder } from './copy-text-encoder'
 
 export const VARIANT_BASE_COLUMNS = [
@@ -58,9 +59,11 @@ export const VARIANT_BASE_COLUMNS = [
  * Set `impact_rank` / `clinvar_rank` on a variant row about to be written,
  * from its `consequence` (impact) and `clinvar` values and the shared severity
  * configuration (#469). Every writer of a variant row calls this, so the
- * stored ranks always describe the stored strings.
+ * stored ranks always describe the stored strings. It also notes the row's
+ * gnomAD AF for the import's out-of-range count.
  */
 export function setSeverityRanks<T extends Record<string, unknown>>(row: T): T {
+  noteGnomadAf(row.gnomad_af)
   return Object.assign(row, annotationSeverityRanks(row))
 }
 

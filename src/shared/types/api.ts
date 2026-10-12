@@ -256,6 +256,8 @@ export interface MultiFileImportResult {
   elapsed: number
   /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 export interface ImportAPI extends ImportDomainContract {
@@ -318,6 +320,8 @@ export interface BatchFileDetail {
   error?: string
   /** ClinVar values of this file that the severity configuration does not know (ranked as unknown). */
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 export interface BatchProgress {
@@ -354,6 +358,8 @@ export interface BatchFileComplete {
   error?: string
   /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 export interface BatchResult {

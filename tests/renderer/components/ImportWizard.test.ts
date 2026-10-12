@@ -411,6 +411,23 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
+    it('keeps the data warnings of a single-file VCF import for the summary', async () => {
+      const mockApi = createMockApi()
+      mockApi.import.start.mockResolvedValue({ variantCount: 3, afOutOfRange: 2 })
+      window.api = mockApi
+      const wrapper = mount(ImportWizard, { global: { plugins: [createPinia(), vuetify] } })
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      vm.isVcfImport = true
+      vm.vcfFilePath = '/case.vcf'
+      vm.vcfSelectedSamples = ['S1']
+      vm.vcfCaseNames = new Map([['S1', 'Case 1']])
+
+      await vm.startVcfImport()
+
+      expect(vm.summary.details).toMatchObject([{ caseName: 'Case 1', afOutOfRange: 2 }])
+      wrapper.unmount()
+    })
+
     it('keeps acknowledged VCF cancellation terminal when the active start call settles later', async () => {
       const mockApi = createMockApi()
       const pendingStart = deferred<{ variantCount: number }>()

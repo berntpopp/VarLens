@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { logUnrankedClinvar } from '../utils/unranked-clinvar'
+import type { ImportDataReport } from '../../../shared/types/import'
+import { importDataNotices, logUnrankedClinvar } from '../utils/unranked-clinvar'
 
 export type ImportPhase =
   'idle' | 'uploading' | 'importing' | 'finalizing' | 'complete' | 'error' | 'cancelled'
@@ -13,6 +14,8 @@ export interface ImportFileDetail {
   variantCount?: number
   error?: string
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 export const useImportStatusStore = defineStore('importStatus', () => {
@@ -134,9 +137,9 @@ export const useImportStatusStore = defineStore('importStatus', () => {
   }
 
   function logUnrankedOnce(
-    finished: ReadonlyArray<{ caseName?: string; unrankedClinvar?: string[] }>
+    finished: ReadonlyArray<ImportDataReport & { caseName?: string }>
   ): void {
-    const affected = finished.some((detail) => (detail.unrankedClinvar?.length ?? 0) > 0)
+    const affected = finished.some((detail) => importDataNotices(detail).length > 0)
     if (unrankedLogged || !affected) return
     unrankedLogged = true
     logUnrankedClinvar(finished)

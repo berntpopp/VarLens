@@ -23,7 +23,7 @@
  *     calling this function (see checkGenomeBuildOrThrow below).
  */
 import { createInterface } from 'node:readline'
-import { DATABASE_CONFIG } from '../../../shared/config'
+import { DATABASE_CONFIG, IMPORT_MESSAGES } from '../../../shared/config'
 import { createBoundedBatcher } from '../../import/bounded-batcher'
 
 import { createCappedLineStream } from '../../import/stream-utils'
@@ -48,6 +48,7 @@ import {
   takeUnrankedClinvar,
   unrankedClinvarLogLine
 } from '../../import/unranked-clinvar'
+import { resetAfOutOfRange, takeAfOutOfRange } from '../../import/af-out-of-range'
 import { openWorkerDatabase } from '../../workers/worker-db'
 import { prepareStatements } from '../../workers/import-pipeline'
 import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
@@ -106,6 +107,7 @@ export async function importAdditionalFileToCase(
   const isCancelled = (): boolean => signal?.aborted === true
 
   resetUnrankedClinvar()
+  resetAfOutOfRange()
   try {
     appendDb.exec('BEGIN IMMEDIATE')
     try {
@@ -231,6 +233,10 @@ export async function importAdditionalFileToCase(
   if (unrankedClinvar !== undefined) {
     mainLogger.warn(unrankedClinvarLogLine(filePath, unrankedClinvar), 'import')
   }
+  const afOutOfRange = takeAfOutOfRange()
+  if (afOutOfRange !== undefined) {
+    mainLogger.warn(`${filePath}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`, 'import')
+  }
 
   return {
     caseId,
@@ -238,7 +244,8 @@ export async function importAdditionalFileToCase(
     skipped: totalSkipped,
     errors,
     elapsed: Date.now() - startTime,
-    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
+    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+    ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
   }
 }
 

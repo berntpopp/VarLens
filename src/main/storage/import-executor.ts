@@ -47,6 +47,8 @@ export interface StorageImportSingleFileResult {
   elapsed: number
   /** ClinVar values of this import that the severity configuration does not know. */
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 /**
@@ -102,6 +104,8 @@ export interface StorageImportMultiFileResult {
   elapsed: number
   /** ClinVar values of all files that the severity configuration does not know. */
   unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+  afOutOfRange?: number
 }
 
 /**

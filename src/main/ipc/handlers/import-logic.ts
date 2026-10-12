@@ -13,7 +13,7 @@
  * (`startMultiFileImportSqlite`).
  */
 import { mainLogger } from '../../services/MainLogger'
-import { mergeUnrankedClinvar } from '../../import/unranked-clinvar'
+import { importDataReport, mergeUnrankedClinvar } from '../../import/unranked-clinvar'
 import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -28,6 +28,7 @@ import {
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import { assertGenomeBuildMatches, resolveCaseSample } from '../../import/vcf/vcf-header-parser'
 import type { StorageImportFileFilters } from '../../storage/import-executor'
+import type { ImportDataReport } from '../../../shared/types/import'
 import type { StorageSession } from '../../storage/session'
 
 /**
@@ -86,14 +87,12 @@ export interface ImportCallbacks {
 }
 
 /** Result of a successful import. */
-export interface ImportResult {
+export interface ImportResult extends ImportDataReport {
   caseId: number
   variantCount: number
   skipped: number
   errors: string[]
   elapsed: number
-  /** ClinVar values of this import that the severity configuration does not know. */
-  unrankedClinvar?: string[]
 }
 
 /** Options for VCF import. */
@@ -206,14 +205,12 @@ export interface MultiFileImportFileResult {
 /**
  * Aggregate result of a multi-file import session.
  */
-export interface MultiFileImportResult {
+export interface MultiFileImportResult extends ImportDataReport {
   caseId: number
   totalVariants: number
   totalSkipped: number
   files: MultiFileImportFileResult[]
   elapsed: number
-  /** ClinVar values of all files that the severity configuration does not know. */
-  unrankedClinvar?: string[]
 }
 
 /**
@@ -346,6 +343,7 @@ async function startMultiFileImportSqlite(
 
   let totalVariants = firstResult.variantCount
   const unrankedLists: Array<string[] | undefined> = [firstResult.unrankedClinvar]
+  let afOutOfRange = firstResult.afOutOfRange ?? 0
   let totalSkipped = firstResult.skipped
 
   // The files of one case are checked against each other: the first file's own
@@ -420,6 +418,7 @@ async function startMultiFileImportSqlite(
         totalVariants += result.variantCount
         totalSkipped += result.skipped
         unrankedLists.push(result.unrankedClinvar)
+        afOutOfRange += result.afOutOfRange ?? 0
 
         fileResults.push({
           filePath: spec.filePath,
@@ -505,7 +504,8 @@ async function startMultiFileImportSqlite(
     totalSkipped,
     files: fileResults,
     elapsed: Date.now() - startTime,
-    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
+    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+    ...(afOutOfRange > 0 ? { afOutOfRange } : {})
   }
 }
 
@@ -561,9 +561,7 @@ export async function startMultiFileImport(
           totalSkipped: result.skipped,
           files: result.files,
           elapsed: result.elapsed,
-          ...(result.unrankedClinvar !== undefined
-            ? { unrankedClinvar: result.unrankedClinvar }
-            : {})
+          ...importDataReport(result)
         }
       }
 

@@ -17,6 +17,7 @@ import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { runImportSession } from '../../../src/main/workers/import-worker'
 import { clinvarRank, impactRank } from '../../../src/shared/config/severity.config'
+import { IMPORT_MESSAGES } from '../../../src/shared/config/import.config'
 import type { MainMessage, WorkerMessage } from '../../../src/shared/types/import-worker'
 
 type StartMessage = Extract<MainMessage, { type: 'start' }>
@@ -213,6 +214,50 @@ describe('SQLite import stores severity ranks (#469)', () => {
       ])
       // Unknown is rank 0: stored, displayed, never guessed.
       expect(rowsOf(db, 'odd').map((row) => row.clinvar_rank)).toEqual([15, 15, 0, 0, 0])
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('counts gnomAD AF values outside [0, 1] per file and keeps them as imported', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const file = join(dir, 'af.json')
+      const afs = [0, 0.0193, 1, 40, -0.1, null]
+      writeFileSync(
+        file,
+        JSON.stringify({
+          variants: afs.map((gnomad_af, index) => ({
+            ...JSON_VARIANTS[0],
+            pos: 700 + index,
+            gnomad_af
+          }))
+        })
+      )
+      const clean = join(dir, 'clean.json')
+      writeFileSync(clean, JSON.stringify({ variants: JSON_VARIANTS }))
+      await importFiles([
+        { filePath: file, caseName: 'af' },
+        { filePath: clean, caseName: 'clean' }
+      ])
+
+      const done = lastMessages.find((message) => message.type === 'complete')
+      expect(done?.type === 'complete' && done.results.details).toMatchObject([
+        { caseName: 'af', afOutOfRange: 2 },
+        { caseName: 'clean' }
+      ])
+      expect(done?.type === 'complete' && done.results.details[1].afOutOfRange).toBeUndefined()
+      expect(
+        warn.mock.calls.map((call) => String(call[0])).filter((m) => /gnomAD AF/.test(m))
+      ).toEqual([`[import-worker] af: ${IMPORT_MESSAGES.afOutOfRange(2)}`])
+      const stored = db
+        .prepare(
+          `SELECT v.gnomad_af FROM variants v JOIN cases c ON c.id = v.case_id
+            WHERE c.name = 'af' ORDER BY v.id`
+        )
+        .all()
+        .map((row) => (row as { gnomad_af: number | null }).gnomad_af)
+      expect(stored).toEqual(afs)
     } finally {
       warn.mockRestore()
     }
