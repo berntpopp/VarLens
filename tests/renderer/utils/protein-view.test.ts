@@ -29,17 +29,22 @@ const row = (over: Partial<CohortVariant>): CohortVariant =>
 
 describe('proteinViewBlockedReason', () => {
   it.each([
-    ['lookups off', row({}), false, PROTEIN_VIEW_COPY.lookupsOff],
-    ['no gene', row({ gene_symbol: null }), true, PROTEIN_VIEW_COPY.noGene],
+    [
+      'lookups off: the server reason',
+      row({}),
+      'Turned off on this server',
+      'Turned off on this server'
+    ],
+    ['no gene', row({ gene_symbol: null }), null, PROTEIN_VIEW_COPY.noGene],
     // SV / intronic / splice / UTR: the gene structure still shows them.
-    ['no protein position', row({ aa_change: null }), true, null],
-    ['available', row({}), true, null]
-  ])('%s', (_name, variant, lookupsOn, expected) => {
-    expect(proteinViewBlockedReason(variant, lookupsOn)).toBe(expected)
+    ['no protein position', row({ aa_change: null }), null, null],
+    ['available', row({}), null, null]
+  ])('%s', (_name, variant, lookupsReason, expected) => {
+    expect(proteinViewBlockedReason(variant, lookupsReason)).toBe(expected)
   })
 
   it('no variant: blocked', () => {
-    expect(proteinViewBlockedReason(null, true)).toBe(PROTEIN_VIEW_COPY.noVariant)
+    expect(proteinViewBlockedReason(null, null)).toBe(PROTEIN_VIEW_COPY.noVariant)
   })
 })
 

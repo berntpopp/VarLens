@@ -85,7 +85,7 @@ import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy } from '@mdi/js'
 import { PROTEIN_VIEW_BUTTONS, type ProteinViewTab } from '../config/proteinViewConfig'
 import { proteinTabReason, proteinViewBlockedReason } from '../utils/protein-view'
-import { useCapabilityStore } from '../stores/capabilityStore'
+import { useProteinLookupsReason } from '../composables/useProteinLookupsReason'
 import IconButton from './common/IconButton.vue'
 import { formatHgvs, variantName } from '../utils/formatters'
 import { ClinVarCell } from './table-cells/simple-cells'
@@ -105,10 +105,8 @@ const emit = defineEmits<{
   'open-protein-view': [tab: ProteinViewTab]
 }>()
 
-const capabilities = useCapabilityStore()
-const proteinReason = computed(() =>
-  proteinViewBlockedReason(props.variant, capabilities.canUse('proteinViewer'))
-)
+const lookupsReason = useProteinLookupsReason()
+const proteinReason = computed(() => proteinViewBlockedReason(props.variant, lookupsReason.value))
 const reasonFor = (tab: ProteinViewTab): string | null =>
   proteinReason.value ?? proteinTabReason(props.variant, tab)
 

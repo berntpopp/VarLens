@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, reactive } from 'vue'
 import { useAppState } from '../../composables/useAppState'
-import { useCapabilityStore } from '../../stores/capabilityStore'
+import { useProteinLookupsReason } from '../../composables/useProteinLookupsReason'
 import { useVariantGenomeBuild } from '../../composables/useVariantGenomeBuild'
 import { proteinViewBlockedReason, proteinViewTabFor } from '../../utils/protein-view'
 import ProteinViewUnavailableDialog from './ProteinViewUnavailableDialog.vue'
@@ -29,7 +29,7 @@ const ProteinVisualizationModal = defineAsyncComponent(
 
 const { proteinViewOpen, proteinViewRequest, panelMode, activeTab, selectedCaseId, cohortViewRef } =
   useAppState()
-const capabilities = useCapabilityStore()
+const lookupsReason = useProteinLookupsReason()
 
 const variant = computed(() => proteinViewRequest.value?.variant ?? null)
 const caseId = computed(() => (activeTab.value === 'case' ? selectedCaseId.value : null))
@@ -40,9 +40,7 @@ const tab = computed(() =>
     ? undefined
     : proteinViewTabFor(proteinViewRequest.value.variant, proteinViewRequest.value.tab)
 )
-const reason = computed(() =>
-  proteinViewBlockedReason(variant.value, capabilities.canUse('proteinViewer'))
-)
+const reason = computed(() => proteinViewBlockedReason(variant.value, lookupsReason.value))
 
 // Cohort view: the cohort's carriers of the gene, under its active filters.
 const loadCohortCarriers = computed(() =>

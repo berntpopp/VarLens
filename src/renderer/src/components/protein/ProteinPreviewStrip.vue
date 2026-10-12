@@ -2,8 +2,8 @@
   <!-- Mini lollipop under the variant identity: the visible entry to the
        protein view. Every state keeps the same height (no layout shift). -->
   <div v-if="gene !== null" class="protein-strip" data-testid="protein-strip">
-    <div v-if="!lookupsOn" class="strip-line text-body-small text-muted">
-      {{ PROTEIN_VIEW_COPY.lookupsOff }}
+    <div v-if="lookupsReason !== null" class="strip-line text-body-small text-muted">
+      {{ lookupsReason }}
     </div>
     <template v-else>
       <!-- SV, intronic, splice, UTR: nothing to place on the protein; the gene structure shows it. -->
@@ -90,15 +90,14 @@ import type { CohortVariant } from '../../../../shared/types/cohort'
 import { getConsequenceColor, getDomainColor } from '../../../../shared/utils/protein-utils'
 import { PROTEIN_VIEW_COPY, type ProteinViewTab } from '../../config/proteinViewConfig'
 import { proteinMappingQuery, proteinDomainsQuery } from '../../queries/protein'
-import { useCapabilityStore } from '../../stores/capabilityStore'
+import { useProteinLookupsReason } from '../../composables/useProteinLookupsReason'
 import { formatError } from '../../utils/ipc-result'
 import { proteinPositionOf, proteinStripSummary } from '../../utils/protein-view'
 
 const props = defineProps<{ variant: Variant | CohortVariant }>()
 const emit = defineEmits<{ open: [tab: ProteinViewTab] }>()
 
-const capabilities = useCapabilityStore()
-const lookupsOn = computed(() => capabilities.canUse('proteinViewer'))
+const lookupsReason = useProteinLookupsReason()
 const gene = computed(() =>
   props.variant.gene_symbol === '' ? null : (props.variant.gene_symbol ?? null)
 )

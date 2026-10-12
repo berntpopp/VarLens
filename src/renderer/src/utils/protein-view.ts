@@ -33,9 +33,12 @@ export function proteinPositionOf(v: AnyVariant): { position: number; aaChange: 
  * variant without a protein position (SV, intronic, splice, UTR) still opens:
  * on the gene structure, which draws its genomic interval.
  */
-export function proteinViewBlockedReason(v: AnyVariant | null, lookupsOn: boolean): string | null {
+export function proteinViewBlockedReason(
+  v: AnyVariant | null,
+  lookupsReason: string | null
+): string | null {
   if (v === null) return PROTEIN_VIEW_COPY.noVariant
-  if (!lookupsOn) return PROTEIN_VIEW_COPY.lookupsOff
+  if (lookupsReason !== null) return lookupsReason
   return v.gene_symbol === null || v.gene_symbol === '' ? PROTEIN_VIEW_COPY.noGene : null
 }
 

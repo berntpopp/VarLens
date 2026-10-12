@@ -11,6 +11,7 @@ import {
   PROTEIN_VIEW_BUTTONS,
   PROTEIN_VIEW_COPY
 } from '../../../src/renderer/src/config/proteinViewConfig'
+import { CAPABILITY_FEATURES } from '../../../src/shared/ipc/capability-features'
 import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
@@ -48,7 +49,7 @@ describe('VariantIdentitySection protein buttons', () => {
   })
 
   it.each([
-    ['lookups off', {}, false, PROTEIN_VIEW_COPY.lookupsOff],
+    ['lookups off', {}, false, CAPABILITY_FEATURES.proteinViewer.unavailableInWeb],
     [
       'no protein position',
       { aa_change: null, cdna: null },

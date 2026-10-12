@@ -16,16 +16,14 @@ import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import { AppStateKey } from '../../composables/useAppState'
 import { PROTEIN_VIEW_BUTTONS } from '../../config/proteinViewConfig'
-import { useCapabilityStore } from '../../stores/capabilityStore'
+import { useProteinLookupsReason } from '../../composables/useProteinLookupsReason'
 import { proteinViewBlockedReason } from '../../utils/protein-view'
 
 const props = defineProps<{ variant: Variant | CohortVariant }>()
 
 const appState = inject(AppStateKey, null)
-const capabilities = useCapabilityStore()
-const reason = computed(() =>
-  proteinViewBlockedReason(props.variant, capabilities.canUse('proteinViewer'))
-)
+const lookupsReason = useProteinLookupsReason()
+const reason = computed(() => proteinViewBlockedReason(props.variant, lookupsReason.value))
 
 function open(): void {
   if (reason.value === null) appState?.openProteinView(props.variant)

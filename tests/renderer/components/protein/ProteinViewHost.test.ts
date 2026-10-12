@@ -10,6 +10,7 @@ import { AppStateKey, createAppState } from '../../../../src/renderer/src/compos
 import ProteinViewHost from '../../../../src/renderer/src/components/protein/ProteinViewHost.vue'
 import { PROTEIN_VIEW_COPY } from '../../../../src/renderer/src/config/proteinViewConfig'
 import { createMockApi } from '../../../utils/mock-api'
+import { CAPABILITY_FEATURES } from '../../../../src/shared/ipc/capability-features'
 import { installCapabilities } from '../../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
@@ -60,7 +61,7 @@ describe('ProteinViewHost', () => {
     await flushPromises()
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).props('reason')).toBe(
-      PROTEIN_VIEW_COPY.lookupsOff
+      CAPABILITY_FEATURES.proteinViewer.unavailableInWeb
     )
     expect(api.protein.getMapping).not.toHaveBeenCalled()
   })

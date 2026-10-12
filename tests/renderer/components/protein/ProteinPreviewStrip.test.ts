@@ -9,6 +9,7 @@ import * as directives from 'vuetify/directives'
 import ProteinPreviewStrip from '../../../../src/renderer/src/components/protein/ProteinPreviewStrip.vue'
 import { PROTEIN_VIEW_COPY } from '../../../../src/renderer/src/config/proteinViewConfig'
 import { createQueryPinia, queryPlugins } from '../../helpers/with-queries'
+import { CAPABILITY_FEATURES } from '../../../../src/shared/ipc/capability-features'
 import { installCapabilities } from '../../helpers/capabilities'
 
 vi.mock('../../../../src/renderer/src/services/LogService', () => ({
@@ -103,7 +104,7 @@ describe('ProteinPreviewStrip', () => {
   it('web with lookups off: says how to enable them and never calls the API', async () => {
     const wrapper = mountStrip({}, true)
     await flushPromises()
-    expect(wrapper.text()).toContain(PROTEIN_VIEW_COPY.lookupsOff)
+    expect(wrapper.text()).toContain(CAPABILITY_FEATURES.proteinViewer.unavailableInWeb)
     expect(getMapping).not.toHaveBeenCalled()
   })
 
