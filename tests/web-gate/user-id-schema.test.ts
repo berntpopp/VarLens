@@ -43,6 +43,8 @@ const EXEMPT_TABLES = new Set([
   'variant_tags',
   'analysis_group_members',
   'case_variant_annotations',
+  // Owned by its case (chromosome-name migration v46: case build to confirm)
+  'contig_build_review',
   // Variant detail extensions (owned by parent variant row)
   'variant_transcripts',
   'variant_sv',
