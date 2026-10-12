@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
+import { DATABASE_CONFIG } from '../../../src/shared/config'
 import EmptyState from '../../../src/renderer/src/components/EmptyState.vue'
 import { AppStateKey, createAppState } from '../../../src/renderer/src/composables/useAppState'
+import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -19,6 +23,11 @@ function mountWithState(hasCases: boolean) {
 }
 
 describe('EmptyState first impression', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    installCapabilities()
+  })
+
   it('renders neither CTA while the case list is still loading', () => {
     const { wrapper } = mountWithState(false)
     const cta = wrapper.find('.empty-state__cta')
@@ -42,6 +51,16 @@ describe('EmptyState first impression', () => {
     appState.setCaseCount(0)
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('Import Variants')
+  })
+
+  it('offers no import when no database is open', async () => {
+    const { wrapper, appState } = mountWithState(false)
+    // database:info answered with no database (desktop started without one).
+    useDatabaseStore().$patch({ revision: 1, currentPath: null })
+    appState.markCasesLoadFailed()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain(DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN)
+    expect(wrapper.text()).not.toContain('Import Variants')
   })
 
   it('falls back to the import CTA when loading the case list failed', async () => {

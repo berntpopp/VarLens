@@ -65,6 +65,13 @@ export const useDatabaseStore = defineStore('database', () => {
   const capabilities = computed(() => capabilityStore.storage)
   const postgresProfiles = ref<PostgresConnectionProfilePublic[]>([])
   const isTestingPostgres = ref<boolean>(false)
+  /** Desktop started (or was left) without a database; revision 0 = info not loaded yet. */
+  const noDatabaseOpen = computed(
+    () =>
+      capabilityStore.canUse('localDatabaseFiles') &&
+      revision.value > 0 &&
+      currentPath.value === null
+  )
 
   // Actions
 
@@ -199,13 +206,9 @@ export const useDatabaseStore = defineStore('database', () => {
     }
   }
 
-  async function selectAndOpenFile(): Promise<DatabaseOpenResult | null> {
+  async function selectFile(): Promise<string | null> {
     requireCapability('localDatabaseFiles')
-    const path = await getApi().database.selectFile()
-    if (path === null) {
-      return null
-    }
-    return await openDatabase(path)
+    return await getApi().database.selectFile()
   }
 
   async function selectSaveLocation(defaultName: string): Promise<string | null> {
@@ -274,6 +277,7 @@ export const useDatabaseStore = defineStore('database', () => {
     capabilities,
     postgresProfiles,
     isTestingPostgres,
+    noDatabaseOpen,
     fetchInfo,
     fetchRecent,
     loadCapabilities,
@@ -284,7 +288,7 @@ export const useDatabaseStore = defineStore('database', () => {
     openDatabase,
     createDatabase,
     openPostgresProfile,
-    selectAndOpenFile,
+    selectFile,
     selectSaveLocation,
     changePassword,
     migrateToEncrypted,

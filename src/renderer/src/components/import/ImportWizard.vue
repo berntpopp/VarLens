@@ -145,7 +145,7 @@
           color="primary"
           variant="flat"
           size="small"
-          :disabled="vcfSelectedSamples.length === 0 || importStore.isActive"
+          :disabled="vcfSelectedSamples.length === 0 || !vcfNamesValid || importStore.isActive"
           @click="startVcfImport"
         >
           {{
@@ -187,7 +187,7 @@ import type {
   BatchCompleteEvent,
   ProgressUpdate
 } from '../../../../shared/types/api'
-import type { VcfPreviewResult } from '../../../../shared/types/vcf'
+import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
 import { useVcfImportExecution } from '../../composables/useVcfImportExecution'
 import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
@@ -245,6 +245,7 @@ const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
 const vcfGenomeBuild = ref('GRCh38')
 const vcfCaseNames = ref(new Map<string, string>())
+const vcfNamesValid = ref(true)
 
 const stepLabels = computed(() => {
   if (isVcfImport.value) {
@@ -533,11 +534,8 @@ function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
   logService.info('VCF preview loaded successfully', 'ImportWizard')
 }
 
-function onVcfSelectionChanged(options: {
-  selectedSamples: string[]
-  genomeBuild: string
-  caseNames: Map<string, string>
-}): void {
+function onVcfSelectionChanged(options: VcfSampleSelection): void {
+  vcfNamesValid.value = options.valid
   vcfSelectedSamples.value = options.selectedSamples
   vcfGenomeBuild.value = options.genomeBuild
   vcfCaseNames.value = options.caseNames

@@ -19,6 +19,7 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { jobRunner } from '../../services/jobs/runner'
 import { withImportJobProgress } from '../import-job-progress'
 import { workerErrorToError } from '../import-worker-errors'
+import { UniqueConstraintError } from '../../database/errors'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { ImportFilters } from '../../import/vcf/import-filters'
@@ -220,6 +221,9 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                   ? { unrankedClinvar: capturedUnrankedClinvar }
                   : {})
               })
+            } else if (detail?.status === 'skipped') {
+              // Cancels returned above, so a skip is the duplicate-name skip; same error as Postgres.
+              reject(new UniqueConstraintError('case', caseName))
             } else {
               reject(
                 workerErrorToError({

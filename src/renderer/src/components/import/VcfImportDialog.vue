@@ -251,6 +251,7 @@ import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
 import ImportFilterOptions, { type ImportFilterState } from './ImportFilterOptions.vue'
 import ImportProgressView, { type FileStatusEntry } from './ImportProgressView.vue'
 import ImportSummaryView from './ImportSummaryView.vue'
+import { CASE_NAME_MESSAGES } from '../../config/importConfig'
 import {
   mdiAlertCircleOutline,
   mdiCheckCircle,
@@ -322,7 +323,7 @@ const filters = ref<ImportFilterState>({
 
 const caseNameError = computed<string[]>(() => {
   if (phase.value !== 'review') return []
-  if (caseName.value.trim() === '') return ['Case name is required']
+  if (caseName.value.trim() === '') return [CASE_NAME_MESSAGES.REQUIRED]
   return []
 })
 
