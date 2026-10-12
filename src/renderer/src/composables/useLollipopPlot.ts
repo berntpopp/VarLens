@@ -39,7 +39,8 @@ import type { Dimensions } from './useResizeObserver'
 interface PositionGroup {
   position: number
   variants: LollipopVariant[]
-  maxHeight: number
+  /** Carriers at this position (cohort), else the number of variants */
+  count: number
   /** Whether this group contains the highlighted (selected) variant */
   hasHighlighted: boolean
 }
@@ -122,6 +123,18 @@ const CLINVAR_TRACK_HEIGHT = 26
 /** Half-size of ClinVar diamond shape */
 const CLINVAR_DIAMOND_SIZE = 4
 
+/** Variants grouped by protein position; a group's size counts carriers when known. */
+export function groupLollipopsByPosition(vars: LollipopVariant[]): PositionGroup[] {
+  const map = new Map<number, LollipopVariant[]>()
+  for (const v of vars) map.set(v.proteinPosition, [...(map.get(v.proteinPosition) ?? []), v])
+  return Array.from(map.entries()).map(([position, group]) => ({
+    position,
+    variants: group,
+    count: group.reduce((sum, v) => sum + (v.carrierCount ?? 1), 0),
+    hasHighlighted: group.some((v) => v.highlighted === true)
+  }))
+}
+
 // ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useLollipopPlot(options: LollipopPlotOptions) {
@@ -153,26 +166,6 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
   /** Current D3 zoom transform (for external zoom controls) */
   let currentTransform = d3.zoomIdentity
   let zoomBehavior: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null
-
-  // ─── Helper: group user variants by position ─────────────────────────
-
-  function groupByPosition(vars: LollipopVariant[]): PositionGroup[] {
-    const map = new Map<number, LollipopVariant[]>()
-    for (const v of vars) {
-      const existing = map.get(v.proteinPosition)
-      if (existing) {
-        existing.push(v)
-      } else {
-        map.set(v.proteinPosition, [v])
-      }
-    }
-    return Array.from(map.entries()).map(([position, group]) => ({
-      position,
-      variants: group,
-      maxHeight: Math.min(LOLLIPOP_MAX_STEM, LOLLIPOP_MIN_STEM + group.length * 8),
-      hasHighlighted: group.some((v) => v.highlighted === true)
-    }))
-  }
 
   // ─── Helper: group gnomAD variants by position for density ───────────
 
@@ -259,7 +252,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     if (width <= 0 || height <= 0 || proteinLength.value <= 0) return
 
     // Case/user variants are always shown (highlighted variant must always be visible)
-    const groups = groupByPosition(variants.value)
+    const groups = groupLollipopsByPosition(variants.value)
 
     // Separate highlighted and non-highlighted groups
     const highlightedGroups = groups.filter((g) => g.hasHighlighted)
@@ -276,7 +269,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     const xScale = d3.scaleLinear().domain([0, proteinLength.value]).range([0, plotWidth])
 
     // Stem height scale based on variant count at position (for non-highlighted)
-    const maxCount = Math.max(1, ...normalGroups.map((g) => g.variants.length))
+    const maxCount = Math.max(1, ...normalGroups.map((g) => g.count))
     const stemScale = d3
       .scaleLinear()
       .domain([1, maxCount])
@@ -543,7 +536,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     const lollipopGroup = clipGroup.append('g').attr('class', 'lollipops')
     for (const group of normalGroups) {
       const cx = xScale(group.position)
-      const stemHeight = stemScale(group.variants.length)
+      const stemHeight = stemScale(group.count)
       const headY = backboneY - BACKBONE_HEIGHT / 2 - stemHeight
       const color = group.variants[0].color
 
@@ -559,7 +552,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
         .attr('opacity', 0.5)
 
       // Head
-      const headRadius = Math.min(NORMAL_HEAD_RADIUS + group.variants.length - 1, 8)
+      const headRadius = Math.min(NORMAL_HEAD_RADIUS + group.count - 1, 8)
       lollipopGroup
         .append('circle')
         .attr('cx', cx)
@@ -736,7 +729,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     })
 
     // Update non-highlighted lollipops
-    const groups = groupByPosition(variants.value)
+    const groups = groupLollipopsByPosition(variants.value)
     const normalGroups = groups.filter((g) => !g.hasHighlighted)
     const highlightedGroups = groups.filter((g) => g.hasHighlighted)
 

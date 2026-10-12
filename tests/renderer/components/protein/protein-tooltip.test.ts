@@ -32,4 +32,31 @@ describe('ProteinTooltip', () => {
     expect(wrapper.text()).not.toContain('missense variant')
     wrapper.unmount()
   })
+
+  it('cohort markers name the carrier count next to the change', () => {
+    const data = {
+      visible: true,
+      type: 'variant',
+      x: 0,
+      y: 0,
+      variants: [
+        {
+          proteinPosition: 180,
+          aaChange: 'p.Met180Val',
+          color: '#000',
+          consequence: 'missense_variant',
+          gnomadAf: null,
+          cadd: null,
+          carrierCount: 3
+        }
+      ]
+    } as unknown as TooltipData
+    const wrapper = mount(ProteinTooltip, {
+      props: { data },
+      global: { stubs: { teleport: true } }
+    })
+
+    expect(wrapper.text()).toContain('p.Met180Val · 3 carriers')
+    wrapper.unmount()
+  })
 })

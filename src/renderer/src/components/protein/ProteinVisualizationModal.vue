@@ -155,11 +155,8 @@ import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { LollipopVariant, ClinVarVariant } from '../../../../shared/types/protein'
 import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
-import {
-  parseProteinPosition,
-  getConsequenceCategory,
-  getConsequenceColor
-} from '../../../../shared/utils/protein-utils'
+import { buildLollipopVariants } from '../../utils/protein-view'
+import type { ProteinViewTab } from '../../config/proteinViewConfig'
 import { logService } from '../../services/LogService'
 import { variantInterval } from '../../utils/variant-interval'
 import { formatHgvs } from '../../utils/formatters'
@@ -172,9 +169,17 @@ interface Props {
   mode: 'case' | 'cohort'
   /** Genome build of the variant (case build or cohort row build); null when unknown */
   genomeBuild?: string | null
+  /** Tab shown each time the modal opens */
+  initialTab?: ProteinViewTab
+  /** Cohort view: the cohort's carrier rows of a gene (active filters and build) */
+  loadCohortCarriers?: (gene: string) => Promise<CohortVariant[]>
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  genomeBuild: null,
+  initialTab: 'lollipop',
+  loadCohortCarriers: undefined
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -183,7 +188,7 @@ const emit = defineEmits<{
 // protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
 const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
-const activeTab = ref('lollipop')
+const activeTab = ref<ProteinViewTab>(props.initialTab)
 
 // Derive gene symbol from the variant
 const geneSymbol = computed<string | null>(() => props.variant?.gene_symbol ?? null)
@@ -228,10 +233,33 @@ const clinvarVariants = ref<ClinVarVariant[]>([])
 watch(
   () => [props.modelValue, props.variant],
   () => {
+    if (props.modelValue) activeTab.value = props.initialTab
     showCaseVariants.value = false
     caseVariants.value = []
-  }
+    void loadCohortCarriers()
+  },
+  { immediate: true }
 )
+
+// Cohort view: every carrier of the gene is on the plot (no Case toggle).
+async function loadCohortCarriers(): Promise<void> {
+  const gene = geneSymbol.value
+  if (!props.modelValue || gene === null || props.loadCohortCarriers === undefined) return
+  caseVariantsLoading.value = true
+  try {
+    const rows = await props.loadCohortCarriers(gene)
+    if (gene !== geneSymbol.value) return
+    caseVariants.value = rows
+    showCaseVariants.value = true
+  } catch (err) {
+    logService.error(
+      `Failed to fetch cohort carriers: ${err instanceof Error ? err.message : 'Unknown'}`,
+      'ProteinVisualizationModal'
+    )
+  } finally {
+    caseVariantsLoading.value = false
+  }
+}
 
 // Fetch ClinVar data when gene symbol changes (shared across all tabs)
 watch(
@@ -271,83 +299,14 @@ watch(
   { immediate: true }
 )
 
-// Convert a single variant to LollipopVariant format.
-// Tries aa_change first, then cdna as fallback (some import formats place protein
-// notation in the cDNA column when columns are shifted).
-function toLolli(v: Variant | CohortVariant, highlighted: boolean): LollipopVariant | null {
-  let proteinPosition = parseProteinPosition(v.aa_change)
-  let aaChange = formatHgvs(v.aa_change)
-
-  // Fallback: try parsing the cdna field if aa_change didn't yield a valid position
-  if (proteinPosition === null && 'cdna' in v && typeof v.cdna === 'string') {
-    proteinPosition = parseProteinPosition(v.cdna)
-    if (proteinPosition !== null) {
-      aaChange = v.cdna
-    }
-  }
-
-  if (proteinPosition === null) return null
-
-  const consequence = v.consequence ?? 'unknown'
-  const consequenceCategory = getConsequenceCategory(consequence)
-  const color = getConsequenceColor(consequence)
-
-  const cadd = 'cadd' in v ? (v.cadd ?? null) : 'cadd_phred' in v ? (v.cadd_phred ?? null) : null
-
-  return {
-    proteinPosition,
-    aaChange,
-    consequence,
-    consequenceCategory,
-    color,
-    geneSymbol: v.gene_symbol ?? '',
-    chr: v.chr,
-    pos: v.pos,
-    ref: v.ref,
-    alt: v.alt,
-    gnomadAf: v.gnomad_af ?? null,
-    cadd,
-    clinvar: v.clinvar ?? null,
-    highlighted
-  }
-}
-
-// Build lollipop variants: selected variant (highlighted) + optional case variants
-const lollipopVariants = computed<LollipopVariant[]>(() => {
-  const result: LollipopVariant[] = []
-
-  // Add the selected variant (highlighted)
-  if (props.variant !== null && props.variant.gene_symbol === geneSymbol.value) {
-    const lolli = toLolli(props.variant, true)
-    if (lolli !== null) {
-      result.push(lolli)
-    }
-  }
-
-  // Add case variants if toggled on (excluding the selected variant to avoid duplicates)
-  if (showCaseVariants.value) {
-    for (const v of caseVariants.value) {
-      // Skip the selected variant (already added above)
-      if (
-        props.variant !== null &&
-        v.chr === props.variant.chr &&
-        v.pos === props.variant.pos &&
-        v.ref === props.variant.ref &&
-        v.alt === props.variant.alt
-      ) {
-        continue
-      }
-
-      if (v.gene_symbol !== geneSymbol.value) continue
-      const lolli = toLolli(v, false)
-      if (lolli !== null) {
-        result.push(lolli)
-      }
-    }
-  }
-
-  return result
-})
+// The selected variant (highlighted) + case variants (toggle) or cohort carriers.
+const lollipopVariants = computed<LollipopVariant[]>(() =>
+  buildLollipopVariants(
+    props.variant,
+    showCaseVariants.value ? caseVariants.value : [],
+    geneSymbol.value
+  )
+)
 
 // Fetch case variants for the current gene
 async function handleToggleCaseVariants(): Promise<void> {

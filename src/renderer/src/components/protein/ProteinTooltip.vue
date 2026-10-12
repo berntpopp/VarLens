@@ -30,6 +30,9 @@
           <div class="tooltip-row">
             <span class="tooltip-dot" :style="{ backgroundColor: v.color }" />
             <span class="tooltip-value tooltip-mono">{{ v.aaChange ?? 'N/A' }}</span>
+            <span v-if="v.carrierCount !== undefined" class="tooltip-value">
+              · {{ carrierLabel(v.carrierCount) }}
+            </span>
           </div>
           <div class="tooltip-row tooltip-sub">
             <span class="tooltip-label">Consequence:</span>
@@ -145,6 +148,7 @@
 import { computed } from 'vue'
 import type { TooltipData } from '../../composables/useLollipopPlot'
 import { formatConsequence } from '../../utils/formatters'
+import { carrierLabel } from '../../utils/protein-view'
 
 const MAX_DISPLAY = 5
 

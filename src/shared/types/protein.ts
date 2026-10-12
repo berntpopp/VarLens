@@ -160,4 +160,6 @@ export interface LollipopVariant {
   clinvar: string | null
   /** Whether this variant should be visually highlighted (e.g. the selected variant) */
   highlighted?: boolean
+  /** Cohort view: carriers of this variant (marker size); absent for case variants */
+  carrierCount?: number
 }
