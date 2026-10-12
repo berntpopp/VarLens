@@ -136,7 +136,11 @@ export function binMarkers(
       kept.push(m)
       continue
     }
-    const index = Math.floor((m.position - w.start) / binWidth)
+    // The last residue / base belongs to the last bin, not one past the plot edge.
+    const index = Math.min(
+      Math.floor((m.position - w.start) / binWidth),
+      Math.ceil(plotWidthPx / opts.binPx) - 1
+    )
     const id = `${m.track}:${index}`
     const bin = bins.get(id)
     if (bin === undefined) {

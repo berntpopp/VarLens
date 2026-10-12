@@ -96,6 +96,12 @@ describe('binMarkers', () => {
     ])
   })
 
+  it('a marker at the very end of the window stays in the last bin, inside the plot', () => {
+    const markers = [marker(1), marker(1000, { key: 'e1' }), marker(1000, { key: 'e2' })]
+    const bins = binMarkers(markers, extent, 100, { maxUnbinned: 1, binPx: 10 })
+    expect(Math.max(...bins.map((b) => b.position))).toBeLessThanOrEqual(1000)
+  })
+
   it('never bins the variant of interest and drops markers outside the window', () => {
     const anchor = marker(2, { isAnchor: true })
     const markers = [marker(1), anchor, marker(3), marker(1500)]
