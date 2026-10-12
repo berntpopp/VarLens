@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
+import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
@@ -88,9 +89,15 @@ describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebui
     )
     expect(state.rows[0]).toEqual({ is_stale: true, stale_reason: 'migration_0029_carrier_rows' })
 
-    // A stale summary is left to its rebuild, which the next cohort read runs.
+    // A stale summary is left to its rebuild. Asking for the status (as the
+    // case view's freshness watcher does) starts it, without a cohort read.
     await new PostgresCaseLifecycleRepository(pool, schema).deleteCase(carrier)
-    await rebuild()
+    const cohort = new PostgresCohortRepository(pool, schema)
+    const deadline = Date.now() + 30_000
+    while ((await cohort.getSummaryStatus()).is_stale && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    expect((await cohort.getSummaryStatus()).is_stale).toBe(false)
     expect(await rows()).toEqual([])
   }, 120_000)
 })
