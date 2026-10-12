@@ -36,5 +36,13 @@ export const DATABASE_CONFIG = {
   /** Max recent databases in history */
   MAX_RECENT_DATABASES: 5,
   /** Worker pool idle timeout in ms — balances thread churn vs memory on desktop */
-  WORKER_IDLE_TIMEOUT_MS: 90_000
+  WORKER_IDLE_TIMEOUT_MS: 90_000,
+  /** Files SQLite keeps next to a database; writing over one corrupts it. */
+  SIDECAR_SUFFIXES: ['-wal', '-shm', '-journal'],
+  /** User-facing copy for database-file problems. */
+  MESSAGES: {
+    NO_DATABASE_OPEN:
+      'No database is open. Create or open one from the database menu in the toolbar.',
+    EXPORT_TARGET_IS_DATABASE: 'This file is a VarLens database. Choose a different file name.'
+  }
 } as const

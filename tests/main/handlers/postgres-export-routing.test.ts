@@ -67,6 +67,8 @@ describe('postgres export IPC routing', () => {
         throw new Error('getDb should not be called for postgres export:variants')
       }) as never,
       getDbManager: (() => ({
+        getCurrentPath: () => null,
+        getRecentDatabases: () => [],
         getCurrentSession: () => ({
           capabilities: { backend: 'postgres' },
           getReadExecutor: () => ({ execute })
@@ -135,6 +137,8 @@ describe('postgres export IPC routing', () => {
         throw new Error('getDb should not be called for postgres export:variants')
       }) as never,
       getDbManager: (() => ({
+        getCurrentPath: () => null,
+        getRecentDatabases: () => [],
         getCurrentSession: () => ({
           capabilities: { backend: 'postgres' },
           getReadExecutor: () => ({ execute })
@@ -198,6 +202,8 @@ describe('postgres export IPC routing', () => {
         throw new Error('getDb should not be called for postgres export:cohort')
       }) as never,
       getDbManager: (() => ({
+        getCurrentPath: () => null,
+        getRecentDatabases: () => [],
         getCurrentSession: () => ({
           capabilities: { backend: 'postgres' },
           getReadExecutor: () => ({ execute })
