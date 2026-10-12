@@ -1,10 +1,7 @@
 <template>
-  <!-- No expand transition: animating the row height shifted the table below
-       it on every frame of the animation (layout shift). -->
-  <div
-    v-if="visiblePresets.length > 0 || hasActiveFilters"
-    class="preset-bar px-3 py-1 d-flex align-center ga-1"
-  >
+  <!-- Always rendered at one chip row's height (it always holds the cog):
+       inserting it once presets loaded pushed the table down (layout shift). -->
+  <div class="preset-bar px-3 py-1 d-flex align-center ga-1">
     <!-- Preset toggle chips: one line that scrolls sideways (arrows only on
          overflow), so a narrower toolbar never adds a row above the table. -->
     <v-slide-group v-if="visiblePresets.length > 0" show-arrows class="preset-bar__chips">
@@ -75,6 +72,7 @@ const emit = defineEmits<{
   background: color-mix(in srgb, rgb(var(--v-theme-surface)) 95%, rgb(var(--v-theme-primary)));
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
   flex-wrap: nowrap;
+  min-height: 33px;
 }
 
 .preset-bar > * {
