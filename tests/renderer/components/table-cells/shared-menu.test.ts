@@ -188,4 +188,37 @@ describe('Row quick menu: Protein view (case + cohort tables)', () => {
     expect(state.proteinViewOpen.value).toBe(false)
     wrapper.unmount()
   })
+
+  it('read-only viewers: the row menu opens with Protein view and read-only ACMG', async () => {
+    installCapabilities()
+    const state = createAppState()
+    const row = { ...variant, aa_change: 'p.Met180Val' }
+    const wrapper = mount(AnnotationsCell, {
+      props: {
+        isStarred: false,
+        acmgClassification: null,
+        hasComment: false,
+        readOnly: true,
+        variant: row as never
+      },
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      attachTo: document.body
+    })
+    const acmgButton = wrapper.findAll('button.annotation-btn')[1]
+    expect(acmgButton.attributes('disabled')).toBeUndefined()
+    expect(acmgButton.attributes('aria-label')).toContain('Protein view')
+    await acmgButton.trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).not.toContain('Evidence editor')
+    const chips = [...document.querySelectorAll('.v-menu .v-chip')]
+    expect(chips.length).toBeGreaterThan(0)
+    expect(chips.every((c) => c.classList.contains('v-chip--disabled'))).toBe(true)
+    const entry = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find((el) =>
+      el.textContent?.includes('Protein view')
+    )
+    entry!.click()
+    expect(state.proteinViewRequest.value?.variant).toEqual(row)
+    wrapper.unmount()
+  })
 })

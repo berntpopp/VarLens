@@ -30,7 +30,7 @@
       :aria-expanded="menu.isOpenFor(acmgButtonRef)"
       :data-tooltip="withShortcut(labels.acmg, 'acmg')"
       data-tooltip-location="top"
-      :disabled="readOnly"
+      :disabled="readOnly && variant === undefined"
       @click.stop="openAcmgMenu"
     >
       <CellChip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
@@ -80,6 +80,7 @@ import {
 } from '@mdi/js'
 import {
   acmgLabel,
+  acmgReadOnlyLabel,
   commentLabel,
   starLabel,
   type AnnotationDisplayState
@@ -169,7 +170,8 @@ function openAcmgMenu(): void {
     locked: props.acmgLocked,
     select: (classification) => emit('acmg-select', classification),
     openEvidence: () => emit('acmg-evidence-click'),
-    variant: props.variant
+    variant: props.variant,
+    readOnly: props.readOnly === true
   })
 }
 
@@ -185,6 +187,8 @@ const labels = computed(() => {
     hasComment: displayHasComment.value,
     secondaryHasComment: displayHasGlobalComment.value
   }
-  return { star: starLabel(state), acmg: acmgLabel(state), comment: commentLabel(state) }
+  // Viewers: the ACMG button opens the row menu read-only (it carries the Protein view).
+  const acmg = props.readOnly === true ? acmgReadOnlyLabel(state) : acmgLabel(state)
+  return { star: starLabel(state), acmg, comment: commentLabel(state) }
 })
 </script>

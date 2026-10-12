@@ -21,6 +21,8 @@ export interface AcmgMenuRequest {
   openEvidence: () => void
   /** The row's variant: the menu also offers the protein view for it. */
   variant?: Variant | CohortVariant
+  /** Viewer: classification shown, not editable */
+  readOnly?: boolean
 }
 
 export type AcmgQuickMenuState = SharedMenu<AcmgMenuRequest>
