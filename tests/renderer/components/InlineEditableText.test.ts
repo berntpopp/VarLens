@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -66,6 +67,19 @@ describe('InlineEditableText', () => {
     await wrapper.find('.editable-text').trigger('keydown', { key })
     window.removeEventListener('keydown', onWindowKey)
     expect(onWindowKey).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('keeps Escape from reaching window shortcuts (panel close) and returns focus', async () => {
+    const { wrapper } = mountEditor()
+    await wrapper.find('.editable-text').trigger('click')
+    const onWindowKey = vi.fn()
+    window.addEventListener('keydown', onWindowKey)
+    await wrapper.find('textarea').trigger('keydown', { key: 'Escape' })
+    window.removeEventListener('keydown', onWindowKey)
+    expect(onWindowKey).not.toHaveBeenCalled()
+    await nextTick()
+    expect(document.activeElement).toBe(wrapper.find('.editable-text').element)
     wrapper.unmount()
   })
 })
