@@ -13,6 +13,8 @@
 import { copyFileSync } from 'node:fs'
 import type Database from 'better-sqlite3-multiple-ciphers'
 
+import { isImportableGenomeBuild } from '../../shared/config/genome-builds.config'
+import type { BuildReview } from '../../shared/types/build-review'
 import {
   contigRenamePairs,
   mergeGlobalAnnotations,
@@ -248,5 +250,39 @@ export function migrateContigNaming(db: Db, backup: (db: Db) => void = backupDat
     )
     for (const f of flags) flag.run(f.caseId, f.stored, f.suggested, f.reason, now)
     if (renames.length > 0 && hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
+  })()
+}
+
+/** Cases waiting for the user to confirm their build (cases:buildReviews). */
+export function listBuildReviews(db: Db): BuildReview[] {
+  if (!hasTable(db, 'contig_build_review')) return []
+  return db
+    .prepare(
+      `SELECT r.case_id AS caseId, c.name AS caseName, r.stored_build AS storedBuild,
+              r.suggested_build AS suggestedBuild, r.reason
+         FROM contig_build_review r JOIN cases c ON c.id = r.case_id
+        ORDER BY c.name`
+    )
+    .all() as BuildReview[]
+}
+
+/**
+ * The user confirmed `build` for a flagged case: store it and rename the
+ * case's contigs to its form, in one transaction (cases:resolveBuildReview).
+ */
+export function resolveBuildReview(db: Db, caseId: number, build: string): void {
+  if (!isImportableGenomeBuild(build)) throw new Error(`Unknown genome build: ${build}`)
+  db.transaction(() => {
+    const review = db.prepare('SELECT 1 FROM contig_build_review WHERE case_id = ?').get(caseId)
+    if (review === undefined) throw new Error(`Case ${caseId} has no genome build to confirm`)
+    db.prepare('UPDATE cases SET genome_build = ? WHERE id = ?').run(build, caseId)
+    const chrs = (
+      db.prepare('SELECT DISTINCT chr FROM variants WHERE case_id = ?').all(caseId) as Array<{
+        chr: string
+      }>
+    ).map((r) => r.chr)
+    renameCaseContigs(db, caseId, contigRenamePairs(chrs, build))
+    db.prepare('DELETE FROM contig_build_review WHERE case_id = ?').run(caseId)
+    if (hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
   })()
 }

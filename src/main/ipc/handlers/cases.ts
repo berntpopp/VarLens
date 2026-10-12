@@ -19,6 +19,8 @@ import type { DeleteCallbacks } from './cases-logic'
 import { startPostgresCaseDeleteJob } from './cases-delete-postgres'
 import type { CaseDeleteTarget } from '../../../shared/types/case-delete-job'
 
+const ResolveBuildReviewSchema = z.tuple([CaseIdSchema, z.string().min(1).max(32)])
+
 // Schema for batch delete IDs array
 const CaseIdArraySchema = z.array(z.number().int().positive()).min(1)
 
@@ -105,6 +107,29 @@ export function registerCaseHandlers({ ipcMain, getDb, getDbManager }: HandlerDe
 
   ipcMain.handle('cases:availableBuilds', async () => {
     return wrapHandler(() => getAvailableBuilds(() => getDbManager().getCurrentSession()))
+  })
+
+  ipcMain.handle('cases:buildReviews', async () => {
+    return wrapHandler(() =>
+      getDbManager().getCurrentSession().getReadExecutor().execute({
+        type: 'cases:buildReviews',
+        params: []
+      })
+    )
+  })
+
+  ipcMain.handle('cases:resolveBuildReview', async (_event, caseId: unknown, build: unknown) => {
+    return wrapHandler(async () => {
+      const validated = ResolveBuildReviewSchema.safeParse([caseId, build])
+      if (validated.success !== true) {
+        throw new Error(`Invalid cases:resolveBuildReview params: ${validated.error.message}`)
+      }
+      await getDbManager()
+        .getCurrentSession()
+        .getWriteExecutor()
+        .execute({ type: 'cases:resolveBuildReview', params: validated.data })
+      return undefined
+    })
   })
 
   ipcMain.handle('cases:query', async (_event, params: unknown) => {

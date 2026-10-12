@@ -95,6 +95,8 @@ describe('web dispatcher: auto-route argument schemas', () => {
   // (the web client forwards those arguments unchanged as `args`).
   const REAL_CALLS: Array<[string, unknown[]]> = [
     ['cases:availableBuilds', []],
+    ['cases:buildReviews', []],
+    ['cases:resolveBuildReview', [7, 'GRCh37']],
     ['case-metadata:get', [7]],
     ['case-metadata:listCohorts', []],
     ['case-metadata:getCohortByName', ['Epilepsy trios']],

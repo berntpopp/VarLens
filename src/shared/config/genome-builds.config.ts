@@ -275,6 +275,7 @@ export const BUILD_COPY = {
     build_disagrees: 'The source header names another build',
     build_excluded: 'Stored positions lie beyond the stored build'
   },
+  reviewCase: 'Case',
   reviewStored: 'Stored',
   reviewSuggested: 'Header',
   reviewChoice: 'Build',

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
+import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
 import {
   renameCaseContigsPg,
   runContigNamingStep
@@ -198,6 +199,21 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
     expect(
       (await probe.query(`SELECT * FROM ${t('variant_annotations')} ORDER BY id`)).rows
     ).toEqual(annotations)
+  }, 60_000)
+
+  it('cases:resolveBuildReview stores the build, renames and clears the review', async () => {
+    const { c } = await seed()
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    await runJob()
+    const repo = new PostgresBuildReviewRepository(pool, schema)
+    expect(await repo.listBuildReviews()).toMatchObject([{ caseId: c, caseName: 'C' }])
+    await repo.resolveBuildReview(c, 'GRCh37')
+    expect(await chrsOf(c)).toEqual(['1'])
+    expect(
+      (await probe.query(`SELECT genome_build FROM ${t('cases')} WHERE id = $1`, [c])).rows[0]
+    ).toEqual({ genome_build: 'GRCh37' })
+    expect(await repo.listBuildReviews()).toEqual([])
+    await expect(repo.resolveBuildReview(c, 'GRCh38')).rejects.toThrow(/no genome build/)
   }, 60_000)
 
   it('a confirmed review renames the flagged case with the same rules', async () => {

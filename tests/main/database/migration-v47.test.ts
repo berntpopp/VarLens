@@ -9,8 +9,10 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  listBuildReviews,
   migrateContigNaming,
-  renameCaseContigs
+  renameCaseContigs,
+  resolveBuildReview
 } from '../../../src/main/database/contig-naming-migration'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
@@ -200,6 +202,24 @@ describe('migration v47: chromosome names per build', () => {
     expect(chrsOf(c)).toEqual(['chr1'])
     expect(annotation('1', 100)).toBeUndefined() // nobody uses 1:100 any more: merged and removed
     expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'b\n\na', starred: 1 })
+  })
+
+  it('resolving a review stores the chosen build and renames to its form', () => {
+    const x = addCase('X', 'GRCh38', GRCH37_TAG)
+    addVariant(x, 'chr1', 5)
+    addVariant(x, '2', 5)
+    db.prepare("UPDATE cases SET genome_build = 'GRCh38' WHERE id = ?").run(x)
+    db.prepare("UPDATE variants SET chr = '1' WHERE case_id = ? AND chr = 'chr1'").run(x)
+    migrateContigNaming(db, vi.fn())
+    expect(listBuildReviews(db)).toMatchObject([{ caseId: x, suggestedBuild: 'GRCh37' }])
+    resolveBuildReview(db, x, 'GRCh37')
+    expect(chrsOf(x)).toEqual(['1', '2'])
+    expect(db.prepare('SELECT genome_build FROM cases WHERE id = ?').get(x)).toEqual({
+      genome_build: 'GRCh37'
+    })
+    expect(listBuildReviews(db)).toEqual([])
+    expect(() => resolveBuildReview(db, x, 'GRCh37')).toThrow(/no genome build to confirm/)
+    expect(() => resolveBuildReview(db, x, 'hg17')).toThrow(/Unknown genome build/)
   })
 
   it('backs up the database file before renaming', () => {

@@ -3,6 +3,7 @@ import type { StorageWriteExecutor, StorageWriteTask } from '../write-executor'
 import type { PostgresAnalysisGroupsRepository } from './PostgresAnalysisGroupsRepository'
 import type { PostgresAnnotationsRepository } from './PostgresAnnotationsRepository'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
+import type { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
 import type { PostgresCaseLifecycleRepository } from './PostgresCaseLifecycleRepository'
 import type { PostgresCaseMetadataRepository } from './PostgresCaseMetadataRepository'
 import type { PostgresCommentsMetricsRepository } from './PostgresCommentsMetricsRepository'
@@ -43,6 +44,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
     private readonly caseLifecycle: Pick<PostgresCaseLifecycleRepository, 'deleteCase'>,
     private readonly workflow: {
       audit: Pick<PostgresAuditLogRepository, 'append'>
+      buildReviews: Pick<PostgresBuildReviewRepository, 'resolveBuildReview'>
       tags: Pick<
         PostgresTagsRepository,
         | 'createTag'
@@ -118,6 +120,9 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         }
         return await this.caseLifecycle.deleteCase(caseId, { successor })
       }
+
+      case 'cases:resolveBuildReview':
+        return await this.workflow.buildReviews.resolveBuildReview(task.params[0], task.params[1])
 
       case 'case-metadata:upsert':
         return await this.caseMetadata.upsertCaseMetadata(task.params[0], task.params[1])

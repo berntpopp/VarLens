@@ -26,6 +26,7 @@ export type StorageWriteTask =
       /** `successor`: a published case that takes the deleted one's name in the same transaction. */
       params: [caseId: number, successor?: { id: number; name: string }]
     }
+  | { type: 'cases:resolveBuildReview'; params: [caseId: number, build: string] }
   | { type: 'case-metadata:upsert'; params: [caseId: number, updates: MetadataUpdates] }
   | { type: 'case-metadata:createCohort'; params: [params: CohortCreateParams] }
   | {

@@ -57,6 +57,7 @@
     <v-main id="main-content" tabindex="-1">
       <h1 class="visually-hidden" data-testid="view-heading">{{ viewTitle.heading }}</h1>
       <ChunkLoadErrorBanner />
+      <BuildReviewBanner @resolved="caseListRef?.refreshCases()" />
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -111,6 +112,7 @@ import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import A11yShell from './components/common/A11yShell.vue'
 import ChunkLoadErrorBanner from './components/common/ChunkLoadErrorBanner.vue'
+import BuildReviewBanner from './components/case/BuildReviewBanner.vue'
 import { useViewTitle } from './composables/useViewTitle'
 import { useThemePreference } from './composables/useThemePreference'
 import { installUrlStateSync } from './composables/useUrlState'

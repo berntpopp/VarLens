@@ -32,6 +32,9 @@ export class SqliteReadExecutor implements StorageReadExecutor {
 
         return this.databaseService.cases.getAvailableGenomeBuilds()
 
+      case 'cases:buildReviews':
+        return this.databaseService.cases.listBuildReviews()
+
       case 'case-metadata:get':
         if (this.dbPool !== null) {
           return await this.dbPool.run({ type: 'case-metadata:get', params: task.params })

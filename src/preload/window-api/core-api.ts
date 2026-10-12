@@ -49,7 +49,9 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       deleteAll: () => casesDomain.deleteAll(),
       deleteBatch: (ids) => casesDomain.deleteBatch(ids),
       startDelete: (target) => casesDomain.startDelete(target),
-      availableBuilds: () => casesDomain.availableBuilds()
+      availableBuilds: () => casesDomain.availableBuilds(),
+      buildReviews: () => casesDomain.buildReviews(),
+      resolveBuildReview: (caseId, build) => casesDomain.resolveBuildReview(caseId, build)
     },
 
     variants: {
