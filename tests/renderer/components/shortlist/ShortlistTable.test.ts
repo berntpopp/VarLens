@@ -76,6 +76,24 @@ describe('ShortlistTable', () => {
     expect(text).toContain('0.95') // score formatted
   })
 
+  it('shows evidence scores as signed points and legacy scores unchanged', () => {
+    const wrapper = mount(ShortlistTable, {
+      props: {
+        rows: [
+          row({
+            id: 1,
+            rank_score: 12.5,
+            rank_evidence: [{ kind: 'mode', id: 'ad', label: 'AD het', group: null, points: 12.5 }]
+          }),
+          row({ id: 2, rank: 2, rank_score: 0.734 })
+        ]
+      },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.find('[data-rank-tip="1"]').text()).toBe('+12.5')
+    expect(wrapper.find('[data-rank-tip="2"]').text()).toBe('0.73')
+  })
+
   it('renders the merged Links column as keyboard-reachable anchors (case/cohort parity)', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },

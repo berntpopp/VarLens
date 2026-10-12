@@ -10,7 +10,7 @@
  * (§3, §4, §5, §6)
  */
 
-import type { EvidenceRuleset } from './evidence-ruleset'
+import type { EvidenceContribution, EvidenceRuleset, ModeId } from './evidence-ruleset'
 import type { Variant, SortItem } from './database'
 import type { FilterState } from './filters'
 import type { FilterPreset } from './filter-presets'
@@ -85,6 +85,12 @@ export interface ScoredRow {
   rank_components: RankComponents
   rank_clinvar_pinned: boolean
   rank_starred_pinned: boolean
+  /** Evidence presets only: the inheritance-mode profile the row was scored under. */
+  rank_mode?: ModeId
+  /** Evidence presets only: mode and rule points; they sum to `rank_score`. */
+  rank_evidence?: EvidenceContribution[]
+  /** Evidence presets only: ids of the other het alleles of a possible compound het. */
+  rank_partners?: number[]
 }
 
 /**

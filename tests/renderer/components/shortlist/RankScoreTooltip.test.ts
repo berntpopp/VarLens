@@ -71,4 +71,37 @@ describe('RankScoreTooltip', () => {
     })
     expect(wrapper.text()).not.toContain('Pinned:')
   })
+
+  describe('evidence rows', () => {
+    const evidence = [
+      { kind: 'mode' as const, id: 'ar_comphet', label: 'AR compound het', group: null, points: 2 },
+      { kind: 'rule' as const, id: 'lof', label: 'Loss of function', group: 'effect', points: 5 },
+      { kind: 'rule' as const, id: 'syn', label: 'Synonymous', group: 'effect', points: -0.5 }
+    ]
+    const mountEvidence = (partners: number[]): ReturnType<typeof mount> =>
+      mount(RankScoreTooltip, {
+        props: { score: 6.5, components: componentsFixture, pinned: null, evidence, partners },
+        global: { plugins: [vuetify] }
+      })
+
+    it('lists the mode first, then each contribution with signed points', () => {
+      const rows = mountEvidence([]).findAll('.rank-tooltip__row')
+      expect(rows.map((r) => r.findAll('span').map((x) => x.text()))).toEqual([
+        ['AR compound het', '+2.0'],
+        ['Loss of function', '+5.0'],
+        ['Synonymous', '-0.5']
+      ])
+      const text = mountEvidence([]).text()
+      expect(text).toContain('Evidence score: +6.5')
+      expect(text).not.toContain('Pathogenicity')
+      expect(text).not.toContain('compound heterozygous')
+    })
+
+    it('names possible compound heterozygosity with the partner count', () => {
+      expect(mountEvidence([7]).text()).toContain(
+        'Possible compound heterozygous (with 1 other variant)'
+      )
+      expect(mountEvidence([7, 9]).text()).toContain('(with 2 other variants)')
+    })
+  })
 })
