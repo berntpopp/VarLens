@@ -58,7 +58,7 @@ Hover the **Score** to see the inheritance mode, every rule that contributed and
 
 ### How it was validated
 
-The ranking was tested by simulation: real ClinVar pathogenic/likely pathogenic variants (two-star review or better) were placed into three real exomes (varvis exports, kept on the local machine), with genotypes matching the disease's inheritance and benign ClinVar variants as decoys. With ClinVar hidden, the causal variant was among the first 10 rows in **36 %** of simulated cases (current *Tier 1 candidates*: 15 %); with ClinVar visible, in **97 %** (*Tier 1*: 87 %). Rare benign decoys almost never reached the first 10 rows. The full report, including every scenario and limitation, is in the repository under `.planning/artifacts/shortlist-sim/2026-10-12-full/report.md`.
+The ranking was tested by simulation: real ClinVar pathogenic/likely pathogenic variants (two-star review or better) were placed into three real exomes (varvis exports, kept on the local machine), with genotypes matching the disease's inheritance and benign ClinVar variants as decoys. With ClinVar hidden, the causal variant was among the first 10 rows in **36 %** of simulated cases (current *Tier 1 candidates*: 14 %); with ClinVar visible, in **97 %** (*Tier 1*: 87 %). Rare benign decoys almost never reached the first 10 rows. The full report, including every scenario and limitation, is in the repository under `.planning/artifacts/shortlist-sim/2026-10-12-full-v2/report.md`.
 
 **Limits.** Three immunology exomes from one laboratory; all three backgrounds are female, so X-linked recessive variants in males were not tested; when a case lacks inheritance and gene annotations the ranking can fall behind *Tier 1*. Treat it as a beta and review the evidence in the tooltip.
 
