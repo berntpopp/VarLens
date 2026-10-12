@@ -3,6 +3,7 @@ export { API_CONFIG } from './api.config'
 export { APP_CONFIG } from './app.config'
 export { DOMAIN_CONFIG } from './domain.config'
 export { UPLOAD_CONFIG } from './upload.config'
+export { IMPORT_MESSAGES } from './import.config'
 export {
   annotationSeverityRanks,
   clinvarRank,

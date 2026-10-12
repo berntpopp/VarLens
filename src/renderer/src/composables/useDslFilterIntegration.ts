@@ -80,13 +80,12 @@ export function useDslFilterIntegration(options: DslFilterIntegrationOptions) {
     () => (isDslMode.value || hasDslFilters.value) && dslInput.value.trim() !== appliedInput.value
   )
 
-  // FTS mode: auto-apply search on keystroke
+  // FTS mode: auto-apply search on keystroke. ftsQuery is '' in DSL mode, which
+  // drops the term applied while the field name was typed (`gene:` before `gene:=`)
   watch(ftsQuery, (query) => {
-    if (!isDslMode.value) {
-      searchQueryRef.value = query
-      // With DSL filters still active the plain text is only half applied (until Enter)
-      if (!hasDslFilters.value) appliedInput.value = query
-    }
+    searchQueryRef.value = query
+    // With DSL filters still active the plain text is only half applied (until Enter)
+    if (!hasDslFilters.value) appliedInput.value = query
   })
 
   /**

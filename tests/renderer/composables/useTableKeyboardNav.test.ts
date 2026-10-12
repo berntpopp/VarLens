@@ -3,6 +3,7 @@ import { ref, nextTick } from 'vue'
 import { withSetup } from '../../utils/test-helpers'
 import {
   isInputFocused,
+  isOverlayOpen,
   isTextEntryFocused,
   useTableKeyboardNav
 } from '@renderer/composables/useTableKeyboardNav'
@@ -362,5 +363,21 @@ describe('useTableKeyboardNav', () => {
       dialog.remove()
       expect(isInputFocused()).toBe(false)
     })
+  })
+})
+
+describe('isOverlayOpen', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  it.each([
+    ['an open dialog', 'v-dialog v-overlay--active', true],
+    ['an open menu', 'v-menu v-overlay--active', true],
+    ['a modal drawer (scrim)', 'v-navigation-drawer__scrim', true],
+    ['a non-modal panel', 'v-navigation-drawer v-navigation-drawer--active', false]
+  ])('%s → %s', (_label, className, expected) => {
+    const el = document.createElement('div')
+    el.className = className
+    document.body.appendChild(el)
+    expect(isOverlayOpen()).toBe(expected)
   })
 })

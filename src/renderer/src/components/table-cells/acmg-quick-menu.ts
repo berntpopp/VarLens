@@ -13,6 +13,8 @@ import { useSharedMenu, type SharedMenu } from './shared-menu'
 export interface AcmgMenuRequest {
   /** Classification currently shown for the row (highlighted in the menu). */
   current: AcmgClassification | null
+  /** Stored evidence decides the class: quick classes are disabled. */
+  locked: boolean
   select: (classification: AcmgClassification | null) => void
   openEvidence: () => void
 }

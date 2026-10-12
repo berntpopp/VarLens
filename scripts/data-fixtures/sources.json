@@ -280,8 +280,8 @@
         "kind": "local",
         "path": "tests/fixtures/import/columnar-format.json",
         "licenseOrTerms": "repo test fixture",
-        "sha256": "ef6f03b46da677da7f48981a13499a794c09ef460378b0429617c1dd5150ad02",
-        "sizeBytes": 11489
+        "sha256": "d22877f281fef6d482da4567acb553bccb35965c355789a2c1ecac3b25ce0e13",
+        "sizeBytes": 11639
       },
       "sourceType": {
         "container": "json",
@@ -293,8 +293,8 @@
           "id": "copy",
           "type": "copy",
           "output": "tests/.cache/public-data/generated/json/columnar-format.json",
-          "sha256": "ef6f03b46da677da7f48981a13499a794c09ef460378b0429617c1dd5150ad02",
-          "sizeBytes": 11489
+          "sha256": "d22877f281fef6d482da4567acb553bccb35965c355789a2c1ecac3b25ce0e13",
+          "sizeBytes": 11639
         }
       ],
       "varlensTarget": {

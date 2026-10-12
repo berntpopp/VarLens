@@ -66,6 +66,7 @@
           :has-comment="!!getGlobalComment(item.chr, item.pos, item.ref, item.alt)"
           :show-global-indicators="false"
           :read-only="!canWrite"
+          :acmg-locked="hasAcmgEvidence?.(item) === true"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -269,6 +270,8 @@ interface Props {
     alt: string
   ) => AcmgClassification | null
   getGlobalComment: (chr: string, pos: number, ref: string, alt: string) => string | null
+  /** Stored ACMG evidence locks the row's quick classes */
+  hasAcmgEvidence?: (item: CohortVariant) => boolean
 }
 
 const emit = defineEmits<{

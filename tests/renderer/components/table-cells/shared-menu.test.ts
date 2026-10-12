@@ -3,6 +3,10 @@
  * the case + cohort tables, shortlist row actions).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import {
+  ACMG_CLASSIFICATIONS,
+  ACMG_EVIDENCE_LOCK_HINT
+} from '../../../../src/shared/config/domain.config'
 import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
@@ -116,6 +120,27 @@ describe('AnnotationsCell with a table-provided ACMG menu', () => {
     await wrapper.findAll('button.annotation-btn')[1].trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('Evidence editor')
+    wrapper.unmount()
+  })
+
+  it('disables the quick classes when the row has stored evidence', async () => {
+    const wrapper = mount(AnnotationsCell, {
+      props: { ...props, acmgClassification: 'Pathogenic', acmgLocked: true },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    await wrapper.findAll('button.annotation-btn')[1].trigger('click')
+    await flushPromises()
+    const chips = [...document.body.querySelectorAll('.v-overlay .v-chip')]
+    expect(chips.length).toBe(ACMG_CLASSIFICATIONS.length)
+    for (const chip of chips) {
+      expect(chip.classList).toContain('v-chip--disabled')
+      ;(chip as HTMLElement).click()
+    }
+    expect(document.body.textContent).toContain(ACMG_EVIDENCE_LOCK_HINT)
+    expect(document.body.textContent).not.toContain('Clear classification')
+    expect(document.body.textContent).toContain('Evidence editor')
+    expect(wrapper.emitted('acmg-select')).toBeUndefined()
     wrapper.unmount()
   })
 })

@@ -4,6 +4,10 @@ import { pipeline } from 'node:stream/promises'
 import { FieldMapper, createFieldMapper } from '../../../src/main/import/transforms/FieldMapper'
 import type { DataDictionaries } from '../../../src/main/import/config/fieldMapping'
 import type { RawVariantRow } from '../../../src/main/import/types'
+import { join } from 'node:path'
+import { detectFormat } from '../../../src/main/import/format-detection'
+import { IMPORT_MESSAGES } from '../../../src/shared/config'
+import { createMapperPipeline } from '../../../src/main/workers/import-mapper-pipeline'
 
 // Mock dictionaries matching test data
 const mockDictionaries: DataDictionaries = {
@@ -298,6 +302,39 @@ describe('FieldMapper', () => {
       const results = await runTransform(rows)
 
       expect(results).toHaveLength(2)
+    })
+  })
+
+  describe('row/header length check (I-01)', () => {
+    it('fails the import when a row is shorter than the header', async () => {
+      const mapper = createFieldMapper(mockDictionaries, undefined, undefined, undefined, 110)
+      await expect(
+        pipeline(
+          Readable.from([{ key: 0, value: createTestRow({}) }]),
+          mapper,
+          new Writable({ objectMode: true, write: (_c, _e, cb) => cb() })
+        )
+      ).rejects.toThrow(IMPORT_MESSAGES.rowWidthMismatch(1, 109, 110))
+    })
+
+    it('accepts a row whose length matches the header', async () => {
+      const out: unknown[] = []
+      await pipeline(
+        Readable.from([{ key: 0, value: createTestRow({}) }]),
+        createFieldMapper(mockDictionaries, undefined, undefined, undefined, 109),
+        new Writable({ objectMode: true, write: (c, _e, cb) => void (out.push(c), cb()) })
+      )
+      expect(out).toHaveLength(1)
+    })
+
+    it('maps the repaired columnar fixture without shifting columns', async () => {
+      const file = join(__dirname, '../../fixtures/import/columnar-format.json.gz')
+      const formatInfo = await detectFormat(file)
+      const rows: Record<string, unknown>[] = []
+      for await (const r of await createMapperPipeline(file, formatInfo)) rows.push(r)
+      expect(rows).toHaveLength(50)
+      expect(rows[0]).toMatchObject({ cdna: 'c.5123C>T', gnomad_af: 0.00001, cadd: 32 })
+      expect(rows[0].clinvar).toBe('pathogenic')
     })
   })
 

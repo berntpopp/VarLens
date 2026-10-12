@@ -85,18 +85,21 @@ export function evidenceFingerprint(json: string | null | undefined): string {
   return JSON.stringify(rest)
 }
 
-/** True when the stored evidence has confirmed criteria, notes or an override. */
-export function hasMeaningfulAcmgEvidence(json: string | null | undefined): boolean {
+const hasConfirmed = (list: unknown): boolean =>
+  Array.isArray(list) &&
+  list.some((c) => typeof c === 'string' || (c as { confirmed?: unknown })?.confirmed === true)
+
+/** True when confirmed criteria or an override decide the class (a note alone does not). */
+export function hasDecidingAcmgEvidence(json: string | null | undefined): boolean {
   const parsed = parseEvidence(json)
   if (parsed === null) return false
-  const confirmed = (list: unknown): boolean =>
-    Array.isArray(list) &&
-    list.some((c) => typeof c === 'string' || (c as { confirmed?: unknown })?.confirmed === true)
-  const notes = typeof parsed.notes === 'string' ? parsed.notes.trim() : ''
   return (
-    confirmed(parsed.pathogenic) ||
-    confirmed(parsed.benign) ||
-    notes !== '' ||
-    parsed.is_override === true
+    hasConfirmed(parsed.pathogenic) || hasConfirmed(parsed.benign) || parsed.is_override === true
   )
+}
+
+/** True when the stored evidence has confirmed criteria, notes or an override. */
+export function hasMeaningfulAcmgEvidence(json: string | null | undefined): boolean {
+  const notes = parseEvidence(json)?.notes
+  return hasDecidingAcmgEvidence(json) || (typeof notes === 'string' && notes.trim() !== '')
 }

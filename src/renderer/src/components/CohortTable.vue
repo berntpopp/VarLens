@@ -77,6 +77,7 @@
       :is-global-starred="isGlobalStarred"
       :get-global-acmg-classification="getGlobalAcmgClassification"
       :get-global-comment="getGlobalComment"
+      :has-acmg-evidence="hasAcmgEvidence"
       @update:options="loadPage"
       @row-click="handleRowClick"
       @star-toggle="handleStarToggle"
@@ -342,6 +343,9 @@ const { requestReload: softRefresh } = useDeferredReload(isActive, async () => {
 // Local state
 const selectedVariantKey = ref<string | null>(null)
 const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+// Stable reference: an inline arrow would re-render the whole data table on every render
+const hasAcmgEvidence = (item: CohortVariant): boolean =>
+  annotationDialogsRef.value?.hasAcmgEvidence(item) === true
 const cohortDataTableRef = ref<InstanceType<typeof CohortDataTable> | null>(null)
 
 // Export state

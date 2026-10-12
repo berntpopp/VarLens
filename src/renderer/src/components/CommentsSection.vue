@@ -22,7 +22,7 @@
       <InlineEditableText
         :key="variantKey(variant)"
         :model-value="globalComment"
-        placeholder="Add a global comment..."
+        :placeholder="COMMENT_PLACEHOLDERS.global"
         :loading="globalSaving"
         :readonly="!canWrite"
         :save="handleGlobalSave"
@@ -55,7 +55,7 @@
       <InlineEditableText
         :key="variantKey(variant)"
         :model-value="perCaseComment"
-        placeholder="Add a case-specific comment..."
+        :placeholder="COMMENT_PLACEHOLDERS.perCase"
         :loading="perCaseSaving"
         :readonly="!canWrite"
         :save="handlePerCaseSave"
@@ -90,6 +90,7 @@ import { ref, computed } from 'vue'
 import { useAnnotations } from '../composables/useAnnotations'
 import { variantKey } from '../composables/annotation-cache'
 import InlineEditableText from './InlineEditableText.vue'
+import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import { mdiDelete } from '@mdi/js'

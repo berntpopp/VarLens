@@ -206,7 +206,7 @@
         variant="text"
         size="x-small"
         color="error"
-        class="ml-auto"
+        class="applied-filters-bar__clear ml-auto"
         @click="clearAll"
       >
         Clear all
@@ -354,7 +354,10 @@ function clearAll(): void {
   min-height: 37px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  /* One line that scrolls sideways: a wrapping row pushed the table down. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 4px;
   padding: 6px 16px;
   background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, transparent);
@@ -366,8 +369,20 @@ function clearAll(): void {
   background: transparent;
 }
 
+.applied-filters-bar > * {
+  flex-shrink: 0;
+}
+
 .applied-filters-bar .v-chip {
   max-width: 200px;
+}
+
+/* Stays in view at the row's right edge while the chips scroll beneath it;
+   -16px = the bar's right padding, which chips would otherwise show through. */
+.applied-filters-bar__clear {
+  position: sticky;
+  right: -16px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, rgb(var(--v-theme-surface)));
 }
 
 .applied-filters-bar .v-chip span {

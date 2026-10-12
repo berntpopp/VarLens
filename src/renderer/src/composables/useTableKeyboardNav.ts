@@ -41,13 +41,25 @@ export function isTextEntryFocused(): boolean {
 }
 
 /**
- * Table row shortcuts bail out on text entry and on a focused link: a
- * focused link cell owns Enter, so it must not also open the row panel.
- * An open dialog owns the keyboard: its keys must not act on the table behind.
+ * An open dialog or menu owns the keyboard. A menu opened by mouse leaves
+ * focus on its activator, so this cannot be read from the focused element.
+ */
+export function isPopupOpen(): boolean {
+  return document.querySelector('.v-dialog.v-overlay--active, .v-menu.v-overlay--active') !== null
+}
+
+/** A popup or a modal drawer (one with a scrim) owns the keyboard. */
+export function isOverlayOpen(): boolean {
+  return isPopupOpen() || document.querySelector('.v-navigation-drawer__scrim') !== null
+}
+
+/**
+ * Table row shortcuts bail out on text entry, on an open dialog/menu and on a
+ * focused link: a focused link cell owns Enter, so it must not also open the
+ * row panel.
  */
 export function isInputFocused(): boolean {
-  if (isTextEntryFocused()) return true
-  if (document.querySelector('.v-dialog.v-overlay--active') !== null) return true
+  if (isTextEntryFocused() || isOverlayOpen()) return true
   const el = document.activeElement
   return el !== null && el.tagName.toLowerCase() === 'a' && el.hasAttribute('href')
 }

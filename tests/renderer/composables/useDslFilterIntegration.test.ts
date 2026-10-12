@@ -77,6 +77,16 @@ describe('useDslFilterIntegration', () => {
     expect(dsl.isDraftPending.value).toBe(true)
   })
 
+  it('drops the plain search left over from typing a DSL field name key by key', async () => {
+    const { dsl, searchQueryRef } = setup()
+    for (const text of ['g', 'ge', 'gene', 'gene:', 'gene:=', 'gene:=:', 'gene:=:B']) {
+      await type(dsl, text)
+    }
+    expect(dsl.isDslMode.value).toBe(true)
+    expect(searchQueryRef.value).toBe('')
+    expect(dsl.isDraftPending.value).toBe(true)
+  })
+
   it('activates a referenced preset', async () => {
     const { dsl, activatePreset } = setup()
     await type(dsl, '@rare_pathogenic AND cadd:>=:20')

@@ -41,6 +41,12 @@
       />
     </div>
 
+    <!-- ClinVar + per-sample call quality (case rows only carry a call) -->
+    <div v-if="variant.clinvar || callLine" class="d-flex align-center flex-wrap ga-2 mt-1">
+      <ClinVarCell v-if="variant.clinvar" :significance="variant.clinvar" />
+      <span v-if="callLine" data-testid="call-line" class="variant-data-mono">{{ callLine }}</span>
+    </div>
+
     <!-- rsID - From VEP colocated_variants -->
     <div class="d-flex align-center mt-2">
       <span class="text-body-small text-muted">rsID:</span>
@@ -68,8 +74,10 @@ import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
-import { formatHgvs } from '../utils/formatters'
-import { NO_GENE_LABEL } from '../config/displayConfig'
+import { formatHgvs, variantName } from '../utils/formatters'
+import { ClinVarCell } from './table-cells/simple-cells'
+import { CALL_QUALITY_FIELDS } from '../config/uiCopyConfig'
+import { INLINE_SEPARATOR } from '../config/displayConfig'
 
 interface Props {
   variant: Variant | CohortVariant
@@ -91,17 +99,26 @@ const isFullVariant = computed(() => {
   return 'transcript' in props.variant
 })
 
+/** "GT 0/1 · DP 34 · …" from the non-empty call fields; null for cohort rows. */
+const callLine = computed(() => {
+  if (!('gt_num' in props.variant)) return null
+  const row = props.variant as unknown as Record<string, unknown>
+  const parts = CALL_QUALITY_FIELDS.flatMap(({ key, label, digits }) => {
+    const value = row[key]
+    if (value === null || value === undefined || value === '') return []
+    const text = typeof value === 'number' && digits !== undefined ? value.toFixed(digits) : value
+    return [`${label}\u00a0${String(text)}`] // a field never wraps between label and value
+  })
+  return parts.length > 0 ? parts.join(INLINE_SEPARATOR) : null
+})
+
 // Create separate clipboard instances for each copy operation
 const { copy: copyHgvsText, copied: hgvsCopied } = useClipboard()
 const { copy: copyVariantText, copied: variantCopied } = useClipboard()
 const { copy: copyRsIdText, copied: rsIdCopied } = useClipboard()
 
 // An STR call has no gene symbol but a repeat id (e.g. FMR1_CGG) that names it
-const title = computed(() => {
-  const repeatId = (props.variant as { _str_repeat_id?: string | null })._str_repeat_id
-  const names = [props.variant.gene_symbol, repeatId]
-  return names.find((name) => name !== null && name !== undefined && name !== '') ?? NO_GENE_LABEL
-})
+const title = computed(() => variantName(props.variant))
 
 // Same string for display and Copy HGVS (VEP values already carry the versioned transcript)
 const hgvsText = computed(() => {

@@ -219,6 +219,8 @@ describe('App.vue', () => {
       // Once answered the draft is gone (applied / discarded) or kept (asked again).
       const guard = vi.fn<() => Promise<boolean> | null>(() => null).mockReturnValueOnce(answer)
       state.setPanelLeaveGuard(guard)
+      await flushPromises() // the sidebar sync of that selection
+      listSelectCase.mockClear()
       return { caseList: wrapper.findComponent({ name: 'CaseList' }), guard }
     }
 
@@ -262,6 +264,21 @@ describe('App.vue', () => {
       caseList.vm.$emit('case-selected', 1, 'A', 0, 0)
       await flushPromises()
       expect(guard).toHaveBeenCalledTimes(1)
+    })
+
+    it('moves the sidebar highlight with a programmatic case change (URL / Back)', async () => {
+      const { caseList } = await mountWithDraft(Promise.resolve(true))
+      listSelectCase.mockReturnValueOnce(true)
+      state.selectCase({ caseId: 3, caseName: 'C' }) // e.g. the URL restore of Back
+      await flushPromises()
+      expect(listSelectCase).toHaveBeenCalledExactlyOnceWith(3)
+      // The list reports the highlight it was given: no prompt, nothing reopened
+      const guard = vi.fn(() => new Promise<boolean>(() => {}))
+      state.setPanelLeaveGuard(guard)
+      caseList.vm.$emit('case-selected', 3, 'C', 0, 0)
+      await flushPromises()
+      expect(guard).not.toHaveBeenCalled()
+      expect(state.selectedCaseId.value).toBe(3)
     })
   })
 

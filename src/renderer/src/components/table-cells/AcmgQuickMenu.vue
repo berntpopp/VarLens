@@ -18,10 +18,14 @@
           size="small"
           label
           class="cursor-pointer"
+          :disabled="request.locked"
           @click="select(cls)"
         >
           {{ ACMG_ABBREV[cls] }}
         </v-chip>
+      </div>
+      <div v-if="request.locked" class="text-caption text-medium-emphasis mb-1">
+        {{ ACMG_EVIDENCE_LOCK_HINT }}
       </div>
       <v-divider class="mb-1" />
       <v-list density="compact" class="pa-0">
@@ -33,7 +37,7 @@
             Evidence editor...
           </v-list-item-title>
         </v-list-item>
-        <v-list-item v-if="current" class="px-1" @click="select(null)">
+        <v-list-item v-if="current && !request.locked" class="px-1" @click="select(null)">
           <v-list-item-title class="text-caption text-medium-emphasis">
             Clear classification
           </v-list-item-title>
@@ -46,7 +50,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { mdiClipboardCheckOutline } from '@mdi/js'
-import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import {
+  ACMG_EVIDENCE_LOCK_HINT,
+  type AcmgClassification
+} from '../../../../shared/config/domain.config'
 import { ACMG_ABBREV, ACMG_CLASSIFICATIONS, ACMG_COLORS } from '../../composables/useAnnotations'
 import type { AcmgQuickMenuState } from './acmg-quick-menu'
 
@@ -57,6 +64,7 @@ const { open, activator, payload: request } = props.state
 const current = computed(() => request.value?.current ?? null)
 
 function select(classification: AcmgClassification | null): void {
+  if (request.value?.locked === true) return
   request.value?.select(classification)
 }
 </script>

@@ -24,6 +24,7 @@
  */
 import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -88,6 +89,8 @@ function manifestMatches() {
     return false
   }
   if (manifest.totalCases !== TARGET_CASES) return false
+  // A changed base fixture (e.g. a repaired row layout) must regenerate the cases
+  if (manifest.baseFixtureSha256 !== baseFixtureSha256()) return false
   if (!Array.isArray(manifest.cases) || manifest.cases.length !== TARGET_CASES) return false
   const total = manifest.totalVariants
   if (typeof total !== 'number') return false
@@ -96,6 +99,10 @@ function manifestMatches() {
   return manifest.cases.every(
     (entry) => typeof entry.filePath === 'string' && existsSync(join(REPO_ROOT, entry.filePath))
   )
+}
+
+function baseFixtureSha256() {
+  return createHash('sha256').update(readFileSync(BASE_FIXTURE)).digest('hex')
 }
 
 function relFromRoot(absPath) {
@@ -141,6 +148,7 @@ function main() {
     generatedAt: new Date().toISOString(),
     totalCases: cases.length,
     totalVariants,
+    baseFixtureSha256: baseFixtureSha256(),
     cases
   }
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n')

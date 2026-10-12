@@ -97,6 +97,9 @@ export const SCORE_THRESHOLDS: Record<string, { green: number; orange: number; r
   spliceai: { green: 0.2, orange: 0.5, red: 0.8 }
 }
 
+/** Why the quick-classify chips are disabled: stored evidence decides the class. */
+export const ACMG_EVIDENCE_LOCK_HINT = 'Set from evidence: use Override in the Evidence editor.'
+
 export const DOMAIN_CONFIG = {
   MAX_CADD_SCORE: 60
 } as const

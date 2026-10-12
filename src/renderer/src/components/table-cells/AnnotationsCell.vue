@@ -102,6 +102,8 @@ interface Props {
   annotationScope?: AnnotationScope
   /** Viewer role: star and ACMG are display-only (comment still opens read-only). */
   readOnly?: boolean
+  /** Stored ACMG evidence decides the class: the quick classes are disabled. */
+  acmgLocked?: boolean
 }
 
 interface Emits {
@@ -159,6 +161,7 @@ function openAcmgMenu(): void {
   if (!acmgButtonRef.value) return
   menu.toggle(acmgButtonRef.value, {
     current: displayAcmg.value ?? null,
+    locked: props.acmgLocked,
     select: (classification) => emit('acmg-select', classification),
     openEvidence: () => emit('acmg-evidence-click')
   })

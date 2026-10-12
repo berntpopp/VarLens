@@ -117,8 +117,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
     await page.waitForTimeout(1000)
 
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
     await expect(drawer).toBeVisible({ timeout: 5000 })
 
     await page.screenshot({ path: testInfo.outputPath('05-sidebar-open.png') })
@@ -127,8 +126,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('06 - sidebar: verify ACMG section with quick-classify chips', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Scroll to ACMG section
     const acmgTitle = drawer.locator('text=ACMG Classification')
@@ -151,8 +149,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('07 - sidebar: quick-classify as VUS', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
     const acmgSection = drawer.locator('.acmg-section')
 
     // Click VUS chip
@@ -172,8 +169,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('08 - sidebar: clear classification via X chip', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
     const acmgSection = drawer.locator('.acmg-section')
 
     // Click the X (clear) chip
@@ -198,8 +194,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('09 - sidebar: open evidence editor', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Click Evidence editor accordion
     const accordionTitle = drawer.locator('.v-expansion-panel-title:has-text("Evidence editor")')
@@ -216,8 +211,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('10 - evidence: PVS1 alone = VUS (ACMG/AMP 2015)', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Click PVS1
     const pvs1 = drawer.locator('button:has-text("PVS1")').first()
@@ -240,8 +234,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('11 - evidence: PVS1 + PM2 = Likely Pathogenic', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Click PM2
     const pm2 = drawer.locator('button:has-text("PM2")').first()
@@ -260,8 +253,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('12 - evidence: PVS1 + PM2 + PP3 = Pathogenic', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Click PP3
     const pp3 = drawer.locator('button:has-text("PP3")').first()
@@ -280,8 +272,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('13 - evidence: verify deprecated PP5/BP6 styling', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     const pp5 = drawer.locator('.criteria-btn--deprecated:has-text("PP5")')
     const bp6 = drawer.locator('.criteria-btn--deprecated:has-text("BP6")')
@@ -296,8 +287,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
   // eslint-disable-next-line no-empty-pattern
   test('14 - evidence: clear all codes', async ({}, testInfo) => {
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Toggle off PVS1, PM2, PP3
     for (const code of ['PVS1', 'PM2', 'PP3']) {
@@ -371,8 +361,7 @@ test.describe.serial('ACMG Classification Pathways', () => {
     await page.waitForTimeout(1000)
 
     const drawer = page
-      .locator('.v-navigation-drawer--active')
-      .filter({ hasText: 'Variant Details' })
+      .locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
 
     // Open evidence editor
     const accordionTitle = drawer.locator('.v-expansion-panel-title:has-text("Evidence editor")')

@@ -478,6 +478,7 @@ defineExpose({
       v-if="shortlistVisited && selectedCaseId !== null"
       v-show="selectedVariantType === 'shortlist'"
       :case-id="selectedCaseId"
+      :interactive="selectedVariantType === 'shortlist'"
       class="shortlist-region"
       @row-click="handleRowClick"
       @open-in-tab="

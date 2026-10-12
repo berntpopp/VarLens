@@ -351,9 +351,11 @@ useShellNavigation({
   closePanelWithoutAsking
 })
 
-// Clear filters on case change
-watch(selectedCaseId, () => {
+// Clear filters on case change; URL restore, Back, delete and import move the
+// sidebar highlight too, and the list's echo of it must not reopen the case
+watch(selectedCaseId, (id) => {
   resetCaseFilters()
+  if (caseListRef.value?.selectCase(id) === true && id !== null) restoredCaseId = id
 })
 
 const { handleDatabaseSwitched, handleImportComplete, handleBatchImportComplete } =

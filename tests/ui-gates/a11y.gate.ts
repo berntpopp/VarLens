@@ -1,5 +1,5 @@
 /**
- * Accessibility gate: axe-core (WCAG 2.0/2.1/2.2 A + AA) on the five key
+ * Accessibility gate: axe-core (WCAG 2.0/2.1/2.2 A + AA) on the key
  * states of the built web app, in light AND dark theme. Any serious or
  * critical violation fails the gate. Moderate/minor findings are recorded in
  * the JSON summary but do not fail.
