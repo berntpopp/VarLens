@@ -12,6 +12,7 @@ import { isValidInfoKey } from '../filters/info-field-filter'
 import {
   CANONICAL_EVIDENCE_FIELDS,
   DEFAULT_IMPORT_FIELD_PROFILE,
+  IMPORT_FIELD_NAME_LIMITS,
   MAX_INFO_JSON_CHARS,
   MAX_INFO_JSON_FIELDS,
   type CanonicalEvidenceField,
@@ -109,6 +110,10 @@ export class FieldProfileResolver {
     JSON: new Map()
   }
   private readonly taken = new Set<string>(CANONICAL_KEYS)
+  /** Next suffix to try per normalised base, so collisions cost O(1) each. */
+  private readonly nextSuffix = new Map<string, number>()
+  private distinctFields = 0
+  private nameChars = 0
   private readonly used = new Map<string, Set<string>>()
 
   constructor(readonly profile: ImportFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE) {}
@@ -145,10 +150,28 @@ export class FieldProfileResolver {
     const byName = this.resolved[origin]
     let field = byName.get(name)
     if (field === undefined) {
+      this.countNewField(name)
       field = { ...this.decide(origin, name), label: sourceLabel(origin, name), noted: false }
       byName.set(name, field)
     }
     return field
+  }
+
+  /** Field names come from the file: bound how many, and how much text, one import keeps. */
+  private countNewField(name: string): void {
+    const { maxDistinctFields, maxNameChars } = IMPORT_FIELD_NAME_LIMITS
+    if (this.distinctFields + 1 > maxDistinctFields) {
+      throw new ImportFieldBudgetError(
+        `The file has more than ${maxDistinctFields} distinct annotation fields`
+      )
+    }
+    if (this.nameChars + name.length > maxNameChars) {
+      throw new ImportFieldBudgetError(
+        `The file's annotation field names exceed ${maxNameChars} characters in total`
+      )
+    }
+    this.distinctFields += 1
+    this.nameChars += name.length
   }
 
   isKept(origin: FieldOrigin, name: string): boolean {
@@ -172,10 +195,12 @@ export class FieldProfileResolver {
 
   private uniqueKey(base: string): string {
     let key = base
-    for (let n = 2; this.taken.has(key); n++) {
-      const suffix = `_${n}`
+    let n = this.nextSuffix.get(base) ?? 2
+    while (this.taken.has(key)) {
+      const suffix = `_${n++}`
       key = base.slice(0, MAX_KEY_CHARS - suffix.length) + suffix
     }
+    this.nextSuffix.set(base, n)
     this.taken.add(key)
     return key
   }

@@ -55,6 +55,16 @@ export const DEFAULT_IMPORT_FIELD_PROFILE: ImportFieldProfile = {
   }
 }
 
+/**
+ * Per-import bound on the source field names a resolver keeps (names come
+ * from untrusted files): distinct fields, and their total characters. A VCF
+ * header allows 4,096 INFO plus 256 CSQ / ANN fields.
+ */
+export const IMPORT_FIELD_NAME_LIMITS = {
+  maxDistinctFields: 8_192,
+  maxNameChars: 1024 * 1024
+} as const
+
 /** Per-variant `info_json` budget; the VCF reader enforces the same numbers on raw INFO. */
 export const MAX_INFO_JSON_FIELDS = 4_096
 export const MAX_INFO_JSON_CHARS = 1024 * 1024
