@@ -16,7 +16,7 @@ export function getScoreColor(scoreName: string, value: number | null): string {
   if (value === null || value === undefined || threshold === undefined) return 'muted'
   if (value >= threshold.red) return 'error'
   if (value >= threshold.orange) return 'warning'
-  if (value >= threshold.green) return 'success'
+  if (value >= threshold.green) return 'info'
   return 'muted'
 }
 

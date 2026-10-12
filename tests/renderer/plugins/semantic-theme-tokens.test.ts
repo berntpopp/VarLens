@@ -100,7 +100,20 @@ const usedTokens = [
 /** Ordered scales whose neighbours (and all other pairs) must stay distinguishable. */
 const SCALES = {
   acmg: ACMG_CLASSIFICATIONS.map((c) => ACMG_COLORS[c]),
-  impact: ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'].map((i) => IMPACT_COLORS[i])
+  impact: ['HIGH', 'MODERATE', 'LOW', 'MODIFIER'].map((i) => IMPACT_COLORS[i]),
+  score: [30, 17, 12, 0].map((v) => getScoreColor('cadd', v)),
+  clinvar: [
+    ...new Set([...CLINVAR_CATEGORIES.map((c) => c.color as string), NEUTRAL_SEVERITY_COLOR])
+  ]
+}
+
+function expectSeparated(label: string, colors: Record<string, string>, keys: string[]): void {
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const pair = `${label} ${keys[i]}~${keys[j]}`
+      expect(minDeltaE(colors[keys[i]], colors[keys[j]]), pair).toBeGreaterThanOrEqual(10)
+    }
+  }
 }
 
 describe('semantic theme tokens', () => {
@@ -112,16 +125,10 @@ describe('semantic theme tokens', () => {
     }
   })
 
-  it.each(THEMES)('%s keeps every ACMG and impact pair at ΔE00 ≥ 10 under CVD', (theme, mode) => {
+  it.each(THEMES)('%s keeps every pair of each scale at ΔE00 ≥ 10 under CVD', (theme, mode) => {
     const colors = themeColors(theme, mode)
-    for (const [scale, tokens] of Object.entries(SCALES)) {
-      for (let i = 0; i < tokens.length; i++) {
-        for (let j = i + 1; j < tokens.length; j++) {
-          const pair = `${theme} ${scale} ${tokens[i]}~${tokens[j]}`
-          expect(minDeltaE(colors[tokens[i]], colors[tokens[j]]), pair).toBeGreaterThanOrEqual(10)
-        }
-      }
-    }
+    for (const [scale, tokens] of Object.entries(SCALES))
+      expectSeparated(`${theme} ${scale}`, colors, tokens)
   })
 
   it('filter chips use the row-chip colour of each ACMG class', () => {
@@ -139,5 +146,12 @@ describe('semantic theme tokens', () => {
       CLINVAR_COLORS.likely_benign,
       CLINVAR_COLORS.benign
     ]).toEqual(SCALES.acmg.map((token) => light[token as keyof typeof light]))
+  })
+
+  it('protein-plot ClinVar marks are 3:1 on white and stay apart under CVD', () => {
+    for (const [key, hex] of Object.entries(CLINVAR_COLORS)) {
+      expect(Color.contrast(hex, '#FFFFFF', 'WCAG21'), key).toBeGreaterThanOrEqual(3)
+    }
+    expectSeparated('protein', CLINVAR_COLORS, Object.keys(CLINVAR_COLORS))
   })
 })
