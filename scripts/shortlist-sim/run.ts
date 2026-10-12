@@ -3,6 +3,7 @@
  *
  *   npx jiti scripts/shortlist-sim/run.ts --run <name> [--quick] [--workers N]
  *        [--cadd-impute on|off] [--scenarios primary,clinvar_visible,...] [--concordance <file>]
+ *        [--template varvis|full]   (full: #597 template, paired with the varvis template)
  *
  * Writes runs/<run>/{results.jsonl, manifest.json, protocol.lock.json, ruleset-tuned.json,
  * support.json} under _data/shortlist-sim (outside the repository). Background rows never leave
@@ -12,7 +13,6 @@ import { availableParallelism } from 'node:os'
 import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { compileRuleset } from '../../src/main/services/scoring/evidence'
-import { VARVIS_EVIDENCE_TEMPLATE } from '../../src/shared/config/evidence-rulesets/varvis-template'
 import { RUNS_DIR } from './common/paths'
 import { rng, shuffle } from './common/rng'
 import type { CaseResult, RunManifest, ScenarioId } from './common/types'
@@ -24,6 +24,8 @@ import type { Job, JobResult } from './sim/jobs'
 import { runJobs } from './sim/pool'
 import { canonicalJson, phenoEnrichedGenes, tuneFolds } from './sim/protocol'
 import { SCENARIOS } from './sim/scenarios'
+import { addExtraFields } from './sim/full-inputs'
+import { isTemplateId, TEMPLATES, type TemplateId, type TunedByTemplate } from './sim/templates'
 import { buildScorers, CANDIDATE_SCORER, REFERENCE_SCORER } from './sim/scorers'
 import { geneFolds } from './stats/folds'
 
@@ -44,6 +46,13 @@ interface Args {
   caddImpute: boolean
   scenarios: ScenarioId[]
   concordance?: string
+  template: TemplateId
+}
+
+function templateArg(t: string): TemplateId {
+  if (!isTemplateId(t))
+    throw new Error(`--template must be one of ${Object.keys(TEMPLATES).join(', ')}`)
+  return t
 }
 
 function parseArgs(argv: string[]): Args {
@@ -62,7 +71,8 @@ function parseArgs(argv: string[]): Args {
     workers: Number(arg('--workers') ?? Math.min(6, availableParallelism())),
     caddImpute: (arg('--cadd-impute') ?? 'on') !== 'off',
     scenarios,
-    concordance: arg('--concordance')
+    concordance: arg('--concordance'),
+    template: templateArg(arg('--template') ?? 'varvis')
   }
 }
 
@@ -98,6 +108,9 @@ async function main(argv: string[]): Promise<void> {
   const inputs = loadInputs(args.concordance)
   let backgrounds = await loadBackgrounds()
   if (args.quick) backgrounds = backgrounds.slice(0, 1)
+  const extraCoverage =
+    args.template === 'full' ? await addExtraFields(inputs, backgrounds) : undefined
+  const templates: TemplateId[] = args.template === 'full' ? ['full', 'varvis'] : ['varvis']
   const caseBgs = await Promise.all(
     backgrounds.map(async (bg) => ({
       info: describeBackground(bg.caseLabel, bg.rows),
@@ -118,7 +131,8 @@ async function main(argv: string[]): Promise<void> {
   const init = {
     backgrounds,
     seed: SEEDS.scenario,
-    disabledGroups: inputs.acceptance.disabledGroups
+    disabledGroups: inputs.acceptance.disabledGroups,
+    template: args.template
   }
   const byBg = (label: string): SimCase[] => cases.filter((c) => c.bg === label)
 
@@ -127,28 +141,39 @@ async function main(argv: string[]): Promise<void> {
     (['primary', 'clinvar_visible'] as const).flatMap((scenario) => {
       const parts = chunks(bg.caseLabel, scenario, byBg(bg.caseLabel))
       if (parts.length === 0) parts.push({ bg: bg.caseLabel, scenario, cases: [] })
-      return parts.map((p, i) => ({ kind: 'assign' as const, ...p, withBackground: i === 0 }))
+      return parts.map((p, i) => ({
+        kind: 'assign' as const,
+        ...p,
+        withBackground: i === 0,
+        templates
+      }))
     })
   )
   const assigned = (await runJobs(assignJobs, init, args.workers, progress('assign'))) as Array<
     Extract<JobResult, { kind: 'assign' }>
   >
-  const tuneInput = {
-    positives: assigned.flatMap((r) => r.positives),
-    background: assigned.flatMap((r) => r.background)
-  }
-  const overlaps: Record<string, number> = {}
-  for (const r of assigned)
-    for (const [g, n] of Object.entries(r.overlaps)) overlaps[g] = (overlaps[g] ?? 0) + n
-  t = lap('assign', t)
-
   const reps = args.quick ? 200 : 2000
-  const tuned = tuneFolds(tuneInput, folds, FOLDS, inputs.acceptance.disabledGroups, {
-    reps,
-    seed: SEEDS.bootstrap,
-    run: args.run
-  })
-  t = lap('tune', t)
+  const overlaps: Record<string, Record<string, number>> = {}
+  const tunings = Object.fromEntries(
+    templates.map((tid) => {
+      const input = {
+        positives: assigned.flatMap((r) => r.positives[tid] ?? []),
+        background: assigned.flatMap((r) => r.background[tid] ?? [])
+      }
+      const o: Record<string, number> = {}
+      for (const r of assigned)
+        for (const [g, k] of Object.entries(r.overlaps[tid] ?? {})) o[g] = (o[g] ?? 0) + k
+      overlaps[tid] = o
+      const id = tid === 'varvis' ? 'varvis-exome-tuned' : `varvis-${tid}-tuned`
+      const opts = { reps, seed: SEEDS.bootstrap, template: TEMPLATES[tid], id }
+      return [tid, tuneFolds(input, folds, FOLDS, inputs.acceptance.disabledGroups, opts)]
+    })
+  ) as Record<TemplateId, ReturnType<typeof tuneFolds>>
+  const tuned = tunings[args.template]
+  const tunedBy: TunedByTemplate = Object.fromEntries(
+    templates.map((tid) => [tid, tunings[tid].perFold])
+  )
+  t = lap('assign_and_tune', t)
 
   // Phase B: every scorer on every case and scenario; fold-specific tuned points.
   const enriched = new Map(caseBgs.map((b) => [b.info.label, phenoEnrichedGenes(b.info)]))
@@ -161,7 +186,7 @@ async function main(argv: string[]): Promise<void> {
         kind: 'eval' as const,
         ...p,
         folds: p.cases.map((c) => folds.get(c.gene)!),
-        tuned: tuned.perFold
+        tuned: tunedBy
       }))
     })
   )
@@ -179,13 +204,23 @@ async function main(argv: string[]): Promise<void> {
   lap('evaluate', t)
   timing.total = (Date.now() - t0) / 1000
 
-  const refit = { ...tuned.refit.ruleset }
-  const shipped = { ...refit, sha256: sha256(canonicalJson(refit)) }
-  compileRuleset(shipped) // the artefact must load in the app; throws otherwise
-  writeFileSync(join(outDir, 'ruleset-tuned.json'), JSON.stringify(shipped, null, 2) + '\n')
-  writeFileSync(join(outDir, 'support.json'), JSON.stringify(tuned.refit.support, null, 2) + '\n')
+  for (const tid of templates) {
+    const refit = { ...tunings[tid].refit.ruleset }
+    const shipped = { ...refit, sha256: sha256(canonicalJson(refit)) }
+    compileRuleset(shipped) // the artefact must load in the app; throws otherwise
+    const suffix = tid === args.template ? '' : `-${tid}`
+    writeFileSync(
+      join(outDir, `ruleset-tuned${suffix}.json`),
+      JSON.stringify(shipped, null, 2) + '\n'
+    )
+    writeFileSync(
+      join(outDir, `support${suffix}.json`),
+      JSON.stringify(tunings[tid].refit.support, null, 2) + '\n'
+    )
+  }
+  const rulesetSha256 = sha256(canonicalJson(tuned.refit.ruleset))
 
-  const scorers = buildScorers(tuned.perFold, inputs.acceptance.disabledGroups)
+  const scorers = buildScorers(tunedBy, inputs.acceptance.disabledGroups, args.template)
   const manifest: RunManifest & Record<string, unknown> = {
     run: args.run,
     createdAt: new Date().toISOString(),
@@ -194,7 +229,7 @@ async function main(argv: string[]): Promise<void> {
     bootstrapReps: reps,
     inputHashes: {
       ...inputs.hashes,
-      template: sha256(canonicalJson(VARVIS_EVIDENCE_TEMPLATE)),
+      template: sha256(canonicalJson(TEMPLATES[args.template])),
       ...Object.fromEntries(
         backgroundFiles()
           .slice(0, backgrounds.length)
@@ -221,6 +256,8 @@ async function main(argv: string[]): Promise<void> {
       ablations: scorers.filter((s) => s.id.startsWith('abl_')).map((s) => s.id),
       all: scorers.map((s) => ({ id: s.id, label: s.label }))
     },
+    template: args.template,
+    extraFieldCoverage: extraCoverage,
     afField: inputs.acceptance.afField,
     caddImpute: args.caddImpute,
     caddSources: build.caddSources,
@@ -231,7 +268,7 @@ async function main(argv: string[]): Promise<void> {
     cases: cases.length,
     workers: args.workers,
     timingSeconds: timing,
-    rulesetSha256: shipped.sha256
+    rulesetSha256
   }
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
   const lock = {
@@ -243,7 +280,7 @@ async function main(argv: string[]): Promise<void> {
     acceptance: inputs.acceptance,
     folds: FOLDS,
     scorers: manifest.scorers,
-    rulesetSha256: shipped.sha256
+    rulesetSha256
   }
   writeFileSync(join(outDir, 'protocol.lock.json'), JSON.stringify(lock, null, 2) + '\n')
   console.log(

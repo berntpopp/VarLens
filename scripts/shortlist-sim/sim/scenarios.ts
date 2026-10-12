@@ -19,6 +19,14 @@ export const SCENARIOS: readonly ScenarioId[] = [
 
 export const masksClinvar = (s: ScenarioId): boolean => s !== 'clinvar_visible'
 
+/** ClinVar review status lives in info_json; it is masked together with `clinvar`. */
+function withoutRevstat(infoJson: string | null): string | null {
+  if (infoJson === null || !infoJson.includes('CLINVAR_REVSTAT')) return infoJson
+  const rest = JSON.parse(infoJson) as Record<string, unknown>
+  delete rest.CLINVAR_REVSTAT
+  return Object.keys(rest).length > 0 ? JSON.stringify(rest) : null
+}
+
 /** Background rows under a scenario (copies; the input is not modified). */
 export function applyScenarioToBackground(
   rows: readonly MappedVariant[],
@@ -27,7 +35,10 @@ export function applyScenarioToBackground(
 ): MappedVariant[] {
   const out = rows.map((r) => ({ ...r }))
   for (const r of out) {
-    if (masksClinvar(s)) r.clinvar = null
+    if (masksClinvar(s)) {
+      r.clinvar = null
+      r.info_json = withoutRevstat(r.info_json)
+    }
     if (s === 'pheno_free') r.hpo_sim_score = null
   }
   if (s === 'pheno_shuffled') shuffleGenePhenotype(out, rnd)
@@ -78,7 +89,10 @@ export function applyScenarioToSpike(
   rnd: () => number
 ): MappedVariant {
   const out = { ...row }
-  if (masksClinvar(s)) out.clinvar = null
+  if (masksClinvar(s)) {
+    out.clinvar = null
+    out.info_json = withoutRevstat(out.info_json)
+  }
   const gene = out.gene_symbol === null ? undefined : bg.geneFields.get(out.gene_symbol)
   if (gene !== undefined) Object.assign(out, gene)
   if (s === 'missingness' && out.func !== null) {

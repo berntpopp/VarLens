@@ -25,6 +25,8 @@ export interface SpikeSource {
   ann: SpikeAnnotation & { vep: SpikeVep }
   /** CADD API PHRED for SNVs: number, null ([] response) or undefined (not fetched). */
   caddApi: number | null | undefined
+  /** Canonical info fields for the full template (local resources; #597). */
+  extra?: Record<string, string>
 }
 
 export interface SpikeRow {
@@ -138,5 +140,7 @@ export function spikeRow(
   } as ObjectFormatVariant)
   // Gene-level moi is copied as the stored string (the mapper's input form is an object list).
   mapped.moi = gene.moi
+  if (src.extra !== undefined && Object.keys(src.extra).length > 0)
+    mapped.info_json = JSON.stringify(src.extra)
   return { poolKey: pv.key, key: norm.key, role, row: mapped, caddSource }
 }

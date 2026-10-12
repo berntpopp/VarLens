@@ -21,7 +21,7 @@ import {
 } from './markdown'
 import { hitBarsSvg, rankCdfSvg } from './svg'
 import { caddCheckSection } from './cadd-check'
-import { caddOffSection, macroSensitivitySection } from './extra'
+import { caddOffSection, macroSensitivitySection, templateComparisonSection } from './extra'
 import { DEFAULT_REPS } from '../stats/bootstrap'
 
 const DEFAULT_RUNS_DIR = '/home/bernt-popp/development/VarLens-wt/_data/shortlist-sim/runs'
@@ -105,7 +105,9 @@ export function renderReport(
   const reps = manifest.bootstrapReps || DEFAULT_REPS
   const seed = manifest.seeds.bootstrap ?? 1
   const notes = extras.notesFile ? readFileSync(extras.notesFile, 'utf8').trim() : ''
+  const comparison = templateComparisonSection(results, reps, seed)
   const tail = [
+    ...(comparison ? [comparison] : []),
     macroSensitivitySection(results, reps, seed),
     ...(extras.caddOffDir
       ? [

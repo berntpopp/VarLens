@@ -189,13 +189,17 @@ export function spikeOptions(inputs: SimInputs, caddImpute: boolean): SpikeOptio
   }
 }
 
+export const rowKey = (r: { chr: string; pos: number; ref: string; alt: string }): string =>
+  `${r.chr}:${r.pos}:${r.ref}:${r.alt}`
+
 /**
- * bcftools-normalised keys of a background (local; temporary files under PRIVATE_DIR). Cached in
- * PRIVATE_DIR (outside the repository) by a hash of the rows, since normalisation is slow.
+ * bcftools-normalised key per background row key (local; temporary files under PRIVATE_DIR).
+ * Cached in PRIVATE_DIR (outside the repository) by a hash of the rows, since normalisation is
+ * slow. Rows that fail normalisation (REF mismatch) are absent.
  */
-export async function backgroundNormKeys(bg: Background): Promise<Set<string>> {
+export async function backgroundNormMap(bg: Background): Promise<Map<string, string>> {
   const alleles = bg.rows.map((r) => ({
-    key: `${r.chr}:${r.pos}:${r.ref}:${r.alt}`,
+    key: rowKey(r),
     chr: r.chr,
     pos: r.pos,
     ref: r.ref,
@@ -203,11 +207,16 @@ export async function backgroundNormKeys(bg: Background): Promise<Set<string>> {
   }))
   const cache = join(
     PRIVATE_DIR,
-    `norm-keys-${sha256(alleles.map((a) => a.key).join('\n')).slice(0, 16)}.json`
+    `norm-map-${sha256(alleles.map((a) => a.key).join('\n')).slice(0, 16)}.json`
   )
-  if (existsSync(cache)) return new Set(readJson<string[]>(cache))
+  if (existsSync(cache)) return new Map(Object.entries(readJson<Record<string, string>>(cache)))
   const out = await normalizeAlleles(alleles, { tmpDir: PRIVATE_DIR })
-  const keys = out.filter((n) => n.status === 'ok').map((n) => n.key)
-  writeFileSync(cache, JSON.stringify(keys))
-  return new Set(keys)
+  const map = new Map(out.filter((n) => n.status === 'ok').map((n) => [n.input, n.key]))
+  writeFileSync(cache, JSON.stringify(Object.fromEntries(map)))
+  return map
+}
+
+/** bcftools-normalised keys of a background (collision check). */
+export async function backgroundNormKeys(bg: Background): Promise<Set<string>> {
+  return new Set((await backgroundNormMap(bg)).values())
 }

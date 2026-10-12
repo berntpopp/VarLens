@@ -1,5 +1,4 @@
 /** Protocol helpers: canonical JSON identity, fold tuning, the phenotype-enrichment gene set. */
-import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-rulesets/varvis-template'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
 import { tuneRuleset, type TuneInput, type TuneResult } from '../stats/tune'
 import type { BackgroundInfo } from './background-db'
@@ -33,17 +32,17 @@ export function tuneFolds(
   folds: Map<string, number>,
   k: number,
   disabledGroups: string[],
-  opts: { reps: number; seed: number; run: string }
+  opts: { reps: number; seed: number; template: EvidenceRuleset; id: string }
 ): FoldTuning {
   const perFold = Array.from(
     { length: k },
     (_, f) =>
-      tuneRuleset(VARVIS_EVIDENCE_TEMPLATE, input, (g) => folds.get(g) !== f, disabledGroups, {
-        id: `varvis-tuned-fold${f}`
+      tuneRuleset(opts.template, input, (g) => folds.get(g) !== f, disabledGroups, {
+        id: `${opts.id}-fold${f}`
       }).ruleset
   )
-  const refit = tuneRuleset(VARVIS_EVIDENCE_TEMPLATE, input, () => true, disabledGroups, {
-    id: 'varvis-exome-tuned',
+  const refit = tuneRuleset(opts.template, input, () => true, disabledGroups, {
+    id: opts.id,
     bootstrap: { reps: opts.reps, seed: opts.seed }
   })
   return { perFold, refit }

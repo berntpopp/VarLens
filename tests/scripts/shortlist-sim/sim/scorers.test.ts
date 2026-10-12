@@ -6,7 +6,7 @@ import { evidenceShortlistConfig } from '../../../../src/shared/evidence/evidenc
 describe('scorers', () => {
   it('benchmarks the product config: evidence_hand = evidenceShortlistConfig(template)', () => {
     const tuned = Array.from({ length: 5 }, () => VARVIS_EVIDENCE_TEMPLATE)
-    const hand = buildScorers(tuned, []).find((s) => s.id === 'evidence_hand')!
+    const hand = buildScorers({ varvis: tuned }, []).find((s) => s.id === 'evidence_hand')!
     expect(hand.config(0)).toEqual(evidenceShortlistConfig(VARVIS_EVIDENCE_TEMPLATE))
     const cfg = hand.config(0)
     expect(cfg.rankConfig.clinvarPinTop).toBe(false)

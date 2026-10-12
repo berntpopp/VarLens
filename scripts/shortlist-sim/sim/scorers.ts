@@ -19,6 +19,7 @@ import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-ru
 import type { EvidenceRuleset, ModeId } from '../../../src/shared/types/evidence-ruleset'
 import type { RankWeights, ShortlistConfig } from '../../../src/shared/types/shortlist'
 import type { ScenarioId } from '../common/types'
+import { TEMPLATES, type TemplateId, type TunedByTemplate } from './templates'
 
 export interface ScorerDef {
   id: string
@@ -77,11 +78,15 @@ export const CANDIDATE_SCORER = 'evidence_tuned'
 
 /** All scorers; `tuned[fold]` is the fold's tuned ruleset (disabled groups already zeroed). */
 export function buildScorers(
-  tuned: readonly EvidenceRuleset[],
-  disabledGroups: string[]
+  tunedBy: TunedByTemplate,
+  disabledGroups: string[],
+  primaryTemplate: TemplateId = 'varvis'
 ): ScorerDef[] {
+  const template = TEMPLATES[primaryTemplate]
+  const tuned = tunedBy[primaryTemplate] ?? []
   const tier1 = builtIn('Tier 1 candidates')
-  const hand = zeroGroups(VARVIS_EVIDENCE_TEMPLATE, disabledGroups)
+  const hand = zeroGroups(template, disabledGroups)
+  const name = primaryTemplate === 'varvis' ? 'Evidence' : `Evidence (${primaryTemplate} template)`
   const fixed = (c: ShortlistConfig) => (): ShortlistConfig => c
   const all = 'all' as const
   const primary: ScenarioId[] = ['primary']
@@ -102,13 +107,13 @@ export function buildScorers(
     { id: 'af_asc', label: 'AF ascending', config: fixed(legacy({ rarity: 1 })), scenarios: all },
     {
       id: 'evidence_hand',
-      label: 'Evidence, hand-set points',
+      label: `${name}, hand-set points`,
       config: fixed(evidenceConfig(hand)),
       scenarios: all
     },
     {
       id: CANDIDATE_SCORER,
-      label: 'Evidence, tuned points',
+      label: `${name}, tuned points`,
       config: (f) => evidenceConfig(tuned[f]),
       scenarios: all
     },
@@ -125,7 +130,7 @@ export function buildScorers(
       scenarios: all
     }
   ]
-  for (const g of VARVIS_EVIDENCE_TEMPLATE.groups) {
+  for (const g of template.groups) {
     if (disabledGroups.includes(g.id)) continue
     scorers.push({
       id: `abl_group_${g.id}`,
@@ -134,7 +139,7 @@ export function buildScorers(
       scenarios: primary
     })
   }
-  const modeIds = VARVIS_EVIDENCE_TEMPLATE.modes.map((m) => m.id).filter((m) => m !== 'fallback')
+  const modeIds = template.modes.map((m) => m.id).filter((m) => m !== 'fallback')
   for (const m of modeIds) {
     scorers.push({
       id: `abl_mode_${m}`,
@@ -142,6 +147,24 @@ export function buildScorers(
       config: (f) => evidenceConfig(zeroModes(tuned[f], [m])),
       scenarios: primary
     })
+  }
+  if (primaryTemplate !== 'varvis') {
+    // Paired comparison with the 18-field varvis template on the same cases (#597).
+    const varvisTuned = tunedBy.varvis ?? []
+    scorers.push(
+      {
+        id: 'varvis_hand',
+        label: 'varvis template, hand-set points',
+        config: fixed(evidenceConfig(zeroGroups(VARVIS_EVIDENCE_TEMPLATE, disabledGroups))),
+        scenarios: all
+      },
+      {
+        id: 'varvis_tuned',
+        label: 'varvis template, tuned points',
+        config: (f) => evidenceConfig(varvisTuned[f]),
+        scenarios: all
+      }
+    )
   }
   scorers.push({
     id: 'abl_modes_all',
