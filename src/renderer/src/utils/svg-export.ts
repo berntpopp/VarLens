@@ -1,8 +1,20 @@
 /** SVG / PNG export of a rendered plot (lollipop, gene structure). */
 
+/**
+ * The plot as a standalone SVG document. Theme colours are CSS variables
+ * (`rgb(var(--v-theme-…))`) that an SVG file or the PNG canvas cannot
+ * resolve, so each is replaced by its computed value first.
+ */
 export function svgMarkup(svg: SVGSVGElement | null): string {
   if (svg === null) return ''
-  return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}`
+  const style = getComputedStyle(svg)
+  const markup = new XMLSerializer()
+    .serializeToString(svg)
+    .replace(/var\((--v-theme-[a-z0-9-]+)\)/gi, (whole, name: string) => {
+      const value = style.getPropertyValue(name).trim()
+      return value === '' ? whole : value
+    })
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${markup}`
 }
 
 /** The SVG drawn on a white canvas at 2× for high-DPI screens. */
@@ -21,7 +33,7 @@ export function svgToPng(
     canvas.width = width * 2
     canvas.height = height * 2
     ctx.scale(2, 2)
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], {
+    const blob = new Blob([svgMarkup(svg)], {
       type: 'image/svg+xml;charset=utf-8'
     })
     const url = URL.createObjectURL(blob)
