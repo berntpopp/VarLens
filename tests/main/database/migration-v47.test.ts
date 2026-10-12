@@ -2,11 +2,11 @@
  * Migration v47: chromosome names in each build's reference form
  * (.planning/specs/2026-10-12-chr-naming-per-build.md).
  */
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   assertFreeSpaceForMigration,
@@ -122,10 +122,8 @@ describe('migration v47: chromosome names per build', () => {
 
   it('renames confirmed cases, flags the rest and merges colliding annotations', () => {
     const { a, b, c, d, e } = seed()
-    const backup = vi.fn()
-    migrateContigNaming(db, backup)
+    migrateContigNaming(db)
 
-    expect(backup).toHaveBeenCalledTimes(1)
     expect(chrsOf(a)).toEqual(['chr1', 'chrM', 'chrUn_KI270742v1'])
     expect(chrsOf(b)).toEqual(['1', 'chrM']) // hg19 chrM is never merged with MT
     expect(chrsOf(c)).toEqual(['1'])
@@ -174,7 +172,7 @@ describe('migration v47: chromosome names per build', () => {
     addVariant(e, '1', 100)
     addVariant(e, 'chrMT', 50) // E is renamed too (chrMT → MT) but keeps 1
     annotate('1', 100, { comment: 'shared note' })
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     expect(chrsOf(e)).toEqual(['1', 'MT'])
     expect(annotation('1', 100)).toMatchObject({ global_comment: 'shared note' })
     expect(annotation('chr1', 100)).toMatchObject({ global_comment: 'shared note' })
@@ -187,7 +185,7 @@ describe('migration v47: chromosome names per build', () => {
     addVariant(c, 'chr1', 100)
     annotate('1', 100, { comment: 'GRCh38 note', acmg: 'Benign' })
     annotate('chr1', 100, { comment: 'GRCh37 note', acmg: 'Pathogenic' })
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     expect(chrsOf(a)).toEqual(['chr1'])
     expect(chrsOf(c)).toEqual(['1'])
     expect(annotation('chr1', 100)).toEqual({
@@ -218,22 +216,18 @@ describe('migration v47: chromosome names per build', () => {
     })
   })
 
-  it('is idempotent: a second run changes nothing and takes no backup', () => {
+  it('is idempotent: a second run changes nothing', () => {
     seed()
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     const before = snapshot()
-    const backup = vi.fn()
-    migrateContigNaming(db, backup)
+    migrateContigNaming(db)
     expect(snapshot()).toEqual(before)
-    expect(backup).not.toHaveBeenCalled()
   })
 
   it('a database already in reference form is left alone', () => {
     const d = addCase('D', 'GRCh38', null)
     addVariant(d, 'chr1', 1)
-    const backup = vi.fn()
-    migrateContigNaming(db, backup)
-    expect(backup).not.toHaveBeenCalled()
+    migrateContigNaming(db)
     expect(chrsOf(d)).toEqual(['chr1'])
     expect(db.prepare('SELECT COUNT(*) AS n FROM contig_build_review').get()).toEqual({ n: 0 })
   })
@@ -241,7 +235,7 @@ describe('migration v47: chromosome names per build', () => {
   it('a header naming another build flags the case with that suggestion', () => {
     const x = addCase('X', 'GRCh38', GRCH37_TAG)
     addVariant(x, '1', 5)
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     expect(chrsOf(x)).toEqual(['1'])
     expect(db.prepare('SELECT suggested_build, reason FROM contig_build_review').get()).toEqual({
       suggested_build: 'GRCh37',
@@ -251,7 +245,7 @@ describe('migration v47: chromosome names per build', () => {
 
   it('renaming a confirmed case later applies the same rules', () => {
     const { c } = seed()
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     renameCases(db, new Map([[c, [{ from: '1', to: 'chr1' }]]]))
     expect(chrsOf(c)).toEqual(['chr1'])
     expect(annotation('1', 100)).toBeUndefined() // nobody uses 1:100 any more: merged and removed
@@ -264,7 +258,7 @@ describe('migration v47: chromosome names per build', () => {
     addVariant(x, '2', 5)
     db.prepare("UPDATE cases SET genome_build = 'GRCh38' WHERE id = ?").run(x)
     db.prepare("UPDATE variants SET chr = '1' WHERE case_id = ? AND chr = 'chr1'").run(x)
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     expect(listBuildReviews(db)).toMatchObject([{ caseId: x, suggestedBuild: 'GRCh37' }])
     expect(resolveBuildReviews(db, [{ caseId: x, build: 'GRCh37' }])).toBe(1)
     expect(chrsOf(x)).toEqual(['1', '2'])
@@ -300,7 +294,7 @@ describe('migration v47: chromosome names per build', () => {
       return id
     })
     annotate('1', 100, { comment: 'shared' })
-    migrateContigNaming(db, vi.fn())
+    migrateContigNaming(db)
     expect(listBuildReviews(db)).toHaveLength(3)
     resolveBuildReviews(
       db,
@@ -353,10 +347,12 @@ describe('migration v47: chromosome names per build', () => {
       reader.prepare('BEGIN').run()
       reader.prepare('SELECT COUNT(*) FROM variants').get()
       db.prepare("UPDATE cases SET name = name || '' WHERE id = 1").run()
-      expect(() => migrateContigNaming(db)).toThrow(
+      db.exec('PRAGMA user_version = 45')
+      expect(() => runMigrations(db)).toThrow(
         expect.objectContaining({ userMessage: expect.stringMatching(/open in another program/) })
       )
-      expect(existsSync(`${path}.pre-v47.bak`)).toBe(false)
+      expect(existsSync(`${path}.pre-v46.bak`)).toBe(false)
+      expect(db.pragma('user_version', { simple: true })).toBe(45)
       expect(chrsOf(1)).toEqual(['1', 'MT', 'chrUn_KI270742v1'].sort())
     } finally {
       reader.prepare('COMMIT').run()
@@ -364,22 +360,37 @@ describe('migration v47: chromosome names per build', () => {
     }
   })
 
-  it('backs up the database file before renaming', () => {
+  it('a v45 database is backed up before v46 runs: the previous release can open the copy', () => {
     db.close()
     const path = join(dir, 'file.db')
     db = new Database(path)
     initializeSchema(db)
     runMigrations(db)
     seed()
-    migrateContigNaming(db)
-    expect(existsSync(`${path}.pre-v47.bak`)).toBe(true)
-    const old = new Database(`${path}.pre-v47.bak`, { readonly: true })
+    db.exec('PRAGMA user_version = 45')
+    runMigrations(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
+    expect(chrsOf(1)).toEqual(['chr1', 'chrM', 'chrUn_KI270742v1'])
+    expect(existsSync(`${path}.pre-v46.bak`)).toBe(true)
+    expect(existsSync(`${path}.pre-v47.bak`)).toBe(false)
+    const old = new Database(`${path}.pre-v46.bak`, { readonly: true })
     try {
+      expect(old.pragma('user_version', { simple: true })).toBe(45)
       expect(old.prepare("SELECT COUNT(*) AS n FROM variants WHERE chr = '1'").get()).toEqual({
         n: 5
       })
     } finally {
       old.close()
     }
+  })
+
+  it('no backup when v47 is not pending, and none for a new database', () => {
+    db.close()
+    const path = join(dir, 'new.db')
+    db = new Database(path)
+    initializeSchema(db)
+    runMigrations(db)
+    runMigrations(db)
+    expect(readdirSync(dir).filter((f) => f.endsWith('.bak'))).toEqual([])
   })
 })

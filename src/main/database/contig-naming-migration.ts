@@ -6,9 +6,9 @@
  * Every case whose names are not in its build's form is re-checked first
  * (planCaseContigNaming): confirmed cases are renamed, the others get a
  * `contig_build_review` row and keep their names until the user confirms a
- * build (cases:resolveBuildReviews, contig-rename-sqlite.ts). Before the first
- * rename the free space is checked and the database file is copied to
- * `<db>.pre-v47.bak`. A second run finds nothing to rename, so it is a no-op.
+ * build (cases:resolveBuildReviews, contig-rename-sqlite.ts). The database is
+ * backed up before the run's first migration (backupBeforeMigrations, called by
+ * runMigrations). A second run finds nothing to rename, so it is a no-op.
  */
 import { copyFileSync, statSync, statfsSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -103,7 +103,7 @@ export function assertFreeSpaceForMigration(
     // Some filesystems (network shares) report no free space: go on; a full
     // disk still aborts the copy or the transaction before anything changes.
     mainLogger.warn(
-      `Free-space check skipped before the v47 backup: ${error instanceof Error ? error.message : String(error)}`,
+      `Free-space check skipped before the pre-migration backup: ${error instanceof Error ? error.message : String(error)}`,
       'database'
     )
     return
@@ -111,15 +111,26 @@ export function assertFreeSpaceForMigration(
   if (available < needed) {
     throw new AppError(
       ErrorCode.RESOURCE_LIMIT,
-      `v47 migration needs ${needed} bytes free, ${available} available`,
+      `pre-migration backup needs ${needed} bytes free, ${available} available`,
       BUILD_COPY.migrationNoSpace(gigabytes(needed), gigabytes(available))
     )
   }
 }
 
-/** Byte copy of the database before its first rename; the rollback of this migration. */
-function backupDatabase(db: Db): void {
-  if (db.memory || db.name === '') return
+/** The first schema version of this release whose migration rewrites stored data. */
+export const DATA_REWRITE_VERSION = 47
+
+/**
+ * Before the first pending migration of a run, when the data-rewriting v47 is
+ * among them: byte-copy the database to `<db>.pre-v<N>.bak`, N being the first
+ * pending version, so the copy is the file the previous release wrote and can
+ * open. The rollback of this release's migrations. Not for an in-memory or
+ * empty database: there is nothing to keep.
+ */
+export function backupBeforeMigrations(db: Db, fromVersion: number): void {
+  if (fromVersion >= DATA_REWRITE_VERSION || db.memory || db.name === '') return
+  if (!hasTable(db, 'cases') || db.prepare('SELECT 1 FROM cases LIMIT 1').get() === undefined)
+    return
   assertFreeSpaceForMigration(db.name)
   // The copy is only complete when every WAL frame is back in the main file.
   const [checkpoint] = db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
@@ -133,14 +144,14 @@ function backupDatabase(db: Db): void {
   ) {
     throw new AppError(
       ErrorCode.CONFLICT,
-      `v47 backup: WAL checkpoint incomplete (${JSON.stringify(checkpoint)})`,
+      `pre-migration backup: WAL checkpoint incomplete (${JSON.stringify(checkpoint)})`,
       BUILD_COPY.migrationBusy
     )
   }
-  copyFileSync(db.name, `${db.name}.pre-v47.bak`)
+  copyFileSync(db.name, `${db.name}.pre-v${fromVersion + 1}.bak`)
 }
 
-export function migrateContigNaming(db: Db, backup: (db: Db) => void = backupDatabase): void {
+export function migrateContigNaming(db: Db): void {
   db.exec(CONTIG_BUILD_REVIEW_DDL)
   if (!hasTable(db, 'variants') || !hasTable(db, 'variant_annotations')) return
 
@@ -167,7 +178,6 @@ export function migrateContigNaming(db: Db, backup: (db: Db) => void = backupDat
   }
   if (renames.size === 0 && flags.length === 0) return
 
-  if (renames.size > 0) backup(db)
   const now = Date.now()
   db.transaction(() => {
     renameCases(db, renames)

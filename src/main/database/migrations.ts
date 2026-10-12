@@ -14,7 +14,7 @@ import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { migrateSeverityRanks } from './severity-rank-migration'
-import { migrateContigNaming } from './contig-naming-migration'
+import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
@@ -79,6 +79,9 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 47
 export function runMigrations(db: Database.Database): void {
   const result = db.prepare('PRAGMA user_version').get() as { user_version: number }
   const currentVersion = result.user_version
+
+  // Before anything changes: the file the previous release can open (v47 rewrites data).
+  backupBeforeMigrations(db, currentVersion)
 
   // v0.3.0 baseline - existing databases have no version set
   if (currentVersion < 1) {

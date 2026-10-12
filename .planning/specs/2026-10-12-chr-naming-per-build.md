@@ -89,11 +89,16 @@ SQLite (`PRAGMA user_version` 47, `src/main/database/contig-naming-migration.ts`
 `contig-rename-sqlite.ts`, runs in the migration worker):
 1. Discover: `SELECT c.id, c.genome_build, v.chr, MAX(v.pos) … GROUP BY c.id, v.chr`; a case already in
    its build's form is skipped (no file read, no row written); the others are planned.
-2. If any case will be renamed: check free space (`DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO`,
-   2.7 x the DB size: backup + peak WAL), `wal_checkpoint(TRUNCATE)` and require it complete (busy 0,
-   every frame checkpointed), then byte-copy the DB file to `<db>.pre-v47.bak`. Either check failing
-   stops with a user-facing message (`BUILD_COPY.migrationNoSpace` / `migrationBusy`, an `AppError` that
-   DatabaseService passes through) before anything changes. The copy keeps SQLCipher encryption.
+2. Backup, at the **start of the run, before its first pending migration** (`backupBeforeMigrations`,
+   called first in `runMigrations`), whenever v47 is pending and the database holds cases: check free
+   space (`DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO`, 2.7 x the DB size: backup + peak WAL),
+   `wal_checkpoint(TRUNCATE)` and require it complete (busy 0, every frame checkpointed), then
+   byte-copy the DB file to `<db>.pre-v<N>.bak`, N = the first pending version (a v45 database gives
+   `<db>.pre-v46.bak`, the v45 file before v46 and v47 ran). It is the file the previous release wrote
+   and can open. A failing check stops with a user-facing message (`BUILD_COPY.migrationNoSpace` /
+   `migrationBusy`, an `AppError` that DatabaseService passes through) before any migration runs;
+   a filesystem that cannot report free space skips that check with a logged warning. The copy keeps
+   SQLCipher encryption. No backup for a new or empty database, or when v47 is not pending.
 3. One transaction: annotation remap, then per renamed case decrement frequencies → `UPDATE variants SET
    chr = to WHERE case_id = ? AND chr = from` (only rows under an old name are written) → recount;
    review rows for flagged cases; summary marked stale; user_version 47.
@@ -144,8 +149,10 @@ twice fails cleanly (no review row).
 ## Release notes (must say)
 
 - Chromosome names are now stored in each build's reference form (GRCh38 `chr1`, GRCh37 `1`); existing
-  data is converted on first open (desktop: after a backup next to the database; web: in the background,
-  back up PostgreSQL first, the change is one-way). Cases whose build cannot be confirmed are listed for
+  data is converted on first open. Desktop: before updating, VarLens copies the database next to
+  itself as `<name>.pre-v46.bak` (from the previous release; it needs free space of about 2.7x the
+  database size), which the previous version can open if you need to go back. Web: converted in the
+  background; back up PostgreSQL first, the change is one-way. Cases whose build cannot be confirmed are listed for
   the user to confirm.
 - Custom external-link templates: `{chr}` is now always the bare name (`1`, `X`, `MT`); use `{chr_ucsc}`
   for `chr1`-style names. Only the built-in UCSC template is updated automatically.
@@ -163,11 +170,14 @@ twice fails cleanly (no review row).
   GRCh38 `1` / hg19 `chr1` swap keeps each note with its own locus.
 - PG job (real Postgres): same scenarios, one rebuild request, a step killed mid-case rolls back and
   resumes, an import and an annotation edit during the job are kept.
-- SQLite: free-space refusal and incomplete-checkpoint refusal change nothing.
+- SQLite: free-space refusal and incomplete-checkpoint refusal change nothing; a v45 database gets
+  `<db>.pre-v46.bak` (user_version 45, opens) and then reaches v47; no backup for a new database or
+  when v47 is not pending.
 - Resolve: one batched write confirms many cases, audit-logged, renames them, removes the reviews.
 - Links, panel BED export (bare for GRCh37), panel intervals per build.
 
 ## Rollback
 
-SQLite: close the app and replace the DB file with `<db>.pre-v47.bak` (it is the v46 database, so it
-needs the previous app version). PG: restore the operator's backup.
+SQLite: close the app and replace the DB file with `<db>.pre-v<N>.bak` (for a v45 database
+`<db>.pre-v46.bak`): it is the database exactly as the previous release left it, before any of this
+release's migrations, so the previous app version opens it. PG: restore the operator's backup.
