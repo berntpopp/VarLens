@@ -155,6 +155,7 @@ import { stripVueProxies } from '../utils/stripVueProxies'
 import { activeMaxCarriers } from '../utils/filters/maxCarriers'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import type { CarrierTarget } from '../composables/useCarrierTarget'
+import { COHORT_CARRIER_LIMIT, type GeneCarriers } from '../config/proteinViewConfig'
 
 // Emit for navigation and row click
 const emit = defineEmits<{
@@ -654,18 +655,18 @@ const refresh = async () => {
 }
 // Protein view: every carrier row of a gene under the active filters, build
 // and variant type (the free-text search is a navigation aid, not a filter).
-// ponytail: one 1000-row page; page through if a gene ever has more variants.
-const queryGeneCarriers = async (gene: string): Promise<CohortVariant[]> =>
-  (
-    await queryPage({
-      ...buildCohortQueryParams(),
-      search_term: undefined,
-      gene_symbol: gene,
-      limit: 1000,
-      sort_order: 'desc',
-      _count_needed: false
-    })
-  ).data
+// ponytail: one page of the top rows by carriers; the total says when it is cut.
+const queryGeneCarriers = async (gene: string): Promise<GeneCarriers> => {
+  const page = await queryPage({
+    ...buildCohortQueryParams(),
+    search_term: undefined,
+    gene_symbol: gene,
+    limit: COHORT_CARRIER_LIMIT,
+    sort_order: 'desc',
+    _count_needed: true
+  })
+  return { rows: page.data, total: page.total_count }
+}
 
 defineExpose({ refresh, softRefresh, filterBar: cohortFilterBarRef, queryGeneCarriers })
 </script>

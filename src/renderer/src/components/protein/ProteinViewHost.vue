@@ -47,7 +47,8 @@ const reason = computed(() =>
 // Cohort view: the cohort's carriers of the gene, under its active filters.
 const loadCohortCarriers = computed(() =>
   panelMode.value === 'cohort'
-    ? (gene: string) => cohortViewRef.value?.queryGeneCarriers(gene) ?? Promise.resolve([])
+    ? (gene: string) =>
+        cohortViewRef.value?.queryGeneCarriers(gene) ?? Promise.resolve({ rows: [], total: 0 })
     : undefined
 )
 </script>

@@ -21,6 +21,7 @@ import CohortTable from '../../../src/renderer/src/components/CohortTable.vue'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
 import { _resetAnnotationsForTesting } from '../../../src/renderer/src/composables/useAnnotations'
+import { COHORT_CARRIER_LIMIT } from '../../../src/renderer/src/config/proteinViewConfig'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -178,13 +179,19 @@ describe('CohortTable paging', () => {
     await flushPromises()
 
     const exposed = wrapper.vm as unknown as {
-      queryGeneCarriers: (gene: string) => Promise<unknown[]>
+      queryGeneCarriers: (gene: string) => Promise<{ rows: unknown[]; total: number }>
     }
-    const rows = await exposed.queryGeneCarriers('THOC5')
+    const carriers = await exposed.queryGeneCarriers('THOC5')
 
-    expect(rows).toEqual([row('v0')])
+    // The total says when the plot shows only the top rows by carriers.
+    expect(carriers).toEqual({ rows: [row('v0')], total: 1000 })
     const sent = queries().at(-1) as Query
-    expect(sent).toMatchObject({ gene_symbol: 'THOC5', starred_only: true, limit: 1000 })
+    expect(sent).toMatchObject({
+      gene_symbol: 'THOC5',
+      starred_only: true,
+      limit: COHORT_CARRIER_LIMIT,
+      _count_needed: true
+    })
     expect(sent).not.toHaveProperty('search_term')
   })
 

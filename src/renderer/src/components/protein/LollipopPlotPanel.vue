@@ -27,6 +27,9 @@
     >
       {{ gnomadReason }}
     </div>
+    <div v-if="note" class="px-3 py-1 text-body-small text-medium-emphasis" role="note">
+      {{ note }}
+    </div>
 
     <!-- Loading bar for gnomAD / ClinVar fetch -->
     <v-progress-linear
@@ -127,9 +130,11 @@ interface Props {
   clinvarVariants: ClinVarVariant[]
   /** Whether ClinVar data is loading */
   clinvarLoading: boolean
+  /** e.g. the cohort carrier cap ("1,000 of 2,345 variants shown") */
+  note?: string | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { note: null })
 
 const emit = defineEmits<{
   'toggle-case-variants': []

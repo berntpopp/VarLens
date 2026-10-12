@@ -76,6 +76,7 @@ import { CohortDataKey, useCohortData } from '../composables/useCohortData'
 import { useAppState } from '../composables/useAppState'
 import { useLiveDataSignal } from '../composables/useLiveDataSignal'
 import type { CohortVariant } from '../../../shared/types/cohort'
+import type { GeneCarriers } from '../config/proteinViewConfig'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
 import { useUrlParam } from '../composables/useUrlState'
@@ -238,8 +239,8 @@ const filterBar = computed(() =>
   activeTab.value === 'variants' ? (cohortTableRef.value?.filterBar ?? null) : null
 )
 
-const queryGeneCarriers = async (gene: string): Promise<CohortVariant[]> =>
-  (await cohortTableRef.value?.queryGeneCarriers(gene)) ?? []
+const queryGeneCarriers = async (gene: string): Promise<GeneCarriers> =>
+  (await cohortTableRef.value?.queryGeneCarriers(gene)) ?? { rows: [], total: 0 }
 
 defineExpose({ refresh, filterBar, queryGeneCarriers })
 </script>

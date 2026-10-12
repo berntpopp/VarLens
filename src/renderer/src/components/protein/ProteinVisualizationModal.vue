@@ -111,6 +111,7 @@
           :has-case-id="caseId !== null && mode === 'case'"
           :clinvar-variants="clinvarVariants"
           :clinvar-loading="clinvarLoading"
+          :note="carrierNote"
           class="fill-height"
           @toggle-case-variants="handleToggleCaseVariants"
         />
@@ -156,7 +157,11 @@ import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { LollipopVariant, ClinVarVariant } from '../../../../shared/types/protein'
 import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 import { buildLollipopVariants } from '../../utils/protein-view'
-import type { ProteinViewTab } from '../../config/proteinViewConfig'
+import {
+  carriersTruncatedNote,
+  type GeneCarriers,
+  type ProteinViewTab
+} from '../../config/proteinViewConfig'
 import { logService } from '../../services/LogService'
 import { variantInterval } from '../../utils/variant-interval'
 import { formatHgvs } from '../../utils/formatters'
@@ -172,7 +177,7 @@ interface Props {
   /** Tab shown each time the modal opens */
   initialTab?: ProteinViewTab
   /** Cohort view: the cohort's carrier rows of a gene (active filters and build) */
-  loadCohortCarriers?: (gene: string) => Promise<CohortVariant[]>
+  loadCohortCarriers?: (gene: string) => Promise<GeneCarriers>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -220,6 +225,7 @@ const genomicVariant = computed<GenomicVariant | null>(() => {
 const showCaseVariants = ref(false)
 const caseVariantsLoading = ref(false)
 const caseVariants = ref<(Variant | CohortVariant)[]>([])
+const carrierNote = ref<string | null>(null)
 
 // ClinVar state (shared across Lollipop, Gene Structure, and 3D tabs)
 const clinvarLoading = ref(false)
@@ -236,6 +242,7 @@ watch(
     if (props.modelValue) activeTab.value = props.initialTab
     showCaseVariants.value = false
     caseVariants.value = []
+    carrierNote.value = null
     void fetchCohortCarriers()
   },
   { immediate: true }
@@ -247,9 +254,10 @@ async function fetchCohortCarriers(): Promise<void> {
   if (!props.modelValue || gene === null || props.loadCohortCarriers === undefined) return
   caseVariantsLoading.value = true
   try {
-    const rows = await props.loadCohortCarriers(gene)
+    const { rows, total } = await props.loadCohortCarriers(gene)
     if (gene !== geneSymbol.value) return
     caseVariants.value = rows
+    carrierNote.value = total > rows.length ? carriersTruncatedNote(rows.length, total) : null
     showCaseVariants.value = true
   } catch (err) {
     logService.error(
