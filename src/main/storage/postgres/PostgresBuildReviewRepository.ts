@@ -14,7 +14,7 @@ import type {
 } from '../../../shared/types/build-review'
 import { auditActorName } from '../../security/request-context'
 import { quoteIdentifier } from './identifiers'
-import { scheduleContigNaming } from './postgres-contig-naming'
+import { contigNamingFailed, scheduleContigNaming } from './postgres-contig-naming'
 import { withTransaction } from './transaction'
 
 export class PostgresBuildReviewRepository {
@@ -53,7 +53,8 @@ export class PostgresBuildReviewRepository {
         suggestedBuild: r.suggested_build,
         reason: r.reason
       })),
-      renameInProgress: pending.rows.length > 0
+      renameInProgress: pending.rows.length > 0,
+      renameFailed: contigNamingFailed(this.schema)
     }
   }
 

@@ -24,6 +24,7 @@ import {
 import { ErrorCode } from '../../shared/types/errors'
 import { readVcfHeaderLinesSync } from '../import/vcf/read-vcf-header'
 import { AppError } from '../ipc/errors'
+import { mainLogger } from '../services/MainLogger'
 import { hasTable, renameCases } from './contig-rename-sqlite'
 
 type Db = Database.Database
@@ -95,7 +96,18 @@ export function assertFreeSpaceForMigration(
   }
 ): void {
   const needed = statSync(dbPath).size * DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO
-  const available = free(dirname(dbPath))
+  let available: number
+  try {
+    available = free(dirname(dbPath))
+  } catch (error) {
+    // Some filesystems (network shares) report no free space: go on; a full
+    // disk still aborts the copy or the transaction before anything changes.
+    mainLogger.warn(
+      `Free-space check skipped before the v47 backup: ${error instanceof Error ? error.message : String(error)}`,
+      'database'
+    )
+    return
+  }
   if (available < needed) {
     throw new AppError(
       ErrorCode.RESOURCE_LIMIT,

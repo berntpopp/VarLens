@@ -204,6 +204,11 @@ export function scheduleContigNaming(scope: ScopedPool, requeued = false): void 
   running.set(scope.schema, task)
 }
 
+/** The job of this schema failed and waits for its next attempt. */
+export function contigNamingFailed(schema: string): boolean {
+  return failures.has(schema)
+}
+
 /** Test-only: await the in-flight job of a schema. */
 export async function awaitContigNaming(schema: string): Promise<void> {
   await running.get(schema)

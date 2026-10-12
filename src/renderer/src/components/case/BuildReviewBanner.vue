@@ -1,6 +1,16 @@
 <template>
   <v-alert
-    v-if="renameInProgress"
+    v-if="renameFailed"
+    type="error"
+    variant="tonal"
+    density="compact"
+    class="mx-2 my-1"
+    data-testid="rename-failed"
+  >
+    {{ COPY.renameFailed }}
+  </v-alert>
+  <v-alert
+    v-else-if="renameInProgress"
     type="info"
     variant="tonal"
     density="compact"
@@ -144,7 +154,7 @@ const ROW_HEIGHT = 40
 
 const emit = defineEmits<{ resolved: [] }>()
 
-const { reviews, renameInProgress, applying, load, apply } = useBuildReviews()
+const { reviews, renameInProgress, renameFailed, applying, load, apply } = useBuildReviews()
 const { canWrite } = usePermissions()
 const { showSnack, incrementDataGeneration } = useAppState()
 const databaseStore = useDatabaseStore()

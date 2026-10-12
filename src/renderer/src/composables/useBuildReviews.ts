@@ -13,6 +13,7 @@ export function useBuildReviews() {
   const { api } = useApiService()
   const reviews = ref<BuildReview[]>([])
   const renameInProgress = ref(false)
+  const renameFailed = ref(false)
   const applying = ref(false)
 
   async function load(): Promise<void> {
@@ -21,6 +22,7 @@ export function useBuildReviews() {
       const list = unwrapIpcResult(await api.cases.buildReviews())
       reviews.value = list.reviews
       renameInProgress.value = list.renameInProgress
+      renameFailed.value = list.renameFailed
     } catch (error) {
       // The notice is optional: a failed check must not break the shell.
       reviews.value = []
@@ -40,5 +42,5 @@ export function useBuildReviews() {
     }
   }
 
-  return { reviews, renameInProgress, applying, load, apply }
+  return { reviews, renameInProgress, renameFailed, applying, load, apply }
 }

@@ -287,6 +287,8 @@ export const BUILD_COPY = {
   reviewSelectGroup: (reason: string) => `Select all: ${reason}`,
   reviewApplySelected: (count: number) => `Confirm selected (${count})`,
   reviewApplyAll: (count: number) => `Confirm all (${count})`,
+  renameFailed:
+    'The background update of chromosome names keeps failing; VarLens retries it automatically. Ask your VarLens administrator to check the server log (entries "Chromosome-name update").',
   renameInProgress:
     'Chromosome names are being updated in the background. Until it finishes, cohort counts can mix old and new names.',
   reviewLater: 'Later',

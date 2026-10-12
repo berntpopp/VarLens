@@ -27,6 +27,7 @@ const resolveBuildReviews = vi.fn(async (choices: Array<{ caseId: number }>) => 
   return choices.length
 })
 let inProgress = false
+let failed = false
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -34,13 +35,18 @@ beforeEach(() => {
   pending = [REVIEW]
   ;(window as unknown as { api: unknown }).api = {
     cases: {
-      buildReviews: vi.fn(async () => ({ reviews: pending, renameInProgress: inProgress })),
+      buildReviews: vi.fn(async () => ({
+        reviews: pending,
+        renameInProgress: inProgress,
+        renameFailed: failed
+      })),
       resolveBuildReviews
     }
   }
 })
 afterEach(() => {
   inProgress = false
+  failed = false
   resolveBuildReviews.mockClear()
   document.body.innerHTML = ''
 })
@@ -101,6 +107,19 @@ describe('BuildReviewBanner', () => {
     expect(wrapper.get('[data-testid="rename-in-progress"]').text()).toContain(
       BUILD_COPY.renameInProgress
     )
+    wrapper.unmount()
+  })
+
+  it('says the update is stuck, and where to get help, when it keeps failing', async () => {
+    pending = []
+    inProgress = true
+    failed = true
+    const wrapper = mount(BuildReviewBanner, {
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: createAppState() } }
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="rename-failed"]').text()).toContain(BUILD_COPY.renameFailed)
+    expect(wrapper.find('[data-testid="rename-in-progress"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

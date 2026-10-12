@@ -327,6 +327,19 @@ describe('migration v47: chromosome names per build', () => {
     expect(() => assertFreeSpaceForMigration(path, () => Number.MAX_SAFE_INTEGER)).not.toThrow()
   })
 
+  it('a filesystem without free-space information skips the check instead of failing', () => {
+    db.close()
+    const path = join(dir, 'netshare.db')
+    db = new Database(path)
+    initializeSchema(db)
+    runMigrations(db)
+    expect(() =>
+      assertFreeSpaceForMigration(path, () => {
+        throw new Error('ENOSYS: statfs not supported')
+      })
+    ).not.toThrow()
+  })
+
   it('refuses to back up while another connection holds the WAL', () => {
     db.close()
     const path = join(dir, 'busy.db')

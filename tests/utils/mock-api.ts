@@ -149,7 +149,9 @@ export function createMockApi(): MockApi {
       deleteAll: vi.fn().mockResolvedValue(0),
       deleteBatch: vi.fn().mockResolvedValue(0),
       startDelete: vi.fn().mockResolvedValue({ jobId: 'job-1' }),
-      buildReviews: vi.fn().mockResolvedValue({ reviews: [], renameInProgress: false }),
+      buildReviews: vi
+        .fn()
+        .mockResolvedValue({ reviews: [], renameInProgress: false, renameFailed: false }),
       resolveBuildReviews: vi.fn().mockResolvedValue(0)
     },
 

@@ -27,4 +27,6 @@ export interface BuildReviewList {
    * so cohort counts can mix old and new names until it finishes.
    */
   renameInProgress: boolean
+  /** PostgreSQL only: the background rename keeps failing (it retries with back-off). */
+  renameFailed: boolean
 }

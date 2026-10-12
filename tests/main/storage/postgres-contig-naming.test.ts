@@ -18,7 +18,8 @@ import { PostgresVariantReadRepository } from '../../../src/main/storage/postgre
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
 import {
   awaitContigNaming,
-  runContigNamingStep
+  runContigNamingStep,
+  scheduleContigNaming
 } from '../../../src/main/storage/postgres/postgres-contig-naming'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
@@ -257,7 +258,11 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     await runJob()
     await awaitContigNaming(schema)
     for (const id of ids) expect(await chrsOf(id)).toEqual(['1'])
-    expect(await repo.listBuildReviews()).toEqual({ reviews: [], renameInProgress: false })
+    expect(await repo.listBuildReviews()).toEqual({
+      reviews: [],
+      renameInProgress: false,
+      renameFailed: false
+    })
     const audit = await probe.query(
       `SELECT entity_key, old_value, new_value FROM varlens_audit."audit_log"
         WHERE project_schema = $1 AND action_type = 'api_write' ORDER BY id`,
@@ -269,6 +274,16 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     await expect(repo.resolveBuildReviews([{ caseId: ids[0], build: 'GRCh38' }])).rejects.toThrow(
       /no genome build/
     )
+  }, 60_000)
+
+  it('listBuildReviews reports a job that keeps failing', async () => {
+    await seed()
+    await migrate()
+    const broken = { connect: async () => Promise.reject(new Error('database gone')) }
+    scheduleContigNaming({ pool: broken as never, schema })
+    await awaitContigNaming(schema)
+    const listed = await new PostgresBuildReviewRepository(pool, schema).listBuildReviews()
+    expect(listed).toMatchObject({ renameInProgress: true, renameFailed: true })
   }, 60_000)
 
   it('a job killed mid-case rolls that case back and resumes on the next run', async () => {
