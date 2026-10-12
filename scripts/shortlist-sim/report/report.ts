@@ -19,6 +19,8 @@ import {
   verdictSection
 } from './markdown'
 import { hitBarsSvg, rankCdfSvg } from './svg'
+import { caddCheckSection } from './cadd-check'
+import { DEFAULT_REPS } from '../stats/bootstrap'
 
 const DEFAULT_RUNS_DIR = '/home/bernt-popp/development/VarLens-wt/_data/shortlist-sim/runs'
 
@@ -60,9 +62,16 @@ export function renderMarkdown(data: ReportData, m: RunManifest): string {
 
 export function renderReport(runDir: string, outDir: string): ReportData {
   const manifest = JSON.parse(readFileSync(join(runDir, 'manifest.json'), 'utf8')) as RunManifest
-  const data = analyze(readResults(join(runDir, 'results.jsonl')), manifest)
+  const results = readResults(join(runDir, 'results.jsonl'))
+  const data = analyze(results, manifest)
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(join(outDir, 'report.md'), renderMarkdown(data, manifest))
+  const cadd = caddCheckSection(
+    results,
+    manifest,
+    manifest.bootstrapReps || DEFAULT_REPS,
+    manifest.seeds.bootstrap ?? 1
+  )
+  writeFileSync(join(outDir, 'report.md'), renderMarkdown(data, manifest) + '\n' + cadd + '\n')
   writeFileSync(join(outDir, 'rank-cdf.svg'), rankCdfSvg(data.cdf))
   writeFileSync(
     join(outDir, 'hit-at-10.svg'),

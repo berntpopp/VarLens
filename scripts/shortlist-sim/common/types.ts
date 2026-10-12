@@ -38,6 +38,8 @@ export interface CaseResult {
   bg: string
   gene: string
   newSince2024: boolean
+  /** Every causal allele is an SNV (CADD is real for all of them; the CADD-imputation check). */
+  snvOnly?: boolean
   /** One entry per causal allele (two for AR_COMPHET). */
   alleles: AlleleRank[]
   /** Benign decoys among the first 10 rows. */

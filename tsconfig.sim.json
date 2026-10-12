@@ -1,0 +1,11 @@
+{
+  // Simulation harness (scripts/shortlist-sim, run with jiti): same compiler rules as the main
+  // process, so `make typecheck` covers the harness and the production code it calls.
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "tsBuildInfoFile": "./.cache/tsbuildinfo/sim.tsbuildinfo"
+  },
+  "include": ["scripts/shortlist-sim/**/*.ts", "src/main/**/*", "src/shared/**/*"]
+}
