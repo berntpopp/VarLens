@@ -22,4 +22,19 @@ describe('CarrierFrequencyField (case and cohort drawers)', () => {
     await wrapper.find('input').setValue('2')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([0.02])
   })
+
+  it('keeps what was typed when the value comes back through v-model', async () => {
+    const wrapper = field(null)
+    await wrapper.find('input').setValue('7')
+    await wrapper.setProps({
+      modelValue: wrapper.emitted('update:modelValue')!.at(-1)![0] as number
+    })
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('7')
+  })
+
+  it('shows a value set elsewhere as a percentage without float noise', async () => {
+    const wrapper = field(null)
+    await wrapper.setProps({ modelValue: 0.07 })
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('7')
+  })
 })

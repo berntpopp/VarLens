@@ -71,7 +71,10 @@ watch(model, (val) => {
   } else if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
     const preset = CARRIER_FREQUENCY_PRESETS.find((p) => p.value === val)
     selectedPreset.value = preset?.value ?? null
-    customPercent.value = preset ? '' : String(val * 100)
+    // Keep what was typed; toPrecision drops float noise (0.07 * 100 = 7.000000000000001).
+    if (preset) customPercent.value = ''
+    else if (Math.min(parseFloat(customPercent.value), 100) / 100 !== val)
+      customPercent.value = String(Number((val * 100).toPrecision(12)))
   }
 })
 </script>
