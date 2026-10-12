@@ -205,3 +205,12 @@ Local VEP/dbNSFP gives CADD only for non-synonymous coding SNVs: it is missing f
 1. **SNV spikes:** real CADD v1.7 PHRED from the public CADD API (all SNVs precomputed; pool variants only — public, patient-independent), cached and marked `cadd-api`.
 2. **Indel spikes and SNVs without an API value:** imputed by sampling a background row of the same projected `func` and allele class, **including** rows whose varvis CADD is null (preserves varvis missingness); marked `imputed` and counted. This deliberately removes any CADD signal that would distinguish spikes from background within a class (conservative for the evidence ruleset).
 3. **Sensitivity analyses reported next to the primary result:** imputation off; and the Tier 1 / CADD comparisons restricted to SNV-only cases (real CADD for every spike).
+
+## 14. Anchor amendment to §11.1 (after a smoke run, before any comparative result)
+
+A smoke run on one background (quick mode, provisional vocabulary mapping) showed §11.1 degenerating: P/LP spikes almost never fall into the "no evidence" reference bins (a_ref = 0 for frequency, effect, phenotype, gene, fallback; ClinVar by construction), so the support rule zeroed nearly every group. Because every group is a complete partition, adding a constant to all bins of a group shifts every row's score equally — **the ranking is invariant to the choice of reference**; "reference = 0" is only a display convention, and anchoring at an a_ref = 0 bin would push every other bin to the clip. Replacement rule:
+- For every bin j (the catch-all included): `e_j = log2[ ((a_j+½)/(A+K/2)) / ((b_j+½)/(B+K/2)) ]`.
+- Anchor = the bin with the largest support `a_j + b_j` (ties → earlier bin); `points_j = round_half(e_j − e_anchor)`, clipped to ±8; the anchor scores 0 and the catch-all rule keeps its own estimate.
+- A bin with `a_j + b_j < 10` scores 0 (anchor level). A group is zeroed only if `A < 20`.
+- Modes: the same over the mode partition.
+No comparative test-fold result informed this amendment; the report states it. The settings editor keeps the catch-all rule pinned last but its points are editable.
