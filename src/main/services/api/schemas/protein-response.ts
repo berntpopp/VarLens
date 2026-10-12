@@ -118,8 +118,12 @@ export const EnsemblGeneLookupSchema = z.object({
   end: z.number(),
   strand: z.number(),
   seq_region_name: z.string(),
+  /** Stable id (with version) of the canonical transcript, on a lookup without expand */
+  canonical_transcript: z.string().optional(),
   Transcript: z.array(EnsemblTranscriptSchema).optional()
 })
+
+export const EnsemblTranscriptLookupSchema = EnsemblTranscriptSchema
 
 export type EnsemblGeneLookup = z.infer<typeof EnsemblGeneLookupSchema>
 
