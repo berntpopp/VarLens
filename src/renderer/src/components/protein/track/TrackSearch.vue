@@ -29,7 +29,7 @@
           @update:model-value="onInput"
           @keydown="onKeydown"
           @click:clear="clear"
-          @vue:mounted="dropWrapperRole"
+          @vue:mounted="dropFieldRole"
         />
       </template>
       <v-list :id="listId" density="compact" role="listbox" class="py-0">
@@ -71,11 +71,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useId, type VNode } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { mdiChevronLeft, mdiChevronRight, mdiMagnify } from '@mdi/js'
 import IconButton from '../../common/IconButton.vue'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
+import { dropFieldRole } from '../../../utils/combobox-field'
 import { parseTrackQuery, searchTrack, type TrackSearchContext } from '../../../utils/track-search'
 
 const props = defineProps<{
@@ -87,12 +88,6 @@ const props = defineProps<{
 }>()
 
 const listId = `track-search-${useId()}`
-// ponytail: Vuetify 4.2 copies `role` onto the v-field wrapper too, a second combobox
-// without aria-expanded (axe critical). Drop it there; the input keeps the role. Revisit
-// when Vuetify stops forwarding it.
-function dropWrapperRole(vnode: VNode): void {
-  ;(vnode.el as HTMLElement | null)?.querySelector('.v-field')?.removeAttribute('role')
-}
 const query = ref<string | null>('')
 const open = ref(false)
 const active = ref(0)
