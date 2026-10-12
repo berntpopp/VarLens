@@ -2,11 +2,12 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { uploadImportFiles } from '../../src/web/client/uploads'
 import { WEB_UPLOAD_EVENT, type WebUploadEventDetail } from '../../src/shared/types/web-upload'
+import { UPLOAD_CONFIG } from '../../src/shared/config/upload.config'
 
 type Reply = { status: number; body: unknown }
 
 /** XMLHttpRequest stand-in answering each upload with the next scripted reply. */
-function stubXhr(replies: Reply[]): void {
+function stubXhr(replies: Reply[], sent: string[] = []): void {
   class FakeXhr {
     status = 0
     statusText = ''
@@ -17,7 +18,9 @@ function stubXhr(replies: Reply[]): void {
     onerror: (() => void) | null = null
     onabort: (() => void) | null = null
     open(): void {}
-    setRequestHeader(): void {}
+    setRequestHeader(name: string, value: string): void {
+      if (name === 'x-varlens-file-name') sent.push(value)
+    }
     abort(): void {}
     send(): void {
       const reply = replies.shift()!
@@ -64,15 +67,39 @@ describe('uploadImportFiles', () => {
     const refs = await uploadImportFiles(files('a.vcf', 'bad.txt', 'c.vcf'))
 
     expect(refs.map((r) => r.fileName)).toEqual(['a.vcf', 'c.vcf'])
-    expect(events.find((e) => e.status === 'skipped')?.message).toBe(
-      'bad.txt: Only VCF, JSON, BED, GZIP, and ZIP files are supported'
-    )
+    expect(events.filter((e) => e.status === 'skipped').map((e) => e.message)).toEqual([
+      '1 file skipped: bad.txt: Only VCF, JSON, BED, GZIP, and ZIP files are supported'
+    ])
+  })
+
+  test('a folder pick never uploads files of other types, and one line sums up the skips', async () => {
+    const sent: string[] = []
+    stubXhr([ok('a.vcf.gz'), ok('b.vcf.gz')], sent)
+    const events = captureEvents()
+    const names = [
+      'a.vcf.gz',
+      'a.vcf.gz.tbi',
+      'b.vcf.gz',
+      'b.vcf.gz.tbi',
+      'notes.txt',
+      'c.csi',
+      'd.bam'
+    ]
+
+    const refs = await uploadImportFiles(files(...names), '.vcf,.vcf.gz,.json,.json.gz,.gz')
+
+    expect(refs).toHaveLength(2)
+    expect(sent).toHaveLength(2)
+    const reason = UPLOAD_CONFIG.NOT_ACCEPTED_REASON
+    expect(events.filter((e) => e.status === 'skipped').map((e) => e.message)).toEqual([
+      `5 files skipped: a.vcf.gz.tbi: ${reason}; b.vcf.gz.tbi: ${reason}; notes.txt: ${reason}; and 2 more`
+    ])
   })
 
   test('rejects with the server message, not the JSON envelope, when every file is refused', async () => {
     stubXhr([refused])
     await expect(uploadImportFiles(files('bad.txt'))).rejects.toThrow(
-      /^bad\.txt: Only VCF, JSON, BED, GZIP, and ZIP files are supported$/
+      /^1 file skipped: bad\.txt: Only VCF, JSON, BED, GZIP, and ZIP files are supported$/
     )
   })
 

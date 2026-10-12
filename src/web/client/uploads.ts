@@ -13,6 +13,7 @@ import {
   WEB_UPLOAD_EVENT,
   type WebUploadEventDetail
 } from '../../shared/types/web-upload'
+import { skippedUploadsSummary, UPLOAD_CONFIG } from '../../shared/config/upload.config'
 
 export interface UploadedFileRef {
   ref: string
@@ -116,16 +117,19 @@ async function uploadImportFileWithProgress(
         )
         // A quota refusal (also 413) concerns the whole selection: it still aborts the batch.
         const skippable = xhr.status === 400 || code === 'upload-too-large'
-        dispatchUploadEvent({
-          status: skippable ? 'skipped' : 'error',
-          fileName: file.name,
-          fileIndex,
-          totalFiles,
-          loadedBytes: 0,
-          totalBytes,
-          percent: null,
-          message
-        })
+        // A skipped file is reported once, in the selection's summary (uploadImportFiles).
+        if (!skippable) {
+          dispatchUploadEvent({
+            status: 'error',
+            fileName: file.name,
+            fileIndex,
+            totalFiles,
+            loadedBytes: 0,
+            totalBytes,
+            percent: null,
+            message
+          })
+        }
         reject(new UploadRefusedError(message, skippable))
         return
       }
@@ -207,17 +211,31 @@ async function discardUploads(refs: readonly string[]): Promise<void> {
   }
 }
 
-export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
+/** True when the name ends with one of the `accept` suffixes (a folder pick ignores `accept`). */
+function isAcceptedName(name: string, accept: string): boolean {
+  const lower = name.toLowerCase()
+  return accept.split(',').some((suffix) => lower.endsWith(suffix.trim().toLowerCase()))
+}
+
+export async function uploadImportFiles(
+  picked: readonly File[],
+  accept?: string
+): Promise<UploadedFileRef[]> {
+  const accepted = (file: File): boolean =>
+    accept === undefined || isAcceptedName(file.name, accept)
+  const files = picked.filter(accepted)
+  const skipped = picked
+    .filter((file) => !accepted(file))
+    .map((file) => `${file.name}: ${UPLOAD_CONFIG.NOT_ACCEPTED_REASON}`)
   const uploaded: UploadedFileRef[] = []
-  let refusal: UploadRefusedError | undefined
   try {
     for (let index = 0; index < files.length; index++) {
       try {
         uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
       } catch (error) {
-        // One stray file must not block the good ones; its `skipped` event names it.
+        // One stray file must not block the good ones; the summary below names it.
         if (!(error instanceof UploadRefusedError) || !error.skippable) throw error
-        refusal = error
+        skipped.push(error.message)
       }
     }
   } catch (error) {
@@ -226,7 +244,20 @@ export async function uploadImportFiles(files: readonly File[]): Promise<Uploade
     void discardUploads(uploaded.map((file) => file.ref))
     throw error
   }
-  if (uploaded.length === 0 && refusal !== undefined) throw refusal
+  if (skipped.length > 0) {
+    const message = skippedUploadsSummary(skipped)
+    if (uploaded.length === 0) throw new Error(message)
+    dispatchUploadEvent({
+      status: 'skipped',
+      fileName: '',
+      fileIndex: files.length - 1,
+      totalFiles: files.length,
+      loadedBytes: 0,
+      totalBytes: null,
+      percent: null,
+      message
+    })
+  }
   return uploaded
 }
 
@@ -281,5 +312,5 @@ export async function pickAndUploadFiles(params: {
   directory?: boolean
 }): Promise<string[]> {
   const files = await pickFiles(params)
-  return (await uploadImportFiles(files)).map((file) => file.ref)
+  return (await uploadImportFiles(files, params.accept)).map((file) => file.ref)
 }

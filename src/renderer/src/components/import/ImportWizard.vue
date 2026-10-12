@@ -357,10 +357,8 @@ function handleWebUploadEvent(event: Event): void {
   if (detail.status === 'error') {
     importStore.importError(detail.message ?? 'Upload failed')
   }
-  // The batch goes on without this file; keep its reason on screen past the next file's start.
-  if (detail.status === 'skipped' && detail.message !== undefined) {
-    cancelError.value = [cancelError.value, detail.message].filter(Boolean).join(' · ')
-  }
+  // Files left out of an otherwise uploaded selection, in one line; cleared by the next selection.
+  if (detail.status === 'skipped') cancelError.value = detail.message ?? ''
 }
 
 function cancelUploadSelection(): void {

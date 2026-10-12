@@ -362,7 +362,7 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
-    it('keeps a skipped web upload reason on screen while the batch goes on', async () => {
+    it('shows the skipped web uploads summary until a new selection starts', async () => {
       window.__VARLENS_WEB__ = true
       window.api = createMockApi()
       const wrapper = mount(ImportWizard, { global: { plugins: [createPinia(), vuetify] } })
@@ -377,9 +377,9 @@ describe('ImportWizard IPC safety', () => {
       }
 
       send('started', 0)
-      send('skipped', 1, 'bad.txt: Only VCF files')
-      send('started', 2)
-      expect(vm.cancelError).toBe('bad.txt: Only VCF files')
+      send('started', 1)
+      send('skipped', 1, '1 file skipped: bad.txt: Only VCF files')
+      expect(vm.cancelError).toBe('1 file skipped: bad.txt: Only VCF files')
 
       send('started', 0) // a new selection starts clean
       expect(vm.cancelError).toBe('')

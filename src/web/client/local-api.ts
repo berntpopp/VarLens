@@ -55,7 +55,8 @@ const importApi: Partial<WindowAPI['import']> = {
   selectFile: () => pickOne(IMPORT_ACCEPT),
   selectFiles: () => pickAndUploadFiles({ multiple: true, accept: IMPORT_ACCEPT }),
   selectBedFile: () => pickOne('.bed,.bed.gz,.gz'),
-  enrollDroppedFiles: async (files) => (await uploadImportFiles(files)).map((file) => file.ref)
+  enrollDroppedFiles: async (files) =>
+    (await uploadImportFiles(files, IMPORT_ACCEPT)).map((file) => file.ref)
 }
 
 const batchImportApi: Partial<WindowAPI['batchImport']> = {
