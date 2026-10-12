@@ -122,9 +122,9 @@ html::-webkit-scrollbar-thumb {
   outline-offset: 2px !important;
 }
 
-/* On the app bar a primary ring would vanish (1:1); its menus are teleported
-   out and keep the primary ring. */
-.v-app-bar {
+/* On app-bar surfaces (app bar, sidebar header) a primary ring would vanish
+   (1:1); their menus are teleported out and keep the primary ring. */
+.bg-app-bar {
   --vl-focus: rgb(var(--v-theme-on-app-bar));
 }
 

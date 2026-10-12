@@ -7,6 +7,7 @@ import * as directives from 'vuetify/directives'
 
 import VariantIdentitySection from '../../../src/renderer/src/components/VariantIdentitySection.vue'
 import { installCapabilities } from '../helpers/capabilities'
+import { IDENTITY_COPY } from '../../../src/renderer/src/config/uiCopyConfig'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -49,6 +50,10 @@ describe('VariantIdentitySection call line', () => {
       filter: 'PASS'
     })
     expect(wrapper.text()).toContain('Uncertain significance')
+    // Labelled, so it never reads as the user's own ACMG VUS (N-details-4)
+    expect(wrapper.find('[data-testid="clinvar-line"]').text()).toMatch(
+      new RegExp(`^${IDENTITY_COPY.clinvar}\\s*Uncertain significance`)
+    )
     expect(callLine(wrapper)).toBe('GT 0|1 · DP 887 · GQ 546 · AB 0.45 · FILTER PASS')
   })
 
