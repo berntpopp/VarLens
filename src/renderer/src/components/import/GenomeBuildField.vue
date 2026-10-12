@@ -35,7 +35,7 @@
     </v-radio-group>
     <div
       v-if="detection.mitoWarning"
-      class="text-caption text-warning"
+      class="text-body-small text-warning"
       data-testid="genome-build-mito-warning"
     >
       {{ detection.mitoWarning }}
