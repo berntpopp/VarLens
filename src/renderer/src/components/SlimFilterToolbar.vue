@@ -146,9 +146,14 @@
               v-if="columns && columns.length > 0"
               :prepend-icon="mdiTableColumn"
               title="Columns"
-              :subtitle="SHORTCUTS.toggleColumns.key"
               @click="emit('open-columns-drawer')"
-            />
+            >
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{
+                  SHORTCUTS.toggleColumns.key
+                }}</kbd>
+              </template>
+            </v-list-item>
             <template v-if="exportFormats && exportBlockedReason == null">
               <v-list-item
                 v-for="option in EXPORT_FORMAT_OPTIONS"

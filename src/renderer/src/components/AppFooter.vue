@@ -209,15 +209,19 @@
             <v-list-item
               :prepend-icon="disclaimerAcknowledged ? mdiShieldCheck : mdiShieldAlert"
               title="Disclaimer"
-              :subtitle="SHORTCUTS.disclaimer.key"
               @click="openDisclaimer"
-            />
-            <v-list-item
-              :prepend-icon="mdiHelpCircle"
-              title="FAQ"
-              :subtitle="SHORTCUTS.faq.key"
-              @click="openFAQ"
-            />
+            >
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{
+                  SHORTCUTS.disclaimer.key
+                }}</kbd>
+              </template>
+            </v-list-item>
+            <v-list-item :prepend-icon="mdiHelpCircle" title="FAQ" @click="openFAQ">
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{ SHORTCUTS.faq.key }}</kbd>
+              </template>
+            </v-list-item>
           </v-list>
         </v-menu>
 
