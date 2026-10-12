@@ -198,3 +198,10 @@ Footer: error count with jump-to-error, Cancel, Save (disabled while invalid).
 **Persistence.** Existing `filter-presets` create/update/delete with `kind: 'shortlist'` and `filter_json.shortlist = ShortlistConfig` (no new IPC channel). Built-ins are never mutated; editing a built-in means duplicating it. Web/desktop parity follows the parity manifest (capability-gated where pending).
 
 **Quality gates.** Load `varlens-ui-patterns`; dense UI is intentional; both themes; keyboard operable (reorder via buttons, not only drag); axe clean. Before done: `impeccable` critique + polish pass on the dialog, `ponytail:ponytail-review` on the branch diff.
+
+## 13. CADD coverage amendment (found by the runner lane, 2026-10-12)
+
+Local VEP/dbNSFP gives CADD only for non-synonymous coding SNVs: it is missing for 710/710 frameshift and 429/433 splice donor/acceptor P/LP spikes, for every indel and for 44 % of pool SNVs, whereas varvis CADD is missing for ~0.3 % of SNV and ~15 % of indel rows. Left as is, spikes would get no CADD credit under Tier 1 / CADD sorting and the ΔHit@10 ship comparison would be inflated. Resolution:
+1. **SNV spikes:** real CADD v1.7 PHRED from the public CADD API (all SNVs precomputed; pool variants only — public, patient-independent), cached and marked `cadd-api`.
+2. **Indel spikes and SNVs without an API value:** imputed by sampling a background row of the same projected `func` and allele class, **including** rows whose varvis CADD is null (preserves varvis missingness); marked `imputed` and counted. This deliberately removes any CADD signal that would distinguish spikes from background within a class (conservative for the evidence ruleset).
+3. **Sensitivity analyses reported next to the primary result:** imputation off; and the Tier 1 / CADD comparisons restricted to SNV-only cases (real CADD for every spike).
