@@ -6,6 +6,14 @@
     'Liberation Mono', monospace;
 }
 
+/* UA default for these is the OS `monospace`; use the bundled mono instead. */
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+}
+
 /* Tabular figures on numeric (end-aligned) data cells so AF/CADD/positions align. */
 td.v-data-table-column--align-end {
   font-variant-numeric: tabular-nums;
