@@ -91,7 +91,7 @@ const emit = defineEmits<{ resolved: [] }>()
 
 const { reviews, applying, load, apply } = useBuildReviews()
 const { canWrite } = usePermissions()
-const { showSnack } = useAppState()
+const { showSnack, incrementDataGeneration } = useAppState()
 const databaseStore = useDatabaseStore()
 const open = ref(false)
 const choices = reactive<Record<number, string | null>>({})
@@ -114,6 +114,8 @@ async function applyChoices(): Promise<void> {
   } catch (error) {
     showSnack(error instanceof Error ? error.message : String(error), 'error')
   }
+  // Renamed contigs and builds (also after a partial failure): views refetch.
+  incrementDataGeneration()
   emit('resolved')
 }
 
