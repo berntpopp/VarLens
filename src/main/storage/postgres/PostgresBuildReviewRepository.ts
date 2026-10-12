@@ -103,7 +103,7 @@ export class PostgresBuildReviewRepository {
         await client.query(
           `INSERT INTO ${this.schemaName}."contig_naming_pending" (case_id, confirmed)
            VALUES ($1, true)
-           ON CONFLICT (case_id) DO UPDATE SET confirmed = true, pairs = NULL, annotations_moved = false`,
+           ON CONFLICT (case_id) DO UPDATE SET confirmed = true, pairs = NULL`,
           [caseId]
         )
       }

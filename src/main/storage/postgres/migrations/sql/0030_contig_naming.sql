@@ -4,9 +4,8 @@
 -- No variant row is rewritten here: the migration runs in one transaction,
 -- and a rewrite of 10k exomes must not. Every published case is queued and
 -- the background job (postgres-contig-naming.ts) works through the queue:
--- plan each case (re-check or confirmed build -> `pairs`, or flag it), move
--- the global annotations of all planned cases at once, then rename one
--- case's variants per transaction. A case confirmed later by the user is
+-- plan each case (re-check or confirmed build -> `pairs`, or flag it), then
+-- rename one case per transaction, its global annotations with it. A case confirmed later by the user is
 -- queued again with `confirmed`. Cases imported from now on are stored in
 -- the reference form and are never queued. Back the database up before
 -- upgrading: the rename is one-way.
@@ -25,8 +24,7 @@ CREATE TABLE IF NOT EXISTS "__schema__"."contig_naming_pending" (
   -- The user confirmed the case's build: rename without the re-check.
   confirmed BOOLEAN NOT NULL DEFAULT false,
   -- The planned renames ([{from, to}]); NULL until the case is planned.
-  pairs JSONB,
-  annotations_moved BOOLEAN NOT NULL DEFAULT false
+  pairs JSONB
 );
 
 INSERT INTO "__schema__"."contig_naming_pending" (case_id)

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
+import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
 import {
   awaitContigNaming,
@@ -302,6 +303,58 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     expect(await chrsOf(a)).toEqual(['chr1', 'chrM'])
     expect(await frequencies()).toEqual(await recount())
     expect(await count('contig_naming_pending')).toBe(0)
+  }, 60_000)
+
+  it('a not-yet-renamed case keeps its notes, filters and edits while the job is mid-way', async () => {
+    const z = await addCase('Z', 'GRCh38', GRCH38_HEADER) // renamed first (lowest id)
+    const a = await addCase('A', 'GRCh38', GRCH38_HEADER)
+    const b = await addCase('B', 'GRCh37', GRCH37_TAG) // canonical, shares 1:100
+    await addVariant(z, '1', 500)
+    for (const pos of [100, 200, 300]) await addVariant(a, '1', pos)
+    await addVariant(b, '1', 100)
+    await annotate('1', 100, 'shared', 1, null, 1)
+    await annotate('1', 300, 'only A', 0, 'Pathogenic', 1)
+    await migrate()
+    while ((await chrsOf(z))[0] !== 'chr1') {
+      if (!(await runContigNamingStep({ pool, schema }))) break
+    }
+    expect(await chrsOf(z)).toEqual(['chr1'])
+    expect(await chrsOf(a)).toEqual(['1']) // the window: A is not renamed yet
+
+    const repo = new PostgresVariantReadRepository(pool, schema)
+    const positions = async (filter: Record<string, unknown>): Promise<number[]> =>
+      (
+        await repo.queryVariants({ case_id: a, annotation_scope: 'all', ...filter } as never, 50)
+      ).data
+        .map((v) => Number(v.pos))
+        .sort((x, y) => x - y)
+    expect(await positions({ starred_only: true })).toEqual([100])
+    expect(await positions({ acmg_classifications: ['Pathogenic'] })).toEqual([300])
+    expect(await positions({ has_comment: true })).toEqual([100, 300])
+
+    // The user edits one note and adds another on A while A waits.
+    await probe.query(
+      `UPDATE ${t('variant_annotations')} SET global_comment = 'edited', updated_at = 9
+        WHERE chr = '1' AND pos = 300`
+    )
+    await annotate('1', 200, 'added', 0, null, 9)
+    await runJob()
+
+    expect(await chrsOf(a)).toEqual(['chr1'])
+    const rows = (
+      await probe.query(
+        `SELECT chr, pos::int AS pos, global_comment FROM ${t('variant_annotations')}
+          ORDER BY pos, chr COLLATE "C"`
+      )
+    ).rows
+    expect(rows).toEqual([
+      { chr: '1', pos: 100, global_comment: 'shared' }, // B keeps it
+      { chr: 'chr1', pos: 100, global_comment: 'shared' },
+      { chr: 'chr1', pos: 200, global_comment: 'added' },
+      { chr: 'chr1', pos: 300, global_comment: 'edited' }
+    ])
+    expect(await positions({ starred_only: true })).toEqual([100])
+    expect(await positions({ has_comment: true })).toEqual([100, 200, 300])
   }, 60_000)
 
   it('an import and an annotation edit during the job are kept', async () => {

@@ -75,8 +75,13 @@ and an hg19 `chr1` at the same position swap keys):
 - Rows that land on one key are merged: `starred = max`, comments joined by paragraph in time order
   (a paragraph appears once), ACMG classification + evidence of the newest row that has one; a different
   classification that is dropped goes to `audit_log` (`acmg_classify`, reason `contig_merge of <keys>`).
-- SQLite: in the migration / confirmation transaction, before the variants are renamed. PostgreSQL: one
-  transaction for all planned cases, with the group rows locked `FOR UPDATE` (a concurrent edit waits).
+- SQLite: in the migration / confirmation transaction, before the variants are renamed (all renamed
+  cases together). PostgreSQL: in **each case's own rename transaction** (`postgres-contig-rename.ts`),
+  with that case's group rows locked `FOR UPDATE`: notes and variants move together, so every read
+  (notes join on the exact name) and the starred / ACMG / comment filters see the case before or after,
+  and an edit made while the case waits moves with it. Other queued cases keep their names, except a
+  queued case that would take one of this case's new keys while giving up its own at that locus (a swap
+  or chain, repeated until stable): its variant and notes at that locus move in the same transaction.
 
 ## Order (per backend)
 
@@ -94,14 +99,13 @@ SQLite (`PRAGMA user_version` 47, `src/main/database/contig-naming-migration.ts`
    review rows for flagged cases; summary marked stale; user_version 47.
 
 PostgreSQL (`0030_contig_naming.sql` + background job `src/main/storage/postgres/postgres-contig-naming.ts`):
-1. Migration: create `contig_build_review` and `contig_naming_pending(case_id, confirmed, pairs,
-   annotations_moved)`, queue every published case (newer imports are canonical and never queued).
+1. Migration: create `contig_build_review` and `contig_naming_pending(case_id, confirmed, pairs)`, queue every published case (newer imports are canonical and never queued).
 2. Job (scheduled from the cohort freshness probe and from `cases:buildReviews`; `FOR UPDATE SKIP
    LOCKED` everywhere, one short transaction per step, so a crash resumes at the step in flight):
    a. plan one case (re-check, async header read off the event loop; or take the confirmed build):
       store `pairs`, or flag it, or dequeue a case that needs nothing;
-   b. once nothing is unplanned: one transaction remaps the annotations of all planned cases;
-   c. rename one case's variants per transaction (frequencies like a case delete/publish) and dequeue it.
+   b. once nothing is unplanned: rename one case per transaction, its notes (and a swap partner's at the
+      same locus) with it, frequencies like a case delete/publish, and dequeue it.
    The step that empties the queue asks for **one** cohort-summary rebuild (`cohort_summary_rebuild_requests`
    `contig_naming`), not one per case.
 3. Backup: operator's responsibility (release notes); the job is resumable and idempotent.
