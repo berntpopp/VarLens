@@ -15,7 +15,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
-import { runContigNamingStep } from '../../../src/main/storage/postgres/postgres-contig-naming'
+import {
+  awaitContigNaming,
+  runContigNamingStep
+} from '../../../src/main/storage/postgres/postgres-contig-naming'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -249,7 +252,9 @@ describe.skipIf(!RUN)('migration 0029 + chromosome-name job (PostgreSQL)', () =>
       3
     )
     expect((await repo.listBuildReviews()).renameInProgress).toBe(true)
+    // The confirmation also started the background job: let both finish.
     await runJob()
+    await awaitContigNaming(schema)
     for (const id of ids) expect(await chrsOf(id)).toEqual(['1'])
     expect(await repo.listBuildReviews()).toEqual({ reviews: [], renameInProgress: false })
     const audit = await probe.query(
