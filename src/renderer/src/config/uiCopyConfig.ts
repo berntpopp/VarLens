@@ -30,6 +30,8 @@ export const CARRIER_FREQUENCY_COPY = {
   column: 'Cohort carrier freq.',
   placeholder: 'Max carrier freq. % (e.g. 5)',
   hint: 'Patients in this database (relatives included), not a population. Not for BA1, BS1 or PM2.',
+  stale:
+    'Cohort counts are being rebuilt: carrier frequency and carrier filters may be out of date.',
   maxCarriersLabel: 'Seen in at most N cases',
   maxCarriersHint: {
     case: 'Counts cases of this genome build in this database, including this case.',

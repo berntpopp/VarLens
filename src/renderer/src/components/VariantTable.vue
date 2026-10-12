@@ -1,12 +1,12 @@
 <template>
   <div ref="tableContainerRef" class="table-container">
-    <!-- Top scrollbar (synced with table) -->
     <div ref="topScrollbarRef" class="top-scrollbar-container">
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
     </div>
 
     <QueryErrorAlert :error="loadError" :stale="variants.length > 0" @retry="loadVariants" />
     <TableLoadIndicator :active="showStale" :message="liveMessage" />
+    <SummaryStaleNotice :stale="summaryStale" />
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
@@ -122,7 +122,6 @@
         <AlleleCell :allele="value" />
       </template>
 
-      <!-- CADD score (handle null) -->
       <template #[`item.cadd`]="{ value }">
         <CaddScoreCell :score="value" />
       </template>
@@ -148,7 +147,6 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- Consequence (handle null) -->
       <template #[`item.consequence`]="{ value }">
         <ConsequenceCell :consequence="value" />
       </template>
@@ -286,6 +284,7 @@ import { SHORTCUTS } from '../config/keyboardShortcuts'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
 import TableLoadIndicator from './table-state/TableLoadIndicator.vue'
+import SummaryStaleNotice from './table-state/SummaryStaleNotice.vue'
 import QueryErrorAlert from './table-state/QueryErrorAlert.vue'
 import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../composables/useTableLoadingState'
@@ -406,6 +405,7 @@ const {
   totalCount,
   loading,
   loadError,
+  summaryStale,
   page,
   itemsPerPage,
   sortBy,
