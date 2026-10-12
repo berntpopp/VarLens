@@ -36,7 +36,7 @@ export const SEMANTIC_COLORS = {
   dark: {
     error: '#FF8A8A',
     warning: '#FFD166',
-    muted: '#B8BFC9',
+    muted: '#B4B6BA',
     'acmg-lp': '#FFC078',
     'acmg-lb': '#9CCBFF',
     'acmg-b': '#5C8DFF'

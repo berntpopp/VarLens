@@ -61,9 +61,9 @@ const warmLight: ThemeDefinition = {
     // Filled star (amber). Material amber is 1.6:1 on surface; this keeps the
     // hue at 4.1:1 so the starred state meets 3:1 non-text contrast (1.4.11).
     star: '#B26A00',
-    // ClinVar "conflicting" chip. Material deep-purple is one colour in both
-    // themes (2.0:1 on the dark surface); this pair is 7.4:1 light, 7.2:1 dark.
-    'clinvar-conflicting': '#5E35B1',
+    // ClinVar "conflicting" chip: a plum that stays ΔE00 >= 10 from the ACMG
+    // scale under CVD (8.6:1 light, 6.4:1 dark; semantic-theme-tokens test).
+    'clinvar-conflicting': '#74364B',
     // error, warning, muted (secondary text, VUS) and acmg-lp/-lb/-b: one
     // CVD-checked map shared with the protein plots.
     ...SEMANTIC_COLORS.light
@@ -96,7 +96,7 @@ const warmDark: ThemeDefinition = {
     'on-success': '#12141A',
     'on-warning': '#12141A',
     star: '#FFC107', // 10.4:1 on surface
-    'clinvar-conflicting': '#B39DDB',
+    'clinvar-conflicting': '#B593C4',
     'app-bar': '#30353E',
     'on-app-bar': '#E4E7EC',
     ...SEMANTIC_COLORS.dark
