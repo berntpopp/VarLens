@@ -451,6 +451,19 @@ onKeyStroke(
     monospace;
 }
 
+/* A long ClinVar class ends in an ellipsis inside the fixed column (the full
+   value is in the chip's tooltip) instead of being clipped mid-word. */
+.shortlist-data-table :deep(td .v-chip[data-tooltip]) {
+  max-width: 100%;
+}
+.shortlist-data-table :deep(td .v-chip[data-tooltip] .v-chip__content) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Same 18px glyph box the former x-small icon v-btn rendered */
 .shortlist-row-icon {
   font-size: 18px;
