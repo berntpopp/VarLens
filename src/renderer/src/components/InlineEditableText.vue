@@ -2,7 +2,9 @@
   <div class="inline-editable">
     <!-- Display mode -->
     <div v-if="readonly" class="d-flex align-center">
-      <span :class="{ 'text-muted': !modelValue }">{{ modelValue || '—' }}</span>
+      <span :class="{ 'text-muted': !modelValue }">{{
+        modelValue || EMPTY_VALUE_PLACEHOLDER
+      }}</span>
     </div>
     <div
       v-else-if="!isEditing"
@@ -40,6 +42,7 @@
 import { ref, nextTick } from 'vue'
 import { mdiPencil } from '@mdi/js'
 import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
+import { EMPTY_VALUE_PLACEHOLDER } from '../config/displayConfig'
 
 interface Props {
   modelValue: string | null
