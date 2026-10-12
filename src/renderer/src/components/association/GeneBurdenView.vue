@@ -71,8 +71,8 @@
       Analysis complete: {{ testedResults.length }} genes tested, {{ significantCount }} significant
       (FDR &lt; 0.05) in {{ (results.elapsed_ms / 1000).toFixed(1) }}s
       <span v-if="untestedCount > 0">
-        ({{ untestedCount }} {{ untestedCount === 1 ? 'gene' : 'genes' }} without qualifying
-        variants not shown)
+        ({{ untestedCount }} {{ untestedCount === 1 ? 'gene' : 'genes' }}
+        {{ ASSOCIATION_UNTESTED_SUMMARY_TEXT }})
       </span>
     </v-alert>
 
@@ -86,7 +86,7 @@
     <v-tabs-window v-if="results" v-model="activeTab">
       <v-tabs-window-item value="table">
         <AssociationResultsTable
-          :results="testedResults"
+          :results="results.results"
           :primary-test="results.primary_test"
           :non-autosomal-variants="results.non_autosomal_variants"
         />
@@ -110,7 +110,8 @@ import ManhattanPlot from './ManhattanPlot.vue'
 import { useAssociation } from '../../composables/useAssociation'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import { formatError } from '../../utils/ipc-result'
-import type { AssociationResultRow } from '../../utils/association-results'
+import { isTestedGene, type AssociationResultRow } from '../../utils/association-results'
+import { ASSOCIATION_UNTESTED_SUMMARY_TEXT } from '../../../../shared/config/domain.config'
 
 interface CaseInfo {
   id: number
@@ -159,8 +160,8 @@ const significantCount = computed(
   () => results.value?.results.filter((r) => r.q_value !== null && r.q_value < 0.05).length ?? 0
 )
 
-// Genes with no qualifying variant have no test; table, plots and summary all show the same set.
-const testedResults = computed(() => results.value?.results.filter((r) => r.n_variants > 0) ?? [])
+// Table, plots and summary show the same tested set; the table's export keeps every gene.
+const testedResults = computed(() => results.value?.results.filter(isTestedGene) ?? [])
 const untestedCount = computed(
   () => (results.value?.results.length ?? 0) - testedResults.value.length
 )

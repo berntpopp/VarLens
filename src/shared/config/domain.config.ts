@@ -55,3 +55,24 @@ export const ASSOCIATION_WARNING_TEXT: Readonly<Record<string, string>> = {
 /** Run-level warning, prefixed with the number of excluded samples. */
 export const ASSOCIATION_MISSING_COVARIATE_TEXT =
   'sample(s) lack a selected covariate (age or metric) and were excluded from the logistic burden test'
+
+/** Status of a tested gene in the burden export. */
+export const ASSOCIATION_TESTED_TEXT = 'tested'
+
+/** After "N gene(s)" in the burden summary: untested genes are not listed in the table. */
+export const ASSOCIATION_UNTESTED_SUMMARY_TEXT =
+  'not tested (no usable site; reasons under warnings and in the export)'
+
+/** Why a gene with no usable site was not tested; used in the warnings and the export. */
+export function untestedGeneReason(excluded: {
+  missing_call: number
+  conflicting_calls: number
+  no_called_alleles: number
+}): string {
+  const total = excluded.missing_call + excluded.conflicting_calls + excluded.no_called_alleles
+  if (total === 0) return 'not tested: no qualifying variants'
+  return (
+    `not tested: all ${total} sites excluded (missing call ${excluded.missing_call}, ` +
+    `conflicting calls ${excluded.conflicting_calls}, no called alleles ${excluded.no_called_alleles})`
+  )
+}

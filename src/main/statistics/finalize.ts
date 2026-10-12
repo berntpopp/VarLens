@@ -1,7 +1,8 @@
 import { benjaminiHochberg } from './fdr'
 import {
   ASSOCIATION_MISSING_COVARIATE_TEXT,
-  ASSOCIATION_WARNING_TEXT
+  ASSOCIATION_WARNING_TEXT,
+  untestedGeneReason
 } from '../../shared/config/domain.config'
 import type {
   AssociationConfig,
@@ -50,7 +51,10 @@ export function finalizeAssociationResults(
   }
   for (const result of rawResults) {
     const code = result.logistic_burden.warning
-    if (code !== undefined && code !== '') {
+    if (result.n_variants === 0) {
+      // No usable site: the reason, not the logistic code, matches the table and export.
+      warnings.push(`${result.gene_symbol}: ${untestedGeneReason(result.sites_excluded)}`)
+    } else if (code !== undefined && code !== '') {
       warnings.push(`${result.gene_symbol}: ${ASSOCIATION_WARNING_TEXT[code] ?? code}`)
     }
   }

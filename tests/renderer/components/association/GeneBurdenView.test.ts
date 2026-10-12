@@ -27,6 +27,7 @@ vi.mock('../../../../src/renderer/src/composables/useAssociation', () => ({
 
 import GeneBurdenView from '../../../../src/renderer/src/components/association/GeneBurdenView.vue'
 import AssociationConfigPanel from '../../../../src/renderer/src/components/association/AssociationConfigPanel.vue'
+import { ASSOCIATION_UNTESTED_SUMMARY_TEXT } from '../../../../src/shared/config/domain.config'
 import AssociationResultsTable from '../../../../src/renderer/src/components/association/AssociationResultsTable.vue'
 
 const vuetify = createVuetify({ components, directives })
@@ -51,10 +52,11 @@ describe('GeneBurdenView', () => {
     expect(mockLoadCasesWithMetadata).toHaveBeenCalledTimes(2)
   })
 
-  it('shows only tested genes, so the summary count matches the table', async () => {
+  it('counts tested genes like the table and names the untested ones', async () => {
     const gene = (gene_symbol: string, n_variants: number) => ({
       gene_symbol,
       n_variants,
+      sites_excluded: { missing_call: 0, conflicting_calls: 0, no_called_alleles: 0 },
       q_value: null,
       fisher: { p_value: null },
       logistic_burden: { p_value: null }
@@ -73,9 +75,10 @@ describe('GeneBurdenView', () => {
     wrapper.findComponent(AssociationConfigPanel).vm.$emit('run', {})
     await flushPromises()
 
+    // The table gets every gene (it lists the tested ones and exports all with a status).
     const rows = wrapper.findComponent(AssociationResultsTable).props('results') as unknown[]
-    expect(rows).toHaveLength(1)
+    expect(rows).toHaveLength(2)
     expect(wrapper.text()).toContain('1 genes tested')
-    expect(wrapper.text()).toContain('1 gene without qualifying variants not shown')
+    expect(wrapper.text()).toContain(`1 gene ${ASSOCIATION_UNTESTED_SUMMARY_TEXT}`)
   })
 })
