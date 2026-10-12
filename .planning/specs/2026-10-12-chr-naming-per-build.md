@@ -96,7 +96,7 @@ twice fails cleanly (no review row).
 
 ## Import and query input (same PR)
 
-- Import: SQLite `insertBatch` (all SQLite VCF/JSON/append paths) and the PG VCF/JSON streams store
+- Import: SQLite `insertBatch` (all SQLite VCF/JSON/append paths) the PG VCF repository (PostgresVcfImportRepository) and the PG JSON worker batch store
   `canonicalContig(chr, caseBuild)`.
 - Query input: coordinate search (3 sites), exact-variant filter, DSL `chr =` / OR → every spelling
   (`contigQueryNames`). Panel regions and panel BED export → `canonicalContig(…, build)`; the four
