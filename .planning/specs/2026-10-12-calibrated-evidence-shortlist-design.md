@@ -214,3 +214,11 @@ A smoke run on one background (quick mode, provisional vocabulary mapping) showe
 - A bin with `a_j + b_j < 10` scores 0 (anchor level). A group is zeroed only if `A < 20`.
 - Modes: the same over the mode partition.
 No comparative test-fold result informed this amendment; the report states it. The settings editor keeps the catch-all rule pinned last but its points are editable.
+
+## 15. Second estimator amendment (after the quick run; disclosed)
+
+The quick run (one background, 50 cases) showed that under §14 a bin with **no** positives scored positive when the anchor also had ≈ 0 positives but more background rows (`e_j − e_anchor ≈ log2(b_anchor/b_j)`), e.g. ClinVar benign above "no ClinVar"; and that anchoring at a background-dominated bin saturated many bins at +8 (top ties). Both are estimator artifacts, not performance findings. Final rule:
+- Anchor = bin with the largest positive count `a_j` (ties → larger `b_j`, then earlier bin); `points_j = round_half(e_j − e_anchor)`, clipped ±8; ranking unchanged by construction.
+- `a_j < 5` → `points_j = min(points_j, 0)`; `a_j + b_j < 10` → 0; group zeroed if `A < 20`. Modes alike.
+- ClinVar: only P/LP vs the rest is identifiable from P/LP spikes, so only the P/LP bin is tuned (against the pooled non-P/LP rows); VUS, conflicting, benign and the catch-all keep the template points as **non-tuned priors**, labelled as such.
+- Because §14/§15 came after looking at smoke/quick runs, the fully pre-registered **hand-set ruleset** is reported alongside as the primary pre-registered comparator; the ship criterion is evaluated for both, and the tuned ruleset ships only if it also passes (otherwise the hand-set one, if it passes).
