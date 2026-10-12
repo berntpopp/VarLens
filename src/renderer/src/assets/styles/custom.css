@@ -74,7 +74,7 @@ html::-webkit-scrollbar-thumb {
 
 .v-application .v-menu .v-list-subheader {
   min-height: 28px !important;
-  font-size: 0.625rem !important;
+  font-size: 0.6875rem !important; /* 11px floor (density spec §2.1) */
   padding-top: 4px !important;
 }
 
