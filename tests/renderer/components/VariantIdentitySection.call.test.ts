@@ -1,13 +1,17 @@
 /** The panel shows ClinVar and the per-sample call quality from the row (P-01). */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import VariantIdentitySection from '../../../src/renderer/src/components/VariantIdentitySection.vue'
+import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
+
+// The section's protein-view buttons read the capability store.
+beforeEach(() => installCapabilities())
 
 const base = {
   chr: 'chr22',

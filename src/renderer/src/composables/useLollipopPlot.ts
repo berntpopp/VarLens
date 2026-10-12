@@ -25,7 +25,7 @@ import type {
   ClinVarSignificance
 } from '../../../shared/types/protein'
 import {
-  DOMAIN_TYPE_COLORS,
+  getDomainColor,
   CLINVAR_COLORS,
   getConsequenceCategory,
   getConsequenceColor,
@@ -504,7 +504,7 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
     // Domains
     const domainsGroup = clipGroup.append('g').attr('class', 'domains')
     for (const domain of domains.value) {
-      const domainColor = DOMAIN_TYPE_COLORS[domain.type.toLowerCase()] ?? '#9E9E9E'
+      const domainColor = getDomainColor(domain.type)
       domainsGroup
         .append('rect')
         .attr('x', xScale(domain.start))

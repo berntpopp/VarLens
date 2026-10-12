@@ -1,16 +1,26 @@
 <template>
   <div class="variant-identity-section">
-    <div class="d-flex align-center mb-2">
-      <h3 class="text-title-large">{{ title }}</h3>
-      <IconButton
-        v-if="variant.gene_symbol"
-        label="Open protein view"
-        :icon="mdiDna"
-        size="x-small"
-        tooltip-location="top"
-        class="ml-1"
-        @click="emit('open-protein-view')"
-      />
+    <div class="d-flex align-center flex-wrap ga-1 mb-2">
+      <h3 class="text-title-large mr-1">{{ title }}</h3>
+      <!-- Disabled buttons get no pointer events: the wrapper carries the reason. -->
+      <span
+        v-for="button in PROTEIN_VIEW_BUTTONS"
+        :key="button.tab"
+        :data-tooltip="proteinReason ?? undefined"
+        data-tooltip-location="top"
+      >
+        <v-btn
+          size="x-small"
+          variant="tonal"
+          color="primary"
+          class="text-none"
+          :prepend-icon="button.icon"
+          :disabled="proteinReason !== null"
+          @click="emit('open-protein-view', button.tab)"
+        >
+          {{ button.label }}
+        </v-btn>
+      </span>
     </div>
 
     <!-- Transcript + cDNA + protein change -->
@@ -72,7 +82,10 @@ import { useClipboard } from '../composables/useClipboard'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../shared/types/vep'
-import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
+import { mdiCheck, mdiContentCopy } from '@mdi/js'
+import { PROTEIN_VIEW_BUTTONS, type ProteinViewTab } from '../config/proteinViewConfig'
+import { proteinViewBlockedReason } from '../utils/protein-view'
+import { useCapabilityStore } from '../stores/capabilityStore'
 import IconButton from './common/IconButton.vue'
 import { formatHgvs, variantName } from '../utils/formatters'
 import { ClinVarCell } from './table-cells/simple-cells'
@@ -89,8 +102,13 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'open-protein-view': []
+  'open-protein-view': [tab: ProteinViewTab]
 }>()
+
+const capabilities = useCapabilityStore()
+const proteinReason = computed(() =>
+  proteinViewBlockedReason(props.variant, capabilities.canUse('proteinViewer'))
+)
 
 /**
  * Check if variant is a full Variant (not CohortVariant)

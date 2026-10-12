@@ -10,7 +10,7 @@
  * - In child components: call `useAppState()` which injects from the provider
  */
 import { invalidateServerData } from '../queries/invalidation'
-import { ref, computed, inject, toRaw } from 'vue'
+import { ref, shallowRef, computed, inject, toRaw } from 'vue'
 import type { Ref, ComputedRef, InjectionKey } from 'vue'
 import type { VariantFilter, Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
@@ -18,6 +18,7 @@ import type VariantTable from '../components/VariantTable.vue'
 import type FilterToolbar from '../components/FilterToolbar.vue'
 import type CohortViewComponent from '../components/CohortView.vue'
 import type { CarrierTarget } from './useCarrierTarget'
+import type { ProteinViewTab } from '../config/proteinViewConfig'
 
 /** Shape of the object returned by createAppState / useAppState. */
 export interface SelectedCaseInput {
@@ -101,6 +102,11 @@ export interface AppStateReturn {
   // Import dialog (owned by the shell's dialog host; views request it here)
   setImportHandler: (fn: () => void) => void
   openImport: () => void
+
+  // Protein view (shell-owned modal; the panel, row menus and `p` request it)
+  proteinViewOpen: Ref<boolean>
+  proteinViewRequest: Ref<{ variant: Variant | CohortVariant; tab: ProteinViewTab } | null>
+  openProteinView: (variant: Variant | CohortVariant, tab?: ProteinViewTab) => void
 }
 
 /** Injection key for the shared app state. */
@@ -214,6 +220,16 @@ export function createAppState(): AppStateReturn {
   }
   function openImport(): void {
     _importHandler?.()
+  }
+
+  const proteinViewOpen = ref(false)
+  const proteinViewRequest = shallowRef<AppStateReturn['proteinViewRequest']['value']>(null)
+  function openProteinView(
+    variant: Variant | CohortVariant,
+    tab: ProteinViewTab = 'lollipop'
+  ): void {
+    proteinViewRequest.value = { variant, tab }
+    proteinViewOpen.value = true
   }
 
   // A panel left open would pair the old case's variant with the new case id,
@@ -377,7 +393,11 @@ export function createAppState(): AppStateReturn {
 
     // Import dialog
     setImportHandler,
-    openImport
+    openImport,
+
+    proteinViewOpen,
+    proteinViewRequest,
+    openProteinView
   }
 }
 

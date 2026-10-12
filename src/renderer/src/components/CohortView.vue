@@ -238,7 +238,10 @@ const filterBar = computed(() =>
   activeTab.value === 'variants' ? (cohortTableRef.value?.filterBar ?? null) : null
 )
 
-defineExpose({ refresh, filterBar })
+const queryGeneCarriers = async (gene: string): Promise<CohortVariant[]> =>
+  (await cohortTableRef.value?.queryGeneCarriers(gene)) ?? []
+
+defineExpose({ refresh, filterBar, queryGeneCarriers })
 </script>
 
 <style scoped>

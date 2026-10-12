@@ -652,7 +652,22 @@ const refresh = async () => {
   // The case set may have changed: cached carrier lists can name deleted cases.
   invalidateCarriers()
 }
-defineExpose({ refresh, softRefresh, filterBar: cohortFilterBarRef })
+// Protein view: every carrier row of a gene under the active filters, build
+// and variant type (the free-text search is a navigation aid, not a filter).
+// ponytail: one 1000-row page; page through if a gene ever has more variants.
+const queryGeneCarriers = async (gene: string): Promise<CohortVariant[]> =>
+  (
+    await queryPage({
+      ...buildCohortQueryParams(),
+      search_term: undefined,
+      gene_symbol: gene,
+      limit: 1000,
+      sort_order: 'desc',
+      _count_needed: false
+    })
+  ).data
+
+defineExpose({ refresh, softRefresh, filterBar: cohortFilterBarRef, queryGeneCarriers })
 </script>
 
 <style scoped>

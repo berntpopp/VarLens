@@ -236,13 +236,13 @@ watch(
     if (props.modelValue) activeTab.value = props.initialTab
     showCaseVariants.value = false
     caseVariants.value = []
-    void loadCohortCarriers()
+    void fetchCohortCarriers()
   },
   { immediate: true }
 )
 
 // Cohort view: every carrier of the gene is on the plot (no Case toggle).
-async function loadCohortCarriers(): Promise<void> {
+async function fetchCohortCarriers(): Promise<void> {
   const gene = geneSymbol.value
   if (!props.modelValue || gene === null || props.loadCohortCarriers === undefined) return
   caseVariantsLoading.value = true
