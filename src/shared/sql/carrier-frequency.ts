@@ -96,10 +96,14 @@ export function classTotalsOnSql(buildExpr: string, typeColumn: string): string 
  * query gains no column that could make its unqualified names ambiguous.
  */
 export function caseCarrierCountSql(summaryTable: string, alias: string): string {
+  // `|| ''` keeps variant_type / genome_build out of any index: without
+  // statistics (a fresh import) PostgreSQL otherwise probes idx_cvs_type_build,
+  // which scans every row of the type and build for each variant. The primary
+  // key prefix (chr, pos, ref, alt) is always selective.
   return `(SELECT s.carrier_count FROM ${summaryTable} s
     WHERE s.chr = ${alias}.chr AND s.pos = ${alias}.pos AND s.ref = ${alias}.ref
-      AND s.alt = ${alias}.alt AND s.variant_type = ${alias}.variant_type
-      AND s.genome_build = bt.build)`
+      AND s.alt = ${alias}.alt AND s.variant_type || '' = ${alias}.variant_type
+      AND s.genome_build || '' = bt.build)`
 }
 
 /**

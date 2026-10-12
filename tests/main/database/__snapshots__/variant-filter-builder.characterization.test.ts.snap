@@ -9,8 +9,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -53,8 +53,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -97,8 +97,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -147,8 +147,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -194,8 +194,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -241,8 +241,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -289,8 +289,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -335,8 +335,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -381,8 +381,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -437,8 +437,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -487,8 +487,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -537,8 +537,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -585,8 +585,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -631,8 +631,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -677,8 +677,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -721,8 +721,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -765,8 +765,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -809,8 +809,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -854,8 +854,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -899,8 +899,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -944,8 +944,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -989,8 +989,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1034,8 +1034,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1079,8 +1079,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1124,8 +1124,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1169,8 +1169,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1214,8 +1214,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1259,8 +1259,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1304,8 +1304,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1349,8 +1349,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1394,8 +1394,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1439,8 +1439,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1484,8 +1484,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1528,8 +1528,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1593,8 +1593,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1639,8 +1639,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1683,8 +1683,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1729,8 +1729,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1774,8 +1774,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1818,8 +1818,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1867,8 +1867,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -1911,8 +1911,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2001,8 +2001,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2034,8 +2034,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
           )
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
       SELECT t.id, t.origin,
         MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
         MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
@@ -2128,8 +2128,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2161,8 +2161,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
           )
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
       SELECT t.id, t.origin,
         MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
         MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
@@ -2255,8 +2255,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2288,8 +2288,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
           )
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?)) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
       SELECT t.id, t.origin,
         MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
         MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
@@ -2343,8 +2343,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2388,8 +2388,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2433,8 +2433,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2477,8 +2477,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2523,8 +2523,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2568,8 +2568,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2612,8 +2612,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2657,8 +2657,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2702,8 +2702,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2750,8 +2750,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2795,8 +2795,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2841,8 +2841,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2885,8 +2885,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2930,8 +2930,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -2974,8 +2974,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3019,8 +3019,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3064,8 +3064,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3108,8 +3108,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3153,8 +3153,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3186,8 +3186,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
           )
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ?",
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ?",
 }
 `;
 
@@ -3200,8 +3200,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3244,8 +3244,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3294,8 +3294,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3338,8 +3338,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3384,8 +3384,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3431,8 +3431,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3478,8 +3478,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3522,8 +3522,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > cor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3567,8 +3567,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3613,8 +3613,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3660,8 +3660,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3706,8 +3706,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3751,8 +3751,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3798,8 +3798,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3844,8 +3844,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3890,8 +3890,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3935,8 +3935,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -3979,8 +3979,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4024,8 +4024,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4068,8 +4068,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4113,8 +4113,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4158,8 +4158,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4202,8 +4202,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ext
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4258,8 +4258,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4404,8 +4404,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4472,8 +4472,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4604,8 +4604,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4648,8 +4648,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4693,8 +4693,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4744,8 +4744,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4788,8 +4788,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4832,8 +4832,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4884,8 +4884,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4948,8 +4948,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -4997,8 +4997,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5081,8 +5081,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5129,8 +5129,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5201,8 +5201,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5245,8 +5245,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5289,8 +5289,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > max
   ],
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5322,8 +5322,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > max
           )
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ?",
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ?",
 }
 `;
 
@@ -5339,8 +5339,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5392,8 +5392,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5583,8 +5583,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5627,8 +5627,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5674,8 +5674,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5718,8 +5718,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -5762,8 +5762,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pan
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6150,8 +6150,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ski
   ],
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6194,8 +6194,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6238,8 +6238,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6282,8 +6282,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6326,8 +6326,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6370,8 +6370,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6414,8 +6414,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6458,8 +6458,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6502,8 +6502,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6546,8 +6546,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6590,8 +6590,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6634,8 +6634,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6678,8 +6678,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6722,8 +6722,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6766,8 +6766,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6810,8 +6810,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6854,8 +6854,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6898,8 +6898,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6942,8 +6942,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -6986,8 +6986,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7030,8 +7030,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7074,8 +7074,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7118,8 +7118,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7162,8 +7162,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7206,8 +7206,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7250,8 +7250,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7294,8 +7294,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7338,8 +7338,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7382,8 +7382,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7426,8 +7426,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7470,8 +7470,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7514,8 +7514,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7558,8 +7558,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7602,8 +7602,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7646,8 +7646,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7690,8 +7690,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7734,8 +7734,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7778,8 +7778,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7822,8 +7822,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7866,8 +7866,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7910,8 +7910,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7954,8 +7954,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -7998,8 +7998,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8042,8 +8042,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8086,8 +8086,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8130,8 +8130,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8174,8 +8174,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8219,8 +8219,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "cnv"."copy_number" as "_cnv_copy_number", "cnv"."copy_number_quality" as "_cnv_gq", "cnv"."homozygosity_ref" as "_cnv_ho_ref", "cnv"."homozygosity_alt" as "_cnv_ho_alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8264,8 +8264,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8310,8 +8310,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8355,8 +8355,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "str_ext"."repeat_id" as "_str_repeat_id", "str_ext"."repeat_unit" as "_str_repeat_unit", "str_ext"."display_repeat_unit" as "_str_display_ru", "str_ext"."ref_copies" as "_str_ref_copies", "str_ext"."alt_copies" as "_str_alt_copies", "str_ext"."str_status" as "_str_status", "str_ext"."normal_max" as "_str_normal_max", "str_ext"."pathologic_min" as "_str_pathologic_min", "str_ext"."disease" as "_str_disease", "str_ext"."inheritance_mode" as "_str_inheritance_mode", "str_ext"."rank_score" as "_str_rank_score" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv
@@ -8400,8 +8400,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > var
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
-      AND s.alt = variants.alt AND s.variant_type = variants.variant_type
-      AND s.genome_build = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af", "sv"."support" as "_sv_support", "sv"."dr" as "_sv_dr", "sv"."dv" as "_sv_dv", "sv"."vaf" as "_sv_vaf", "sv"."sv_is_precise" as "_sv_is_precise", "sv"."strand" as "_sv_strand", "sv"."coverage" as "_sv_coverage", "sv"."stdev_len" as "_sv_stdev_len", "sv"."stdev_pos" as "_sv_stdev_pos" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
           FROM cases c
           WHERE c.import_status = 'ready' AND EXISTS (
             SELECT 1 FROM variants cv

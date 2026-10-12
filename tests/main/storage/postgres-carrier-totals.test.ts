@@ -112,6 +112,21 @@ describe.skipIf(!RUN)('cached carrier-frequency denominators on a real PostgreSQ
       expect(await frequency()).toBe(1)
       await addCase('b', 200) // a second case with small variants, not carrying pos 100
       expect(await frequency()).toBe(0.5)
+      // Before any ANALYZE the planner must still probe the summary by its
+      // primary key, not scan every row of a (type, build) per variant.
+      const { buildPostgresVariantQueryParts } =
+        await import('../../../src/main/storage/postgres/PostgresVariantReadRepository')
+      const parts = buildPostgresVariantQueryParts({ case_id: first }, `"${schema}"`)
+      const plan = (
+        await pool.query(
+          `EXPLAIN SELECT ${parts.projections.join(', ')} ${parts.fromAndWhereSql}`,
+          parts.params
+        )
+      ).rows
+        .map((row: Record<string, string>) => row['QUERY PLAN'])
+        .join('\n')
+      expect(plan).toContain('cohort_variant_summary_pkey')
+      expect(plan).not.toContain('idx_cvs_type_build')
     } finally {
       await pool.end()
       await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
