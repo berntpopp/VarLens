@@ -30,7 +30,7 @@ import {
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
-import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
+import { isFatalImportRowError } from '../import/vcf/vcf-resource-limits'
 
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
@@ -452,7 +452,7 @@ export async function streamInsertVcf(
           full = batch.add(variant as unknown as MappedRow, line.length) || full
         }
       } catch (e) {
-        if (e instanceof VcfResourceLimitError) throw e
+        if (isFatalImportRowError(e)) throw e
         const reason = e instanceof Error ? e.message : String(e)
         // The worker's onSkip counts and logs the row; log here only without one.
         if (onSkip !== undefined) onSkip(reason)

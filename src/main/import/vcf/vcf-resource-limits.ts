@@ -17,11 +17,23 @@ export const MAX_VCF_STRUCTURED_HEADER_CHARS = 256 * 1024
 export const MAX_VCF_STRUCTURED_HEADER_FIELDS = 256
 export const MAX_VCF_GENOTYPE_ALLELES = 64
 
+import { ImportFieldBudgetError } from '../../../shared/utils/import-field-profile'
+
 export class VcfResourceLimitError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'VcfResourceLimitError'
   }
+}
+
+/**
+ * An error that must fail the whole import, never skip one row: a resource
+ * limit, or a row whose kept annotation fields exceed the info_json budget.
+ * A skipped row would let an import "succeed" without its variants and
+ * replace the case it overwrites.
+ */
+export function isFatalImportRowError(error: unknown): boolean {
+  return error instanceof VcfResourceLimitError || error instanceof ImportFieldBudgetError
 }
 
 /** Native split honors its limit and stops tokenizing once the sentinel part is reached. */
