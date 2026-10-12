@@ -3,6 +3,9 @@ import { estimatePoints } from '../../../../scripts/shortlist-sim/stats/points'
 import { tuneRuleset, type Assignment } from '../../../../scripts/shortlist-sim/stats/tune'
 import type { ScenarioId } from '../../../../scripts/shortlist-sim/common/types'
 import type { ModeId } from '../../../../src/shared/types/evidence-ruleset'
+import { compileRuleset } from '../../../../src/main/services/scoring/evidence'
+import { canonicalJson } from '../../../../scripts/shortlist-sim/sim/protocol'
+import { createHash } from 'node:crypto'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../../src/shared/config/evidence-rulesets/varvis-template'
 
 const many = (
@@ -84,6 +87,20 @@ describe('tuneRuleset (spec §11.1)', () => {
     const template = VARVIS_EVIDENCE_TEMPLATE.groups.find((g) => g.id === 'clinvar')!.rules
     for (const rule of template.slice(1))
       expect(pts(r, 'clinvar', rule.id)).toMatchObject({ tuned: false, points: rule.points })
+  })
+
+  it('produces a ruleset the production compiler loads, incl. tuned catch-all points and sha256', () => {
+    const tuned = tune().ruleset
+    // The catch-all is estimated like any bin and may be non-zero when another bin anchors.
+    const ruleset = {
+      ...tuned,
+      groups: tuned.groups.map((g) => ({
+        ...g,
+        rules: g.rules.map((r) => (r.id === 'cadd_ref' ? { ...r, points: -2.5 } : r))
+      }))
+    }
+    const sha256 = createHash('sha256').update(canonicalJson(ruleset)).digest('hex')
+    expect(() => compileRuleset({ ...ruleset, sha256 })).not.toThrow()
   })
 
   it('bootstrap intervals bracket the estimate and are deterministic', () => {
