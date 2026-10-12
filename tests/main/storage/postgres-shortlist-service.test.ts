@@ -5,6 +5,7 @@ import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import type { Variant } from '../../../src/shared/types/database'
 import { ShortlistQueryError } from '../../../src/main/database/ShortlistService'
 import { PanelRegionsUnavailableError } from '../../../src/shared/filters/panel-intervals'
+import { EVIDENCE_CONFIG } from '../../fixtures/shortlist/evidence-fixture'
 
 const CONFIG: ShortlistConfig = {
   variantTypeScope: ['snv'],
@@ -57,11 +58,14 @@ function variant(overrides: Partial<Variant>): Variant {
 /** A `streamVariantRows` stand-in yielding the given rows. */
 function streamOf(rows: Variant[]): {
   streamVariantRows: ReturnType<typeof vi.fn>
+  variantRowsQuery: ReturnType<typeof vi.fn>
 } {
   return {
     streamVariantRows: vi.fn(async function* () {
       yield* rows as unknown as Array<Record<string, unknown>>
-    })
+    }),
+    // Only the evidence path (real PostgreSQL tests) pages through a cursor.
+    variantRowsQuery: vi.fn()
   }
 }
 
@@ -149,7 +153,8 @@ describe('PostgresShortlistService', () => {
           streamVariantRows: vi.fn(async function* () {
             yield* []
             throw error
-          })
+          }),
+          variantRowsQuery: vi.fn()
         }
       })
 
@@ -160,5 +165,35 @@ describe('PostgresShortlistService', () => {
     await expect(
       make(new Error('connection lost')).getShortlist({ caseId: 1, adHocConfig: CONFIG })
     ).rejects.toBeInstanceOf(ShortlistQueryError)
+  })
+
+  it('runs an evidence ranking in a read-only snapshot and rolls back on failure', async () => {
+    const statements: string[] = []
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        statements.push(sql.split(' ').slice(0, 2).join(' '))
+        if (sql.startsWith('FETCH')) throw new Error('cursor lost')
+        return { rows: [] }
+      }),
+      release: vi.fn()
+    }
+    const service = new PostgresShortlistService({
+      pool: { query: vi.fn(), connect: vi.fn().mockResolvedValue(client) } as never,
+      schema: 'public',
+      filterPresets: { getPreset: vi.fn() },
+      rows: {
+        streamVariantRows: vi.fn(),
+        variantRowsQuery: vi.fn().mockResolvedValue({ sql: 'SELECT 1', params: [] })
+      }
+    })
+
+    await expect(
+      service.getShortlist({ caseId: 1, adHocConfig: EVIDENCE_CONFIG })
+    ).rejects.toBeInstanceOf(ShortlistQueryError)
+    expect(statements[0]).toBe('BEGIN ISOLATION')
+    expect(client.query).toHaveBeenCalledWith('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    expect(statements.at(-1)).toBe('ROLLBACK')
+    expect(statements).not.toContain('COMMIT')
+    expect(client.release).toHaveBeenCalledTimes(1)
   })
 })
