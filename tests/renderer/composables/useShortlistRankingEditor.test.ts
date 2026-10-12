@@ -28,6 +28,8 @@ vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', async (ori
 import { useShortlistRankingEditor } from '../../../src/renderer/src/composables/useShortlistRankingEditor'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
 import { serializeRanking } from '../../../src/renderer/src/utils/shortlist-ranking-io'
+import { EVIDENCE_BETA_PRESET } from '../../../src/main/database/evidence-ranking-preset'
+import { evidenceShortlistConfig } from '../../../src/shared/evidence/evidence-shortlist-config'
 
 const weights = { impact: 1, pathogenicity: 1, rarity: 1, clinvar: 1, phenotype: 0 }
 const evidenceConfig = (): ShortlistConfig => ({
@@ -144,6 +146,33 @@ describe('useShortlistRankingEditor — new drafts', () => {
     ).toBe('a'.repeat(64))
   })
 
+  it('duplicates the seeded evidence preset completely, changing only name and ruleset identity', async () => {
+    const seeded = preset(20, EVIDENCE_BETA_PRESET.name, EVIDENCE_BETA_PRESET.config, true)
+    presets.value = [...presets.value, seeded]
+    const e = await editor(20)
+    e.duplicate()
+    const copy = JSON.parse(JSON.stringify(e.draft.value!.config)) as typeof e.draft.value.config
+    expect(copy.rankConfig.ruleset.id).not.toBe(EVIDENCE_BETA_PRESET.config.rankConfig.ruleset!.id)
+    expect(copy.rankConfig.ruleset.sha256).toBeUndefined()
+    const expected = structuredClone(EVIDENCE_BETA_PRESET.config)
+    delete expected.rankConfig.ruleset!.sha256
+    expected.rankConfig.ruleset!.id = copy.rankConfig.ruleset.id
+    expect(copy).toEqual(expected)
+    expect(copy.rankConfig.pinStarredTop).toBe(true)
+    expect(copy.tieBreakers?.length).toBeGreaterThan(0)
+  })
+
+  it('keeps per-type overrides and pins when duplicating a user ranking', async () => {
+    const custom = evidenceConfig()
+    custom.perTypeOverrides = { indel: { maxGnomadAf: 0.005 } }
+    custom.rankConfig.pinStarredTop = true
+    presets.value = [...presets.value, preset(21, 'Custom', custom)]
+    const e = await editor(21)
+    e.duplicate()
+    expect(e.draft.value!.config.perTypeOverrides).toEqual({ indel: { maxGnomadAf: 0.005 } })
+    expect(e.draft.value!.config.rankConfig.pinStarredTop).toBe(true)
+  })
+
   it('duplicates a weighted preset as the template with its gate', async () => {
     const e = await editor(1)
     e.duplicate()
@@ -154,9 +183,12 @@ describe('useShortlistRankingEditor — new drafts', () => {
     expect(e.problems.value).toEqual([])
   })
 
-  it('starts a valid ranking from the template with a free name', async () => {
+  it('starts a valid ranking from the template with a free name and the shipped defaults', async () => {
     const e = await editor()
     e.newFromTemplate()
+    const shipped = evidenceShortlistConfig(VARVIS_EVIDENCE_TEMPLATE)
+    expect(e.draft.value!.config.tieBreakers).toEqual(shipped.tieBreakers)
+    expect(e.draft.value!.config.baseFilters).toEqual(shipped.baseFilters)
     e.newFromTemplate()
     expect(e.draft.value!.name).toBe('My evidence ranking')
     expect(e.draft.value!.config.baseFilters.maxGnomadAf).toBe(0.01)
