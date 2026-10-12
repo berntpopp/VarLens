@@ -107,7 +107,8 @@ const rowProps = ({ item }: { item: Row }) => ({
   class: { 'track-row--focused': item.key === props.nav.focusedKey.value },
   tabindex: 0,
   onKeydown: (e: KeyboardEvent) => {
-    if (e.key === 'Enter') goTo(item)
+    // Enter on the row itself; the row's own button handles its Enter.
+    if (e.key === 'Enter' && e.target === e.currentTarget) goTo(item)
   }
 })
 

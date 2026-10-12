@@ -8,8 +8,6 @@
       tabindex="0"
       role="group"
       :aria-label="`${label}. ${PLOT_COPY.keyboardHint}`"
-      :data-tooltip="PLOT_COPY.keyboardHint"
-      data-tooltip-location="top"
       @keydown="nav.onKeydown"
     >
       <svg ref="svgRef" class="track-plot-svg" />

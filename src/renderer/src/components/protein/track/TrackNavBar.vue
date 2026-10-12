@@ -3,6 +3,13 @@
   <div class="d-flex align-center ga-2 px-3 py-1 flex-wrap track-nav-bar">
     <span class="text-body-small text-medium-emphasis track-caption">{{ caption }}</span>
     <v-spacer />
+    <!-- The plot keys, for mouse users too (the plot's name carries them for screen readers). -->
+    <IconButton
+      :icon="mdiKeyboardOutline"
+      :label="`Keyboard: ${PLOT_COPY.keyboardHint}`"
+      size="x-small"
+      tooltip-location="bottom"
+    />
     <TrackSearch :nav="nav" :context="searchContext" :label="searchLabel" :hint="searchHint" />
     <v-btn-toggle
       v-model="list"
@@ -28,7 +35,8 @@
 </template>
 
 <script setup lang="ts">
-import { mdiChartBellCurveCumulative, mdiFormatListBulleted } from '@mdi/js'
+import { mdiChartBellCurveCumulative, mdiFormatListBulleted, mdiKeyboardOutline } from '@mdi/js'
+import IconButton from '../../common/IconButton.vue'
 import TrackSearch from './TrackSearch.vue'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
