@@ -17,7 +17,9 @@
 @font-face {
   font-family: 'JetBrains Mono Variable';
   font-style: normal;
-  font-display: swap;
+  /* block, not swap: fallbacks differ in width (Consolas 0.55em vs 0.60em), so
+     mono text would jump on swap; the file is local/same-origin and loads fast. */
+  font-display: block;
   font-weight: 100 800;
   src: url('@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2')
     format('woff2-variations');
