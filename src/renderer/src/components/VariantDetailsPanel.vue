@@ -234,7 +234,7 @@ import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import IconButton from './common/IconButton.vue'
 import { usePanelFocus } from '../composables/usePanelFocus'
-import { isTextEntryFocused } from '../composables/useTableKeyboardNav'
+import { isOverlayOpen, isTextEntryFocused } from '../composables/useTableKeyboardNav'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
@@ -553,8 +553,7 @@ appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
 // Escape closes the panel, unless a text field or an open menu/dialog owns it
 const handleKeydown = (e: KeyboardEvent): void => {
-  if (e.key !== 'Escape' || !props.open || isTextEntryFocused()) return
-  if ((e.target as Element | null)?.closest?.('.v-overlay')) return
+  if (e.key !== 'Escape' || !props.open || isTextEntryFocused() || isOverlayOpen()) return
   emit('update:open', false)
 }
 onMounted(() => window.addEventListener('keydown', handleKeydown))

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
-import { VLayout } from 'vuetify/components'
+import { VBtn, VLayout, VList, VListItem, VMenu } from 'vuetify/components'
+import { flushPromises } from '@vue/test-utils'
+import { isInputFocused } from '../../../src/renderer/src/composables/useTableKeyboardNav'
 import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -54,11 +56,23 @@ const STUBS = Object.fromEntries(
 
 let wrapper: VueWrapper | null = null
 
+// A real menu, opened by mouse: Vuetify leaves focus on its activator
+const MouseMenu = defineComponent(
+  () => () =>
+    h(VMenu, null, {
+      activator: ({ props }: { props: Record<string, unknown> }) =>
+        h(VBtn, { ...props, class: 'menu-activator' }, () => 'Tags'),
+      default: () => h(VList, () => h(VListItem, { title: 'tag' }))
+    })
+)
+
 function mountPanel(mode: 'case' | 'cohort' = 'case'): VueWrapper {
   const variant = { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'G', genome_build: 'GRCh38' }
   const props = { open: true, variant, caseId: mode === 'case' ? 1 : null, mode }
   // The navigation drawer needs a Vuetify layout around it
-  const Host = defineComponent(() => () => h(VLayout, () => h(VariantDetailsPanel, props)))
+  const Host = defineComponent(
+    () => () => h(VLayout, () => [h(VariantDetailsPanel, props), h(MouseMenu)])
+  )
   wrapper = mount(Host, { global: { plugins: [vuetify], stubs: STUBS }, attachTo: document.body })
   return wrapper.findComponent(VariantDetailsPanel)
 }
@@ -80,6 +94,20 @@ afterEach(() => {
 })
 
 describe('VariantDetailsPanel Escape', () => {
+  it('stays open on Escape while a mouse-opened menu is open (the menu owns it)', async () => {
+    const w = mountPanel()
+    await flushPromises() // the panel moves focus to its heading on open
+    const activator = document.querySelector<HTMLElement>('.menu-activator')!
+    activator.focus()
+    activator.click()
+    await flushPromises()
+    expect(document.querySelector('.v-menu.v-overlay--active')).not.toBeNull()
+    expect(document.activeElement).toBe(activator)
+    expect(isInputFocused()).toBe(true) // table row shortcuts stand down too
+    activator.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(w.emitted('update:open')).toBeUndefined()
+  })
+
   it('closes on Escape from the page', () => {
     const w = mountPanel()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
@@ -92,17 +120,6 @@ describe('VariantDetailsPanel Escape', () => {
     document.body.appendChild(input)
     input.focus()
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    expect(w.emitted('update:open')).toBeUndefined()
-  })
-
-  it('stays open on Escape inside an open overlay (menu)', () => {
-    const w = mountPanel()
-    const overlay = document.createElement('div')
-    overlay.className = 'v-overlay'
-    const item = document.createElement('button')
-    overlay.appendChild(item)
-    document.body.appendChild(overlay)
-    item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(w.emitted('update:open')).toBeUndefined()
   })
 })
