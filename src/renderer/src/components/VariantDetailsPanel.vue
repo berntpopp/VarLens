@@ -231,6 +231,7 @@ import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import IconButton from './common/IconButton.vue'
 import { usePanelFocus } from '../composables/usePanelFocus'
+import { isTextEntryFocused } from '../composables/useTableKeyboardNav'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
@@ -316,7 +317,6 @@ function handleTagsChanged(): void {
   if (isWebRuntime()) emit('variant-updated')
 }
 
-// Use panel resize composable
 const { panelWidth, startResize } = usePanelResize()
 
 // Docked beside the table at >= 1440 px (v-main shrinks, nothing is covered);
@@ -328,7 +328,6 @@ const effectiveWidth = computed(() =>
     : clampDetailPanelWidth(panelWidth.value, displayWidth.value)
 )
 
-// Use annotations composable
 const {
   loadAnnotations,
   loadGlobalAnnotations,
@@ -546,19 +545,13 @@ const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>
 const appState = inject(AppStateKey, null)
 appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
-// Handle Escape key to close panel
+// Escape closes the panel, unless a text field or an open menu/dialog owns it
 const handleKeydown = (e: KeyboardEvent): void => {
-  if (e.key === 'Escape' && props.open) {
-    emit('update:open', false)
-  }
+  if (e.key !== 'Escape' || !props.open || isTextEntryFocused()) return
+  if ((e.target as Element | null)?.closest?.('.v-overlay')) return
+  emit('update:open', false)
 }
-
-// Add Escape listener on mount
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
-
-// Clean up Escape listener on unmount
+onMounted(() => window.addEventListener('keydown', handleKeydown))
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   appState?.setPanelLeaveGuard(null)

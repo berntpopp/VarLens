@@ -4,7 +4,15 @@
     <div v-if="readonly" class="d-flex align-center">
       <span :class="{ 'text-muted': !modelValue }">{{ modelValue || '—' }}</span>
     </div>
-    <div v-else-if="!isEditing" class="editable-text d-flex align-center" @click="startEdit">
+    <div
+      v-else-if="!isEditing"
+      class="editable-text d-flex align-center"
+      role="button"
+      tabindex="0"
+      @click="startEdit"
+      @keydown.enter.prevent="startEdit"
+      @keydown.space.prevent="startEdit"
+    >
       <span :class="{ 'text-muted': !modelValue }">
         {{ modelValue || placeholder }}
       </span>
@@ -66,6 +74,8 @@ const startEdit = () => {
 }
 
 const saveEdit = async () => {
+  // Escape cancels before the textarea unmounts; its blur must not save the discarded text
+  if (!isEditing.value) return
   const trimmed = editValue.value.trim()
   const value = trimmed.length > 0 ? trimmed : null
   if (props.save) {
