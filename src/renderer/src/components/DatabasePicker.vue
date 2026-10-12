@@ -280,6 +280,7 @@ import PostgresConnectionDialog from './PostgresConnectionDialog.vue'
 import type { RecentDatabase } from '../../../shared/types/api'
 import type { PostgresConnectionProfilePublic } from '../../../shared/types/postgres-profile'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
 import {
   mdiClose,
   mdiConnection,
@@ -332,7 +333,13 @@ onMounted(() => {
 
 // Handlers
 async function handleOpenRecent(path: string): Promise<void> {
-  const result = await databaseStore.openDatabase(path)
+  let result: Awaited<ReturnType<typeof databaseStore.openDatabase>>
+  try {
+    result = await databaseStore.openDatabase(path)
+  } catch (error) {
+    emit('error', formatError(error))
+    return
+  }
 
   if (result.needsPassword === true) {
     pendingOpenPath.value = path

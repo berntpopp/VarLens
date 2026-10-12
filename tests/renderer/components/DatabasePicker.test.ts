@@ -8,6 +8,7 @@ import * as directives from 'vuetify/directives'
 import DatabasePicker from '../../../src/renderer/src/components/DatabasePicker.vue'
 import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
 import type { PostgresConnectionProfilePublic } from '../../../src/shared/types/postgres-profile'
+import { DATABASE_CONFIG } from '../../../src/shared/config'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
 import { installCapabilities } from '../helpers/capabilities'
 
@@ -163,6 +164,25 @@ describe('DatabasePicker', () => {
 
     expect(mockApi.database.open).toHaveBeenCalledWith('/x.db', undefined)
     expect(document.body.textContent).toContain('Enter Database Password')
+  })
+
+  it('reports a refused open (damaged file) instead of failing silently', async () => {
+    mockApi.database.selectFile = vi.fn().mockResolvedValue('/x.xlsx')
+    mockApi.database.open = vi.fn().mockResolvedValue({
+      code: 'INVALID_PARAMETERS',
+      message: 'Not an encrypted database',
+      userMessage: DATABASE_CONFIG.MESSAGES.NOT_A_DATABASE
+    })
+
+    mountPicker()
+    await openPickerMenu()
+    const open = [...document.body.querySelectorAll('.v-list-item')].find(
+      (el) => el.textContent?.trim() === 'Open...'
+    ) as HTMLElement
+    open.click()
+    await flushPromises()
+
+    expect(wrapper.emitted('error')).toEqual([[DATABASE_CONFIG.MESSAGES.NOT_A_DATABASE]])
   })
 
   it('hides desktop database actions in web mode', async () => {
