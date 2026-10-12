@@ -110,3 +110,19 @@ Open issues from the parallel review (#545–#564, filed 2026-10-12) that this p
 - #555 internal AF partitioned by build → denominator PR (doc `09`).
 
 Decisions: chr names per build; merge colliding ACMG by keeping the newer one and logging the other; SV/CNV/STR no-calls stop counting as carriers; separate per-build annotations outside the main contigs is deferred (schema). Builds stored wrongly by past batch/JSON imports are re-checked **before** the chr migration (doc `10` risk). Everything config-driven (`src/shared/config`); every PR gets a ponytail review.
+
+**Deferred items filed as issues (2026-10-12):**
+- #567 ACMG override reason
+- #568 explain-why empty states
+- #569 Ctrl/⌘K palette
+- #570 clinical-question presets
+- #571 gene-structure ticks/exon labels
+- #572 ClinVar shape cue
+- #573 cohort SV End/length columns
+- #574 ACMG + comments in export
+- #575 reopen last DB (policy)
+- #576 genome build with HGVS/coordinates
+- #577 annotations keyed by build on every contig
+- #578 screen-reader + GPU 3D checks
+
+The shortlist ClinVar chip truncation goes into PR 4 instead (trivial).
