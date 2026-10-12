@@ -68,8 +68,20 @@ describe('import session cancellation via the injected isCancelled', () => {
         throttleMs: 0,
         batchSize: BATCH_SIZE,
         files: [
-          { filePath, caseName: 'cancelled-case', isDuplicate: false, duplicateStrategy: 'skip' },
-          { filePath, caseName: 'never-started', isDuplicate: false, duplicateStrategy: 'skip' }
+          {
+            filePath,
+            caseName: 'cancelled-case',
+            isDuplicate: false,
+            duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38'
+          },
+          {
+            filePath,
+            caseName: 'never-started',
+            isDuplicate: false,
+            duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38'
+          }
         ]
       },
       port,

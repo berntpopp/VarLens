@@ -28,7 +28,8 @@ interface ImportRunStore {
 interface VcfImportExecutionState {
   filePath: Ref<string>
   selectedSamples: Ref<string[]>
-  genomeBuild: Ref<string>
+  /** Confirmed in the preview step (GenomeBuildField.validate) before import starts. */
+  genomeBuild: Ref<string | null>
   caseNames: Ref<Map<string, string>>
   step: Ref<number>
   totalFiles: Ref<number>

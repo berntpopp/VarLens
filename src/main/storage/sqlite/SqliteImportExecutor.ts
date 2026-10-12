@@ -162,6 +162,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                   ? [vcfOptions.selectedSample]
                   : undefined,
               vcfGenomeBuild: vcfOptions?.genomeBuild,
+              fallbackGenomeBuild: vcfOptions?.fallbackGenomeBuild,
               vcfFilters: filters
             }
           ],

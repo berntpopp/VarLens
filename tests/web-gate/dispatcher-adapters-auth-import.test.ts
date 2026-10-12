@@ -829,6 +829,45 @@ describe('web dispatcher adapters: auth and import', () => {
     expect(importSingleFile).not.toHaveBeenCalled()
   })
 
+  test('batch-import.start rejects an unknown fallback genome build before starting work', async () => {
+    const { deps, importSingleFile, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides['batch-import:start'].handle(
+      [[], 'skip', undefined, 'run-build', 'hg99'],
+      request as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({
+      error: 'invalid-genome-build',
+      message: 'fallbackGenomeBuild is invalid'
+    })
+    expect(importSingleFile).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['import:start', ['web-upload:x', 'Case A', { genomeBuild: 'hg38' }]],
+    [
+      'import:startMultiFile',
+      ['Case A', [{ filePath: 'web-upload:x', variantType: 'snv' }], { genomeBuild: 'hg38' }]
+    ]
+  ])('%s rejects an unknown genome build at the trust boundary', async (route, args) => {
+    const { deps, importSingleFile, importMultiFile, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+
+    const result = await overrides[route].handle(args, request as never, reply as never, deps)
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(result).toEqual({ error: 'invalid-genome-build', message: 'genomeBuild is invalid' })
+    expect(importSingleFile).not.toHaveBeenCalled()
+    expect(importMultiFile).not.toHaveBeenCalled()
+  })
+
   test('import.start routes a staged browser upload through shared import logic', async () => {
     const prevNodeEnv = process.env.NODE_ENV
     const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
@@ -848,7 +887,7 @@ describe('web dispatcher adapters: auth and import', () => {
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
 
       const result = await overrides['import:start'].handle(
-        [upload.ref, 'Case A', { genomeBuild: 'hg38' }],
+        [upload.ref, 'Case A', { genomeBuild: 'GRCh38' }],
         request as never,
         reply as never,
         deps
@@ -860,7 +899,7 @@ describe('web dispatcher adapters: auth and import', () => {
         expect.objectContaining({
           filePath: upload.storedPath,
           caseName: 'Case A',
-          vcfOptions: { genomeBuild: 'hg38', selectedSample: undefined }
+          vcfOptions: { genomeBuild: 'GRCh38', selectedSample: undefined }
         })
       )
     } finally {
@@ -949,7 +988,7 @@ describe('web dispatcher adapters: auth and import', () => {
               annotationFormat: null
             }
           ],
-          { genomeBuild: 'hg38' },
+          { genomeBuild: 'GRCh38' },
           { bedPadding: 10, passOnly: true, minQual: 30, minGq: null }
         ],
         request as never,
@@ -969,7 +1008,7 @@ describe('web dispatcher adapters: auth and import', () => {
               annotationFormat: null
             }
           ],
-          vcfOptions: { genomeBuild: 'hg38', selectedSample: undefined },
+          vcfOptions: { genomeBuild: 'GRCh38', selectedSample: undefined },
           filters: expect.objectContaining({
             bedPadding: 10,
             passOnly: true,
@@ -1009,7 +1048,7 @@ describe('web dispatcher adapters: auth and import', () => {
         [
           'Case A',
           [{ filePath: upload.ref, variantType: 'snv', caller: null, annotationFormat: null }],
-          { genomeBuild: 'hg38' },
+          { genomeBuild: 'GRCh38' },
           { bedFile: '/etc/passwd', bedPadding: 10 }
         ],
         request as never,
@@ -1061,7 +1100,7 @@ describe('web dispatcher adapters: auth and import', () => {
         [
           'Case A',
           [{ filePath: vcfUpload.ref, variantType: 'snv', caller: null, annotationFormat: null }],
-          { genomeBuild: 'hg38' },
+          { genomeBuild: 'GRCh38' },
           { bedFile: bedUpload.ref, bedPadding: 10 }
         ],
         request as never,
@@ -1113,7 +1152,7 @@ describe('web dispatcher adapters: auth and import', () => {
               annotationFormat: null
             }
           ],
-          { genomeBuild: 'hg38' },
+          { genomeBuild: 'GRCh38' },
           { minQual: '30', passOnly: 'true' }
         ],
         request as never,
@@ -1165,7 +1204,7 @@ describe('web dispatcher adapters: auth and import', () => {
               annotationFormat: null
             }
           ],
-          { genomeBuild: 'hg38' },
+          { genomeBuild: 'GRCh38' },
           null
         ],
         request as never,

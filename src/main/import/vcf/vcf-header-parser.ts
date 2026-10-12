@@ -7,7 +7,7 @@
 
 import { createInterface } from 'node:readline'
 import { createCappedLineStream } from '../stream-utils'
-import { detectGenomeBuildFromVcfHeaders } from '../../services/GenomeBuildDetector'
+import { detectGenomeBuild, detectionBuild } from '../../../shared/genome/genome-build'
 import type { VcfHeader, InfoFieldDef, FormatFieldDef, ContigDef, AnnotationType } from './types'
 import { VcfHeaderBudget, type VcfHeaderLimitOptions } from './vcf-header-limits'
 import {
@@ -223,8 +223,9 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
     annotationType = 'ann'
   }
 
-  // Detect genome build using existing GenomeBuildDetector
-  const genomeBuild = detectGenomeBuildFromVcfHeaders(rawHeaderLines)
+  // Header-only here; the preview adds data positions (vcf-preview.ts).
+  const buildDetection = detectGenomeBuild(rawHeaderLines)
+  const genomeBuild = detectionBuild(buildDetection)
 
   return {
     fileformat,
@@ -235,6 +236,7 @@ export function parseVcfHeaderFromLines(lines: string[]): VcfHeader {
     annotationType,
     csqFields,
     genomeBuild,
+    buildDetection,
     rawHeaderLines
   }
 }

@@ -83,7 +83,9 @@ export async function importFrozenPerfFixture(
   for (const caseName of PERF_CASE_NAMES) {
     const importedCase = await window.evaluate(
       async ([filePath, nextCaseName]) => {
-        const result = await window.api.import.start(filePath, nextCaseName)
+        const result = await window.api.import.start(filePath, nextCaseName, {
+          genomeBuild: 'GRCh38'
+        })
         if ('code' in result) throw new Error(`import:start failed: ${JSON.stringify(result)}`)
         return {
           caseId: result.caseId,

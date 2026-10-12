@@ -34,6 +34,7 @@ import {
   startSessionBatchImport
 } from './batch-import-session'
 import type { BatchImportCallbacks } from './batch-import-logic'
+import { addDetectedBuilds } from '../../import/batch-utils'
 import {
   IMPORTABLE_VARIANT_EXTENSIONS,
   isImportableVariantFileName
@@ -135,29 +136,35 @@ export function registerBatchImportHandlers({
    */
   ipcMain.handle(
     'batch-import:checkDuplicates',
-    async (_event, filePaths: unknown, stripText?: unknown) => {
+    async (_event, filePaths: unknown, stripText?: unknown, detectBuilds?: unknown) => {
       return wrapHandler(async () => {
-        const parsed = BatchImportCheckDuplicatesParamsSchema.safeParse([filePaths, stripText])
+        const parsed = BatchImportCheckDuplicatesParamsSchema.safeParse([
+          filePaths,
+          stripText,
+          detectBuilds
+        ])
         if (!parsed.success) {
           throw new InvalidParametersError(
             `Invalid batch-import:checkDuplicates params: ${parsed.error.message}`
           )
         }
-        const [validatedFilePaths, validatedStripText] = parsed.data
+        const [validatedFilePaths, validatedStripText, validatedDetectBuilds] = parsed.data
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:checkDuplicates', filePath, `filePaths[${index}]`)
           }
         })
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return checkSessionDuplicates(
-            session,
-            validatedFilePaths.map((filePath) => ({ filePath, fileName: basename(filePath) })),
-            validatedStripText
-          )
-        }
-        return checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
+        const report =
+          session.capabilities.backend === 'postgres'
+            ? await checkSessionDuplicates(
+                session,
+                validatedFilePaths.map((filePath) => ({ filePath, fileName: basename(filePath) })),
+                validatedStripText
+              )
+            : checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
+        if (validatedDetectBuilds !== true) return report
+        return { ...report, files: await addDetectedBuilds(report.files, validatedFilePaths) }
       })
     }
   )
@@ -172,22 +179,29 @@ export function registerBatchImportHandlers({
       filePaths: unknown,
       duplicateStrategy: unknown,
       stripText: unknown,
-      runId: unknown
+      runId: unknown,
+      fallbackGenomeBuild?: unknown
     ) => {
       return wrapHandler(async () => {
         const parsed = BatchImportStartParamsSchema.safeParse([
           filePaths,
           duplicateStrategy,
           stripText,
-          runId
+          runId,
+          fallbackGenomeBuild
         ])
         if (!parsed.success) {
           throw new InvalidParametersError(
             `Invalid batch-import:start params: ${parsed.error.message}`
           )
         }
-        const [validatedFilePaths, validatedStrategy, validatedStripText, validatedRunId] =
-          parsed.data
+        const [
+          validatedFilePaths,
+          validatedStrategy,
+          validatedStripText,
+          validatedRunId,
+          validatedFallbackBuild
+        ] = parsed.data
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
@@ -205,6 +219,7 @@ export function registerBatchImportHandlers({
             })),
             duplicateStrategy: validatedStrategy,
             stripText: validatedStripText,
+            fallbackGenomeBuild: validatedFallbackBuild,
             runId: validatedRunId,
             session,
             callbacks: createBatchImportCallbacks(validatedRunId)
@@ -215,7 +230,8 @@ export function registerBatchImportHandlers({
           validatedFilePaths,
           validatedStrategy,
           validatedStripText,
-          createBatchImportCallbacks(validatedRunId)
+          createBatchImportCallbacks(validatedRunId),
+          validatedFallbackBuild
         )
       })
     }

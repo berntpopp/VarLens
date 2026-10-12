@@ -142,7 +142,11 @@ async function seedCases(baseURL: string, cookie: string): Promise<GateServerSta
     if (upload.status !== 200 || ref === undefined) {
       throw new Error(`fixture upload failed: HTTP ${upload.status} ${JSON.stringify(upload.json)}`)
     }
-    const result = (await rpc({ baseURL }, cookie, 'import/start', [ref, caseName])) as {
+    const result = (await rpc({ baseURL }, cookie, 'import/start', [
+      ref,
+      caseName,
+      { genomeBuild: 'GRCh38' }
+    ])) as {
       caseId: number
       variantCount: number
     }

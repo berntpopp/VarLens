@@ -27,16 +27,11 @@
         </v-chip>
       </div>
 
-      <!-- Genome build -->
-      <v-select
+      <GenomeBuildField
+        ref="buildField"
         v-model="selectedGenomeBuild"
-        :items="genomeBuildOptions"
-        label="Genome Build"
-        variant="outlined"
-        density="compact"
+        :detection="preview.buildDetection"
         class="mb-4"
-        hint="Auto-detected from VCF header. Override if incorrect."
-        persistent-hint
       />
 
       <!-- Sample selection -->
@@ -122,6 +117,7 @@ import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
 import { CASE_NAME_MESSAGES } from '../../config/importConfig'
+import GenomeBuildField from './GenomeBuildField.vue'
 
 const props = defineProps<{
   filePath: string
@@ -139,12 +135,18 @@ const error = ref<string | null>(null)
 const preview = ref<VcfPreviewResult | null>(null)
 
 const selectedSamples = ref<string[]>([])
-const selectedGenomeBuild = ref('GRCh38')
+// Never defaulted: pre-selected by GenomeBuildField only for definitive evidence.
+const selectedGenomeBuild = ref<string | null>(null)
 const caseNames = ref(new Map<string, string>())
 /** Names of the cases already in the database, to flag a clash before import. */
 const existingCaseNames = ref(new Set<string>())
+const buildField = ref<InstanceType<typeof GenomeBuildField> | null>(null)
 
-const genomeBuildOptions = ['GRCh38', 'GRCh37']
+/** False (with the field's inline error) until the user has confirmed a build. */
+function validate(): boolean {
+  return buildField.value?.validate() ?? false
+}
+defineExpose({ validate })
 
 const annotationLabel = computed(() => {
   if (!preview.value) return ''
@@ -226,11 +228,6 @@ onMounted(async () => {
     selectedSamples.value = [...preview.value.samples]
     for (const sample of preview.value.samples) {
       caseNames.value.set(sample, sample)
-    }
-
-    // Set detected genome build
-    if (preview.value.detectedGenomeBuild !== null && preview.value.detectedGenomeBuild !== '') {
-      selectedGenomeBuild.value = preview.value.detectedGenomeBuild
     }
 
     emit('preview-loaded', preview.value)

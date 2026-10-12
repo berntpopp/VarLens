@@ -54,6 +54,7 @@ describe('import worker applies VCF import filters', () => {
             caseName: 'filtered',
             isDuplicate: false,
             duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38',
             vcfFilters
           }
         ],
@@ -108,6 +109,7 @@ describe('import worker applies VCF import filters', () => {
             caseName: 'filtered',
             isDuplicate: false,
             duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38',
             vcfFilters: { bedFilePath: join(dir, 'missing.bed') }
           }
         ],

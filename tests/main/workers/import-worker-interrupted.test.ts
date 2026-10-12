@@ -116,7 +116,10 @@ describe('import worker: interrupted imports', () => {
     leaveInterruptedCase('X', 'A')
 
     const messages = await h.run([
-      h.file('X', [variantAt(300, 'XXX')], { duplicateStrategy: 'skip' })
+      h.file('X', [variantAt(300, 'XXX')], {
+        duplicateStrategy: 'skip',
+        fallbackGenomeBuild: 'GRCh38'
+      })
     ])
 
     expect(sessionStatuses(messages)).toEqual(['X:success'])

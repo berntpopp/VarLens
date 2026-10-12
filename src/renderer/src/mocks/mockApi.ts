@@ -265,6 +265,12 @@ export const mockApi: WindowAPI = {
       variantCountEstimate: 100,
       annotationType: 'none' as const,
       detectedGenomeBuild: 'GRCh38',
+      buildDetection: {
+        suggested: 'GRCh38',
+        confidence: 'definitive' as const,
+        evidence: [{ build: 'GRCh38', source: 'Contig lengths', detail: '24 of 24' }],
+        excluded: []
+      },
       infoFields: [],
       callerName: null,
       callerVersion: null,

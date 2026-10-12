@@ -167,6 +167,7 @@ describe('VCF types', () => {
       variantCountEstimate: 2000,
       annotationType: 'csq',
       detectedGenomeBuild: 'GRCh38',
+      buildDetection: { suggested: 'GRCh38', confidence: 'definitive', evidence: [], excluded: [] },
       infoFields: [
         {
           id: 'CSQ',

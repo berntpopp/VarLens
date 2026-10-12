@@ -8,6 +8,7 @@ import { dirname, basename, extname, resolve as pathResolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createCappedLineStream } from '../stream-utils'
 import { parseVcfHeaderFromLines } from './vcf-header-parser'
+import { detectGenomeBuild, detectionBuild } from '../../../shared/genome/genome-build'
 import { getFieldColumnMapping, DEFAULT_INFO_FIELD_MAPPINGS } from './info-field-registry'
 import { detectCaller } from './caller-detector'
 import type { VcfPreviewResult } from './types'
@@ -36,6 +37,8 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
     const headerLines: string[] = []
     const headerBudget = new VcfHeaderBudget()
     let dataLineCount = 0
+    // Max POS per contig: positions can exclude a genome build, never suggest one.
+    const maxPos: Record<string, number> = {}
     let bytesReadAtCap = 0
     let capped = false
     let resolved = false
@@ -55,6 +58,13 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
         }
       } else {
         dataLineCount++
+        const chromEnd = line.indexOf('\t')
+        const posEnd = line.indexOf('\t', chromEnd + 1)
+        if (chromEnd > 0 && posEnd > chromEnd) {
+          const chrom = line.slice(0, chromEnd)
+          const pos = Number(line.slice(chromEnd + 1, posEnd))
+          if (pos > (maxPos[chrom] ?? 0)) maxPos[chrom] = pos
+        }
         if (dataLineCount >= MAX_COUNTED_LINES) {
           capped = true
           bytesReadAtCap = rawBytesRead()
@@ -73,6 +83,7 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
         const header = parseVcfHeaderFromLines(headerLines)
         const infoFields = getFieldColumnMapping(header.infoDefs, DEFAULT_INFO_FIELD_MAPPINGS)
         const callerInfo = detectCaller(header.rawHeaderLines)
+        const buildDetection = detectGenomeBuild(header.rawHeaderLines, maxPos)
 
         // Extrapolate total if we hit the cap
         let estimate = dataLineCount
@@ -85,7 +96,8 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
           samples: header.samples,
           variantCountEstimate: estimate,
           annotationType: header.annotationType,
-          detectedGenomeBuild: header.genomeBuild,
+          detectedGenomeBuild: detectionBuild(buildDetection),
+          buildDetection,
           infoFields,
           callerName: callerInfo.name !== 'unknown' ? callerInfo.name : null,
           callerVersion: callerInfo.version,

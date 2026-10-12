@@ -138,10 +138,16 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
     batchImport: {
       selectFiles: () => batchImportDomain.selectFiles(),
       selectFolder: () => batchImportDomain.selectFolder(),
-      checkDuplicates: (filePaths, stripText) =>
-        batchImportDomain.checkDuplicates(filePaths, stripText),
-      start: (filePaths, duplicateStrategy, stripText, runId) =>
-        batchImportDomain.start(filePaths, duplicateStrategy, stripText, runId),
+      checkDuplicates: (filePaths, stripText, detectBuilds) =>
+        batchImportDomain.checkDuplicates(filePaths, stripText, detectBuilds),
+      start: (filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild) =>
+        batchImportDomain.start(
+          filePaths,
+          duplicateStrategy,
+          stripText,
+          runId,
+          fallbackGenomeBuild
+        ),
       cancel: () => batchImportDomain.cancel(),
       selectZip: () => batchImportDomain.selectZip(),
       testZipPassword: (zipPath, password) => batchImportDomain.testZipPassword(zipPath, password),

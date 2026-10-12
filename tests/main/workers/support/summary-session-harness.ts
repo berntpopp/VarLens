@@ -65,7 +65,7 @@ export function openSummarySessionHarness(): SummarySessionHarness {
     file(caseName, variants, extra = {}) {
       const filePath = join(dir, `file-${fileCount++}.json`)
       writeFileSync(filePath, JSON.stringify({ variants }))
-      return { filePath, caseName, ...extra } as SessionFile
+      return { filePath, caseName, fallbackGenomeBuild: 'GRCh38', ...extra } as SessionFile
     },
     async run(files, options = {}) {
       const messages: WorkerMessage[] = []
