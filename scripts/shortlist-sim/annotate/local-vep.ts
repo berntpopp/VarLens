@@ -1,12 +1,14 @@
 /**
  * Offline VEP 115 + dbNSFP 5.3.1a (no network). Flags follow
- * varlens-annotation-workflows/workflow/main.nf (offline cache, --everything, dbNSFP plugin)
- * plus JSON output and MANE-first picking so one transcript per allele is flagged.
+ * varlens-annotation-workflows/workflow/main.nf (offline cache, --everything) plus JSON output
+ * and MANE-first picking so one transcript per allele is flagged. The dbNSFP fields the
+ * workflow adds through its plugin are joined per allele from a local subset instead.
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import {
   ANNOTATE_ENV_BIN,
   DBNSFP_FILE,
@@ -98,7 +100,7 @@ export function parseVepLine(line: string): LocalVepRecord {
 }
 
 /** The env's perl/htslib must win over the system ones (vep uses `#!/usr/bin/env perl`). */
-const toolEnv = (): NodeJS.ProcessEnv => ({
+export const toolEnv = (): NodeJS.ProcessEnv => ({
   ...process.env,
   PATH: `${ANNOTATE_ENV_BIN}:${process.env.PATH ?? ''}`
 })
@@ -115,21 +117,19 @@ function vcfText(alleles: AlleleInput[]): string {
   ].join('\n')
 }
 
-function vepArgs(inFile: string, outFile: string, fork: number, dbnsfp: string | null): string[] {
+function vepArgs(inFile: string, outFile: string, fork: number): string[] {
   return [
     ...['--offline', '--cache', '--dir_cache', VEP_CACHE_DIR, '--cache_version', '115'],
     ...['--assembly', 'GRCh38', '--species', 'homo_sapiens', '--fasta', GRCH38_FASTA],
     ...['--dir_plugins', VEP_PLUGIN_DIR, '--input_file', inFile, '--output_file', outFile],
     ...['--json', '--force_overwrite', '--no_stats', '--fork', String(fork)],
-    ...['--everything', '--flag_pick', '--pick_order', PICK_ORDER],
-    ...(dbnsfp === null ? [] : ['--plugin', `dbNSFP,${dbnsfp},${DBNSFP_FIELDS.join(',')}`])
+    ...['--everything', '--flag_pick', '--pick_order', PICK_ORDER]
   ]
 }
 
 /** Run VEP on one chunk; stderr goes to a file so an orphaned fork cannot hold a pipe open. */
-function runChunk(text: string, outDir: string, fork: number, dbnsfp: string | null): string {
-  const mode = dbnsfp === null ? 'vep' : 'vep+dbnsfp'
-  const id = createHash('sha1').update(mode).update(text).digest('hex').slice(0, 12)
+function runChunk(text: string, outDir: string, fork: number): string {
+  const id = createHash('sha1').update('vep').update(text).digest('hex').slice(0, 12)
   const inFile = join(outDir, `chunk-${id}.vcf`)
   const outFile = join(outDir, `chunk-${id}.json`)
   const done = join(outDir, `chunk-${id}.done`)
@@ -139,7 +139,7 @@ function runChunk(text: string, outDir: string, fork: number, dbnsfp: string | n
   for (let attempt = 1; attempt <= 3; attempt++) {
     const errFile = join(outDir, `chunk-${id}.stderr`)
     const fd = openSync(errFile, 'w')
-    const p = spawnSync(VEP, vepArgs(inFile, outFile, fork, dbnsfp), {
+    const p = spawnSync(VEP, vepArgs(inFile, outFile, fork), {
       env: toolEnv(),
       stdio: ['ignore', 'ignore', fd]
     })
@@ -208,7 +208,7 @@ export function splitByChromosome(regions: string[], n: number): string[][] {
  * Local dbNSFP subset for the alleles, extracted with parallel tabix queries: the full file sits
  * on a soft-mounted CIFS share where concurrent VEP forks intermittently fail to open it.
  */
-async function dbnsfpSubset(
+export async function dbnsfpSubset(
   alleles: AlleleInput[],
   outDir: string,
   env: NodeJS.ProcessEnv
@@ -244,7 +244,45 @@ async function dbnsfpSubset(
   return subset
 }
 
-/** Offline VEP in resumable chunks (finished chunks are reused by content hash). */
+export interface DbnsfpValues {
+  caddPhred: number | null
+  jointAf: number | null
+  popmaxAf: number | null
+}
+
+/** Allele-level dbNSFP values (SNVs only) keyed chr:pos:ref:alt, read from the local subset. */
+export async function dbnsfpLookup(
+  alleles: AlleleInput[],
+  outDir: string
+): Promise<Map<string, DbnsfpValues>> {
+  const subset = await dbnsfpSubset(alleles, outDir, toolEnv())
+  const lines = gunzipSync(readFileSync(subset)).toString('utf8').split('\n')
+  const cols = lines[0].replace(/^#/, '').split('\t')
+  const at = (name: string): number => {
+    const i = cols.indexOf(name)
+    if (i < 0) throw new Error(`dbNSFP column ${name} missing`)
+    return i
+  }
+  const [chr, pos, ref, alt] = ['chr', 'pos(1-based)', 'ref', 'alt'].map(at)
+  const [cadd, joint, popmax] = DBNSFP_FIELDS.map(at)
+  const out = new Map<string, DbnsfpValues>()
+  for (const line of lines.slice(1)) {
+    if (line === '') continue
+    const f = line.split('\t')
+    out.set(`${f[chr]}:${f[pos]}:${f[ref]}:${f[alt]}`, {
+      caddPhred: dbnsfpNumber(f[cadd]),
+      jointAf: dbnsfpNumber(f[joint]),
+      popmaxAf: dbnsfpNumber(f[popmax])
+    })
+  }
+  return out
+}
+
+/**
+ * Offline VEP in resumable chunks (finished chunks are reused by content hash), then dbNSFP
+ * values joined per allele — equivalent to the dbNSFP plugin's allele match, without having
+ * every VEP fork open the 50 GB file on the CIFS share.
+ */
 export async function runLocalVep(
   alleles: AlleleInput[],
   outDir: string,
@@ -255,12 +293,16 @@ export async function runLocalVep(
     a.chr === b.chr ? a.pos - b.pos : a.chr.localeCompare(b.chr)
   )
   const size = opts.chunkSize ?? 2500
-  const dbnsfp = opts.dbnsfp === false ? null : await dbnsfpSubset(sorted, outDir, toolEnv())
   const records: LocalVepRecord[] = []
   for (let i = 0; i < sorted.length; i += size) {
-    const outFile = runChunk(vcfText(sorted.slice(i, i + size)), outDir, opts.fork ?? 8, dbnsfp)
+    const outFile = runChunk(vcfText(sorted.slice(i, i + size)), outDir, opts.fork ?? 8)
     for (const line of readFileSync(outFile, 'utf8').split('\n'))
       if (line.trim() !== '') records.push(parseVepLine(line))
   }
-  return records
+  if (opts.dbnsfp === false) return records
+  const values = await dbnsfpLookup(sorted, outDir)
+  return records.map((r) => {
+    const v = values.get(r.key.replace(/^chr/i, ''))
+    return v ? { ...r, caddPhred: v.caddPhred, gnomadJointAf: v.jointAf, popmaxAf: v.popmaxAf } : r
+  })
 }
