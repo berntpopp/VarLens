@@ -5,6 +5,9 @@
  * Each function returns string | null (null when required data is missing).
  */
 
+import { genomeBuildLinks } from '../../../shared/config/genome-builds.config'
+import { bareContig } from '../../../shared/utils/contig'
+
 /** Genome build type for variant data */
 export type GenomeBuild = 'GRCh37' | 'GRCh38'
 
@@ -67,13 +70,16 @@ export function resolveUrlTemplate(
   }
 
   // Build variable map for substitution
-  const buildUcsc = build === 'GRCh37' ? 'hg19' : 'hg38'
-  const datasetGnomad = build === 'GRCh37' ? 'gnomad_r2_1' : 'gnomad_r4'
+  const { ucscDb: buildUcsc, gnomadDataset: datasetGnomad } = genomeBuildLinks(build)
+  // `{chr}` is the bare (Ensembl/GRC) name whatever the stored form, so a
+  // template's own `chr{chr}` never doubles the prefix; `{chr_ucsc}` is UCSC's.
+  const chr = data.chr == null || data.chr === '' ? '' : bareContig(data.chr)
   const posStart = Math.max(1, (data.pos ?? 0) - 25)
   const posEnd = (data.pos ?? 0) + 25
 
   const variables: Record<string, string> = {
-    chr: String(data.chr ?? ''),
+    chr,
+    chr_ucsc: chr === '' ? '' : `chr${chr === 'MT' ? 'M' : chr}`,
     pos: String(data.pos ?? ''),
     ref: encodeURIComponent(data.ref ?? ''),
     alt: encodeURIComponent(data.alt ?? ''),

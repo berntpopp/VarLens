@@ -134,3 +134,30 @@ describe('resolveUrlTemplate', () => {
     expect(url).toBe('https://example.com/gnomad_r4')
   })
 })
+
+describe('resolveUrlTemplate — chromosome names', () => {
+  const variant = (chr: string) => ({ chr, pos: 12345, ref: 'A', alt: 'G', gene_symbol: null })
+  const fields = ['chr', 'pos', 'ref', 'alt']
+  const franklin =
+    'https://franklin.genoox.com/clinical-db/variant/snp/chr{chr}-{pos}-{ref}-{alt}/{build}'
+
+  it.each(['1', 'chr1'])('Franklin gets chr1, never chrchr1, for stored %s', (chr) => {
+    expect(resolveUrlTemplate(franklin, variant(chr), 'GRCh38', fields)).toBe(
+      'https://franklin.genoox.com/clinical-db/variant/snp/chr1-12345-A-G/GRCh38'
+    )
+  })
+
+  it('{chr} is the bare name (gnomAD, ClinVar)', () => {
+    expect(resolveUrlTemplate('{chr}', variant('chrX'), 'GRCh38', fields)).toBe('X')
+    expect(resolveUrlTemplate('{chr}', variant('chrM'), 'GRCh38', fields)).toBe('MT')
+  })
+
+  it.each([
+    ['1', 'chr1'],
+    ['chr1', 'chr1'],
+    ['MT', 'chrM'],
+    ['chrM', 'chrM']
+  ])('{chr_ucsc} of %s is %s', (chr, expected) => {
+    expect(resolveUrlTemplate('{chr_ucsc}', variant(chr), 'GRCh37', fields)).toBe(expected)
+  })
+})

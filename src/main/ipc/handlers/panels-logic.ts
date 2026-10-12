@@ -6,6 +6,7 @@
  * without mocking Electron internals.
  */
 import { mainLogger } from '../../services/MainLogger'
+import { canonicalContig } from '../../../shared/utils/contig'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { CreatePanelInput } from '../../database/PanelRepository'
 import type { GeneReferenceDb } from '../../database/GeneReferenceDb'
@@ -411,7 +412,7 @@ export function generateBedContent(
     const coords = coordsMap.get(gene.hgnc_id)
     if (!coords) continue
 
-    const chr = coords.chromosome.startsWith('chr') ? coords.chromosome : `chr${coords.chromosome}`
+    const chr = canonicalContig(coords.chromosome, assembly)
     const bedStart = Math.max(0, coords.start_pos - 1 - paddingBp)
     const bedEnd = coords.end_pos + paddingBp
 
