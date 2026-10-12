@@ -82,7 +82,7 @@ describe('postgres-import-worker — injected cancellation while streaming', () 
         batchSize: 50,
         ...(format === 'vcf'
           ? { vcfOptions: { selectedSample: 'NA12878', genomeBuild: 'GRCh38' } }
-          : {})
+          : { vcfOptions: { fallbackGenomeBuild: 'GRCh38' } })
       } as never,
       (message) => messages.push(message as Record<string, unknown>)
     )

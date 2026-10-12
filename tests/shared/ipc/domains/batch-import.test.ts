@@ -111,6 +111,7 @@ describe('batch-import preload domain behavior', () => {
       3,
       'batch-import:checkDuplicates',
       ['/path/to/file1.json'],
+      undefined,
       undefined
     )
     expect(invoke).toHaveBeenNthCalledWith(
@@ -119,7 +120,8 @@ describe('batch-import preload domain behavior', () => {
       ['/path/to/file1.json'],
       'skip',
       undefined,
-      'desktop-run-1'
+      'desktop-run-1',
+      undefined
     )
     expect(invoke).toHaveBeenNthCalledWith(5, 'batch-import:cancel')
     expect(invoke).toHaveBeenNthCalledWith(6, 'batch-import:selectZip')
@@ -235,7 +237,12 @@ describe('batch-import preload domain behavior', () => {
 
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFiles')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectFolder')
-    expect(invoke).toHaveBeenCalledWith('batch-import:checkDuplicates', ['/file.json'], undefined)
+    expect(invoke).toHaveBeenCalledWith(
+      'batch-import:checkDuplicates',
+      ['/file.json'],
+      undefined,
+      undefined
+    )
     expect(invoke).toHaveBeenCalledWith('batch-import:cancel')
     expect(invoke).toHaveBeenCalledWith('batch-import:selectZip')
     expect(invoke).toHaveBeenCalledWith('batch-import:testZipPassword', '/archive.zip', 'pwd')

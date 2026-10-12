@@ -8,6 +8,7 @@
 
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import type { AnnotationType } from '../../../shared/types/import'
+import type { BuildDetection } from '../../../shared/genome/genome-build'
 
 export type { AnnotationType, VcfPreviewResult } from '../../../shared/types/import'
 
@@ -51,8 +52,10 @@ export interface VcfHeader {
   annotationType: AnnotationType
   /** CSQ Format subfield names (only if annotationType === 'csq') */
   csqFields: string[] | null
-  /** Detected genome build from ##reference or ##contig lines */
+  /** Build the header decides on its own (definitive or strong detection), else null */
   genomeBuild: string | null
+  /** Full detection with evidence (src/shared/genome/genome-build.ts) */
+  buildDetection: BuildDetection
   /** Raw header lines (for genome build detection) */
   rawHeaderLines: string[]
 }

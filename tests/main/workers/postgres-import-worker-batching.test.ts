@@ -78,7 +78,8 @@ const jsonStart: PostgresImportWorkerStartMessage = {
   mode: 'single-file',
   caseName: 'JSON case',
   filePath: '/tmp/a.json',
-  format: 'json'
+  format: 'json',
+  vcfOptions: { fallbackGenomeBuild: 'GRCh38' }
 }
 
 const vcfStart: PostgresImportWorkerStartMessage = {

@@ -14,6 +14,8 @@ import {
 } from '../../../main/ipc/handlers/batch-import-session'
 import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
 import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
+import { GenomeBuildIdSchema } from '../../../shared/ipc/domains/import-schemas'
+import { addDetectedBuilds } from '../../../main/import/batch-utils'
 import { batchImportRuns, type BatchImportAccepted } from '../batch-import-runs'
 import { toSerializableWebError } from '../dispatcher-errors'
 import {
@@ -54,7 +56,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
   return {
     'batch-import:checkDuplicates': {
       async handle(args, request, reply, { session }) {
-        const [filePaths, stripText] = args
+        const [filePaths, stripText, detectBuilds] = args
         if (!Array.isArray(filePaths)) {
           reply.code(400)
           return { error: 'invalid-files', message: 'filePaths must be an array' }
@@ -66,17 +68,25 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           return resolution.body
         }
 
-        return await checkSessionDuplicates(
+        const report = await checkSessionDuplicates(
           session,
           resolution.files.map((file) => ({ filePath: file.inputPath, fileName: file.fileName })),
           typeof stripText === 'string' ? stripText : undefined
         )
+        if (detectBuilds !== true) return report
+        return {
+          ...report,
+          files: await addDetectedBuilds(
+            report.files,
+            resolution.files.map((file) => file.storedPath)
+          )
+        }
       }
     },
 
     'batch-import:start': {
       async handle(args, request, reply, { session, events }) {
-        const [filePaths, duplicateStrategy, stripText, runId] = args
+        const [filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild] = args
         if (!Array.isArray(filePaths)) {
           reply.code(400)
           return { error: 'invalid-files', message: 'filePaths must be an array' }
@@ -84,6 +94,11 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
         if (duplicateStrategy !== 'skip' && duplicateStrategy !== 'overwrite') {
           reply.code(400)
           return { error: 'invalid-duplicate-strategy', message: 'duplicateStrategy is invalid' }
+        }
+        const parsedFallback = GenomeBuildIdSchema.optional().safeParse(fallbackGenomeBuild)
+        if (!parsedFallback.success) {
+          reply.code(400)
+          return { error: 'invalid-genome-build', message: 'fallbackGenomeBuild is invalid' }
         }
         const parsedRunId = BatchImportRunIdSchema.safeParse(runId)
         if (!parsedRunId.success) {
@@ -112,6 +127,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           files: resolution.files,
           duplicateStrategy,
           stripText: typeof stripText === 'string' ? stripText : undefined,
+          fallbackGenomeBuild: parsedFallback.data,
           runId: validRunId,
           session,
           callbacks: webBatchCallbacks(events, userId, validRunId)

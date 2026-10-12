@@ -33,6 +33,7 @@ export const SHORTCUTS = {
   comment: rowKey('c', 'Open comment dialog'),
   // The ACMG cell button opens the quick menu; the key opens the evidence dialog.
   acmg: rowKey('a', 'Open ACMG evidence dialog', 'evidence dialog'),
+  proteinView: rowKey('p', 'Open protein view (lollipop, gene, 3D)', 'protein view'),
   expandRow: { key: 'e', description: 'Expand / collapse row (Cohort)' },
   search: { key: '/', description: 'Focus search field' },
   toggleFilters: { key: `${MOD}+Shift+F`, description: 'Toggle filter panel' },
@@ -51,7 +52,10 @@ export type ShortcutId = keyof typeof SHORTCUTS
 const s = SHORTCUTS
 export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; shortcuts: readonly Shortcut[] }> = [
   { title: 'Table Navigation', shortcuts: [s.moveSelection, s.openDetails, s.closeDetails] },
-  { title: 'Actions (on selected row)', shortcuts: [s.star, s.comment, s.acmg, s.expandRow] },
+  {
+    title: 'Actions (on selected row)',
+    shortcuts: [s.star, s.comment, s.acmg, s.proteinView, s.expandRow]
+  },
   {
     title: 'Search & Filters',
     shortcuts: [s.search, s.toggleFilters, s.toggleColumns, s.clearFilters, s.closeDrawer]

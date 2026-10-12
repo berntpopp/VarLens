@@ -54,6 +54,27 @@ describe('useZipImportCleanup request ownership', () => {
     setActivePinia(createPinia())
   })
 
+  it('reads the header builds on the first check only, and keeps them on a recheck', async () => {
+    vi.useFakeTimers()
+    const item = { filePath: '/tmp/current.json', fileName: 'current.json', isDuplicate: false }
+    const build = { suggested: 'GRCh37', confidence: 'definitive' as const }
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ files: [{ ...item, caseName: 'a', build }], duplicateCount: 0 })
+      .mockResolvedValueOnce({ files: [{ ...item, caseName: 'b' }], duplicateCount: 0 })
+    const { cleanup, state } = createHarness(request)
+
+    await cleanup.checkDuplicatesAndAdvance(['/tmp/current.json'])
+    expect(request).toHaveBeenLastCalledWith(['/tmp/current.json'], undefined, true)
+    state.stripText.value = 'x'
+    cleanup.scheduleDuplicateRecheck()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(request).toHaveBeenLastCalledWith(['/tmp/current.json'], 'x')
+    expect(state.reviewFiles.value).toEqual([{ ...item, caseName: 'b', build }])
+    vi.useRealTimers()
+  })
+
   it('ignores an older duplicate response that resolves after a newer response', async () => {
     vi.useFakeTimers()
     const first = deferred<IpcResult<DuplicateCheckResult>>()

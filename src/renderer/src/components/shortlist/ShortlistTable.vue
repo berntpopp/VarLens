@@ -38,6 +38,8 @@ import {
   hasCommandModifier
 } from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
+import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
+import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 
 const props = defineProps<{
   rows: ShortlistRow[]
@@ -195,6 +197,8 @@ const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTab
   getItemId: (item: ShortlistRow) => item.id,
   onSelect: (_item: ShortlistRow) => {}
 })
+
+useProteinViewShortcut(() => (props.interactive === false ? null : selectedItem.value))
 
 function getRowProps({ item }: { item: ShortlistRow }) {
   const isSelected = selectedItem.value?.id === item.id
@@ -373,6 +377,7 @@ onKeyStroke(
           View in {{ targetTabFor(actionsRow.variant_type).toUpperCase() }} tab
         </v-list-item-title>
       </v-list-item>
+      <ProteinViewMenuItem :variant="actionsRow" />
     </v-list>
   </v-menu>
   <v-tooltip

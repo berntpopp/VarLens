@@ -79,6 +79,21 @@ describe('runSessionBatchImport', () => {
     expect(completed.every((event) => event.totalFiles === 3)).toBe(true)
   })
 
+  it('hands every file the build for files without one (#557)', async () => {
+    const { session, importSingleFile } = fakeSession([])
+    await runSessionBatchImport({
+      files: [file('HG002.json')],
+      duplicateStrategy: 'skip',
+      fallbackGenomeBuild: 'GRCh37',
+      session,
+      callbacks: {},
+      signal: new AbortController().signal
+    })
+    expect(importSingleFile).toHaveBeenCalledWith(
+      expect.objectContaining({ vcfOptions: { fallbackGenomeBuild: 'GRCh37' } })
+    )
+  })
+
   const overwrite = (session: StorageSession, names: string[]) =>
     runSessionBatchImport({
       files: names.map(file),

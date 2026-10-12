@@ -67,6 +67,7 @@
           :show-global-indicators="false"
           :read-only="!canWrite"
           :acmg-locked="hasAcmgEvidence?.(item) === true"
+          :variant="item"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -194,6 +195,7 @@
 <script setup lang="ts">
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
+import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import type { CohortVariant } from '../../../../shared/types/cohort'
@@ -520,6 +522,8 @@ onKeyStroke(
   },
   { dedupe: true }
 )
+
+useProteinViewShortcut(() => (viewActive.value ? navSelectedItem.value : null))
 
 // Scroll selected row into view
 watch(selectedIndex, async (newIndex) => {

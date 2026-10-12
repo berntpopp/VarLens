@@ -96,7 +96,8 @@ test('Import fixture files via batch API and verify cases appear', async () => {
       filePaths,
       'overwrite',
       undefined,
-      crypto.randomUUID()
+      crypto.randomUUID(),
+      'GRCh38'
     )
     console.log('import result:', JSON.stringify(importResult))
 
@@ -174,7 +175,8 @@ test('Import real immunology case files', async () => {
       filePaths,
       'overwrite',
       undefined,
-      crypto.randomUUID()
+      crypto.randomUUID(),
+      'GRCh38'
     )
     return { check, importResult }
   }, jsonGzFiles)

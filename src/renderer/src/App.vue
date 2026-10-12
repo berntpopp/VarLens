@@ -96,6 +96,7 @@
     <BackgroundJobsPanel />
 
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
+    <ProteinViewHost v-if="proteinViewMounted" />
 
     <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
   </v-app>
@@ -156,6 +157,9 @@ const AppDialogHost = defineAsyncComponent(() => import('./components/AppDialogH
 const KeyboardShortcutsDialog = defineAsyncComponent(
   () => import('./components/KeyboardShortcutsDialog.vue')
 )
+const ProteinViewHost = defineAsyncComponent(
+  () => import('./components/protein/ProteinViewHost.vue')
+)
 const ViewTransitionOverlay = defineAsyncComponent(
   () => import('./components/ViewTransitionOverlay.vue')
 )
@@ -213,6 +217,7 @@ const { smAndDown: sidebarIsOverlay } = useDisplay()
 const detailsPanelMounted = useMountOnFirstOpen(() => panelOpen.value)
 const keyboardHelpMounted = useMountOnFirstOpen(() => showKeyboardHelp.value)
 const transitionOverlayMounted = useMountOnFirstOpen(() => transitioning.value)
+const proteinViewMounted = useMountOnFirstOpen(() => appState.proteinViewOpen.value)
 
 // Database store
 const databaseStore = useDatabaseStore()

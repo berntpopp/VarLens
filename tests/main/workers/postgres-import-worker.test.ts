@@ -574,7 +574,8 @@ describe('postgres-import-worker runImport', () => {
       mode: 'single-file',
       caseName: 'JSON case',
       filePath: '/tmp/a.json',
-      format: 'json'
+      format: 'json',
+      vcfOptions: { fallbackGenomeBuild: 'GRCh38' }
     }
 
     await runImport(
@@ -645,6 +646,7 @@ describe('postgres-import-worker runImport', () => {
         caseName: 'JSON case',
         filePath: '/tmp/a.json',
         format: 'json',
+        vcfOptions: { fallbackGenomeBuild: 'GRCh38' },
         batchSize: 1
       },
       (message) => messages.push(message)

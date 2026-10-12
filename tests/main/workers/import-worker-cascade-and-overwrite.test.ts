@@ -266,7 +266,7 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
       workerDb.prepare("UPDATE cases SET import_status = 'ready' WHERE id = ?").run(caseId)
       workerDb.close()
 
-      // 2. Attempt to import with duplicateStrategy: 'overwrite' but with a non-existent file
+      // 2. Attempt to import with duplicateStrategy: 'overwrite', fallbackGenomeBuild: 'GRCh38' but with a non-existent file
       const nonExistentPath = join(tmpdir(), `non-existent-${randomUUID()}.json`)
       const messages: WorkerMessage[] = []
       const port: ImportWorkerPort = {
@@ -281,7 +281,8 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
             {
               filePath: nonExistentPath,
               caseName: 'existing-sample',
-              duplicateStrategy: 'overwrite'
+              duplicateStrategy: 'overwrite',
+              fallbackGenomeBuild: 'GRCh38'
             }
           ]
         },
@@ -370,6 +371,7 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
                   caseName: 'existing-sample',
                   isDuplicate: true,
                   duplicateStrategy: 'overwrite',
+                  fallbackGenomeBuild: 'GRCh38',
                   vcfSelectedSamples
                 }
               ]
@@ -415,7 +417,15 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
             type: 'start',
             dbPath,
             throttleMs: 0,
-            files: [{ filePath, caseName: 'fresh', isDuplicate: false, duplicateStrategy: 'skip' }]
+            files: [
+              {
+                filePath,
+                caseName: 'fresh',
+                isDuplicate: false,
+                duplicateStrategy: 'skip',
+                fallbackGenomeBuild: 'GRCh38'
+              }
+            ]
           },
           { postMessage: (m) => messages.push(m) }
         )
@@ -439,7 +449,15 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
             type: 'start',
             dbPath,
             throttleMs: 0,
-            files: [{ filePath, caseName: 'empty', isDuplicate: false, duplicateStrategy: 'skip' }]
+            files: [
+              {
+                filePath,
+                caseName: 'empty',
+                isDuplicate: false,
+                duplicateStrategy: 'skip',
+                fallbackGenomeBuild: 'GRCh38'
+              }
+            ]
           },
           { postMessage: () => undefined }
         )
@@ -466,7 +484,8 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
                   filePath,
                   caseName: 'existing-sample',
                   isDuplicate: true,
-                  duplicateStrategy: 'overwrite'
+                  duplicateStrategy: 'overwrite',
+                  fallbackGenomeBuild: 'GRCh38'
                 }
               ]
             },
@@ -561,7 +580,8 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
               {
                 filePath: validPath,
                 caseName: 'existing-sample',
-                duplicateStrategy: 'overwrite'
+                duplicateStrategy: 'overwrite',
+                fallbackGenomeBuild: 'GRCh38'
               }
             ]
           },

@@ -1,13 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import VariantIdentitySection from '../../../src/renderer/src/components/VariantIdentitySection.vue'
+import { installCapabilities } from '../helpers/capabilities'
 import { NO_GENE_LABEL } from '../../../src/renderer/src/config/displayConfig'
 import type { Variant } from '../../../src/shared/types/api'
 
 const vuetify = createVuetify({ components, directives })
+
+// The section's protein-view buttons read the capability store.
+beforeEach(() => installCapabilities())
 
 function render(variant: Record<string, unknown>) {
   const base = { chr: '1', pos: 100, ref: 'A', alt: 'G', gene_symbol: null, cdna: null }

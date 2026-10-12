@@ -78,7 +78,7 @@ async function importCase(driver: WebDriver, caseName: string, rows: number): Pr
   })) as unknown as InjectResult
   expect(upload.statusCode, upload.body).toBe(200)
   const { ref } = upload.json() as { ref: string }
-  const imported = await driver.api('import', 'start', ref, caseName, { genomeBuild: 'hg38' })
+  const imported = await driver.api('import', 'start', ref, caseName, { genomeBuild: 'GRCh38' })
   expect(imported.statusCode, imported.body).toBe(200)
   const result = imported.json() as { caseId: number; variantCount: number }
   expect(result.variantCount).toBe(rows)

@@ -121,6 +121,27 @@ describe('runSessionBatchImport — parallel', () => {
     expect(s.importSingleFile).not.toHaveBeenCalled()
   })
 
+  it('hands every parallel file the build for files without one (#557)', async () => {
+    const s = parallelSession()
+    const run = runSessionBatchImport({
+      files: names(2),
+      duplicateStrategy: 'skip',
+      fallbackGenomeBuild: 'GRCh37',
+      session: s.session,
+      callbacks: {},
+      signal: new AbortController().signal,
+      concurrency: 2
+    })
+    await flush()
+    await s.settle('S1')
+    await s.settle('S2')
+    await run
+    for (const [params] of s.batch.importFile.mock.calls) {
+      expect(params).toMatchObject({ vcfOptions: { fallbackGenomeBuild: 'GRCh37' } })
+    }
+    expect(s.batch.importFile).toHaveBeenCalledTimes(2)
+  })
+
   it('lists results in file order whatever order the files finish in', async () => {
     const s = parallelSession()
     const run = runSessionBatchImport({

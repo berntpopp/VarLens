@@ -115,7 +115,7 @@ async function runImportScenarioOnElectron(vcfPath: string): Promise<ImportAndFi
       caseId: number
       variantCount?: number
       totalVariants?: number
-    }>(session, 'import', 'start', [vcfPath, 'parity-test-case', { genomeBuild: 'hg38' }])
+    }>(session, 'import', 'start', [vcfPath, 'parity-test-case', { genomeBuild: 'GRCh38' }])
     const caseId = importResult.caseId
 
     const [queryAll, queryChr22, queryHighImpact] = await Promise.all([
@@ -259,7 +259,7 @@ async function runImportScenarioOnWeb(vcfPath: string): Promise<ImportAndFilterR
   const driver = await startWebDriver()
   try {
     const importRes = await driver.api('import', 'start', vcfPath, 'parity-test-case', {
-      genomeBuild: 'hg38'
+      genomeBuild: 'GRCh38'
     })
     expect(importRes.statusCode).toBe(200)
     const importResult = importRes.json() as { caseId: number; variantCount: number }

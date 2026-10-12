@@ -49,7 +49,7 @@ export interface PostgresImportWorkerStartMessage {
   schema: string
   mode: 'single-file' | 'multi-file'
   caseName: string
-  vcfOptions?: { selectedSample?: string; genomeBuild?: string }
+  vcfOptions?: { selectedSample?: string; genomeBuild?: string; fallbackGenomeBuild?: string }
   // Single-file:
   filePath?: string
   /**

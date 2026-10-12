@@ -4,18 +4,26 @@ import {
   ImportStartParamsSchema,
   ImportVcfOptionsSchema
 } from '../../../src/shared/ipc/domains/import-schemas'
+import { GENOME_BUILDS } from '../../../src/shared/config/genome-builds.config'
 
 describe('ImportVcfOptionsSchema', () => {
-  it('accepts future genome build string values', () => {
-    expect(ImportVcfOptionsSchema.safeParse({ genomeBuild: 'T2T-CHM13v2.0' }).success).toBe(true)
+  it.each(GENOME_BUILDS.map((b) => [b.id, b.importable] as const))(
+    'genome build %s is accepted only when importable (%s)',
+    (id, importable) => {
+      expect(ImportVcfOptionsSchema.safeParse({ genomeBuild: id }).success).toBe(importable)
+    }
+  )
+
+  it('rejects an unknown genome build', () => {
+    expect(ImportVcfOptionsSchema.safeParse({ genomeBuild: ' GRCh39 ' }).success).toBe(false)
   })
 
   it('preserves leading and trailing spaces while validating nonblank strings', () => {
-    const vcfOptionsResult = ImportVcfOptionsSchema.safeParse({ genomeBuild: ' GRCh39 ' })
+    const vcfOptionsResult = ImportVcfOptionsSchema.safeParse({ selectedSample: ' S1 ' })
     expect(vcfOptionsResult.success).toBe(true)
     if (!vcfOptionsResult.success) return
 
-    expect(vcfOptionsResult.data?.genomeBuild).toBe(' GRCh39 ')
+    expect(vcfOptionsResult.data?.selectedSample).toBe(' S1 ')
 
     const startParamsResult = ImportStartParamsSchema.safeParse([
       ' /tmp/input.vcf ',

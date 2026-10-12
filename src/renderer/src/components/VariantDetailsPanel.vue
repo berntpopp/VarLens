@@ -44,9 +44,10 @@
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
-            class="mb-4"
+            class="mb-2"
             @open-protein-view="openProteinView"
           />
+          <ProteinPreviewStrip :variant="variant" class="mb-4" @open="openProteinView" />
 
           <!-- Extension details for SV/CNV/STR variants (case mode only: cohort rows lack per-call SV fields like _sv_is_precise) -->
           <ExtensionDetailsSection
@@ -195,23 +196,6 @@
 
         <div v-else class="text-muted text-center mt-4">Select a variant to view details</div>
       </div>
-
-      <!-- Protein Visualization Modal: mounted on first open only. Rendering it
-           closed still fetched its chunk and fired protein/ClinVar requests on
-           every variant change. -->
-      <ProteinVisualizationModal
-        v-if="proteinViewerAvailable && proteinModalMounted"
-        v-model="proteinModalOpen"
-        :variant="variant"
-        :case-id="caseId"
-        :mode="mode"
-        :genome-build="genomeBuild"
-      />
-      <ProteinViewUnavailableDialog
-        v-else-if="!proteinViewerAvailable"
-        v-model="proteinModalOpen"
-        :reason="capabilities.capabilityReason('proteinViewer')"
-      />
     </v-card>
   </v-navigation-drawer>
 </template>
@@ -228,6 +212,8 @@ import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import ProteinPreviewStrip from './protein/ProteinPreviewStrip.vue'
+import type { ProteinViewTab } from '../config/proteinViewConfig'
 import IconButton from './common/IconButton.vue'
 import { usePanelFocus } from '../composables/usePanelFocus'
 import { isOverlayOpen, isTextEntryFocused } from '../composables/useTableKeyboardNav'
@@ -260,13 +246,6 @@ const ActivityLogPanel = defineAsyncComponent({
   loader: () => import('./ActivityLogPanel.vue'),
   ...asyncOpts
 })
-const ProteinVisualizationModal = defineAsyncComponent({
-  loader: () => import('./protein/ProteinVisualizationModal.vue'),
-  ...asyncOpts
-})
-const ProteinViewUnavailableDialog = defineAsyncComponent(
-  () => import('./protein/ProteinViewUnavailableDialog.vue')
-)
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -277,7 +256,6 @@ import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/u
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { useCapabilityStore } from '../stores/capabilityStore'
-import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 import { usePermissions } from '../composables/usePermissions'
 import { useVariantGenomeBuild } from '../composables/useVariantGenomeBuild'
 
@@ -312,16 +290,14 @@ watch(
 )
 const genomeBuild = useVariantGenomeBuild(props)
 
-const proteinModalOpen = ref(false)
 // External lookups: always on in desktop; an admin-controlled, default-off
 // server setting in web; read from the capability document (fail-closed).
 const capabilities = useCapabilityStore()
-const proteinViewerAvailable = computed(() => capabilities.canUse('proteinViewer'))
 const vepFetchAvailable = computed(() => capabilities.canUse('vepEnrichment'))
-const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
-function openProteinView(): void {
-  proteinModalOpen.value = true
+// The protein view is the shell's (ProteinViewHost), shared with the row menu and `p`.
+function openProteinView(tab: ProteinViewTab): void {
+  if (props.variant !== null) appState?.openProteinView(props.variant, tab)
 }
 
 function handleTagsChanged(): void {

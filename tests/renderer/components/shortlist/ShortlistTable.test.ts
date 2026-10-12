@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -20,6 +20,8 @@ import ShortlistTable from '../../../../src/renderer/src/components/shortlist/Sh
 import { createPinia, setActivePinia } from 'pinia'
 import type { ShortlistRow } from '../../../../src/shared/types/shortlist'
 import { clinvarDisplayText } from '../../../../src/shared/config/severity.config'
+import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
+import { installCapabilities } from '../../helpers/capabilities'
 
 // ShortlistTable resolves its Links column through the external-links store
 beforeEach(() => setActivePinia(createPinia()))
@@ -273,6 +275,25 @@ describe('ShortlistTable', () => {
       await wrapper.vm.$nextTick()
     }
     expect(wrapper.emitted('toggle-star')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('the row actions menu opens the protein view for the row (case-view parity)', async () => {
+    installCapabilities()
+    const state = createAppState()
+    const item = row({ aa_change: 'p.Met180Val' })
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [item] },
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      attachTo: document.body
+    })
+    await wrapper.get('[data-testid="shortlist-actions-1"]').trigger('click')
+    await flushPromises()
+    const entry = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find((el) =>
+      el.textContent?.includes('Protein view')
+    )
+    entry!.click()
+    expect(state.proteinViewRequest.value).toEqual({ variant: item, tab: 'lollipop' })
     wrapper.unmount()
   })
 })

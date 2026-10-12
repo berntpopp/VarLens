@@ -78,7 +78,8 @@ describe('import worker session guards', () => {
             filePath: writeSimpleJson(),
             caseName: 'never-created',
             isDuplicate: false,
-            duplicateStrategy: 'skip'
+            duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38'
           }
         ]
       })
@@ -109,7 +110,8 @@ describe('import worker session guards', () => {
           filePath: writeSimpleJson(),
           caseName: 'ok',
           isDuplicate: false,
-          duplicateStrategy: 'skip'
+          duplicateStrategy: 'skip',
+          fallbackGenomeBuild: 'GRCh38'
         }
       ]
     })
@@ -125,7 +127,8 @@ describe('import worker session guards', () => {
           filePath: writeSimpleJson(),
           caseName: 'announced',
           isDuplicate: false,
-          duplicateStrategy: 'skip'
+          duplicateStrategy: 'skip',
+          fallbackGenomeBuild: 'GRCh38'
         }
       ]
     })

@@ -130,7 +130,8 @@ export async function startBatchImport(
   filePaths: string[],
   duplicateStrategy: DuplicateChoice,
   stripText: string | undefined,
-  callbacks: BatchImportCallbacks
+  callbacks: BatchImportCallbacks,
+  fallbackGenomeBuild?: string
 ): Promise<BatchImportResult> {
   let db: DatabaseService | undefined
   const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
@@ -144,7 +145,8 @@ export async function startBatchImport(
       filePath: f.filePath,
       caseName: f.caseName,
       isDuplicate: f.isDuplicate,
-      duplicateStrategy
+      duplicateStrategy,
+      fallbackGenomeBuild
     }))
 
     const database = db

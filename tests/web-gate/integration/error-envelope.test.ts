@@ -100,11 +100,11 @@ describe.skipIf(!HAS_PG)('error envelope: name clashes are 409 CONFLICT (web/Pos
       const driver = await startWebDriver()
       try {
         const first = await driver.api('import', 'start', await uploadVcf(driver, 'a'), 'HG005', {
-          genomeBuild: 'hg38'
+          genomeBuild: 'GRCh38'
         })
         expect(first.statusCode, first.body).toBe(200)
         const again = await driver.api('import', 'start', await uploadVcf(driver, 'b'), 'HG005', {
-          genomeBuild: 'hg38'
+          genomeBuild: 'GRCh38'
         })
         expectConflict(again as Res, /HG005/)
       } finally {

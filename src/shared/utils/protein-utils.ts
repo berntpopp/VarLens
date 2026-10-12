@@ -56,6 +56,10 @@ export const DOMAIN_TYPE_COLORS: Record<string, string> = {
   'coiled coil': '#EF6C00'
 }
 
+/** Colour of an InterPro domain type (grey for types without one). */
+export const getDomainColor = (type: string): string =>
+  DOMAIN_TYPE_COLORS[type.toLowerCase()] ?? '#9E9E9E'
+
 /**
  * ClinVar clinical significance colours for the protein plots, gene structure
  * and Mol*: the light ACMG tokens, since these figures always render on a

@@ -44,7 +44,15 @@ describe('import worker JSON rows without required fields', () => {
         type: 'start',
         dbPath,
         throttleMs: 0,
-        files: [{ filePath, caseName: 'c', isDuplicate: false, duplicateStrategy: 'skip' }]
+        files: [
+          {
+            filePath,
+            caseName: 'c',
+            isDuplicate: false,
+            duplicateStrategy: 'skip',
+            fallbackGenomeBuild: 'GRCh38'
+          }
+        ]
       },
       { postMessage: (m) => messages.push(m) }
     )

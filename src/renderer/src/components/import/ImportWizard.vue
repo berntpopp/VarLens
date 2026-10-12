@@ -97,15 +97,17 @@
 
       <v-card-text v-else-if="isVcfImport && step === 2">
         <VcfPreviewStep
+          ref="vcfPreviewStep"
           :file-path="vcfFilePath"
-          @preview-loaded="onVcfPreviewLoaded"
           @selection-changed="onVcfSelectionChanged"
         />
       </v-card-text>
 
       <v-card-text v-else-if="step === 2">
         <BatchReviewPhase
+          ref="batchReview"
           v-model:strip-text="stripText"
+          v-model:fallback-build="batchFallbackBuild"
           v-model:duplicate-strategy="duplicateStrategy"
           :review-files="reviewFiles"
           :file-count="fileCount"
@@ -146,7 +148,7 @@
           variant="flat"
           size="small"
           :disabled="vcfSelectedSamples.length === 0 || !vcfNamesValid || importStore.isActive"
-          @click="startVcfImport"
+          @click="vcfPreviewStep?.validate() && startVcfImport()"
         >
           {{
             importStore.isActive
@@ -161,7 +163,7 @@
           variant="flat"
           size="small"
           :disabled="hasEmptyCaseNames || fileCount === 0 || importStore.isActive"
-          @click="startImport"
+          @click="batchReview?.validate() && startImport()"
         >
           {{
             importStore.isActive
@@ -187,7 +189,7 @@ import type {
   BatchCompleteEvent,
   ProgressUpdate
 } from '../../../../shared/types/api'
-import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
+import type { VcfSampleSelection } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
 import { useVcfImportExecution } from '../../composables/useVcfImportExecution'
 import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
@@ -235,7 +237,8 @@ const cancelError = ref('')
 const isVcfImport = ref(false)
 const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
-const vcfGenomeBuild = ref('GRCh38')
+const vcfGenomeBuild = ref<string | null>(null)
+const vcfPreviewStep = ref<InstanceType<typeof VcfPreviewStep> | null>(null)
 const vcfCaseNames = ref(new Map<string, string>())
 const vcfNamesValid = ref(true)
 
@@ -287,6 +290,8 @@ const zipError = ref('')
 const zipUnlocking = ref(false)
 
 const reviewFiles = ref<DuplicateCheckItem[]>([])
+const batchFallbackBuild = ref<string | null>(null)
+const batchReview = ref<InstanceType<typeof BatchReviewPhase> | null>(null)
 const duplicateCount = ref(0)
 const fileCount = computed(() => reviewFiles.value.length)
 const duplicateStrategy = ref<DuplicateChoice>('skip')
@@ -300,13 +305,14 @@ const overallPercent = ref(0)
 const variantCount = ref(0)
 const liveProgress = ref<Partial<BatchProgressEvent>>({}) // parallel batches: done count + running files
 
-const summary = ref<BatchResult>({
+const emptySummary = (): BatchResult => ({
   succeeded: 0,
   failed: 0,
   skipped: 0,
   cancelled: false,
   details: []
 })
+const summary = ref<BatchResult>(emptySummary())
 
 let cleanupProgress: (() => void) | null = null
 let cleanupImportProgress: (() => void) | null = null
@@ -347,13 +353,7 @@ function handleWebUploadEvent(event: Event): void {
     })
   }
   if (detail.status === 'aborted') {
-    importStore.importComplete({
-      succeeded: 0,
-      failed: 0,
-      skipped: 0,
-      cancelled: true,
-      details: []
-    })
+    importStore.importComplete({ ...emptySummary(), cancelled: true, details: [] })
   }
   if (detail.status === 'error') {
     importStore.importError(detail.message ?? 'Upload failed')
@@ -381,7 +381,8 @@ const {
   cancelDuplicateRecheck
 } = useZipImportCleanup({
   cleanupRequest: (extractionId) => api!.batchImport.cleanupZipTemp(extractionId),
-  checkDuplicatesRequest: (filePaths, strip) => api!.batchImport.checkDuplicates(filePaths, strip),
+  checkDuplicatesRequest: (filePaths, strip, detectBuilds) =>
+    api!.batchImport.checkDuplicates(filePaths, strip, detectBuilds),
   importStore,
   state: {
     step,
@@ -525,10 +526,6 @@ function cancelZip(): void {
   abandonZipImport('password prompt cancellation')
 }
 
-function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
-  logService.info('VCF preview loaded successfully', 'ImportWizard')
-}
-
 function onVcfSelectionChanged(options: VcfSampleSelection): void {
   vcfNamesValid.value = options.valid
   vcfSelectedSamples.value = options.selectedSamples
@@ -554,13 +551,7 @@ function completeCancelledRun(generation: number): void {
   activeBatchRunGeneration = null
   activeBatchRunId = null
   cancellationRequestedGeneration = null
-  const cancelledResult: BatchResult = {
-    succeeded: 0,
-    failed: 0,
-    skipped: 0,
-    cancelled: true,
-    details: []
-  }
+  const cancelledResult: BatchResult = { ...emptySummary(), cancelled: true }
   summary.value = cancelledResult
   step.value = 4
   importStore.importComplete({ ...cancelledResult, details: [] })
@@ -621,7 +612,8 @@ async function startImport(): Promise<void> {
         [...selectedFilePaths.value],
         duplicateStrategy.value,
         stripText.value || undefined,
-        runId
+        runId,
+        batchFallbackBuild.value ?? undefined
       )
     )
 
@@ -665,13 +657,7 @@ async function startImport(): Promise<void> {
       cancellationRequestedGeneration = null
       logService.error(`Import failed: ${message}`, 'ImportWizard')
       cancelError.value = ''
-      summary.value = {
-        succeeded: 0,
-        failed: fileCount.value,
-        skipped: 0,
-        cancelled: false,
-        details: []
-      }
+      summary.value = { ...emptySummary(), failed: fileCount.value }
       step.value = 4
       importStore.importError(message)
     }
@@ -724,7 +710,7 @@ function resetState(): void {
   isVcfImport.value = false
   vcfFilePath.value = ''
   vcfSelectedSamples.value = []
-  vcfGenomeBuild.value = 'GRCh38'
+  vcfGenomeBuild.value = null
   vcfCaseNames.value = new Map()
   isZipImport.value = false
   zipPath.value = ''
@@ -738,6 +724,7 @@ function resetState(): void {
   zipUnlocking.value = false
   cancellationPending.value = false
   reviewFiles.value = []
+  batchFallbackBuild.value = null
   duplicateCount.value = 0
   duplicateStrategy.value = 'skip'
   stripText.value = ''
@@ -747,7 +734,7 @@ function resetState(): void {
   overallPercent.value = 0
   variantCount.value = 0
   liveProgress.value = {}
-  summary.value = { succeeded: 0, failed: 0, skipped: 0, cancelled: false, details: [] }
+  summary.value = emptySummary()
 }
 
 const show = (): void => {

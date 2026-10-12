@@ -69,7 +69,7 @@ test('benchmark: import 50 files, verify, delete all', async ({}, testInfo) => {
     const result = await window.evaluate(
       ([fp, cn]) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (window as any).api.import.start(fp, cn)
+        return (window as any).api.import.start(fp, cn, { genomeBuild: 'GRCh38' })
       },
       [escapedPath, caseName]
     )
