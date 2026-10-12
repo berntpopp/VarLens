@@ -180,6 +180,7 @@
 import { computed } from 'vue'
 import type { MultiFileImportResult } from '../../../../shared/types/api'
 import { unrankedClinvarSummary } from '../../utils/unranked-clinvar'
+import { VARIANT_TYPE_COLORS } from '../../config/importConfig'
 import type { VcfPreviewResult } from '../../../../shared/types/import'
 import {
   mdiAlertCircle,
@@ -258,20 +259,7 @@ function percentage(count: number): string {
 }
 
 function variantTypeColor(type: string): string {
-  switch (type) {
-    case 'snv':
-      return 'primary'
-    case 'indel':
-      return 'deep-purple'
-    case 'sv':
-      return 'orange'
-    case 'cnv':
-      return 'teal'
-    case 'str':
-      return 'pink'
-    default:
-      return 'grey'
-  }
+  return VARIANT_TYPE_COLORS[type] ?? 'grey'
 }
 
 function fileName(filePath: string): string {
