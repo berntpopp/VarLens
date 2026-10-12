@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseDsl } from '../../../src/renderer/src/dsl/parser'
+import { parseDsl } from '../../../src/shared/dsl/parser'
 
 describe('parseDsl', () => {
   it('parses a single filter rule', () => {

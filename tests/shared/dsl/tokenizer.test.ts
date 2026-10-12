@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, isDslInput } from '../../../src/renderer/src/dsl/tokenizer'
+import { tokenize, isDslInput } from '../../../src/shared/dsl/tokenizer'
 
 describe('tokenizer', () => {
   it('tokenizes a simple filter rule', () => {
