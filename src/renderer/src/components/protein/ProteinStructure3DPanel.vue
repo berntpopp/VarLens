@@ -32,7 +32,8 @@ const clinvarChips: Array<{ key: ClinVarSignificance; label: string; color: stri
   { key: 'likely_pathogenic', label: 'Likely P.', color: CLINVAR_COLORS.likely_pathogenic },
   { key: 'uncertain', label: 'VUS', color: CLINVAR_COLORS.uncertain },
   { key: 'likely_benign', label: 'Likely B.', color: CLINVAR_COLORS.likely_benign },
-  { key: 'benign', label: 'Benign', color: CLINVAR_COLORS.benign }
+  { key: 'benign', label: 'Benign', color: CLINVAR_COLORS.benign },
+  { key: 'other', label: 'Other', color: CLINVAR_COLORS.other }
 ]
 
 function toggleClinvar(key: ClinVarSignificance): void {

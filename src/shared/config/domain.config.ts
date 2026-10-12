@@ -43,6 +43,12 @@ export const SEMANTIC_COLORS = {
   }
 } as const
 
+/**
+ * Plot mark for ClinVar records outside the five classes (conflicting, not
+ * provided, ...): 3.45:1 on white, ΔE00 >= 10 from the VUS grey under CVD.
+ */
+export const CLINVAR_OTHER_MARK = '#8A8A8A'
+
 /** Theme colour token per ACMG classification (row, filter and dialog chips alike). */
 export const ACMG_COLORS: Record<AcmgClassification, string> = {
   Pathogenic: 'error',

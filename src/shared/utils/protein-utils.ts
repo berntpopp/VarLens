@@ -4,7 +4,7 @@
  */
 
 import type { ConsequenceCategory, ClinVarSignificance } from '../types/protein'
-import { SEMANTIC_COLORS } from '../config/domain.config'
+import { CLINVAR_OTHER_MARK, SEMANTIC_COLORS } from '../config/domain.config'
 
 /**
  * Consequence category color scheme (cBioPortal convention)
@@ -68,7 +68,7 @@ export const CLINVAR_COLORS: Record<ClinVarSignificance, string> = {
   uncertain: SEMANTIC_COLORS.light.muted,
   likely_benign: SEMANTIC_COLORS.light['acmg-lb'],
   benign: SEMANTIC_COLORS.light['acmg-b'],
-  other: '#999999'
+  other: CLINVAR_OTHER_MARK
 }
 
 /**
