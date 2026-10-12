@@ -33,7 +33,8 @@ import {
   resolveVcfSelectedSampleColumn,
   type VcfSelectedSampleColumn
 } from '../../import/vcf/vcf-line-parser'
-import { mapVcfRecord } from '../../import/vcf/VcfMapper'
+import { mapVcfRecord, seedVcfFields } from '../../import/vcf/VcfMapper'
+import { FieldProfileResolver } from '../../../shared/utils/import-field-profile'
 import { detectCaller } from '../../import/vcf/caller-detector'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registry'
 import type { VcfHeader } from '../../import/vcf/types'
@@ -91,6 +92,12 @@ export async function importAdditionalFileToCase(
   let activeSample = ''
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
+  const fields = new FieldProfileResolver(vcfOptions?.fieldProfile)
+  // The keys the case's earlier files assigned keep their meaning in this one.
+  const stored = appendDb
+    .prepare('SELECT field_dictionary FROM case_data_info WHERE case_id = ?')
+    .get(caseId) as { field_dictionary: string | null } | undefined
+  if (stored?.field_dictionary != null) fields.adopt(JSON.parse(stored.field_dictionary))
 
   let totalInserted = 0
   let totalSkipped = 0
@@ -127,6 +134,7 @@ export async function importAdditionalFileToCase(
             true
           )
           activeSample = activeSampleColumn.name
+          seedVcfFields(fields, header, DEFAULT_INFO_FIELD_MAPPINGS)
 
           const callerInfo = detectCaller(headerLines)
           callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
@@ -164,7 +172,8 @@ export async function importAdditionalFileToCase(
             header,
             activeSample,
             DEFAULT_INFO_FIELD_MAPPINGS,
-            callerName
+            callerName,
+            fields
           )
 
           // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
@@ -216,6 +225,15 @@ export async function importAdditionalFileToCase(
         batch.flush()
       }
       if (isCancelled()) throw new Error('Import cancelled by user')
+      const dictionary = fields.dictionary()
+      if (dictionary !== null) {
+        appendDb
+          .prepare(
+            `UPDATE case_data_info SET field_dictionary = json_patch(COALESCE(field_dictionary, '{}'), ?)
+             WHERE case_id = ?`
+          )
+          .run(JSON.stringify(dictionary), caseId)
+      }
       appendDb.exec('COMMIT')
     } catch (error) {
       if (appendDb.inTransaction) appendDb.exec('ROLLBACK')

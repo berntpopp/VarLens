@@ -82,6 +82,7 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       startMultiFile: (caseName, files, vcfOptions, filters) =>
         importDomain.startMultiFile(caseName, files, vcfOptions, filters),
       vcfPreview: (filePath) => importDomain.vcfPreview(filePath),
+      jsonPreview: (filePath) => importDomain.jsonPreview(filePath),
       vcfMultiPreview: (filePaths) => importDomain.vcfMultiPreview(filePaths),
       onProgress: (callback) => subscribeToIpcEvent('import:progress', callback),
       cancel: () => importDomain.cancel()
@@ -140,8 +141,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       selectFolder: () => batchImportDomain.selectFolder(),
       checkDuplicates: (filePaths, stripText) =>
         batchImportDomain.checkDuplicates(filePaths, stripText),
-      start: (filePaths, duplicateStrategy, stripText, runId) =>
-        batchImportDomain.start(filePaths, duplicateStrategy, stripText, runId),
+      start: (filePaths, duplicateStrategy, stripText, runId, options) =>
+        batchImportDomain.start(filePaths, duplicateStrategy, stripText, runId, options),
       cancel: () => batchImportDomain.cancel(),
       selectZip: () => batchImportDomain.selectZip(),
       testZipPassword: (zipPath, password) => batchImportDomain.testZipPassword(zipPath, password),

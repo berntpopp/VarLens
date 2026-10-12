@@ -11,6 +11,7 @@ import {
   canonicalizeTranscriptSemantics,
   type TranscriptInsertRow
 } from '../../../shared/types/transcript'
+import { ANN_FIELD_NAMES } from '../../../shared/config/import-fields.config'
 import {
   MAX_VCF_ANNOTATION_CHARS,
   MAX_VCF_ANNOTATION_FIELDS,
@@ -241,6 +242,7 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
     cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
     clinvar: clinvarStr ?? null,
     vepClinSig: best?.fields.get('CLIN_SIG') ?? null,
+    selectedFields: best?.fields,
     transcripts
   }
 }
@@ -361,8 +363,17 @@ function buildAnnResult(filtered: AnnTranscript[]): AnnotationResult {
     gnomadAf: null,
     cadd: null,
     clinvar: null,
+    selectedFields: best === null ? undefined : annFields(best.parts),
     transcripts
   }
+}
+
+function annFields(parts: string[]): Map<string, string> {
+  const fields = new Map<string, string>()
+  parts.forEach((part, i) => {
+    if (part !== '' && i < ANN_FIELD_NAMES.length) fields.set(ANN_FIELD_NAMES[i], part)
+  })
+  return fields
 }
 
 // ── Shared helpers ───────────────────────────────────────────

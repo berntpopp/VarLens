@@ -40,6 +40,7 @@ import {
   streamInsertJson,
   streamInsertVcf
 } from './import-pipeline'
+import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { discardInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
@@ -258,6 +259,7 @@ export async function runImportSession(
             }
           }
 
+          const fields = new FieldProfileResolver(file.fieldProfile)
           stmts.beginBulkInsert()
           try {
             if (formatInfo.format === 'vcf') {
@@ -272,7 +274,8 @@ export async function runImportSession(
                 onProgress,
                 onSkip,
                 undefined,
-                vcfFilters
+                vcfFilters,
+                fields
               )
             } else {
               variantCount = await streamInsertJson(
@@ -284,7 +287,8 @@ export async function runImportSession(
                 isCancelled,
                 onProgress,
                 undefined,
-                onSkip
+                onSkip,
+                fields
               )
             }
           } finally {
@@ -308,7 +312,7 @@ export async function runImportSession(
 
           // Insert data_info provenance
           try {
-            stmts.insertDataInfo.run(caseId, fileName, formatInfo.format)
+            stmts.insertDataInfo.run(caseId, fileName, formatInfo.format, fields.dictionary())
           } catch (e) {
             console.warn(
               '[import-worker] Failed to insert data_info provenance:',

@@ -369,6 +369,8 @@ export interface CaseDataInfo {
   gene_list_id: number | null
   /** FK to region_files (optional BED region file link) */
   region_file_id: number | null
+  /** JSON: stored `info.<KEY>` → original source field (`CSQ:REVEL_score`), set by the import. */
+  field_dictionary?: string | null
   created_at: number
   updated_at: number
 }

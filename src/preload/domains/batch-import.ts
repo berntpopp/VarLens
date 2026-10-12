@@ -7,8 +7,15 @@ export function createBatchImportApi(): BatchImportDomainContract {
     selectFolder: () => ipcRenderer.invoke('batch-import:selectFolder'),
     checkDuplicates: (filePaths, stripText) =>
       ipcRenderer.invoke('batch-import:checkDuplicates', filePaths, stripText),
-    start: (filePaths, duplicateStrategy, stripText, runId) =>
-      ipcRenderer.invoke('batch-import:start', filePaths, duplicateStrategy, stripText, runId),
+    start: (filePaths, duplicateStrategy, stripText, runId, options) =>
+      ipcRenderer.invoke(
+        'batch-import:start',
+        filePaths,
+        duplicateStrategy,
+        stripText,
+        runId,
+        options
+      ),
     cancel: () => ipcRenderer.invoke('batch-import:cancel'),
     selectZip: () => ipcRenderer.invoke('batch-import:selectZip'),
     testZipPassword: (zipPath, password) =>

@@ -20,7 +20,8 @@ import {
   ImportStartMultiFileParamsSchema,
   ImportStartParamsSchema,
   ImportVcfMultiPreviewParamsSchema,
-  ImportVcfPreviewParamsSchema
+  ImportVcfPreviewParamsSchema,
+  ImportJsonPreviewParamsSchema
 } from '../../../shared/ipc/domains/import-schemas'
 import {
   startImport,
@@ -34,6 +35,7 @@ import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageSession } from '../../storage/session'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { VcfMultiPreviewResult } from '../../../shared/types/import'
+import { getJsonFieldPreview } from '../../import/json-preview'
 
 /**
  * Serializable filter payload sent from the renderer over IPC.
@@ -165,12 +167,7 @@ export function registerImportHandlers({
 
   ipcMain.handle(
     'import:start',
-    async (
-      _event,
-      filePath: string,
-      caseName: string,
-      vcfOptions?: { selectedSample?: string; genomeBuild?: string }
-    ) => {
+    async (_event, filePath: string, caseName: string, vcfOptions?: unknown) => {
       return wrapHandler(async () => {
         const parsed = ImportStartParamsSchema.safeParse([filePath, caseName, vcfOptions])
         if (!parsed.success) {
@@ -200,7 +197,7 @@ export function registerImportHandlers({
       _event,
       caseName: string,
       files: MultiFileImportSpec[],
-      vcfOptions?: { selectedSample?: string; genomeBuild?: string },
+      vcfOptions?: unknown,
       filtersPayload?: ImportFiltersIpcPayload
     ) => {
       return wrapHandler(async () => {
@@ -276,6 +273,22 @@ export function registerImportHandlers({
         throwUnallowedImportPath('import:vcfPreview', validatedPath)
       }
       return getVcfPreview(validatedPath)
+    })
+  })
+
+  ipcMain.handle('import:jsonPreview', async (_event, filePath: unknown) => {
+    return wrapHandler(async () => {
+      const parsed = ImportJsonPreviewParamsSchema.safeParse([filePath])
+      if (!parsed.success) {
+        throw new InvalidParametersError(
+          `Invalid import:jsonPreview params: ${parsed.error.message}`
+        )
+      }
+      const [validatedPath] = parsed.data
+      if (!isStrictlyEnrolledPath(validatedPath)) {
+        throwUnallowedImportPath('import:jsonPreview', validatedPath)
+      }
+      return getJsonFieldPreview(validatedPath)
     })
   })
 

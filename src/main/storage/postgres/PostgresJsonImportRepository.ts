@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg'
 
 import { UniqueConstraintError } from '../../database/errors'
 import { quoteIdentifier } from './identifiers'
+import { fieldDictionaryText } from './PostgresVcfImportRepository'
 import {
   VARIANT_BASE_COLUMNS,
   setSeverityRanks,
@@ -132,6 +133,8 @@ export interface PostgresJsonImportRequest {
   fileSize: number
   genomeBuild: string
   importFileType: PostgresJsonImportFileType
+  /** Read after the variants are written: stored info key → original source field. */
+  fieldDictionary?: () => Record<string, string> | null
 }
 
 export interface PostgresJsonImportBatchResult {
@@ -254,13 +257,20 @@ export class PostgresJsonImportRepository {
     // Do not add ad-hoc provenance columns here (e.g. import_date, imported_at).
     await client.query(
       `INSERT INTO ${this.schemaName}."case_data_info"
-         (case_id, import_file_name, import_file_type, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $4)
+         (case_id, import_file_name, import_file_type, field_dictionary, created_at, updated_at)
+       VALUES ($1, $2, $3, $5, $4, $4)
        ON CONFLICT (case_id) DO UPDATE SET
          import_file_name = EXCLUDED.import_file_name,
          import_file_type = EXCLUDED.import_file_type,
+         field_dictionary = EXCLUDED.field_dictionary,
          updated_at = EXCLUDED.updated_at`,
-      [caseId, request.fileName, request.importFileType, createdAt]
+      [
+        caseId,
+        request.fileName,
+        request.importFileType,
+        createdAt,
+        fieldDictionaryText(request.fieldDictionary?.() ?? null)
+      ]
     )
 
     await client.query(`UPDATE ${this.schemaName}."cases" SET variant_count = $1 WHERE id = $2`, [

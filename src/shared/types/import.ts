@@ -1,3 +1,4 @@
+import type { FieldOrigin } from '../config/import-fields.config'
 // Progress update for import callbacks
 export interface ProgressUpdate {
   phase: 'reading' | 'parsing' | 'inserting'
@@ -36,15 +37,6 @@ export interface ImportResult {
   unrankedClinvar?: string[]
 }
 
-// Field mapping definition
-export interface FieldMapping {
-  source: string // Source column name (for header lookup)
-  sourceIndex: number // Direct index into data array
-  target: string // Target property name (matches Variant type)
-  isMultiValue: boolean // True if array that needs transcript selection
-  hasDictionary: boolean // True if needs data dictionary lookup
-}
-
 // Raw variant row from columnar format (before mapping)
 // This is a tuple: [value1, value2, ...] indexed by column
 export type RawVariantRow = (string | number | null | (string | number | null)[])[]
@@ -74,6 +66,29 @@ export interface BatchImportOptions {
   signal?: AbortSignal
 }
 
+/** One source field in an import preview (spec §16 field table). */
+export interface ImportFieldPreview {
+  origin: FieldOrigin
+  name: string
+  /** The VarLens column it fills, or null when the field profile decides. */
+  column: string | null
+  /** number / text from the sampled values, else the header or catalogue type; '' when unknown. */
+  type: string
+  /** Share of sampled variants with a value (0..1); null when not sampled (VCF). */
+  fillRate: number | null
+  /** Up to three short sample values. */
+  samples: string[]
+  description?: string
+}
+
+/** JSON (columnar / object / simple) preview returned by import:jsonPreview. */
+export interface JsonFieldPreviewResult {
+  format: FileFormat
+  /** Variants read for fill rates and samples (the first N of the file). */
+  variantsScanned: number
+  fields: ImportFieldPreview[]
+}
+
 /** Annotation type detected from VCF header */
 export type AnnotationType = 'csq' | 'ann' | 'none'
 
@@ -97,6 +112,8 @@ export interface VcfPreviewResult {
   callerVersion: string | null
   /** Default variant type inferred from caller (snv, sv, cnv, str) */
   defaultVariantType: string
+  /** CSQ / ANN subfield names of the selected transcript, in header order. */
+  annotationFields: string[]
   /** Absolute file path (used for multi-file preview) */
   filePath: string
   /** File size in bytes */

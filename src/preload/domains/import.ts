@@ -53,6 +53,7 @@ export function createImportApi(): ImportDomainContract {
     startMultiFile: (caseName, files, vcfOptions, filters) =>
       ipcRenderer.invoke('import:startMultiFile', caseName, files, vcfOptions, filters),
     vcfPreview: (filePath) => ipcRenderer.invoke('import:vcfPreview', filePath),
+    jsonPreview: (filePath) => ipcRenderer.invoke('import:jsonPreview', filePath),
     vcfMultiPreview: (filePaths) => ipcRenderer.invoke('import:vcfMultiPreview', filePaths),
     cancel: () => ipcRenderer.invoke('import:cancel')
   }

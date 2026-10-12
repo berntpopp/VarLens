@@ -1,10 +1,15 @@
 import { z } from 'zod'
 
-import { importFilterNumericFields } from '../../ipc/domains/import-schemas'
+import {
+  ImportFieldProfileSchema,
+  importFilterNumericFields
+} from '../../ipc/domains/import-schemas'
+import type { ImportFieldProfile } from '../../config/import-fields.config'
 
 export interface ImportVcfOptions {
   selectedSample?: string
   genomeBuild?: string
+  fieldProfile?: ImportFieldProfile
 }
 
 export interface ImportMultiFileSpec {
@@ -21,7 +26,8 @@ export const ImportVariantTypeArgSchema = z.string().refine((value) => value.tri
 export const ImportVcfOptionsSchema = z
   .object({
     selectedSample: z.string().optional(),
-    genomeBuild: z.string().optional()
+    genomeBuild: z.string().optional(),
+    fieldProfile: ImportFieldProfileSchema.optional()
   })
   .passthrough()
 
@@ -81,9 +87,18 @@ export function normalizeImportVcfOptions(vcfOptions: unknown): ImportVcfOptions
         genomeBuild:
           typeof (vcfOptions as { genomeBuild?: unknown }).genomeBuild === 'string'
             ? (vcfOptions as { genomeBuild: string }).genomeBuild
-            : undefined
+            : undefined,
+        fieldProfile: normalizeImportFieldProfile(
+          (vcfOptions as { fieldProfile?: unknown }).fieldProfile
+        )
       }
     : undefined
+}
+
+/** A valid field profile, or undefined (the import then uses the default profile). */
+export function normalizeImportFieldProfile(profile: unknown): ImportFieldProfile | undefined {
+  const parsed = ImportFieldProfileSchema.safeParse(profile)
+  return parsed.success ? parsed.data : undefined
 }
 
 export function normalizeImportMultiFileSpec(input: ImportMultiFileSpecInput): ImportMultiFileSpec {
