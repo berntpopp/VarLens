@@ -844,10 +844,11 @@ const inheritanceSummary = computed(() => {
   padding: 8px 12px 12px;
 }
 
+/* Colour comes from text-medium-emphasis (the theme's 0.7): a 0.6 override
+   fell to 4.39:1 on the drawer surface (axe color-contrast). */
 .filter-section-header {
   font-size: 0.625rem;
   letter-spacing: 0.1em;
-  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .preset-drawer-section {
