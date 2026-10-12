@@ -51,7 +51,8 @@ describe('useAnnotationDialogs hasAcmgEvidence', () => {
     ['case', null, EVIDENCE, false],
     ['all', null, EVIDENCE, true],
     ['all', EVIDENCE, null, false],
-    ['case', '{"pathogenic":[],"benign":[]}', null, false]
+    ['case', '{"pathogenic":[],"benign":[]}', null, false],
+    ['case', '{"notes":"segregates"}', null, false]
   ] as const)('scope %s (per-case %s, global %s) -> %s', (scope, perCase, global, expected) => {
     expect(withEvidence(scope, perCase, global).hasAcmgEvidence(VARIANT as never)).toBe(expected)
   })

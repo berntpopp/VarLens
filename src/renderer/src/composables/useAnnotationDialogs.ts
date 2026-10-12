@@ -10,7 +10,7 @@ import type { Variant } from '../../../shared/types/api'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type AcmgEvidenceDialog from '../components/AcmgEvidenceDialog.vue'
 import type { AnnotationScope, AnnotationTarget } from '../../../shared/types/annotations'
-import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
+import { hasDecidingAcmgEvidence } from '../utils/acmg/acmg-undo'
 
 type DialogVariant = Variant | AnnotationTarget
 
@@ -118,7 +118,7 @@ export function useAnnotationDialogs(
   })
 
   /** Stored evidence decides the class: a quick class would contradict it. */
-  const hasAcmgEvidence = (v: DialogVariant): boolean => hasMeaningfulAcmgEvidence(evidenceFor(v))
+  const hasAcmgEvidence = (v: DialogVariant): boolean => hasDecidingAcmgEvidence(evidenceFor(v))
 
   const acmgVariantData = computed(() => {
     const v = selectedVariantForAcmg.value

@@ -131,6 +131,13 @@ describe.each(['case', 'cohort'] as const)('ACMG quick chips (%s)', (mode) => {
     expect(setAcmgClassification).toHaveBeenCalledOnce()
   })
 
+  it('stay enabled with only a note (no criterion decides the class)', async () => {
+    evidence.json = '{"notes":"segregates"}'
+    const w = mountPanel(mode)
+    await quickChip(w, ACMG_ABBREV[ACMG_CLASSIFICATIONS[0]]).trigger('click')
+    expect(setAcmgClassification).toHaveBeenCalledOnce()
+  })
+
   it('are disabled when evidence exists, so they cannot contradict it', async () => {
     evidence.json = '{"pathogenic":["PM2","PP3"]}'
     const w = mountPanel(mode)

@@ -114,13 +114,13 @@
                 size="small"
                 label
                 class="cursor-pointer"
-                :disabled="!canWrite || hasAcmgEvidence"
+                :disabled="!canWrite || acmgLocked"
                 @click="handleQuickClassify(cls)"
               >
                 {{ ACMG_ABBREV[cls] }}
               </v-chip>
               <v-chip
-                v-if="currentQuickClassification && canWrite && !hasAcmgEvidence"
+                v-if="currentQuickClassification && canWrite && !acmgLocked"
                 variant="text"
                 size="small"
                 class="cursor-pointer text-medium-emphasis"
@@ -130,7 +130,7 @@
                 <v-icon size="x-small" :icon="mdiClose" />
               </v-chip>
             </div>
-            <div v-if="hasAcmgEvidence && canWrite" class="text-caption text-medium-emphasis mb-1">
+            <div v-if="acmgLocked && canWrite" class="text-caption text-medium-emphasis mb-1">
               {{ ACMG_EVIDENCE_LOCK_HINT }}
             </div>
 
@@ -229,7 +229,7 @@ import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { formatConsequence } from '../utils/formatters'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
-import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
+import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
 import IconButton from './common/IconButton.vue'
@@ -414,6 +414,7 @@ const currentAcmgEvidence = computed(() => {
 // Stored evidence with every criterion removed is still a JSON blob; only
 // say "(has evidence)" when criteria, notes or an override remain.
 const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
+const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
 // Variant annotation data for auto-suggestions
 const currentVariantData = computed(() => {
@@ -447,7 +448,7 @@ const currentQuickClassification = computed<AcmgClassification | null>(() => {
 
 // Handle quick-classify chip click
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
-  if (props.variant === null || hasAcmgEvidence.value) return
+  if (props.variant === null || acmgLocked.value) return
   // Toggle off if already selected
   const value = classification === currentQuickClassification.value ? null : classification
 
