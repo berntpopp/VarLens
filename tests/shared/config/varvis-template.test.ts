@@ -65,3 +65,28 @@ describe('VARVIS_EVIDENCE_TEMPLATE', () => {
     }
   })
 })
+
+describe('VARVIS_EVIDENCE_TEMPLATE — X-linked mode', () => {
+  const xl = VARVIS_EVIDENCE_TEMPLATE.modes.find((m) => m.id === 'xl')!
+  const compiled = compileRule(xl.when!)
+  if (!compiled.ok) throw new Error(compiled.errors.join(', '))
+  const fits = (row: Record<string, unknown>): boolean => compiled.predicate(row)
+
+  it.each(['XR', 'XLR', 'X-linked recessive inheritance', 'AR, XR'])(
+    'accepts a hemizygous call for moi %s',
+    (moi) => {
+      expect(fits({ chr: 'chrX', moi, zygosity: 'hemi' })).toBe(true)
+    }
+  )
+
+  it.each(['XD', 'XLD'])('accepts a heterozygous call for X-linked dominant (%s)', (moi) => {
+    expect(fits({ chr: 'X', moi, zygosity: 'het' })).toBe(true)
+  })
+
+  it('gives no credit to missing or reference genotypes, or to het in an X-linked recessive gene', () => {
+    expect(fits({ chr: 'X', moi: 'XD', zygosity: null })).toBe(false)
+    expect(fits({ chr: 'X', moi: 'XLD', zygosity: null })).toBe(false)
+    expect(fits({ chr: 'X', moi: 'XR', zygosity: 'het' })).toBe(false)
+    expect(fits({ chr: '1', moi: 'AR', zygosity: 'hom' })).toBe(false)
+  })
+})

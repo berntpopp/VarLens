@@ -34,8 +34,10 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
     xl: {
       label: 'X-linked',
       help: 'Hemizygous or homozygous chrX variant, or heterozygous in an X-linked dominant gene.',
+      // Any X-linked spelling (XR, XLR, XD, XLD, X-linked); hemizygosity already
+      // handles chrX/PAR, and dominant credit needs an actual het call.
       defaultWhen:
-        'chr:=:X AND (moi:~:XR OR moi:~:XD) AND (zygosity:=:hemi OR zygosity:=:hom OR moi:~:XD)'
+        'moi:~:X AND (zygosity:=:hemi OR zygosity:=:hom OR ((moi:~:XD OR moi:~:XLD) AND zygosity:=:het))'
     },
     ad: {
       label: 'Dominant, heterozygous',
