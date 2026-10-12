@@ -23,7 +23,7 @@
     {
       "category": "Data",
       "question": "How is my data stored?",
-      "answer": "Variant data is stored in a database you control: a local, optionally encrypted SQLite file in the desktop app, or your organisation's PostgreSQL server in the web edition. Lookups you start or enable (for example gnomAD, Ensembl VEP, MyVariant, SpliceAI, UniProt, AlphaFold, STRING or PanelApp) send the variant, gene or protein identifier (or the term you search for) to that public service."
+      "answer": "Variant data is stored in a database you control: a local, optionally encrypted SQLite file in the desktop app, or your organisation's PostgreSQL server in the web edition. Only the external lookups described under \"Is my data shared with anyone?\" send anything elsewhere."
     },
     {
       "category": "Data",
@@ -53,7 +53,7 @@
     {
       "category": "Privacy",
       "question": "Is my data shared with anyone?",
-      "answer": "VarLens does not collect telemetry or share your data with third parties. The desktop app checks GitHub for updates. Lookups you start or enable (for example gnomAD, Ensembl VEP, MyVariant, SpliceAI, UniProt, AlphaFold, STRING or PanelApp) send the variant, gene or protein identifier (or the term you search for) to that public service."
+      "answer": "VarLens collects no telemetry and sends no case data. External lookups send only an identifier (a variant, gene, protein or structure ID, or the HPO term you type) to these public services: gnomAD and the SpliceAI lookup (Broad Institute), Ensembl REST and VEP, MyVariant.info, UniProt, AlphaFold DB, InterPro and PDBe (EMBL-EBI), RCSB PDB, STRING, PanelApp (Genomics England and PanelApp Australia), and NLM Clinical Tables (HPO term search). The desktop app makes them when you open or request the data and also checks GitHub for updates. In the web edition your organisation's server makes them, only for services an administrator has enabled under External lookups, and records each one in the audit log; 3D structure files (AlphaFold DB, PDBe, RCSB PDB) are loaded by your browser directly."
     },
     {
       "category": "Privacy",
