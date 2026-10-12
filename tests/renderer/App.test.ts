@@ -31,6 +31,9 @@ import App from '../../src/renderer/src/App.vue'
 import { AppStateKey } from '../../src/renderer/src/composables/useAppState'
 import type { AppStateReturn } from '../../src/renderer/src/composables/useAppState'
 import { createMockApi } from '../utils/mock-api'
+import { useDatabaseStore } from '../../src/renderer/src/stores/databaseStore'
+import { DATABASE_CONFIG } from '../../src/shared/config'
+import { installCapabilities } from './helpers/capabilities'
 
 const mockApi = createMockApi()
 
@@ -216,6 +219,8 @@ describe('App.vue', () => {
       // Once answered the draft is gone (applied / discarded) or kept (asked again).
       const guard = vi.fn<() => Promise<boolean> | null>(() => null).mockReturnValueOnce(answer)
       state.setPanelLeaveGuard(guard)
+      await flushPromises() // the sidebar sync of that selection
+      listSelectCase.mockClear()
       return { caseList: wrapper.findComponent({ name: 'CaseList' }), guard }
     }
 
@@ -260,6 +265,79 @@ describe('App.vue', () => {
       await flushPromises()
       expect(guard).toHaveBeenCalledTimes(1)
     })
+
+    it('moves the sidebar highlight with a programmatic case change (URL / Back)', async () => {
+      const { caseList } = await mountWithDraft(Promise.resolve(true))
+      listSelectCase.mockReturnValueOnce(true)
+      state.selectCase({ caseId: 3, caseName: 'C' }) // e.g. the URL restore of Back
+      await flushPromises()
+      expect(listSelectCase).toHaveBeenCalledExactlyOnceWith(3)
+      // The list reports the highlight it was given: no prompt, nothing reopened
+      const guard = vi.fn(() => new Promise<boolean>(() => {}))
+      state.setPanelLeaveGuard(guard)
+      caseList.vm.$emit('case-selected', 3, 'C', 0, 0)
+      await flushPromises()
+      expect(guard).not.toHaveBeenCalled()
+      expect(state.selectedCaseId.value).toBe(3)
+    })
+  })
+
+  it('refreshes the case list when the import wizard reports completion on desktop', async () => {
+    const handleBatchImportComplete = vi.fn()
+    useShellLifecycleSpy.mockReturnValue({
+      handleDatabaseSwitched: vi.fn(),
+      handleImportComplete: vi.fn(),
+      handleBatchImportComplete
+    })
+    await router.push('/case')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [vuetify, createPinia(), router],
+        stubs: {
+          ...asyncComponentStubs,
+          AppDialogHost: { name: 'AppDialogHost', template: '<div />' }
+        }
+      }
+    })
+    await flushPromises()
+    // The single-VCF wizard reports only through this emit (no batch run ID on desktop).
+    wrapper.findComponent({ name: 'AppDialogHost' }).vm.$emit('batch-import-complete')
+    await flushPromises()
+    expect(handleBatchImportComplete).toHaveBeenCalledTimes(1)
+  })
+
+  it('every import entry says no database is open instead of opening a wizard', async () => {
+    useShellLifecycleSpy.mockReturnValue({})
+    const host = { showImportDialog: vi.fn(), showVcfImportDialog: vi.fn(), showSnackbar: vi.fn() }
+    const pinia = createPinia()
+    await router.push('/case')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [vuetify, pinia, router],
+        stubs: {
+          ...asyncComponentStubs,
+          AppDialogHost: {
+            template: '<div />',
+            setup: (_: unknown, { expose }: { expose: (exposed: object) => void }) => expose(host)
+          }
+        }
+      }
+    })
+    await flushPromises()
+    installCapabilities()
+    useDatabaseStore(pinia).$patch({ revision: 1, currentPath: null })
+
+    const toolbar = wrapper.findComponent({ name: 'AppToolbar' })
+    toolbar.vm.$emit('import-click')
+    toolbar.vm.$emit('vcf-import-click')
+    await flushPromises()
+
+    expect(host.showImportDialog).not.toHaveBeenCalled()
+    expect(host.showVcfImportDialog).not.toHaveBeenCalled()
+    expect(host.showSnackbar).toHaveBeenCalledWith(
+      DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN,
+      'error'
+    )
   })
 
   it('does not mount the details panel or shortcut dialog until first opened', async () => {

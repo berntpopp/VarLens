@@ -306,13 +306,13 @@ describe('runExportPipeline — CSV', () => {
     expect(result.filePath).toBe(params.outputFilePath)
   })
 
-  it('correctly formats gnomad_af in exponential notation', async () => {
+  it('writes gnomad_af as a plain number', async () => {
     insertVariant(db, caseId, { chr: '1', pos: 100, gnomad_af: 0.0001 })
     const params = makeCsvParams()
     await runExportPipeline(params)
 
     const content = readFileSync(params.outputFilePath, 'utf8')
-    expect(content).toContain('1.00e-4')
+    expect(content).toContain(',0.0001,')
   })
 
   it('correctly formats cadd with 2 decimal places', async () => {
@@ -457,7 +457,7 @@ describe('runExportPipeline — XLSX', () => {
     expect(flat).toContain(0.01)
   })
 
-  it('correctly formats gnomad_af in XLSX cells', async () => {
+  it('keeps gnomad_af a numeric XLSX cell', async () => {
     insertVariant(db, caseId, { chr: '1', pos: 100, gnomad_af: 0.00015 })
     const params = makeXlsxParams()
     await runExportPipeline(params)
@@ -465,7 +465,7 @@ describe('runExportPipeline — XLSX', () => {
     const wb = readXlsxFile(params.outputFilePath)
     const ws = wb.Sheets['Variants']
     const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws) as Record<string, unknown>[]
-    expect(data[0]['gnomAD AF']).toBe('1.50e-4')
+    expect(data[0]['gnomAD AF']).toBe(0.00015)
   })
 
   it('produces a valid XLSX with no variants (header only)', async () => {

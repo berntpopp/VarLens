@@ -46,8 +46,6 @@
     <CohortFilterBar
       ref="cohortFilterBarRef"
       :total-count="totalCount"
-      :cohort-summary="summary"
-      :summary-stale="summaryStale"
       :columns="orderedColumns.map((h) => ({ key: h.key, title: h.title }))"
       :visible-columns="visibleHeaders.map((h) => h.key)"
       :exporting="exporting"
@@ -79,6 +77,7 @@
       :is-global-starred="isGlobalStarred"
       :get-global-acmg-classification="getGlobalAcmgClassification"
       :get-global-comment="getGlobalComment"
+      :has-acmg-evidence="hasAcmgEvidence"
       @update:options="loadPage"
       @row-click="handleRowClick"
       @star-toggle="handleStarToggle"
@@ -167,7 +166,6 @@ const emit = defineEmits<{
 // API + domain composables
 const { api } = useApiService()
 const {
-  summary,
   summaryStale,
   rebuildPhaseIndex,
   rebuildPhaseTotal,
@@ -175,7 +173,6 @@ const {
   columnMeta,
   genomeBuild,
   selectedVariantType,
-  fetchSummary,
   fetchColumnMeta,
   queryPage,
   cleanupListeners,
@@ -196,7 +193,11 @@ const {
 const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = useAcmgUndo()
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
-const { orderedColumns, visibleHeaders, isVisible: isColumnShown } = useCohortColumns(prefs)
+const {
+  orderedColumns,
+  visibleHeaders,
+  isVisible: isColumnShown
+} = useCohortColumns(prefs, selectedVariantType)
 
 async function getCohortQueryBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('cohort.query')
@@ -204,16 +205,6 @@ async function getCohortQueryBlockReason(): Promise<string | null> {
 
 async function getCohortExportBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('export.cohort')
-}
-
-async function fetchSupportedCohortSummary(): Promise<void> {
-  const reason = await getCurrentUnsupportedReason('cohort.summary')
-  if (reason !== null) {
-    logService.warn(reason, 'backend-capabilities')
-    return
-  }
-
-  await fetchSummary()
 }
 
 async function fetchSupportedCohortColumnMeta(): Promise<void> {
@@ -343,19 +334,18 @@ const {
 const { requestReload } = useDeferredReload(isActive, invalidateAndReload)
 
 // Cases were added while the table is on screen (batch import): refetch the
-// current page, the summary tiles and the column metadata in one go, keeping
+// current page and the column metadata in one go, keeping
 // the page, sort and filters. Deferred like any reload while hidden.
 const { requestReload: softRefresh } = useDeferredReload(isActive, async () => {
-  await Promise.all([
-    fetchSupportedCohortSummary(),
-    fetchSupportedCohortColumnMeta(),
-    reloadCurrentPage()
-  ])
+  await Promise.all([fetchSupportedCohortColumnMeta(), reloadCurrentPage()])
 })
 
 // Local state
 const selectedVariantKey = ref<string | null>(null)
 const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+// Stable reference: an inline arrow would re-render the whole data table on every render
+const hasAcmgEvidence = (item: CohortVariant): boolean =>
+  annotationDialogsRef.value?.hasAcmgEvidence(item) === true
 const cohortDataTableRef = ref<InstanceType<typeof CohortDataTable> | null>(null)
 
 // Export state
@@ -628,18 +618,15 @@ watch(
       stopRebuildTimer(true)
       void requestReload()
       invalidateCarriers()
-      void fetchSupportedCohortSummary()
       void fetchSupportedCohortColumnMeta()
     }
   },
   { immediate: true }
 )
 
-// Fetch summary + column metadata on mount so the filter chip can show
-// filtered/total from the start. Table data itself loads via v-data-table-server's
-// immediate update:options event, so we only need summary + meta here.
+// Fetch column metadata on mount. Table data itself loads via v-data-table-server's
+// immediate update:options event, so we only need the meta here.
 onMounted(() => {
-  void fetchSupportedCohortSummary()
   void fetchSupportedCohortColumnMeta()
 })
 
@@ -661,11 +648,7 @@ onDeactivated(() => {
 
 // Expose refresh method — single entry point for all data loading
 const refresh = async () => {
-  await Promise.all([
-    fetchSupportedCohortSummary(),
-    fetchSupportedCohortColumnMeta(),
-    invalidateAndReload()
-  ])
+  await Promise.all([fetchSupportedCohortColumnMeta(), invalidateAndReload()])
   // The case set may have changed: cached carrier lists can name deleted cases.
   invalidateCarriers()
 }

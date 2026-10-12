@@ -43,8 +43,10 @@ export function getPublicDir(): string {
 
 /** Vite emits content-hashed filenames under `assets/`; they never change in place. */
 export const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
-/** Everything else (HTML shell, favicon, manifest) must revalidate via ETag. */
+/** Everything else but the shell (favicon, manifest) must revalidate via ETag. */
 export const REVALIDATE_CACHE_CONTROL = 'no-cache'
+/** The HTML shell is never stored, so Back after sign-out cannot restore it from cache. */
+export const SHELL_CACHE_CONTROL = 'no-store'
 
 const PRECOMPRESSED_SUFFIX = /\.(?:br|gz)$/
 
@@ -92,10 +94,12 @@ export async function registerStatic(app: FastifyInstance): Promise<void> {
         reply.header('cache-control', IMMUTABLE_ASSET_CACHE_CONTROL)
         return
       }
-      reply.header('cache-control', REVALIDATE_CACHE_CONTROL)
       if (assetPath === 'index.html') {
+        reply.header('cache-control', SHELL_CACHE_CONTROL)
         reply.header('Content-Security-Policy', webAppCspHeader())
+        return
       }
+      reply.header('cache-control', REVALIDATE_CACHE_CONTROL)
     }
   })
 

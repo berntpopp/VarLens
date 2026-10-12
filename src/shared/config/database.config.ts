@@ -36,5 +36,20 @@ export const DATABASE_CONFIG = {
   /** Max recent databases in history */
   MAX_RECENT_DATABASES: 5,
   /** Worker pool idle timeout in ms — balances thread churn vs memory on desktop */
-  WORKER_IDLE_TIMEOUT_MS: 90_000
+  WORKER_IDLE_TIMEOUT_MS: 90_000,
+  /** Files SQLite keeps next to a database; writing over one corrupts it. */
+  SIDECAR_SUFFIXES: ['-wal', '-shm', '-journal'],
+  /**
+   * Leading bytes of files that cannot be an encrypted VarLens database: the
+   * cipher keeps no plaintext header, so a plain SQLite header that fails to
+   * read means a damaged file, and a ZIP header means an XLSX or archive.
+   */
+  NON_DATABASE_SIGNATURES: ['SQLite format 3\0', 'PK\x03\x04'],
+  /** User-facing copy for database-file problems. */
+  MESSAGES: {
+    NOT_A_DATABASE: 'This file is not a VarLens database or is damaged.',
+    NO_DATABASE_OPEN:
+      'No database is open. Create or open one from the database menu in the toolbar.',
+    EXPORT_TARGET_IS_DATABASE: 'This file is a VarLens database. Choose a different file name.'
+  }
 } as const

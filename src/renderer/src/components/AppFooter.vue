@@ -176,11 +176,15 @@
             @click="openDisclaimer"
           >
             <v-icon :icon="disclaimerAcknowledged ? mdiShieldCheck : mdiShieldAlert" />
-            <v-tooltip activator="parent" location="top">Disclaimer</v-tooltip>
+            <v-tooltip activator="parent" location="top">{{
+              withShortcut('Disclaimer', 'disclaimer')
+            }}</v-tooltip>
           </v-btn>
           <v-btn icon size="small" variant="text" aria-label="Open FAQ" @click="openFAQ">
             <v-icon :icon="mdiHelpCircle" />
-            <v-tooltip activator="parent" location="top">FAQ</v-tooltip>
+            <v-tooltip activator="parent" location="top">{{
+              withShortcut('FAQ', 'faq')
+            }}</v-tooltip>
           </v-btn>
 
           <v-divider vertical class="footer-divider" />
@@ -206,8 +210,18 @@
               :prepend-icon="disclaimerAcknowledged ? mdiShieldCheck : mdiShieldAlert"
               title="Disclaimer"
               @click="openDisclaimer"
-            />
-            <v-list-item :prepend-icon="mdiHelpCircle" title="FAQ" @click="openFAQ" />
+            >
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{
+                  SHORTCUTS.disclaimer.key
+                }}</kbd>
+              </template>
+            </v-list-item>
+            <v-list-item :prepend-icon="mdiHelpCircle" title="FAQ" @click="openFAQ">
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{ SHORTCUTS.faq.key }}</kbd>
+              </template>
+            </v-list-item>
           </v-list>
         </v-menu>
 
@@ -220,7 +234,9 @@
           @click="$emit('open-shortcuts-help')"
         >
           <v-icon :icon="mdiKeyboard" />
-          <v-tooltip activator="parent" location="top">Keyboard Shortcuts (?)</v-tooltip>
+          <v-tooltip activator="parent" location="top">{{
+            withShortcut('Keyboard Shortcuts', 'help')
+          }}</v-tooltip>
         </v-btn>
 
         <!-- Dev tool: Console -->
@@ -236,7 +252,9 @@
           <v-badge :content="errorCount" :model-value="errorCount > 0" color="error" floating>
             <v-icon :icon="mdiConsole" />
           </v-badge>
-          <v-tooltip activator="parent" location="top">Log Viewer</v-tooltip>
+          <v-tooltip activator="parent" location="top">{{
+            withShortcut('Log Viewer', 'logViewer')
+          }}</v-tooltip>
         </v-btn>
       </div>
     </div>
@@ -245,6 +263,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
 import { storeToRefs } from 'pinia'
 import { useLogStore } from '../stores/logStore'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'

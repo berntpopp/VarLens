@@ -98,6 +98,13 @@ describe('useProteinData', () => {
     expect(protein.geneStructureLoading.value).toBe(false)
   })
 
+  it('uses the mapping length when domain data reports length 0', async () => {
+    getDomains.mockResolvedValue({ success: true, domains: [], proteinLength: 0 })
+    const protein = mountProtein()
+    await flushPromises()
+    expect(protein.proteinLength.value).toBe(100)
+  })
+
   it('never shows the previous gene when its mapping arrives last', async () => {
     let resolveFirst: (value: unknown) => void = () => {}
     getMapping.mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))

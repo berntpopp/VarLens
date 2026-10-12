@@ -101,6 +101,7 @@ const {
   openAcmgEvidenceDialog,
   handleStarToggle: persistStarToggle,
   handleQuickAcmgSelect: persistQuickAcmgSelect,
+  hasAcmgEvidence,
   handleAcmgEvidenceChange: persistAcmgEvidenceChange,
   handleCommentSave: persistCommentSave,
   getGlobalTimestamps,
@@ -162,6 +163,7 @@ defineExpose({
   openCommentDialog,
   openAcmgEvidenceDialog,
   handleStarToggle,
-  handleQuickAcmgSelect
+  handleQuickAcmgSelect,
+  hasAcmgEvidence
 })
 </script>

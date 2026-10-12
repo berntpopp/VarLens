@@ -43,6 +43,8 @@ const props = defineProps<{
   rows: ShortlistRow[]
   /** Viewer role: the star is display-only. */
   readOnly?: boolean
+  /** False while the tab is hidden (v-show): window keys must not act on unseen rows. */
+  interactive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -211,6 +213,7 @@ function handleRowClick(item: ShortlistRow) {
 onKeyStroke(
   'ArrowDown',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveDown()
@@ -221,6 +224,7 @@ onKeyStroke(
 onKeyStroke(
   'ArrowUp',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveUp()
@@ -231,6 +235,7 @@ onKeyStroke(
 onKeyStroke(
   'Enter',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
@@ -241,6 +246,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
     if (props.readOnly === true) return
     e.preventDefault()
@@ -252,6 +258,7 @@ onKeyStroke(
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused()) return
     e.preventDefault()
     clearSelection()
@@ -440,6 +447,19 @@ onKeyStroke(
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
+}
+
+/* A long ClinVar class ends in an ellipsis inside the fixed column (the full
+   value is in the chip's tooltip) instead of being clipped mid-word. */
+.shortlist-data-table :deep(td .v-chip[data-tooltip]) {
+  max-width: 100%;
+}
+.shortlist-data-table :deep(td .v-chip[data-tooltip] .v-chip__content) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Same 18px glyph box the former x-small icon v-btn rendered */

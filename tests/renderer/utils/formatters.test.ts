@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { formatHgvs } from '../../../src/renderer/src/utils/formatters'
-import { EMPTY_VALUE_PLACEHOLDER } from '../../../src/renderer/src/config/displayConfig'
+import { formatHgvs, variantHeading } from '../../../src/renderer/src/utils/formatters'
+import {
+  EMPTY_VALUE_PLACEHOLDER,
+  NO_GENE_LABEL
+} from '../../../src/renderer/src/config/displayConfig'
 import { formatScoreValue } from '../../../src/renderer/src/utils/scoreThresholds'
 import {
   formatScientific,
@@ -65,5 +68,20 @@ describe('formatHgvs', () => {
     expect(formatHgvs('ENSP1:p.Val74%3D')).toBe('ENSP1:p.Val74=')
     expect(formatHgvs('')).toBeNull()
     expect(formatHgvs(null, 'NM_1.1')).toBeNull()
+  })
+})
+
+describe('variantHeading', () => {
+  it.each([
+    [{ gene_symbol: 'LMNA', aa_change: 'p.Arg453Trp', cdna: 'c.1357C>T' }, 'LMNA · p.Arg453Trp'],
+    [
+      { gene_symbol: 'LMNA', aa_change: null, cdna: 'ENST1.7:c.1357C>T' },
+      'LMNA · ENST1.7:c.1357C>T'
+    ],
+    [{ gene_symbol: null, _str_repeat_id: 'FMR1_CGG' }, 'FMR1_CGG'],
+    [{ gene_symbol: null }, NO_GENE_LABEL],
+    [null, NO_GENE_LABEL]
+  ])('%o → %s', (variant, expected) => {
+    expect(variantHeading(variant)).toBe(expected)
   })
 })

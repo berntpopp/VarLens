@@ -45,6 +45,7 @@
       style="min-height: 0"
     >
       <LollipopPlot
+        v-if="proteinLength > 0"
         ref="plotRef"
         :protein-length="proteinLength"
         :domains="domains"
@@ -57,6 +58,9 @@
         :active-clinvar-consequences="activeClinVarConsequences"
         :gnomad-max-af="gnomadMaxAf"
       />
+      <div v-else role="note" class="pa-3 text-body-small text-medium-emphasis">
+        {{ PROTEIN_VIEW_COPY.lengthUnknown }}
+      </div>
     </v-theme-provider>
 
     <!-- Legend -->
@@ -106,6 +110,7 @@ import { useCapabilityStore } from '../../stores/capabilityStore'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import { downloadBlob } from '../../utils/download'
+import { PROTEIN_VIEW_COPY } from '../../config/uiCopyConfig'
 
 interface Props {
   proteinLength: number

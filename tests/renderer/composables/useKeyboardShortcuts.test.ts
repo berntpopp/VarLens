@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { SHORTCUTS, type ShortcutId } from '../../../src/renderer/src/config/keyboardShortcuts'
 
 // Module-level map that the mock factory can access
 const keyHandlers = new Map<string, (e: KeyboardEvent) => void>()
@@ -234,5 +235,75 @@ describe('useKeyboardShortcuts', () => {
     expect(dispatch({ key: 'X', ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true)
     expect(onToggleFilterDrawer).toHaveBeenCalledTimes(2)
     expect(onClearAllFilters).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The shared shortcut list (config/keyboardShortcuts.ts) must match real
+ * bindings. App-wide chords are fired here from their listed key text; row
+ * keys are bound by reference to SHORTCUTS in the table components.
+ */
+describe('every shared shortcut has a binding', () => {
+  type Callbacks = Parameters<
+    typeof import('../../../src/renderer/src/composables/useKeyboardShortcuts').useKeyboardShortcuts
+  >[0]
+
+  /** Build the keydown a user produces for a listed key such as "Alt+Shift+C". */
+  function eventFor(keyText: string): KeyboardEventInit {
+    const parts = keyText.split('+')
+    const last = parts.pop()!
+    const shiftKey = parts.includes('Shift')
+    const letter = /^[a-z]$/i.test(last)
+    return {
+      key: letter && shiftKey ? last.toUpperCase() : last,
+      code: letter ? `Key${last.toUpperCase()}` : undefined,
+      shiftKey,
+      ctrlKey: parts.includes('Ctrl'),
+      metaKey: parts.includes('Cmd'),
+      altKey: parts.includes('Alt') || parts.includes('Option')
+    }
+  }
+
+  const APP_WIDE: Partial<Record<ShortcutId, keyof Callbacks>> = {
+    search: 'onSearchFocus',
+    toggleFilters: 'onToggleFilterDrawer',
+    toggleColumns: 'onToggleColumnsDrawer',
+    clearFilters: 'onClearAllFilters',
+    help: 'onHelp',
+    import: 'onImport',
+    logViewer: 'onLogViewer',
+    disclaimer: 'onDisclaimer',
+    faq: 'onFaq'
+  }
+  /** Where the remaining shortcuts are bound (typed: a new shortcut must be placed). */
+  const BOUND_ELSEWHERE: Record<Exclude<ShortcutId, keyof typeof APP_WIDE>, string> = {
+    moveSelection: 'VariantTable / CohortDataTable ArrowUp/ArrowDown (interactive-prop.test.ts)',
+    openDetails: 'VariantTable / CohortDataTable via SHORTCUTS.openDetails.key',
+    closeDetails: 'VariantTable / CohortDataTable via SHORTCUTS.closeDetails.key',
+    star: 'VariantTable / CohortDataTable via SHORTCUTS.star.key',
+    comment: 'VariantTable / CohortDataTable via SHORTCUTS.comment.key',
+    acmg: 'VariantTable / CohortDataTable via SHORTCUTS.acmg.key',
+    expandRow: 'CohortDataTable via SHORTCUTS.expandRow.key',
+    closeDrawer: 'Vuetify overlay/drawer Escape (utils/overlay-escape-guard.ts)'
+  }
+
+  beforeEach(() => {
+    keyHandlers.clear()
+    predicateHandlers.length = 0
+    inputFocused.value = false
+  })
+
+  it('lists every shortcut exactly once', () => {
+    const covered = [...Object.keys(APP_WIDE), ...Object.keys(BOUND_ELSEWHERE)].sort()
+    expect(covered).toEqual(Object.keys(SHORTCUTS).sort())
+  })
+
+  it.each(Object.entries(APP_WIDE))('%s fires from its listed key text', async (id, callback) => {
+    const spy = vi.fn()
+    const { useKeyboardShortcuts } =
+      await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
+    useKeyboardShortcuts({ [callback!]: spy })
+    dispatch(eventFor(SHORTCUTS[id as ShortcutId].key))
+    expect(spy).toHaveBeenCalledTimes(1)
   })
 })

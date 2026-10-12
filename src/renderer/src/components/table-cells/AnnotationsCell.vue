@@ -7,7 +7,7 @@
       :class="{ 'has-global': showGlobalIndicators && displayGlobalStarred }"
       :aria-label="labels.star"
       :aria-pressed="displayStarred"
-      :data-tooltip="labels.star"
+      :data-tooltip="withShortcut(labels.star, 'star')"
       data-tooltip-location="top"
       :disabled="readOnly"
       @click.stop="emit('star-toggle')"
@@ -28,7 +28,7 @@
       :aria-label="labels.acmg"
       aria-haspopup="menu"
       :aria-expanded="menu.isOpenFor(acmgButtonRef)"
-      :data-tooltip="labels.acmg"
+      :data-tooltip="withShortcut(labels.acmg, 'acmg')"
       data-tooltip-location="top"
       :disabled="readOnly"
       @click.stop="openAcmgMenu"
@@ -47,7 +47,7 @@
       class="annotation-btn"
       :class="{ 'has-global': showGlobalIndicators && displayHasGlobalComment }"
       :aria-label="labels.comment"
-      :data-tooltip="labels.comment"
+      :data-tooltip="withShortcut(labels.comment, 'comment')"
       data-tooltip-location="top"
       @click.stop="emit('comment-click')"
     >
@@ -67,6 +67,7 @@ import type { AnnotationScope } from '../../../../shared/types/annotations'
 import { ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
 import { CellChip, CellIcon } from './cell-components'
 import AcmgQuickMenu from './AcmgQuickMenu.vue'
+import { withShortcut } from '../../config/keyboardShortcuts'
 import { createAcmgQuickMenuState, injectAcmgQuickMenu } from './acmg-quick-menu'
 import {
   mdiClipboardCheckOutline,
@@ -101,6 +102,8 @@ interface Props {
   annotationScope?: AnnotationScope
   /** Viewer role: star and ACMG are display-only (comment still opens read-only). */
   readOnly?: boolean
+  /** Stored ACMG evidence decides the class: the quick classes are disabled. */
+  acmgLocked?: boolean
 }
 
 interface Emits {
@@ -158,6 +161,7 @@ function openAcmgMenu(): void {
   if (!acmgButtonRef.value) return
   menu.toggle(acmgButtonRef.value, {
     current: displayAcmg.value ?? null,
+    locked: props.acmgLocked,
     select: (classification) => emit('acmg-select', classification),
     openEvidence: () => emit('acmg-evidence-click')
   })

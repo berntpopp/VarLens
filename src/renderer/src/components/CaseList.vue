@@ -599,8 +599,11 @@ const softRefreshCases = async (): Promise<void> => {
   }
 }
 
-const selectCase = (caseId: number | null): void => {
+/** Highlight a case; false when it already is (then nothing is re-emitted). */
+const selectCase = (caseId: number | null): boolean => {
+  if ((selected.value[0] ?? null) === caseId) return false
   selected.value = caseId === null ? [] : [caseId]
+  return true
 }
 
 defineExpose({ refreshCases, softRefreshCases, selectCase })

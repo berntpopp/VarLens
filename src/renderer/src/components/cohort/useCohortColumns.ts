@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import { linksColumn, type ColumnDef } from '../variant-table/columns'
 import { withFixedWidth } from '../variant-table/column-widths'
@@ -30,17 +30,31 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'AA Change', key: 'aa_change', sortable: true }
 ]
 
+/** Columns that carry no meaning for SV/CNV/STR rows (symbolic alleles, no gnomAD/CADD/HGVS). */
+export const SNV_ONLY_COHORT_COLUMNS: readonly string[] = [
+  'ref',
+  'gnomad_af',
+  'cadd_phred',
+  'cdna',
+  'aa_change'
+]
+
 /**
  * Composable that computes dynamic, ordered, and visible column sets for the cohort table.
  * Columns without an explicit visibility preference follow the responsive
  * default from `useAutoHiddenColumns`, exactly like the case table.
  */
-export function useCohortColumns(prefs: ReturnType<typeof useColumnPreferences>['prefs']) {
+export function useCohortColumns(
+  prefs: ReturnType<typeof useColumnPreferences>['prefs'],
+  variantType: MaybeRefOrGetter<string> = 'snv'
+) {
   const linksStore = useExternalLinksStore()
 
   /** Base columns plus the merged Links column (parity with the case table). */
   const headers = computed<ColumnDef[]>(() => [
-    ...baseHeaders,
+    ...(toValue(variantType) === 'snv'
+      ? baseHeaders
+      : baseHeaders.filter((h) => !SNV_ONLY_COHORT_COLUMNS.includes(h.key))),
     ...linksColumn(linksStore.virtualLinks.length)
   ])
 

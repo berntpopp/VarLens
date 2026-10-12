@@ -84,13 +84,13 @@ describe('web static caching + precompressed assets', () => {
     }
   })
 
-  test('HTML shell (direct and SPA fallback) is served with no-cache + CSP', async () => {
+  test('HTML shell (direct and SPA fallback) is served with no-store + CSP', async () => {
     const app = await buildStaticApp()
     try {
       for (const url of ['/index.html', '/cases/42', '/']) {
         const response = await app.inject({ method: 'GET', url })
         expect(response.statusCode, url).toBe(200)
-        expect(response.headers['cache-control'], url).toBe('no-cache')
+        expect(response.headers['cache-control'], url).toBe('no-store')
         expect(response.headers['content-security-policy'], url).toContain("frame-ancestors 'none'")
       }
     } finally {

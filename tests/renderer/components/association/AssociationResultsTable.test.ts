@@ -55,4 +55,14 @@ describe('AssociationResultsTable', () => {
       '2 qualifying variants were left out because they are not on chromosomes 1-22.'
     )
   })
+
+  it('lists only tested genes; untested ones stay in the export with their reason', () => {
+    const untested = { ...result, gene_symbol: 'UNTESTED1', n_variants: 0 }
+    const wrapper = mount(AssociationResultsTable, {
+      global: { plugins: [vuetify, createPinia()] },
+      props: { results: [result, untested], primaryTest: 'fisher' }
+    })
+    expect(wrapper.text()).toContain(result.gene_symbol)
+    expect(wrapper.text()).not.toContain('UNTESTED1')
+  })
 })

@@ -52,21 +52,22 @@ export const CASE_TABLE_STEPS: readonly InteractionStep[] = [
   {
     name: 'case-page-next',
     run: async (w) => {
-      await w.getByLabel('Next page').click()
+      await w.getByRole('button', { name: 'Next page' }).click()
       await settleTable(w)
     }
   },
   {
     name: 'case-page-prev',
     run: async (w) => {
-      await w.getByLabel('Previous page').click()
+      await w.getByRole('button', { name: 'Previous page' }).click()
       await settleTable(w)
     }
   },
   {
     name: 'case-row-select',
     run: async (w) => {
-      await w.locator(ROWS).nth(2).locator('td').nth(5).click()
+      // A cell without a link or control, so the click selects the row
+      await w.locator(ROWS).nth(2).locator('td:not(:has(a, button, input, [role="button"]))').first().click()
       await waitForQuiet(w)
     }
   },
@@ -84,8 +85,23 @@ export const COHORT_TABLE_STEPS: readonly InteractionStep[] = [
   {
     name: 'cohort-page-next',
     run: async (w) => {
-      await w.getByLabel('Next page').click()
+      await w.getByRole('button', { name: 'Next page' }).click()
       await settleTable(w)
     }
   }
+]
+
+/**
+ * Docked details panel (>= 1440 px): the toolbar narrows when the panel docks,
+ * so wrapping chip rows used to push the table down on open and close.
+ */
+export const PANEL_DOCK_STEPS: readonly InteractionStep[] = [
+  {
+    name: 'case-panel-open',
+    run: async (w) => {
+      await w.locator(ROWS).nth(2).locator('td:not(:has(a, button, input, [role="button"]))').first().click()
+      await waitForQuiet(w)
+    }
+  },
+  { name: 'case-panel-close', run: async (w) => await closeDetailsPanel(w) }
 ]

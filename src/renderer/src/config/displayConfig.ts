@@ -9,6 +9,9 @@ export const EMPTY_VALUE_PLACEHOLDER = '--'
 /** Joins several consequence labels of one call */
 export const CONSEQUENCE_JOIN = ', '
 
+/** Joins the parts of a one-line summary, e.g. "LMNA · p.Arg453Trp" */
+export const INLINE_SEPARATOR = ' · '
+
 /** Shown in compact one-line summaries for a missing numeric value (e.g. CN=?) */
 export const UNKNOWN_VALUE_GLYPH = '?'
 

@@ -1,14 +1,13 @@
-/** Format a cell value — applies numeric formatting for specific columns. */
+import { EXPORT_NUMBER_FORMATS } from '../../shared/config'
+
+/** Format a cell value — rounds configured numeric columns, keeping them numbers. */
 export function formatCellValue(key: string, value: unknown): string | number | null {
   if (value === null || value === undefined) return ''
-  if (key === 'gnomad_af' && typeof value === 'number') {
-    return value.toExponential(2)
-  }
-  if (key === 'cadd' && typeof value === 'number') {
-    return value.toFixed(2)
-  }
-  if (key === 'hpo_sim_score' && typeof value === 'number') {
-    return value.toFixed(4)
+  const format = EXPORT_NUMBER_FORMATS[key]
+  if (format !== undefined && typeof value === 'number' && Number.isFinite(value)) {
+    return 'decimals' in format
+      ? Number(value.toFixed(format.decimals))
+      : Number(value.toPrecision(format.significantDigits))
   }
   return value as string | number | null
 }

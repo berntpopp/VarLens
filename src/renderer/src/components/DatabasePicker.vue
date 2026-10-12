@@ -280,6 +280,7 @@ import PostgresConnectionDialog from './PostgresConnectionDialog.vue'
 import type { RecentDatabase } from '../../../shared/types/api'
 import type { PostgresConnectionProfilePublic } from '../../../shared/types/postgres-profile'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
 import {
   mdiClose,
   mdiConnection,
@@ -332,7 +333,13 @@ onMounted(() => {
 
 // Handlers
 async function handleOpenRecent(path: string): Promise<void> {
-  const result = await databaseStore.openDatabase(path)
+  let result: Awaited<ReturnType<typeof databaseStore.openDatabase>>
+  try {
+    result = await databaseStore.openDatabase(path)
+  } catch (error) {
+    emit('error', formatError(error))
+    return
+  }
 
   if (result.needsPassword === true) {
     pendingOpenPath.value = path
@@ -345,21 +352,8 @@ async function handleOpenRecent(path: string): Promise<void> {
 }
 
 async function handleOpen(): Promise<void> {
-  const result = await databaseStore.selectAndOpenFile()
-
-  if (result === null) {
-    // User cancelled
-    return
-  }
-
-  if (result.needsPassword === true && result.info !== undefined) {
-    pendingOpenPath.value = result.info.path
-    passwordDialogRef.value?.show(handlePasswordSubmit)
-  } else if (result.success) {
-    emit('database-switched')
-  } else if (result.error !== undefined) {
-    emit('error', result.error)
-  }
+  const path = await databaseStore.selectFile()
+  if (path !== null) await handleOpenRecent(path)
 }
 
 function handleCreate(): void {

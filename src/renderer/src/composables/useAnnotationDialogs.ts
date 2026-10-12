@@ -10,6 +10,7 @@ import type { Variant } from '../../../shared/types/api'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type AcmgEvidenceDialog from '../components/AcmgEvidenceDialog.vue'
 import type { AnnotationScope, AnnotationTarget } from '../../../shared/types/annotations'
+import { hasDecidingAcmgEvidence } from '../utils/acmg/acmg-undo'
 
 type DialogVariant = Variant | AnnotationTarget
 
@@ -105,15 +106,19 @@ export function useAnnotationDialogs(
   const acmgEvidenceDialogRef = ref<InstanceType<typeof AcmgEvidenceDialog> | null>(null)
   const selectedVariantForAcmg = ref<DialogVariant | null>(null)
 
+  /** Evidence JSON of the slot the current scope reads and writes. */
+  const evidenceFor = (v: DialogVariant): string | null =>
+    (scope?.value ?? 'case') === 'all' && annotations.getGlobalAcmgEvidence
+      ? annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+      : annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+
   const acmgEvidenceJson = computed(() => {
     const v = selectedVariantForAcmg.value
-    if (v === null) return null
-    const effectiveScope = scope?.value ?? 'case'
-    if (effectiveScope === 'all' && annotations.getGlobalAcmgEvidence) {
-      return annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
-    }
-    return annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+    return v === null ? null : evidenceFor(v)
   })
+
+  /** Stored evidence decides the class: a quick class would contradict it. */
+  const hasAcmgEvidence = (v: DialogVariant): boolean => hasDecidingAcmgEvidence(evidenceFor(v))
 
   const acmgVariantData = computed(() => {
     const v = selectedVariantForAcmg.value
@@ -285,6 +290,7 @@ export function useAnnotationDialogs(
     openAcmgEvidenceDialog,
     handleStarToggle,
     handleQuickAcmgSelect,
+    hasAcmgEvidence,
     handleAcmgEvidenceChange,
     handleCommentSave,
     getGlobalTimestamps,

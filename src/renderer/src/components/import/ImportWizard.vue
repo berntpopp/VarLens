@@ -145,7 +145,7 @@
           color="primary"
           variant="flat"
           size="small"
-          :disabled="vcfSelectedSamples.length === 0 || importStore.isActive"
+          :disabled="vcfSelectedSamples.length === 0 || !vcfNamesValid || importStore.isActive"
           @click="startVcfImport"
         >
           {{
@@ -187,7 +187,7 @@ import type {
   BatchCompleteEvent,
   ProgressUpdate
 } from '../../../../shared/types/api'
-import type { VcfPreviewResult } from '../../../../shared/types/vcf'
+import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
 import { useApiService } from '../../composables/useApiService'
 import { useVcfImportExecution } from '../../composables/useVcfImportExecution'
 import { useZipImportCleanup } from '../../composables/useZipImportCleanup'
@@ -203,6 +203,11 @@ import type { ImportSourceMode, ImportSourceOption } from './ImportSourceSelecto
 import VcfPreviewStep from './VcfPreviewStep.vue'
 import { isWebRuntime } from '../../utils/runtime-mode'
 import {
+  WEB_UPLOAD_CANCEL_EVENT,
+  WEB_UPLOAD_EVENT,
+  type WebUploadEventDetail
+} from '../../../../shared/types/web-upload'
+import {
   mdiChevronRight,
   mdiClose,
   mdiDatabaseImport,
@@ -217,19 +222,6 @@ import {
 type ImportMode = ImportSourceMode
 const { api } = useApiService()
 const importStore = useImportStatusStore()
-const WEB_UPLOAD_EVENT = 'varlens:web-upload'
-const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
-
-interface WebUploadEventDetail {
-  status: 'started' | 'progress' | 'complete' | 'error' | 'aborted'
-  fileName: string
-  fileIndex: number
-  totalFiles: number
-  loadedBytes: number
-  totalBytes: number | null
-  percent: number | null
-  message?: string
-}
 
 const emit = defineEmits<{
   'import-complete': [result: { caseId: number; variantCount: number; caseName: string }]
@@ -245,6 +237,7 @@ const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
 const vcfGenomeBuild = ref('GRCh38')
 const vcfCaseNames = ref(new Map<string, string>())
+const vcfNamesValid = ref(true)
 
 const stepLabels = computed(() => {
   if (isVcfImport.value) {
@@ -341,6 +334,7 @@ function handleWebUploadEvent(event: Event): void {
 
   if (detail.status === 'started') {
     importStore.startUpload(detail.totalFiles)
+    if (detail.fileIndex === 0) cancelError.value = ''
   }
   if (detail.status === 'started' || detail.status === 'progress' || detail.status === 'complete') {
     importStore.updateUploadProgress({
@@ -364,6 +358,8 @@ function handleWebUploadEvent(event: Event): void {
   if (detail.status === 'error') {
     importStore.importError(detail.message ?? 'Upload failed')
   }
+  // Files left out of an otherwise uploaded selection, in one line; cleared by the next selection.
+  if (detail.status === 'skipped') cancelError.value = detail.message ?? ''
 }
 
 function cancelUploadSelection(): void {
@@ -533,11 +529,8 @@ function onVcfPreviewLoaded(_preview: VcfPreviewResult): void {
   logService.info('VCF preview loaded successfully', 'ImportWizard')
 }
 
-function onVcfSelectionChanged(options: {
-  selectedSamples: string[]
-  genomeBuild: string
-  caseNames: Map<string, string>
-}): void {
+function onVcfSelectionChanged(options: VcfSampleSelection): void {
+  vcfNamesValid.value = options.valid
   vcfSelectedSamples.value = options.selectedSamples
   vcfGenomeBuild.value = options.genomeBuild
   vcfCaseNames.value = options.caseNames

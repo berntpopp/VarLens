@@ -66,6 +66,7 @@
           :has-comment="!!getGlobalComment(item.chr, item.pos, item.ref, item.alt)"
           :show-global-indicators="false"
           :read-only="!canWrite"
+          :acmg-locked="hasAcmgEvidence?.(item) === true"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -194,6 +195,7 @@
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
+import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
@@ -268,6 +270,8 @@ interface Props {
     alt: string
   ) => AcmgClassification | null
   getGlobalComment: (chr: string, pos: number, ref: string, alt: string) => string | null
+  /** Stored ACMG evidence locks the row's quick classes */
+  hasAcmgEvidence?: (item: CohortVariant) => boolean
 }
 
 const emit = defineEmits<{
@@ -445,7 +449,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Enter',
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -456,7 +460,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     e.preventDefault()
@@ -468,7 +472,7 @@ onKeyStroke(
 
 // Action shortcuts on selected row
 onKeyStroke(
-  's',
+  SHORTCUTS.star.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -479,7 +483,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'c',
+  SHORTCUTS.comment.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -490,7 +494,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'a',
+  SHORTCUTS.acmg.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -501,7 +505,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'e',
+  SHORTCUTS.expandRow.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return

@@ -16,6 +16,15 @@ export interface VcfPreviewInfoField {
   mapsToColumn: string | null
 }
 
+/** Samples and case names chosen in the VCF preview step. */
+export interface VcfSampleSelection {
+  selectedSamples: string[]
+  genomeBuild: string
+  caseNames: Map<string, string>
+  /** Every selected sample has a non-empty, new and unique case name. */
+  valid: boolean
+}
+
 export interface VcfPreviewResult {
   fileformat: string
   samples: string[]

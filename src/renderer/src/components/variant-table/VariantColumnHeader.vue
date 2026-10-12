@@ -9,11 +9,14 @@
       role="button"
       tabindex="0"
       :aria-label="`Sort by ${headerColumn.title}`"
+      :aria-describedby="help ? helpId : undefined"
+      :data-tooltip="help ? `${headerColumn.title} — ${help}` : headerColumn.title"
       @click.stop="toggleSort(headerColumn)"
       @keydown.enter.prevent.stop="toggleSort(headerColumn)"
       @keydown.space.prevent.stop="toggleSort(headerColumn)"
     >
-      <span class="header-title" :data-tooltip="headerColumn.title">{{ headerColumn.title }}</span>
+      <span class="header-title">{{ headerColumn.title }}</span>
+      <span v-if="help" :id="helpId" class="visually-hidden">{{ help }}</span>
       <span v-if="isSorted(headerColumn)" class="sort-indicator ml-1">
         <v-icon size="x-small" :icon="getSortIcon(headerColumn)" />
         <span v-if="sortIndex > 0" class="sort-priority">{{ sortIndex }}</span>
@@ -86,7 +89,7 @@
  * Auto-selects the correct filter component (numeric, categorical, text-suggest)
  * based on the filterMode prop. Used by both VariantTable and CohortDataTable.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, useId } from 'vue'
 import type {
   ColumnFilter,
   ColumnFilterMeta,
@@ -94,6 +97,7 @@ import type {
   ColumnFilterOperator
 } from '../../../../shared/types/column-filters'
 import { clinvarDisplayText } from '../../../../shared/config/severity.config'
+import { COLUMN_HELP } from '../../config/columnHelp'
 import NumericColumnFilter from './NumericColumnFilter.vue'
 import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
 import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
@@ -141,6 +145,10 @@ const props = withDefaults(defineProps<Props>(), {
 /** Filter options read like the table cell: ClinVar strings through its formatter. */
 const formatOption = (value: string): string =>
   props.headerColumn.key === 'clinvar' ? clinvarDisplayText(value) : value
+
+/** Header help (tooltip + accessible description); title alone when unset. */
+const help = computed<string | undefined>(() => COLUMN_HELP[props.headerColumn.key])
+const helpId = useId()
 
 /** 1-based sort priority index. Only shown when multiple columns are sorted. */
 const sortIndex = computed(() => {

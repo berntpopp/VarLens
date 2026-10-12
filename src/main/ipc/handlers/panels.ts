@@ -24,6 +24,7 @@ import { StringDbClient } from '../../services/api/StringDbClient'
 import { clearPanelIntervalCache } from './variants'
 import { dialog } from 'electron'
 import { writeFile } from 'fs/promises'
+import { assertNotDatabaseFile } from '../../security/database-path-allowlist'
 import {
   listPanels,
   getPanelWithGenes,
@@ -375,6 +376,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       if (canceled || !filePath) {
         return { success: false, path: undefined }
       }
+      assertNotDatabaseFile(filePath, getDbManager)
 
       // Write BED file (I/O stays in handler)
       await writeFile(filePath, bed.lines.join('\n') + '\n', 'utf-8')

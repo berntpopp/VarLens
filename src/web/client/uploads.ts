@@ -7,29 +7,38 @@
  * CustomEvent (`WEB_UPLOAD_EVENT`) that the import wizard listens to.
  */
 import { API_BASE } from './transport'
-
-export const WEB_UPLOAD_EVENT = 'varlens:web-upload'
-export const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
-/** Sent by the import wizard with `{ refs }` it abandons before any import used them. */
-export const WEB_UPLOAD_DISCARD_EVENT = 'varlens:web-upload-discard'
-
-export type WebUploadStatus = 'started' | 'progress' | 'complete' | 'error' | 'aborted'
-
-export interface WebUploadEventDetail {
-  status: WebUploadStatus
-  fileName: string
-  fileIndex: number
-  totalFiles: number
-  loadedBytes: number
-  totalBytes: number | null
-  percent: number | null
-  message?: string
-}
+import {
+  WEB_UPLOAD_CANCEL_EVENT,
+  WEB_UPLOAD_DISCARD_EVENT,
+  WEB_UPLOAD_EVENT,
+  type WebUploadEventDetail
+} from '../../shared/types/web-upload'
+import { skippedUploadsSummary, UPLOAD_CONFIG } from '../../shared/config/upload.config'
 
 export interface UploadedFileRef {
   ref: string
   fileName: string
   size: number
+}
+
+/** A non-2xx answer; `skippable` when only this file is at fault (type, per-file size). */
+class UploadRefusedError extends Error {
+  constructor(
+    message: string,
+    readonly skippable: boolean
+  ) {
+    super(message)
+  }
+}
+
+/** The server's `{ userMessage | message }`, not the JSON envelope, prefixed with the file name. */
+function refusalMessage(fileName: string, text: string): { message: string; code?: string } {
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string; userMessage?: string }
+    return { message: `${fileName}: ${body.userMessage ?? body.message ?? text}`, code: body.error }
+  } catch {
+    return { message: `${fileName}: ${text}` }
+  }
 }
 
 let activeUpload: XMLHttpRequest | null = null
@@ -102,18 +111,26 @@ async function uploadImportFileWithProgress(
       activeUpload = null
       const text = xhr.responseText
       if (xhr.status < 200 || xhr.status >= 300) {
-        const message = `web upload: ${xhr.status} ${xhr.statusText}: ${text}`
-        dispatchUploadEvent({
-          status: 'error',
-          fileName: file.name,
-          fileIndex,
-          totalFiles,
-          loadedBytes: 0,
-          totalBytes,
-          percent: null,
-          message
-        })
-        reject(new Error(message))
+        const { message, code } = refusalMessage(
+          file.name,
+          text || `${xhr.status} ${xhr.statusText}`
+        )
+        // A quota refusal (also 413) concerns the whole selection: it still aborts the batch.
+        const skippable = xhr.status === 400 || code === 'upload-too-large'
+        // A skipped file is reported once, in the selection's summary (uploadImportFiles).
+        if (!skippable) {
+          dispatchUploadEvent({
+            status: 'error',
+            fileName: file.name,
+            fileIndex,
+            totalFiles,
+            loadedBytes: 0,
+            totalBytes,
+            percent: null,
+            message
+          })
+        }
+        reject(new UploadRefusedError(message, skippable))
         return
       }
 
@@ -129,7 +146,7 @@ async function uploadImportFileWithProgress(
       try {
         resolve(JSON.parse(text) as UploadedFileRef)
       } catch (error) {
-        const message = `web upload: invalid JSON response: ${error instanceof Error ? error.message : String(error)}`
+        const message = `${file.name}: invalid upload response: ${error instanceof Error ? error.message : String(error)}`
         dispatchUploadEvent({
           status: 'error',
           fileName: file.name,
@@ -146,7 +163,7 @@ async function uploadImportFileWithProgress(
 
     xhr.onerror = () => {
       activeUpload = null
-      const message = `web upload: ${xhr.status} ${xhr.statusText}: network error`
+      const message = `${file.name}: upload failed (network error)`
       dispatchUploadEvent({
         status: 'error',
         fileName: file.name,
@@ -194,17 +211,52 @@ async function discardUploads(refs: readonly string[]): Promise<void> {
   }
 }
 
-export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
+/** True when the name ends with one of the `accept` suffixes (a folder pick ignores `accept`). */
+function isAcceptedName(name: string, accept: string): boolean {
+  const lower = name.toLowerCase()
+  return accept.split(',').some((suffix) => lower.endsWith(suffix.trim().toLowerCase()))
+}
+
+export async function uploadImportFiles(
+  picked: readonly File[],
+  accept?: string
+): Promise<UploadedFileRef[]> {
+  const accepted = (file: File): boolean =>
+    accept === undefined || isAcceptedName(file.name, accept)
+  const files = picked.filter(accepted)
+  const skipped = picked
+    .filter((file) => !accepted(file))
+    .map((file) => `${file.name}: ${UPLOAD_CONFIG.NOT_ACCEPTED_REASON}`)
   const uploaded: UploadedFileRef[] = []
   try {
     for (let index = 0; index < files.length; index++) {
-      uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+      try {
+        uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+      } catch (error) {
+        // One stray file must not block the good ones; the summary below names it.
+        if (!(error instanceof UploadRefusedError) || !error.skippable) throw error
+        skipped.push(error.message)
+      }
     }
   } catch (error) {
     // Refused or cancelled part-way: nothing will import the files already
     // staged, and left alone they count against the per-user cap for 24 h.
     void discardUploads(uploaded.map((file) => file.ref))
     throw error
+  }
+  if (skipped.length > 0) {
+    const message = skippedUploadsSummary(skipped)
+    if (uploaded.length === 0) throw new Error(message)
+    dispatchUploadEvent({
+      status: 'skipped',
+      fileName: '',
+      fileIndex: files.length - 1,
+      totalFiles: files.length,
+      loadedBytes: 0,
+      totalBytes: null,
+      percent: null,
+      message
+    })
   }
   return uploaded
 }
@@ -260,5 +312,5 @@ export async function pickAndUploadFiles(params: {
   directory?: boolean
 }): Promise<string[]> {
   const files = await pickFiles(params)
-  return (await uploadImportFiles(files)).map((file) => file.ref)
+  return (await uploadImportFiles(files, params.accept)).map((file) => file.ref)
 }
