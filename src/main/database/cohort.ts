@@ -216,7 +216,8 @@ export class CohortService {
     const sortBy = cohortSortExpression(
       validatedSortKey,
       SORTABLE_COLUMNS[validatedSortKey],
-      params.genome_build
+      params.genome_build,
+      params.variant_type
     )
     const sortOrder = params.sort_order ?? 'desc'
 

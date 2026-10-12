@@ -22,6 +22,22 @@ export const HEMI_GENOTYPES = ['1'] as const
  */
 export const REF_GENOTYPES = ['0/0', '0|0', '0'] as const
 
+/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
+const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
+
+/**
+ * Genotypes that name no copy of the row's allele: a no-call (an SV/CNV/STR
+ * no-call row is imported, small no-calls are not), a reference call, or a
+ * reference half-call. Such a row is not a carrier.
+ */
+export const NON_CARRIER_GENOTYPES = [
+  '.',
+  './.',
+  '.|.',
+  ...REF_GENOTYPES,
+  ...REF_HALF_CALLS
+] as const
+
 export type Zygosity = 'het' | 'hom' | 'hemi'
 
 const includes = (list: readonly string[], gt: string): boolean => list.includes(gt)
@@ -65,9 +81,6 @@ export function genotypeCallKey(gt: string | null | undefined): string {
   return `${rank}${gt ?? ''}`
 }
 
-/** A reference allele next to a missing one: read like `1/.`, the missing allele is a different ALT. */
-const REF_HALF_CALLS = ['0/.', './0', '0|.', '.|0'] as const
-
 /**
  * Alleles a genotype calls, for an allele-frequency denominator: 1 for a
  * haploid call, 2 for a diploid one — an assumed het (`1/.`) is a het, and a
@@ -92,11 +105,16 @@ export const ASSUMED_HET_HELP =
 export const COHORT_ZYGOSITY_HELP =
   'Carriers by zygosity. Het includes assumed het calls. ' +
   ASSUMED_HET_HELP +
-  ' Other: hemizygous, or a genotype without a called zygosity.'
+  ' Hemi: carriers minus het minus hom, i.e. hemizygous (one copy, e.g. male chrX outside the ' +
+  'PAR) or a genotype without a called zygosity; no-calls are not carriers.'
+
+/** Label of the carriers − het − hom remainder shown after Het / Hom. */
+export const ZYGOSITY_REMAINDER_LABEL = 'hemi'
 
 /**
  * Carriers of a cohort row that are neither het nor hom: hemizygous, or a
- * genotype that names no zygosity (no-call SV, missing). Never negative.
+ * genotype that names no zygosity (missing GT). No-calls are not carriers.
+ * Never negative.
  */
 export function otherZygosityCount(row: {
   carrier_count: number

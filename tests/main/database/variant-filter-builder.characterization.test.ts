@@ -493,7 +493,7 @@ describe('VariantFilterBuilder characterization (compiled SQL + parameters)', ()
     expect({ sql: compiled.sql, parameters: compiled.parameters }).toMatchSnapshot()
   })
 
-  it('max_internal_af is a no-op when the cases table is empty', () => {
+  it('max_internal_af compiles NULL-inclusive, so an empty cases table filters nothing', () => {
     const emptyDb = new Database(':memory:')
     initializeSchema(emptyDb)
     runMigrations(emptyDb)

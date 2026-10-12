@@ -4,7 +4,13 @@
  * SQL consumer on both backends takes them from here.
  */
 import type { SqlDialect } from './chromosome-order'
-import { HEMI_GENOTYPES, HET_GENOTYPES, HOM_GENOTYPES, REF_GENOTYPES } from '../utils/genotype'
+import {
+  HEMI_GENOTYPES,
+  HET_GENOTYPES,
+  HOM_GENOTYPES,
+  NON_CARRIER_GENOTYPES,
+  REF_GENOTYPES
+} from '../utils/genotype'
 
 const sqlList = (genotypes: readonly string[]): string =>
   `(${genotypes.map((gt) => `'${gt}'`).join(',')})`
@@ -18,6 +24,16 @@ export const HET_OR_HEMI_GT_SQL = sqlList([...HET_GENOTYPES, ...HEMI_GENOTYPES])
 export const REF_GT_SQL = sqlList(REF_GENOTYPES)
 /** A carrier of the row's allele, whatever the zygosity. */
 export const ALT_GT_SQL = sqlList([...HET_GENOTYPES, ...HOM_GENOTYPES, ...HEMI_GENOTYPES])
+
+/**
+ * Variant row `alias` is a carrier: its genotype is not a no-call or a
+ * reference call (NULL — a file without GT — counts as carried). Every
+ * cohort-summary contribution keeps carrier rows only, so carrier, het and
+ * hom counts never include a no-call SV/CNV/STR row.
+ */
+export function carrierRowSql(alias: string): string {
+  return `(${alias}.gt_num IS NULL OR ${alias}.gt_num NOT IN ${sqlList(NON_CARRIER_GENOTYPES)})`
+}
 
 /**
  * Genotype column `column` is not an explicit reference call: the sample

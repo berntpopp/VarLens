@@ -4,11 +4,25 @@ import type { SortItem, VariantFilter } from '../types'
 import { buildExtensionJoinClauses, type ExtensionTypeKey } from '../variant-extension-registry'
 import type { VariantQueryBuilder } from './query-types'
 import { resolveSortColumn } from './sortable-columns'
+import {
+  caseCarrierCountSql,
+  classTotalsSql,
+  variantClassSql
+} from '../../../shared/sql/carrier-frequency'
+import { SQLITE_CARRIER_FREQUENCY_RELATIONS } from '../cohort-frequency-sql'
+
+/** Carriers of the row's variant in its case's build (cohort summary). */
+export const CASE_CARRIER_COUNT_SQL = caseCarrierCountSql('cohort_variant_summary', 'variants')
+
+/** The row's cohort carrier frequency, REAL like the cohort view's (cohort-frequency-sql.ts). */
+export const CASE_CARRIER_FREQUENCY_SQL = `CAST(CAST(${CASE_CARRIER_COUNT_SQL} AS REAL) / NULLIF(bt.total, 0) AS REAL)`
 
 /**
  * SELECT skeleton shared by every case variant query: all `variants` columns,
- * the `variant_frequency` LEFT JOIN, the computed `internal_af` projection and
- * the mandatory case predicate.
+ * the carrier-frequency denominator join (`bt`, by the case's build and the
+ * row's variant class), the computed `internal_af` projection — the same
+ * number the cohort view shows (src/shared/sql/carrier-frequency.ts) — and the
+ * mandatory case predicate.
  */
 export function createBaseVariantQuery(
   kysely: Kysely<VarlensDatabase>,
@@ -17,20 +31,14 @@ export function createBaseVariantQuery(
   return kysely
     .selectFrom('variants')
     .selectAll('variants')
-    .leftJoin('variant_frequency as vf', (join) =>
-      join
-        .onRef('vf.chr', '=', 'variants.chr')
-        .onRef('vf.pos', '=', 'variants.pos')
-        .onRef('vf.ref', '=', 'variants.ref')
-        .onRef('vf.alt', '=', 'variants.alt')
+    .leftJoin(
+      sql`(${sql.raw(classTotalsSql(SQLITE_CARRIER_FREQUENCY_RELATIONS))})`.as('bt'),
+      (join) =>
+        join.on(
+          sql<boolean>`bt.build = (SELECT genome_build FROM cases WHERE id = ${filter.case_id}) AND bt.vclass = ${sql.raw(variantClassSql('variants.variant_type'))}`
+        )
     )
-    .select(
-      sql<
-        number | null
-      >`CAST(vf.case_count AS REAL) / NULLIF((SELECT COUNT(*) FROM cases WHERE import_status = 'ready'), 0)`.as(
-        'internal_af'
-      )
-    )
+    .select(sql<number | null>`${sql.raw(CASE_CARRIER_FREQUENCY_SQL)}`.as('internal_af'))
     .where('variants.case_id', '=', filter.case_id)
 }
 

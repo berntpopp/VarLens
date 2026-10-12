@@ -152,7 +152,7 @@ export class PostgresCohortRepository {
 
   /** The summary table as `cvs`, with the per-build case totals the frequency needs. */
   private summaryWithBuildTotals(): string {
-    return `${this.tbl('cohort_variant_summary')} cvs ${summaryBuildTotalsJoin(this.tbl('cases'))}`
+    return `${this.tbl('cohort_variant_summary')} cvs ${summaryBuildTotalsJoin((table) => this.tbl(table))}`
   }
 
   async queryVariants(params: CohortSearchParams): Promise<CohortPaginatedResult> {
@@ -202,7 +202,7 @@ export class PostgresCohortRepository {
         pool: this.pool as Pool,
         schema: this.schema,
         table: this.tbl('cohort_variant_summary'),
-        casesTable: this.tbl('cases'),
+        tbl: (table) => this.tbl(table),
         toVariant: (row) => this.toCohortVariant(row, totalCases)
       },
       params,
@@ -381,7 +381,7 @@ export class PostgresCohortRepository {
         parts.whereParts,
         parts.orderBy,
         totalCases,
-        summaryBuildTotalsJoin(this.tbl('cases')),
+        summaryBuildTotalsJoin((table) => this.tbl(table)),
         limitOffset.join('\n    ')
       ),
       values

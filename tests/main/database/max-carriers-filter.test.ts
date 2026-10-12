@@ -1,6 +1,6 @@
 /**
- * "Seen in at most K cases" (#455) on SQLite. The case view reads
- * variant_frequency.case_count, the cohort view cohort_variant_summary.carrier_count.
+ * "Seen in at most K cases" (#455) on SQLite. Both views read
+ * cohort_variant_summary.carrier_count (#555: one definition for both).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CohortSearchParams } from '../../../src/shared/types/cohort'
@@ -34,7 +34,7 @@ describe('carrier cap (#455), SQLite', () => {
 
   afterEach(() => service.close())
 
-  /** Import a case and count it in variant_frequency, as the import does. */
+  /** Import a case and count it in the frequency tables, as the import does. */
   function importCase(name: string, variants: Row[]): number {
     const id = service.cases.createCase(name, `/${name}.json`, 100)
     service.variants.insertVariantsBatch(
@@ -42,6 +42,7 @@ describe('carrier cap (#455), SQLite', () => {
       variants.map((v) => makeVariant(v))
     )
     service.variants.updateFrequencies(id)
+    service.cohortSummary.rebuild()
     return id
   }
 
@@ -90,7 +91,7 @@ describe('carrier cap (#455), SQLite', () => {
     it('keeps a variant without a frequency row', () => {
       const id = service.cases.createCase('c1', '/c1.json', 100)
       service.variants.insertVariantsBatch(id, [makeVariant(SHARED)])
-      // No updateFrequencies: variant_frequency has no row for it.
+      // No summary rebuild: cohort_variant_summary has no row for it.
       expect(caseView(id, 1)).toEqual({ positions: [100], total: 1 })
     })
 
@@ -100,7 +101,8 @@ describe('carrier cap (#455), SQLite', () => {
       const c2 = importCase('c2', [SHARED])
       expect(caseView(c1, 1).positions).toEqual([])
 
-      service.variants.decrementFrequencies(c2)
+      service.cases.deleteCase(c2)
+      service.cohortSummary.rebuild()
       expect(caseView(c1, 1).positions).toEqual([100])
     })
 

@@ -3,6 +3,7 @@ import {
   type SeverityFilterTarget
 } from '../../../shared/filters/severity-filter'
 import { carrierRanks } from './cohort-summary-representative-sql'
+import { caseCarrierFrequencySql } from './postgres-cohort-summary-query'
 import {
   addPostgresColumnFilters,
   hasPostgresColumnFilterPrefix,
@@ -176,7 +177,8 @@ export function buildPostgresVariantQueryParts(
     whereParts.push(sql)
   }
 
-  addWhere(`v.case_id = ${addParam(filter.case_id)}`)
+  const caseIdParam = addParam(filter.case_id)
+  addWhere(`v.case_id = ${caseIdParam}`)
 
   const exactVariantType = filter.exact_variant_type === true
   if (filter.variant_type !== undefined && filter.variant_type !== '') {
@@ -222,15 +224,22 @@ export function buildPostgresVariantQueryParts(
     addWhere(`(v.cadd IS NULL OR v.cadd >= ${addParam(filter.cadd_min)})`)
   }
 
-  const internalAfExpression = `vf.case_count::double precision / NULLIF((SELECT COUNT(*) FROM ${schemaName}."cases"), 0)`
+  const {
+    carriers,
+    frequency: internalAfExpression,
+    totalsJoin
+  } = caseCarrierFrequencySql((table) => `${schemaName}."${table}"`, caseIdParam)
 
   if (filter.max_internal_af !== undefined && filter.max_internal_af > 0) {
     addWhere(
-      `(vf.case_count IS NULL OR ${internalAfExpression} <= ${addParam(filter.max_internal_af)})`
+      `(${internalAfExpression} IS NULL OR ${internalAfExpression} <= ${addParam(filter.max_internal_af)})`
     )
   }
   if (filter.carrier_count_max !== undefined && filter.carrier_count_max >= 1) {
-    addWhere(`(vf.case_count IS NULL OR vf.case_count <= ${addParam(filter.carrier_count_max)})`)
+    // ::bigint: API callers may send any positive safe integer, beyond int4.
+    addWhere(
+      `(${carriers} IS NULL OR ${carriers} <= ${addParam(filter.carrier_count_max)}::bigint)`
+    )
   }
 
   const searchQuery = (filter.search_query ?? '').trim()
@@ -256,7 +265,7 @@ export function buildPostgresVariantQueryParts(
     addWhere(`v.alt = ${addParam(filter.alt)}`)
   }
 
-  const joins = [`LEFT JOIN ${schemaName}."variant_frequency" vf ON vf.coord_hash = v.coord_hash`]
+  const joins = [totalsJoin]
   const projections = [`v.*`, `${internalAfExpression} AS internal_af`]
 
   if (filter.variant_type === 'sv' || hasPostgresColumnFilterPrefix(filter, 'sv.')) {

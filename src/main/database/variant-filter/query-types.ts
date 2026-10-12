@@ -4,7 +4,7 @@ import type { SortItem } from '../types'
 
 /**
  * Kysely query builder type for variant queries.
- * Uses `any` for the table union to accommodate the LEFT JOIN alias ('vf')
+ * Uses `any` for the table union to accommodate the LEFT JOIN alias ('bt')
  * and the computed `internal_af` column which isn't in any physical table schema.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

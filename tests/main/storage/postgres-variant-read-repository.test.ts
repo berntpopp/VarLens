@@ -197,13 +197,11 @@ describe('PostgresVariantReadRepository', () => {
     const dataSql = (pool.query.mock.calls[1][0] as { text: string }).text
     expect(countSql).toContain('COUNT(*)::int AS count')
     expect(dataSql).toContain('to_tsquery')
-    expect(dataSql).toContain(
-      'LEFT JOIN "public"."variant_frequency" vf ON vf.coord_hash = v.coord_hash'
-    )
-    expect(dataSql).not.toMatch(/vf\.chr\s*=\s*v\.chr/)
-    expect(dataSql).not.toMatch(/vf\.ref\s*=\s*v\.ref/)
-    expect(dataSql).not.toMatch(/vf\.alt\s*=\s*v\.alt/)
-    expect(dataSql).toContain('COUNT(*) FROM "public"."cases"')
+    // Carrier frequency: the cohort summary's carriers over the case build's
+    // cases holding a call of the row's class — the cohort view's number.
+    expect(dataSql).toContain('FROM "public"."cohort_variant_summary" s')
+    expect(dataSql).toContain('(SELECT genome_build FROM "public"."cases" WHERE id = $1)')
+    expect(dataSql).not.toContain('variant_frequency')
     expect(dataSql).toContain('EXISTS')
     expect(dataSql).toContain('"public"."variant_sv"')
     expect(dataSql).toContain('"public"."variant_str"')

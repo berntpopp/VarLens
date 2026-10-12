@@ -69,6 +69,19 @@ export const IMPACT_COLORS: Record<string, string> = {
 /** Theme colour token per zygosity class, on the impact scale. */
 export const ZYGOSITY_COLORS = { hom: 'error', het: 'warning', hemi: 'info' } as const
 
+/**
+ * Variant classes of the cohort carrier frequency denominator: a case counts
+ * for a class when it holds at least one call of one of its `variant_type`s.
+ * SNVs and indels come from one callset; SV, CNV and STR callers each run
+ * separately (audit 09, Part 2). A type in no class has no frequency.
+ */
+export const CARRIER_FREQUENCY_CLASSES: Readonly<Record<string, readonly string[]>> = {
+  small: ['snv', 'indel'],
+  sv: ['sv'],
+  cnv: ['cnv'],
+  str: ['str']
+}
+
 /** Short abbreviations for compact display. */
 export const ACMG_ABBREV: Record<AcmgClassification, string> = {
   Pathogenic: 'P',

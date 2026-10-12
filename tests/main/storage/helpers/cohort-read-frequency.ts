@@ -8,9 +8,9 @@ import {
   summaryBuildTotalsJoin
 } from '../../../../src/main/storage/postgres/postgres-cohort-summary-query'
 
-/** `FROM` clause: the summary as `cvs` plus the per-build case totals. */
+/** `FROM` clause: the summary as `cvs` plus the per-build, per-class case totals. */
 export function summaryWithFrequencyFrom(schema: string): string {
-  return `"${schema}".cohort_variant_summary cvs ${summaryBuildTotalsJoin(`"${schema}".cases`)}`
+  return `"${schema}".cohort_variant_summary cvs ${summaryBuildTotalsJoin((table) => `"${schema}".${table}`)}`
 }
 
 /** Select-list item yielding the read-time frequency as `cohort_frequency`. */
