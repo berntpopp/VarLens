@@ -8,7 +8,6 @@ import * as directives from 'vuetify/directives'
 
 import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
 import ProteinViewHost from '../../../../src/renderer/src/components/protein/ProteinViewHost.vue'
-import { PROTEIN_VIEW_COPY } from '../../../../src/renderer/src/config/proteinViewConfig'
 import { createMockApi } from '../../../utils/mock-api'
 import { CAPABILITY_FEATURES } from '../../../../src/shared/ipc/capability-features'
 import { installCapabilities } from '../../helpers/capabilities'
