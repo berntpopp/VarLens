@@ -4,6 +4,7 @@
  * Both backends call these, so a row scores identically on SQLite and
  * PostgreSQL.
  */
+import { SHORTLIST_EVIDENCE_CONFIG } from '../../../../shared/config/shortlist-evidence.config'
 import type {
   RankConfig,
   ScoredCandidate,
@@ -28,7 +29,7 @@ export function toLightRow(row: LightRow): LightRow {
   }
 }
 
-const MAX_CACHED = 32
+const MAX_CACHED = SHORTLIST_EVIDENCE_CONFIG.compiledCacheSize
 const compiledCache = new Map<string, CompiledRuleset>()
 
 /** Compile a ruleset once per distinct JSON text; throws like `compileRuleset`. */

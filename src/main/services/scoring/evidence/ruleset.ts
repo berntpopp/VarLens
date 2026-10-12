@@ -4,6 +4,7 @@
  * rule it concerns, so a stored preset fails loudly instead of falling back
  * to legacy scoring.
  */
+import { SHORTLIST_EVIDENCE_CONFIG } from '../../../../shared/config/shortlist-evidence.config'
 import { compileRule, type RowPredicate } from '../../../../shared/dsl/evaluate'
 import { EvidenceRulesetSchema } from '../../../../shared/types/evidence-ruleset-schemas'
 import {
@@ -45,8 +46,8 @@ export interface CompiledRuleset {
   groups: CompiledGroup[]
 }
 
-const MAX_RULES = 200
-const EVIDENCE_TYPES: readonly VariantTypeKey[] = ['snv', 'indel']
+const MAX_RULES = SHORTLIST_EVIDENCE_CONFIG.limits.rulesTotal
+const EVIDENCE_TYPES: readonly VariantTypeKey[] = SHORTLIST_EVIDENCE_CONFIG.variantTypes
 
 function compileText(owner: string, text: string, problems: string[]): RowPredicate {
   const result = compileRule(text)

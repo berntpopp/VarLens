@@ -26,10 +26,16 @@ import {
 } from '../config/severity.config'
 import { INFO_FIELD_PREFIX } from '../filters/info-field-filter'
 import { readInfoValue } from '../filters/info-value'
+import { SHORTLIST_EVIDENCE_CONFIG } from '../config/shortlist-evidence.config'
 
 export type EvaluableRow = Readonly<Record<string, unknown>>
 export type RowPredicate = (row: EvaluableRow) => boolean
-export const RULE_LIMITS = { maxChars: 500, maxDepth: 8, maxNodes: 64 } as const
+const { limits } = SHORTLIST_EVIDENCE_CONFIG
+export const RULE_LIMITS = {
+  maxChars: limits.ruleChars,
+  maxDepth: limits.ruleDepth,
+  maxNodes: limits.ruleNodes
+} as const
 export type CompileResult = { ok: true; predicate: RowPredicate } | { ok: false; errors: string[] }
 
 const finite = (v: unknown): number | null =>

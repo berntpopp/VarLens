@@ -4,9 +4,11 @@
  * probabilities.
  */
 
+import { EVIDENCE_MODE_ORDER, type EvidenceModeId } from '../config/shortlist-evidence.config'
+
 /** Inheritance-mode profiles, in their fixed decision-list order. */
-export const EVIDENCE_MODE_ORDER = ['ar_hom', 'ar_comphet', 'xl', 'ad', 'fallback'] as const
-export type ModeId = (typeof EVIDENCE_MODE_ORDER)[number]
+export { EVIDENCE_MODE_ORDER }
+export type ModeId = EvidenceModeId
 
 export interface EvidenceRule {
   id: string
