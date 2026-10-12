@@ -32,13 +32,17 @@
     </div>
 
     <!-- Loading bar for gnomAD / ClinVar fetch -->
-    <v-progress-linear
-      v-if="gnomadLoading || clinvarLoading"
-      aria-label="Loading gnomAD and ClinVar variants"
-      indeterminate
-      color="info"
-      height="2"
-    />
+    <!-- Overlays the edge instead of taking a row: arriving data shifts nothing. -->
+    <div class="position-relative">
+      <v-progress-linear
+        v-if="gnomadLoading || clinvarLoading"
+        aria-label="Loading gnomAD and ClinVar variants"
+        indeterminate
+        absolute
+        color="info"
+        height="2"
+      />
+    </div>
 
     <!-- Caption, search, plot + overview, neighbourhood of the variant of interest -->
     <TrackView
@@ -69,7 +73,7 @@
       :active-clinvar-categories="activeClinVarCategories"
       :active-clinvar-consequences="activeClinVarConsequences"
       :domains="domains"
-      :has-clinvar="clinvarVariants.length > 0"
+      :has-clinvar="capabilities.canUse('gnomadVariants')"
       :consequence-counts="consequenceCounts"
       :clinvar-counts="clinvarCounts"
       :clinvar-consequence-counts="clinvarConsequenceCounts"

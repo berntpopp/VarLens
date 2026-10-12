@@ -44,7 +44,7 @@
     </v-btn-toggle>
 
     <div class="text-body-small mb-1" data-testid="neighbourhood-line">{{ line }}</div>
-    <div class="d-flex flex-wrap ga-1 mb-2">
+    <div class="d-flex flex-wrap ga-1 mb-2 count-row">
       <v-btn
         v-for="g in n.clinvar"
         :key="g.cls"
@@ -140,6 +140,10 @@ function toggle(keys: string[]): void {
   flex: 0 0 320px;
   overflow-y: auto;
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.count-row {
+  min-height: 24px;
 }
 
 .count-dot {

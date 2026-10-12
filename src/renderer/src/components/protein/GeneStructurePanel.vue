@@ -102,13 +102,17 @@
     </v-toolbar>
 
     <!-- Loading bar -->
-    <v-progress-linear
-      v-if="loading || clinvarLoading"
-      indeterminate
-      color="info"
-      height="2"
-      aria-label="Loading gene structure"
-    />
+    <!-- Overlays the edge instead of taking a row: arriving data shifts nothing. -->
+    <div class="position-relative">
+      <v-progress-linear
+        v-if="loading || clinvarLoading"
+        indeterminate
+        absolute
+        color="info"
+        height="2"
+        aria-label="Loading gene structure"
+      />
+    </div>
 
     <!-- Genome-build context (#539): the gene model is GRCh38 -->
     <v-alert
