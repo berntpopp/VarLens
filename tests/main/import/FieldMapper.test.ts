@@ -6,6 +6,7 @@ import type { DataDictionaries } from '../../../src/main/import/config/fieldMapp
 import type { RawVariantRow } from '../../../src/main/import/types'
 import { join } from 'node:path'
 import { detectFormat } from '../../../src/main/import/format-detection'
+import { IMPORT_MESSAGES } from '../../../src/shared/config'
 import { createMapperPipeline } from '../../../src/main/workers/import-mapper-pipeline'
 
 // Mock dictionaries matching test data
@@ -313,7 +314,7 @@ describe('FieldMapper', () => {
           mapper,
           new Writable({ objectMode: true, write: (_c, _e, cb) => cb() })
         )
-      ).rejects.toThrow('Row 1 has 109 values but the header declares 110 columns')
+      ).rejects.toThrow(IMPORT_MESSAGES.rowWidthMismatch(1, 109, 110))
     })
 
     it('accepts a row whose length matches the header', async () => {

@@ -11,6 +11,7 @@ import type { RawVariantRow } from '../types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 import { setRecordBytes } from '../bounded-batcher'
+import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -56,7 +57,7 @@ export class FieldMapper extends Transform {
       const row = chunk.value
       if (this.columnCount !== undefined && row.length !== this.columnCount) {
         throw new Error(
-          `Row ${chunk.key + 1} has ${row.length} values but the header declares ${this.columnCount} columns`
+          IMPORT_MESSAGES.rowWidthMismatch(chunk.key + 1, row.length, this.columnCount)
         )
       }
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0

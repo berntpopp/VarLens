@@ -39,6 +39,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { mdiPencil } from '@mdi/js'
+import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
 
 interface Props {
   modelValue: string | null
@@ -51,7 +52,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: 'Click to add...',
+  placeholder: COMMENT_PLACEHOLDERS.default,
   loading: false,
   readonly: false,
   save: undefined

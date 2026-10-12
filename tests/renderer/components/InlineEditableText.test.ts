@@ -4,6 +4,7 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import InlineEditableText from '../../../src/renderer/src/components/InlineEditableText.vue'
+import { COMMENT_PLACEHOLDERS } from '../../../src/renderer/src/config/commentConfig'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -47,5 +48,14 @@ describe('InlineEditableText', () => {
     await trigger.trigger('keydown', { key })
     expect(wrapper.find('textarea').exists()).toBe(true)
     wrapper.unmount()
+  })
+
+  it('shows the configured default placeholder, which does not assume a mouse', () => {
+    const wrapper = mount(InlineEditableText, {
+      props: { modelValue: null },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.text()).toBe(COMMENT_PLACEHOLDERS.default)
+    for (const text of Object.values(COMMENT_PLACEHOLDERS)) expect(text).not.toMatch(/click/i)
   })
 })
