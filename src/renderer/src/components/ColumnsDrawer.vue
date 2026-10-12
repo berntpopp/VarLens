@@ -4,6 +4,7 @@
     location="right"
     temporary
     :width="340"
+    :aria-label="COLUMNS_DRAWER_COPY.drawer"
     @update:model-value="emit('update:open', $event)"
     @keydown.esc="isPopupOpen() || emit('update:open', false)"
   >
@@ -31,6 +32,8 @@
         <template v-for="[groupId, groupCols] in groupedColumns" :key="groupId">
           <div v-if="groupCols.length > 0 || groupId === 'links'" class="column-group mb-3">
             <!-- Group header -->
+            <!-- '.indeterminate' sets the native input property: Vuetify writes
+                 aria-checked="mixed" without it, which axe flags. -->
             <div class="group-header d-flex align-center px-2 py-1 rounded bg-grey-lighten-3">
               <v-icon size="small" class="mr-2">{{ groupIcon(groupId) }}</v-icon>
               <span class="text-body-small font-weight-bold text-uppercase">
@@ -40,6 +43,8 @@
               <v-checkbox-btn
                 :model-value="isGroupAllVisible(groupId)"
                 :indeterminate="isGroupIndeterminate(groupId)"
+                v-bind="{ '.indeterminate': isGroupIndeterminate(groupId) }"
+                :aria-label="COLUMNS_DRAWER_COPY.group(groupLabel(groupId))"
                 density="compact"
                 hide-details
                 @click.stop="toggleGroup(groupId)"
@@ -74,6 +79,7 @@
                       />
                       <v-checkbox-btn
                         :model-value="visibleColumns.includes(column.key)"
+                        :aria-label="COLUMNS_DRAWER_COPY.column(column.title)"
                         density="compact"
                         hide-details
                         @click.stop="emit('toggle:column', column.key)"
@@ -113,6 +119,7 @@ import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 import { usePanelFocus } from '../composables/usePanelFocus'
 import { isPopupOpen } from '../composables/useTableKeyboardNav'
 import { groupColumns, getGroupConfig } from '../config/columnGroups'
+import { COLUMNS_DRAWER_COPY } from '../config/uiCopyConfig'
 import {
   mdiClose,
   mdiDragVertical,

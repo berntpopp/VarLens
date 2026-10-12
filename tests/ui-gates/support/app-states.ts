@@ -1,5 +1,5 @@
 /**
- * Drives the web app into the five audited key states. Every helper waits
+ * Drives the web app into the audited key states. Every helper waits
  * for the state to be visually settled (no skeleton, network idle) so axe
  * and Lighthouse snapshots see the same DOM a user does.
  */
@@ -10,14 +10,25 @@ import { GATE_CASE_NAMES } from './gate-server'
 export const PLAIN_CELL = 'td:not(:has(a, button, input, [role="button"]))'
 
 export type GateTheme = 'light' | 'dark'
-export type GateStateName = 'login' | 'home' | 'case-table' | 'case-details-panel' | 'cohort'
+export type GateStateName =
+  | 'login'
+  | 'home'
+  | 'case-table'
+  | 'case-details-panel'
+  | 'case-filter-drawer'
+  | 'case-columns-drawer'
+  | 'cohort'
+  | 'cohort-filter-drawer'
 
 export const GATE_STATES: readonly GateStateName[] = [
   'login',
   'home',
   'case-table',
   'case-details-panel',
-  'cohort'
+  'case-filter-drawer',
+  'case-columns-drawer',
+  'cohort',
+  'cohort-filter-drawer'
 ]
 
 const VUETIFY_THEME: Record<GateTheme, string> = { light: 'warmLight', dark: 'warmDark' }
@@ -80,6 +91,18 @@ async function openCase(page: Page, caseName: string): Promise<void> {
   await expect(page.locator('.v-main tbody tr').first()).toBeVisible({ timeout: 15_000 })
 }
 
+const DRAWER_BUTTONS = {
+  filters: { name: /^Filters/, drawer: 'Filter options' },
+  columns: { name: /^Columns$/, drawer: 'Column options' }
+} as const
+
+async function openDrawer(page: Page, which: keyof typeof DRAWER_BUTTONS): Promise<void> {
+  const { name, drawer } = DRAWER_BUTTONS[which]
+  await page.getByRole('button', { name }).first().click()
+  await expect(page.locator(`.v-navigation-drawer--active[aria-label="${drawer}"]`)).toBeVisible()
+  await settle(page)
+}
+
 export async function gotoState(page: Page, state: GateStateName): Promise<void> {
   if (state === 'login') {
     await page.goto('/login')
@@ -96,6 +119,8 @@ export async function gotoState(page: Page, state: GateStateName): Promise<void>
   await openCase(page, GATE_CASE_NAMES[0])
   await settle(page)
   if (state === 'case-table') return
+  if (state === 'case-filter-drawer') return openDrawer(page, 'filters')
+  if (state === 'case-columns-drawer') return openDrawer(page, 'columns')
 
   if (state === 'case-details-panel') {
     await page
@@ -114,4 +139,5 @@ export async function gotoState(page: Page, state: GateStateName): Promise<void>
   await page.getByRole('button', { name: 'Cohort mode' }).click()
   await expect(page.locator('.v-main tbody tr').first()).toBeVisible({ timeout: 15_000 })
   await settle(page)
+  if (state === 'cohort-filter-drawer') await openDrawer(page, 'filters')
 }
