@@ -78,7 +78,7 @@
         size="x-small"
         variant="text"
         color="primary"
-        class="text-none ml-1"
+        class="text-none text-body-small ml-1"
         data-testid="protein-strip-gene"
         @click="emit('open', 'gene-structure')"
       >
