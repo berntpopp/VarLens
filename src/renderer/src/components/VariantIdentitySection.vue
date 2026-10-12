@@ -41,6 +41,12 @@
       />
     </div>
 
+    <!-- ClinVar + per-sample call quality (case rows only carry a call) -->
+    <div v-if="variant.clinvar || callLine" class="d-flex align-center flex-wrap ga-2 mt-1">
+      <ClinVarCell v-if="variant.clinvar" :significance="variant.clinvar" />
+      <span v-if="callLine" data-testid="call-line" class="variant-data-mono">{{ callLine }}</span>
+    </div>
+
     <!-- rsID - From VEP colocated_variants -->
     <div class="d-flex align-center mt-2">
       <span class="text-body-small text-muted">rsID:</span>
@@ -69,6 +75,9 @@ import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
 import { formatHgvs, variantName } from '../utils/formatters'
+import { ClinVarCell } from './table-cells/simple-cells'
+import { CALL_QUALITY_FIELDS } from '../config/uiCopyConfig'
+import { INLINE_SEPARATOR } from '../config/displayConfig'
 
 interface Props {
   variant: Variant | CohortVariant
@@ -88,6 +97,19 @@ const emit = defineEmits<{
  */
 const isFullVariant = computed(() => {
   return 'transcript' in props.variant
+})
+
+/** "GT 0/1 · DP 34 · …" from the non-empty call fields; null for cohort rows. */
+const callLine = computed(() => {
+  if (!('gt_num' in props.variant)) return null
+  const row = props.variant as unknown as Record<string, unknown>
+  const parts = CALL_QUALITY_FIELDS.flatMap(({ key, label, digits }) => {
+    const value = row[key]
+    if (value === null || value === undefined || value === '') return []
+    const text = typeof value === 'number' && digits !== undefined ? value.toFixed(digits) : value
+    return [`${label}\u00a0${String(text)}`] // a field never wraps between label and value
+  })
+  return parts.length > 0 ? parts.join(INLINE_SEPARATOR) : null
 })
 
 // Create separate clipboard instances for each copy operation
