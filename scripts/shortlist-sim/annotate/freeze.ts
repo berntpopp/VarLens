@@ -40,13 +40,16 @@ export function gnomadFromLocal(l: LocalVepRecord): SpikeGnomad {
   }
 }
 
-/** Spike annotations come from the local VEP run for every field (coordinator decision). */
+/**
+ * Spike annotations come from the local VEP run for every field (coordinator decision); alleles
+ * whose pool gene has no VEP transcript consequence (`unmapped_gene`) are excluded.
+ */
 export function freezeSpikes(
   alleles: NormalizedAllele[],
   local: Map<string, LocalVepRecord>
 ): FrozenSpike[] {
   return alleles
-    .filter((a) => a.status === 'ok')
+    .filter((a) => a.status === 'ok' && local.get(a.key)?.selection !== 'unmapped_gene')
     .map((a): FrozenSpike => {
       const l = local.get(a.key)
       const source: Source = l ? 'local-vep' : 'none'

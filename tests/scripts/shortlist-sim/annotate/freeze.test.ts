@@ -22,7 +22,8 @@ const local = (key: string): LocalVepRecord => ({
   popmaxAf: null,
   exomePopmaxAf: 2e-5,
   genomePopmaxAf: null,
-  inGnomadCache: true
+  inGnomadCache: true,
+  selection: 'gene'
 })
 describe('freezeSpikes', () => {
   it('takes every spike field from the local VEP run and records provenance', () => {
@@ -43,5 +44,13 @@ describe('freezeSpikes', () => {
     expect(out[0].vep).toMatchObject({ caddPhred: 25, isMane: true, hgvsc: null })
     expect(out[0].gnomad).toMatchObject({ found: true, exomeAf: 1e-5, exomePopmaxAf: 2e-5 })
     expect(out[2]).toMatchObject({ vep: null, vepSource: 'none', errors: ['local-vep: no record'] })
+  })
+
+  it('excludes alleles whose pool gene has no transcript consequence', () => {
+    const out = freezeSpikes(
+      [allele('1:10:A:G')],
+      new Map([['1:10:A:G', { ...local('1:10:A:G'), selection: 'unmapped_gene' as const }]])
+    )
+    expect(out).toEqual([])
   })
 })

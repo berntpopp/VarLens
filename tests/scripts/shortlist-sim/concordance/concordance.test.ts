@@ -48,7 +48,8 @@ function fakeLocal(
     popmaxAf: null,
     exomePopmaxAf: null,
     genomePopmaxAf: null,
-    inGnomadCache: af !== null
+    inGnomadCache: af !== null,
+    selection: 'gene'
   }
 }
 
@@ -88,6 +89,33 @@ describe('computeConcordance (synthetic background, fabricated local VEP)', () =
     expect(mnv).toMatchObject({ vepTerm: 'missense_variant', varvisFunc: 'mnv' })
     expect(report.impactByFunc.find((r) => r.varvisFunc === 'mnv')?.impact).toBe('HIGH')
     expect(report.funcAgreement.projectedEqual).toBe(report.funcAgreement.n)
+    expect(report.transcriptSelection).toEqual({ gene: 196 })
+  })
+
+  it('leaves unmapped_gene sites out of the mapping and the agreement', async () => {
+    const bg = await loadBackground(SYNTHETIC, 'bg1')
+    const sites = bg.rows.map((r, i) => ({
+      varvis: r,
+      local: {
+        ...fakeLocal(`${i}`, r.func, r.gnomad_af, r.cadd),
+        selection: i < 10 ? ('unmapped_gene' as const) : ('gene' as const)
+      }
+    }))
+    const all = computeConcordance(
+      [
+        {
+          bg,
+          sites: sites.map((x) => ({ ...x, local: { ...x.local, selection: 'gene' as const } }))
+        }
+      ],
+      {},
+      null
+    )
+    const report = computeConcordance([{ bg, sites }], {}, null)
+    expect(report.transcriptSelection).toEqual({ gene: 190, unmapped_gene: 10 })
+    expect(all.funcAgreement.n - report.funcAgreement.n).toBe(
+      sites.slice(0, 10).filter((x) => x.varvis.func !== null).length
+    )
     expect(report.geneConstancy.every((g) => g.inconsistentGenes === 0)).toBe(true)
     // Aggregate only: no coordinates or gene symbols anywhere in the report.
     const text = JSON.stringify(report)

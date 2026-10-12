@@ -124,3 +124,70 @@ describe('dbNSFP subset regions', () => {
     for (const p of parts) expect(new Set(p.map((r) => r.split('\t')[0])).size).toBe(1)
   })
 })
+
+describe('gene-restricted transcript selection (overlapping genes)', () => {
+  // One allele annotated for two genes; VEP flag_pick chose the other gene's transcript.
+  const line = JSON.stringify({
+    id: '1:100:A:G',
+    most_severe_consequence: 'missense_variant',
+    colocated_variants: [{ id: 'rs1', frequencies: { G: { gnomade: 1e-4 } } }],
+    transcript_consequences: [
+      {
+        gene_symbol: 'OTHER',
+        transcript_id: 'T-O1',
+        consequence_terms: ['missense_variant'],
+        impact: 'MODERATE',
+        pick: 1,
+        mane_select: 'NM_9.1',
+        variant_allele: 'G',
+        cadd_phred: 31
+      },
+      {
+        gene_symbol: 'POOL',
+        transcript_id: 'T-P1',
+        consequence_terms: ['downstream_gene_variant'],
+        impact: 'MODIFIER',
+        variant_allele: 'G'
+      },
+      {
+        gene_symbol: 'POOL',
+        transcript_id: 'T-P2',
+        consequence_terms: ['intron_variant'],
+        impact: 'MODIFIER',
+        canonical: 1,
+        variant_allele: 'G'
+      },
+      {
+        gene_symbol: 'POOL',
+        transcript_id: 'T-P3',
+        consequence_terms: ['splice_region_variant', 'intron_variant'],
+        impact: 'LOW',
+        variant_allele: 'G'
+      }
+    ]
+  })
+
+  it('uses the pool gene: MANE, then canonical, keeping allele-level dbNSFP values', () => {
+    expect(parseVepLine(line).transcript).toBe('T-O1') // VEP pick: wrong gene
+    const r = parseVepLine(line, 'POOL')
+    expect(r).toMatchObject({
+      selection: 'gene',
+      gene: 'POOL',
+      transcript: 'T-P2',
+      terms: ['intron_variant'],
+      mostSevere: 'intron_variant',
+      caddPhred: 31,
+      gnomadExomeAf: 1e-4
+    })
+  })
+
+  it('falls back to the most severe transcript of the gene, and flags a gene without transcripts', () => {
+    const noCanonical = line.replace('"canonical":1,', '')
+    expect(parseVepLine(noCanonical, 'pool').transcript).toBe('T-P3')
+    expect(parseVepLine(line, 'ABSENT')).toMatchObject({
+      selection: 'unmapped_gene',
+      transcript: null,
+      terms: []
+    })
+  })
+})
