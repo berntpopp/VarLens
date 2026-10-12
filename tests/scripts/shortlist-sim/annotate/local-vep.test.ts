@@ -99,3 +99,28 @@ describe('genefoundry payload extraction', () => {
     expect(g.genomePopmaxAf).toBe(0)
   })
 })
+
+describe('dbNSFP subset regions', () => {
+  it('merges overlapping REF spans and keeps chromosomes whole across parts', async () => {
+    const { mergedRegions, splitByChromosome } =
+      await import('../../../../scripts/shortlist-sim/annotate/local-vep')
+    const a = (chr: string, pos: number, ref = 'A') => ({
+      key: `${chr}:${pos}`,
+      chr,
+      pos,
+      ref,
+      alt: 'G'
+    })
+    const regions = mergedRegions([
+      a('chr2', 10),
+      a('1', 100, 'ACG'),
+      a('1', 102),
+      a('1', 200),
+      a('2', 5)
+    ])
+    expect(regions).toEqual(['1\t100\t103', '1\t200\t201', '2\t5\t6', '2\t10\t11'])
+    const parts = splitByChromosome(regions, 8)
+    expect(parts).toHaveLength(2)
+    for (const p of parts) expect(new Set(p.map((r) => r.split('\t')[0])).size).toBe(1)
+  })
+})
