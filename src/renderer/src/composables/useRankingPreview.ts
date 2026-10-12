@@ -51,16 +51,20 @@ export function useRankingPreview(
   const compared = ref(false)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  // Signature (case + config) of the snapshot the shown result was computed from.
   const previewed = ref<string | null>(null)
-  const stale = computed(
-    () => result.value !== null && previewed.value !== JSON.stringify(config())
-  )
+  const signature = (): string => JSON.stringify([caseId.value, config()])
+  const stale = computed(() => result.value !== null && previewed.value !== signature())
+  let latest = 0
 
   async function run(): Promise<void> {
     const id = caseId.value
     const draft = config()
     if (id === null || draft === null || api === undefined) return
     const presetId = savedPresetId()
+    // Freeze the snapshot before awaiting: edits made meanwhile must read as stale.
+    const snapshot = signature()
+    const request = ++latest
     loading.value = true
     error.value = null
     try {
@@ -68,15 +72,17 @@ export function useRankingPreview(
         api.variants.shortlist({ caseId: id, adHocConfig: JSON.parse(JSON.stringify(draft)) }),
         presetId === null ? null : api.variants.shortlist({ caseId: id, presetId })
       ])
+      if (request !== latest) return
       const savedRows = saved === null ? null : unwrapIpcResult(saved).rows
       result.value = rankDeltas(unwrapIpcResult(edited).rows, savedRows, rows)
       compared.value = savedRows !== null
-      previewed.value = JSON.stringify(draft)
+      previewed.value = snapshot
     } catch (e) {
+      if (request !== latest) return
       error.value = formatError(e)
       result.value = null
     } finally {
-      loading.value = false
+      if (request === latest) loading.value = false
     }
   }
 
