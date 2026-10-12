@@ -9,6 +9,7 @@ import { desktopConfig, startFlow } from 'lighthouse'
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import type { FlowStepLike } from '../../../scripts/ui-gates/lighthouse-budgets'
 import { GATE_CASE_NAMES, type GateServerState } from './gate-server'
+import { PLAIN_CELL } from './app-states'
 import { DISCLAIMER_STORAGE_KEY } from './gate-state'
 
 export type LighthousePreset = 'desktop' | 'mobile'
@@ -70,8 +71,9 @@ async function openCase(page: Page): Promise<void> {
 
 async function openDetailsPanel(page: Page): Promise<void> {
   const rows = await page.$$('.v-main tbody tr.v-data-table__tr')
-  const cells = await rows[1].$$('td')
-  await cells[3].click()
+  const cell = await rows[1].$(PLAIN_CELL)
+  if (cell === null) throw new Error('no plain cell in the second row')
+  await cell.click()
   await page.waitForSelector('::-p-text(Variant Details)', { visible: true })
   await idle(page)
 }

@@ -66,7 +66,8 @@ export const CASE_TABLE_STEPS: readonly InteractionStep[] = [
   {
     name: 'case-row-select',
     run: async (w) => {
-      await w.locator(ROWS).nth(2).locator('td').nth(5).click()
+      // A cell without a link or control, so the click selects the row
+      await w.locator(ROWS).nth(2).locator('td:not(:has(a, button, input, [role="button"]))').first().click()
       await waitForQuiet(w)
     }
   },

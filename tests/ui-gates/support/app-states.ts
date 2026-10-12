@@ -6,6 +6,9 @@
 import { expect, type Page } from '@playwright/test'
 import { GATE_CASE_NAMES } from './gate-server'
 
+/** A row cell with no link or control, so a click selects the row (links open their target). */
+export const PLAIN_CELL = 'td:not(:has(a, button, input, [role="button"]))'
+
 export type GateTheme = 'light' | 'dark'
 export type GateStateName = 'login' | 'home' | 'case-table' | 'case-details-panel' | 'cohort'
 
@@ -95,7 +98,12 @@ export async function gotoState(page: Page, state: GateStateName): Promise<void>
   if (state === 'case-table') return
 
   if (state === 'case-details-panel') {
-    await page.locator('.v-main tbody tr.v-data-table__tr').nth(1).locator('td').nth(3).click()
+    await page
+      .locator('.v-main tbody tr.v-data-table__tr')
+      .nth(1)
+      .locator(PLAIN_CELL)
+      .first()
+      .click()
     await expect(page.getByText('Variant Details', { exact: true })).toBeVisible({
       timeout: 15_000
     })
