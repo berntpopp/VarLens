@@ -149,6 +149,22 @@ describe('DatabasePicker', () => {
     expect(mockApi.database.deleteFile).not.toHaveBeenCalled()
   })
 
+  it('asks for the password when "Open..." picks an encrypted database', async () => {
+    mockApi.database.selectFile = vi.fn().mockResolvedValue('/x.db')
+    mockApi.database.open = vi.fn().mockResolvedValue({ success: false, needsPassword: true })
+
+    mountPicker()
+    await openPickerMenu()
+    const open = [...document.body.querySelectorAll('.v-list-item')].find(
+      (el) => el.textContent?.trim() === 'Open...'
+    ) as HTMLElement
+    open.click()
+    await flushPromises()
+
+    expect(mockApi.database.open).toHaveBeenCalledWith('/x.db', undefined)
+    expect(document.body.textContent).toContain('Enter Database Password')
+  })
+
   it('hides desktop database actions in web mode', async () => {
     window.__VARLENS_WEB__ = true
     installCapabilities({ runtime: 'web', role: 'user', storage: null })

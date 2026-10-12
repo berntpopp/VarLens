@@ -199,13 +199,9 @@ export const useDatabaseStore = defineStore('database', () => {
     }
   }
 
-  async function selectAndOpenFile(): Promise<DatabaseOpenResult | null> {
+  async function selectFile(): Promise<string | null> {
     requireCapability('localDatabaseFiles')
-    const path = await getApi().database.selectFile()
-    if (path === null) {
-      return null
-    }
-    return await openDatabase(path)
+    return await getApi().database.selectFile()
   }
 
   async function selectSaveLocation(defaultName: string): Promise<string | null> {
@@ -284,7 +280,7 @@ export const useDatabaseStore = defineStore('database', () => {
     openDatabase,
     createDatabase,
     openPostgresProfile,
-    selectAndOpenFile,
+    selectFile,
     selectSaveLocation,
     changePassword,
     migrateToEncrypted,
