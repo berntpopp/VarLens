@@ -103,7 +103,7 @@ describe('ShortlistRankingDialog', () => {
 
   it('shows weighted presets as a read-only summary', async () => {
     const w = await mountDialog(1)
-    expect(w.find('[data-testid="ranking-legacy"]').exists()).toBe(true)
+    expect(w.find('[data-testid="ranking-legacy"]').text()).toContain('HIGH')
   })
 
   it('edits a user ranking: field error, problem count, Save disabled until fixed', async () => {
@@ -118,6 +118,7 @@ describe('ShortlistRankingDialog', () => {
     await w.find('[data-testid="ranking-save"]').trigger('click')
     await flushPromises()
     expect(updatePreset).toHaveBeenCalledWith(3, expect.objectContaining({ name: 'My lab' }))
+    expect(w.find('[data-testid="ranking-saved"]').text()).toContain('My lab')
   })
 
   it('reorders rules with the keyboard-operable buttons and keeps the reference last', async () => {
@@ -131,6 +132,9 @@ describe('ShortlistRankingDialog', () => {
       .findAll('[data-testid="ranking-rule-row"] input')
       .map((i) => (i.element as HTMLInputElement).value)
     expect(labels[0]).toBe('AF < 0.001 %')
+    expect(w.find('[data-testid="ranking-announcement"]').text()).toBe(
+      'Not in gnomAD moved to position 2'
+    )
     // the reference row has no move buttons
     expect(
       w.findAll('[data-testid="ranking-rule-row"]')[4].find('[data-testid="rule-move-up"]').exists()
@@ -148,6 +152,8 @@ describe('ShortlistRankingDialog', () => {
 
   it('asks for an open case before previewing', async () => {
     const w = await mountDialog(3)
+    expect(w.find('[data-testid="ranking-preview"]').exists()).toBe(false)
+    await w.find('[data-testid="ranking-preview-toggle"]').trigger('click')
     expect(w.find('[data-testid="ranking-preview"]').text()).toContain('Open a case')
     expect(w.find('[data-testid="ranking-preview-run"]').exists()).toBe(false)
   })

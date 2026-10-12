@@ -49,6 +49,7 @@ const errors = computed(() =>
     :is-dsl-mode="false"
     :errors="errors"
     :label="label"
+    :title="modelValue"
     :placeholder="COPY.conditionPlaceholder"
     @update:raw-input="(value) => (rawInput = value)"
     @select-suggestion="applySuggestion"

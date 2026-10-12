@@ -33,7 +33,8 @@ export const SHORTLIST_RANKING_EDITOR = {
     save: 'Save',
     runPreview: 'Run preview',
     rerunPreview: 'Update preview',
-    editRanking: 'Edit ranking'
+    editRanking: 'Edit ranking',
+    togglePreview: 'Preview'
   },
   defaultRanking: {
     label: 'Default for the shortlist',
@@ -57,7 +58,8 @@ export const SHORTLIST_RANKING_EDITOR = {
     candidatesHelp: 'Only variants passing these filters are scored.',
     otherFilters: 'Also filtered by',
     modes: 'Inheritance modes',
-    modesHelp: 'The first matching mode applies; its points are added once.',
+    modesHelp:
+      'Checked in this fixed order: the first matching mode applies and its points are added once.',
     groups: 'Evidence groups',
     groupsHelp:
       'In each group the first matching rule wins. The reference rule catches the rest at 0 points.',
@@ -75,6 +77,10 @@ export const SHORTLIST_RANKING_EDITOR = {
   atCharacter: (n: number): string => ` (at character ${n})`,
   previewColumns: { rank: '#', gene: 'Gene', variant: 'Variant', points: 'Points', delta: 'Δ' },
   previewNew: 'new',
+  deltaLabel: (n: number): string =>
+    n > 0 ? `up ${n} places` : n < 0 ? `down ${-n} places` : 'same place',
+  announceMoved: (label: string, position: number): string =>
+    `${label} moved to position ${position}`,
   errors: {
     count: (n: number): string => `${n} problem${n === 1 ? '' : 's'}`,
     nameRequired: 'A name is required',
@@ -85,7 +91,9 @@ export const SHORTLIST_RANKING_EDITOR = {
   },
   confirm: {
     discard: 'Discard the unsaved changes to this ranking?',
-    remove: (name: string): string => `Delete the ranking "${name}"?`
+    remove: (name: string): string => `Delete the ranking "${name}"?`,
+    removeGroup: (label: string, rules: number): string =>
+      `Remove the group "${label}" and its ${rules} rules?`
   },
   saved: (name: string): string => `Ranking "${name}" saved`,
   copySuffix: 'copy',

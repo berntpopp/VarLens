@@ -19,6 +19,12 @@ const group = computed(() => editor.ruleset.value!.groups[props.groupIndex])
 const key = computed(() => [...RULESET_PATH, 'groups', props.groupIndex].join('.'))
 const problemCount = computed(() => editor.problemCountUnder(key.value))
 
+function removeGroup(): void {
+  if (window.confirm(COPY.confirm.removeGroup(group.value.label, group.value.rules.length))) {
+    editor.removeGroup(props.groupIndex)
+  }
+}
+
 const modeLabel = (id: string): string =>
   SHORTLIST_EVIDENCE_CONFIG.modes[id as keyof typeof SHORTLIST_EVIDENCE_CONFIG.modes]?.label ?? id
 const scopeItems = computed(() => [
@@ -71,7 +77,7 @@ const scopeLabel = computed(() =>
           size="small"
           color="error"
           :prepend-icon="mdiDeleteOutline"
-          @click="editor.removeGroup(groupIndex)"
+          @click="removeGroup"
         >
           {{ COPY.actions.removeGroup }}
         </v-btn>
@@ -87,7 +93,7 @@ const scopeLabel = computed(() =>
         <span />
         <span>{{ COPY.fields.label }}</span>
         <span>{{ COPY.fields.condition }}</span>
-        <span class="text-right">{{ COPY.fields.points }}</span>
+        <span>{{ COPY.fields.points }}</span>
       </div>
       <RankingRuleRow
         v-for="(rule, ri) in group.rules"

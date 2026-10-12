@@ -17,6 +17,7 @@ const { result, compared, loading, error, stale, run } = useRankingPreview(
 
 const signed = (n: number): string => (n > 0 ? `+${n}` : `${n}`)
 const cols = COPY.previewColumns
+const arrow = (n: number): string => (n > 0 ? `↑${n}` : n < 0 ? `↓${-n}` : '·')
 </script>
 
 <template>
@@ -81,7 +82,8 @@ const cols = COPY.previewColumns
               'delta--down': row.delta !== null && row.delta < 0
             }"
           >
-            {{ row.delta === null ? COPY.previewNew : row.delta === 0 ? '·' : signed(row.delta) }}
+            <span v-if="row.delta === null">{{ COPY.previewNew }}</span>
+            <span v-else :aria-label="COPY.deltaLabel(row.delta)">{{ arrow(row.delta) }}</span>
           </td>
         </tr>
       </tbody>
@@ -95,6 +97,10 @@ const cols = COPY.previewColumns
 .preview-table {
   font-size: 0.8125rem;
   background: transparent;
+}
+.preview-table :deep(th),
+.preview-table :deep(td) {
+  padding-inline: 6px !important;
 }
 .preview-table--stale tbody {
   opacity: 0.6;

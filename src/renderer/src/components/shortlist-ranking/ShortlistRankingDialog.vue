@@ -10,6 +10,7 @@ import {
   mdiClose,
   mdiContentCopy,
   mdiDeleteOutline,
+  mdiEyeOutline,
   mdiLockOutline,
   mdiPlus,
   mdiSortVariant
@@ -19,6 +20,7 @@ import RankingCandidatesSection from './RankingCandidatesSection.vue'
 import RankingModesSection from './RankingModesSection.vue'
 import RankingGroupCard from './RankingGroupCard.vue'
 import RankingPreview from './RankingPreview.vue'
+import RankingLegacySummary from './RankingLegacySummary.vue'
 import {
   RankingEditorKey,
   RULESET_PATH,
@@ -44,6 +46,10 @@ const { showSnack } = useAppState()
 const saving = ref(false)
 const openGroups = ref<number[]>([])
 const editorPane = ref<HTMLElement | null>(null)
+// The preview sits beside the editor so the effect of an edit stays in view.
+const showPreview = ref(false)
+// Confirmed in the footer: a snackbar would cover the dialog's own buttons.
+const savedName = ref<string | null>(null)
 
 watch(
   open,
@@ -57,6 +63,7 @@ watch(
 function guarded(action: () => void): void {
   if (dirty.value && !readOnly.value && !window.confirm(COPY.confirm.discard)) return
   action()
+  savedName.value = null
   openGroups.value = []
   editorPane.value?.scrollTo({ top: 0 })
 }
@@ -81,7 +88,7 @@ async function save(): Promise<void> {
   saving.value = true
   try {
     const saved = await editor.save()
-    if (saved) showSnack(COPY.saved(saved.name), 'success')
+    savedName.value = saved?.name ?? null
   } catch (e) {
     logService.error(`saving shortlist ranking failed: ${formatError(e)}`, 'shortlist.ranking')
     showSnack(formatError(e), 'error')
@@ -104,6 +111,13 @@ function addGroup(): void {
   editor.addGroup()
   const last = editor.ruleset.value!.groups.length - 1
   openGroups.value = [...openGroups.value, last]
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+    event.preventDefault()
+    if (!readOnly.value && dirty.value && problems.value.length === 0) void save()
+  }
 }
 
 /** Reveal the field of a problem: open its group, scroll to the closest marked element, focus it. */
@@ -131,8 +145,13 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
 </script>
 
 <template>
-  <v-dialog v-model="open" max-width="1180" scrollable :persistent="dirty || saving">
-    <v-card class="ranking-dialog" data-testid="shortlist-ranking-dialog">
+  <v-dialog
+    v-model="open"
+    :max-width="showPreview && draft ? 1480 : 1180"
+    scrollable
+    :persistent="dirty || saving"
+  >
+    <v-card class="ranking-dialog" data-testid="shortlist-ranking-dialog" @keydown="onKeydown">
       <v-card-title class="d-flex align-center">
         <v-icon :icon="mdiSortVariant" class="mr-2" />
         {{ COPY.title }}
@@ -238,7 +257,6 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 {{ COPY.actions.addGroup }}
               </v-btn>
             </section>
-            <RankingPreview />
           </template>
           <div v-else-if="selected" class="legacy" data-testid="ranking-legacy">
             <div class="d-flex align-center">
@@ -266,10 +284,22 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 {{ COPY.actions.duplicate }}
               </v-btn>
             </div>
-            <p v-if="selected.description" class="text-body-2 mt-1">{{ selected.description }}</p>
-            <p class="ranking-section__help mt-2">{{ COPY.sections.legacyHelp }}</p>
+            <p v-if="selected.description" class="legacy__description">
+              {{ selected.description }}
+            </p>
+            <RankingLegacySummary :preset="selected" />
+            <p class="ranking-section__help">{{ COPY.sections.legacyHelp }}</p>
           </div>
         </div>
+        <template v-if="showPreview && draft">
+          <v-divider vertical />
+          <aside class="ranking-dialog__preview">
+            <RankingPreview />
+          </aside>
+        </template>
+      </div>
+      <div class="visually-hidden" aria-live="polite" data-testid="ranking-announcement">
+        {{ editor.announcement.value }}
       </div>
       <v-divider />
       <v-card-actions class="ranking-dialog__actions">
@@ -296,7 +326,27 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
             />
           </v-list>
         </v-menu>
+        <span
+          v-if="savedName && !dirty"
+          class="ranking-dialog__saved text-caption"
+          role="status"
+          data-testid="ranking-saved"
+        >
+          {{ COPY.saved(savedName) }}
+        </span>
         <v-spacer />
+        <v-btn
+          v-if="draft"
+          variant="text"
+          size="small"
+          :prepend-icon="mdiEyeOutline"
+          :active="showPreview"
+          :aria-pressed="showPreview"
+          data-testid="ranking-preview-toggle"
+          @click="showPreview = !showPreview"
+        >
+          {{ COPY.actions.togglePreview }}
+        </v-btn>
         <v-btn variant="text" @click="close">{{ COPY.actions.cancel }}</v-btn>
         <v-btn
           v-if="!readOnly && draft"
@@ -351,6 +401,30 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
 .legacy {
   padding: 10px 0;
   max-width: 640px;
+}
+.legacy__description {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+}
+.ranking-dialog__preview {
+  flex: 0 0 320px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+/* Dense fields: the editor shows many rows; text stays legible at 13px. */
+.ranking-dialog__editor :deep(.v-input--density-compact) {
+  --v-input-control-height: 32px;
+  --v-input-padding-top: 4px;
+}
+.ranking-dialog__editor :deep(.v-input--density-compact .v-field) {
+  --v-field-padding-bottom: 4px;
+}
+.ranking-dialog__editor :deep(.v-field__input) {
+  font-size: 0.8125rem;
+}
+.ranking-dialog__saved {
+  color: rgb(var(--v-theme-success));
 }
 .ranking-dialog__actions {
   padding-inline: 16px;

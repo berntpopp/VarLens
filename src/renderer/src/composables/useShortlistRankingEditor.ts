@@ -117,6 +117,8 @@ export function useShortlistRankingEditor() {
   const readOnly = computed(() => selected.value?.isBuiltIn === true || !canWrite.value)
   const dirty = computed(() => JSON.stringify(draft.value) !== baseline.value)
   const ruleset = computed(() => draft.value?.config.rankConfig.ruleset ?? null)
+  /** Polite screen-reader message after a keyboard reorder. */
+  const announcement = ref('')
 
   function setDraft(next: RankingDraft | null, saved: boolean): void {
     draft.value = next
@@ -276,6 +278,7 @@ export function useShortlistRankingEditor() {
     if (!canMoveRule(gi, ri, delta)) return
     const rules = ruleset.value!.groups[gi].rules
     ;[rules[ri], rules[ri + delta]] = [rules[ri + delta], rules[ri]]
+    announcement.value = COPY.announceMoved(rules[ri + delta].label, ri + delta + 1)
   }
 
   // ─── Validation ──────────────────────────────────────────────────────────
@@ -372,6 +375,7 @@ export function useShortlistRankingEditor() {
     ruleset,
     readOnly,
     dirty,
+    announcement,
     problems,
     problemsAt,
     messagesAt,

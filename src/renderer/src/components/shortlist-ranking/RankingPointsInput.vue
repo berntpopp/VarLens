@@ -33,21 +33,32 @@ const value = computed({
     :step="step"
     :aria-label="label"
     :error-messages="errorMessages"
+    :prefix="modelValue > 0 ? '+' : undefined"
     hide-details="auto"
     class="points-input"
+    :class="{ 'points-input--negative': modelValue < 0 }"
   />
 </template>
 
 <style scoped>
 .points-text {
   display: block;
-  padding: 6px 4px;
-  text-align: right;
+  padding: 6px 13px;
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;
 }
+.points-input--negative :deep(input) {
+  color: rgb(var(--v-theme-error));
+}
 .points-input :deep(input) {
-  text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* The sign reads as part of the number: "+3", not "+ 3". */
+.points-input.v-text-field--prefixed :deep(.v-field .v-field__input) {
+  --v-field-padding-start: 1px;
+}
+.points-input :deep(.v-text-field__prefix) {
+  padding-inline-start: 12px;
+  color: inherit;
 }
 </style>

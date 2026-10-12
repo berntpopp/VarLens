@@ -87,6 +87,7 @@ const otherMessages = computed(() =>
           multiple
           column
           :disabled="readOnly"
+          role="group"
           aria-labelledby="ranking-impact-label"
         >
           <v-chip
@@ -111,6 +112,7 @@ const otherMessages = computed(() =>
           multiple
           column
           :disabled="readOnly"
+          role="group"
           aria-labelledby="ranking-types-label"
         >
           <v-chip
