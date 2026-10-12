@@ -13,6 +13,10 @@ export interface Neighbourhood {
   window: TrackWindow
   /** The domain / exon that contains the anchor */
   feature: TrackFeature | null
+  /** A CNV/SV: the features its interval overlaps, left to right (null for a point) */
+  spans: TrackFeature[] | null
+  /** A CNV/SV that reaches past the gene / protein */
+  beyondExtent: boolean
   /** Outside every feature: the nearest one on each side */
   before: TrackFeature | null
   after: TrackFeature | null
@@ -27,13 +31,24 @@ export interface Neighbourhood {
 
 export function neighbourhoodSummary(input: {
   anchor: number
+  /** A CNV/SV interval's end */
+  anchorEnd?: number
   half: number
   features: TrackFeature[]
   markers: TrackMarker[]
+  extent?: TrackWindow
 }): Neighbourhood {
   const { anchor, half, features } = input
-  const window = { start: anchor - half, end: anchor + half }
-  const feature = features.find((f) => f.start <= anchor && anchor <= f.end) ?? null
+  const end = input.anchorEnd ?? anchor
+  const window = { start: anchor - half, end: end + half }
+  const spans =
+    input.anchorEnd === undefined
+      ? null
+      : features.filter((f) => f.start <= end && f.end >= anchor).sort((a, b) => a.start - b.start)
+  const beyondExtent =
+    input.extent !== undefined && (anchor < input.extent.start || end > input.extent.end)
+  const feature =
+    spans === null ? (features.find((f) => f.start <= anchor && anchor <= f.end) ?? null) : null
   const before = feature
     ? null
     : last(
@@ -68,13 +83,17 @@ export function neighbourhoodSummary(input: {
     keys: inWindow.filter((m) => m.track === 'clinvar' && m.clinvarClass === cls).map((m) => m.key)
   })).filter((g) => g.keys.length > 0)
   const cohortMarkers = inWindow.filter((m) => m.track === 'cohort')
+  // Inside a CNV/SV interval the distance is 0; outside it, to its nearer edge.
+  const distanceTo = (p: number): number => (p < anchor ? p - anchor : p > end ? p - end : 0)
   const nearby = inWindow
-    .map((marker) => ({ marker, distance: marker.position - anchor }))
+    .map((marker) => ({ marker, distance: distanceTo(marker.position) }))
     .sort((a, b) => Math.abs(a.distance) - Math.abs(b.distance) || a.distance - b.distance)
 
   return {
     window,
     feature,
+    spans,
+    beyondExtent,
     before,
     after,
     boundaryDistance,
@@ -118,10 +137,21 @@ export function locationLine(
   n: Neighbourhood,
   unit: string,
   betweenLabel: string,
-  noFeaturesLabel = betweenLabel
+  noFeaturesLabel = betweenLabel,
+  outsideLabel = ''
 ): string {
-  if (n.feature) return `In ${n.feature.name} · ${n.boundaryDistance} ${unit} to its edge`
   const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+  if (n.spans !== null) {
+    const [first, last] = [n.spans[0], n.spans[n.spans.length - 1]]
+    const where =
+      n.spans.length === 0
+        ? capital(betweenLabel)
+        : n.spans.length === 1
+          ? `Overlaps ${first.name}`
+          : `Spans ${first.name} – ${last.name} (${n.spans.length})`
+    return n.beyondExtent && outsideLabel !== '' ? `${where} · reaches ${outsideLabel}` : where
+  }
+  if (n.feature) return `In ${n.feature.name} · ${n.boundaryDistance} ${unit} to its edge`
   if (n.before === null && n.after === null) return capital(noFeaturesLabel)
   const lead = capital(betweenLabel)
   return n.nearestName === null

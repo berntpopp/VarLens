@@ -112,10 +112,13 @@ export function drawGeneView(ctx: TrackDrawContext, model: GeneViewModel): void 
 
   lollipopTrack(g, ctx, ['variant', 'cohort'], baseY, baseY - TOP_PX)
   if (model.hasClinvar) diamondTrack(g, ctx, clinvarY)
+  const starTop = Math.max(TOP_PX, exonY - 190)
   if (a !== null && isInterval(a)) {
-    const anchor = ctx.markers.find((m) => m.isAnchor === true)
+    // The CNV/SV keeps its band and label even when another variant is the anchor.
+    const band =
+      ctx.markers.find((m) => m.end !== undefined) ?? ctx.markers.find((m) => m.isAnchor === true)
     const bx = x(a.pos)
-    const el = g.append('g').classed('is-anchor', true)
+    const el = g.append('g').classed('is-anchor', band?.isAnchor === true)
     el.append('rect')
       .attr('x', bx)
       .attr('width', Math.max(2, x(a.end) - bx))
@@ -132,10 +135,11 @@ export function drawGeneView(ctx: TrackDrawContext, model: GeneViewModel): void 
       .attr('fill', TRACK_STYLE.STRONG)
       .attr('font-size', '12px')
       .attr('font-weight', '700')
-      .text(anchor?.label ?? a.label)
-    if (anchor !== undefined) ctx.bindMarker(el, anchor)
+      .text(band?.label ?? a.label)
+    if (band !== undefined) ctx.bindMarker(el, band)
+    if (band?.isAnchor !== true) anchorMarker(g, ctx, exonY - EXON_PX / 2, starTop)
   } else {
-    anchorMarker(g, ctx, exonY - EXON_PX / 2, Math.max(TOP_PX, exonY - 190))
+    anchorMarker(g, ctx, exonY - EXON_PX / 2, starTop)
   }
 
   gutterLabel(ctx, (TOP_PX + baseY) / 2, model.cohort ? TRACK_LABELS.cohort : TRACK_LABELS.variant)

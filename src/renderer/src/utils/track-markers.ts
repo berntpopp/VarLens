@@ -135,7 +135,8 @@ export function geneTrackData(input: {
       color: a.color,
       isAnchor: true,
       chr: a.chr,
-      pos: a.pos
+      pos: a.pos,
+      ...(isInterval(a) ? { end: a.end } : {})
     })
   }
   // The highlighted row is the anchor itself.

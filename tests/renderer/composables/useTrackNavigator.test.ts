@@ -105,6 +105,12 @@ describe('useTrackNavigator', () => {
     expect(nav.anchor.value?.key).toBe('anchor')
   })
 
+  it('a CNV/SV interval is framed from half before its start to half after its end', async () => {
+    const nav = setup([m('del', 100, { isAnchor: true, end: 300 })])
+    await nextTick()
+    expect(nav.window.value).toEqual({ start: 100 - half, end: 300 + half })
+  })
+
   it('a wider neighbourhood re-frames the variant of interest', async () => {
     const nav = setup()
     await nextTick()

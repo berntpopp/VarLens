@@ -93,6 +93,83 @@ describe('neighbourhoodSummary', () => {
   })
 })
 
+describe('a CNV/SV interval as the variant of interest', () => {
+  const exons: TrackFeature[] = [
+    { key: 'e1', name: 'Exon 1', start: 900, end: 1100 },
+    { key: 'e2', name: 'Exon 2', start: 3000, end: 3200 },
+    { key: 'e3', name: 'Exon 3', start: 8000, end: 8100 }
+  ]
+  const markers: TrackMarker[] = [
+    m('del', 1000, { track: 'variant', isAnchor: true, end: 5000 }),
+    m('inside', 2000, { clinvarClass: 'pathogenic' }),
+    m('after', 5300, { clinvarClass: 'benign' }),
+    m('far', 7000, { clinvarClass: 'benign' })
+  ]
+  const s = neighbourhoodSummary({
+    anchor: 1000,
+    anchorEnd: 5000,
+    half: 500,
+    features: exons,
+    markers
+  })
+
+  it('the window runs from half before its start to half after its end', () => {
+    expect(s.window).toEqual({ start: 500, end: 5500 })
+  })
+
+  it('counts the variants inside the interval (distance 0) and near it', () => {
+    expect(s.nearby.map((n) => [n.marker.key, n.distance])).toEqual([
+      ['inside', 0],
+      ['after', 300]
+    ])
+    expect(s.clinvar.map((g) => [g.cls, g.keys])).toEqual([
+      ['pathogenic', ['inside']],
+      ['benign', ['after']]
+    ])
+  })
+
+  it('says which features it spans or overlaps', () => {
+    expect(s.spans?.map((f) => f.key)).toEqual(['e1', 'e2'])
+    expect(locationLine(s, 'bp', 'in an intron', 'no exon data', 'outside the gene')).toBe(
+      'Spans Exon 1 – Exon 2 (2)'
+    )
+    const one = neighbourhoodSummary({
+      anchor: 3100,
+      anchorEnd: 3150,
+      half: 10,
+      features: exons,
+      markers: []
+    })
+    expect(locationLine(one, 'bp', 'in an intron', 'no exon data', 'outside the gene')).toBe(
+      'Overlaps Exon 2'
+    )
+    const none = neighbourhoodSummary({
+      anchor: 1500,
+      anchorEnd: 2500,
+      half: 10,
+      features: exons,
+      markers: []
+    })
+    expect(locationLine(none, 'bp', 'in an intron', 'no exon data', 'outside the gene')).toBe(
+      'In an intron'
+    )
+  })
+
+  it('says when it reaches past the gene', () => {
+    const big = neighbourhoodSummary({
+      anchor: 0,
+      anchorEnd: 20000,
+      half: 500,
+      features: exons,
+      markers: [],
+      extent: { start: 800, end: 9000 }
+    })
+    expect(locationLine(big, 'bp', 'in an intron', 'no exon data', 'outside the gene')).toBe(
+      'Spans Exon 1 – Exon 3 (3) · reaches outside the gene'
+    )
+  })
+})
+
 describe('summary lines', () => {
   const s = neighbourhoodSummary({ anchor: 180, half: 25, features: domains, markers })
 

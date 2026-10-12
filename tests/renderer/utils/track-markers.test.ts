@@ -141,7 +141,7 @@ describe('geneTrackData', () => {
       }
     })
     expect(data.markers).toEqual([
-      expect.objectContaining({ position: 1000, isAnchor: true, label: 'DEL' })
+      expect.objectContaining({ position: 1000, end: 6000, isAnchor: true, label: 'DEL' })
     ])
   })
 })

@@ -102,6 +102,13 @@ describe('binMarkers', () => {
     expect(Math.max(...bins.map((b) => b.position))).toBeLessThanOrEqual(1000)
   })
 
+  it('keeps an interval anchor that starts left of the window but reaches into it', () => {
+    const del = marker(100, { key: 'del', isAnchor: true, end: 600 })
+    expect(binMarkers([del], { start: 400, end: 500 }, 600, { maxUnbinned: 5, binPx: 6 })).toEqual([
+      del
+    ])
+  })
+
   it('never bins the variant of interest and drops markers outside the window', () => {
     const anchor = marker(2, { isAnchor: true })
     const markers = [marker(1), anchor, marker(3), marker(1500)]

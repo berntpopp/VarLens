@@ -167,6 +167,33 @@ describe('gene view', () => {
     expect(texts(ctx)).toContain('DEL')
   })
 
+  it('re-anchored on another variant: the band keeps its label and the new anchor gets the star', () => {
+    const del = {
+      chr: '22',
+      pos: 29_510_000,
+      end: 29_520_000,
+      ref: 'N',
+      alt: '<DEL>',
+      label: 'DEL',
+      color: '#D32F2F'
+    }
+    const ctx = context({ start: gene.start, end: gene.end }, [
+      marker({ key: 'band', position: del.pos, end: del.end, label: 'DEL' }),
+      marker({
+        key: 'cv',
+        position: 29_515_000,
+        track: 'variant',
+        label: 'p.Arg300Gln',
+        isAnchor: true
+      })
+    ])
+    drawGeneView(ctx, model(del))
+    const svg = ctx.root.node()!
+    expect(svg.querySelector('[data-key="band"] rect')).not.toBeNull()
+    expect(svg.querySelector('[data-key="band"] text')!.textContent).toBe('DEL')
+    expect(svg.querySelector('[data-key="cv"].is-anchor path')).not.toBeNull()
+  })
+
   it('a point variant is the star at POS', () => {
     const snv = {
       chr: '22',

@@ -26,6 +26,8 @@ export interface TrackMarker {
   color: string
   /** The variant of interest: own shape and label, always drawn, never binned */
   isAnchor?: boolean
+  /** A CNV/SV interval's end (its start is `position`) */
+  end?: number
   /** Set on a bin: the keys of the markers it stands for */
   binnedKeys?: string[]
   aaChange?: string | null
@@ -125,7 +127,7 @@ export function binMarkers(
   plotWidthPx: number,
   opts: { maxUnbinned: number; binPx: number }
 ): TrackMarker[] {
-  const inView = markers.filter((m) => m.position >= w.start && m.position <= w.end)
+  const inView = markers.filter((m) => m.position <= w.end && (m.end ?? m.position) >= w.start)
   if (inView.length <= opts.maxUnbinned || plotWidthPx <= 0) return inView
   const binWidth = (span(w) * opts.binPx) / plotWidthPx
   const bins = new Map<string, TrackMarker>()

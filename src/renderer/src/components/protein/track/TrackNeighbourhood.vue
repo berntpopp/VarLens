@@ -121,7 +121,15 @@ const props = defineProps<{
 const n = computed(() => props.nav.neighbourhood.value)
 const changed = computed(() => props.nav.anchor.value?.key !== props.nav.originalAnchor.value?.key)
 const location = computed(() =>
-  n.value ? locationLine(n.value, props.unit, props.betweenLabel, props.noFeaturesLabel) : ''
+  n.value
+    ? locationLine(
+        n.value,
+        props.unit,
+        props.betweenLabel,
+        props.noFeaturesLabel,
+        PLOT_COPY.outside
+      )
+    : ''
 )
 const line = computed(() =>
   n.value ? neighbourhoodLine(n.value, props.nav.half.value, props.unit) : ''

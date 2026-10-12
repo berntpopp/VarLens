@@ -56,6 +56,8 @@ export function useTrackNavigator(opts: {
       ? null
       : neighbourhoodSummary({
           anchor: anchor.value.position,
+          anchorEnd: anchor.value.end,
+          extent: extent.value,
           half: half.value,
           features: features.value,
           markers: displayMarkers.value
@@ -67,8 +69,12 @@ export function useTrackNavigator(opts: {
   }
   const reset = (): void => setWindow(extent.value)
   function frameAnchor(): void {
-    if (anchor.value === null) reset()
-    else setWindow(windowAround(anchor.value.position, half.value, extent.value, minSpan))
+    const a = anchor.value
+    if (a === null) reset()
+    else if (a.end !== undefined) {
+      // A CNV/SV: the whole interval with half a window either side.
+      setWindow({ start: a.position - half.value, end: a.end + half.value })
+    } else setWindow(windowAround(a.position, half.value, extent.value, minSpan))
   }
   // A new gene / protein or a new variant of interest: show its neighbourhood.
   watch(
