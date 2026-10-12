@@ -233,15 +233,11 @@ export function buildPostgresVariantQueryParts(
   } = caseCarrierFrequencySql((table) => `${schemaName}."${table}"`, caseIdParam, carrierTotals)
 
   if (filter.max_internal_af !== undefined && filter.max_internal_af > 0) {
-    addWhere(
-      `(${internalAfExpression} IS NULL OR ${internalAfExpression} <= ${addParam(filter.max_internal_af)})`
-    )
+    addWhere(`COALESCE(${internalAfExpression}, 0) <= ${addParam(filter.max_internal_af)}`)
   }
   if (filter.carrier_count_max !== undefined && filter.carrier_count_max >= 1) {
     // ::bigint: API callers may send any positive safe integer, beyond int4.
-    addWhere(
-      `(${carriers} IS NULL OR ${carriers} <= ${addParam(filter.carrier_count_max)}::bigint)`
-    )
+    addWhere(`COALESCE(${carriers}, 0) <= ${addParam(filter.carrier_count_max)}::bigint`)
   }
 
   const searchQuery = (filter.search_query ?? '').trim()

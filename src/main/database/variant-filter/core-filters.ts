@@ -56,7 +56,8 @@ export function applyInternalAfFilter(
   const max = filter.max_internal_af
   return query.$if(max !== undefined && max > 0, (qb) =>
     qb.where(
-      sql<boolean>`(${sql.raw(CASE_CARRIER_FREQUENCY_SQL)} IS NULL OR ${sql.raw(CASE_CARRIER_FREQUENCY_SQL)} <= ${max!})`
+      // COALESCE keeps a row without a frequency (max > 0) and probes once.
+      sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_FREQUENCY_SQL)}, 0) <= ${max!}`
     )
   )
 }
@@ -150,8 +151,6 @@ export function applyMaxCarriersFilter(
 ): VariantQueryBuilder {
   const max = filter.carrier_count_max
   return query.$if(max !== undefined && max >= 1, (qb) =>
-    qb.where(
-      sql<boolean>`(${sql.raw(CASE_CARRIER_COUNT_SQL)} IS NULL OR ${sql.raw(CASE_CARRIER_COUNT_SQL)} <= ${max!})`
-    )
+    qb.where(sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_COUNT_SQL)}, 0) <= ${max!}`)
   )
 }

@@ -7,6 +7,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DatabaseService } from '../../../src/main/database'
 import { makeVariant as baseVariant } from '../../utils/make-variant'
+import { VariantFilterBuilder } from '../../../src/main/database/VariantFilterBuilder'
+import { buildPostgresVariantQueryParts } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
 
 const SNV = { chr: '1', pos: 100, ref: 'A', alt: 'G', variant_type: 'snv' }
 const SV = { chr: '1', pos: 5000, ref: 'N', alt: '<DEL>', variant_type: 'sv', end_pos: 9000 }
@@ -90,5 +92,27 @@ describe('cohort carrier frequency — case and cohort agree', () => {
     const snv = byType(cohortRows({ genome_build: 'GRCh38' }), 'snv')
     expect(snv?.carrier_count).toBe(3)
     expect(byType(caseRows(json), 'snv')?.internal_af).toBeCloseTo(1)
+  })
+})
+
+describe('carrier-frequency filters evaluate the summary probe once per row', () => {
+  const probes = (sql: string): number => sql.split('SELECT s.carrier_count').length - 1
+
+  it('SQLite: projection + one probe per filter', () => {
+    const service = new DatabaseService(':memory:')
+    try {
+      const builder = new VariantFilterBuilder(service.database, service.kysely)
+      expect(probes(builder.build({ case_id: 1, max_internal_af: 0.05 }).compile().sql)).toBe(2)
+      expect(probes(builder.build({ case_id: 1, carrier_count_max: 2 }).compile().sql)).toBe(2)
+    } finally {
+      service.close()
+    }
+  })
+
+  it('PostgreSQL: one probe per filter', () => {
+    const af = buildPostgresVariantQueryParts({ case_id: 1, max_internal_af: 0.05 }, '"s"')
+    expect(probes(af.fromAndWhereSql)).toBe(1)
+    const cap = buildPostgresVariantQueryParts({ case_id: 1, carrier_count_max: 2 }, '"s"')
+    expect(probes(cap.fromAndWhereSql)).toBe(1)
   })
 })

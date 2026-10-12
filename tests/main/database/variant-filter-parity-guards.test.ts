@@ -467,7 +467,7 @@ describe('PostgreSQL case view carrier cap (#455, #555, no PostgreSQL required)'
       '"public"'
     )
     const carriers = caseCarrierCountSql('"public"."cohort_variant_summary"', 'v')
-    expect(fromAndWhereSql).toContain(`(${carriers} IS NULL OR ${carriers} <= $2::bigint)`)
+    expect(fromAndWhereSql).toContain(`COALESCE(${carriers}, 0) <= $2::bigint`)
     expect(fromAndWhereSql).not.toContain('variant_frequency')
     expect(params).toEqual([1, 3])
   })
