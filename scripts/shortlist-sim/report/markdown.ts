@@ -188,7 +188,9 @@ export function pointsSection(m: RunManifest): string {
       : b.supported
         ? signed(b.points, 1)
         : '0 (unsupported)',
-    b.lo !== undefined && b.hi !== undefined ? `[${signed(b.lo, 2)}, ${signed(b.hi, 2)}]` : '–'
+    Number.isFinite(b.lo) && Number.isFinite(b.hi)
+      ? `[${signed(b.lo!, 2)}, ${signed(b.hi!, 2)}]`
+      : '–'
   ])
   const disabled = m.concordance.disabledGroups
   return [
