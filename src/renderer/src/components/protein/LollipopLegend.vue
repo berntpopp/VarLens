@@ -200,11 +200,8 @@ import type {
   ClinVarSignificance,
   ProteinDomain
 } from '../../../../shared/types/protein'
-import {
-  CONSEQUENCE_COLORS,
-  CLINVAR_COLORS,
-  getDomainColor
-} from '../../../../shared/utils/protein-utils'
+import { CONSEQUENCE_COLORS } from '../../../../shared/config/domain.config'
+import { CLINVAR_COLORS, getDomainColor } from '../../../../shared/utils/protein-utils'
 
 interface Props {
   activeCategories: Set<ConsequenceCategory>
