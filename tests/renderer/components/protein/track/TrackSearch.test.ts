@@ -89,4 +89,16 @@ describe('TrackSearch', () => {
     expect(status().text()).toBe('1 of 2')
     expect(wrapper.findAll('[role="status"]')).toHaveLength(1)
   })
+
+  it('only the input is the combobox, with aria-expanded and aria-controls (axe)', async () => {
+    const { wrapper, input } = await mountSearch()
+    const comboboxes = wrapper.findAll('[role="combobox"]')
+    expect(comboboxes).toHaveLength(1)
+    expect(comboboxes[0].element).toBe(input.element)
+    expect(input.attributes('aria-expanded')).toBe('false')
+    expect(input.attributes('aria-controls')).toMatch(/^track-search-/)
+    await input.setValue('coiled')
+    expect(input.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.findAll('[role="combobox"]')).toHaveLength(1)
+  })
 })
