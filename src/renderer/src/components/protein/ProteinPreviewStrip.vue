@@ -146,11 +146,16 @@ const summary = computed(() =>
   border-radius: 4px;
 }
 
+.strip-figure {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
 .strip-plot {
   display: block;
   width: 100%;
   height: 100%;
   padding: 2px 8px;
+  border: 0;
   cursor: pointer;
   border-radius: 4px;
 }
