@@ -163,13 +163,47 @@ describe('computeAutoHiddenColumns', () => {
     expect([...after].sort()).toEqual([...before].filter((key) => key !== 'moi').sort())
   })
 
-  it('maps cohort-only keys onto the same priorities', () => {
-    const cohortKeys = ['data-table-expand', ...caseKeys, 'carrier_count', 'het_count']
-    const hidden = computeAutoHiddenColumns(cohortKeys, 14, oneRem)
-    // 2 structural + 12 data columns: carriers (priority 12) fits right after gt_num
-    expect(hidden.has('carrier_count')).toBe(false)
-    expect(hidden.has('aa_change')).toBe(true)
-    expect(hidden.has('het_count')).toBe(true)
+  const cohortKeys = [
+    'data-table-expand',
+    'annotations',
+    'chr',
+    'pos',
+    'ref',
+    'alt',
+    'gene_symbol',
+    'consequence',
+    'clinvar',
+    'gnomad_af',
+    'cadd_phred',
+    'carrier_count',
+    'cohort_frequency',
+    'het_count',
+    'func',
+    'transcript',
+    'cdna',
+    'aa_change'
+  ]
+
+  // Each row: one more data column of room after the 7-column minimum
+  it.each([
+    [1, ['carrier_count'], ['cohort_frequency', 'gnomad_af']],
+    [2, ['carrier_count', 'cohort_frequency'], ['gnomad_af']],
+    [3, ['carrier_count', 'cohort_frequency', 'gnomad_af'], ['cadd_phred']]
+  ])(
+    'cohort: with room for %i more column(s) Carriers and frequency come before gnomAD AF',
+    (extra, shown, hidden) => {
+      // 2 structural + 7 minimum + `extra`, all 1 rem wide
+      const result = computeAutoHiddenColumns(cohortKeys, 9 + extra, oneRem)
+      for (const key of shown) expect(result.has(key)).toBe(false)
+      for (const key of hidden) expect(result.has(key)).toBe(true)
+    }
+  )
+
+  it('case view order is unchanged: gnomAD AF and CADD follow the minimum', () => {
+    const hidden = computeAutoHiddenColumns(caseKeys, 10, oneRem)
+    expect(hidden.has('gnomad_af')).toBe(false)
+    expect(hidden.has('cadd')).toBe(false)
+    expect(hidden.has('func')).toBe(true)
   })
 })
 
