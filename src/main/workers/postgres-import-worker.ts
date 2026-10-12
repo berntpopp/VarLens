@@ -553,8 +553,9 @@ export async function runImport(
         let totalSkipped = 0
         let lastSuccessfulFileName = ''
         const parseErrors: string[] = []
-        // Merged over the files that imported; written when the case is published.
-        let fieldDictionary: Record<string, string> | null = null
+        // One resolver for every file: one key names one source field across the case.
+        // ponytail: a file that fails mid-way may leave its keys in the dictionary.
+        const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
         const genomeBuild = start.vcfOptions?.genomeBuild ?? 'GRCh38'
@@ -621,7 +622,6 @@ export async function runImport(
               fileCaseId = caseId
             }
 
-            const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
             const stream = await deps.createVcfMappedStream(fileSpec.filePath, {
               selectedSample,
               genomeBuild,
@@ -693,10 +693,6 @@ export async function runImport(
             caseId = fileCaseId
             totalVariantCount += fileVariantCount
             lastSuccessfulFileName = fileName
-            const fileDictionary = fields.dictionary()
-            if (fileDictionary !== null) {
-              fieldDictionary = { ...(fieldDictionary ?? {}), ...fileDictionary }
-            }
             fileResults.push({
               filePath: fileSpec.filePath,
               variantType: fileSpec.variantType,
@@ -788,7 +784,7 @@ export async function runImport(
               lastSuccessfulFileName,
               'vcf',
               fence,
-              fieldDictionary
+              fields.dictionary()
             )
             throwIfCancelled()
             publicationCommitAttempted = true

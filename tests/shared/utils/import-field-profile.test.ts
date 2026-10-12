@@ -98,6 +98,30 @@ describe('FieldProfileResolver', () => {
   })
 })
 
+describe('FieldProfileResolver across the files of one case', () => {
+  it('adopts the keys an earlier file assigned', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    resolver.adopt({ AF_2: 'CSQ:AF', REVEL: 'CSQ:REVEL_score', BAD: 'nonsense' })
+    resolver.seed('CSQ', ['AF', 'REVEL_score'])
+    expect(resolver.resolve('CSQ', 'AF').key).toBe('AF_2')
+    expect(resolver.resolve('CSQ', 'REVEL_score').key).toBe('REVEL')
+    // A new INFO field may not take a key the case already uses.
+    expect(resolver.resolve('INFO', 'AF_2').key).toBe('AF_2_2')
+  })
+})
+
+describe('VCF INFO evidence aliases', () => {
+  it('keep their INFO key and also feed the canonical key', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    expect(
+      info(resolver, (r) => r.set('INFO', 'CLNREVSTAT', 'criteria_provided,_single_submitter'))
+    ).toEqual({
+      CLNREVSTAT: 'criteria_provided,_single_submitter',
+      CLINVAR_REVSTAT: 'criteria provided, single submitter'
+    })
+  })
+})
+
 describe('FieldRecord', () => {
   it('stores unknown fields as text and the canonical value of aliases', () => {
     const resolver = new FieldProfileResolver(ALL)

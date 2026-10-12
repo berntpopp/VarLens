@@ -93,6 +93,11 @@ export async function importAdditionalFileToCase(
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
   const fields = new FieldProfileResolver(vcfOptions?.fieldProfile)
+  // The keys the case's earlier files assigned keep their meaning in this one.
+  const stored = appendDb
+    .prepare('SELECT field_dictionary FROM case_data_info WHERE case_id = ?')
+    .get(caseId) as { field_dictionary: string | null } | undefined
+  if (stored?.field_dictionary != null) fields.adopt(JSON.parse(stored.field_dictionary))
 
   let totalInserted = 0
   let totalSkipped = 0

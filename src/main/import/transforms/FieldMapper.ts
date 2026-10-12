@@ -377,8 +377,11 @@ export function columnarCellText(
     selected = value[selectedTranscript] ?? value[0]
   }
   const label = (code: unknown): unknown =>
-    dictionary !== null && code !== null && typeof code !== 'object'
-      ? (dictionary[String(code)] ?? code)
+    dictionary !== null &&
+    code !== null &&
+    typeof code !== 'object' &&
+    Object.prototype.hasOwnProperty.call(dictionary, String(code))
+      ? dictionary[String(code)]
       : code
   return jsonValueText(Array.isArray(selected) ? selected.map(label) : label(selected))
 }

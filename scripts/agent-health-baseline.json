@@ -73,7 +73,7 @@
     },
     {
       "path": "src/renderer/src/components/import/ImportWizard.vue",
-      "lines": 860,
+      "lines": 861,
       "threshold": 600,
       "category": "source",
       "reason": "existing large renderer component; must not grow before component split. Baseline synced after already-merged web changes; this audit-contract branch does not add new ImportWizard responsibility."

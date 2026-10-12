@@ -87,8 +87,14 @@ export async function getJsonFieldPreview(
   if (formatInfo.format === 'columnar') {
     const wrapped = formatInfo.wrapped !== false
     const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
-    const { headerItems, columnIndices } = await parseHeader(filePath, headerPath)
-    readRow = columnarRowReader(collector, headerItems, columnIndices)
+    let header: Awaited<ReturnType<typeof parseHeader>>
+    try {
+      header = await parseHeader(filePath, headerPath)
+    } catch (error) {
+      stream.destroy() // the data stream is already open
+      throw error
+    }
+    readRow = columnarRowReader(collector, header.headerItems, header.columnIndices)
   } else {
     readRow = (value) => {
       if (value === null || typeof value !== 'object') return

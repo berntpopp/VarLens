@@ -86,13 +86,29 @@ function sourceLabel(origin: FieldOrigin, name: string): string {
   return `${origin}:${name}`
 }
 
+const SOURCE_LABEL_RE = /^(INFO|CSQ|ANN|JSON):(.+)$/
+const CANONICAL_KEYS = new Set(CANONICAL_EVIDENCE_FIELDS.map((f) => f.key))
+
+/** A resolved field with what the hot path needs cached. */
+interface Resolved extends ResolvedField {
+  label: string
+  /** Already entered in the dictionary. */
+  noted: boolean
+}
+
 /**
  * Resolves source fields against one profile for one imported file and
  * collects the per-case field dictionary (stored key → original source).
  */
 export class FieldProfileResolver {
-  private readonly resolved = new Map<string, ResolvedField>()
-  private readonly taken = new Set<string>(CANONICAL_EVIDENCE_FIELDS.map((f) => f.key))
+  // Per origin, so the per-record lookup builds no string.
+  private readonly resolved: Record<FieldOrigin, Map<string, Resolved>> = {
+    INFO: new Map(),
+    CSQ: new Map(),
+    ANN: new Map(),
+    JSON: new Map()
+  }
+  private readonly taken = new Set<string>(CANONICAL_KEYS)
   private readonly used = new Map<string, Set<string>>()
 
   constructor(readonly profile: ImportFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE) {}
@@ -102,23 +118,53 @@ export class FieldProfileResolver {
     for (const name of names) this.resolve(origin, name)
   }
 
-  resolve(origin: FieldOrigin, name: string): ResolvedField {
-    const id = fieldProfileKey(origin, name)
-    const cached = this.resolved.get(id)
-    if (cached !== undefined) return cached
-    const field = this.decide(origin, name)
-    this.resolved.set(id, field)
+  /**
+   * Keep the keys an earlier file of the same case assigned (its stored field
+   * dictionary), so one key means one source field across the whole case.
+   */
+  adopt(dictionary: Record<string, string> | null): void {
+    for (const [key, source] of Object.entries(dictionary ?? {})) {
+      const match = SOURCE_LABEL_RE.exec(source)
+      if (match === null || CANONICAL_KEYS.has(key) || this.taken.has(key)) continue
+      const origin = match[1] as FieldOrigin
+      const name = match[2]
+      if (this.resolved[origin].has(name)) continue
+      this.taken.add(key)
+      const keep = this.isKept(origin, name)
+      const canonical = keep ? canonicalFieldFor(name) : null
+      this.resolved[origin].set(name, {
+        key: keep ? key : null,
+        canonical,
+        label: source,
+        noted: false
+      })
+    }
+  }
+
+  resolve(origin: FieldOrigin, name: string): Resolved {
+    const byName = this.resolved[origin]
+    let field = byName.get(name)
+    if (field === undefined) {
+      field = { ...this.decide(origin, name), label: sourceLabel(origin, name), noted: false }
+      byName.set(name, field)
+    }
     return field
+  }
+
+  isKept(origin: FieldOrigin, name: string): boolean {
+    return (
+      this.profile.fields[fieldProfileKey(origin, name)]?.keep ?? defaultKeep(this.profile, name)
+    )
   }
 
   private decide(origin: FieldOrigin, name: string): ResolvedField {
     const choice = this.profile.fields[fieldProfileKey(origin, name)]
     const canonical = canonicalFieldFor(name)
-    const keep = choice?.keep ?? defaultKeep(this.profile, name)
-    if (!keep) return { key: null, canonical: null }
+    if (!this.isKept(origin, name)) return { key: null, canonical: null }
     // A synonym is stored under its canonical key; a component of a derived
-    // maximum (the four SpliceAI scores) keeps its own key as well.
-    const synonym = canonical?.combine === 'first' ? canonical.key : undefined
+    // maximum (the four SpliceAI scores) keeps its own key as well, and so
+    // does a VCF INFO field, whose key existing filters may already use.
+    const synonym = canonical?.combine === 'first' && origin !== 'INFO' ? canonical.key : undefined
     const requested = choice?.key ?? synonym ?? name
     if (canonical !== null && requested === canonical.key) return { key: requested, canonical }
     return { key: this.uniqueKey(normaliseInfoKey(requested)), canonical }
@@ -165,33 +211,34 @@ export class FieldRecord {
 
   /** A source value; `text` is stored as given (a VCF Flag is `''`). */
   set(origin: FieldOrigin, name: string, text: string): void {
-    const { key, canonical } = this.resolver.resolve(origin, name)
+    const field = this.resolver.resolve(origin, name)
+    const { key, canonical } = field
     if (key === null) return
-    if (canonical !== null) this.addCandidate(canonical, origin, name, text)
+    if (canonical !== null) this.addCandidate(canonical, field.label, name, text)
     if (canonical !== null && key === canonical.key) return
     this.values.set(key, text)
-    this.resolver.noteUse(key, sourceLabel(origin, name))
+    if (!field.noted) {
+      field.noted = true
+      this.resolver.noteUse(key, field.label)
+    }
   }
 
   /** A value already stored in a column that also feeds a canonical key. */
   deriveOnly(origin: FieldOrigin, name: string, text: string): void {
     const canonical = canonicalFieldFor(name)
-    if (canonical === null) return
-    const { profile } = this.resolver
-    const choice = profile.fields[fieldProfileKey(origin, name)]
-    if (!(choice?.keep ?? defaultKeep(profile, name))) return
-    this.addCandidate(canonical, origin, name, text)
+    if (canonical === null || !this.resolver.isKept(origin, name)) return
+    this.addCandidate(canonical, sourceLabel(origin, name), name, text)
   }
 
   private addCandidate(
     canonical: CanonicalEvidenceField,
-    origin: FieldOrigin,
+    label: string,
     name: string,
     text: string
   ): void {
     let byAlias = this.candidates.get(canonical)
     if (byAlias === undefined) this.candidates.set(canonical, (byAlias = new Map()))
-    byAlias.set(name, { origin, text })
+    byAlias.set(name, { label, text })
   }
 
   /** The record as `info_json` text, or null when it holds nothing. */
@@ -219,7 +266,7 @@ export class FieldRecord {
 }
 
 interface Candidate {
-  origin: FieldOrigin
+  label: string
   text: string
 }
 
@@ -249,7 +296,7 @@ function deriveCanonical(
   for (const alias of field.aliases) {
     const candidate = byAlias.get(alias)
     if (candidate === undefined) continue
-    const label = sourceLabel(candidate.origin, alias)
+    const { label } = candidate
     if (field.kind === 'text') {
       const value = canonicalText(candidate.text)
       if (value !== null) return { value, sources: [label] }

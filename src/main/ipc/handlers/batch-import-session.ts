@@ -257,14 +257,9 @@ export async function runSessionBatchImport(params: {
     })
     if (signal.aborted) result.cancelled = true
   } else {
+    const options = params.fieldProfile && { fieldProfile: params.fieldProfile }
     const importOne: ImportOneFile = (file, caseName, onProgress) =>
-      startImport(
-        file.storedPath,
-        caseName,
-        params.fieldProfile && { fieldProfile: params.fieldProfile },
-        () => session,
-        { onProgress }
-      )
+      startImport(file.storedPath, caseName, options, () => session, { onProgress })
     for (let index = 0; index < files.length && !result.cancelled; index++) {
       await processFile(index, importOne)
     }

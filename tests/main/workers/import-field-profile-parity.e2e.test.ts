@@ -16,7 +16,7 @@ import { join, resolve } from 'node:path'
 
 import Database from 'better-sqlite3-multiple-ciphers'
 import { Client, Pool } from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
 import { detectFormat } from '../../../src/main/import/format-detection'
@@ -28,6 +28,13 @@ import { createMapperPipeline } from '../../../src/main/workers/import-pipeline'
 import { runImportSession } from '../../../src/main/workers/import-worker'
 import { runImport, streamMappedVcfRows } from '../../../src/main/workers/postgres-import-worker'
 import type { ImportFieldProfile } from '../../../src/shared/config/import-fields.config'
+
+// The cohort summary rebuild after an append runs in a worker thread of the built bundle.
+vi.mock('../../../src/main/ipc/handlers/cohort-logic', () => ({
+  spawnRebuildWorker: vi.fn(async () => undefined)
+}))
+
+const { startMultiFileImport } = await import('../../../src/main/ipc/handlers/import-logic')
 
 const RUN_PG = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -220,7 +227,28 @@ interface Imported {
   dictionary: Record<string, string> | null
 }
 
-type Backend = (filePath: string, profile?: ImportFieldProfile) => Promise<Imported>
+/** One file: a single-file import; several: one multi-file case. */
+type Backend = (filePath: string | string[], profile?: ImportFieldProfile) => Promise<Imported>
+
+const specsOf = (paths: string[]) =>
+  paths.map((filePath) => ({
+    filePath,
+    variantType: 'auto',
+    caller: null,
+    annotationFormat: null
+  }))
+
+/** Two VCFs of one case: the first has an INFO AF, the second only VEP's CSQ AF. */
+const csqAfVcf = (withInfoAf: boolean, pos: number): string =>
+  [
+    '##fileformat=VCFv4.2',
+    ...(withInfoAf ? ['##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency">'] : []),
+    '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Feature|AF">',
+    '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+    '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1',
+    `chr3\t${pos}\t.\tA\tG\t50\tPASS\t${withInfoAf ? 'AF=0.5;' : ''}CSQ=G|missense_variant|MODERATE|G3|ENST3|0.0${pos % 10}\tGT\t0/1`,
+    ''
+  ].join('\n')
 
 const keyOf = (r: Record<string, unknown>): string => `${r.chr}:${r.pos}:${r.ref}>${r.alt}`
 const pick = (info: Record<string, string>, keys: string[]): Record<string, string> =>
@@ -277,12 +305,26 @@ describe('import field profile: every source, both backends', () => {
             cancel: () => undefined
           }) as never
       })
-      await executor.importSingleFile({
-        filePath,
-        caseName: 'parity',
-        vcfOptions: profile && { fieldProfile: profile },
-        throttleMs: 1000
-      })
+      const vcfOptions = profile && { fieldProfile: profile }
+      if (Array.isArray(filePath)) {
+        const session = { capabilities: { backend: 'sqlite' }, getImportExecutor: () => executor }
+        const result = await startMultiFileImport(
+          'parity',
+          specsOf(filePath),
+          vcfOptions,
+          () => session as never,
+          () => svc,
+          {}
+        )
+        expect(result.files.filter((f) => f.error !== undefined)).toEqual([])
+      } else {
+        await executor.importSingleFile({
+          filePath,
+          caseName: 'parity',
+          vcfOptions,
+          throttleMs: 1000
+        })
+      }
       const db = new Database(dbPath, { readonly: true })
       try {
         const rows = db.prepare('SELECT chr, pos, ref, alt, info_json FROM variants').all()
@@ -373,6 +415,18 @@ describe('import field profile: every source, both backends', () => {
       expect(first).not.toHaveProperty('LocalSig')
     }, 60_000)
 
+    it(`${label}: one key names one source field across the files of a case`, async () => {
+      const first = join(dir, 'case-snv.vcf')
+      const second = join(dir, 'case-sv.vcf')
+      writeFileSync(first, csqAfVcf(true, 101))
+      writeFileSync(second, csqAfVcf(false, 202))
+      const { rows, dictionary } = await importCase([first, second])
+      expect(rows['chr3:101:A>G']).toEqual({ AF: '0.5', AF_2: '0.01' })
+      // The second file has no INFO AF: its CSQ AF keeps the key the first file gave it.
+      expect(rows['chr3:202:A>G']).toEqual({ AF_2: '0.02' })
+      expect(dictionary).toEqual({ AF: 'INFO:AF', AF_2: 'CSQ:AF' })
+    }, 60_000)
+
     it(`${label}: the repo VEP fixture keeps INFO keys and suffixes colliding subfields`, async () => {
       const { rows } = await importCase(resolve(VCF_DIR, 'single-sample.vep.vcf.gz'))
       const all = Object.values(rows)
@@ -441,12 +495,24 @@ describe('import field profile: every source, both backends', () => {
             terminate: async () => undefined
           }) as never
       })
-      const result = await executor.importSingleFile({
-        filePath,
-        caseName: `parity-${randomBytes(6).toString('hex')}`,
-        vcfOptions: profile && { fieldProfile: profile },
-        throttleMs: 1000
-      })
+      const caseName = `parity-${randomBytes(6).toString('hex')}`
+      const vcfOptions = profile && { fieldProfile: profile }
+      const result = Array.isArray(filePath)
+        ? await startMultiFileImport(
+            caseName,
+            specsOf(filePath),
+            vcfOptions,
+            () =>
+              ({
+                capabilities: { backend: 'postgres' },
+                getImportExecutor: () => executor
+              }) as never,
+            () => {
+              throw new Error('no SQLite database on the PostgreSQL path')
+            },
+            {}
+          )
+        : await executor.importSingleFile({ filePath, caseName, vcfOptions, throttleMs: 1000 })
       const rows = await probe.query(
         `SELECT chr, pos, ref, alt, info_json FROM "${schema}"."variants" WHERE case_id = $1`,
         [result.caseId]

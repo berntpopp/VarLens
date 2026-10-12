@@ -7,6 +7,7 @@
 import { computed, ref } from 'vue'
 import { mdiMagnify, mdiSigma, mdiStarFourPointsOutline } from '@mdi/js'
 import {
+  CANONICAL_EVIDENCE_FIELDS,
   KEEP_UNKNOWN_OPTIONS,
   type ImportFieldProfile,
   type KeepUnknownPolicy
@@ -95,6 +96,8 @@ const renameError = ref('')
 const inputVersion = ref(0)
 function renameProblem(row: FieldRow, key: string): string | null {
   if (!isValidInfoKey(key)) return 'use letters, digits, _ or . and start with a letter or _'
+  const evidence = CANONICAL_EVIDENCE_FIELDS.find((field) => field.key === key)
+  if (evidence !== undefined && row.canonical !== key) return `reserved for ${evidence.label}`
   const owner = rows.value.find(
     (other) =>
       other.id !== row.id &&
@@ -237,13 +240,13 @@ function percent(rate: number | null): string {
           <span class="field-profile__prefix">info.</span>
           <v-text-field
             :key="`${item.id}:${inputVersion}`"
-            :model-value="item.rename ?? item.key ?? ''"
+            :model-value="item.key ?? ''"
             :readonly="readonly"
             :aria-label="`Stored key for ${item.name}`"
             variant="plain"
             hide-details
             class="field-profile__key"
-            @change="rename(item, ($event.target as HTMLInputElement).value)"
+            @change="rename(item, ($event.target as { value: string }).value)"
           />
           <v-tooltip
             v-if="item.canonical === item.key"
