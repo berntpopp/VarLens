@@ -189,7 +189,7 @@ let searchTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Clean up debounce timer on component unmount
 onUnmounted(() => {
-  if (searchTimeout) clearTimeout(searchTimeout)
+  if (searchTimeout !== null) clearTimeout(searchTimeout)
 })
 
 watch(
@@ -199,7 +199,7 @@ watch(
     selectedPanel.value = null
     errorMessage.value = ''
 
-    if (searchTimeout) clearTimeout(searchTimeout)
+    if (searchTimeout !== null) clearTimeout(searchTimeout)
     const keyword = searchKeyword.value?.trim()
     if (!keyword || keyword.length < 2) {
       searchResults.value = []
