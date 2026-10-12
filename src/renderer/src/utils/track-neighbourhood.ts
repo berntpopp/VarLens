@@ -109,9 +109,16 @@ export function neighbourhoodLine(n: Neighbourhood, half: number, unit: string):
 }
 
 /** "In THO domain · 30 aa to its edge" / "Between domains · 70 aa to Coiled coil" */
-export function locationLine(n: Neighbourhood, unit: string, betweenLabel: string): string {
+export function locationLine(
+  n: Neighbourhood,
+  unit: string,
+  betweenLabel: string,
+  noFeaturesLabel = betweenLabel
+): string {
   if (n.feature) return `In ${n.feature.name} · ${n.boundaryDistance} ${unit} to its edge`
-  const lead = betweenLabel.charAt(0).toUpperCase() + betweenLabel.slice(1)
+  const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+  if (n.before === null && n.after === null) return capital(noFeaturesLabel)
+  const lead = capital(betweenLabel)
   return n.nearestName === null
     ? lead
     : `${lead} · ${n.boundaryDistance} ${unit} to ${n.nearestName}`

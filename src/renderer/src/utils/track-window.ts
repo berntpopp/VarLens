@@ -35,6 +35,9 @@ export interface TrackMarker {
   clinvarClass?: ClinVarSignificance | null
   stars?: number | null
   carriers?: number | null
+  consequence?: string | null
+  /** gnomAD allele frequency (its track's height) */
+  af?: number | null
 }
 
 /** A domain (protein) or an exon (gene structure). */

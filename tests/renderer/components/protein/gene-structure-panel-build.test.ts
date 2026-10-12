@@ -35,9 +35,9 @@ function render(variantBuild: string | null) {
     global: {
       plugins: [vuetify],
       stubs: {
-        GeneStructurePlot: {
-          name: 'GeneStructurePlot',
-          props: ['variant', 'axisNote'],
+        TrackView: {
+          name: 'TrackView',
+          props: ['deps'],
           template: '<div />'
         }
       }
@@ -48,15 +48,15 @@ function render(variantBuild: string | null) {
 describe('GeneStructurePanel genome build', () => {
   it('draws a GRCh38 interval without a warning', () => {
     const wrapper = render('GRCh38')
-    const plot = wrapper.findComponent({ name: 'GeneStructurePlot' })
-    expect(plot.props('variant')).toEqual(variant)
-    expect(plot.props('axisNote')).toBe(null)
+    const model = wrapper.findComponent({ name: 'TrackView' }).props('deps')
+    expect(model.anchorVariant).toEqual(variant)
+    expect(model.axisNote).toBe(null)
     expect(wrapper.find('[data-testid="gene-structure-build-note"]').exists()).toBe(false)
   })
 
   it('does not draw a GRCh37 variant on the GRCh38 gene model', () => {
     const wrapper = render('GRCh37')
-    expect(wrapper.findComponent({ name: 'GeneStructurePlot' }).props('variant')).toBe(null)
+    expect(wrapper.findComponent({ name: 'TrackView' }).props('deps').anchorVariant).toBe(null)
     expect(wrapper.find('[data-testid="gene-structure-build-note"]').text()).toContain(
       'Variant is GRCh37'
     )
@@ -64,8 +64,8 @@ describe('GeneStructurePanel genome build', () => {
 
   it('draws a variant of unknown build but says the build is unknown', () => {
     const wrapper = render(null)
-    const plot = wrapper.findComponent({ name: 'GeneStructurePlot' })
-    expect(plot.props('variant')).toEqual(variant)
-    expect(plot.props('axisNote')).toBe('Variant genome build unknown')
+    const model = wrapper.findComponent({ name: 'TrackView' }).props('deps')
+    expect(model.anchorVariant).toEqual(variant)
+    expect(model.axisNote).toBe('Variant genome build unknown')
   })
 })

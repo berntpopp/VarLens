@@ -68,11 +68,15 @@ export const CLINVAR_CLASS_LABELS: Readonly<Record<ClinVarSignificance, string>>
 
 export const PLOT_COPY = {
   proteinAxis: 'Amino-acid position',
-  searchLabel: 'Search position, change, domain, c. or chr:pos',
-  geneSearchLabel: 'Search exon, chr:pos, c., p. or position',
+  searchLabel: 'Find variant, position or domain',
+  geneSearchLabel: 'Find exon, variant or position',
+  searchHint: 'e.g. 180 · p.180 · M180V · Met180Val · a domain name · c.538A>G · chr22:29539391',
+  geneSearchHint: 'e.g. exon 5 · chr22:29539391 · c.538A>G · M180V · 180 (residue)',
   noMatch: 'No match',
   between: 'between domains',
   betweenExons: 'in an intron',
+  noDomains: 'no annotated domains',
+  noExons: 'no exon data',
   outside: 'outside the gene',
   setAnchor: 'Set as variant of interest',
   backToAnchor: 'Back to the original variant',
@@ -83,6 +87,17 @@ export const PLOT_COPY = {
   noNearby: 'No other variants in this window',
   keyboardHint:
     '+ / − zoom · ← / → pan · Home reset · Tab to a variant, then ← / → step · Esc back to the plot'
+} as const
+
+/** Columns of the variant list (List view and Nearby variants). */
+export const VARIANT_LIST_HEADERS = {
+  position: 'Position',
+  distance: 'Distance',
+  change: 'Variant',
+  track: 'Track',
+  clinvar: 'ClinVar',
+  carriers: 'Carriers',
+  source: 'Source'
 } as const
 
 export function proteinCaption(gene: string, length: number, cohort: boolean): string {

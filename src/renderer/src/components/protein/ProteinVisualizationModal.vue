@@ -127,6 +127,7 @@
           :gene-symbol="geneSymbol"
           :clinvar-variants="clinvarVariants"
           :clinvar-loading="clinvarLoading"
+          :variants="lollipopVariants"
           class="fill-height"
         />
 
@@ -155,7 +156,7 @@ import ProteinStructure3DPanel from './ProteinStructure3DPanel.vue'
 import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import type { LollipopVariant, ClinVarVariant } from '../../../../shared/types/protein'
-import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
+import type { GenomicVariant } from '../../utils/track-markers'
 import { buildLollipopVariants } from '../../utils/protein-view'
 import {
   carriersTruncatedNote,

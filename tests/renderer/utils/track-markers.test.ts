@@ -74,6 +74,16 @@ describe('proteinTrackData', () => {
     ])
   })
 
+  it('labels drop the transcript prefix of the HGVS protein notation', () => {
+    const d = proteinTrackData({
+      variants: [lolli({ aaChange: 'ENSP00000420306.1:p.Met180Val' })],
+      clinvar: [clinvar({ hgvsp: 'p.Thr285%3D' })],
+      gnomad: [],
+      domains: []
+    })
+    expect(d.markers.map((m) => m.label)).toEqual(['p.Met180Val', 'p.Thr285='])
+  })
+
   it('ClinVar and gnomAD rows without a protein position are left out', () => {
     expect(
       data.markers

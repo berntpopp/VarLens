@@ -107,6 +107,13 @@ describe('summary lines', () => {
     expect(locationLine(b, 'aa', 'between domains')).toBe('Between domains · 70 aa to Coiled coil')
   })
 
+  it('no domains at all: says so instead of "between domains"', () => {
+    const none = neighbourhoodSummary({ anchor: 180, half: 25, features: [], markers })
+    expect(locationLine(none, 'aa', 'between domains', 'no annotated domains')).toBe(
+      'No annotated domains'
+    )
+  })
+
   it('an empty window says so', () => {
     const e = neighbourhoodSummary({ anchor: 600, half: 10, features: domains, markers })
     expect(neighbourhoodLine(e, 10, 'aa')).toBe('±10 aa: no other variants')

@@ -8,7 +8,6 @@ import {
   proteinViewBlockedReason,
   proteinViewTabFor
 } from '../../../src/renderer/src/utils/protein-view'
-import { groupLollipopsByPosition } from '../../../src/renderer/src/composables/useLollipopPlot'
 import { PROTEIN_VIEW_COPY } from '../../../src/renderer/src/config/proteinViewConfig'
 import type { CohortVariant } from '../../../src/shared/types/cohort'
 
@@ -107,24 +106,5 @@ describe('buildLollipopVariants (cohort carriers)', () => {
   it('case variants carry no carrier count', () => {
     const caseVariant = { ...row({}), carrier_count: undefined } as unknown as CohortVariant
     expect(buildLollipopVariants(caseVariant, [], 'THOC5')[0].carrierCount).toBeUndefined()
-  })
-})
-
-describe('groupLollipopsByPosition', () => {
-  it('sums carriers of the variants at one position (count = carriers, else variants)', () => {
-    const variants = buildLollipopVariants(
-      null,
-      [
-        row({ pos: 1, aa_change: 'p.Met180Val', carrier_count: 2 }),
-        row({ pos: 2, aa_change: 'p.Met180Ile', carrier_count: 4 }),
-        row({ pos: 3, aa_change: 'p.Arg300Gln', carrier_count: 1 })
-      ],
-      'THOC5'
-    )
-    const groups = groupLollipopsByPosition(variants)
-    expect(groups.map((g) => [g.position, g.count, g.variants.length])).toEqual([
-      [180, 6, 2],
-      [300, 1, 1]
-    ])
   })
 })

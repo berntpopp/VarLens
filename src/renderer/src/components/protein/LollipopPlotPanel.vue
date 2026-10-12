@@ -9,9 +9,9 @@
       :gnomad-max-af="gnomadMaxAf"
       :gnomad-count="filteredGnomadCount"
       :gnomad-total="gnomadVariants.length"
-      @zoom-in="plotRef?.zoomIn()"
-      @zoom-out="plotRef?.zoomOut()"
-      @zoom-reset="plotRef?.resetZoom()"
+      @zoom-in="nav.zoom(ZOOM_STEP)"
+      @zoom-out="nav.zoom(1 / ZOOM_STEP)"
+      @zoom-reset="nav.reset()"
       @toggle-gnomad="handleToggleGnomad"
       @toggle-case-variants="emit('toggle-case-variants')"
       @update:gnomad-max-af="gnomadMaxAf = $event"
@@ -40,31 +40,28 @@
       height="2"
     />
 
-    <!-- Plot area: a light "paper" figure in both themes, like its PNG export -->
-    <v-theme-provider
-      theme="warmLight"
-      with-background
-      class="bg-surface flex-grow-1 position-relative"
-      style="min-height: 0"
-    >
-      <LollipopPlot
-        v-if="proteinLength > 0"
-        ref="plotRef"
-        :protein-length="proteinLength"
-        :domains="domains"
-        :variants="variants"
-        :gnomad-variants="gnomadVariants"
-        :clinvar-variants="clinvarVariants"
-        :show-gnomad="showGnomad"
-        :active-categories="activeCategories"
-        :active-clinvar-categories="activeClinVarCategories"
-        :active-clinvar-consequences="activeClinVarConsequences"
-        :gnomad-max-af="gnomadMaxAf"
-      />
-      <div v-else role="note" class="pa-3 text-body-small text-medium-emphasis">
-        {{ PROTEIN_VIEW_COPY.lengthUnknown }}
-      </div>
-    </v-theme-provider>
+    <!-- Caption, search, plot + overview, neighbourhood of the variant of interest -->
+    <TrackView
+      v-if="proteinLength > 0"
+      ref="plotRef"
+      class="flex-grow-1"
+      :nav="nav"
+      unit="aa"
+      :caption="proteinCaption(geneSymbol ?? 'this', proteinLength, cohort)"
+      :plot-label="`Lollipop plot of ${geneSymbol ?? 'the protein'}`"
+      :search-label="PLOT_COPY.searchLabel"
+      :search-context="searchContext"
+      :extent="extent"
+      :features="track.features"
+      :between-label="PLOT_COPY.between"
+      :no-features-label="PLOT_COPY.noDomains"
+      :search-hint="PLOT_COPY.searchHint"
+      :draw="(ctx) => drawProteinView(ctx, viewModel)"
+      :deps="viewModel"
+    />
+    <div v-else role="note" class="flex-grow-1 pa-3 text-body-small text-medium-emphasis">
+      {{ PROTEIN_VIEW_COPY.lengthUnknown }}
+    </div>
 
     <!-- Legend -->
     <LollipopLegend
@@ -90,9 +87,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, type ComponentPublicInstance } from 'vue'
+import { ref, computed, watch } from 'vue'
 import LollipopToolbar from './LollipopToolbar.vue'
-import LollipopPlot from './LollipopPlot.vue'
+import TrackView from './track/TrackView.vue'
+import { drawProteinView } from '../../composables/track-plot/lollipop-view'
+import { useTrackNavigator } from '../../composables/useTrackNavigator'
+import { PLOT_COPY, ZOOM_STEP, proteinCaption } from '../../config/proteinPlotConfig'
+import { proteinTrackData } from '../../utils/track-markers'
 import LollipopLegend from './LollipopLegend.vue'
 import type {
   ProteinDomain,
@@ -143,14 +144,7 @@ const emit = defineEmits<{
 // protein.* / gnomad.* are gated on the proteinViewer capability (parity manifest).
 const api = useCapabilityStore().canUse('proteinViewer') ? useApiService().api : undefined
 
-// Exposed LollipopPlot methods
-const plotRef = ref<ComponentPublicInstance<{
-  resetZoom: () => void
-  zoomIn: () => void
-  zoomOut: () => void
-  exportSvg: () => string
-  exportPng: () => Promise<Blob | null>
-}> | null>(null)
+const plotRef = ref<InstanceType<typeof TrackView> | null>(null)
 
 // gnomAD + ClinVar come from the `gnomad` reference service: always on in
 // desktop, an admin-enabled server lookup in web.
@@ -167,16 +161,16 @@ const gnomadVariants = ref<GnomadVariant[]>([])
 // gnomAD frequency filter (default: show all)
 const gnomadMaxAf = ref(1)
 
-/** Count of gnomAD variants after AF + consequence filters */
-const filteredGnomadCount = computed(
-  () =>
-    gnomadVariants.value.filter(
-      (gv) =>
-        gv.proteinPosition !== null &&
-        gv.alleleFrequency <= gnomadMaxAf.value &&
-        activeCategories.value.has(getConsequenceCategory(gv.consequence))
-    ).length
+/** gnomAD variants after AF + consequence filters */
+const filteredGnomad = computed(() =>
+  gnomadVariants.value.filter(
+    (gv) =>
+      gv.proteinPosition !== null &&
+      gv.alleleFrequency <= gnomadMaxAf.value &&
+      activeCategories.value.has(getConsequenceCategory(gv.consequence))
+  )
 )
+const filteredGnomadCount = computed(() => filteredGnomad.value.length)
 
 // Filter categories - all active by default
 const activeCategories = ref<Set<ConsequenceCategory>>(
@@ -192,6 +186,43 @@ const activeClinVarCategories = ref<Set<ClinVarSignificance>>(
 const activeClinVarConsequences = ref<Set<ConsequenceCategory>>(
   new Set(Object.keys(CONSEQUENCE_COLORS) as ConsequenceCategory[])
 )
+
+// ── The plot's markers, navigator and drawing model ──────────────────────
+const track = computed(() =>
+  proteinTrackData({
+    variants: props.variants,
+    clinvar: props.clinvarVariants.filter(
+      (cv) =>
+        activeClinVarCategories.value.has(getClinVarCategory(cv.clinicalSignificance)) &&
+        activeClinVarConsequences.value.has(getConsequenceCategory(cv.consequence))
+    ),
+    gnomad: showGnomad.value ? filteredGnomad.value : [],
+    domains: props.domains
+  })
+)
+const extent = computed(() => ({ start: 0, end: Math.max(1, props.proteinLength) }))
+const nav = useTrackNavigator({
+  view: 'protein',
+  extent,
+  markers: computed(() => track.value.markers),
+  features: computed(() => track.value.features)
+})
+const cohort = computed(() => props.variants.some((v) => v.carrierCount !== undefined))
+const clipId = `lollipop-clip-${Math.random().toString(36).slice(2, 8)}`
+const viewModel = computed(() => ({
+  clipId,
+  length: props.proteinLength,
+  features: track.value.features,
+  cohort: cohort.value,
+  hasClinvar: props.clinvarVariants.length > 0,
+  showGnomad: showGnomad.value && filteredGnomad.value.length > 0
+}))
+const searchContext = computed(() => ({
+  view: 'protein' as const,
+  markers: nav.displayMarkers.value,
+  features: track.value.features,
+  extentEnd: props.proteinLength
+}))
 
 // Generation counter to discard stale gnomAD results on rapid gene changes
 let gnomadGeneration = 0
@@ -370,7 +401,7 @@ const clinvarCounts = computed(() => {
 })
 
 function handleExportSvg(): void {
-  const svgString = plotRef.value?.exportSvg()
+  const svgString: string | undefined = plotRef.value?.exportSvg()
   if (svgString === undefined || svgString === '') return
 
   const blob = new Blob([svgString], { type: 'image/svg+xml' })
@@ -378,8 +409,8 @@ function handleExportSvg(): void {
 }
 
 async function handleExportPng(): Promise<void> {
-  const blob = await plotRef.value?.exportPng()
-  if (!blob) return
+  const blob: Blob | null | undefined = await plotRef.value?.exportPng()
+  if (blob === null || blob === undefined) return
 
   downloadBlob(blob, `${props.geneSymbol ?? 'protein'}_lollipop.png`)
 }

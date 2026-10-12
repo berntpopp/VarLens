@@ -16,20 +16,39 @@ import {
   getConsequenceColor,
   getDomainColor
 } from '../../../shared/utils/protein-utils'
-import type { GenomicVariant } from '../composables/useGeneStructurePlot'
 import type { TrackFeature, TrackMarker } from './track-window'
+
+/** The variant shown in the gene structure: a point, or a CNV/SV interval. */
+export interface GenomicVariant {
+  chr: string
+  pos: number
+  /** Interval end for CNV/SV calls; absent or null renders a point. */
+  end?: number | null
+  ref: string
+  alt: string
+  label: string
+  color: string
+}
+
+export function isInterval(v: GenomicVariant): v is GenomicVariant & { end: number } {
+  return v.end !== null && v.end !== undefined && v.end > v.pos
+}
 
 export interface TrackData {
   markers: TrackMarker[]
   features: TrackFeature[]
 }
 
+/** "ENSP…:p.Met180Val" → "p.Met180Val" (the transcript prefix is noise on a plot). */
+export const shortHgvs = (hgvs: string): string =>
+  hgvs.replace(/^[^:\s]+:(?=[pc]\.)/, '').replace(/%3D/gi, '=')
+
 function variantMarker(v: LollipopVariant, position: number): TrackMarker {
   return {
     key: `v:${v.chr}:${v.pos}:${v.ref}:${v.alt}`,
     position,
     track: v.carrierCount === undefined ? 'variant' : 'cohort',
-    label: v.aaChange ?? `${v.chr}:${v.pos}`,
+    label: v.aaChange === null ? `${v.chr}:${v.pos}` : shortHgvs(v.aaChange),
     weight: v.carrierCount ?? 1,
     color: v.color,
     isAnchor: v.highlighted === true,
@@ -38,7 +57,8 @@ function variantMarker(v: LollipopVariant, position: number): TrackMarker {
     chr: v.chr,
     pos: v.pos,
     proteinPosition: v.proteinPosition,
-    carriers: v.carrierCount ?? null
+    carriers: v.carrierCount ?? null,
+    consequence: v.consequence
   }
 }
 
@@ -49,7 +69,7 @@ function clinvarMarker(cv: ClinVarVariant, position: number): TrackMarker {
     key: `cv:${cv.variantId}`,
     position,
     track: 'clinvar',
-    label: cv.hgvsp ?? cv.variantId,
+    label: cv.hgvsp === null ? cv.variantId : shortHgvs(cv.hgvsp),
     weight: 1,
     color: CLINVAR_COLORS[cls],
     aaChange: cv.hgvsp,
@@ -57,7 +77,8 @@ function clinvarMarker(cv: ClinVarVariant, position: number): TrackMarker {
     pos: cv.genomicPosition ?? (Number(pos) || null),
     proteinPosition: cv.proteinPosition,
     clinvarClass: cls,
-    stars: cv.goldStars
+    stars: cv.goldStars,
+    consequence: cv.consequence
   }
 }
 
@@ -77,11 +98,13 @@ export function proteinTrackData(input: {
       key: `gn:${g.variantId}`,
       position: g.proteinPosition,
       track: 'gnomad',
-      label: g.hgvsp ?? g.variantId,
+      label: g.hgvsp === null ? g.variantId : shortHgvs(g.hgvsp),
       weight: 1,
       color: getConsequenceColor(g.consequence),
       aaChange: g.hgvsp,
-      proteinPosition: g.proteinPosition
+      proteinPosition: g.proteinPosition,
+      consequence: g.consequence,
+      af: g.alleleFrequency
     })
   }
   const features = input.domains.map((d) => ({
@@ -107,7 +130,7 @@ export function geneTrackData(input: {
       key: `anchor:${a.chr}:${a.pos}:${a.ref}:${a.alt}`,
       position: a.pos,
       track: 'variant',
-      label: a.label,
+      label: shortHgvs(a.label),
       weight: 1,
       color: a.color,
       isAnchor: true,
