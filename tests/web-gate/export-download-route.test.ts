@@ -131,7 +131,7 @@ describe('web export: prepare + signed download', () => {
       'Chromosome,Position,Reference,Alternate,Genotype,Gene,Consequence,Impact,Transcript,' +
         'cDNA,AA Change,gnomAD AF,CADD,Quality,ClinVar,HPO Similarity,MOI'
     )
-    expect(lines[1]).toBe('chr22,100,A,G,,COMT,,,,,,1.23e-4,25.46,,,,')
+    expect(lines[1]).toBe('chr22,100,A,G,,COMT,,,,,,0.000123,25.46,,,,')
     expect(lines[2]).toContain('"A,B ""quoted"""')
     expect(lines).toHaveLength(4)
     expect(execute).toHaveBeenCalledWith({

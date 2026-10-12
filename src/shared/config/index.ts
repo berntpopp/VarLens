@@ -10,3 +10,4 @@ export {
   takeUnrankedClinvarStrings,
   withOfferedValues
 } from './severity.config'
+export { EXPORT_NUMBER_FORMATS } from './export.config'
