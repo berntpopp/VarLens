@@ -11,11 +11,14 @@ import { CACHE_DIR, POOL_NORMALIZED_FILE } from '../common/paths'
 
 export const CADD_API_DIR = join(CACHE_DIR, 'cadd-api')
 const API = 'https://cadd.gs.washington.edu/api/v1.0/GRCh38-v1.7'
+/** The plain v1.7 endpoint answers [] for many SNVs; the annotated one has the same PHRED. */
+const API_ANNO = 'https://cadd.gs.washington.edu/api/v1.0/GRCh38-v1.7_inclAnno'
 
 export interface CaddApiEntry {
   key: string
-  /** null when the API has no precomputed score ([] response). */
+  /** null when neither endpoint has a precomputed score ([] responses). */
   phred: number | null
+  endpoint?: 'v1.7' | 'v1.7_inclAnno'
   fetchedAt: string
 }
 
@@ -39,25 +42,38 @@ export function loadCaddApiCache(keys: Iterable<string>): Map<string, number | n
   return out
 }
 
-async function fetchOne(key: string): Promise<void> {
-  const [chr, pos, ref, alt] = key.split(':')
-  const url = `${API}/${chr}:${pos}_${ref}_${alt}`
+async function getJson(url: string): Promise<unknown> {
   for (let attempt = 1; ; attempt++) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const entry: CaddApiEntry = {
-        key,
-        phred: parseCaddBody(await res.json()),
-        fetchedAt: new Date().toISOString()
-      }
-      writeFileSync(cacheFile(key), JSON.stringify(entry))
-      return
+      return await res.json()
     } catch (error) {
-      if (attempt >= 5) throw new Error(`${key}: ${String(error)}`, { cause: error })
+      if (attempt >= 5) throw new Error(`${url}: ${String(error)}`, { cause: error })
       await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt))
     }
   }
+}
+
+async function fetchOne(key: string): Promise<void> {
+  const [chr, pos, ref, alt] = key.split(':')
+  const site = `${chr}:${pos}_${ref}_${alt}`
+  let phred = parseCaddBody(await getJson(`${API}/${site}`))
+  let endpoint: CaddApiEntry['endpoint'] = 'v1.7'
+  if (phred === null) {
+    phred = parseCaddBody(await getJson(`${API_ANNO}/${site}`))
+    endpoint = 'v1.7_inclAnno'
+  }
+  const entry: CaddApiEntry = { key, phred, endpoint, fetchedAt: new Date().toISOString() }
+  writeFileSync(cacheFile(key), JSON.stringify(entry))
+}
+
+/** Missing, or a null from before the annotated-endpoint fallback existed. */
+function needsFetch(key: string): boolean {
+  const f = cacheFile(key)
+  if (!existsSync(f)) return true
+  const e = JSON.parse(readFileSync(f, 'utf8')) as CaddApiEntry
+  return e.phred === null && e.endpoint === undefined
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -71,7 +87,7 @@ async function main(argv: string[]): Promise<void> {
     status: string
   }>
   const todo = pool
-    .filter((a) => a.status === 'ok' && isSnv(a.ref, a.alt) && !existsSync(cacheFile(a.key)))
+    .filter((a) => a.status === 'ok' && isSnv(a.ref, a.alt) && needsFetch(a.key))
     .map((a) => a.key)
   console.log(`cadd-api: ${todo.length} SNVs to fetch`)
   let next = 0

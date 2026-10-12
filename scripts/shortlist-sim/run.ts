@@ -2,7 +2,7 @@
  * Simulation runner (spec §5–6, plan Task 12 Step 5).
  *
  *   npx jiti scripts/shortlist-sim/run.ts --run <name> [--quick] [--workers N]
- *        [--cadd-impute on|off] [--scenarios primary,clinvar_visible,...]
+ *        [--cadd-impute on|off] [--scenarios primary,clinvar_visible,...] [--concordance <file>]
  *
  * Writes runs/<run>/{results.jsonl, manifest.json, protocol.lock.json, ruleset-tuned.json,
  * support.json} under _data/shortlist-sim (outside the repository). Background rows never leave
@@ -42,6 +42,7 @@ interface Args {
   workers: number
   caddImpute: boolean
   scenarios: ScenarioId[]
+  concordance?: string
 }
 
 function parseArgs(argv: string[]): Args {
@@ -59,7 +60,8 @@ function parseArgs(argv: string[]): Args {
     quick: argv.includes('--quick'),
     workers: Number(arg('--workers') ?? Math.min(6, availableParallelism())),
     caddImpute: (arg('--cadd-impute') ?? 'on') !== 'off',
-    scenarios
+    scenarios,
+    concordance: arg('--concordance')
   }
 }
 
@@ -92,7 +94,7 @@ async function main(argv: string[]): Promise<void> {
   const outDir = join(RUNS_DIR, args.run)
   mkdirSync(outDir, { recursive: true })
 
-  const inputs = loadInputs()
+  const inputs = loadInputs(args.concordance)
   let backgrounds = await loadBackgrounds()
   if (args.quick) backgrounds = backgrounds.slice(0, 1)
   const caseBgs = await Promise.all(

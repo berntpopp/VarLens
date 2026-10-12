@@ -3,7 +3,7 @@
  * concordance report with its §11.4 acceptance (which fixes the AF field and disabled groups).
  */
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LocalVepRecord } from '../annotate/local-vep'
 import { normalizeAlleles, type NormalizedAllele } from '../annotate/normalize'
@@ -168,7 +168,10 @@ export function spikeOptions(inputs: SimInputs, caddImpute: boolean): SpikeOptio
   }
 }
 
-/** bcftools-normalised keys of a background (local; temporary files under PRIVATE_DIR). */
+/**
+ * bcftools-normalised keys of a background (local; temporary files under PRIVATE_DIR). Cached in
+ * PRIVATE_DIR (outside the repository) by a hash of the rows, since normalisation is slow.
+ */
 export async function backgroundNormKeys(bg: Background): Promise<Set<string>> {
   const alleles = bg.rows.map((r) => ({
     key: `${r.chr}:${r.pos}:${r.ref}:${r.alt}`,
@@ -177,6 +180,13 @@ export async function backgroundNormKeys(bg: Background): Promise<Set<string>> {
     ref: r.ref,
     alt: r.alt
   }))
+  const cache = join(
+    PRIVATE_DIR,
+    `norm-keys-${sha256(alleles.map((a) => a.key).join('\n')).slice(0, 16)}.json`
+  )
+  if (existsSync(cache)) return new Set(readJson<string[]>(cache))
   const out = await normalizeAlleles(alleles, { tmpDir: PRIVATE_DIR })
-  return new Set(out.filter((n) => n.status === 'ok').map((n) => n.key))
+  const keys = out.filter((n) => n.status === 'ok').map((n) => n.key)
+  writeFileSync(cache, JSON.stringify(keys))
+  return new Set(keys)
 }
