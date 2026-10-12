@@ -1397,3 +1397,19 @@ shortlist-sim: ## Simulation benchmark for the evidence shortlist (local data; n
 - **Task 10/11:** annotation acceptance per spec §11.4; a failing field disables its rule group (points 0) everywhere, recorded in `protocol.lock.json`.
 - **Task 13 report:** ship verdict per spec §11.5 (power requirement, primary + visible-ClinVar safety, Clopper–Pearson sensitivity on gene clusters).
 - **Task 15:** `sha256` over canonical JSON without the `sha256` field; tests assert artifact = SQLite payload = PostgreSQL payload on fresh and upgraded DBs; never add the preset to `BUILT_IN_SHORTLIST_PRESETS`.
+
+---
+
+## Tasks 17–19: Settings editor (spec §12)
+
+### Task 17: Ruleset editing model (composable, no UI)
+**Files:** Create `src/renderer/src/composables/useShortlistRankingEditor.ts`, `src/renderer/src/utils/shortlist-ranking-io.ts` (import/export JSON with schema validation and id/sha normalisation); Test `tests/renderer/composables/useShortlistRankingEditor.test.ts`, `tests/renderer/utils/shortlist-ranking-io.test.ts`.
+**Behaviour:** load presets of kind `shortlist`; `duplicate(preset)` → draft (new name "<name> (copy)", built-in flag off, ruleset id suffixed, `sha256` dropped); `newFromTemplate()` from `VARVIS_EVIDENCE_TEMPLATE` + `SHORTLIST_EVIDENCE_CONFIG.defaultGate/defaultTopN`; edit operations (gate fields, mode condition/points, group add/remove/rename/scope, rule add/remove/move up/down with the reference rule pinned last, rule label/condition/points); `errors` computed live via `compileRule`, `EvidenceRulesetSchema`, and the structural checks (extract the pure structural validation from `src/main/services/scoring/evidence/ruleset.ts` into `src/shared/` so renderer and main share it); `save()` via `window.api.filterPresets.create/update` with `unwrapIpcResult`; `remove()` for user presets; `dirty` flag; default ranking id in `settingsStore`. Tests: every operation, error surfacing (bad DSL, duplicate ids, points off-step, reference not last), built-in immutability, import of a valid/invalid file, export round-trip.
+
+### Task 18: Dialog UI
+**Files:** Create `src/renderer/src/components/shortlist-ranking/ShortlistRankingDialog.vue` (shell: list + editor + footer), `RankingList.vue`, `RankingCandidatesSection.vue`, `RankingModesSection.vue`, `RankingGroupCard.vue`, `RankingRuleRow.vue`, `RankingPreview.vue`; register in `AppDialogHost.vue` (`showShortlistRanking(presetId?)`), settings menu entry, "Edit ranking" button in `ShortlistPanel.vue`. Reuse `DslSearchBar`/its autocomplete in `shortlist` scope for conditions (extend scope plumbing if needed). Every string from config or the existing copy files. Tests per component (render, emit, keyboard reorder, error display, locked built-in). Visual check both themes; axe.
+
+### Task 19: Preview and default ranking
+`RankingPreview.vue` calls the shortlist IPC with `adHocConfig` built from the draft (debounced, on demand), compares with the saved preset's ranking (Δ rank). Default ranking persisted in `settingsStore`, preselected by `useShortlistQuery`. Tests for Δ computation and default selection.
+
+**Gates for 17–19:** `make typecheck`, `make lint-check`, renderer tests, `make agent-check`, visual check light/dark with screenshots, `impeccable` critique → fixes → polish, `ponytail:ponytail-review` → fixes.

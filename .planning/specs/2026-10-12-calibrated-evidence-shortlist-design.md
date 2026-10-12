@@ -177,3 +177,24 @@ One branch, staged commits: (1) shared DSL move, (2) evaluator + derived fields,
 **11.6 Ruleset artifact identity (amends §3.5).** `sha256` = SHA-256 of the canonical JSON (sorted keys, no whitespace) of the ruleset **without** the `sha256` field. Tests assert artifact = SQLite-seeded payload = PostgreSQL-seeded payload on fresh and upgraded databases. The new preset is seeded **only** by its own migrations — never added to the historical `BUILT_IN_SHORTLIST_PRESETS` array used by older seeds.
 
 **11.7 Round-2 resolution.** N1 → 11.1. N2 → 11.5. N3 → §3.4 mode decision list + 11.1 (first-match counts, exclusive bins). N4 → §3.3 (backend iteration kept, full rank config). N5 → §3.3 consistency. N6 → §4.3 production identity contract. N7 → §4.1 in-process mapper + insertBatch. N8 → §3.1. N9 → 11.6. Partial 7 → 11.4; partial 17 → 11.1–11.3; partial 21 → §3.4 merged filters.
+
+## 12. Settings: "Shortlist ranking" editor (user decision 2026-10-12)
+
+The user asked for the ranking to be configurable in Settings with an easy, high-quality UX. This brings #585 into this branch.
+
+**Config.** Every default, limit, label and help text comes from `src/shared/config/shortlist-evidence.config.ts`; the rule template from `src/shared/config/evidence-rulesets/varvis-template.ts`. Components contain no domain constants.
+
+**Placement.** A settings dialog "Shortlist ranking", hosted by `AppDialogHost` like the existing preferences dialogs, opened from the settings menu and from an "Edit ranking" button next to the shortlist preset picker (which opens it on the selected preset).
+
+**Layout (approved mock).** Left: list of shortlist rankings — built-ins locked (lock icon, "Duplicate to edit"), user rankings editable; New (from the varvis template), Import (JSON), Export; "Default ranking for the shortlist" selector (persisted in the settings store; the shortlist tab preselects it). Right: editor for the selected ranking:
+1. *Candidates* — gnomAD AF maximum, impact chips, variant types (SNV/indel only), rows to show.
+2. *Inheritance modes* — fixed decision-list order with label, help, condition and points; fallback last, condition fixed.
+3. *Evidence groups* — collapsible cards ("first matching rule wins"); each rule row: drag handle/up-down, label, condition (the existing DSL input with autocomplete in `shortlist` scope), points stepper (config step/range), delete; the reference rule pinned last and marked; add rule / add group (global or mode-scoped).
+4. *Preview* — when a case is open: top 10 under the edited ranking vs the saved one (rank, gene, variant, score, Δ rank), recomputed on demand via the existing shortlist IPC with an ad-hoc config.
+Footer: error count with jump-to-error, Cancel, Save (disabled while invalid).
+
+**Validation.** Instant, in the renderer, with the shared `compileRule` / `EvidenceRulesetSchema` / structural checks — the same code the main process runs on load. Errors show at the field (message + position for DSL).
+
+**Persistence.** Existing `filter-presets` create/update/delete with `kind: 'shortlist'` and `filter_json.shortlist = ShortlistConfig` (no new IPC channel). Built-ins are never mutated; editing a built-in means duplicating it. Web/desktop parity follows the parity manifest (capability-gated where pending).
+
+**Quality gates.** Load `varlens-ui-patterns`; dense UI is intentional; both themes; keyboard operable (reorder via buttons, not only drag); axe clean. Before done: `impeccable` critique + polish pass on the dialog, `ponytail:ponytail-review` on the branch diff.
