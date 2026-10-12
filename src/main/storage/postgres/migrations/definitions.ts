@@ -149,6 +149,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0029',
     name: 'case_field_dictionary',
     fileName: '0029_case_field_dictionary.sql'
+  },
+  {
+    version: '0030',
+    name: 'evidence_ranking_beta_preset',
+    fileName: '0030_evidence_ranking_beta_preset.sql'
   }
 ]
 

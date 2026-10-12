@@ -14,6 +14,7 @@
  * - Foreign keys pragma verification
  */
 
+import { EVIDENCE_BETA_PRESET } from '../../../src/main/database/evidence-ranking-preset'
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -1213,10 +1214,11 @@ describe('migration v27 — filter_presets.kind + shortlist seeds', () => {
       .prepare(
         `SELECT name, kind, is_built_in, filter_json, sort_order
          FROM filter_presets
-         WHERE kind = 'shortlist'
+         WHERE kind = 'shortlist' AND name != ?
          ORDER BY sort_order`
       )
-      .all() as Array<{
+      // v47 seeds the evidence preset (migration-v47-evidence-preset.test.ts)
+      .all(EVIDENCE_BETA_PRESET.name) as Array<{
       name: string
       kind: string
       is_built_in: number

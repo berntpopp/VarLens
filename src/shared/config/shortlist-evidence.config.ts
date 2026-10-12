@@ -78,6 +78,12 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
   /** Pre-registered candidate gate (spec §3.4). */
   defaultGate: { maxGnomadAf: 0.01, consequences: ['HIGH', 'MODERATE', 'LOW'] },
   defaultTopN: 100,
+  /** Tie-breakers for rows with equal points (nulls sort last in both directions). */
+  defaultTieBreakers: [
+    { key: 'cadd', order: 'desc' },
+    { key: 'chr', order: 'asc' },
+    { key: 'pos', order: 'asc' }
+  ],
 
   /** Compiled rulesets kept in memory by the main process. */
   compiledCacheSize: 32
