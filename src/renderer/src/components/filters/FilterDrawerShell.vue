@@ -1,8 +1,11 @@
 <template>
+  <!-- disable-route-watcher: every filter click writes the URL query, and a
+       temporary drawer otherwise closes on each route change. -->
   <v-navigation-drawer
     :model-value="open"
     location="right"
     temporary
+    disable-route-watcher
     :width="drawerWidth"
     :style="{ zIndex: DRAWER_Z_INDEX }"
     aria-label="Filter options"

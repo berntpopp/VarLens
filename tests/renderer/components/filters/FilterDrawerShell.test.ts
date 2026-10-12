@@ -71,3 +71,33 @@ describe('FilterDrawerShell width', () => {
     expect(wrapper.find('.filter-drawer-resize-handle').exists()).toBe(true)
   })
 })
+
+describe('FilterDrawerShell route changes', () => {
+  it('stays open when a filter change writes the URL query', async () => {
+    const { createRouter, createMemoryHistory } = await import('vue-router')
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { render: () => null } }]
+    })
+    await router.push('/')
+    const onUpdate = vi.fn()
+    mount(
+      {
+        render: () =>
+          h(VLayout, () =>
+            h(FilterDrawerShell, {
+              open: true,
+              activeFilterCount: 0,
+              expandedPanels: [],
+              allPanelValues: [],
+              'onUpdate:open': onUpdate
+            })
+          )
+      },
+      { global: { plugins: [createVuetify({ components, directives }), router] } }
+    )
+    await router.push({ path: '/', query: { f: '{"impact":["HIGH"]}' } })
+    await nextTick()
+    expect(onUpdate).not.toHaveBeenCalledWith(false)
+  })
+})
