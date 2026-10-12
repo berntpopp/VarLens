@@ -8,11 +8,11 @@
     />
     <title>VarLens</title>
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
-    <!-- The app ships a light theme only. Declaring it (plus a pre-mount
-         background matching the Vuetify theme's `background`) stops dark-OS
-         browsers from painting a dark canvas that flashes to white, then to
-         the app's slate background, before Vue mounts. -->
-    <meta name="color-scheme" content="light" />
+    <!-- Pre-mount background = the Vuetify themes' `background`, so nothing
+         flashes before Vue mounts: dark for a dark OS (unless the app chose
+         light), and html/body follow <html data-theme> once the app runs
+         (useThemePreference). CSS only: the CSP blocks inline scripts. -->
+    <meta name="color-scheme" content="light dark" />
     <style>
       html,
       body {
@@ -20,6 +20,20 @@
         background: #f0f4f8;
         color: #1a1d23;
         color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']),
+        :root:not([data-theme='light']) body {
+          background: #12141a;
+          color: #e4e7ec;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme='dark'],
+      :root[data-theme='dark'] body {
+        background: #12141a;
+        color: #e4e7ec;
+        color-scheme: dark;
       }
     </style>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->

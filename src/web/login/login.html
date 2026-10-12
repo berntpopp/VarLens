@@ -8,10 +8,9 @@
       name="description"
       content="Sign in to VarLens, a genetic variant analysis and clinical interpretation workspace."
     />
-    <!-- Light only, matching the app (src/renderer/src/plugins/vuetify.ts ships
-         no theme switch). A dark login on dark-OS browsers would flash
-         dark -> light on sign-in. -->
-    <meta name="color-scheme" content="light" />
+    <!-- Follows the OS colour scheme, like the app's default `system` theme
+         preference, so a dark-OS user gets no light login before a dark app. -->
+    <meta name="color-scheme" content="light dark" />
     <title>VarLens — Sign in</title>
     <link rel="icon" href="__APP_PATH_PREFIX__/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="__APP_PATH_PREFIX__/favicon.svg" />
@@ -29,7 +28,7 @@
         --on-surface: #1a1d23;
         --on-surface-muted: #5a6470;
         --on-primary: #ffffff;
-        --error: #b71c1c;
+        --error: #8e1b1b;
         --error-bg: #fdeded;
         --info: #1565c0;
         --info-bg: #e8f1fb;
@@ -38,6 +37,28 @@
         --shadow: 0 1px 2px rgba(26, 29, 35, 0.04), 0 4px 16px rgba(26, 29, 35, 0.08);
         --radius: 8px;
         --focus-ring: 0 0 0 3px rgba(30, 58, 95, 0.18);
+      }
+      /* Dark values of the same tokens (plugins/vuetify.ts warmDark). */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --primary: #9cc4e4;
+          --primary-hover: #b5d3ec;
+          --secondary: #90a4ae;
+          --surface: #1a1d22;
+          --surface-variant: #252a32;
+          --background: #12141a;
+          --on-surface: #e4e7ec;
+          --on-surface-muted: #b8bfc9;
+          --on-primary: #12141a;
+          --error: #ff8a8a;
+          --error-bg: #3a1f22;
+          --info: #64b5f6;
+          --info-bg: #16263a;
+          --border: #30353e;
+          --border-strong: #4a515c;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.4);
+          --focus-ring: 0 0 0 3px rgba(156, 196, 228, 0.35);
+        }
       }
       * {
         box-sizing: border-box;
@@ -56,7 +77,7 @@
         background: var(--background);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        color-scheme: light;
+        color-scheme: light dark;
       }
 
       .page {

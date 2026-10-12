@@ -1,4 +1,13 @@
-import { app, dialog, shell, nativeImage, BrowserWindow, ipcMain, session } from 'electron'
+import {
+  app,
+  dialog,
+  shell,
+  nativeImage,
+  nativeTheme,
+  BrowserWindow,
+  ipcMain,
+  session
+} from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -81,7 +90,9 @@ function createWindow(): BrowserWindow {
     minWidth: APP_CONFIG.WINDOW_MIN_WIDTH,
     minHeight: APP_CONFIG.WINDOW_MIN_HEIGHT,
     show: false,
-    backgroundColor: '#F0F4F8',
+    // Follows the OS like the default `system` theme, so a dark OS gets no white flash.
+    backgroundColor:
+      APP_CONFIG.WINDOW_BACKGROUND[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'],
     title: 'Varlens',
     autoHideMenuBar: true,
     icon: getAppIcon(),
