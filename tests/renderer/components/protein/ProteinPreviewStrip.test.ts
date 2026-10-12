@@ -71,6 +71,13 @@ describe('ProteinPreviewStrip', () => {
     expect(wrapper.emitted('open')).toEqual([['lollipop']])
   })
 
+  it('takes the length from the mapping when InterPro answers 0 (no domains)', async () => {
+    getDomains.mockResolvedValue({ success: true, proteinLength: 0, domains: [] })
+    const wrapper = mountStrip()
+    await flushPromises()
+    expect(wrapper.text()).toContain('p.180 / 683 aa')
+  })
+
   it('the Gene link opens the gene structure tab', async () => {
     const wrapper = mountStrip()
     await flushPromises()

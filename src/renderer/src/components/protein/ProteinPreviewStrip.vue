@@ -113,9 +113,11 @@ const loading = computed(() =>
   [mappingQuery, domainsQuery].some((q) => q.status.value === 'pending')
 )
 const domains = computed(() => domainsQuery.data.value?.domains ?? [])
-const length = computed(
-  () => domainsQuery.data.value?.proteinLength ?? mappingQuery.data.value?.proteinLength ?? 0
-)
+// InterPro answers 0 for a protein without domains: then the mapping knows.
+const length = computed(() => {
+  const fromDomains = domainsQuery.data.value?.proteinLength ?? 0
+  return fromDomains > 0 ? fromDomains : (mappingQuery.data.value?.proteinLength ?? 0)
+})
 const pct = (aa: number): string => `${Math.min(100, (aa / Math.max(1, length.value)) * 100)}%`
 const markerColor = computed(() => getConsequenceColor(props.variant.consequence ?? 'unknown'))
 const summary = computed(() =>
