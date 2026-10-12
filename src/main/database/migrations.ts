@@ -15,6 +15,7 @@ import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { migrateSeverityRanks } from './severity-rank-migration'
 import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
+import { repairSummaryKeys } from './summary-key-repair'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
@@ -1982,6 +1983,9 @@ export function runMigrations(db: Database.Database): void {
     migrateContigNaming(db)
     db.exec('PRAGMA user_version = 47')
   }
+
+  // Not a version: derived summary keys that drifted on real data are restored on every open.
+  repairSummaryKeys(db)
 }
 
 function backfillMissingCaseDataInfo(db: Database.Database): void {
