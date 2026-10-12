@@ -11,6 +11,7 @@ import type { RawVariantRow } from '../types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 import { setRecordBytes } from '../bounded-batcher'
+import { COLUMNAR_TRANSCRIPT_FIELDS } from '../../../shared/config/import-fields.config'
 import {
   canonicalFieldFor,
   FieldProfileResolver,
@@ -39,6 +40,8 @@ interface ProfileColumn {
   dictionary: Record<string, unknown> | null
   /** Already stored in a column: it only feeds its canonical key. */
   deriveOnly: boolean
+  /** One value per transcript: the selected transcript's value is kept. */
+  perTranscript: boolean
 }
 
 interface FieldMapperOptions {
@@ -198,14 +201,11 @@ export class FieldMapper extends Transform {
   /** The row's unmapped columns as `info_json`, per the field profile. */
   private infoJson(row: RawVariantRow, selectedTranscript: number): string | null {
     if (this.profileColumns.length === 0) return null
-    const transcriptCol = row[this.cols.TRANSCRIPT]
-    const transcriptCount = Array.isArray(transcriptCol) ? transcriptCol.length : 1
     const record = this.fields.record()
     for (const column of this.profileColumns) {
       const text = columnarCellText(
         row[column.index],
-        selectedTranscript,
-        transcriptCount,
+        column.perTranscript ? selectedTranscript : null,
         column.dictionary
       )
       if (text === null) continue
@@ -356,24 +356,25 @@ function profileColumnsOf(header: ColumnarHeaderItem[], cols: ColumnIndices): Pr
     const deriveOnly = slotIndexes.has(index)
     if (deriveOnly && canonicalFieldFor(item.id) === null) return
     const dictionary = item.dataDictionary ?? null
-    columns.push({ index, name: item.id, dictionary, deriveOnly })
+    // A slot column is read per transcript like its column value.
+    const perTranscript = deriveOnly || COLUMNAR_TRANSCRIPT_FIELDS.has(item.id)
+    columns.push({ index, name: item.id, dictionary, deriveOnly, perTranscript })
   })
   return columns
 }
 
 /**
- * One cell as stored text: an array as long as the transcript list holds one
- * value per transcript (the selected one is kept), any other array is a list;
- * a data-dictionary code is resolved to its label.
+ * One cell as stored text: for a transcript-specific column
+ * (`selectedTranscript` set) the selected transcript's value, otherwise an
+ * array is a list; a data-dictionary code is resolved to its label.
  */
 export function columnarCellText(
   value: RawVariantRow[number],
-  selectedTranscript: number,
-  transcriptCount: number,
+  selectedTranscript: number | null,
   dictionary: Record<string, unknown> | null
 ): string | null {
   let selected: unknown = value
-  if (Array.isArray(value) && value.length === transcriptCount && transcriptCount > 1) {
+  if (Array.isArray(value) && selectedTranscript !== null) {
     selected = value[selectedTranscript] ?? value[0]
   }
   const label = (code: unknown): unknown =>

@@ -15,9 +15,9 @@ import {
 import type { ImportFieldPreview } from '../../../../shared/types/import'
 import { isValidInfoKey } from '../../../../shared/filters/info-field-filter'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { stripVueProxies } from '../../utils/stripVueProxies'
 import {
   fieldRows,
-  mergeIntoDefault,
   withAllKept,
   withFieldChoice,
   type FieldRow
@@ -27,7 +27,7 @@ const props = withDefaults(
   defineProps<{
     fields: ImportFieldPreview[]
     readonly?: boolean
-    /** Shows "Save as default", merging these choices into Settings (the wizard). */
+    /** Shows "Save as default": these choices become the Settings default (the wizard). */
     canSaveDefault?: boolean
     /** Rows the table area may show before it scrolls. */
     height?: number
@@ -38,7 +38,9 @@ const profile = defineModel<ImportFieldProfile>({ required: true })
 const settings = useSettingsStore()
 const savedDefault = ref(false)
 function saveDefault(): void {
-  settings.importFieldProfile = mergeIntoDefault(settings.importFieldProfile, profile.value)
+  // The wizard's profile starts from the saved default, so it is the whole edited profile:
+  // saving it as is keeps removed overrides and cleared renames removed.
+  settings.importFieldProfile = stripVueProxies(profile.value)
   savedDefault.value = true
   window.setTimeout(() => (savedDefault.value = false), 3000)
 }
