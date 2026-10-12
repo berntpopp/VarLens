@@ -202,7 +202,6 @@ describe('PostgresCohortRepository', () => {
   it('resolves active panels to padded genomic intervals across the cohort', async () => {
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ chr: '1' }] })
       .mockResolvedValueOnce({ rows: [{ total_cases: '10' }] })
       .mockResolvedValueOnce({ rows: [{ total_count: '1' }] })
       .mockResolvedValueOnce({ rows: [] })
@@ -217,10 +216,10 @@ describe('PostgresCohortRepository', () => {
       offset: 0
     })
 
-    const dataSql = normalizeSql(callText(query.mock.calls[3]))
-    const dataParams = callParams(query.mock.calls[3])
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
+    const dataParams = callParams(query.mock.calls[2])
 
-    expect(resolveIntervals).toHaveBeenCalledWith([3, 4], 'GRCh37', 7500, false)
+    expect(resolveIntervals).toHaveBeenCalledWith([3, 4], 'GRCh37', 7500)
     expect(dataSql).toContain('(cvs.chr = $')
     expect(dataSql).toContain('cvs.pos <= $')
     expect(dataSql).toContain('COALESCE(cvs.end_pos, cvs.pos) >= $')
@@ -235,7 +234,7 @@ describe('PostgresCohortRepository', () => {
     // query must reject (surface the failure) rather than silently fall
     // back to an unfiltered result set — see PostgresCohortRepository's
     // resolvePanelParams for the contract this mirrors from panelIntervalHelper.ts.
-    const query = vi.fn().mockResolvedValueOnce({ rows: [{ chr: '1' }] })
+    const query = vi.fn()
     const resolveIntervals = vi
       .fn()
       .mockRejectedValue(new Error('Simulated panel interval computation failure'))
@@ -270,7 +269,6 @@ describe('PostgresCohortRepository', () => {
     )
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ chr: 'chr1' }] })
       .mockResolvedValueOnce({ rows: [{ hgnc_id: 'HGNC:1100' }] })
       .mockResolvedValueOnce({ rows: [{ total_cases: '10' }] })
       .mockResolvedValueOnce({ rows: [{ total_count: '1' }] })
@@ -283,10 +281,10 @@ describe('PostgresCohortRepository', () => {
       offset: 0
     })
 
-    const panelSql = normalizeSql(callText(query.mock.calls[1]))
-    const panelParams = callParams(query.mock.calls[1])
-    const dataSql = normalizeSql(callText(query.mock.calls[4]))
-    const dataParams = callParams(query.mock.calls[4])
+    const panelSql = normalizeSql(callText(query.mock.calls[0]))
+    const panelParams = callParams(query.mock.calls[0])
+    const dataSql = normalizeSql(callText(query.mock.calls[3]))
+    const dataParams = callParams(query.mock.calls[3])
 
     expect(panelSql).toContain('FROM "public"."panel_genes"')
     expect(panelParams).toEqual([[3]])

@@ -153,7 +153,7 @@ describe('translateAst — chromosome', () => {
   it('chr equality matches the stored spelling of every build', () => {
     const result = translate('chr:=:1')
     expect(result.errors).toEqual([])
-    expect(result.columnFilters.chr).toEqual({ operator: 'in', value: ['1', 'chr1'] })
+    expect(result.columnFilters.chr).toEqual({ operator: 'in', value: ['chr1', '1'] })
   })
 
   it('a mitochondrion matches chrM and MT', () => {
@@ -165,7 +165,7 @@ describe('translateAst — chromosome', () => {
   it('OR alternatives expand without duplicates', () => {
     expect(translate('chr:=:1 OR chr:=:chr1').columnFilters.chr).toEqual({
       operator: 'in',
-      value: ['1', 'chr1']
+      value: ['chr1', '1']
     })
   })
 })

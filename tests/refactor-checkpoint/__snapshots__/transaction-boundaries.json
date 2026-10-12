@@ -43,6 +43,16 @@
       "assignedTo": "rebuildTransaction"
     },
     {
+      "file": "src/main/database/contig-naming-migration.ts",
+      "callerFunction": "migrateContigNaming",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/contig-naming-migration.ts",
+      "callerFunction": "resolveBuildReview",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/DatabaseService.ts",
       "callerFunction": "runTransaction",
       "assignedTo": "transactionFn"
