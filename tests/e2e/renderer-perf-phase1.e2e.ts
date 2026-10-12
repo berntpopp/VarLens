@@ -24,6 +24,7 @@ import {
   closeDetailsPanel,
   COHORT_TABLE_STEPS,
   firstRenderedPosition,
+  PANEL_DOCK_STEPS,
   settleTable,
   sortableHeader,
   type InteractionStep
@@ -458,6 +459,29 @@ test.describe.serial('interaction quality gates', () => {
       Object.assign(measured, await measureSteps(launched.window, COHORT_TABLE_STEPS))
 
       writeJsonArtifact('interaction-quality/metrics.json', measured)
+      test.info().annotations.push({ type: 'metrics', description: JSON.stringify(measured) })
+      for (const [name, metrics] of Object.entries(measured)) {
+        expectWithinBudget(name, 'cls', metrics.cls)
+        expectWithinBudget(name, 'allShifts', metrics.allShifts)
+        expectWithinBudget(name, 'inpMs', metrics.inpMs)
+      }
+    } finally {
+      await launched.cleanup()
+    }
+  })
+
+  test('docking the details panel keeps CLS <= 0.02 (1440 x 900)', async () => {
+    const launched = await prepareLoadedApp()
+    try {
+      // Pin the content to the docking width (the outer window size includes chrome)
+      await launched.app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setContentSize(1440, 900)
+      )
+      await measureCaseSelectVisibleRows(launched.window, PERF_CASE_NAMES[0], 0)
+      await settleTable(launched.window)
+      expect(await launched.window.evaluate(() => window.innerWidth)).toBe(1440)
+      const measured = await measureSteps(launched.window, PANEL_DOCK_STEPS)
+      writeJsonArtifact('interaction-quality/panel-dock-metrics.json', measured)
       test.info().annotations.push({ type: 'metrics', description: JSON.stringify(measured) })
       for (const [name, metrics] of Object.entries(measured)) {
         expectWithinBudget(name, 'cls', metrics.cls)

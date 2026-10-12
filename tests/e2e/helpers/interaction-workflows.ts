@@ -90,3 +90,18 @@ export const COHORT_TABLE_STEPS: readonly InteractionStep[] = [
     }
   }
 ]
+
+/**
+ * Docked details panel (>= 1440 px): the toolbar narrows when the panel docks,
+ * so wrapping chip rows used to push the table down on open and close.
+ */
+export const PANEL_DOCK_STEPS: readonly InteractionStep[] = [
+  {
+    name: 'case-panel-open',
+    run: async (w) => {
+      await w.locator(ROWS).nth(2).locator('td:not(:has(a, button, input, [role="button"]))').first().click()
+      await waitForQuiet(w)
+    }
+  },
+  { name: 'case-panel-close', run: async (w) => await closeDetailsPanel(w) }
+]
