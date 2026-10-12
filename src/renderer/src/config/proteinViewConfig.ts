@@ -12,7 +12,9 @@ export const PROTEIN_VIEW_COPY = {
   noGene: 'No gene annotated for this variant',
   noProteinPosition: 'No protein position for this variant',
   loadFailed: 'Protein data could not be loaded',
-  noDomain: 'no annotated domain'
+  noDomain: 'no annotated domain',
+  stripLabel: 'Protein view',
+  geneStructure: 'Gene structure'
 } as const
 
 /**

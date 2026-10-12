@@ -114,10 +114,15 @@ describe('ProteinPreviewStrip', () => {
     expect(wrapper.text()).toContain('p.180 / 683 aa')
   })
 
-  it('the Gene link opens the gene structure tab', async () => {
+  it('is a labelled group whose Gene structure button opens that tab', async () => {
     const wrapper = mountStrip()
     await dwell()
-    await wrapper.get('[data-testid="protein-strip-gene"]').trigger('click')
+    const strip = wrapper.get('[data-testid="protein-strip"]')
+    expect(strip.attributes('role')).toBe('group')
+    expect(strip.attributes('aria-label')).toBe(PROTEIN_VIEW_COPY.stripLabel)
+    const gene = wrapper.get('[data-testid="protein-strip-gene"]')
+    expect(gene.text()).toBe(PROTEIN_VIEW_COPY.geneStructure)
+    await gene.trigger('click')
     expect(wrapper.emitted('open')).toEqual([['gene-structure']])
   })
 

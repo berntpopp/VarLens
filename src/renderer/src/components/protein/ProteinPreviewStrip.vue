@@ -1,7 +1,13 @@
 <template>
   <!-- Mini lollipop under the variant identity: the visible entry to the
        protein view. Every state keeps the same height (no layout shift). -->
-  <div v-if="gene !== null" class="protein-strip" data-testid="protein-strip">
+  <div
+    v-if="gene !== null"
+    class="protein-strip"
+    role="group"
+    :aria-label="PROTEIN_VIEW_COPY.stripLabel"
+    data-testid="protein-strip"
+  >
     <div v-if="lookupsReason !== null" class="strip-line text-body-small text-muted">
       {{ lookupsReason }}
     </div>
@@ -76,7 +82,7 @@
         data-testid="protein-strip-gene"
         @click="emit('open', 'gene-structure')"
       >
-        Gene
+        {{ PROTEIN_VIEW_COPY.geneStructure }}
       </v-btn>
     </template>
   </div>
