@@ -203,6 +203,11 @@ import type { ImportSourceMode, ImportSourceOption } from './ImportSourceSelecto
 import VcfPreviewStep from './VcfPreviewStep.vue'
 import { isWebRuntime } from '../../utils/runtime-mode'
 import {
+  WEB_UPLOAD_CANCEL_EVENT,
+  WEB_UPLOAD_EVENT,
+  type WebUploadEventDetail
+} from '../../../../shared/types/web-upload'
+import {
   mdiChevronRight,
   mdiClose,
   mdiDatabaseImport,
@@ -217,19 +222,6 @@ import {
 type ImportMode = ImportSourceMode
 const { api } = useApiService()
 const importStore = useImportStatusStore()
-const WEB_UPLOAD_EVENT = 'varlens:web-upload'
-const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
-
-interface WebUploadEventDetail {
-  status: 'started' | 'progress' | 'complete' | 'error' | 'aborted'
-  fileName: string
-  fileIndex: number
-  totalFiles: number
-  loadedBytes: number
-  totalBytes: number | null
-  percent: number | null
-  message?: string
-}
 
 const emit = defineEmits<{
   'import-complete': [result: { caseId: number; variantCount: number; caseName: string }]
@@ -342,6 +334,7 @@ function handleWebUploadEvent(event: Event): void {
 
   if (detail.status === 'started') {
     importStore.startUpload(detail.totalFiles)
+    if (detail.fileIndex === 0) cancelError.value = ''
   }
   if (detail.status === 'started' || detail.status === 'progress' || detail.status === 'complete') {
     importStore.updateUploadProgress({
@@ -365,6 +358,8 @@ function handleWebUploadEvent(event: Event): void {
   if (detail.status === 'error') {
     importStore.importError(detail.message ?? 'Upload failed')
   }
+  // Files left out of an otherwise uploaded selection, in one line; cleared by the next selection.
+  if (detail.status === 'skipped') cancelError.value = detail.message ?? ''
 }
 
 function cancelUploadSelection(): void {

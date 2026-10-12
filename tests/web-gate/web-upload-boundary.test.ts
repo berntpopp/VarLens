@@ -74,7 +74,7 @@ describe('web upload boundary', () => {
     const localApi = readRepoFile('src/web/client/local-api.ts')
 
     expect(uploads).toContain("document.createElement('input')")
-    expect(uploads).toContain('uploadImportFiles(files: readonly File[])')
+    expect(uploads).toContain('export async function uploadImportFiles(')
     // Plain ZIPs must not look password-protected (P-08): probe with inspectZip.
     expect(localApi).toContain("httpInvoke('batch-import', 'inspectZip'")
     expect(localApi).not.toContain("httpInvoke('batch-import', 'testZipPassword'")

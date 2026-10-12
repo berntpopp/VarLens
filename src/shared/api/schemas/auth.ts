@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import { USER_ROLES } from '../../auth/auth-constants'
+import { DESKTOP_MIN_PASSWORD_LENGTH, USER_ROLES } from '../../auth/auth-constants'
 
 export const UsernameSchema = z.string().min(1).max(100)
 
-export const PasswordSchema = z.string().min(8).max(256)
+export const PasswordSchema = z.string().min(DESKTOP_MIN_PASSWORD_LENGTH).max(256)
 export const PasswordInputSchema = z.string().min(1).max(256)
 
 export const LoginParamsSchema = z.object({

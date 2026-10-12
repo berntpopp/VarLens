@@ -25,8 +25,9 @@
           :class="{ 'count-updated': countPulsing }"
           aria-live="polite"
           :aria-label="
-            `${filteredCount} of ${totalCount ?? 'unknown'} variants shown` +
-            (totalCountStale ? '; the total is being refreshed' : '')
+            totalCount === null
+              ? `${filteredCount} variants shown`
+              : `${filteredCount} of ${totalCount} variants shown`
           "
         >
           <v-icon start size="small" :icon="mdiFilterVariant" />
@@ -34,14 +35,6 @@
           <template v-if="totalCount !== null">
             <span class="mx-1" style="opacity: 0.7">/</span>
             <span style="opacity: 0.7">{{ totalCount.toLocaleString() }}</span>
-            <v-icon
-              v-if="totalCountStale"
-              end
-              size="x-small"
-              :icon="mdiDatabaseSync"
-              title="The total is being refreshed"
-              data-testid="total-refreshing"
-            />
           </template>
         </v-chip>
 
@@ -234,7 +227,6 @@ import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
-  mdiDatabaseSync,
   mdiDotsVertical,
   mdiFilterCheck,
   mdiFilterOff,
@@ -268,8 +260,6 @@ interface Props {
   exportBlockedReason?: string | null
   /** Offer a CSV / Excel choice (web: the browser download has no save dialog). */
   exportFormats?: boolean
-  /** The total comes from a summary that is being rebuilt (cohort view). */
-  totalCountStale?: boolean
 }
 
 const EXPORT_FORMAT_OPTIONS = [

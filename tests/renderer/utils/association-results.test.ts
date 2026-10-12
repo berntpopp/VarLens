@@ -8,6 +8,10 @@ import {
   nonAutosomalNote,
   type AssociationResultRow
 } from '../../../src/renderer/src/utils/association-results'
+import {
+  ASSOCIATION_TESTED_TEXT,
+  untestedGeneReason
+} from '../../../src/shared/config/domain.config'
 
 const row: AssociationResultRow = {
   gene_symbol: 'GENE1',
@@ -61,7 +65,8 @@ describe('association result text', () => {
       'q_value',
       'Excluded_missing_call',
       'Excluded_conflicting_calls',
-      'Excluded_no_called_alleles'
+      'Excluded_no_called_alleles',
+      'Status'
     ])
     expect(line.split('\t')).toEqual([
       'GENE1',
@@ -78,8 +83,24 @@ describe('association result text', () => {
       '0.08',
       '2',
       '1',
-      '0'
+      '0',
+      ASSOCIATION_TESTED_TEXT
     ])
+  })
+
+  it.each([
+    [
+      { missing_call: 0, conflicting_calls: 0, no_called_alleles: 0 },
+      'not tested: no qualifying variants'
+    ],
+    [
+      { missing_call: 2, conflicting_calls: 1, no_called_alleles: 0 },
+      'not tested: all 3 sites excluded (missing call 2, conflicting calls 1, no called alleles 0)'
+    ]
+  ])('keeps an untested gene in the export with its reason (%j)', (sites_excluded, status) => {
+    const untested = { ...row, n_variants: 0, sites_excluded }
+    expect(untestedGeneReason(sites_excluded)).toBe(status)
+    expect(buildAssociationTsv([untested]).split('\n')[2].split('\t').at(-1)).toBe(status)
   })
 
   it('says how many qualifying variants are not on an autosome, in the view text and the export', () => {
