@@ -23,6 +23,8 @@ export interface ShipInputs {
   clinvarVisible: { deltaHit10: Interval; deltaDecoys: Interval }
   /** Gene clusters and clusters with ≥ 1 gated-out causal allele (candidate gate). */
   sensitivity: { n: number; failures: number }
+  /** Inputs not fully accepted (spec §11.4): the verdict is never SHIP. */
+  provisional?: boolean
 }
 
 export interface ShipCheck {
@@ -94,6 +96,13 @@ export function evaluateShip(input: ShipInputs): ShipVerdict {
       input.clinvarVisible.deltaDecoys.hi,
       `≤ +${SHIP.maxDeltaDecoys}`,
       input.clinvarVisible.deltaDecoys.hi <= SHIP.maxDeltaDecoys
+    ),
+    check(
+      'inputs_final',
+      'Annotation acceptance fully evaluated (inputs not provisional)',
+      input.provisional === true ? 0 : 1,
+      '= 1',
+      input.provisional !== true
     ),
     check(
       'sensitivity',

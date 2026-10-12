@@ -65,7 +65,8 @@ export const SPIKE_OPTIONS: SpikeOptions = {
     { varvisFunc: 'stop_gained', impact: 'HIGH', count: 50 },
     { varvisFunc: 'synonymous_variant', impact: 'LOW', count: 50 }
   ],
-  caddImpute: true
+  caddImpute: true,
+  imputeSeed: 11
 }
 
 let next = 0

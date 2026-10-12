@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import type { FrozenSpike } from '../annotate/freeze'
 import { normalizeAlleles } from '../annotate/normalize'
 import { projectToVarvis } from '../annotate/project-varvis'
-import { PRIVATE_DIR, REPO_ROOT } from '../common/paths'
+import { ensurePrivateDir, PRIVATE_DIR, REPO_ROOT } from '../common/paths'
 import type { ConcordanceCheck } from '../common/types'
 import type { Background } from '../concordance/load-backgrounds'
 import { TOLERANCE, type AfField, type ConcordanceReport } from '../concordance/metrics'
@@ -50,6 +50,8 @@ export interface Acceptance {
   afField: AfField
   disabledGroups: string[]
   checks: ConcordanceCheck[]
+  /** Some acceptance check was not evaluable: the run cannot support a ship decision. */
+  provisional: boolean
 }
 
 /** §11.4: a failing AF or CADD check disables its rule groups everywhere. */
@@ -69,7 +71,7 @@ export function acceptanceOf(report: ConcordanceReport): Acceptance {
     metric,
     value: value ?? Number.NaN,
     threshold: pass === null ? `${threshold} (not evaluable: too few sites)` : threshold,
-    accepted: pass !== false
+    accepted: pass === true
   })
   const checks = [
     check(
@@ -116,11 +118,15 @@ export function acceptanceOf(report: ConcordanceReport): Acceptance {
     )
   ]
   const disabledGroups = [
-    // null = not evaluable (too few compared sites), which the concordance defines as no fail.
-    ...(acc.afPass !== false && acc.poolAfPass !== false ? [] : ['freq', 'ad_freq']),
-    ...(acc.caddPass !== false && acc.poolCaddPass !== false ? [] : ['cadd'])
+    // Only an explicit pass enables a group; null (not evaluable) disables it as well and
+    // marks the run provisional, which the ship verdict refuses.
+    ...(acc.afPass === true && acc.poolAfPass === true ? [] : ['freq', 'ad_freq']),
+    ...(acc.caddPass === true && acc.poolCaddPass === true ? [] : ['cadd'])
   ]
-  return { afField: acc.afField, disabledGroups, checks }
+  const provisional = [acc.afPass, acc.poolAfPass, acc.caddPass, acc.poolCaddPass].some(
+    (p) => p === null
+  )
+  return { afField: acc.afField, disabledGroups, checks, provisional }
 }
 
 export interface SimInputs {
@@ -180,12 +186,17 @@ export function loadInputs(concordanceFile = CONCORDANCE_FILE): SimInputs {
   }
 }
 
-export function spikeOptions(inputs: SimInputs, caddImpute: boolean): SpikeOptions {
+export function spikeOptions(
+  inputs: SimInputs,
+  caddImpute: boolean,
+  imputeSeed: number
+): SpikeOptions {
   return {
     afField: inputs.acceptance.afField,
     funcMapping: inputs.concordance.funcMapping,
     impactByFunc: inputs.concordance.impactByFunc,
-    caddImpute
+    caddImpute,
+    imputeSeed
   }
 }
 
@@ -209,8 +220,9 @@ export async function backgroundNormMap(bg: Background): Promise<Map<string, str
     PRIVATE_DIR,
     `norm-map-${sha256(alleles.map((a) => a.key).join('\n')).slice(0, 16)}.json`
   )
+  ensurePrivateDir()
   if (existsSync(cache)) return new Map(Object.entries(readJson<Record<string, string>>(cache)))
-  const out = await normalizeAlleles(alleles, { tmpDir: PRIVATE_DIR })
+  const out = await normalizeAlleles(alleles, { tmpDir: ensurePrivateDir() })
   const map = new Map(out.filter((n) => n.status === 'ok').map((n) => [n.input, n.key]))
   writeFileSync(cache, JSON.stringify(Object.fromEntries(map)))
   return map

@@ -3,7 +3,7 @@
  * rows from the same local resources (see extra-fields.ts). Background values are cached in
  * the private directory only; the returned coverage is aggregate.
  */
-import { CACHE_DIR, PRIVATE_DIR } from '../common/paths'
+import { CACHE_DIR, ensurePrivateDir } from '../common/paths'
 import type { Background } from '../concordance/load-backgrounds'
 import { canonicalText, extraFields, type ExtraFields } from './extra-fields'
 import { backgroundNormMap, rowKey, type SimInputs } from './inputs'
@@ -57,7 +57,7 @@ export async function addExtraFields(
       const key = norm.get(rowKey(r))
       return key === undefined ? [] : [{ key, gene: r.gene_symbol }]
     })
-    const fields = await extraFields(sites, PRIVATE_DIR, bg.caseLabel, true)
+    const fields = await extraFields(sites, ensurePrivateDir(), bg.caseLabel, true)
     for (const r of bg.rows) {
       const key = norm.get(rowKey(r))
       const extra = key === undefined ? {} : (fields.get(key) ?? {})

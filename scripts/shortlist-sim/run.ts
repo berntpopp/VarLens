@@ -13,7 +13,7 @@ import { availableParallelism } from 'node:os'
 import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { compileRuleset } from '../../src/main/services/scoring/evidence'
-import { RUNS_DIR } from './common/paths'
+import { assertOutsideRepo, RUNS_DIR } from './common/paths'
 import { rng, shuffle } from './common/rng'
 import type { CaseResult, RunManifest, ScenarioId } from './common/types'
 import { backgroundFiles, loadBackgrounds } from './concordance/load-backgrounds'
@@ -102,7 +102,7 @@ async function main(argv: string[]): Promise<void> {
     (timing[k] = (Date.now() - since) / 1000),
     Date.now()
   )
-  const outDir = join(RUNS_DIR, args.run)
+  const outDir = assertOutsideRepo(join(RUNS_DIR, args.run))
   mkdirSync(outDir, { recursive: true })
 
   const inputs = loadInputs(args.concordance)
@@ -117,7 +117,7 @@ async function main(argv: string[]): Promise<void> {
       normKeys: await backgroundNormKeys(bg)
     }))
   )
-  const opts = spikeOptions(inputs, args.caddImpute)
+  const opts = spikeOptions(inputs, args.caddImpute, SEEDS.cases)
   const build = buildCases(inputs.pool.variants, inputs.sources, caseBgs, SEEDS.cases, opts)
   let cases = build.cases
   if (args.quick) cases = shuffle(cases, rng(SEEDS.quick)).slice(0, 50)
@@ -225,6 +225,7 @@ async function main(argv: string[]): Promise<void> {
     run: args.run,
     createdAt: new Date().toISOString(),
     quick: args.quick,
+    provisional: inputs.acceptance.provisional,
     seeds: SEEDS,
     bootstrapReps: reps,
     inputHashes: {

@@ -19,6 +19,7 @@ import {
   POOL_LOCAL_VEP_FILE,
   POOL_NORMALIZED_FILE,
   PRIVATE_DIR,
+  ensurePrivateDir,
   REPO_ROOT,
   RUNS_DIR
 } from '../common/paths'
@@ -259,7 +260,7 @@ function loadPool(): PoolInput | null {
 
 async function main(): Promise<void> {
   const keep = process.argv.includes('--keep-private')
-  mkdirSync(PRIVATE_DIR, { recursive: true })
+  ensurePrivateDir()
   try {
     const bgs = await loadBackgrounds()
     const { input, normalization } = await annotateBackgrounds(bgs)
