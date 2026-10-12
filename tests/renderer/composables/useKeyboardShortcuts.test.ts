@@ -284,6 +284,7 @@ describe('every shared shortcut has a binding', () => {
     comment: 'VariantTable / CohortDataTable via SHORTCUTS.comment.key',
     acmg: 'VariantTable / CohortDataTable via SHORTCUTS.acmg.key',
     expandRow: 'CohortDataTable via SHORTCUTS.expandRow.key',
+    proteinView: 'VariantTable / CohortDataTable / ShortlistTable via useProteinViewShortcut',
     closeDrawer: 'Vuetify overlay/drawer Escape (utils/overlay-escape-guard.ts)'
   }
 

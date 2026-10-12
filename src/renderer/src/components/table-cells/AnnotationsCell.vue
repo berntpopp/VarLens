@@ -64,6 +64,8 @@
 import { computed, ref } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { AnnotationScope } from '../../../../shared/types/annotations'
+import type { Variant } from '../../../../shared/types/api'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import { ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
 import { CellChip, CellIcon } from './cell-components'
 import AcmgQuickMenu from './AcmgQuickMenu.vue'
@@ -104,6 +106,8 @@ interface Props {
   readOnly?: boolean
   /** Stored ACMG evidence decides the class: the quick classes are disabled. */
   acmgLocked?: boolean
+  /** The row's variant, for the quick menu's Protein view entry */
+  variant?: Variant | CohortVariant
 }
 
 interface Emits {
@@ -118,7 +122,8 @@ const props = withDefaults(defineProps<Props>(), {
   globalAcmgClassification: null,
   hasGlobalComment: false,
   showGlobalIndicators: true,
-  annotationScope: 'case'
+  annotationScope: 'case',
+  variant: undefined
 })
 
 const emit = defineEmits<Emits>()
@@ -163,7 +168,8 @@ function openAcmgMenu(): void {
     current: displayAcmg.value ?? null,
     locked: props.acmgLocked,
     select: (classification) => emit('acmg-select', classification),
-    openEvidence: () => emit('acmg-evidence-click')
+    openEvidence: () => emit('acmg-evidence-click'),
+    variant: props.variant
   })
 }
 

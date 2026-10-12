@@ -8,6 +8,8 @@
  */
 import { inject, provide, type InjectionKey } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import type { Variant } from '../../../../shared/types/api'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import { useSharedMenu, type SharedMenu } from './shared-menu'
 
 export interface AcmgMenuRequest {
@@ -17,6 +19,8 @@ export interface AcmgMenuRequest {
   locked: boolean
   select: (classification: AcmgClassification | null) => void
   openEvidence: () => void
+  /** The row's variant: the menu also offers the protein view for it. */
+  variant?: Variant | CohortVariant
 }
 
 export type AcmgQuickMenuState = SharedMenu<AcmgMenuRequest>
