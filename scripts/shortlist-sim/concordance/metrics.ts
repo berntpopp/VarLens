@@ -71,6 +71,8 @@ export interface ConcordanceReport {
   sites: number
   matched: number
   normalization: Record<string, number>
+  /** Transcript choice per matched site: 'gene' (varvis gene), 'pick' (no gene), 'unmapped_gene'. */
+  transcriptSelection: Record<string, number>
   funcMapping: FuncMappingRow[]
   impactByFunc: ImpactRow[]
   funcAgreement: { n: number; projectedEqual: number; impactEqual: number; unmapped: number }
@@ -215,10 +217,13 @@ function countRows<K extends string>(keys: Iterable<K>): Map<K, number> {
   return m
 }
 
+/** Sites with a usable consequence: annotated and not `unmapped_gene` (gene has no transcript). */
+const hasTerms = (s: Site): boolean => s.local !== null && s.local.selection !== 'unmapped_gene'
+
 export function buildFuncMapping(sites: Site[]): FuncMappingRow[] {
   const counts = countRows(
     sites
-      .filter((s) => s.local !== null && s.varvis.func !== null)
+      .filter((s) => hasTerms(s) && s.varvis.func !== null)
       .map((s) => {
         const cls: AlleleClass = alleleClass(s.varvis.ref, s.varvis.alt)
         return [vepTermKey(s.local!.mostSevere, s.local!.terms), cls, s.varvis.func].join('\t')
@@ -277,9 +282,9 @@ export function funcAgreement(
   let impactEqual = 0
   let unmapped = 0
   for (const s of sites) {
-    if (s.local === null || s.varvis.func === null) continue
+    if (!hasTerms(s) || s.varvis.func === null) continue
     n++
-    const p = projectToVarvis(s.local.mostSevere, s.local.terms, mapping, impactByFunc, s.varvis)
+    const p = projectToVarvis(s.local!.mostSevere, s.local!.terms, mapping, impactByFunc, s.varvis)
     if (p.reason === 'unmapped') unmapped++
     if (p.func === s.varvis.func) projectedEqual++
     if (p.consequence !== null && p.consequence === s.varvis.consequence) impactEqual++

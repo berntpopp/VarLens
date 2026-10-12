@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T13:46:07.520Z",
+  "generatedAt": "2026-10-12T15:38:27.890Z",
   "backgrounds": [
     {
       "label": "bg1",
@@ -29,186 +29,161 @@
     "ok": 19578,
     "repositioned": 0
   },
+  "transcriptSelection": {
+    "gene": 18710,
+    "unmapped_gene": 841,
+    "pick": 27
+  },
   "funcMapping": [
     {
       "vepTerm": "intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "coding_transcript_intron_variant",
-      "count": 3548
+      "count": 3807
     },
     {
       "vepTerm": "missense_variant",
       "alleleClass": "snv",
       "varvisFunc": "missense_variant",
-      "count": 3092
+      "count": 3160
     },
     {
       "vepTerm": "synonymous_variant",
       "alleleClass": "snv",
       "varvisFunc": "synonymous_variant",
-      "count": 2318
+      "count": 2376
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "del",
       "varvisFunc": "coding_transcript_intron_variant",
-      "count": 1208
+      "count": 1226
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "coding_transcript_intron_variant",
-      "count": 1094
+      "count": 1110
     },
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "snv",
       "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 555
+      "count": 584
+    },
+    {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 300
     },
     {
       "vepTerm": "missense_variant",
       "alleleClass": "mnv",
       "varvisFunc": "mnv",
-      "count": 290
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 284
+      "count": 285
     },
     {
       "vepTerm": "5_prime_UTR_variant",
       "alleleClass": "snv",
       "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 220
+      "count": 228
     },
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "del",
       "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 204
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 187
+      "count": 217
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
       "varvisFunc": "upstream_gene_variant",
-      "count": 186
+      "count": 217
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 197
     },
     {
       "vepTerm": "inframe_deletion",
       "alleleClass": "del",
       "varvisFunc": "inframe_indel",
-      "count": 177
+      "count": 178
     },
     {
       "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "splice_region_variant",
-      "count": 171
+      "count": 172
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "mnv",
       "varvisFunc": "coding_transcript_intron_variant",
-      "count": 155
+      "count": 168
     },
     {
       "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "del",
       "varvisFunc": "splice_region_variant",
-      "count": 139
+      "count": 143
     },
     {
-      "vepTerm": "downstream_gene_variant",
+      "vepTerm": "intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 131
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 120
     },
     {
       "vepTerm": "missense_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 131
+      "count": 120
     },
     {
-      "vepTerm": "synonymous_variant",
-      "alleleClass": "snv",
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "del",
       "varvisFunc": "coding_transcript_intron_variant",
-      "count": 122
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
       "count": 118
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 117
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 117
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 112
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "snv",
       "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 111
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 106
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_region_variant",
-      "count": 98
+      "count": 109
     },
     {
       "vepTerm": "downstream_gene_variant",
       "alleleClass": "snv",
       "varvisFunc": "downstream_gene_variant",
-      "count": 97
+      "count": 108
     },
     {
       "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "splice_region_variant",
-      "count": 94
+      "count": 99
+    },
+    {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "splice_region_variant",
+      "count": 97
     },
     {
       "vepTerm": "inframe_insertion",
       "alleleClass": "ins",
       "varvisFunc": "inframe_indel",
-      "count": 93
+      "count": 95
     },
     {
-      "vepTerm": "synonymous_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 89
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 87
     },
     {
       "vepTerm": "frameshift_variant",
@@ -217,73 +192,55 @@
       "count": 85
     },
     {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 85
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 85
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 84
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "synonymous_variant",
-      "count": 81
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 80
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 76
     },
     {
       "vepTerm": "splice_donor_region_variant&intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "splice_region_variant",
-      "count": 76
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "splice_region_variant",
-      "count": 73
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 73
+      "count": 78
     },
     {
       "vepTerm": "missense_variant&splice_region_variant",
       "alleleClass": "snv",
       "varvisFunc": "missense_variant",
+      "count": 72
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
       "count": 71
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "splice_region_variant",
+      "count": 70
     },
     {
       "vepTerm": "splice_region_variant&intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "splice_region_variant",
-      "count": 69
+      "count": 70
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 68
+    },
+    {
+      "vepTerm": "non_coding_transcript_exon_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 66
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
       "alleleClass": "snv",
       "varvisFunc": "intergenic_variant",
       "count": 64
@@ -295,57 +252,33 @@
       "count": 64
     },
     {
-      "vepTerm": "synonymous_variant",
+      "vepTerm": "splice_region_variant&synonymous_variant",
       "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 64
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 60
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
-      "count": 56
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 54
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 51
+      "varvisFunc": "splice_region_variant",
+      "count": 52
     },
     {
       "vepTerm": "frameshift_variant",
       "alleleClass": "ins",
       "varvisFunc": "frameshift_truncation",
-      "count": 49
+      "count": 50
     },
     {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 49
-    },
-    {
-      "vepTerm": "splice_region_variant&synonymous_variant",
-      "alleleClass": "snv",
+      "vepTerm": "intron_variant",
+      "alleleClass": "ins",
       "varvisFunc": "splice_region_variant",
       "count": 48
     },
     {
-      "vepTerm": "downstream_gene_variant",
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "intergenic_variant",
+      "count": 48
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 47
     },
     {
@@ -355,117 +288,99 @@
       "count": 47
     },
     {
-      "vepTerm": "synonymous_variant",
+      "vepTerm": "intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 47
+      "varvisFunc": "downstream_gene_variant",
+      "count": 46
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
+      "vepTerm": "intron_variant",
       "alleleClass": "ins",
-      "varvisFunc": "5_prime_UTR_exon_variant",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 46
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 46
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_region_variant",
       "count": 45
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "synonymous_variant",
-      "count": 45
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 44
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 44
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 42
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 41
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 40
     },
     {
       "vepTerm": "missense_variant",
       "alleleClass": "snv",
       "varvisFunc": "downstream_gene_variant",
-      "count": 40
+      "count": 44
+    },
+    {
+      "vepTerm": "missense_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 44
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 43
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 42
+    },
+    {
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 41
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "missense_variant",
+      "count": 40
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 37
+    },
+    {
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 37
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 35
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "missense_variant",
+      "count": 35
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "ins",
       "varvisFunc": "intergenic_variant",
-      "count": 38
+      "count": 33
     },
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 37
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 35
-    },
-    {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 34
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 34
+      "count": 31
     },
     {
       "vepTerm": "missense_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
-      "count": 34
-    },
-    {
-      "vepTerm": "synonymous_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 34
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 30
     },
     {
@@ -475,10 +390,10 @@
       "count": 30
     },
     {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 29
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "intergenic_variant",
+      "count": 30
     },
     {
       "vepTerm": "3_prime_UTR_variant",
@@ -490,54 +405,60 @@
       "vepTerm": "intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 26
+      "count": 28
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "synonymous_variant",
       "count": 26
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 25
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 24
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
-      "count": 24
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 25
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
       "count": 24
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 24
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 23
     },
     {
-      "vepTerm": "intergenic_variant",
+      "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 22
+    },
+    {
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 22
     },
     {
       "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 21
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "synonymous_variant",
       "count": 21
     },
     {
@@ -547,123 +468,75 @@
       "count": 21
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 20
-    },
-    {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
+      "alleleClass": "snv",
       "varvisFunc": "coding_transcript_intron_variant",
       "count": 20
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 20
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_region_variant",
-      "count": 19
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 19
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "synonymous_variant",
+      "count": 20
+    },
+    {
+      "vepTerm": "missense_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 19
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 17
     },
     {
       "vepTerm": "downstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 18
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 17
     },
     {
       "vepTerm": "splice_donor_variant",
       "alleleClass": "snv",
       "varvisFunc": "splice_donor_variant",
-      "count": 18
+      "count": 17
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 18
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 17
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 17
+      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "splice_acceptor_variant",
+      "count": 16
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 15
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "missense_variant",
+      "count": 15
     },
     {
       "vepTerm": "missense_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 17
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 14
     },
     {
       "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "splice_acceptor_variant",
-      "count": 17
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 17
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
-      "count": 16
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 15
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 15
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 15
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 14
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "synonymous_variant",
-      "count": 14
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 14
     },
     {
@@ -673,27 +546,9 @@
       "count": 14
     },
     {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_acceptor_variant",
-      "count": 14
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 13
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 13
-    },
-    {
-      "vepTerm": "splice_acceptor_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_acceptor_variant",
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 13
     },
     {
@@ -703,20 +558,14 @@
       "count": 13
     },
     {
-      "vepTerm": "synonymous_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 13
-    },
-    {
-      "vepTerm": "inframe_deletion",
+      "vepTerm": "intron_variant",
       "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "varvisFunc": "downstream_gene_variant",
       "count": 12
     },
     {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "ins",
+      "vepTerm": "missense_variant",
+      "alleleClass": "mnv",
       "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 12
     },
@@ -727,46 +576,34 @@
       "count": 12
     },
     {
+      "vepTerm": "splice_acceptor_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "splice_acceptor_variant",
+      "count": 12
+    },
+    {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "mnv",
+      "alleleClass": "del",
       "varvisFunc": "intergenic_variant",
       "count": 12
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 11
+    },
+    {
+      "vepTerm": "non_coding_transcript_exon_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 11
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
       "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 12
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
       "count": 11
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 11
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 11
-    },
-    {
-      "vepTerm": "inframe_deletion",
-      "alleleClass": "del",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 11
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 10
     },
     {
       "vepTerm": "5_prime_UTR_variant",
@@ -776,38 +613,38 @@
     },
     {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 10
-    },
-    {
-      "vepTerm": "intergenic_variant",
-      "alleleClass": "ins",
+      "alleleClass": "del",
       "varvisFunc": "intergenic_variant",
       "count": 10
     },
     {
-      "vepTerm": "intron_variant",
+      "vepTerm": "inframe_deletion",
       "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 10
+    },
+    {
+      "vepTerm": "inframe_deletion",
+      "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 10
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "ins",
       "varvisFunc": "downstream_gene_variant",
       "count": 10
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 10
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "missense_variant",
       "count": 10
     },
     {
       "vepTerm": "missense_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 10
     },
     {
@@ -817,62 +654,98 @@
       "count": 10
     },
     {
-      "vepTerm": "synonymous_variant",
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 10
     },
     {
-      "vepTerm": "intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 9
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 10
     },
     {
-      "vepTerm": "splice_donor_region_variant&intron_variant",
-      "alleleClass": "del",
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "snv",
       "varvisFunc": "coding_transcript_intron_variant",
       "count": 9
     },
     {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "inframe_deletion",
       "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "mnv",
       "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 9
     },
     {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "snv",
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "mnv",
       "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 9
     },
     {
-      "vepTerm": "upstream_gene_variant",
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "splice_region_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 9
     },
     {
-      "vepTerm": "downstream_gene_variant",
+      "vepTerm": "splice_donor_region_variant&intron_variant",
       "alleleClass": "del",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 8
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 9
     },
     {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "inframe_indel",
-      "count": 8
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "missense_variant",
+      "count": 9
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "missense_variant",
       "count": 8
     },
     {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 8
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "del",
       "varvisFunc": "upstream_gene_variant",
       "count": 8
     },
@@ -883,15 +756,21 @@
       "count": 8
     },
     {
-      "vepTerm": "splice_donor_region_variant&intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "intergenic_variant",
       "count": 8
     },
     {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "vepTerm": "non_coding_transcript_exon_variant",
       "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 8
+    },
+    {
+      "vepTerm": "splice_donor_region_variant&intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 8
     },
     {
@@ -901,15 +780,9 @@
       "count": 8
     },
     {
-      "vepTerm": "stop_gained",
+      "vepTerm": "synonymous_variant",
       "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 8
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 8
     },
     {
@@ -919,45 +792,39 @@
       "count": 7
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 7
-    },
-    {
       "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "del",
+      "alleleClass": "ins",
       "varvisFunc": "upstream_gene_variant",
       "count": 7
     },
     {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 7
-    },
-    {
-      "vepTerm": "inframe_deletion",
       "alleleClass": "del",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 7
     },
     {
-      "vepTerm": "intron_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 7
-    },
-    {
-      "vepTerm": "intron_variant",
+      "vepTerm": "downstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
+      "varvisFunc": "splice_region_variant",
+      "count": 7
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 7
     },
     {
       "vepTerm": "splice_donor_region_variant&intron_variant",
       "alleleClass": "mnv",
       "varvisFunc": "splice_region_variant",
+      "count": 7
+    },
+    {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 7
     },
     {
@@ -973,22 +840,22 @@
       "count": 7
     },
     {
-      "vepTerm": "synonymous_variant",
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 7
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_region_variant",
-      "count": 7
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "synonymous_variant",
+      "count": 6
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 7
+      "count": 6
     },
     {
       "vepTerm": "3_prime_UTR_variant",
@@ -997,57 +864,21 @@
       "count": 6
     },
     {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_region_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "inframe_indel",
-      "count": 6
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "mnv",
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
       "varvisFunc": "intergenic_variant",
       "count": 6
     },
     {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 6
     },
     {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "intron_variant",
+      "vepTerm": "frameshift_variant",
       "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "frameshift_elongation",
       "count": 6
     },
     {
@@ -1058,25 +889,25 @@
     },
     {
       "vepTerm": "intron_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 6
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
-      "count": 6
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
       "alleleClass": "mnv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 6
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "intergenic_variant",
+      "count": 6
+    },
+    {
+      "vepTerm": "missense_variant",
+      "alleleClass": "snv",
       "varvisFunc": "intergenic_variant",
       "count": 6
     },
@@ -1088,9 +919,21 @@
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "upstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 6
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 6
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 5
     },
     {
       "vepTerm": "3_prime_UTR_variant",
@@ -1099,20 +942,44 @@
       "count": 5
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "downstream_gene_variant",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 5
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "inframe_indel",
       "count": 5
     },
     {
       "vepTerm": "frameshift_variant",
       "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "del",
+      "varvisFunc": "frameshift_elongation",
+      "count": 5
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "inframe_insertion",
+      "alleleClass": "ins",
       "varvisFunc": "upstream_gene_variant",
       "count": 5
     },
@@ -1123,21 +990,51 @@
       "count": 5
     },
     {
+      "vepTerm": "intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_intron_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 5
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "mnv",
+      "count": 5
+    },
+    {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
       "alleleClass": "snv",
       "varvisFunc": "upstream_gene_variant",
       "count": 5
     },
     {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
       "count": 5
     },
     {
-      "vepTerm": "splice_region_variant&5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_region_variant",
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "del",
+      "varvisFunc": "downstream_gene_variant",
       "count": 5
     },
     {
@@ -1153,6 +1050,12 @@
       "count": 5
     },
     {
+      "vepTerm": "start_lost",
+      "alleleClass": "snv",
+      "varvisFunc": "start_lost",
+      "count": 5
+    },
+    {
       "vepTerm": "stop_gained",
       "alleleClass": "mnv",
       "varvisFunc": "mnv",
@@ -1160,19 +1063,7 @@
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 5
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "splice_region_variant",
-      "count": 5
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
+      "alleleClass": "mnv",
       "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 5
     },
@@ -1184,86 +1075,68 @@
     },
     {
       "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "ins",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "downstream_gene_variant",
       "count": 4
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
+      "vepTerm": "5_prime_UTR_variant",
       "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 4
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "vepTerm": "5_prime_UTR_variant",
       "alleleClass": "snv",
       "varvisFunc": "intergenic_variant",
       "count": 4
     },
     {
       "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "upstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 4
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 4
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 4
     },
     {
       "vepTerm": "downstream_gene_variant",
       "alleleClass": "del",
-      "varvisFunc": "splice_region_variant",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 4
     },
     {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "del",
-      "varvisFunc": "frameshift_elongation",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 4
     },
     {
-      "vepTerm": "frameshift_variant",
+      "vepTerm": "downstream_gene_variant",
       "alleleClass": "ins",
-      "varvisFunc": "frameshift_elongation",
+      "varvisFunc": "inframe_indel",
       "count": 4
     },
     {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "downstream_gene_variant",
       "count": 4
     },
     {
       "vepTerm": "frameshift_variant&splice_region_variant",
       "alleleClass": "ins",
       "varvisFunc": "splice_donor_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "inframe_deletion",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 4
     },
     {
@@ -1281,31 +1154,37 @@
     {
       "vepTerm": "intron_variant",
       "alleleClass": "mnv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "varvisFunc": "mnv",
       "count": 4
     },
     {
       "vepTerm": "intron_variant",
-      "alleleClass": "snv",
+      "alleleClass": "ins",
       "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 4
     },
     {
       "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_intron_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 4
+    },
+    {
+      "vepTerm": "intron_variant&NMD_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 4
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "upstream_gene_variant",
       "count": 4
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 4
     },
     {
@@ -1317,43 +1196,13 @@
     {
       "vepTerm": "non_coding_transcript_exon_variant",
       "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "intergenic_variant",
       "count": 4
     },
     {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "vepTerm": "non_coding_transcript_exon_variant",
       "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "splice_region_variant&intron_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 4
     },
     {
@@ -1375,18 +1224,6 @@
       "count": 4
     },
     {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
-      "count": 4
-    },
-    {
-      "vepTerm": "start_lost",
-      "alleleClass": "snv",
-      "varvisFunc": "start_lost",
-      "count": 4
-    },
-    {
       "vepTerm": "synonymous_variant",
       "alleleClass": "mnv",
       "varvisFunc": "mnv",
@@ -1395,67 +1232,49 @@
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "del",
-      "varvisFunc": "downstream_gene_variant",
+      "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 4
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "mnv",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "varvisFunc": "intergenic_variant",
       "count": 4
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "del",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 3
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 4
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "synonymous_variant",
-      "count": 3
+      "varvisFunc": "splice_region_variant",
+      "count": 4
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "5_prime_UTR_variant",
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
       "alleleClass": "ins",
       "varvisFunc": "downstream_gene_variant",
       "count": 3
     },
     {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
@@ -1466,20 +1285,8 @@
     },
     {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "frameshift_variant",
-      "alleleClass": "del",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "frameshift_variant&start_lost&start_retained_variant",
       "alleleClass": "ins",
-      "varvisFunc": "start_lost",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
@@ -1491,19 +1298,13 @@
     {
       "vepTerm": "inframe_insertion",
       "alleleClass": "ins",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 3
     },
     {
       "vepTerm": "inframe_insertion",
       "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 3
-    },
-    {
-      "vepTerm": "intron_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "mnv",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
@@ -1513,15 +1314,21 @@
       "count": 3
     },
     {
-      "vepTerm": "intron_variant",
+      "vepTerm": "intron_variant&NMD_transcript_variant",
       "alleleClass": "ins",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
-      "vepTerm": "intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "synonymous_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "splice_region_variant",
       "count": 3
     },
     {
@@ -1537,9 +1344,9 @@
       "count": 3
     },
     {
-      "vepTerm": "splice_donor_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "vepTerm": "non_coding_transcript_exon_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
@@ -1558,6 +1365,24 @@
       "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "splice_region_variant&5_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "splice_region_variant",
+      "count": 3
+    },
+    {
+      "vepTerm": "splice_region_variant&intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
       "count": 3
     },
     {
@@ -1579,15 +1404,15 @@
       "count": 3
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 3
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "ins",
-      "varvisFunc": "inframe_indel",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 3
     },
     {
@@ -1597,21 +1422,21 @@
       "count": 3
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "inframe_indel",
-      "count": 3
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 3
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 2
     },
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "ins",
       "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 2
     },
     {
@@ -1621,9 +1446,9 @@
       "count": 2
     },
     {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "downstream_gene_variant",
       "count": 2
     },
     {
@@ -1645,9 +1470,33 @@
       "count": 2
     },
     {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 2
+    },
+    {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "frameshift_truncation",
+      "alleleClass": "mnv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "intergenic_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 2
     },
     {
@@ -1659,19 +1508,31 @@
     {
       "vepTerm": "downstream_gene_variant",
       "alleleClass": "ins",
-      "varvisFunc": "frameshift_truncation",
+      "varvisFunc": "splice_region_variant",
       "count": 2
     },
     {
       "vepTerm": "downstream_gene_variant",
       "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "varvisFunc": "splice_region_variant",
       "count": 2
     },
     {
       "vepTerm": "frameshift_variant",
       "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "del",
+      "varvisFunc": "downstream_gene_variant",
       "count": 2
     },
     {
@@ -1683,7 +1544,7 @@
     {
       "vepTerm": "frameshift_variant&start_lost&start_retained_variant",
       "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "start_lost",
       "count": 2
     },
     {
@@ -1693,7 +1554,7 @@
       "count": 2
     },
     {
-      "vepTerm": "inframe_deletion",
+      "vepTerm": "frameshift_variant&stop_lost",
       "alleleClass": "del",
       "varvisFunc": "intergenic_variant",
       "count": 2
@@ -1701,7 +1562,7 @@
     {
       "vepTerm": "inframe_deletion",
       "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 2
     },
     {
@@ -1711,33 +1572,15 @@
       "count": 2
     },
     {
-      "vepTerm": "inframe_insertion",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
       "vepTerm": "inframe_insertion&splice_region_variant",
       "alleleClass": "ins",
       "varvisFunc": "splice_donor_variant",
       "count": 2
     },
     {
-      "vepTerm": "inframe_insertion&splice_region_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "intergenic_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 2
-    },
-    {
       "vepTerm": "intron_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 2
     },
     {
@@ -1748,38 +1591,56 @@
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "missense_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "mnv",
+      "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 2
     },
     {
-      "vepTerm": "non_coding_transcript_exon_variant",
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "inframe_indel",
+      "count": 2
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "splice_region_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "intergenic_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "missense_variant",
       "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "varvisFunc": "downstream_gene_variant",
       "count": 2
     },
     {
       "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 2
     },
     {
@@ -1810,6 +1671,12 @@
       "vepTerm": "splice_donor_region_variant&intron_variant",
       "alleleClass": "ins",
       "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "splice_donor_region_variant&intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 2
     },
     {
@@ -1825,27 +1692,27 @@
       "count": 2
     },
     {
+      "vepTerm": "splice_donor_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "splice_donor_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "intergenic_variant",
+      "count": 2
+    },
+    {
       "vepTerm": "splice_donor_variant&splice_donor_5th_base_variant&coding_sequence_variant&intron_variant",
       "alleleClass": "del",
       "varvisFunc": "coding_transcript_intron_variant",
       "count": 2
     },
     {
-      "vepTerm": "splice_donor_variant&splice_donor_5th_base_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "splice_donor_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "del",
-      "varvisFunc": "3_prime_UTR_exon_variant",
-      "count": 2
-    },
-    {
       "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
+      "varvisFunc": "downstream_gene_variant",
       "count": 2
     },
     {
@@ -1855,39 +1722,9 @@
       "count": 2
     },
     {
-      "vepTerm": "splice_region_variant&5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 2
-    },
-    {
       "vepTerm": "splice_region_variant&non_coding_transcript_exon_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "upstream_gene_variant",
+      "varvisFunc": "splice_region_variant",
       "count": 2
     },
     {
@@ -1897,33 +1734,9 @@
       "count": 2
     },
     {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_region_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "splice_region_variant&synonymous_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "intergenic_variant",
-      "count": 2
-    },
-    {
       "vepTerm": "stop_lost",
       "alleleClass": "mnv",
       "varvisFunc": "mnv",
-      "count": 2
-    },
-    {
-      "vepTerm": "stop_lost",
-      "alleleClass": "mnv",
-      "varvisFunc": "intergenic_variant",
       "count": 2
     },
     {
@@ -1933,54 +1746,36 @@
       "count": 2
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_acceptor_variant",
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "intergenic_variant",
       "count": 2
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "ins",
-      "varvisFunc": "5_prime_UTR_exon_variant",
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 2
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "splice_region_variant",
       "count": 2
     },
     {
       "vepTerm": "upstream_gene_variant",
       "alleleClass": "ins",
-      "varvisFunc": "frameshift_elongation",
-      "count": 2
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "mnv",
       "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 2
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 2
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "mnv",
-      "count": 2
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "3_prime_UTR_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 1
-    },
-    {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "mnv",
       "varvisFunc": "coding_transcript_intron_variant",
@@ -1989,13 +1784,49 @@
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
+      "varvisFunc": "inframe_indel",
+      "count": 1
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "del",
+      "varvisFunc": "upstream_gene_variant",
       "count": 1
     },
     {
       "vepTerm": "3_prime_UTR_variant",
       "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "stop_gained",
+      "count": 1
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "3_prime_UTR_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "3_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "inframe_indel",
+      "count": 1
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 1
     },
     {
@@ -2013,13 +1844,13 @@
     {
       "vepTerm": "5_prime_UTR_variant",
       "alleleClass": "snv",
-      "varvisFunc": "start_lost",
+      "varvisFunc": "missense_variant",
       "count": 1
     },
     {
       "vepTerm": "5_prime_UTR_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
+      "alleleClass": "del",
+      "varvisFunc": "inframe_indel",
       "count": 1
     },
     {
@@ -2029,9 +1860,33 @@
       "count": 1
     },
     {
-      "vepTerm": "5_prime_UTR_variant",
+      "vepTerm": "5_prime_UTR_variant&NMD_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_intron_variant",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "5_prime_UTR_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "frameshift_truncation",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "splice_donor_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "splice_acceptor_variant",
       "count": 1
     },
     {
@@ -2042,20 +1897,38 @@
     },
     {
       "vepTerm": "downstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "stop_lost",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
       "alleleClass": "mnv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "splice_donor_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "del",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "downstream_gene_variant",
+      "alleleClass": "ins",
       "varvisFunc": "upstream_gene_variant",
       "count": 1
     },
     {
       "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "splice_acceptor_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "non_coding_transcript_exon_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_intron_variant",
       "count": 1
     },
     {
@@ -2065,21 +1938,33 @@
       "count": 1
     },
     {
-      "vepTerm": "downstream_gene_variant",
+      "vepTerm": "frameshift_variant",
       "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
-      "vepTerm": "downstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_exon_variant",
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "frameshift_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "downstream_gene_variant",
       "count": 1
     },
     {
       "vepTerm": "frameshift_variant",
       "alleleClass": "del",
       "varvisFunc": "stop_gained",
+      "count": 1
+    },
+    {
+      "vepTerm": "frameshift_variant&splice_region_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "splice_acceptor_variant",
       "count": 1
     },
     {
@@ -2092,12 +1977,6 @@
       "vepTerm": "frameshift_variant&splice_region_variant",
       "alleleClass": "del",
       "varvisFunc": "splice_donor_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "frameshift_variant&start_lost&start_retained_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
@@ -2121,13 +2000,7 @@
     {
       "vepTerm": "inframe_deletion",
       "alleleClass": "del",
-      "varvisFunc": "3_prime_UTR_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "inframe_insertion",
-      "alleleClass": "ins",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 1
     },
     {
@@ -2151,31 +2024,25 @@
     {
       "vepTerm": "inframe_insertion&stop_retained_variant",
       "alleleClass": "ins",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "inframe_insertion&stop_retained_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "stop_lost",
-      "count": 1
-    },
-    {
-      "vepTerm": "inframe_insertion&stop_retained_variant",
-      "alleleClass": "ins",
       "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "intron_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_donor_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "frameshift_truncation",
       "count": 1
     },
     {
       "vepTerm": "intron_variant",
       "alleleClass": "mnv",
       "varvisFunc": "upstream_gene_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "start_lost",
       "count": 1
     },
     {
@@ -2186,68 +2053,80 @@
     },
     {
       "vepTerm": "intron_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "splice_region_variant",
       "count": 1
     },
     {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "missense_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "vepTerm": "intron_variant&NMD_transcript_variant",
       "alleleClass": "del",
       "varvisFunc": "splice_region_variant",
       "count": 1
     },
     {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "downstream_gene_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "vepTerm": "intron_variant&NMD_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_exon_variant",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "upstream_gene_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "vepTerm": "intron_variant&NMD_transcript_variant",
       "alleleClass": "snv",
-      "varvisFunc": "start_lost",
+      "varvisFunc": "synonymous_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&NMD_transcript_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "splice_acceptor_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "3_prime_UTR_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "5_prime_UTR_intron_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
       "vepTerm": "intron_variant&non_coding_transcript_variant",
       "alleleClass": "ins",
-      "varvisFunc": "splice_region_variant",
+      "varvisFunc": "frameshift_truncation",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "frameshift_truncation",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "del",
+      "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "downstream_gene_variant",
       "count": 1
     },
     {
@@ -2259,7 +2138,25 @@
     {
       "vepTerm": "missense_variant",
       "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_intron_variant",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "missense_variant",
+      "alleleClass": "mnv",
+      "varvisFunc": "5_prime_UTR_intron_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "missense_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "missense_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 1
     },
     {
@@ -2276,20 +2173,14 @@
     },
     {
       "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "ins",
+      "alleleClass": "mnv",
       "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
       "count": 1
     },
     {
@@ -2300,20 +2191,14 @@
     },
     {
       "vepTerm": "non_coding_transcript_exon_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "synonymous_variant",
+      "alleleClass": "del",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
       "vepTerm": "protein_altering_variant",
       "alleleClass": "ins",
       "varvisFunc": "inframe_indel",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_acceptor_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "downstream_gene_variant",
       "count": 1
     },
     {
@@ -2332,12 +2217,6 @@
       "vepTerm": "splice_acceptor_variant&coding_sequence_variant&intron_variant",
       "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_exon_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_acceptor_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "splice_acceptor_variant",
       "count": 1
     },
     {
@@ -2385,6 +2264,12 @@
     {
       "vepTerm": "splice_donor_region_variant&intron_variant&non_coding_transcript_variant",
       "alleleClass": "snv",
+      "varvisFunc": "splice_region_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "splice_donor_region_variant&intron_variant&non_coding_transcript_variant",
+      "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 1
     },
@@ -2415,7 +2300,7 @@
     {
       "vepTerm": "splice_donor_variant&splice_donor_5th_base_variant&intron_variant",
       "alleleClass": "del",
-      "varvisFunc": "non_coding_transcript_intron_variant",
+      "varvisFunc": "splice_donor_variant",
       "count": 1
     },
     {
@@ -2431,6 +2316,12 @@
       "count": 1
     },
     {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "downstream_gene_variant",
+      "count": 1
+    },
+    {
       "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&NMD_transcript_variant",
       "alleleClass": "ins",
       "varvisFunc": "upstream_gene_variant",
@@ -2443,27 +2334,15 @@
       "count": 1
     },
     {
+      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
       "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
       "alleleClass": "del",
       "varvisFunc": "splice_region_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "del",
-      "varvisFunc": "5_prime_UTR_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_polypyrimidine_tract_variant&intron_variant&non_coding_transcript_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "non_coding_transcript_intron_variant",
       "count": 1
     },
     {
@@ -2534,12 +2413,6 @@
     },
     {
       "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "del",
       "varvisFunc": "upstream_gene_variant",
       "count": 1
@@ -2548,6 +2421,12 @@
       "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
       "alleleClass": "snv",
       "varvisFunc": "3_prime_UTR_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "splice_region_variant&splice_polypyrimidine_tract_variant&intron_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
       "count": 1
     },
     {
@@ -2571,19 +2450,19 @@
     {
       "vepTerm": "splice_region_variant&synonymous_variant",
       "alleleClass": "snv",
+      "varvisFunc": "upstream_gene_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "splice_region_variant&synonymous_variant",
+      "alleleClass": "snv",
       "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "stop_gained",
       "alleleClass": "snv",
-      "varvisFunc": "coding_transcript_intron_variant",
-      "count": 1
-    },
-    {
-      "vepTerm": "stop_gained",
-      "alleleClass": "snv",
-      "varvisFunc": "3_prime_UTR_exon_variant",
+      "varvisFunc": "5_prime_UTR_intron_variant",
       "count": 1
     },
     {
@@ -2611,21 +2490,27 @@
       "count": 1
     },
     {
+      "vepTerm": "stop_lost&NMD_transcript_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "coding_transcript_intron_variant",
+      "count": 1
+    },
+    {
       "vepTerm": "stop_retained_variant",
       "alleleClass": "snv",
       "varvisFunc": "stop_retained_variant",
       "count": 1
     },
     {
-      "vepTerm": "upstream_gene_variant",
-      "alleleClass": "mnv",
-      "varvisFunc": "non_coding_transcript_exon_variant",
+      "vepTerm": "synonymous_variant",
+      "alleleClass": "snv",
+      "varvisFunc": "5_prime_UTR_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "snv",
-      "varvisFunc": "stop_gained",
+      "alleleClass": "mnv",
+      "varvisFunc": "coding_transcript_intron_variant",
       "count": 1
     },
     {
@@ -2636,20 +2521,14 @@
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "ins",
-      "varvisFunc": "frameshift_truncation",
-      "count": 1
-    },
-    {
-      "vepTerm": "upstream_gene_variant",
       "alleleClass": "del",
       "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 1
     },
     {
       "vepTerm": "upstream_gene_variant",
-      "alleleClass": "del",
-      "varvisFunc": "frameshift_elongation",
+      "alleleClass": "mnv",
+      "varvisFunc": "non_coding_transcript_exon_variant",
       "count": 1
     },
     {
@@ -2660,8 +2539,20 @@
     },
     {
       "vepTerm": "upstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "5_prime_UTR_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
+      "alleleClass": "ins",
+      "varvisFunc": "non_coding_transcript_exon_variant",
+      "count": 1
+    },
+    {
+      "vepTerm": "upstream_gene_variant",
       "alleleClass": "snv",
-      "varvisFunc": "splice_donor_variant",
+      "varvisFunc": "start_lost",
       "count": 1
     }
   ],
@@ -2788,10 +2679,10 @@
     }
   ],
   "funcAgreement": {
-    "n": 19551,
-    "projectedEqual": 15309,
-    "impactEqual": 16756,
-    "unmapped": 84
+    "n": 18710,
+    "projectedEqual": 15835,
+    "impactEqual": 17063,
+    "unmapped": 49
   },
   "afField": [
     {
@@ -2864,7 +2755,7 @@
     {
       "field": "func",
       "varvisMissing": 27,
-      "localMissing": 0,
+      "localMissing": 841,
       "n": 19578
     }
   ],
@@ -2891,9 +2782,9 @@
     "afField": [
       {
         "field": "joint",
-        "medianAbsLog10Err": 6.689977454232832e-7,
-        "n": 135,
-        "onlyVarvis": 158,
+        "medianAbsLog10Err": 6.552470818155243e-7,
+        "n": 144,
+        "onlyVarvis": 149,
         "onlyLocal": 0,
         "bothMissing": 212
       },
@@ -2915,9 +2806,9 @@
       },
       {
         "field": "popmax",
-        "medianAbsLog10Err": 9.788623698270271e-7,
-        "n": 132,
-        "onlyVarvis": 154,
+        "medianAbsLog10Err": 0.0000010529022658190001,
+        "n": 141,
+        "onlyVarvis": 145,
         "onlyLocal": 3,
         "bothMissing": 216
       },
@@ -2939,18 +2830,18 @@
       }
     ],
     "cadd": {
-      "n": 275,
+      "n": 289,
       "medianAbsErr": 0,
       "pearson": 1
     },
-    "termAgreement": 469,
-    "transcriptAgreement": 465,
-    "unmapped": 3,
-    "unmappedShare": 0.000552791597567717,
+    "termAgreement": 475,
+    "transcriptAgreement": 475,
+    "unmapped": 7,
+    "unmappedShare": 0.0012898470609913396,
     "byReason": {
-      "empirical": 5084,
-      "identity": 340,
-      "unmapped": 3
+      "empirical": 5391,
+      "identity": 29,
+      "unmapped": 7
     }
   },
   "acceptance": {
@@ -2963,9 +2854,9 @@
       "af": "pass (n = 16780)",
       "cadd": "pass (n = 4166)",
       "poolAf": "pass (n = 277)",
-      "poolCadd": "pass (n = 275)"
+      "poolCadd": "pass (n = 289)"
     },
-    "unmappedShare": 0.000552791597567717,
+    "unmappedShare": 0.0012898470609913396,
     "unmappedFlag": false
   }
 }
