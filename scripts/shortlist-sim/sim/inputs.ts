@@ -63,13 +63,13 @@ export function acceptanceOf(report: ConcordanceReport): Acceptance {
     metric: string,
     value: number | null | undefined,
     threshold: string,
-    accepted: boolean
+    pass: boolean | null
   ): ConcordanceCheck => ({
     field,
     metric,
     value: value ?? Number.NaN,
-    threshold,
-    accepted
+    threshold: pass === null ? `${threshold} (not evaluable: too few sites)` : threshold,
+    accepted: pass !== false
   })
   const checks = [
     check(
@@ -116,8 +116,9 @@ export function acceptanceOf(report: ConcordanceReport): Acceptance {
     )
   ]
   const disabledGroups = [
-    ...(acc.afPass && acc.poolAfPass ? [] : ['freq', 'ad_freq']),
-    ...(acc.caddPass && acc.poolCaddPass ? [] : ['cadd'])
+    // null = not evaluable (too few compared sites), which the concordance defines as no fail.
+    ...(acc.afPass !== false && acc.poolAfPass !== false ? [] : ['freq', 'ad_freq']),
+    ...(acc.caddPass !== false && acc.poolCaddPass !== false ? [] : ['cadd'])
   ]
   return { afField: acc.afField, disabledGroups, checks }
 }
