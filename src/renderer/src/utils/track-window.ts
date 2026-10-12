@@ -5,6 +5,7 @@
  * both renderers and the navigator read them.
  */
 import type { ClinVarSignificance } from '../../../shared/types/protein'
+import { CLINVAR_CLASS_LABELS } from '../config/proteinPlotConfig'
 
 export interface TrackWindow {
   start: number
@@ -50,6 +51,15 @@ export interface TrackFeature {
 }
 
 const span = (w: TrackWindow): number => w.end - w.start
+
+/** Worst first (the config's order). */
+const CLASS_RANK = Object.keys(CLINVAR_CLASS_LABELS) as ClinVarSignificance[]
+const rank = (m: TrackMarker): number =>
+  m.clinvarClass ? CLASS_RANK.indexOf(m.clinvarClass) : CLASS_RANK.length
+
+/** The marker whose ClinVar class is worst (Pathogenic before Benign); the first on a tie. */
+export const worstClinvar = (markers: TrackMarker[]): TrackMarker =>
+  markers.reduce((worst, m) => (rank(m) < rank(worst) ? m : worst))
 
 /** Keep a window inside the extent and at least `minSpan` wide. */
 export function clampWindow(w: TrackWindow, extent: TrackWindow, minSpan: number): TrackWindow {
@@ -138,11 +148,16 @@ export function binMarkers(
         label: m.label,
         weight: m.weight,
         color: m.color,
+        clinvarClass: m.clinvarClass,
         binnedKeys: [m.key]
       })
     } else {
       bin.weight += m.weight
       bin.binnedKeys!.push(m.key)
+      if (rank(m) < rank(bin)) {
+        bin.clinvarClass = m.clinvarClass
+        bin.color = m.color
+      }
       bin.label = `${bin.binnedKeys!.length} variants`
     }
   }

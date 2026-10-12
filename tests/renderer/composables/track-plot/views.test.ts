@@ -78,6 +78,30 @@ describe('protein view', () => {
   })
 })
 
+describe('ClinVar colour at one position', () => {
+  it('the diamond shows the worst class there, not the first one listed', () => {
+    const ctx = context({ start: 0, end: 683 }, [
+      marker({ key: 'b', position: 200, track: 'clinvar', clinvarClass: 'benign', color: 'green' }),
+      marker({
+        key: 'p',
+        position: 200,
+        track: 'clinvar',
+        clinvarClass: 'pathogenic',
+        color: 'red'
+      })
+    ])
+    drawProteinView(ctx, {
+      clipId: 'c',
+      length: 683,
+      features: [],
+      cohort: false,
+      hasClinvar: true,
+      showGnomad: false
+    })
+    expect(ctx.root.node()!.querySelector('[data-key] path')!.getAttribute('fill')).toBe('red')
+  })
+})
+
 describe('gene view', () => {
   const exons = Array.from({ length: 60 }, (_, i) => ({
     start: 29_500_000 + i * 900,

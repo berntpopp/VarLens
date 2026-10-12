@@ -5,7 +5,7 @@
  */
 import * as d3 from 'd3'
 import { TRACK_GUTTER_PX } from '../../config/proteinPlotConfig'
-import type { TrackKind, TrackMarker } from '../../utils/track-window'
+import { worstClinvar, type TrackKind, type TrackMarker } from '../../utils/track-window'
 import type { TrackDrawContext } from './useTrackPlot'
 
 export type Group = d3.Selection<SVGGElement, unknown, null, undefined>
@@ -100,10 +100,12 @@ export function lollipopTrack(
 /** Several markers at one position, shown as one: a bin of them (the tooltip says how many). */
 function mergeGroup(group: TrackMarker[]): TrackMarker {
   if (group.length === 1) return group[0]
+  // ClinVar: the worst class there colours the diamond (Pathogenic over Benign).
+  const lead = group[0].track === 'clinvar' ? worstClinvar(group) : group[0]
   return {
-    ...group[0],
+    ...lead,
     weight: group.reduce((s, m) => s + m.weight, 0),
-    label: `${group[0].label} +${group.length - 1}`,
+    label: `${lead.label} +${group.length - 1}`,
     binnedKeys: group.flatMap((m) => m.binnedKeys ?? [m.key])
   }
 }
@@ -119,7 +121,7 @@ export function diamondTrack(g: Group, ctx: TrackDrawContext, y: number): void {
     el.append('path')
       .attr('transform', `translate(${ctx.x(group[0].position)},${y})`)
       .attr('d', d3.symbol(d3.symbolDiamond, size)() ?? '')
-      .attr('fill', group[0].color)
+      .attr('fill', worstClinvar(group).color)
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.6)
     emphasis(el, ctx, group)

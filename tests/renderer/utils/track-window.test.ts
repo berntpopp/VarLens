@@ -82,6 +82,20 @@ describe('binMarkers', () => {
     ])
   })
 
+  it('a ClinVar bin takes the worst class in it, not the first', () => {
+    const markers = [
+      marker(1, { key: 'b', track: 'clinvar', clinvarClass: 'benign', color: 'green' }),
+      marker(2, { key: 'p', track: 'clinvar', clinvarClass: 'pathogenic', color: 'red' }),
+      marker(3, { key: 'v', track: 'clinvar', clinvarClass: 'uncertain', color: 'yellow' })
+    ]
+    const [bin] = binMarkers(markers, extent, 100, { maxUnbinned: 1, binPx: 10 })
+    expect([bin.clinvarClass, bin.color, bin.binnedKeys]).toEqual([
+      'pathogenic',
+      'red',
+      ['b', 'p', 'v']
+    ])
+  })
+
   it('never bins the variant of interest and drops markers outside the window', () => {
     const anchor = marker(2, { isAnchor: true })
     const markers = [marker(1), anchor, marker(3), marker(1500)]
