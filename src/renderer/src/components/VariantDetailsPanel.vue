@@ -13,14 +13,12 @@
     :width="effectiveWidth"
     @update:model-value="emit('update:open', $event)"
   >
-    <!-- Resize handle (left edge) -->
     <div class="resize-handle" @mousedown="startResize" />
 
     <v-card flat class="h-100 d-flex flex-column">
-      <!-- Header with title and close button -->
       <v-toolbar color="transparent" density="compact" flat>
         <v-toolbar-title class="text-body-large">
-          <h2 ref="headingRef" tabindex="-1" class="panel-heading">Variant Details</h2>
+          <h2 ref="headingRef" tabindex="-1" class="panel-heading text-truncate">{{ heading }}</h2>
         </v-toolbar-title>
         <IconButton
           label="Close variant details"
@@ -31,9 +29,11 @@
 
       <v-divider />
 
-      <!-- Scrollable content area -->
-      <div class="flex-grow-1 overflow-y-auto pa-3">
-        <!-- Skeleton loader while variant details are loading -->
+      <div
+        ref="scrollRef"
+        data-testid="variant-details-scroll"
+        class="flex-grow-1 overflow-y-auto pa-3"
+      >
         <v-skeleton-loader
           v-if="variant && isLoading"
           type="card-heading, list-item-three-line@4"
@@ -41,7 +41,6 @@
         />
 
         <template v-else-if="variant">
-          <!-- Section 1: Variant Identity -->
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
@@ -56,7 +55,6 @@
             :genome-build="genomeBuild"
           />
 
-          <!-- Transcript Section (case + cohort mode) -->
           <TranscriptSection
             :variant-id="mode === 'case' && 'id' in variant ? (variant as Variant).id : null"
             :vep-transcripts="allTranscripts"
@@ -74,7 +72,6 @@
 
           <v-divider class="mb-4" />
 
-          <!-- Section 2: Annotation Scores -->
           <AnnotationScoresSection
             :variant="variant"
             :preferred-transcript="preferredTranscript"
@@ -104,7 +101,6 @@
           <div class="acmg-section mb-4">
             <h3 class="text-title-small mb-2">ACMG Classification</h3>
 
-            <!-- Quick-classify chips -->
             <div class="d-flex flex-wrap ga-1 mb-2">
               <v-chip
                 v-for="cls in ACMG_CLASSIFICATIONS"
@@ -226,7 +222,7 @@ import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
-import { formatConsequence } from '../utils/formatters'
+import { formatConsequence, variantHeading } from '../utils/formatters'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
@@ -304,9 +300,18 @@ const emit = defineEmits<{
 // Move focus into the panel on open; restore it to the originating row on close
 const headingRef = ref<HTMLElement | null>(null)
 usePanelFocus(() => props.open, headingRef)
+const heading = computed(() => variantHeading(props.variant))
+const scrollRef = ref<HTMLElement | null>(null)
+// Keyed on the locus (case and cohort rows alike), so a refresh does not jump
+watch(
+  () =>
+    props.variant
+      ? [props.variant.chr, props.variant.pos, props.variant.ref, props.variant.alt].join(':')
+      : null,
+  () => scrollRef.value?.scrollTo({ top: 0 })
+)
 const genomeBuild = useVariantGenomeBuild(props)
 
-// Protein visualization modal state
 const proteinModalOpen = ref(false)
 // External lookups: always on in desktop; an admin-controlled, default-off
 // server setting in web; read from the capability document (fail-closed).
@@ -380,7 +385,6 @@ const globalAcmgClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-// Audit trail entity key
 const auditEntityKey = computed(() => {
   if (!props.variant) return null
   if (props.mode === 'case' && props.caseId !== null && 'id' in props.variant) {
@@ -446,10 +450,8 @@ const currentQuickClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-// Handle quick-classify chip click
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
   if (props.variant === null || acmgLocked.value) return
-  // Toggle off if already selected
   const value = classification === currentQuickClassification.value ? null : classification
 
   if (props.mode === 'case' && props.caseId !== null) {
@@ -474,7 +476,6 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
   }
 }
 
-// Handle ACMG evidence change from panel
 const handleAcmgEvidenceChange = async (payload: {
   classification: AcmgClassification | null
   evidenceJson: string
@@ -510,11 +511,9 @@ watch(
   () => props.variant,
   async (newVariant) => {
     if (newVariant !== null) {
-      // Clear stale VEP enrichment data immediately — before any async work,
-      // so the UI never shows data from the previous variant
+      // Clear stale VEP data before any async work: never show the previous variant's
       clearVepData()
 
-      // Load annotations
       if (props.mode === 'case' && props.caseId !== null) {
         await loadAnnotations(
           props.caseId,
@@ -531,7 +530,6 @@ watch(
   { immediate: true }
 )
 
-// Helper functions for consequence formatting
 function getConsequenceColor(consequence: string): string {
   if (
     consequence.includes('frameshift') ||

@@ -68,8 +68,7 @@ import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy, mdiDna } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
-import { formatHgvs } from '../utils/formatters'
-import { NO_GENE_LABEL } from '../config/displayConfig'
+import { formatHgvs, variantName } from '../utils/formatters'
 
 interface Props {
   variant: Variant | CohortVariant
@@ -97,11 +96,7 @@ const { copy: copyVariantText, copied: variantCopied } = useClipboard()
 const { copy: copyRsIdText, copied: rsIdCopied } = useClipboard()
 
 // An STR call has no gene symbol but a repeat id (e.g. FMR1_CGG) that names it
-const title = computed(() => {
-  const repeatId = (props.variant as { _str_repeat_id?: string | null })._str_repeat_id
-  const names = [props.variant.gene_symbol, repeatId]
-  return names.find((name) => name !== null && name !== undefined && name !== '') ?? NO_GENE_LABEL
-})
+const title = computed(() => variantName(props.variant))
 
 // Same string for display and Copy HGVS (VEP values already carry the versioned transcript)
 const hgvsText = computed(() => {

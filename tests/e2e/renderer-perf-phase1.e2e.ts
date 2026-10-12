@@ -68,21 +68,7 @@ async function getPerfSnapshot(window: Page): Promise<PerfSnapshot> {
 }
 
 async function closeBlockingDrawers(window: Page): Promise<void> {
-  const variantDetailsTitle = window.getByText('Variant Details', { exact: true })
-  if (await variantDetailsTitle.isVisible()) {
-    const closedVariantDetails = await window.evaluate(() => {
-      const titles = Array.from(document.querySelectorAll('.v-toolbar-title__placeholder'))
-      const title = titles.find((node) => node.textContent?.trim() === 'Variant Details')
-      const drawer = title?.closest('nav')
-      const closeButton = drawer?.querySelector('.v-toolbar button') as HTMLButtonElement | null
-      closeButton?.click()
-      return closeButton !== null
-    })
-
-    if (closedVariantDetails) {
-      await window.waitForTimeout(200)
-    }
-  }
+  await closeDetailsPanel(window)
 
   const scrim = window.locator('.v-navigation-drawer__scrim').first()
   if ((await scrim.count()) > 0 && (await scrim.isVisible())) {

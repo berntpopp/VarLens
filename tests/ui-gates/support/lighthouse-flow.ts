@@ -74,7 +74,9 @@ async function openDetailsPanel(page: Page): Promise<void> {
   const cell = await rows[1].$(PLAIN_CELL)
   if (cell === null) throw new Error('no plain cell in the second row')
   await cell.click()
-  await page.waitForSelector('::-p-text(Variant Details)', { visible: true })
+  await page.waitForSelector('aside[aria-label="Variant details"].v-navigation-drawer--active', {
+    visible: true
+  })
   await idle(page)
 }
 

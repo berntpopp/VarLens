@@ -129,7 +129,9 @@ export async function gotoState(page: Page, state: GateStateName): Promise<void>
       .locator(PLAIN_CELL)
       .first()
       .click()
-    await expect(page.getByText('Variant Details', { exact: true })).toBeVisible({
+    await expect(
+      page.locator('aside[aria-label="Variant details"].v-navigation-drawer--active')
+    ).toBeVisible({
       timeout: 15_000
     })
     await settle(page)
