@@ -60,13 +60,16 @@
 
     <!-- ClinVar + per-sample call quality (case rows only carry a call) -->
     <div v-if="variant.clinvar || callLine" class="d-flex align-center flex-wrap ga-2 mt-1">
-      <ClinVarCell v-if="variant.clinvar" :significance="variant.clinvar" />
+      <span v-if="variant.clinvar" data-testid="clinvar-line" class="d-flex align-center ga-1">
+        <span class="text-body-small text-muted">{{ IDENTITY_COPY.clinvar }}</span>
+        <ClinVarCell :significance="variant.clinvar" />
+      </span>
       <span v-if="callLine" data-testid="call-line" class="variant-data-mono">{{ callLine }}</span>
     </div>
 
     <!-- rsID - From VEP colocated_variants -->
     <div class="d-flex align-center mt-2">
-      <span class="text-body-small text-muted">rsID:</span>
+      <span class="text-body-small text-muted">{{ IDENTITY_COPY.rsid }}</span>
       <template v-if="rsId">
         <span class="ml-1 variant-data-mono">{{ rsId }}</span>
         <IconButton
@@ -96,7 +99,7 @@ import { useProteinLookupsReason } from '../composables/useProteinLookupsReason'
 import IconButton from './common/IconButton.vue'
 import { formatHgvs, variantName } from '../utils/formatters'
 import { ClinVarCell } from './table-cells/simple-cells'
-import { CALL_QUALITY_FIELDS } from '../config/uiCopyConfig'
+import { CALL_QUALITY_FIELDS, IDENTITY_COPY } from '../config/uiCopyConfig'
 import { INLINE_SEPARATOR } from '../config/displayConfig'
 
 interface Props {

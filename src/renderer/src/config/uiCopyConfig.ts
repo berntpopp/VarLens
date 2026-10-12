@@ -10,6 +10,12 @@ export const PROTEIN_VIEW_COPY = {
   lengthUnknown: 'Protein length unknown, so the plot is unavailable.'
 } as const
 
+/** Field labels in the details-panel identity block; ClinVar is named so its chip never reads as the user's own ACMG call. */
+export const IDENTITY_COPY = {
+  clinvar: 'ClinVar:',
+  rsid: 'rsID:'
+} as const
+
 /** Per-sample call fields shown under the locus in the details panel, in order. */
 export const CALL_QUALITY_FIELDS: ReadonlyArray<{ key: string; label: string; digits?: number }> = [
   { key: 'gt_num', label: 'GT' },
