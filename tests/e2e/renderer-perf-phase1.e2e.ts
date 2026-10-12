@@ -195,8 +195,8 @@ async function measurePageNextPrev(window: Page, runIndex: number): Promise<Work
     await window.waitForTimeout(250)
   }
 
-  const nextButton = window.getByLabel('Next page')
-  const previousButton = window.getByLabel('Previous page')
+  const nextButton = window.getByRole('button', { name: 'Next page' })
+  const previousButton = window.getByRole('button', { name: 'Previous page' })
 
   await resetPerfSnapshot(window)
   const startedAt = performance.now()

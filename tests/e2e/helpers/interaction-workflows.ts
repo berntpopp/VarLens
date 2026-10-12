@@ -52,14 +52,14 @@ export const CASE_TABLE_STEPS: readonly InteractionStep[] = [
   {
     name: 'case-page-next',
     run: async (w) => {
-      await w.getByLabel('Next page').click()
+      await w.getByRole('button', { name: 'Next page' }).click()
       await settleTable(w)
     }
   },
   {
     name: 'case-page-prev',
     run: async (w) => {
-      await w.getByLabel('Previous page').click()
+      await w.getByRole('button', { name: 'Previous page' }).click()
       await settleTable(w)
     }
   },
@@ -85,7 +85,7 @@ export const COHORT_TABLE_STEPS: readonly InteractionStep[] = [
   {
     name: 'cohort-page-next',
     run: async (w) => {
-      await w.getByLabel('Next page').click()
+      await w.getByRole('button', { name: 'Next page' }).click()
       await settleTable(w)
     }
   }
