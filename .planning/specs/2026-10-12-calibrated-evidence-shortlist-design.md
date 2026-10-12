@@ -222,3 +222,17 @@ The quick run (one background, 50 cases) showed that under §14 a bin with **no*
 - `a_j < 5` → `points_j = min(points_j, 0)`; `a_j + b_j < 10` → 0; group zeroed if `A < 20`. Modes alike.
 - ClinVar: only P/LP vs the rest is identifiable from P/LP spikes, so only the P/LP bin is tuned (against the pooled non-P/LP rows); VUS, conflicting, benign and the catch-all keep the template points as **non-tuned priors**, labelled as such.
 - Because §14/§15 came after looking at smoke/quick runs, the fully pre-registered **hand-set ruleset** is reported alongside as the primary pre-registered comparator; the ship criterion is evaluated for both, and the tuned ruleset ships only if it also passes (otherwise the hand-set one, if it passes).
+
+## 16. Configurable import of all annotation columns (user decision 2026-10-12)
+
+varvis holds ~140 SNV annotation columns (manual 2.11.1; e.g. `RevelScore`, `MetaRnnRank`, `BayesDelNoAfRank`, `PangolinScore`, `ScSnvAda/Rf`, `MaxEntScan-*`, `GnomGLofOe`, `GnomGMisZ`, `GnomPMaxFiltAF`, `GnomHomInd`, `LocalAF`, `AllexesFound`, `ClinVStatus`, `ClinVLofFraction`, `Filter`, `AltAF-Index`, `PhaseSet-Index`, `AionAcmgClass`); the current exports carry 18 and the columnar/object importers drop every unmapped field (`info_json: null`). The user decided: keep them, make it configurable, defaults in Settings, good UX.
+
+**Field profile (one engine for VCF, varvis columnar and object JSON).** For each source field: target = a known VarLens column (from the typed mapping), `info.<KEY>`, or skip. Unknown fields default to the profile policy `keepUnknown: 'all' | 'selected' | 'none'` (default `all`). Keys are normalised to the `info.<KEY>` grammar (`-` → `_`, other invalid characters → `_`, collisions suffixed) and the original name is kept in a per-case field dictionary so the UI can show it. Dictionary-typed columnar values are resolved to labels; lists are stored as comma-joined text (the INFO filter already treats lists as non-numeric). Size limits follow the existing VCF resource limits.
+
+**Config.** `src/shared/config/import-fields.config.ts`: known source-field → column mappings for varvis columnar/object formats (moved from `src/main/import/config/fieldMapping.ts` where shared), normalisation rule, default policy. No mapping lives in components.
+
+**UI.** Import wizard step 2 for JSON/varvis gains a field table (field, detected type, fill rate in the preview sample, target selector, search, bulk "keep all / none"); the VCF preview table becomes editable with the same component. "Save as default" writes the profile to Settings. **Settings → Import** section edits the default profile (policy, per-field choices, renames) with the same table. Viewer accounts read-only. Desktop/web parity via the manifest.
+
+**Preview IPC.** A JSON/columnar preview (first N variants: fields, types, fill rates) in the import domain following the domain-module pattern; samples never leave the machine except to the renderer.
+
+**Ranking.** A "varvis full" rule template uses `info.*` fields (REVEL/MetaRNN missense bins, splicing, LoF o/e constraint, homozygote counts vs AR/AD, ClinVar review status) and is benchmarked with the same harness. Spikes receive REVEL/MetaRNN/BayesDel from local dbNSFP and constraint from the local gnomAD v4.1 constraint file; fields that cannot be simulated for spikes (Pangolin, in-house/network frequencies, Aion) stay out of the benchmarked template and are marked unvalidated if offered.
