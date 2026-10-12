@@ -11,6 +11,7 @@
 import { availableParallelism } from 'node:os'
 import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { compileRuleset } from '../../src/main/services/scoring/evidence'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../src/shared/config/evidence-rulesets/varvis-template'
 import { RUNS_DIR } from './common/paths'
 import { rng, shuffle } from './common/rng'
@@ -180,6 +181,7 @@ async function main(argv: string[]): Promise<void> {
 
   const refit = { ...tuned.refit.ruleset }
   const shipped = { ...refit, sha256: sha256(canonicalJson(refit)) }
+  compileRuleset(shipped) // the artefact must load in the app; throws otherwise
   writeFileSync(join(outDir, 'ruleset-tuned.json'), JSON.stringify(shipped, null, 2) + '\n')
   writeFileSync(join(outDir, 'support.json'), JSON.stringify(tuned.refit.support, null, 2) + '\n')
 
