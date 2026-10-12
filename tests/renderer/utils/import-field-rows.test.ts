@@ -4,15 +4,11 @@ import { describe, expect, it } from 'vitest'
 import {
   catalogueFields,
   fieldRows,
-  mergeIntoDefault,
   vcfPreviewFields,
   withAllKept,
   withFieldChoice
 } from '../../../src/renderer/src/utils/import-field-rows'
-import {
-  DEFAULT_IMPORT_FIELD_PROFILE,
-  type ImportFieldProfile
-} from '../../../src/shared/config/import-fields.config'
+import type { ImportFieldProfile } from '../../../src/shared/config/import-fields.config'
 import type { ImportFieldPreview } from '../../../src/shared/types/import'
 import type { VcfPreviewResult } from '../../../src/shared/types/vcf'
 
@@ -53,18 +49,6 @@ describe('profile edits', () => {
   it('keeps or skips every non-column field at once', () => {
     const fields = [field('A'), field('B', 'chr')]
     expect(withAllKept(ALL, fields, false).fields).toEqual({ 'JSON:A': { keep: false } })
-  })
-
-  it('merges a file profile into the saved default', () => {
-    const merged = mergeIntoDefault(DEFAULT_IMPORT_FIELD_PROFILE, {
-      keepUnknown: 'none',
-      fields: { 'JSON:A': { keep: true } }
-    })
-    expect(merged.keepUnknown).toBe('none')
-    expect(merged.fields).toMatchObject({
-      'JSON:lims_id': { keep: false },
-      'JSON:A': { keep: true }
-    })
   })
 })
 

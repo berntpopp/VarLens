@@ -93,14 +93,6 @@ export function withAllKept(
     }, profile)
 }
 
-/** A file's choices merged into the saved default ("Save as default"). */
-export function mergeIntoDefault(
-  saved: ImportFieldProfile,
-  current: ImportFieldProfile
-): ImportFieldProfile {
-  return { keepUnknown: current.keepUnknown, fields: { ...saved.fields, ...current.fields } }
-}
-
 const COLUMN_BY_ANNOTATION: Record<string, Readonly<Record<string, string>>> = {
   csq: CSQ_COLUMN_FIELDS,
   ann: ANN_COLUMN_FIELDS
