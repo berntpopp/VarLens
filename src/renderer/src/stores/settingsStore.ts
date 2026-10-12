@@ -45,6 +45,8 @@ interface PersistedSettings {
   defaultCaseTab: DefaultCaseTab
   /** 'system' follows prefers-color-scheme (see utils/theme-preference.ts). */
   themePreference: ThemePreference
+  /** Shortlist preset the Shortlist tab preselects; null = the first in the list. */
+  defaultShortlistPresetId: number | null
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -54,7 +56,8 @@ const DEFAULTS: PersistedSettings = {
   workerThreads: 0,
   prefetchEnabled: true,
   defaultCaseTab: 'shortlist',
-  themePreference: DEFAULT_THEME_PREFERENCE
+  themePreference: DEFAULT_THEME_PREFERENCE,
+  defaultShortlistPresetId: null
 }
 
 function load(): PersistedSettings {
@@ -88,6 +91,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const prefetchEnabled = ref(persisted.prefetchEnabled)
   const defaultCaseTab = ref<DefaultCaseTab>(persisted.defaultCaseTab)
   const themePreference = ref<ThemePreference>(persisted.themePreference)
+  const defaultShortlistPresetId = ref<number | null>(persisted.defaultShortlistPresetId)
 
   // Auto-persist on change
   watch(
@@ -98,7 +102,8 @@ export const useSettingsStore = defineStore('settings', () => {
       workerThreads,
       prefetchEnabled,
       defaultCaseTab,
-      themePreference
+      themePreference,
+      defaultShortlistPresetId
     ],
     () => {
       save({
@@ -108,7 +113,8 @@ export const useSettingsStore = defineStore('settings', () => {
         workerThreads: workerThreads.value,
         prefetchEnabled: prefetchEnabled.value,
         defaultCaseTab: defaultCaseTab.value,
-        themePreference: themePreference.value
+        themePreference: themePreference.value,
+        defaultShortlistPresetId: defaultShortlistPresetId.value
       })
     }
   )
@@ -120,6 +126,7 @@ export const useSettingsStore = defineStore('settings', () => {
     workerThreads,
     prefetchEnabled,
     defaultCaseTab,
-    themePreference
+    themePreference,
+    defaultShortlistPresetId
   }
 })
