@@ -6,7 +6,9 @@ import {
   genotypeZygosity,
   gtToDosage,
   isAssumedHetGenotype,
-  otherZygosityCount
+  otherZygosityCount,
+  COHORT_ZYGOSITY_HELP,
+  ZYGOSITY_REMAINDER_LABEL
 } from '../../../src/shared/utils/genotype'
 
 describe('gtToDosage', () => {
@@ -113,6 +115,11 @@ describe('otherZygosityCount', () => {
   it('is the carriers that are neither het nor hom', () => {
     expect(otherZygosityCount({ carrier_count: 4, het_count: 2, hom_count: 1 })).toBe(1)
     expect(otherZygosityCount({ carrier_count: 3, het_count: 2, hom_count: 1 })).toBe(0)
+  })
+
+  it('has a neutral label: a JSON GTNum code such as 1 or 2 is no known hemizygous call', () => {
+    expect(ZYGOSITY_REMAINDER_LABEL).toBe('other')
+    expect(COHORT_ZYGOSITY_HELP).toContain('Other: hemizygous, or a genotype')
   })
 
   it('is never negative while a summary is being refreshed', () => {

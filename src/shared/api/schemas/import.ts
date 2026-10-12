@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import {
+  GenomeBuildIdSchema,
   ImportFieldProfileSchema,
   importFilterNumericFields
 } from '../../ipc/domains/import-schemas'
@@ -26,7 +27,7 @@ export const ImportVariantTypeArgSchema = z.string().refine((value) => value.tri
 export const ImportVcfOptionsSchema = z
   .object({
     selectedSample: z.string().optional(),
-    genomeBuild: z.string().optional(),
+    genomeBuild: GenomeBuildIdSchema.optional(),
     fieldProfile: ImportFieldProfileSchema.optional()
   })
   .passthrough()
@@ -77,6 +78,12 @@ export const ImportUnknownResponseSchema = z.unknown()
 export type ImportMultiFileSpecInput = z.infer<typeof ImportMultiFileSpecSchema>
 export type ImportFiltersPayload = z.infer<typeof ImportFiltersPayloadSchema>
 
+/** A `genomeBuild` that is present but not an importable build id (the route answers 400). */
+export function hasInvalidImportGenomeBuild(vcfOptions: unknown): boolean {
+  const genomeBuild = (vcfOptions as { genomeBuild?: unknown } | null | undefined)?.genomeBuild
+  return genomeBuild !== undefined && !GenomeBuildIdSchema.safeParse(genomeBuild).success
+}
+
 export function normalizeImportVcfOptions(vcfOptions: unknown): ImportVcfOptions | undefined {
   return vcfOptions !== null && typeof vcfOptions === 'object'
     ? {
@@ -84,10 +91,11 @@ export function normalizeImportVcfOptions(vcfOptions: unknown): ImportVcfOptions
           typeof (vcfOptions as { selectedSample?: unknown }).selectedSample === 'string'
             ? (vcfOptions as { selectedSample: string }).selectedSample
             : undefined,
-        genomeBuild:
-          typeof (vcfOptions as { genomeBuild?: unknown }).genomeBuild === 'string'
-            ? (vcfOptions as { genomeBuild: string }).genomeBuild
-            : undefined,
+        genomeBuild: GenomeBuildIdSchema.safeParse(
+          (vcfOptions as { genomeBuild?: unknown }).genomeBuild
+        ).success
+          ? (vcfOptions as { genomeBuild: string }).genomeBuild
+          : undefined,
         fieldProfile: normalizeImportFieldProfile(
           (vcfOptions as { fieldProfile?: unknown }).fieldProfile
         )

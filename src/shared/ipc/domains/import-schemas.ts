@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isImportableGenomeBuild } from '../../config/genome-builds.config'
 
 import {
   IMPORT_FIELD_PROFILE_LIMITS,
@@ -28,6 +29,10 @@ const DroppedFileEnrollmentTokenSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/)
 
+/** A genome build id from the config that VarLens can import (genome-builds.config.ts). */
+export const GenomeBuildIdSchema = z.string().max(64).refine(isImportableGenomeBuild, {
+  message: 'Unknown or unsupported genome build'
+})
 /** An import field profile (src/shared/config/import-fields.config.ts); keys are normalised on use. */
 export const ImportFieldProfileSchema: z.ZodType<ImportFieldProfile> = z
   .object({
@@ -46,7 +51,7 @@ export const ImportFieldProfileSchema: z.ZodType<ImportFieldProfile> = z
 export const ImportVcfOptionsSchema = z
   .object({
     selectedSample: NonBlankImportStringSchema.optional(),
-    genomeBuild: NonBlankImportStringSchema.optional(),
+    genomeBuild: GenomeBuildIdSchema.optional(),
     fieldProfile: ImportFieldProfileSchema.optional()
   })
   .strict()

@@ -86,7 +86,12 @@ describe('import worker: per-file cohort summary upkeep', () => {
     caseName = sample,
     extra: Partial<StartMessage['files'][number]> = {}
   ): StartMessage['files'][number] =>
-    ({ filePath: fileFor(sample), caseName, ...extra }) as StartMessage['files'][number]
+    ({
+      filePath: fileFor(sample),
+      caseName,
+      fallbackGenomeBuild: 'GRCh38',
+      ...extra
+    }) as StartMessage['files'][number]
 
   /** Runs a session, asserting exactness (and the meta state) after every completed file. */
   async function runSession(
@@ -258,9 +263,21 @@ describe('import worker: per-file cohort summary upkeep', () => {
     const messages = await runSession(
       [
         request('S1'),
-        request('OLD_V2', 'OLD', { isDuplicate: true, duplicateStrategy: 'overwrite' }),
-        request('S0', 'S0', { isDuplicate: true, duplicateStrategy: 'skip' }),
-        { filePath: broken, caseName: 'BROKEN' } as StartMessage['files'][number],
+        request('OLD_V2', 'OLD', {
+          isDuplicate: true,
+          duplicateStrategy: 'overwrite',
+          fallbackGenomeBuild: 'GRCh38'
+        }),
+        request('S0', 'S0', {
+          isDuplicate: true,
+          duplicateStrategy: 'skip',
+          fallbackGenomeBuild: 'GRCh38'
+        }),
+        {
+          filePath: broken,
+          caseName: 'BROKEN',
+          fallbackGenomeBuild: 'GRCh38'
+        } as StartMessage['files'][number],
         request('S2'),
         request('S37', 'S37', { vcfGenomeBuild: 'GRCh37' }),
         request('S9')
@@ -304,11 +321,13 @@ describe('import worker: per-file cohort summary upkeep', () => {
       has_comment: 1,
       acmg_best: 'Pathogenic'
     })
+    // GRCh37 stores bare `1`: the GRCh38 `chr1:100` annotations are another
+    // locus and no longer bleed into the GRCh37 row (chr naming per build).
     expect(row(100, 'GRCh37')).toMatchObject({
       carrier_count: 1,
       cadd: 99,
-      has_star: 1,
-      acmg_best: 'Pathogenic'
+      has_star: 0,
+      acmg_best: null
     })
     expect(row(200)).toMatchObject({ carrier_count: 3, has_star: 1, acmg_best: 'Pathogenic' })
     expect(row(400)).toMatchObject({ carrier_count: 1, hom_count: 1, has_star: 1 })
@@ -341,7 +360,8 @@ describe('import worker: per-file cohort summary upkeep', () => {
         filePath: broken,
         caseName: 'OLD',
         isDuplicate: true,
-        duplicateStrategy: 'overwrite'
+        duplicateStrategy: 'overwrite',
+        fallbackGenomeBuild: 'GRCh38'
       } as StartMessage['files'][number]
     ])
 
@@ -410,7 +430,11 @@ describe('import worker: per-file cohort summary upkeep', () => {
     // a switched case falls back to the remaining carriers.
     await runSession([
       request('S2'),
-      request('OLD_V2', 'S0', { isDuplicate: true, duplicateStrategy: 'overwrite' })
+      request('OLD_V2', 'S0', {
+        isDuplicate: true,
+        duplicateStrategy: 'overwrite',
+        fallbackGenomeBuild: 'GRCh38'
+      })
     ])
     const summary = snapshotSummary(db)
     expect(summary).toEqual(referenceSummary(db))

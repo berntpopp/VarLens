@@ -115,6 +115,7 @@ import { mdiAlertCircleOutline, mdiDownload, mdiMagnify } from '@mdi/js'
 import {
   BURDEN_REFERENCE_NOTE,
   buildAssociationTsv,
+  isTestedGene,
   excludedSiteCount,
   excludedSitesLabel,
   nonAutosomalNote,
@@ -170,9 +171,10 @@ const headers = [
 ]
 
 const filteredResults = computed(() => {
-  if (!searchTerm.value) return props.results
+  const tested = props.results.filter(isTestedGene)
+  if (!searchTerm.value) return tested
   const term = searchTerm.value.toLowerCase()
-  return props.results.filter((r) => r.gene_symbol.toLowerCase().includes(term))
+  return tested.filter((r) => r.gene_symbol.toLowerCase().includes(term))
 })
 
 function formatPValue(val: number | null | undefined): string {
@@ -196,6 +198,6 @@ function exportResults(): void {
 
 <style scoped>
 .gene-symbol {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 </style>

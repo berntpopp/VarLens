@@ -30,6 +30,7 @@
  */
 import type { PoolClient } from 'pg'
 
+import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
 import { uniqueVariantsSql } from './cohort-unique-variants-sql'
 
 type Queryable = Pick<PoolClient, 'query'>
@@ -49,7 +50,7 @@ function casePairsCte(tbl: Tbl, includeProvisional: boolean): string {
     SELECT v.gene_symbol, v.chr, v.pos, v.ref, v.alt,
            COUNT(*)::bigint AS row_count, 1 AS carrier_delta, 1 AS case_delta
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
-    WHERE v.case_id = $1 AND v.gene_symbol IS NOT NULL
+    WHERE v.case_id = $1 AND v.gene_symbol IS NOT NULL AND ${carrierRowSql('v')}
     GROUP BY v.gene_symbol, v.chr, v.pos, v.ref, v.alt
   )`
 }
@@ -63,14 +64,14 @@ function rowPairsCte(tbl: Tbl): string {
   const other = (extra: string): string =>
     `EXISTS (SELECT 1 FROM ${tbl('variants')} o
               WHERE o.case_id = t.case_id AND o.gene_symbol = t.gene_symbol
-                AND o.id <> t.id${extra})`
+                AND o.id <> t.id AND ${carrierRowSql('o')}${extra})`
   return `per_pair AS (
     SELECT t.gene_symbol, t.chr, t.pos, t.ref, t.alt, 1::bigint AS row_count,
            CASE WHEN ${other(' AND o.chr = t.chr AND o.pos = t.pos AND o.ref = t.ref AND o.alt = t.alt')}
                 THEN 0 ELSE 1 END AS carrier_delta,
            CASE WHEN ${other('')} THEN 0 ELSE 1 END AS case_delta
     FROM ${tbl('variants')} t
-    WHERE t.id = $1 AND t.gene_symbol IS NOT NULL
+    WHERE t.id = $1 AND t.gene_symbol IS NOT NULL AND ${carrierRowSql('t')}
   )`
 }
 
@@ -264,7 +265,7 @@ export async function rebuildGeneSummary({
     WITH per_case_pair AS MATERIALIZED (
       SELECT v.gene_symbol, v.chr, v.pos, v.ref, v.alt, v.case_id, COUNT(*) AS row_count
       FROM ${tbl('variants')} v
-      WHERE v.gene_symbol IS NOT NULL
+      WHERE v.gene_symbol IS NOT NULL AND ${carrierRowSql('v')}
       GROUP BY v.gene_symbol, v.chr, v.pos, v.ref, v.alt, v.case_id
     ),
     pairs AS (

@@ -245,15 +245,15 @@ describe('formatCellValue', () => {
   })
 
   it('formats gnomad_af as exponential with 2 decimal places', () => {
-    expect(formatCellValue('gnomad_af', 0.0001234)).toBe('1.23e-4')
+    expect(formatCellValue('gnomad_af', 0.0001234)).toBe(0.000123)
   })
 
   it('formats cadd as fixed with 2 decimal places', () => {
-    expect(formatCellValue('cadd', 23.456)).toBe('23.46')
+    expect(formatCellValue('cadd', 23.456)).toBe(23.46)
   })
 
   it('formats hpo_sim_score as fixed with 4 decimal places', () => {
-    expect(formatCellValue('hpo_sim_score', 0.87654321)).toBe('0.8765')
+    expect(formatCellValue('hpo_sim_score', 0.87654321)).toBe(0.8765)
   })
 
   it('passes through string values unchanged', () => {
@@ -364,15 +364,15 @@ describe('CSV export pipeline', () => {
     expect(lines).toHaveLength(4)
   })
 
-  it('correctly formats gnomad_af in exponential notation', () => {
+  it('writes gnomad_af as a plain number', () => {
     insertVariant(svc, caseId, { chr: '1', pos: 100, gnomad_af: 0.0001 })
 
     const { sql, params } = buildExportSql(caseId)
     runCsvExport(dbPath, sql, params, outputPath)
 
     const content = readFileSync(outputPath, 'utf8')
-    // gnomAD AF column value should use exponential notation
-    expect(content).toContain('1.00e-4')
+    // gnomAD AF stays a number (sortable in spreadsheets)
+    expect(content).toContain(',0.0001,')
   })
 
   it('correctly formats cadd with 2 decimal places', () => {
@@ -519,7 +519,7 @@ describe('XLSX export pipeline', () => {
     expect(flat).toContain(0.01)
   })
 
-  it('correctly formats gnomad_af in XLSX cells', () => {
+  it('keeps gnomad_af a numeric XLSX cell', () => {
     insertVariant(svc, caseId, { chr: '1', pos: 100, gnomad_af: 0.00015 })
 
     const { sql, params } = buildExportSql(caseId)
@@ -529,7 +529,7 @@ describe('XLSX export pipeline', () => {
     const ws = wb.Sheets['Variants']
     const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws) as Record<string, unknown>[]
 
-    expect(data[0]['gnomAD AF']).toBe('1.50e-4')
+    expect(data[0]['gnomAD AF']).toBe(0.00015)
   })
 
   it('produces a valid XLSX with no variants (header only)', () => {

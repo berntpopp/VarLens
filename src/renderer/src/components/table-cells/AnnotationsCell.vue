@@ -7,7 +7,7 @@
       :class="{ 'has-global': showGlobalIndicators && displayGlobalStarred }"
       :aria-label="labels.star"
       :aria-pressed="displayStarred"
-      :data-tooltip="labels.star"
+      :data-tooltip="withShortcut(labels.star, 'star')"
       data-tooltip-location="top"
       :disabled="readOnly"
       @click.stop="emit('star-toggle')"
@@ -28,9 +28,9 @@
       :aria-label="labels.acmg"
       aria-haspopup="menu"
       :aria-expanded="menu.isOpenFor(acmgButtonRef)"
-      :data-tooltip="labels.acmg"
+      :data-tooltip="withShortcut(labels.acmg, 'acmg')"
       data-tooltip-location="top"
-      :disabled="readOnly"
+      :disabled="readOnly && variant === undefined"
       @click.stop="openAcmgMenu"
     >
       <CellChip v-if="displayAcmg" :color="ACMG_COLORS[displayAcmg]" size="x-small" label>
@@ -47,7 +47,7 @@
       class="annotation-btn"
       :class="{ 'has-global': showGlobalIndicators && displayHasGlobalComment }"
       :aria-label="labels.comment"
-      :data-tooltip="labels.comment"
+      :data-tooltip="withShortcut(labels.comment, 'comment')"
       data-tooltip-location="top"
       @click.stop="emit('comment-click')"
     >
@@ -64,9 +64,12 @@
 import { computed, ref } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { AnnotationScope } from '../../../../shared/types/annotations'
+import type { Variant } from '../../../../shared/types/api'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import { ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
 import { CellChip, CellIcon } from './cell-components'
 import AcmgQuickMenu from './AcmgQuickMenu.vue'
+import { withShortcut } from '../../config/keyboardShortcuts'
 import { createAcmgQuickMenuState, injectAcmgQuickMenu } from './acmg-quick-menu'
 import {
   mdiClipboardCheckOutline,
@@ -77,6 +80,7 @@ import {
 } from '@mdi/js'
 import {
   acmgLabel,
+  acmgReadOnlyLabel,
   commentLabel,
   starLabel,
   type AnnotationDisplayState
@@ -101,6 +105,10 @@ interface Props {
   annotationScope?: AnnotationScope
   /** Viewer role: star and ACMG are display-only (comment still opens read-only). */
   readOnly?: boolean
+  /** Stored ACMG evidence decides the class: the quick classes are disabled. */
+  acmgLocked?: boolean
+  /** The row's variant, for the quick menu's Protein view entry */
+  variant?: Variant | CohortVariant
 }
 
 interface Emits {
@@ -115,7 +123,8 @@ const props = withDefaults(defineProps<Props>(), {
   globalAcmgClassification: null,
   hasGlobalComment: false,
   showGlobalIndicators: true,
-  annotationScope: 'case'
+  annotationScope: 'case',
+  variant: undefined
 })
 
 const emit = defineEmits<Emits>()
@@ -158,8 +167,11 @@ function openAcmgMenu(): void {
   if (!acmgButtonRef.value) return
   menu.toggle(acmgButtonRef.value, {
     current: displayAcmg.value ?? null,
+    locked: props.acmgLocked,
     select: (classification) => emit('acmg-select', classification),
-    openEvidence: () => emit('acmg-evidence-click')
+    openEvidence: () => emit('acmg-evidence-click'),
+    variant: props.variant,
+    readOnly: props.readOnly === true
   })
 }
 
@@ -175,6 +187,8 @@ const labels = computed(() => {
     hasComment: displayHasComment.value,
     secondaryHasComment: displayHasGlobalComment.value
   }
-  return { star: starLabel(state), acmg: acmgLabel(state), comment: commentLabel(state) }
+  // Viewers: the ACMG button opens the row menu read-only (it carries the Protein view).
+  const acmg = props.readOnly === true ? acmgReadOnlyLabel(state) : acmgLabel(state)
+  return { star: starLabel(state), acmg, comment: commentLabel(state) }
 })
 </script>

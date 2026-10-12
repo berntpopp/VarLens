@@ -254,45 +254,16 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
 
-      <!-- Internal Frequency -->
+      <!-- Cohort carrier frequency -->
       <v-expansion-panel value="internal-frequency">
         <FilterPanelTitle
           :icon="mdiDatabase"
-          label="Internal Frequency"
+          :label="CARRIER_FREQUENCY_COPY.panel"
           :active="isFilterGroupActive('internal-frequency')"
           :value-summary="internalFrequencySummary"
         />
         <v-expansion-panel-text>
-          <div class="d-flex ga-1 flex-wrap mb-2">
-            <v-chip
-              v-for="preset in internalAfPresets"
-              :key="preset.value"
-              :color="selectedInternalAfPreset === preset.value ? 'primary' : undefined"
-              :variant="selectedInternalAfPreset === preset.value ? 'flat' : 'outlined'"
-              size="small"
-              label
-              @click="
-                selectedInternalAfPreset =
-                  selectedInternalAfPreset === preset.value ? null : preset.value
-              "
-            >
-              {{ preset.label }}
-            </v-chip>
-          </div>
-          <v-text-field
-            v-model="customInternalAf"
-            density="compact"
-            variant="outlined"
-            hide-details
-            type="number"
-            step="0.1"
-            min="0"
-            max="100"
-            placeholder="Max internal AF % (e.g. 5)"
-            clearable
-            suffix="%"
-            @click:clear="customInternalAf = ''"
-          />
+          <CarrierFrequencyField v-model="filters.maxInternalAf" />
           <MaxCarriersField v-model="filters.maxCarriers" scope="case" />
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -542,7 +513,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, computed, watch, onMounted } from 'vue'
+import { inject, ref, computed, onMounted } from 'vue'
 import IconButton from './common/IconButton.vue'
 import FilterDrawerShell from './filters/FilterDrawerShell.vue'
 import FilterPanelTitle from './filters/FilterPanelTitle.vue'
@@ -557,6 +528,8 @@ import FilterTypeNarrowingChip from './filters/FilterTypeNarrowingChip.vue'
 import { consequenceGroups, clinvarGroups } from '../config/filterGroups'
 import { ACMG_FILTER_OPTIONS_LONG, formatAfPercent } from '../utils/filters'
 import { summarizeInternalFilters } from '../utils/filters/activeFilters'
+import { CARRIER_FREQUENCY_COPY } from '../config/uiCopyConfig'
+import CarrierFrequencyField from './filters/CarrierFrequencyField.vue'
 import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
 import { useAnalysisGroups } from '../composables/useAnalysisGroups'
 import type { Tag } from '../../../shared/types/database-entities'
@@ -699,62 +672,6 @@ const frequencySummary = computed(() => {
   return ''
 })
 
-// Internal frequency filter state
-const internalAfPresets = [
-  { label: '<= 1%', value: 0.01 },
-  { label: '<= 5%', value: 0.05 },
-  { label: '<= 10%', value: 0.1 }
-] as const
-
-const selectedInternalAfPreset = ref<number | null>(null)
-const customInternalAf = ref<string>('')
-
-// Bidirectional sync: preset selection sets filter state and clears custom input
-watch(selectedInternalAfPreset, (val) => {
-  if (val !== null) {
-    filters.value.maxInternalAf = val
-    customInternalAf.value = ''
-  } else if (customInternalAf.value === '') {
-    filters.value.maxInternalAf = null
-  }
-})
-
-// Bidirectional sync: custom input sets filter state and clears preset
-watch(customInternalAf, (val) => {
-  const num = parseFloat(val)
-  if (val !== '' && !Number.isNaN(num) && num > 0) {
-    const clamped = Math.min(Math.max(num, 0), 100)
-    filters.value.maxInternalAf = clamped / 100
-    selectedInternalAfPreset.value = null
-  } else if (val === '') {
-    // Only clear if no preset is active
-    if (selectedInternalAfPreset.value === null) {
-      filters.value.maxInternalAf = null
-    }
-  }
-})
-
-// Sync filter state back to UI when changed externally (e.g. "Clear all", loading presets)
-watch(
-  () => filters.value.maxInternalAf,
-  (val) => {
-    if (val === null || val === 0) {
-      selectedInternalAfPreset.value = null
-      customInternalAf.value = ''
-    } else if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
-      // Check if it matches a preset
-      const matchingPreset = internalAfPresets.find((p) => p.value === val)
-      if (matchingPreset) {
-        selectedInternalAfPreset.value = matchingPreset.value
-        customInternalAf.value = ''
-      } else {
-        selectedInternalAfPreset.value = null
-        customInternalAf.value = String(val * 100)
-      }
-    }
-  }
-)
-
 const internalFrequencySummary = computed(() => summarizeInternalFilters(filters.value))
 
 const caddSummary = computed(() => {
@@ -844,10 +761,11 @@ const inheritanceSummary = computed(() => {
   padding: 8px 12px 12px;
 }
 
+/* Colour comes from text-medium-emphasis (the theme's 0.7): a 0.6 override
+   fell to 4.39:1 on the drawer surface (axe color-contrast). */
 .filter-section-header {
   font-size: 0.625rem;
   letter-spacing: 0.1em;
-  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .preset-drawer-section {

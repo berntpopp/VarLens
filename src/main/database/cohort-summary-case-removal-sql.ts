@@ -19,6 +19,7 @@ import {
 } from '../../shared/sql/cohort-representative'
 import { perCaseAnnotationFlagsSql } from '../../shared/sql/cohort-summary-rebuild'
 import {
+  carrierRowSql,
   HET_GT_SQL as HET,
   HOM_GT_SQL as HOM,
   resolvedGtSql
@@ -54,6 +55,9 @@ export const CLEAR_TEMP_TABLES_SQL = `
   DELETE FROM temp.removed_case_gene_lost;
 `
 
+/** Only carrier rows count, as in every summary contribution. */
+const CARRIER_ROW = carrierRowSql('variants')
+
 /** The case's per-key contribution: its best row and genotype, as the rebuild's first stage. */
 const CAPTURE_ROWS_SQL = `
   INSERT INTO temp.removed_case_rows
@@ -68,7 +72,7 @@ const CAPTURE_ROWS_SQL = `
       ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
-    WHERE v.case_id = ?
+    WHERE v.case_id = ? AND ${carrierRowSql('v')}
     WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build)
   ) d
   WHERE d.rn = 1`
@@ -93,6 +97,7 @@ const MARK_RECOMPUTE_SQL = `
       SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
       WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
         AND r.variant_type = k.variant_type AND rc.genome_build IS k.genome_build
+        AND ${carrierRowSql('r')}
         AND ${remainingRowCovers('r', 'k', 's', 'sqlite')}
     )`
 
@@ -127,12 +132,14 @@ export function prepareRemovalStatements(
       `INSERT INTO temp.removed_case_gene_rows (gene_symbol, row_count)
        SELECT gene_symbol, COUNT(*) FROM variants
        WHERE case_id = ? AND gene_symbol IS NOT NULL AND gene_symbol != ''
+         AND ${CARRIER_ROW}
        GROUP BY gene_symbol`
     ),
     captureGeneCoords: db.prepare(
       `INSERT OR IGNORE INTO temp.removed_case_gene_coords (gene_symbol, chr, pos, ref, alt)
        SELECT gene_symbol, chr, pos, ref, alt FROM variants
-       WHERE case_id = ? AND gene_symbol IS NOT NULL AND gene_symbol != ''`
+       WHERE case_id = ? AND gene_symbol IS NOT NULL AND gene_symbol != ''
+         AND ${CARRIER_ROW}`
     ),
     markRecompute: db.prepare(MARK_RECOMPUTE_SQL),
     deleteRecomputeRows: db.prepare(
@@ -159,6 +166,7 @@ export function prepareRemovalStatements(
          SELECT 1 FROM variants r JOIN cases rc ON rc.id = r.case_id AND rc.import_status = 'ready'
          WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
            AND r.gene_symbol = k.gene_symbol AND rc.genome_build IS @build
+           AND ${carrierRowSql('r')}
        )
        GROUP BY k.gene_symbol`
     ),

@@ -5,15 +5,19 @@ import type { ImportFieldProfile } from '../../config/import-fields.config'
 export interface BatchImportDomainContract {
   selectFiles: () => Promise<IpcResult<string[]>>
   selectFolder: () => Promise<IpcResult<string[]>>
+  /** `detectBuilds` also reads each VCF header for its genome build (first call only). */
   checkDuplicates: (
     filePaths: string[],
-    stripText?: string
+    stripText?: string,
+    detectBuilds?: boolean
   ) => Promise<IpcResult<DuplicateCheckResult>>
+  /** `fallbackGenomeBuild`: the build for files whose header decides none (always JSON). */
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
     stripText: string | undefined,
     runId: string,
+    fallbackGenomeBuild?: string,
     options?: { fieldProfile?: ImportFieldProfile }
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>

@@ -12,8 +12,8 @@
     <AppToolbar
       @show-case-metadata="dialogHostRef?.showCaseMetadata()"
       @show-database-overview="dialogHostRef?.showDatabaseOverview()"
-      @import-click="dialogHostRef?.showImportDialog()"
-      @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
+      @import-click="openImportDialog"
+      @vcf-import-click="openVcfImportDialog"
       @show-external-links="dialogHostRef?.showExternalLinks()"
       @show-tag-management="dialogHostRef?.showTagManagement()"
       @show-panel-manager="dialogHostRef?.showPanelManager()"
@@ -35,8 +35,8 @@
     >
       <AppSidebar
         :case-count="caseCount"
-        @import-click="dialogHostRef?.showImportDialog()"
-        @vcf-import-click="dialogHostRef?.showVcfImportDialog()"
+        @import-click="openImportDialog"
+        @vcf-import-click="openVcfImportDialog"
       >
         <CaseList
           ref="caseListRef"
@@ -57,6 +57,7 @@
     <v-main id="main-content" tabindex="-1">
       <h1 class="visually-hidden" data-testid="view-heading">{{ viewTitle.heading }}</h1>
       <ChunkLoadErrorBanner />
+      <BuildReviewBanner @resolved="caseListRef?.refreshCases()" />
       <router-view v-slot="{ Component }">
         <keep-alive :max="2">
           <component :is="Component" />
@@ -96,6 +97,7 @@
     <BackgroundJobsPanel />
 
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
+    <ProteinViewHost v-if="proteinViewMounted" />
 
     <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
   </v-app>
@@ -110,6 +112,7 @@ import AppSidebar from './components/AppSidebar.vue'
 import CaseList from './components/CaseList.vue'
 import A11yShell from './components/common/A11yShell.vue'
 import ChunkLoadErrorBanner from './components/common/ChunkLoadErrorBanner.vue'
+import BuildReviewBanner from './components/case/BuildReviewBanner.vue'
 import { useViewTitle } from './composables/useViewTitle'
 import { useThemePreference } from './composables/useThemePreference'
 import { installUrlStateSync } from './composables/useUrlState'
@@ -121,6 +124,7 @@ import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { filterShortcutCallbacks } from './composables/useFilterShortcutDispatch'
 import { useDatabaseStore } from './stores/databaseStore'
+import { DATABASE_CONFIG } from '../../shared/config'
 import { useCaseMetadata } from './composables/useCaseMetadata'
 import { useCaseDeletion } from './composables/useCaseDeletion'
 import { useColumnPreferences } from './composables/useColumnPreferences'
@@ -154,6 +158,9 @@ const VariantDetailsPanel = defineAsyncComponent(
 const AppDialogHost = defineAsyncComponent(() => import('./components/AppDialogHost.vue'))
 const KeyboardShortcutsDialog = defineAsyncComponent(
   () => import('./components/KeyboardShortcutsDialog.vue')
+)
+const ProteinViewHost = defineAsyncComponent(
+  () => import('./components/protein/ProteinViewHost.vue')
 )
 const ViewTransitionOverlay = defineAsyncComponent(
   () => import('./components/ViewTransitionOverlay.vue')
@@ -212,6 +219,7 @@ const { smAndDown: sidebarIsOverlay } = useDisplay()
 const detailsPanelMounted = useMountOnFirstOpen(() => panelOpen.value)
 const keyboardHelpMounted = useMountOnFirstOpen(() => showKeyboardHelp.value)
 const transitionOverlayMounted = useMountOnFirstOpen(() => transitioning.value)
+const proteinViewMounted = useMountOnFirstOpen(() => appState.proteinViewOpen.value)
 
 // Database store
 const databaseStore = useDatabaseStore()
@@ -350,9 +358,11 @@ useShellNavigation({
   closePanelWithoutAsking
 })
 
-// Clear filters on case change
-watch(selectedCaseId, () => {
+// Clear filters on case change; URL restore, Back, delete and import move the
+// sidebar highlight too, and the list's echo of it must not reopen the case
+watch(selectedCaseId, (id) => {
   resetCaseFilters()
+  if (caseListRef.value?.selectCase(id) === true && id !== null) restoredCaseId = id
 })
 
 const { handleDatabaseSwitched, handleImportComplete, handleBatchImportComplete } =
@@ -373,14 +383,27 @@ appState.setCaseMetadataHandler(() => {
   dialogHostRef.value?.showCaseMetadata()
 })
 
+/** Imports need an open database: say so instead of opening a wizard that fails. */
+function blockedWithoutDatabase(): boolean {
+  if (databaseStore.noDatabaseOpen) {
+    dialogHostRef.value?.showSnackbar(DATABASE_CONFIG.MESSAGES.NO_DATABASE_OPEN, 'error')
+  }
+  return databaseStore.noDatabaseOpen
+}
+
 /** Open the import wizard. Viewers are read-only, so for them it does nothing. */
 function openImportDialog(): void {
-  if (permissions.canWrite.value) dialogHostRef.value?.showImportDialog()
+  if (permissions.canWrite.value && !blockedWithoutDatabase()) {
+    dialogHostRef.value?.showImportDialog()
+  }
+}
+
+function openVcfImportDialog(): void {
+  if (!blockedWithoutDatabase()) void dialogHostRef.value?.showVcfImportDialog()
 }
 appState.setImportHandler(openImportDialog)
 
 const handleDialogBatchImportComplete = async (): Promise<void> => {
-  if (!isWebRuntime()) return
   await handleBatchImportComplete()
 }
 

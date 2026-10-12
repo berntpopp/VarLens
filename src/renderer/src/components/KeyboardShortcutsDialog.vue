@@ -15,7 +15,7 @@
           <div class="text-subtitle-2 mb-2">{{ group.title }}</div>
           <v-table density="compact">
             <tbody>
-              <tr v-for="shortcut in group.shortcuts" :key="shortcut.key">
+              <tr v-for="shortcut in group.shortcuts" :key="shortcut.description">
                 <td style="width: 140px">
                   <kbd class="shortcut-key">{{ shortcut.key }}</kbd>
                 </td>
@@ -31,61 +31,15 @@
 
 <script setup lang="ts">
 import { mdiClose, mdiKeyboard } from '@mdi/js'
+import { SHORTCUT_GROUPS as shortcutGroups } from '../config/keyboardShortcuts'
 const model = defineModel<boolean>({ default: false })
-
-const isMac =
-  typeof navigator !== 'undefined' &&
-  typeof navigator.platform === 'string' &&
-  navigator.platform.toUpperCase().indexOf('MAC') >= 0
-const mod = isMac ? 'Cmd' : 'Ctrl'
-const alt = isMac ? 'Option' : 'Alt'
-
-const shortcutGroups = [
-  {
-    title: 'Table Navigation',
-    shortcuts: [
-      { key: '\u2191 / \u2193', description: 'Move selection up / down' },
-      { key: 'Enter', description: 'Open variant detail panel' },
-      { key: 'Escape', description: 'Close detail panel / deselect row' }
-    ]
-  },
-  {
-    title: 'Actions (on selected row)',
-    shortcuts: [
-      { key: 's', description: 'Toggle star' },
-      { key: 'c', description: 'Open comment dialog' },
-      { key: 'a', description: 'Open ACMG classification' },
-      { key: 'e', description: 'Expand / collapse row (Cohort)' }
-    ]
-  },
-  {
-    title: 'Search & Filters',
-    shortcuts: [
-      { key: '/', description: 'Focus search field' },
-      { key: `${mod}+Shift+F`, description: 'Toggle filter panel' },
-      { key: `${alt}+Shift+C`, description: 'Toggle columns panel' },
-      { key: `${mod}+Shift+X`, description: 'Clear all filters' },
-      { key: 'Escape', description: 'Close drawer / blur search' }
-    ]
-  },
-  {
-    title: 'General',
-    shortcuts: [
-      { key: '?', description: 'Show this help' },
-      { key: `${alt}+Shift+O`, description: 'Import data' },
-      { key: `${alt}+Shift+L`, description: 'Toggle log viewer' },
-      { key: `${alt}+Shift+D`, description: 'Show disclaimer' },
-      { key: `${alt}+Shift+Q`, description: 'Show FAQ' }
-    ]
-  }
-]
 </script>
 
 <style scoped>
 .shortcut-key {
   display: inline-block;
   padding: 2px 8px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background-color: rgba(var(--v-theme-on-surface), 0.08);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.15);

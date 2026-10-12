@@ -68,16 +68,7 @@
 
 /* HGVS notation monospace */
 .table-container .hgvs-notation {
-  font-family: var(
-    --font-mono,
-    ui-monospace,
-    SFMono-Regular,
-    'SF Mono',
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace
-  );
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -209,6 +200,13 @@
 }
 
 .table-container .variant-table--sticky th:nth-child(2) {
+  z-index: 3;
+}
+
+/* Vuetify's sticky thead (z-index 2) is a stacking context, so the header
+   cells' z-index 3 counts only inside it; lift the whole header above the
+   sticky body cells (z-index 2) or they paint over the lead header cells. */
+.table-container .variant-table--sticky thead {
   z-index: 3;
 }
 

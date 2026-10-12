@@ -1,6 +1,8 @@
-import { lstatSync } from 'node:fs'
+import { lstatSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import type { DatabaseManager } from '../services/DatabaseManager'
+import { InvalidParametersError } from '../ipc/errors'
+import { DATABASE_CONFIG } from '../../shared/config'
 import { PathAuthorityStore } from './path-authority-store'
 
 const dialogAllowedDatabasePaths = new PathAuthorityStore()
@@ -45,6 +47,31 @@ export function isAllowedDatabasePath(
   const currentPath = manager.getCurrentPath()
   if (currentPath !== null && isExactMetadataPath(currentPath, canonical)) return true
   return manager.getRecentDatabases().some((db) => isExactMetadataPath(db.path, canonical))
+}
+
+/** Refuse a write target that is the open or a recent database (or its sidecar files). */
+export function assertNotDatabaseFile(target: string, getDbManager: () => DatabaseManager): void {
+  const manager = getDbManager()
+  const databases = [manager.getCurrentPath(), ...manager.getRecentDatabases().map((d) => d.path)]
+    .filter((p): p is string => p !== null && p !== '')
+    .flatMap((p) => ['', ...DATABASE_CONFIG.SIDECAR_SUFFIXES].map((s) => comparablePath(p + s)))
+  if (databases.includes(comparablePath(target))) {
+    throw new InvalidParametersError(
+      `Export target is a database file: ${target}`,
+      DATABASE_CONFIG.MESSAGES.EXPORT_TARGET_IS_DATABASE
+    )
+  }
+}
+
+function comparablePath(filePath: string): string {
+  let resolved = resolve(filePath)
+  try {
+    resolved = realpathSync.native(resolved) // follow symlinks to an existing file
+  } catch {
+    // Not on disk yet: the lexical path is all there is to compare.
+  }
+  // macOS and Windows file systems are case-insensitive by default.
+  return process.platform === 'linux' ? resolved : resolved.toLowerCase()
 }
 
 function isExactMetadataPath(storedPath: string, candidate: string): boolean {

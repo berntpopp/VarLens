@@ -1217,7 +1217,7 @@ describe('migration v27 — filter_presets.kind + shortlist seeds', () => {
          WHERE kind = 'shortlist' AND name != ?
          ORDER BY sort_order`
       )
-      // v47 seeds the evidence preset (migration-v47-evidence-preset.test.ts)
+      // v49 seeds the evidence preset (migration-v49-evidence-preset.test.ts)
       .all(EVIDENCE_BETA_PRESET.name) as Array<{
       name: string
       kind: string

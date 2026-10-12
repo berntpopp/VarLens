@@ -4,7 +4,8 @@ import { computeGeneAssociation } from './gene-tests'
 
 if (!parentPort) throw new Error('Must be run as worker thread')
 
-parentPort.on('message', (request: WorkerRequest) => {
+// One batch per worker: with the listener gone the thread exits on its own (code 0).
+parentPort.once('message', (request: WorkerRequest) => {
   if (request.type === 'run') {
     const total = request.genes.length
 

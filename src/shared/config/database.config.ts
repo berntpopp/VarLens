@@ -12,6 +12,14 @@ export const DATABASE_CONFIG = {
   IMPORT_CACHE_SIZE_KB: -64000,
   /** Memory-mapped I/O size in bytes (1 GB — virtual address reservation is free on 64-bit) */
   MMAP_SIZE_BYTES: 1_073_741_824,
+  /**
+   * Free disk space the v47 chromosome-name migration needs next to the
+   * database, as a multiple of its size: the pre-migration backup (1x) plus the
+   * peak WAL of the rename (measured 0.84x on a 741 MB database), with margin.
+   */
+  CONTIG_MIGRATION_FREE_SPACE_RATIO: 2.7,
+  /** The same when no row will be renamed: only the backup copy, with margin. */
+  BACKUP_ONLY_FREE_SPACE_RATIO: 1.1,
   /** Busy timeout in milliseconds */
   BUSY_TIMEOUT_MS: 5000,
   /** Max rows sampled per table during ANALYZE (caps optimizer stat-gathering time) */
@@ -36,5 +44,20 @@ export const DATABASE_CONFIG = {
   /** Max recent databases in history */
   MAX_RECENT_DATABASES: 5,
   /** Worker pool idle timeout in ms — balances thread churn vs memory on desktop */
-  WORKER_IDLE_TIMEOUT_MS: 90_000
+  WORKER_IDLE_TIMEOUT_MS: 90_000,
+  /** Files SQLite keeps next to a database; writing over one corrupts it. */
+  SIDECAR_SUFFIXES: ['-wal', '-shm', '-journal'],
+  /**
+   * Leading bytes of files that cannot be an encrypted VarLens database: the
+   * cipher keeps no plaintext header, so a plain SQLite header that fails to
+   * read means a damaged file, and a ZIP header means an XLSX or archive.
+   */
+  NON_DATABASE_SIGNATURES: ['SQLite format 3\0', 'PK\x03\x04'],
+  /** User-facing copy for database-file problems. */
+  MESSAGES: {
+    NOT_A_DATABASE: 'This file is not a VarLens database or is damaged.',
+    NO_DATABASE_OPEN:
+      'No database is open. Create or open one from the database menu in the toolbar.',
+    EXPORT_TARGET_IS_DATABASE: 'This file is a VarLens database. Choose a different file name.'
+  }
 } as const

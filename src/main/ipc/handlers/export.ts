@@ -11,6 +11,7 @@ import {
 } from '../../security/export-path-allowlist'
 import { FilePathSchema } from '../../../shared/types/ipc-schemas'
 import { InvalidParametersError } from '../errors'
+import { assertNotDatabaseFile } from '../../security/database-path-allowlist'
 import {
   CohortSearchParamsSchema,
   VariantExportParamsSchema
@@ -133,6 +134,7 @@ export function registerExportHandlers({
           if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
             return { success: false, error: 'Export cancelled' }
           }
+          assertNotDatabaseFile(result.filePath, getDbManager)
           outputFilePath = result.filePath
         }
 
@@ -228,6 +230,7 @@ export function registerExportHandlers({
           if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
             return { success: false, error: 'Export cancelled' }
           }
+          assertNotDatabaseFile(result.filePath, getDbManager)
           outputFilePath = result.filePath
         }
 

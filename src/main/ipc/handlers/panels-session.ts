@@ -1,5 +1,6 @@
 import { mainLogger } from '../../services/MainLogger'
 import type { z } from 'zod'
+import { canonicalContig } from '../../../shared/utils/contig'
 import type { GeneReferenceDb } from '../../database/GeneReferenceDb'
 import type { PanelAppClient, PanelAppPanel } from '../../services/api/PanelAppClient'
 import type { StringDbClient } from '../../services/api/StringDbClient'
@@ -189,7 +190,7 @@ export async function generateBedContentForSession(
     const coords = coordsMap.get(gene.hgnc_id)
     if (coords === undefined) continue
 
-    const chr = coords.chromosome.startsWith('chr') ? coords.chromosome : `chr${coords.chromosome}`
+    const chr = canonicalContig(coords.chromosome, assembly)
     const bedStart = Math.max(0, coords.start_pos - 1 - paddingBp)
     const bedEnd = coords.end_pos + paddingBp
     lines.push(`${chr}\t${bedStart}\t${bedEnd}\t${gene.symbol}`)

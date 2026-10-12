@@ -5,6 +5,8 @@ export const APP_CONFIG = {
   /** Minimum window size: below this the case view chrome leaves no table rows */
   WINDOW_MIN_WIDTH: 1024,
   WINDOW_MIN_HEIGHT: 640,
+  /** Window background before the renderer paints: the themes' `background` token */
+  WINDOW_BACKGROUND: { light: '#F0F4F8', dark: '#12141A' },
   /** Max log entries in renderer */
   MAX_LOG_ENTRIES: 1000,
   /** Default debounce delay (ms) */

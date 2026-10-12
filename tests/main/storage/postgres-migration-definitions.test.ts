@@ -9,7 +9,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(30)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(32)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -40,7 +40,9 @@ describe('Postgres migration definitions', () => {
       '0027',
       '0028',
       '0029',
-      '0030'
+      '0030',
+      '0031',
+      '0032'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -71,6 +73,8 @@ describe('Postgres migration definitions', () => {
       'summary_genotype_classes',
       'summary_conflicting_calls',
       'rare_not_recurrent_preset',
+      'summary_carrier_rows',
+      'contig_naming',
       'case_field_dictionary',
       'evidence_ranking_beta_preset'
     ])
@@ -163,10 +167,10 @@ describe('Postgres migration definitions', () => {
     expect(migration?.afterApply).toBeUndefined()
   })
 
-  // The SQL literal and the TypeScript preset (also seeded by SQLite v47) must
+  // The SQL literal and the TypeScript preset (also seeded by SQLite v49) must
   // not drift apart; the ruleset inside is the frozen, content-addressed file.
-  it('0030 seeds "Evidence ranking (beta)" exactly as evidence-ranking-preset.ts defines it', () => {
-    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0030')
+  it('0032 seeds "Evidence ranking (beta)" exactly as evidence-ranking-preset.ts defines it', () => {
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0032')
     const literal = (text: string): string => `'${text.replace(/'/g, "''")}'`
     expect(migration?.sql).toContain(literal(EVIDENCE_BETA_PRESET.name))
     expect(migration?.sql).toContain(literal(EVIDENCE_BETA_PRESET.description))

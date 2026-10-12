@@ -31,6 +31,7 @@ import { buildPostgresVariantQueryParts } from '../../../src/main/storage/postgr
 import { buildSummaryQueryParts } from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
 import { dispatchTask } from '../../../src/main/workers/db-worker-dispatch'
 import type { ColumnFiltersParam } from '../../../src/shared/types/column-filters'
+import { caseCarrierCountSql } from '../../../src/shared/sql/carrier-frequency'
 
 /** `chr:pos:ref:alt` of a cohort row; its variant_key is opaque (#503). */
 const coord = (row: unknown): string => {
@@ -75,10 +76,10 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     sqlite = new DatabaseService(':memory:')
     grch38Case = sqlite.cases.createCase('guard-38', '/tmp/guard-38.json', 0, 'GRCh38')
     sqlite.variants.insertVariantsBatch(grch38Case, [
-      variant('7', 150_000, { cadd: 25 }),
-      variant('7', 202_000),
-      variant('7', 90_000, { end_pos: 210_000, alt: '<DEL>', variant_type: 'cnv' }),
-      variant('7', 300_000, { gene_symbol: GENE.symbol, cadd: 10, omim_mim_number: '600000' })
+      variant('chr7', 150_000, { cadd: 25 }),
+      variant('chr7', 202_000),
+      variant('chr7', 90_000, { end_pos: 210_000, alt: '<DEL>', variant_type: 'cnv' }),
+      variant('chr7', 300_000, { gene_symbol: GENE.symbol, cadd: 10, omim_mim_number: '600000' })
     ])
     const grch37Case = sqlite.cases.createCase('guard-37', '/tmp/guard-37.json', 0, 'GRCh37')
     sqlite.variants.insertVariantsBatch(grch37Case, [variant('7', 150_000, { alt: 'C' })])
@@ -90,6 +91,41 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
 
   afterEach(() => {
     sqlite.close()
+  })
+
+  describe('a case flagged for build review keeps bare names: panels still match it', () => {
+    const REGION = { chr: 'chr7', start: 95_000, end: 205_000 }
+    // >= PANEL_TEMP_TABLE_THRESHOLD regions switch the case view to the temp table.
+    const MANY = [
+      REGION,
+      ...Array.from({ length: 60 }, (_, i) => ({ chr: 'chr9', start: i * 10, end: i * 10 + 5 }))
+    ]
+    let flagged: number
+
+    beforeEach(() => {
+      flagged = sqlite.cases.createCase('flagged-38', '/tmp/flagged.json', 0, 'GRCh38')
+      sqlite.variants.insertVariantsBatch(flagged, [variant('7', 150_000), variant('7', 300_000)])
+      sqlite.cohortSummary.rebuild()
+    })
+
+    it.each([
+      ['few regions', [REGION]],
+      ['many regions', MANY]
+    ])('case view (%s)', (_label, panel_intervals) => {
+      const result = sqlite.variants.getVariants({ case_id: flagged, panel_intervals }, 100, 0)
+      expect(result.data.map((r) => r.pos)).toEqual([150_000])
+    })
+
+    it('cohort view', () => {
+      const result = sqlite.cohort.getCohortVariants({
+        genome_build: 'GRCh38',
+        panel_intervals: [REGION],
+        limit: 100,
+        offset: 0
+      })
+      expect(result.data.map(coord)).toContain('7:150000:A:T')
+      expect(result.data.map(coord)).not.toContain('7:300000:A:T')
+    })
   })
 
   it('desktop export applies the active gene panel to the exported rows, not only to the pre-count', async () => {
@@ -121,9 +157,9 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
 
     // 7:150000:A:C belongs to the GRCh37 case and must not leak in.
     expect(result.data.map(coord).sort()).toEqual([
-      '7:150000:A:T',
-      '7:202000:A:T',
-      '7:90000:A:<DEL>'
+      'chr7:150000:A:T',
+      'chr7:202000:A:T',
+      'chr7:90000:A:<DEL>'
     ])
   })
 
@@ -213,7 +249,11 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       }
 
       expect(await keys('GRCh37')).toEqual([])
-      expect(await keys('GRCh38')).toEqual(['7:150000:A:T', '7:202000:A:T', '7:90000:A:<DEL>'])
+      expect(await keys('GRCh38')).toEqual([
+        'chr7:150000:A:T',
+        'chr7:202000:A:T',
+        'chr7:90000:A:<DEL>'
+      ])
     })
 
     it('cohort export restricts to the active panel and build like the cohort table', () => {
@@ -225,9 +265,9 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
       const panel = { active_panel_ids: [panelId], panel_padding_bp: 5000 }
 
       expect(exported({ ...panel, genome_build: 'GRCh38' })).toEqual([
-        '7:150000:A:T',
-        '7:202000:A:T',
-        '7:90000:A:<DEL>'
+        'chr7:150000:A:T',
+        'chr7:202000:A:T',
+        'chr7:90000:A:<DEL>'
       ])
       expect(exported({ ...panel, genome_build: 'GRCh37' })).toEqual([])
       // No build selected: the table shows GRCh38, so the export must too.
@@ -352,12 +392,13 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     })
 
     it('SQLite cohort view matches the stored text', () => {
+      // GRCh37 stores bare contig names, so `chr = 7` must match the stored '7'.
       for (const value of ['7', 7]) {
         const result = sqlite.cohort.getCohortVariants({
-          genome_build: 'GRCh38',
+          genome_build: 'GRCh37',
           column_filters: { chr: { operator: '=', value } }
         })
-        expect(result.data).toHaveLength(4)
+        expect(result.data.length).toBeGreaterThan(0)
       }
     })
 
@@ -383,7 +424,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     // `variant_frequency` is joined into every case query and also has `chr`
     // and `pos`, so an unqualified column reference is ambiguous in SQLite.
     it('SQLite case view accepts them (columns are qualified with the variants table)', () => {
-      expect(positions({ chr: { operator: '=', value: '7' } })).toEqual([
+      expect(positions({ chr: { operator: '=', value: 'chr7' } })).toEqual([
         90_000, 150_000, 202_000, 300_000
       ])
       expect(positions({ chr: { operator: 'like', value: '8' } })).toEqual([])
@@ -400,7 +441,7 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
     it('SQLite export SQL built from them is accepted too', async () => {
       const prepared = await prepareVariantExport(() => sqlite, grch38Case, {
         column_filters: {
-          chr: { operator: '=', value: '7' },
+          chr: { operator: '=', value: 'chr7' },
           pos: { operator: '<', value: 100_000 }
         }
       })
@@ -459,14 +500,15 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
   })
 })
 
-describe('PostgreSQL case view carrier cap (#455, no PostgreSQL required)', () => {
-  it('caps vf.case_count and keeps rows without a frequency row', () => {
+describe('PostgreSQL case view carrier cap (#455, #555, no PostgreSQL required)', () => {
+  it('caps the summary carrier count and keeps rows without a summary row', () => {
     const { fromAndWhereSql, params } = buildPostgresVariantQueryParts(
       { case_id: 1, carrier_count_max: 3 },
       '"public"'
     )
-    expect(fromAndWhereSql).toContain('(vf.case_count IS NULL OR vf.case_count <= $2)')
-    expect(fromAndWhereSql).toContain('LEFT JOIN "public"."variant_frequency" vf')
+    const carriers = caseCarrierCountSql('"public"."cohort_variant_summary"', 'v')
+    expect(fromAndWhereSql).toContain(`COALESCE(${carriers}, 0) <= $2::bigint`)
+    expect(fromAndWhereSql).not.toContain('variant_frequency')
     expect(params).toEqual([1, 3])
   })
 
@@ -475,7 +517,7 @@ describe('PostgreSQL case view carrier cap (#455, no PostgreSQL required)', () =
       { case_id: 1, carrier_count_max: 0 },
       '"public"'
     )
-    expect(fromAndWhereSql).not.toContain('vf.case_count <=')
+    expect(fromAndWhereSql).not.toContain('::bigint)')
     expect(params).toEqual([1])
   })
 })

@@ -10,9 +10,8 @@ import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useCohortData } from '@renderer/composables/useCohortData'
 import { SUMMARY_STALE_POLL_MS } from '@renderer/composables/useSummaryFreshness'
-import type { CohortVariant, CohortSummary } from '../../../../../src/shared/types/cohort'
+import type { CohortVariant } from '../../../../../src/shared/types/cohort'
 import { logService } from '../../../src/renderer/src/services/LogService'
-import { ErrorCode } from '../../../src/shared/types/errors'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -43,7 +42,6 @@ describe('useCohortData', () => {
     expect(result.totalCount.value).toBe(0)
     expect(result.isLoading.value).toBe(false)
     expect(result.error.value).toBeNull()
-    expect(result.summary.value).toBeNull()
   })
 
   it('fetches variants and updates state', async () => {
@@ -233,67 +231,6 @@ describe('useCohortData', () => {
     expect(result.error.value).toBeNull()
   })
 
-  it('fetches summary successfully', async () => {
-    const mockSummary: CohortSummary = {
-      total_cases: 10,
-      total_variants: 100,
-      unique_variants: 0,
-      avg_variants_per_case: 0,
-      genes_with_variants: 0,
-      starred_variants: 0,
-      acmg_counts: {
-        pathogenic: 0,
-        likely_pathogenic: 0,
-        vus: 0,
-        likely_benign: 0,
-        benign: 0
-      }
-    }
-    window.api.cohort.getSummary = vi.fn().mockResolvedValue(mockSummary)
-
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.fetchSummary()
-
-    expect(result.summary.value).toEqual(mockSummary)
-    expect(window.api.cohort.getSummary).toHaveBeenCalledOnce()
-  })
-
-  it('handles summary fetch errors gracefully', async () => {
-    window.api.cohort.getSummary = vi.fn().mockRejectedValue(new Error('Summary error'))
-
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.fetchSummary()
-
-    expect(result.summary.value).toBeNull()
-    expect(logService.error).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to load cohort summary:'),
-      'cohort'
-    )
-  })
-
-  it('handles SerializableError summary responses via unwrap flow', async () => {
-    window.api.cohort.getSummary = vi.fn().mockResolvedValue({
-      code: ErrorCode.DB_ERROR,
-      message: 'Summary error',
-      userMessage: 'Could not load summary'
-    })
-
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.fetchSummary()
-
-    expect(result.summary.value).toBeNull()
-    expect(logService.error).toHaveBeenCalledWith(
-      expect.stringContaining('Could not load summary'),
-      'cohort'
-    )
-  })
-
   it('reset clears all state', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
@@ -315,7 +252,6 @@ describe('useCohortData', () => {
     ]
     result.totalCount.value = 1
     result.error.value = new Error('Test error')
-    result.summary.value = { total_cases: 10, total_variants: 100 }
 
     // Reset
     result.reset()
@@ -324,7 +260,6 @@ describe('useCohortData', () => {
     expect(result.variants.value).toEqual([])
     expect(result.totalCount.value).toBe(0)
     expect(result.error.value).toBeNull()
-    expect(result.summary.value).toBeNull()
   })
 
   it('passes filter params to IPC call', async () => {

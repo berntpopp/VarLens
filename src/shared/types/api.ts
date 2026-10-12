@@ -61,6 +61,7 @@ import type {
 } from './database'
 import type { ProgressUpdate, ImportResult } from './import'
 import type { IpcResult } from './errors'
+import type { BuildConfidence } from '../genome/genome-build'
 import type {
   CohortVariant,
   CohortVariantIdentity,
@@ -383,6 +384,8 @@ export interface DuplicateCheckItem {
   fileName: string
   caseName: string
   isDuplicate: boolean
+  /** The header's genome build (when requested): `none` for JSON and unreadable files. */
+  build?: { suggested: string | null; confidence: BuildConfidence }
 }
 
 export interface DuplicateCheckResult {
@@ -393,15 +396,19 @@ export interface DuplicateCheckResult {
 export interface BatchImportAPI {
   selectFiles: () => Promise<IpcResult<string[]>>
   selectFolder: () => Promise<IpcResult<string[]>>
+  /** `detectBuilds` also reads each VCF header for its genome build (first call only). */
   checkDuplicates: (
     filePaths: string[],
-    stripText?: string
+    stripText?: string,
+    detectBuilds?: boolean
   ) => Promise<IpcResult<DuplicateCheckResult>>
+  /** `fallbackGenomeBuild`: the build for files whose header decides none (always JSON). */
   start: (
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
     stripText: string | undefined,
     runId: string,
+    fallbackGenomeBuild?: string,
     options?: { fieldProfile?: ImportFieldProfile }
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>

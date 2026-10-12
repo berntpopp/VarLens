@@ -123,7 +123,7 @@
                 density="compact"
                 :error-messages="urlError"
                 class="mb-3"
-                style="font-family: monospace"
+                style="font-family: var(--font-mono)"
               />
 
               <v-select
@@ -153,7 +153,10 @@
                   <v-expansion-panel-title>Available Variables</v-expansion-panel-title>
                   <v-expansion-panel-text>
                     <div class="text-body-small">
-                      <div><code>{chr}</code> - Chromosome (e.g., "1", "X")</div>
+                      <div><code>{chr}</code> - Chromosome, without chr (e.g., "1", "X", "MT")</div>
+                      <div>
+                        <code>{chr_ucsc}</code> - Chromosome, UCSC style (e.g., "chr1", "chrM")
+                      </div>
                       <div><code>{pos}</code> - Position (e.g., 12345)</div>
                       <div><code>{ref}</code> - Reference allele (e.g., "A")</div>
                       <div><code>{alt}</code> - Alternate allele (e.g., "G")</div>

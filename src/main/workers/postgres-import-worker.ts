@@ -54,6 +54,9 @@ import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pi
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
+import { resolveImportGenomeBuild } from '../import/vcf/resolve-genome-build'
+import { canonicalContig } from '../../shared/utils/contig'
+import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
 import type { ImportFilters } from '../import/vcf/import-filters'
 import { splitVcfRows } from './postgres-vcf-batch'
 import { streamMappedVcfRows } from './postgres-vcf-stream'
@@ -269,7 +272,12 @@ export async function runImport(
           // sample, matching the SQLite path; the generator throws cleanly if
           // the VCF has no selectable sample at all.
           const selectedSample = start.vcfOptions?.selectedSample ?? ''
-          const genomeBuild = start.vcfOptions?.genomeBuild ?? 'GRCh38'
+          const genomeBuild = await resolveImportGenomeBuild({
+            filePath,
+            isVcf: true,
+            explicit: start.vcfOptions?.genomeBuild,
+            fallback: start.vcfOptions?.fallbackGenomeBuild
+          })
           const vcfFileName = basename(filePath)
           let vcfFileSize = 0
           try {
@@ -422,6 +430,13 @@ export async function runImport(
       // JSON imports keep the standard transaction shape since the WGS-
       // class tuning (per-batch async commit) is VCF-specific.
       // -------------------------------------------------------------------
+      // Before the transaction: a JSON file without a build fails without opening one.
+      const jsonGenomeBuild = await resolveImportGenomeBuild({
+        filePath,
+        isVcf: false,
+        explicit: start.vcfOptions?.genomeBuild,
+        fallback: start.vcfOptions?.fallbackGenomeBuild
+      })
       await beginFenced()
       beganTransaction = true
 
@@ -454,6 +469,9 @@ export async function runImport(
           maxRows: batchSize,
           maxBytes: maxBatchBytes,
           flush: async (rows) => {
+            for (const row of rows) {
+              if (typeof row.chr === 'string') row.chr = canonicalContig(row.chr, jsonGenomeBuild)
+            }
             await session.insertVariantBatch(rows)
             totalInserted += rows.length
             post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })
@@ -503,7 +521,7 @@ export async function runImport(
           fileName,
           caseName: start.caseName,
           fileSize,
-          genomeBuild: start.vcfOptions?.genomeBuild ?? 'GRCh38',
+          genomeBuild: jsonGenomeBuild,
           importFileType,
           fieldDictionary: () => fields.dictionary()
         },
@@ -558,7 +576,19 @@ export async function runImport(
         const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
-        const genomeBuild = start.vcfOptions?.genomeBuild ?? 'GRCh38'
+        // The case's build: the user's choice, else what the first file decides.
+        const genomeBuild = await resolveImportGenomeBuild({
+          filePath: start.files[0].filePath,
+          isVcf: true,
+          explicit: start.vcfOptions?.genomeBuild
+        })
+        // Appended files are checked against the first file's own header build
+        // (so an override of the declared build does not reject them), else the case build.
+        const lockBuild =
+          start.files.length > 1
+            ? ((await parseVcfHeader(start.files[0].filePath).catch(() => undefined))?.header
+                .genomeBuild ?? genomeBuild)
+            : genomeBuild
 
         // Build ImportFilters once before the per-file loop so BED parsing runs
         // in the worker, not main. An explicit BED load must fail closed.
@@ -627,7 +657,7 @@ export async function runImport(
               genomeBuild,
               // Every file, the first included: same records as SQLite (#484).
               filters: importFilters,
-              appendedTo: i > 0 ? { genomeBuild } : undefined,
+              appendedTo: i > 0 ? { genomeBuild: lockBuild } : undefined,
               fields,
               onSkip: (reason) => {
                 totalSkipped += 1

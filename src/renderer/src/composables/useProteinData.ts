@@ -44,14 +44,17 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
     error: computed(() => message(mappingQuery.error.value)),
     mapping,
     domains: computed(() => domainsQuery.data.value?.domains ?? []),
-    // Without domain data the length comes from the mapping.
-    proteinLength: computed(
-      () => domainsQuery.data.value?.proteinLength ?? mapping.value?.proteinLength ?? 0
-    ),
+    // Without domain data (or a 0 length from it) the length comes from the mapping.
+    proteinLength: computed(() => {
+      const fromDomains = domainsQuery.data.value?.proteinLength ?? 0
+      return fromDomains > 0 ? fromDomains : (mapping.value?.proteinLength ?? 0)
+    }),
     structureInfo: computed(() => structureQuery.data.value ?? null),
     geneStructure: computed(() => geneQuery.data.value ?? null),
     geneStructureLoading: computed(() => geneQuery.asyncStatus.value === 'loading'),
     geneStructureError: computed(() => message(geneQuery.error.value)),
+    /** The gene structure alone (its own Retry: the lollipop does not wait for it) */
+    refetchGeneStructure: (): void => void geneQuery.refetch().catch(() => undefined),
     refetch
   }
 }

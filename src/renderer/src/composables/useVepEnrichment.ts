@@ -69,7 +69,7 @@ export function useVepEnrichment() {
   const cachedAt = computed<Date | null>(() => {
     if (vepData.value === null || !vepData.value.success) return null
     if (vepData.value.cacheInfo.cachedAt === null) return null
-    return new Date(vepData.value.cacheInfo.cachedAt * 1000)
+    return new Date(vepData.value.cacheInfo.cachedAt) // epoch ms, as every API cache stores it
   })
 
   // Get preferred transcript with scores

@@ -51,7 +51,6 @@ export function createRepositories(db: DatabaseType) {
     filterBuilder: new VariantFilterBuilder(db, kysely, new VariantSearchService(db, kysely)),
     cases,
     metadata,
-    variants,
     panels
   })
 

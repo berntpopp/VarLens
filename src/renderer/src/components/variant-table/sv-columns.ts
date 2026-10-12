@@ -1,4 +1,6 @@
 import type { ColumnDef } from './columns'
+import { formatBpLength } from '../../utils/variant-interval'
+import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
 
 /**
  * Column definitions for SV (structural variant) variant tables.
@@ -17,9 +19,22 @@ export const svHeaders: ColumnDef[] = [
   { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' },
-  { title: 'End', key: 'end_pos', sortable: true, align: 'end' },
+  {
+    title: 'End',
+    key: 'end_pos',
+    sortable: true,
+    align: 'end',
+    value: (item) =>
+      (item as { end_pos?: number | null }).end_pos?.toLocaleString() ?? EMPTY_VALUE_PLACEHOLDER
+  },
   { title: 'SV Type', key: 'sv_type', sortable: true },
-  { title: 'Length', key: 'sv_length', sortable: true, align: 'end' },
+  {
+    title: 'Length',
+    key: 'sv_length',
+    sortable: true,
+    align: 'end',
+    value: (item) => formatBpLength((item as { sv_length?: number | null }).sv_length)
+  },
   { title: 'Gene', key: 'gene_symbol', sortable: true },
   { title: 'Impact', key: 'consequence', sortable: true },
   {

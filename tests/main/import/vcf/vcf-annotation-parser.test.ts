@@ -83,6 +83,20 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts[0].func).toBe('synonymous_variant')
     })
 
+    it('decodes the %3D escape VEP writes into HGVSp (variant and transcript rows)', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant|LOW|COMT|ENSG00000093010|Transcript|ENST00000361682|protein_coding|2/6|.|ENST00000361682.4:c.186C>T|ENSP00000354346.4:p.Ala62%3D|336|186|62|A|gcC/gcT|YES|NM_000754.4|0.12|11.2||tolerated(0.8)|benign(0.05)'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'T')
+
+      expect(result.aaChange).toBe('ENSP00000354346.4:p.Ala62=')
+      expect(result.transcripts[0].aa_change).toBe('ENSP00000354346.4:p.Ala62=')
+    })
+
     it('rejects a non-enum IMPACT while preserving its SO consequence', () => {
       const info = new Map([
         [

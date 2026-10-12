@@ -129,7 +129,13 @@ describe('import worker: cohort summary recovery', () => {
     ])
 
     const messages = await h.run(
-      [h.file('A', [variantAt(400, 'CCC')], { isDuplicate: true, duplicateStrategy: 'overwrite' })],
+      [
+        h.file('A', [variantAt(400, 'CCC')], {
+          isDuplicate: true,
+          duplicateStrategy: 'overwrite',
+          fallbackGenomeBuild: 'GRCh38'
+        })
+      ],
       {
         onMessage: (m) => {
           if (m.type === 'file-complete') throw new Error('port closed')

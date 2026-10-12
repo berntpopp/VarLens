@@ -47,7 +47,8 @@ export const strHeaders: ColumnDef[] = [
     title: 'Status',
     key: 'str.str_status',
     sortable: true,
-    value: (item) => (item as { _str_status?: string | null })._str_status ?? null
+    value: (item) =>
+      (item as { _str_status?: string | null })._str_status?.replace(/_/g, ' ') ?? null
   },
   {
     title: 'Normal Max',

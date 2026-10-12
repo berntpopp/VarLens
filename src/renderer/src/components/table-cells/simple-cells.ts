@@ -13,7 +13,8 @@
  */
 import { h, type FunctionalComponent, type PropType, type VNode } from 'vue'
 import { mdiOpenInNew } from '@mdi/js'
-import { EMPTY_VALUE_PLACEHOLDER } from '../../utils/formatters'
+import { formatConsequence, formatHgvs } from '../../utils/formatters'
+import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
 import {
   formatCaddScore,
   formatPosition,
@@ -165,9 +166,9 @@ export const GeneSymbolCell: FunctionalComponent<
   { value: string | null; linkUrl?: string | null },
   LinkEmits
 > = (props, { emit }) => {
-  if (!hasText(props.value) || !hasText(props.linkUrl)) {
-    return h('span', { class: 'gene-symbol' }, props.value ?? EMPTY_VALUE_PLACEHOLDER)
-  }
+  // Placeholder outside the letter-spaced .gene-symbol span, which renders '--' as '- -'
+  if (!hasText(props.value)) return placeholder()
+  if (!hasText(props.linkUrl)) return h('span', { class: 'gene-symbol' }, props.value)
   const ariaLabel = `${props.value} (opens in a new tab)`
   return h(
     'a',
@@ -260,11 +261,11 @@ export const ConsequenceCell: FunctionalComponent<{
   impact?: string | null
   asChip?: boolean
 }> = (props) => {
-  if (!hasText(props.consequence)) return h('span', EMPTY_VALUE_PLACEHOLDER)
-  const text = props.consequence.replace(/_/g, ' ')
+  if (!hasText(props.consequence)) return placeholder()
+  const text = formatConsequence(props.consequence)
   const tooltip = { 'data-tooltip': props.consequence, 'data-tooltip-location': TOOLTIP_TOP }
   if (props.asChip !== true) return h('span', tooltip, text)
-  const color = hasText(props.impact) ? getImpactColor(props.impact) : 'grey'
+  const color = getImpactColor(props.impact ?? null)
   return chipVNode(text, { color, size: 'small', label: true, attrs: tooltip })
 }
 ConsequenceCell.displayName = 'ConsequenceCell'
@@ -275,11 +276,12 @@ ConsequenceCell.props = {
 }
 
 export const HgvsCell: FunctionalComponent<{ value: string | null | undefined }> = (props) => {
-  if (!hasText(props.value)) return placeholder()
+  const text = formatHgvs(props.value)
+  if (text === null) return placeholder()
   return h(
     'span',
-    { class: 'hgvs-notation', 'data-tooltip': props.value, 'data-tooltip-location': TOOLTIP_TOP },
-    props.value
+    { class: 'hgvs-notation', 'data-tooltip': text, 'data-tooltip-location': TOOLTIP_TOP },
+    text
   )
 }
 HgvsCell.displayName = 'HgvsCell'

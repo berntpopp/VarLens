@@ -54,11 +54,18 @@ export async function createMapperPipeline(
       const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
       filter = wrapped ? `${formatInfo.caseKey}.data` : 'data'
 
-      const { dictionaries, columnIndices, headerItems } = await parseHeader(filePath, headerPath)
-      mapper = createFieldMapper(dictionaries, columnIndices, budget.takeRecordBytes, onSkip, {
-        header: headerItems,
-        fields
-      })
+      const { dictionaries, columnIndices, columnCount, headerItems } = await parseHeader(
+        filePath,
+        headerPath
+      )
+      mapper = createFieldMapper(
+        dictionaries,
+        columnIndices,
+        budget.takeRecordBytes,
+        onSkip,
+        columnCount,
+        { header: headerItems, fields }
+      )
       break
     }
 
@@ -85,6 +92,7 @@ export async function parseHeader(
 ): Promise<{
   dictionaries: DataDictionaries
   columnIndices: ReturnType<typeof resolveColumnIndices>
+  columnCount: number | undefined
   headerItems: ColumnarHeaderItem[]
 }> {
   return new Promise((resolve, reject) => {
@@ -168,7 +176,13 @@ export async function parseHeader(
       if (resolved) return
       resolved = true
       cleanup()
-      resolve({ dictionaries, columnIndices: resolveColumnIndices(headerItems), headerItems })
+      resolve({
+        dictionaries,
+        columnIndices: resolveColumnIndices(headerItems),
+        // No header means the legacy positional layout, which has no declared width
+        columnCount: headerItems.length > 0 ? headerItems.length : undefined,
+        headerItems
+      })
     })
 
     stream.on('error', (err: Error) => {

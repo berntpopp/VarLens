@@ -13,14 +13,12 @@
     :width="effectiveWidth"
     @update:model-value="emit('update:open', $event)"
   >
-    <!-- Resize handle (left edge) -->
     <div class="resize-handle" @mousedown="startResize" />
 
     <v-card flat class="h-100 d-flex flex-column">
-      <!-- Header with title and close button -->
       <v-toolbar color="transparent" density="compact" flat>
         <v-toolbar-title class="text-body-large">
-          <h2 ref="headingRef" tabindex="-1" class="panel-heading">Variant Details</h2>
+          <h2 ref="headingRef" tabindex="-1" class="panel-heading text-truncate">{{ heading }}</h2>
         </v-toolbar-title>
         <IconButton
           label="Close variant details"
@@ -31,9 +29,11 @@
 
       <v-divider />
 
-      <!-- Scrollable content area -->
-      <div class="flex-grow-1 overflow-y-auto pa-3">
-        <!-- Skeleton loader while variant details are loading -->
+      <div
+        ref="scrollRef"
+        data-testid="variant-details-scroll"
+        class="flex-grow-1 overflow-y-auto pa-3"
+      >
         <v-skeleton-loader
           v-if="variant && isLoading"
           type="card-heading, list-item-three-line@4"
@@ -41,13 +41,13 @@
         />
 
         <template v-else-if="variant">
-          <!-- Section 1: Variant Identity -->
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
-            class="mb-4"
+            class="mb-2"
             @open-protein-view="openProteinView"
           />
+          <ProteinPreviewStrip :variant="variant" class="mb-4" @open="openProteinView" />
 
           <!-- Extension details for SV/CNV/STR variants (case mode only: cohort rows lack per-call SV fields like _sv_is_precise) -->
           <ExtensionDetailsSection
@@ -56,7 +56,6 @@
             :genome-build="genomeBuild"
           />
 
-          <!-- Transcript Section (case + cohort mode) -->
           <TranscriptSection
             :variant-id="mode === 'case' && 'id' in variant ? (variant as Variant).id : null"
             :vep-transcripts="allTranscripts"
@@ -74,7 +73,6 @@
 
           <v-divider class="mb-4" />
 
-          <!-- Section 2: Annotation Scores -->
           <AnnotationScoresSection
             :variant="variant"
             :preferred-transcript="preferredTranscript"
@@ -104,7 +102,6 @@
           <div class="acmg-section mb-4">
             <h3 class="text-title-small mb-2">ACMG Classification</h3>
 
-            <!-- Quick-classify chips -->
             <div class="d-flex flex-wrap ga-1 mb-2">
               <v-chip
                 v-for="cls in ACMG_CLASSIFICATIONS"
@@ -114,13 +111,13 @@
                 size="small"
                 label
                 class="cursor-pointer"
-                :disabled="!canWrite"
+                :disabled="!canWrite || acmgLocked"
                 @click="handleQuickClassify(cls)"
               >
                 {{ ACMG_ABBREV[cls] }}
               </v-chip>
               <v-chip
-                v-if="currentQuickClassification && canWrite"
+                v-if="currentQuickClassification && canWrite && !acmgLocked"
                 variant="text"
                 size="small"
                 class="cursor-pointer text-medium-emphasis"
@@ -129,6 +126,9 @@
               >
                 <v-icon size="x-small" :icon="mdiClose" />
               </v-chip>
+            </div>
+            <div v-if="acmgLocked && canWrite" class="text-caption text-medium-emphasis mb-1">
+              {{ ACMG_EVIDENCE_LOCK_HINT }}
             </div>
 
             <!-- Evidence-based classification panel -->
@@ -196,23 +196,6 @@
 
         <div v-else class="text-muted text-center mt-4">Select a variant to view details</div>
       </div>
-
-      <!-- Protein Visualization Modal: mounted on first open only. Rendering it
-           closed still fetched its chunk and fired protein/ClinVar requests on
-           every variant change. -->
-      <ProteinVisualizationModal
-        v-if="proteinViewerAvailable && proteinModalMounted"
-        v-model="proteinModalOpen"
-        :variant="variant"
-        :case-id="caseId"
-        :mode="mode"
-        :genome-build="genomeBuild"
-      />
-      <ProteinViewUnavailableDialog
-        v-else-if="!proteinViewerAvailable"
-        v-model="proteinModalOpen"
-        :reason="capabilities.capabilityReason('proteinViewer')"
-      />
     </v-card>
   </v-navigation-drawer>
 </template>
@@ -223,14 +206,17 @@ import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
-import { formatConsequence } from '../utils/formatters'
+import { formatConsequence, variantHeading } from '../utils/formatters'
 import { useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
-import { hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
+import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import ProteinPreviewStrip from './protein/ProteinPreviewStrip.vue'
+import type { ProteinViewTab } from '../config/proteinViewConfig'
 import IconButton from './common/IconButton.vue'
 import { usePanelFocus } from '../composables/usePanelFocus'
+import { isOverlayOpen, isTextEntryFocused } from '../composables/useTableKeyboardNav'
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
@@ -260,21 +246,16 @@ const ActivityLogPanel = defineAsyncComponent({
   loader: () => import('./ActivityLogPanel.vue'),
   ...asyncOpts
 })
-const ProteinVisualizationModal = defineAsyncComponent({
-  loader: () => import('./protein/ProteinVisualizationModal.vue'),
-  ...asyncOpts
-})
-const ProteinViewUnavailableDialog = defineAsyncComponent(
-  () => import('./protein/ProteinViewUnavailableDialog.vue')
-)
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
-import type { AcmgClassification } from '../../../shared/config/domain.config'
+import {
+  ACMG_EVIDENCE_LOCK_HINT,
+  type AcmgClassification
+} from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { useCapabilityStore } from '../stores/capabilityStore'
-import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
 import { usePermissions } from '../composables/usePermissions'
 import { useVariantGenomeBuild } from '../composables/useVariantGenomeBuild'
 
@@ -297,26 +278,32 @@ const emit = defineEmits<{
 // Move focus into the panel on open; restore it to the originating row on close
 const headingRef = ref<HTMLElement | null>(null)
 usePanelFocus(() => props.open, headingRef)
+const heading = computed(() => variantHeading(props.variant))
+const scrollRef = ref<HTMLElement | null>(null)
+// Keyed on the locus (case and cohort rows alike), so a refresh does not jump
+watch(
+  () =>
+    props.variant
+      ? [props.variant.chr, props.variant.pos, props.variant.ref, props.variant.alt].join(':')
+      : null,
+  () => scrollRef.value?.scrollTo({ top: 0 })
+)
 const genomeBuild = useVariantGenomeBuild(props)
 
-// Protein visualization modal state
-const proteinModalOpen = ref(false)
 // External lookups: always on in desktop; an admin-controlled, default-off
 // server setting in web; read from the capability document (fail-closed).
 const capabilities = useCapabilityStore()
-const proteinViewerAvailable = computed(() => capabilities.canUse('proteinViewer'))
 const vepFetchAvailable = computed(() => capabilities.canUse('vepEnrichment'))
-const proteinModalMounted = useMountOnFirstOpen(() => proteinModalOpen.value)
 
-function openProteinView(): void {
-  proteinModalOpen.value = true
+// The protein view is the shell's (ProteinViewHost), shared with the row menu and `p`.
+function openProteinView(tab: ProteinViewTab): void {
+  if (props.variant !== null) appState?.openProteinView(props.variant, tab)
 }
 
 function handleTagsChanged(): void {
   if (isWebRuntime()) emit('variant-updated')
 }
 
-// Use panel resize composable
 const { panelWidth, startResize } = usePanelResize()
 
 // Docked beside the table at >= 1440 px (v-main shrinks, nothing is covered);
@@ -328,7 +315,6 @@ const effectiveWidth = computed(() =>
     : clampDetailPanelWidth(panelWidth.value, displayWidth.value)
 )
 
-// Use annotations composable
 const {
   loadAnnotations,
   loadGlobalAnnotations,
@@ -375,7 +361,6 @@ const globalAcmgClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-// Audit trail entity key
 const auditEntityKey = computed(() => {
   if (!props.variant) return null
   if (props.mode === 'case' && props.caseId !== null && 'id' in props.variant) {
@@ -409,6 +394,7 @@ const currentAcmgEvidence = computed(() => {
 // Stored evidence with every criterion removed is still a JSON blob; only
 // say "(has evidence)" when criteria, notes or an override remain.
 const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
+const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
 // Variant annotation data for auto-suggestions
 const currentVariantData = computed(() => {
@@ -440,10 +426,8 @@ const currentQuickClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-// Handle quick-classify chip click
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
-  if (props.variant === null) return
-  // Toggle off if already selected
+  if (props.variant === null || acmgLocked.value) return
   const value = classification === currentQuickClassification.value ? null : classification
 
   if (props.mode === 'case' && props.caseId !== null) {
@@ -468,7 +452,6 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
   }
 }
 
-// Handle ACMG evidence change from panel
 const handleAcmgEvidenceChange = async (payload: {
   classification: AcmgClassification | null
   evidenceJson: string
@@ -504,11 +487,9 @@ watch(
   () => props.variant,
   async (newVariant) => {
     if (newVariant !== null) {
-      // Clear stale VEP enrichment data immediately — before any async work,
-      // so the UI never shows data from the previous variant
+      // Clear stale VEP data before any async work: never show the previous variant's
       clearVepData()
 
-      // Load annotations
       if (props.mode === 'case' && props.caseId !== null) {
         await loadAnnotations(
           props.caseId,
@@ -525,7 +506,6 @@ watch(
   { immediate: true }
 )
 
-// Helper functions for consequence formatting
 function getConsequenceColor(consequence: string): string {
   if (
     consequence.includes('frameshift') ||
@@ -538,7 +518,7 @@ function getConsequenceColor(consequence: string): string {
   if (consequence.includes('missense') || consequence.includes('inframe')) {
     return 'warning'
   }
-  return 'grey'
+  return 'muted'
 }
 
 // Selection changes and closes wait for the evidence editor's unsaved-draft prompt
@@ -546,19 +526,12 @@ const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>
 const appState = inject(AppStateKey, null)
 appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
-// Handle Escape key to close panel
+// Escape closes the panel, unless a text field or an open menu/dialog owns it
 const handleKeydown = (e: KeyboardEvent): void => {
-  if (e.key === 'Escape' && props.open) {
-    emit('update:open', false)
-  }
+  if (e.key !== 'Escape' || !props.open || isTextEntryFocused() || isOverlayOpen()) return
+  emit('update:open', false)
 }
-
-// Add Escape listener on mount
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
-
-// Clean up Escape listener on unmount
+onMounted(() => window.addEventListener('keydown', handleKeydown))
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   appState?.setPanelLeaveGuard(null)

@@ -87,6 +87,18 @@ describe('useVepEnrichment', () => {
     expect(enrichment.vepLoading.value).toBe(false)
   })
 
+  it('reads the cache timestamp as epoch milliseconds', async () => {
+    mockVepFetch.mockResolvedValue({
+      ...successVepResult,
+      cacheInfo: { cached: true, cachedAt: Date.UTC(2026, 9, 12) }
+    })
+    const enrichment = useVepEnrichment()
+
+    await enrichment.fetchVep('1', 12345, 'A', 'G')
+
+    expect(enrichment.cachedAt.value?.getUTCFullYear()).toBe(2026)
+  })
+
   it('discards stale results when clearData is called during fetch', async () => {
     // Create a delayed VEP response that resolves after clearData
     let resolveVep: (value: unknown) => void

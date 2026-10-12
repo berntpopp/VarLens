@@ -9,6 +9,7 @@ import { unlinkSync, existsSync, writeFileSync } from 'fs'
 import { DatabaseManager } from '../../../src/main/services/DatabaseManager'
 import { RecentDatabasesService } from '../../../src/main/services/RecentDatabasesService'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { DATABASE_CONFIG } from '../../../src/shared/config'
 import { jobRunner } from '../../../src/main/services/jobs/runner'
 
 // Helper to create a unique temp file path
@@ -383,6 +384,23 @@ describe('DatabaseManager', () => {
         cleanupDb(badPath)
       }
     })
+
+    for (const signature of DATABASE_CONFIG.NON_DATABASE_SIGNATURES) {
+      it(`reports a file starting with ${JSON.stringify(signature)} as damaged, not as encrypted`, () => {
+        const badPath = tempDbPath('-sig')
+        writeFileSync(
+          badPath,
+          Buffer.concat([Buffer.from(signature, 'latin1'), Buffer.alloc(4096, 7)])
+        )
+        try {
+          expect(() => manager.openDetectEncryption(badPath)).toThrow(
+            expect.objectContaining({ userMessage: DATABASE_CONFIG.MESSAGES.NOT_A_DATABASE })
+          )
+        } finally {
+          cleanupDb(badPath)
+        }
+      })
+    }
 
     it('detects a genuinely SQLCipher-encrypted database (opened with no key) as needing a password', async () => {
       const dbPath = tempDbPath('-enc')

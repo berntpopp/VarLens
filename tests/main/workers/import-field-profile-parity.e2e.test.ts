@@ -319,7 +319,11 @@ describe('import field profile: every source, both backends', () => {
             cancel: () => undefined
           }) as never
       })
-      const vcfOptions = profile && { fieldProfile: profile }
+      // JSON files carry no build (#557); the fixtures are all GRCh38
+      const vcfOptions = {
+        genomeBuild: 'GRCh38',
+        ...(profile && { fieldProfile: profile })
+      }
       if (Array.isArray(filePath)) {
         const session = { capabilities: { backend: 'sqlite' }, getImportExecutor: () => executor }
         const result = await startMultiFileImport(
@@ -473,7 +477,8 @@ describe('import field profile: every source, both backends', () => {
                   filePath,
                   caseName: 'replace-me',
                   isDuplicate: false,
-                  duplicateStrategy: 'overwrite'
+                  duplicateStrategy: 'overwrite',
+                  fallbackGenomeBuild: 'GRCh38'
                 }
               ],
               dbPath,
@@ -563,7 +568,11 @@ describe('import field profile: every source, both backends', () => {
     const importPostgres: Backend = async (filePath, profile) => {
       const executor = postgresExecutor()
       const caseName = `parity-${randomBytes(6).toString('hex')}`
-      const vcfOptions = profile && { fieldProfile: profile }
+      // JSON files carry no build (#557); the fixtures are all GRCh38
+      const vcfOptions = {
+        genomeBuild: 'GRCh38',
+        ...(profile && { fieldProfile: profile })
+      }
       const result = Array.isArray(filePath)
         ? await startMultiFileImport(
             caseName,
@@ -621,6 +630,7 @@ describe('import field profile: every source, both backends', () => {
       const result = await runSessionBatchImport({
         files: [{ inputPath: overBudget, storedPath: overBudget, fileName: 'over-budget-pg.vcf' }],
         duplicateStrategy: 'overwrite',
+        fallbackGenomeBuild: 'GRCh38',
         session: session as never,
         callbacks: {},
         signal: new AbortController().signal,

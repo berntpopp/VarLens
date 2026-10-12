@@ -177,6 +177,22 @@ describe('databaseStore.fetchInfo', () => {
     expect(store.keyManaged).toBe(false)
   })
 
+  it('reports noDatabaseOpen only after database:info answered with no database', async () => {
+    const store = useDatabaseStore()
+    expect(store.noDatabaseOpen).toBe(false) // info not loaded yet: no flash at startup
+
+    await store.fetchInfo()
+    expect(store.noDatabaseOpen).toBe(true)
+
+    vi.mocked(window.api.database.info).mockResolvedValueOnce({
+      path: '/tmp/a.db',
+      name: 'a.db',
+      encrypted: false
+    })
+    await store.fetchInfo()
+    expect(store.noDatabaseOpen).toBe(false)
+  })
+
   it('BLOCKER 1: applyInfo picks up keyManaged from database:info (defaulting to false when absent)', async () => {
     const store = useDatabaseStore()
     const infoMock = window.api.database.info as ReturnType<typeof vi.fn>

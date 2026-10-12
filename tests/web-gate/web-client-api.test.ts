@@ -636,15 +636,13 @@ describe('web client api', () => {
     })
 
     const api = createApi() as unknown as TestApi
-    await expect(api.import.selectFile()).rejects.toThrow(
-      'web upload: 413 Payload Too Large: upload exceeds limit'
-    )
+    await expect(api.import.selectFile()).rejects.toThrow('too-large.vcf: upload exceeds limit')
 
     expect(uploadEvents).toContainEqual(
       expect.objectContaining({
         status: 'error',
         fileName: 'too-large.vcf',
-        message: 'web upload: 413 Payload Too Large: upload exceeds limit'
+        message: 'too-large.vcf: upload exceeds limit'
       })
     )
   })

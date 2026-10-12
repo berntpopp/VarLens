@@ -17,6 +17,7 @@ import {
   FieldProfileResolver,
   jsonValueText
 } from '../../../shared/utils/import-field-profile'
+import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -46,7 +47,7 @@ interface ProfileColumn {
 
 interface FieldMapperOptions {
   dictionaries: DataDictionaries
-  /** The file's header: rows must match its length; unmapped columns go to the field profile. */
+  /** The file's header: its unmapped columns go to the field profile. */
   header?: ColumnarHeaderItem[]
   /** Decides where the unmapped columns go (default: keep all). */
   fields?: FieldProfileResolver
@@ -56,6 +57,8 @@ interface FieldMapperOptions {
   takeRecordBytes?: () => number
   /** Told about every row dropped for a missing required field. */
   onSkip?: (reason: string) => void
+  /** Number of header columns; a row of any other length would shift every later value. */
+  columnCount?: number
 }
 
 export class FieldMapper extends Transform {
@@ -63,9 +66,9 @@ export class FieldMapper extends Transform {
   private cols: ColumnIndices
   private readonly takeRecordBytes?: () => number
   private readonly onSkip?: (reason: string) => void
-  private readonly headerLength: number | null
   private readonly fields: FieldProfileResolver
   private readonly profileColumns: ProfileColumn[]
+  private readonly columnCount?: number
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
@@ -73,7 +76,7 @@ export class FieldMapper extends Transform {
     this.cols = options.columnIndices ?? COLUMN_INDICES
     this.takeRecordBytes = options.takeRecordBytes
     this.onSkip = options.onSkip
-    this.headerLength = options.header?.length ?? null
+    this.columnCount = options.columnCount
     this.fields = options.fields ?? new FieldProfileResolver()
     this.profileColumns = profileColumnsOf(options.header ?? [], this.cols)
     this.fields.seed(
@@ -90,9 +93,9 @@ export class FieldMapper extends Transform {
     try {
       const recordBytes = this.takeRecordBytes?.()
       const row = chunk.value
-      if (this.headerLength !== null && row.length !== this.headerLength) {
+      if (this.columnCount !== undefined && row.length !== this.columnCount) {
         throw new Error(
-          `Columnar row ${chunk.key + 1} has ${row.length} values but the header has ${this.headerLength} columns`
+          IMPORT_MESSAGES.rowWidthMismatch(chunk.key + 1, row.length, this.columnCount)
         )
       }
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0
@@ -392,6 +395,7 @@ export function createFieldMapper(
   columnIndices?: ColumnIndices,
   takeRecordBytes?: () => number,
   onSkip?: (reason: string) => void,
+  columnCount?: number,
   profile?: { header: ColumnarHeaderItem[]; fields: FieldProfileResolver }
 ): FieldMapper {
   return new FieldMapper({
@@ -399,6 +403,7 @@ export function createFieldMapper(
     columnIndices,
     takeRecordBytes,
     onSkip,
+    columnCount,
     header: profile?.header,
     fields: profile?.fields
   })

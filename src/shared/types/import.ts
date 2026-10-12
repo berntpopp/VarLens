@@ -1,4 +1,6 @@
 import type { FieldOrigin } from '../config/import-fields.config'
+import type { BuildDetection } from '../genome/genome-build'
+
 // Progress update for import callbacks
 export interface ProgressUpdate {
   phase: 'reading' | 'parsing' | 'inserting'
@@ -98,7 +100,10 @@ export interface VcfPreviewResult {
   samples: string[]
   variantCountEstimate: number
   annotationType: AnnotationType
+  /** Build the file decides on its own (definitive or strong), else null. */
   detectedGenomeBuild: string | null
+  /** Suggested build with evidence; the user confirms it in the import UI. */
+  buildDetection: BuildDetection
   infoFields: Array<{
     id: string
     type: string

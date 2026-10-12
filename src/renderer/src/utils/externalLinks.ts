@@ -5,6 +5,21 @@
  * Each function returns string | null (null when required data is missing).
  */
 
+import { genomeBuildLinks } from '../../../shared/config/genome-builds.config'
+import { normalizeContigName } from '../../../shared/sql/chromosome-order'
+import { bareContig } from '../../../shared/utils/contig'
+
+/**
+ * UCSC name of a stored contig. A stored `M`/`chrM` is already UCSC's (in a
+ * GRCh37 case it is hg19's own NC_001807); an `MT` is rCRS, which each build
+ * names in its config (hg38 chrM, hg19 chrMT).
+ */
+function ucscContig(stored: string | null, bare: string, rcrsMito: string): string {
+  if (bare === '') return ''
+  if (bare !== 'MT') return `chr${bare}`
+  return normalizeContigName(stored ?? '') === 'M' ? 'chrM' : rcrsMito
+}
+
 /** Genome build type for variant data */
 export type GenomeBuild = 'GRCh37' | 'GRCh38'
 
@@ -67,13 +82,16 @@ export function resolveUrlTemplate(
   }
 
   // Build variable map for substitution
-  const buildUcsc = build === 'GRCh37' ? 'hg19' : 'hg38'
-  const datasetGnomad = build === 'GRCh37' ? 'gnomad_r2_1' : 'gnomad_r4'
+  const { ucscDb: buildUcsc, gnomadDataset: datasetGnomad, ucscRcrsMito } = genomeBuildLinks(build)
+  // `{chr}` is the bare (Ensembl/GRC) name whatever the stored form, so a
+  // template's own `chr{chr}` never doubles the prefix; `{chr_ucsc}` is UCSC's.
+  const chr = data.chr == null || data.chr === '' ? '' : bareContig(data.chr)
   const posStart = Math.max(1, (data.pos ?? 0) - 25)
   const posEnd = (data.pos ?? 0) + 25
 
   const variables: Record<string, string> = {
-    chr: String(data.chr ?? ''),
+    chr,
+    chr_ucsc: ucscContig(data.chr, chr, ucscRcrsMito),
     pos: String(data.pos ?? ''),
     ref: encodeURIComponent(data.ref ?? ''),
     alt: encodeURIComponent(data.alt ?? ''),

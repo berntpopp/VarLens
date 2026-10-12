@@ -414,13 +414,7 @@ export class ShortlistService {
     const panelFilter = filter as VariantFilter & PanelAwareFilter
     panelFilter.genome_build =
       this.stage1.cases.getCase(filter.case_id)?.genome_build ?? DEFAULT_PANEL_GENOME_BUILD
-    resolvePanelIntervalsInPlace(
-      panelFilter,
-      this.stage1,
-      getGeneReference(),
-      this.db,
-      filter.case_id
-    )
+    resolvePanelIntervalsInPlace(panelFilter, this.stage1, getGeneReference(), filter.case_id)
   }
 
   /**

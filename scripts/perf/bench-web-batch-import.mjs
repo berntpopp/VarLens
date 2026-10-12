@@ -172,7 +172,14 @@ async function main() {
   })()
 
   const runId = randomUUID()
-  let result = await session.invoke('batchImport', 'start', [refs, 'skip', undefined, runId])
+  // The simulated cohort is GRCh38; it is the build for files whose header names none.
+  let result = await session.invoke('batchImport', 'start', [
+    refs,
+    'skip',
+    undefined,
+    runId,
+    'GRCh38'
+  ])
   // The server accepts the batch and answers with a job id; the result is
   // read from the status call (a browser gets it by event). An older server
   // held the request open and returned the result directly.

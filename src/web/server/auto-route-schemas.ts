@@ -55,6 +55,13 @@ function orDefault<T extends z.ZodType>(schema: T, fallback: z.output<T>) {
 
 export const AUTO_ROUTE_ARG_SCHEMAS: Readonly<Record<string, z.ZodType<unknown[]>>> = {
   'cases:availableBuilds': none,
+  'cases:buildReviews': none,
+  'cases:resolveBuildReviews': z.tuple([
+    z
+      .array(z.object({ caseId: id, build: z.string().min(1).max(32) }).strict())
+      .min(1)
+      .max(MAX_LIST)
+  ]),
 
   'case-metadata:get': oneId,
   'case-metadata:listCohorts': none,

@@ -135,7 +135,9 @@ describe('missing covariates (#499)', () => {
     )
     // Fisher's test needs no covariates and still counts the sample.
     expect(withMissing.results[0].groupA_total).toBe(21)
-    expect(withMissing.warnings).toEqual([expect.stringMatching(/^MISSING_COVARIATE: 1 sample/)])
+    expect(withMissing.warnings).toEqual([
+      expect.stringMatching(/^1 sample\(s\) lack a selected covariate/)
+    ])
   })
 
   it('excludes a sample without a selected metric value', () => {
@@ -144,7 +146,9 @@ describe('missing covariates (#499)', () => {
     expect(withMissing.results[0].logistic_burden.beta).toBe(
       complete.results[0].logistic_burden.beta
     )
-    expect(withMissing.warnings).toEqual([expect.stringMatching(/^MISSING_COVARIATE: 1 sample/)])
+    expect(withMissing.warnings).toEqual([
+      expect.stringMatching(/^1 sample\(s\) lack a selected covariate/)
+    ])
   })
 
   it('frequencies and weights describe the tested samples (#520)', () => {

@@ -45,7 +45,9 @@ test('postgres dev mode imports a JSON file and reads the created dataset', asyn
 
     const results = await launched.window.evaluate(
       async ({ fixturePath, caseName }) => {
-        const importResult = await window.api.import.start(fixturePath, caseName)
+        const importResult = await window.api.import.start(fixturePath, caseName, {
+          genomeBuild: 'GRCh38'
+        })
         const unwrappedImport =
           typeof importResult === 'object' &&
           importResult !== null &&

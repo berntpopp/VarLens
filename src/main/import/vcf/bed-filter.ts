@@ -1,19 +1,15 @@
 import { isAbsolute, resolve } from 'path'
 import { resolveMaxDecompressedBytes } from '../stream-utils'
 import { readBedEntries } from './bed-reader'
+import { bareContig } from '../../../shared/utils/contig'
 
 export const MAX_BED_FILTER_DECOMPRESSED_BYTES = 256 * 1024 * 1024 // 256 MiB
 
 /**
  * `1` and `chr1`, `M` and `MT` name the same contig: a BED file in the other
  * naming would otherwise filter every variant out.
- * ponytail: not shared with VepApiClient.normalizeChromosome, whose module is
- * not worker-safe; move both to src/shared if a third caller appears.
  */
-function contigKey(chr: string): string {
-  const bare = chr.replace(/^chr/i, '')
-  return bare.toUpperCase() === 'M' ? 'MT' : bare
-}
+const contigKey = bareContig
 
 interface Interval {
   start: number // 1-based inclusive

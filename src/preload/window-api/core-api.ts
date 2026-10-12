@@ -49,7 +49,9 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       deleteAll: () => casesDomain.deleteAll(),
       deleteBatch: (ids) => casesDomain.deleteBatch(ids),
       startDelete: (target) => casesDomain.startDelete(target),
-      availableBuilds: () => casesDomain.availableBuilds()
+      availableBuilds: () => casesDomain.availableBuilds(),
+      buildReviews: () => casesDomain.buildReviews(),
+      resolveBuildReviews: (choices) => casesDomain.resolveBuildReviews(choices)
     },
 
     variants: {
@@ -139,10 +141,17 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
     batchImport: {
       selectFiles: () => batchImportDomain.selectFiles(),
       selectFolder: () => batchImportDomain.selectFolder(),
-      checkDuplicates: (filePaths, stripText) =>
-        batchImportDomain.checkDuplicates(filePaths, stripText),
-      start: (filePaths, duplicateStrategy, stripText, runId, options) =>
-        batchImportDomain.start(filePaths, duplicateStrategy, stripText, runId, options),
+      checkDuplicates: (filePaths, stripText, detectBuilds) =>
+        batchImportDomain.checkDuplicates(filePaths, stripText, detectBuilds),
+      start: (filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild, options) =>
+        batchImportDomain.start(
+          filePaths,
+          duplicateStrategy,
+          stripText,
+          runId,
+          fallbackGenomeBuild,
+          options
+        ),
       cancel: () => batchImportDomain.cancel(),
       selectZip: () => batchImportDomain.selectZip(),
       testZipPassword: (zipPath, password) => batchImportDomain.testZipPassword(zipPath, password),

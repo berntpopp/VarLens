@@ -25,12 +25,14 @@ import {
 const SOURCE_LOGIN_HTML = resolve(process.cwd(), 'src/web/login/login.html')
 
 describe('renderLoginPage — first-load quality', () => {
-  test('has a meta description and declares the app light color-scheme', () => {
+  test('has a meta description and follows the OS colour scheme', () => {
     const html = renderLoginPage('/varlens', '/varlens/')
     expect(html).toMatch(/<meta\s+name="description"\s+content="[^"]{20,}"/)
-    expect(html).toMatch(/<meta\s+name="color-scheme"\s+content="light"/)
-    // The app ships no dark theme switch; the login wall must not go dark either.
-    expect(html).not.toContain('prefers-color-scheme: dark')
+    expect(html).toMatch(/<meta\s+name="color-scheme"\s+content="light dark"/)
+    // Same default as the app's `system` theme: a dark OS gets a dark login, no light flash.
+    expect(html.toLowerCase()).toMatch(
+      /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{[^}]*--background: #12141a/
+    )
   })
 
   test('hints the LCP logo with fetchpriority=high', () => {

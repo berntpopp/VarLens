@@ -26,7 +26,8 @@ interface ZipImportCleanupOptions {
   cleanupRequest: (extractionId: string) => Promise<IpcResult<void>>
   checkDuplicatesRequest: (
     filePaths: string[],
-    stripText?: string
+    stripText?: string,
+    detectBuilds?: boolean
   ) => Promise<IpcResult<DuplicateCheckResult>>
   importStore: ReturnType<typeof useImportStatusStore>
   state: ZipImportCleanupState
@@ -159,7 +160,8 @@ export function useZipImportCleanup({
     const generation = beginDuplicateRequest()
     try {
       const result = unwrapIpcResult(
-        await checkDuplicatesRequest(filePaths, state.stripText.value || undefined)
+        // Only this first call reads each header for its build; rechecks keep it.
+        await checkDuplicatesRequest(filePaths, state.stripText.value || undefined, true)
       )
       if (generation !== duplicateRequestGeneration) return
       state.reviewFiles.value = result.files
@@ -183,7 +185,11 @@ export function useZipImportCleanup({
         try {
           const result = unwrapIpcResult(await checkDuplicatesRequest(filePaths, stripText))
           if (generation !== duplicateRequestGeneration) return
-          state.reviewFiles.value = result.files
+          const builds = new Map(state.reviewFiles.value.map((f) => [f.filePath, f.build]))
+          state.reviewFiles.value = result.files.map((f) => ({
+            ...f,
+            build: builds.get(f.filePath)
+          }))
           state.duplicateCount.value = result.duplicateCount
         } catch (error) {
           if (generation !== duplicateRequestGeneration) return

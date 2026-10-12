@@ -246,7 +246,7 @@ describe('panel-interval computation failure surfaces as an error (no silent unf
       await import('../../../src/main/ipc/handlers/panelIntervalHelper')
 
     expect(() =>
-      computePanelIntervals(dbService, { active_panel_ids: [panel.id] }, undefined, 'variants')
+      computePanelIntervals(dbService, { active_panel_ids: [panel.id] }, 'variants')
     ).toThrow('Simulated panel interval computation failure')
   })
 
@@ -425,11 +425,11 @@ describe('PanelRepository.computeIntervals — worker-side logic', () => {
       getCoordinatesForGenes: () => new Map()
     } as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
 
-    const intervals = panels.computeIntervals([panel.id], 'GRCh38', 5000, stubGeneRefDb, false)
+    const intervals = panels.computeIntervals([panel.id], 'GRCh38', 5000, stubGeneRefDb)
     expect(intervals).toEqual([])
   })
 
-  it('applies padding and chr prefix via stub gene reference DB', () => {
+  it("applies padding and the build's contig names via stub gene reference DB", () => {
     const panel = panels.createPanel({ name: 'WithGenes', source: 'manual' })
     panels.setGenes(panel.id, [{ hgncId: 'HGNC:TEST1', symbol: 'TESTGENE' }])
 
@@ -458,15 +458,15 @@ describe('PanelRepository.computeIntervals — worker-side logic', () => {
       }
     } as unknown as import('../../../src/main/database/GeneReferenceDb').GeneReferenceDb
 
-    // Without chr prefix, no padding
-    const withoutPrefix = panels.computeIntervals([panel.id], 'GRCh38', 0, stubGeneRefDb, false)
+    // GRCh37 names, no padding
+    const withoutPrefix = panels.computeIntervals([panel.id], 'GRCh37', 0, stubGeneRefDb)
     expect(withoutPrefix).toHaveLength(1)
     expect(withoutPrefix[0].chr).toBe('17')
     expect(withoutPrefix[0].start).toBe(43044295)
     expect(withoutPrefix[0].end).toBe(43170245)
 
-    // With chr prefix and padding
-    const withPrefix = panels.computeIntervals([panel.id], 'GRCh38', 1000, stubGeneRefDb, true)
+    // GRCh38 names and padding
+    const withPrefix = panels.computeIntervals([panel.id], 'GRCh38', 1000, stubGeneRefDb)
     expect(withPrefix).toHaveLength(1)
     expect(withPrefix[0].chr).toBe('chr17')
     expect(withPrefix[0].start).toBe(43044295 - 1000)

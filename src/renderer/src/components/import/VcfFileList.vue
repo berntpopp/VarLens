@@ -61,14 +61,15 @@
         <v-chip v-else size="small" variant="tonal" label color="grey"> Unknown caller </v-chip>
 
         <!-- Genome build -->
+        <!-- This file's own suggestion; warning colour when it disagrees with the case build. -->
         <v-chip
-          v-if="file.detectedGenomeBuild !== null && file.detectedGenomeBuild !== ''"
+          v-if="file.buildDetection.suggested !== null"
           size="small"
           variant="tonal"
           label
-          color="info"
+          :color="buildDisagrees(file) ? 'warning' : 'info'"
         >
-          {{ file.detectedGenomeBuild }}
+          {{ file.buildDetection.suggested }}
         </v-chip>
 
         <!-- Annotation -->
@@ -126,7 +127,13 @@ export type VariantTypeOverride = { variantType?: string }
 const props = defineProps<{
   files: VcfPreviewResult[]
   overrides: Map<string, VariantTypeOverride>
+  /** The build chosen for the case, if any. */
+  caseBuild?: string | null
 }>()
+
+function buildDisagrees(file: VcfPreviewResult): boolean {
+  return props.caseBuild != null && file.buildDetection.suggested !== props.caseBuild
+}
 
 const emit = defineEmits<{
   'update:override': [filePath: string, override: VariantTypeOverride]

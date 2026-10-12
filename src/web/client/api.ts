@@ -24,8 +24,8 @@ import { refusalFor, setCapabilityDocument, WebCallRefusedError } from './call-p
 import { LOCAL_API } from './local-api'
 import { httpInvoke } from './transport'
 
-export { WEB_UPLOAD_CANCEL_EVENT, WEB_UPLOAD_EVENT } from './uploads'
-export type { WebUploadEventDetail, WebUploadStatus } from './uploads'
+export { WEB_UPLOAD_CANCEL_EVENT, WEB_UPLOAD_EVENT } from '../../shared/types/web-upload'
+export type { WebUploadEventDetail, WebUploadStatus } from '../../shared/types/web-upload'
 
 type AnyFunction = (...args: unknown[]) => unknown
 

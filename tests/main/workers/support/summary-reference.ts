@@ -10,6 +10,7 @@ import {
   REBUILD_VARIANT_SUMMARY_SQL,
   UPDATE_PER_CASE_ANNOTATION_FLAGS_SQL
 } from '../../../../src/shared/sql/cohort-summary-rebuild'
+import { carrierRowSql } from '../../../../src/shared/sql/genotype-dosage'
 
 export interface SummarySnapshot {
   variants: unknown[]
@@ -45,10 +46,16 @@ function storedUniqueVariants(db: DatabaseType): number | null {
   return value === undefined ? null : Number(value)
 }
 
-/** Distinct coordinates counted from `variants`, independent of the summary. */
+/**
+ * Distinct carried coordinates counted from `variants`, independent of the
+ * summary: a coordinate held only by no-call rows has no carrier (#555).
+ */
 function uniqueVariantsFromVariants(db: DatabaseType): number {
   const row = db
-    .prepare('SELECT COUNT(*) AS c FROM (SELECT DISTINCT chr, pos, ref, alt FROM variants)')
+    .prepare(
+      `SELECT COUNT(*) AS c FROM (SELECT DISTINCT chr, pos, ref, alt FROM variants v
+       WHERE ${carrierRowSql('v')})`
+    )
     .get() as { c: number }
   return row.c
 }

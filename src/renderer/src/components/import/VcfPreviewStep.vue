@@ -27,16 +27,11 @@
         </v-chip>
       </div>
 
-      <!-- Genome build -->
-      <v-select
+      <GenomeBuildField
+        ref="buildField"
         v-model="selectedGenomeBuild"
-        :items="genomeBuildOptions"
-        label="Genome Build"
-        variant="outlined"
-        density="compact"
+        :detection="preview.buildDetection"
         class="mb-4"
-        hint="Auto-detected from VCF header. Override if incorrect."
-        persistent-hint
       />
 
       <!-- Sample selection -->
@@ -57,14 +52,15 @@
           />
           <v-text-field
             v-if="selectedSamples.includes(sample)"
-            :model-value="caseNames.get(sample) || sample"
+            :model-value="caseNames.get(sample) ?? sample"
             :aria-label="`Case name for ${sample}`"
             :data-testid="`vcf-case-name-${sample}`"
+            :error-messages="caseNameErrors(sample)"
             label="Case name"
             name="caseName"
             variant="outlined"
             density="compact"
-            hide-details
+            hide-details="auto"
             class="flex-grow-1"
             @update:model-value="setCaseName(sample, $event)"
           />
@@ -96,11 +92,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
-import type { VcfPreviewResult } from '../../../../shared/types/vcf'
+import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
 import type { ImportFieldProfile } from '../../../../shared/config/import-fields.config'
 import { usePermissions } from '../../composables/usePermissions'
 import { vcfPreviewFields } from '../../utils/import-field-rows'
 import ImportFieldProfileTable from './ImportFieldProfileTable.vue'
+import { CASE_NAME_MESSAGES } from '../../config/importConfig'
+import GenomeBuildField from './GenomeBuildField.vue'
 
 const props = defineProps<{
   filePath: string
@@ -108,13 +106,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'preview-loaded': [preview: VcfPreviewResult]
-  'selection-changed': [
-    options: {
-      selectedSamples: string[]
-      genomeBuild: string
-      caseNames: Map<string, string>
-    }
-  ]
+  'selection-changed': [options: VcfSampleSelection]
 }>()
 
 const fieldProfile = defineModel<ImportFieldProfile>('fieldProfile', { required: true })
@@ -127,11 +119,20 @@ const error = ref<string | null>(null)
 const preview = ref<VcfPreviewResult | null>(null)
 
 const selectedSamples = ref<string[]>([])
-const selectedGenomeBuild = ref('GRCh38')
+// Never defaulted: pre-selected by GenomeBuildField only for definitive evidence.
+const selectedGenomeBuild = ref<string | null>(null)
 const caseNames = ref(new Map<string, string>())
+/** Names of the cases already in the database, to flag a clash before import. */
+const existingCaseNames = ref(new Set<string>())
+const buildField = ref<InstanceType<typeof GenomeBuildField> | null>(null)
 
-const genomeBuildOptions = ['GRCh38', 'GRCh37']
 const previewFields = computed(() => (preview.value ? vcfPreviewFields(preview.value) : []))
+
+/** False (with the field's inline error) until the user has confirmed a build. */
+function validate(): boolean {
+  return buildField.value?.validate() ?? false
+}
+defineExpose({ validate })
 
 const annotationLabel = computed(() => {
   if (!preview.value) return ''
@@ -171,11 +172,24 @@ function setCaseName(sample: string, name: unknown): void {
   emitSelection()
 }
 
+function caseNameOf(sample: string): string {
+  return (caseNames.value.get(sample) ?? sample).trim()
+}
+
+function caseNameErrors(sample: string): string[] {
+  const name = caseNameOf(sample)
+  if (name === '') return [CASE_NAME_MESSAGES.REQUIRED]
+  if (existingCaseNames.value.has(name)) return [CASE_NAME_MESSAGES.EXISTS(name)]
+  const sameName = selectedSamples.value.filter((s) => caseNameOf(s) === name)
+  return sameName.length > 1 ? [CASE_NAME_MESSAGES.REPEATED] : []
+}
+
 function emitSelection(): void {
   emit('selection-changed', {
     selectedSamples: [...selectedSamples.value],
     genomeBuild: selectedGenomeBuild.value,
-    caseNames: new Map(caseNames.value)
+    caseNames: new Map(caseNames.value),
+    valid: selectedSamples.value.every((s) => caseNameErrors(s).length === 0)
   })
 }
 
@@ -188,17 +202,18 @@ onMounted(async () => {
     loading.value = true
     error.value = null
 
-    preview.value = unwrapIpcResult(await api!.import.vcfPreview(props.filePath))
+    const [result, cases] = await Promise.all([
+      api!.import.vcfPreview(props.filePath),
+      api!.cases.list().catch(() => null)
+    ])
+    preview.value = unwrapIpcResult(result)
+    // The server still refuses a clash; failing to list cases only loses the early hint.
+    if (Array.isArray(cases)) existingCaseNames.value = new Set(cases.map((c) => c.name))
 
     // Default: select all samples
     selectedSamples.value = [...preview.value.samples]
     for (const sample of preview.value.samples) {
       caseNames.value.set(sample, sample)
-    }
-
-    // Set detected genome build
-    if (preview.value.detectedGenomeBuild !== null && preview.value.detectedGenomeBuild !== '') {
-      selectedGenomeBuild.value = preview.value.detectedGenomeBuild
     }
 
     emit('preview-loaded', preview.value)

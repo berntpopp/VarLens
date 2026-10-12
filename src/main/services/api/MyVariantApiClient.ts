@@ -10,6 +10,7 @@
  */
 
 import Bottleneck from 'bottleneck'
+import { bareContig } from '../../../shared/utils/contig'
 import { z } from 'zod'
 import { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
@@ -125,8 +126,7 @@ export class MyVariantApiClient {
     alt: string,
     assembly: 'hg38' | 'hg19' = 'hg38'
   ): Promise<MyVariantResult> {
-    // Normalize chromosome
-    const normalizedChr = chr.replace(/^chr/i, '')
+    const normalizedChr = bareContig(chr)
 
     // Generate HGVS notation for myvariant.info
     // Format: chr17:g.43092919G>A

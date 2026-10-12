@@ -3,7 +3,7 @@
  * with `{ args }`. Application errors come back as `SerializableError` JSON and
  * are returned as IPC error envelopes; transport failures throw.
  */
-import { isIpcError } from '../../shared/types/errors'
+import { ErrorCode, isIpcError } from '../../shared/types/errors'
 
 // Vite's `base` config materialises here at build time. The browser
 // loads the SPA from BASE_URL (e.g. `/varlens/`), so API calls have to
@@ -33,6 +33,11 @@ export async function httpInvoke(
   if (!res.ok) {
     try {
       const parsed = JSON.parse(text) as unknown
+      // Session gone (signed out, revoked, Back into a stale page): the reload meets the page
+      // gate's redirect to /login. A user-mistake 401 (wrong current password) carries no such code.
+      if (res.status === 401 && isIpcError(parsed) && parsed.code === ErrorCode.UNAUTHENTICATED) {
+        globalThis.location?.reload()
+      }
       if (isIpcError(parsed)) return parsed
     } catch {
       // Throw below for non-JSON error responses.

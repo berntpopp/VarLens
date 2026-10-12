@@ -24,23 +24,30 @@ import RankScoreTooltip from './RankScoreTooltip.vue'
 import { formatRankScore } from '../../utils/formatters'
 import { useRowHoverTarget } from './useRowHoverTarget'
 import { CellChip, CellIcon } from '../table-cells/cell-components'
-import { LinkOutsCell } from '../table-cells/simple-cells'
+import { ClinVarCell, LinkOutsCell } from '../table-cells/simple-cells'
 import { linksColumn } from '../variant-table/columns'
 import { resolveRowLinks, useLinkResolvers } from '../../composables/useLinkResolvers'
 import { useVariantLinks } from '../../composables/useVariantLinks'
 import { useSharedMenu } from '../table-cells/shared-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
+import { formatHgvs } from '../../utils/formatters'
+import { EMPTY_VALUE_PLACEHOLDER, UNKNOWN_VALUE_GLYPH } from '../../config/displayConfig'
+import { formatBpLength } from '../../utils/variant-interval'
 import {
   useTableKeyboardNav,
   isInputFocused,
   hasCommandModifier
 } from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
+import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
+import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 
 const props = defineProps<{
   rows: ShortlistRow[]
   /** Viewer role: the star is display-only. */
   readOnly?: boolean
+  /** False while the tab is hidden (v-show): window keys must not act on unseen rows. */
+  interactive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -94,26 +101,26 @@ interface VariantCell {
  * Fields `cdna` and `aa_change` come straight from the `Variant` row shape.
  * The `c.`/`p.` prefixes are conventional HGVS markers — we only prepend
  * them if the stored value doesn't already start with them (annotators
- * vary — VEP stores bare notation, SnpEff stores prefixed).
+ * vary — VEP stores `ENST…:c.…`, which is left as is).
  */
 function variantCell(row: ShortlistRow): VariantCell {
   if (row.variant_type === 'sv') {
     return {
-      primary: `${row.chr}:${row.pos} ${row.sv_type ?? ''} ${row.sv_length ?? '?'}bp`.trim(),
+      primary: `${row.chr}:${row.pos} ${row.sv_type ?? ''} ${formatBpLength(row.sv_length)}`.trim(),
       cdna: null,
       protein: null
     }
   }
   if (row.variant_type === 'cnv') {
     return {
-      primary: `${row.chr}:${row.pos} CNV CN=${row.cnv_copy_number ?? '?'}`,
+      primary: `${row.chr}:${row.pos} CNV CN=${row.cnv_copy_number ?? UNKNOWN_VALUE_GLYPH}`,
       cdna: null,
       protein: null
     }
   }
   if (row.variant_type === 'str') {
     return {
-      primary: `${row.chr}:${row.pos} STR ${row.str_alt_copies ?? '?'} copies`,
+      primary: `${row.chr}:${row.pos} STR ${row.str_alt_copies ?? UNKNOWN_VALUE_GLYPH} copies`,
       cdna: null,
       protein: null
     }
@@ -128,7 +135,8 @@ function variantCell(row: ShortlistRow): VariantCell {
 }
 
 function ensureHgvsPrefix(value: string, prefix: 'c.' | 'p.'): string {
-  return value.startsWith(prefix) ? value : `${prefix}${value}`
+  const text = formatHgvs(value) ?? value
+  return text.includes(':') || text.startsWith(prefix) ? text : `${prefix}${text}`
 }
 
 function pinFor(row: ShortlistRow): 'starred' | 'clinvar' | null {
@@ -191,6 +199,8 @@ const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTab
   onSelect: (_item: ShortlistRow) => {}
 })
 
+useProteinViewShortcut(() => (props.interactive === false ? null : selectedItem.value))
+
 function getRowProps({ item }: { item: ShortlistRow }) {
   const isSelected = selectedItem.value?.id === item.id
   return {
@@ -208,6 +218,7 @@ function handleRowClick(item: ShortlistRow) {
 onKeyStroke(
   'ArrowDown',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveDown()
@@ -218,6 +229,7 @@ onKeyStroke(
 onKeyStroke(
   'ArrowUp',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveUp()
@@ -228,6 +240,7 @@ onKeyStroke(
 onKeyStroke(
   'Enter',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
@@ -238,6 +251,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
     if (props.readOnly === true) return
     e.preventDefault()
@@ -249,6 +263,7 @@ onKeyStroke(
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused()) return
     e.preventDefault()
     clearSelection()
@@ -302,8 +317,12 @@ onKeyStroke(
       </div>
     </template>
 
+    <template #[`item.clinvar`]="{ item }">
+      <ClinVarCell :significance="item.clinvar" />
+    </template>
+
     <template #[`item.gnomad_af`]="{ item }">
-      {{ item.gnomad_af == null ? '—' : item.gnomad_af.toExponential(2) }}
+      {{ item.gnomad_af == null ? EMPTY_VALUE_PLACEHOLDER : item.gnomad_af.toExponential(2) }}
     </template>
 
     <!-- Native buttons + static icons: no VBtn/VIcon instances per row -->
@@ -359,6 +378,7 @@ onKeyStroke(
           View in {{ targetTabFor(actionsRow.variant_type).toUpperCase() }} tab
         </v-list-item-title>
       </v-list-item>
+      <ProteinViewMenuItem :variant="actionsRow" />
     </v-list>
   </v-menu>
   <v-tooltip
@@ -434,9 +454,20 @@ onKeyStroke(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
+}
+
+/* A long ClinVar class ends in an ellipsis inside the fixed column (the full
+   value is in the chip's tooltip) instead of being clipped mid-word. */
+.shortlist-data-table :deep(td .v-chip[data-tooltip]) {
+  max-width: 100%;
+}
+.shortlist-data-table :deep(td .v-chip[data-tooltip] .v-chip__content) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Same 18px glyph box the former x-small icon v-btn rendered */

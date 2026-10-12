@@ -1,12 +1,12 @@
 <template>
   <div ref="tableContainerRef" class="table-container">
-    <!-- Top scrollbar (synced with table) -->
     <div ref="topScrollbarRef" class="top-scrollbar-container">
       <div ref="topScrollbarInnerRef" class="top-scrollbar-inner"></div>
     </div>
 
     <QueryErrorAlert :error="loadError" :stale="variants.length > 0" @retry="loadVariants" />
     <TableLoadIndicator :active="showStale" :message="liveMessage" />
+    <SummaryStaleNotice :stale="summaryStale" />
     <v-data-table-server
       ref="dataTableRef"
       v-model:page="page"
@@ -69,6 +69,8 @@
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
           :read-only="!canWrite"
+          :acmg-locked="annotationDialogsRef?.hasAcmgEvidence(item) === true"
+          :variant="item"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -120,7 +122,6 @@
         <AlleleCell :allele="value" />
       </template>
 
-      <!-- CADD score (handle null) -->
       <template #[`item.cadd`]="{ value }">
         <CaddScoreCell :score="value" />
       </template>
@@ -146,7 +147,6 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- Consequence (handle null) -->
       <template #[`item.consequence`]="{ value }">
         <ConsequenceCell :consequence="value" />
       </template>
@@ -159,15 +159,7 @@
 
       <!-- Func (handle null) with human-readable formatting -->
       <template #[`item.func`]="{ value }">
-        <span
-          v-if="value"
-          class="consequence-cell"
-          :data-tooltip="value"
-          data-tooltip-location="top"
-        >
-          {{ formatConsequence(value) }}
-        </span>
-        <EmptyPlaceholder v-else />
+        <ConsequenceCell :consequence="value" />
       </template>
 
       <!-- Qual score (handle null/undefined/non-number) -->
@@ -266,7 +258,8 @@ import {
   onUnmounted,
   onActivated,
   onDeactivated,
-  nextTick
+  nextTick,
+  inject
 } from 'vue'
 import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
@@ -282,14 +275,16 @@ import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useVariantLinks } from '../composables/useVariantLinks'
 import { useLinkResolvers } from '../composables/useLinkResolvers'
 import { useAutoPageSize } from '../composables/useAutoPageSize'
-import { formatConsequence } from '../utils/formatters'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
 import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
+import { useProteinViewShortcut } from '../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
+import { SHORTCUTS } from '../config/keyboardShortcuts'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
 import TableLoadIndicator from './table-state/TableLoadIndicator.vue'
+import SummaryStaleNotice from './table-state/SummaryStaleNotice.vue'
 import QueryErrorAlert from './table-state/QueryErrorAlert.vue'
 import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../composables/useTableLoadingState'
@@ -297,7 +292,7 @@ import { useVariantColumns } from './variant-table/columns'
 import { useVariantData } from './variant-table/useVariantData'
 import { mdiFilterOff, mdiFilterOffOutline } from '@mdi/js'
 import { useApiService } from '../composables/useApiService'
-import { useAppState } from '../composables/useAppState'
+import { AppStateKey } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
 import {
   PositionCell,
@@ -360,12 +355,7 @@ const viewActive = ref(true)
 const acmgQuickMenu = provideAcmgQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
-let appState: ReturnType<typeof useAppState> | null = null
-try {
-  appState = useAppState()
-} catch {
-  // Safe fallback when mounted without AppState provider in isolated unit tests
-}
+const appState = inject(AppStateKey, null) // null without a provider (isolated unit tests)
 let cleanupAnnotationChanged: (() => void) | null = null
 
 // Annotations
@@ -402,7 +392,6 @@ const annotationActions = {
   getGlobalAcmgEvidence
 }
 
-// Links
 const { buildOmimEntryUrl, openExternalLink } = useVariantLinks()
 
 // Column preferences and column definitions — swap columns on variant type change
@@ -416,6 +405,7 @@ const {
   totalCount,
   loading,
   loadError,
+  summaryStale,
   page,
   itemsPerPage,
   sortBy,
@@ -592,7 +582,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Enter',
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null) return
@@ -603,7 +593,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     e.preventDefault()
@@ -621,9 +611,9 @@ onKeyStroke(
 // Action shortcuts on selected row (bare letters only: Ctrl/Cmd/Alt+key
 // belongs to the browser, see hasCommandModifier)
 const rowActionKeys: Record<string, (item: NonNullable<typeof selectedItem.value>) => void> = {
-  s: (item) => annotationDialogsRef.value?.handleStarToggle(item),
-  c: (item) => annotationDialogsRef.value?.openCommentDialog(item),
-  a: (item) => annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
+  [SHORTCUTS.star.key]: (item) => annotationDialogsRef.value?.handleStarToggle(item),
+  [SHORTCUTS.comment.key]: (item) => annotationDialogsRef.value?.openCommentDialog(item),
+  [SHORTCUTS.acmg.key]: (item) => annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
 }
 for (const [key, action] of Object.entries(rowActionKeys)) {
   onKeyStroke(
@@ -638,6 +628,8 @@ for (const [key, action] of Object.entries(rowActionKeys)) {
     { dedupe: true }
   )
 }
+
+useProteinViewShortcut(() => (tableWorkActive.value ? selectedItem.value : null))
 
 // Scroll selected row into view
 watch(selectedIndex, async (newIndex) => {
@@ -690,7 +682,7 @@ defineExpose({
 <style scoped>
 /* Monospace data display */
 .variant-data-mono {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 

@@ -5,7 +5,7 @@
  * (`evidenceShortlistConfig`); the starred pin only lifts rows the user
  * starred, which the simulation has none of.
  *
- * Seeded by SQLite migration v47 and PostgreSQL migration 0030 — never via
+ * Seeded by SQLite migration v49 and PostgreSQL migration 0032 — never via
  * the historical BUILT_IN_SHORTLIST_PRESETS array.
  */
 import { evidenceShortlistConfig } from '../../shared/evidence/evidence-shortlist-config'

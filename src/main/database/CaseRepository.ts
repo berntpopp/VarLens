@@ -1,4 +1,6 @@
 import { BaseRepository } from './BaseRepository'
+import { listBuildReviews, resolveBuildReviews } from './contig-rename-sqlite'
+import type { BuildReview, BuildReviewChoice } from '../../shared/types/build-review'
 import type {
   AvailableBuild,
   Case,
@@ -105,6 +107,16 @@ export class CaseRepository extends BaseRepository {
         .where('import_status', '=', 'ready')
         .orderBy('created_at', 'desc')
     )
+  }
+
+  /** Cases whose genome build must be confirmed before their contigs are renamed. */
+  listBuildReviews(): BuildReview[] {
+    return listBuildReviews(this.db)
+  }
+
+  /** Confirm the builds of flagged cases and rename their contigs, in one transaction. */
+  resolveBuildReviews(choices: readonly BuildReviewChoice[]): number {
+    return resolveBuildReviews(this.db, choices)
   }
 
   /**

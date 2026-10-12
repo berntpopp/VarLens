@@ -104,6 +104,12 @@ describe('computeAutoHiddenColumns', () => {
     }
   })
 
+  it('keeps the locus at the phone budget: Gene, Chr, Pos, Impact, ClinVar', () => {
+    const hidden = computeAutoHiddenColumns(caseKeys, getMaxAutoVisibleColumns(390))
+    const shown = caseKeys.filter((key) => key !== 'annotations' && !hidden.has(key))
+    expect(shown.sort()).toEqual(['chr', 'clinvar', 'consequence', 'gene_symbol', 'pos'])
+  })
+
   it('never auto-hides structural columns', () => {
     const hidden = computeAutoHiddenColumns(
       ['data-table-expand', 'annotations', 'chr', 'gene_symbol'],

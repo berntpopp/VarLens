@@ -10,7 +10,7 @@
  * const { formatPosition, formatScientific } = useTableFormatters()
  * ```
  */
-import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
+import { EMPTY_VALUE_PLACEHOLDER } from '../config/displayConfig'
 
 export interface UseTableFormattersReturn {
   formatPosition: (pos: number) => string

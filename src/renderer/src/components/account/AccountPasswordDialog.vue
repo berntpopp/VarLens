@@ -16,7 +16,7 @@
             type="password"
             label="New password"
             autocomplete="new-password"
-            hint="At least 12 characters and different from the current one."
+            :hint="`At least ${minPasswordLength(isWebRuntime())} characters and different from the current one.`"
             persistent-hint
             class="mb-2"
           />
@@ -51,6 +51,8 @@ import { computed, ref, watch } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { describeAdminError } from '../../composables/useUserAdmin'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { minPasswordLength } from '../../../../shared/auth/auth-constants'
+import { isWebRuntime } from '../../utils/runtime-mode'
 
 const open = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ changed: [] }>()

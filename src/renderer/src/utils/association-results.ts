@@ -3,6 +3,7 @@
  * excluded sites of a gene, and the TSV export.
  */
 import { escapeDelimitedCell } from '../../../shared/utils/delimited-text'
+import { ASSOCIATION_TESTED_TEXT, untestedGeneReason } from '../../../shared/config/domain.config'
 
 /** Shown with every result and written into every export. VarLens stores no callability. */
 export const BURDEN_REFERENCE_NOTE =
@@ -43,6 +44,11 @@ export interface AssociationResultRow {
   q_value: number | null
 }
 
+/** A gene with no usable site has no test; the table and plots leave it out, the export keeps it. */
+export function isTestedGene(r: Pick<AssociationResultRow, 'n_variants'>): boolean {
+  return r.n_variants > 0
+}
+
 export function excludedSiteCount(excluded: SitesExcluded): number {
   return excluded.missing_call + excluded.conflicting_calls + excluded.no_called_alleles
 }
@@ -78,7 +84,8 @@ const TSV_HEADER = [
   'q_value',
   'Excluded_missing_call',
   'Excluded_conflicting_calls',
-  'Excluded_no_called_alleles'
+  'Excluded_no_called_alleles',
+  'Status'
 ]
 
 /** The results as TSV. `#` comment lines first: the stated assumption, then the non-autosomal count. */
@@ -102,7 +109,8 @@ export function buildAssociationTsv(
       r.q_value ?? '',
       r.sites_excluded.missing_call,
       r.sites_excluded.conflicting_calls,
-      r.sites_excluded.no_called_alleles
+      r.sites_excluded.no_called_alleles,
+      isTestedGene(r) ? ASSOCIATION_TESTED_TEXT : untestedGeneReason(r.sites_excluded)
     ].join('\t')
   )
   const skipped = nonAutosomalNote(nonAutosomalVariants)

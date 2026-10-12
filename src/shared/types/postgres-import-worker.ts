@@ -53,6 +53,7 @@ export interface PostgresImportWorkerStartMessage {
   vcfOptions?: {
     selectedSample?: string
     genomeBuild?: string
+    fallbackGenomeBuild?: string
     /** Applies to JSON as well as VCF: where fields without a column go. */
     fieldProfile?: ImportFieldProfile
   }

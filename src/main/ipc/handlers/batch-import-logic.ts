@@ -132,6 +132,7 @@ export async function startBatchImport(
   duplicateStrategy: DuplicateChoice,
   stripText: string | undefined,
   callbacks: BatchImportCallbacks,
+  fallbackGenomeBuild?: string,
   fieldProfile?: ImportFieldProfile
 ): Promise<BatchImportResult> {
   let db: DatabaseService | undefined
@@ -147,6 +148,7 @@ export async function startBatchImport(
       caseName: f.caseName,
       isDuplicate: f.isDuplicate,
       duplicateStrategy,
+      fallbackGenomeBuild,
       fieldProfile
     }))
 

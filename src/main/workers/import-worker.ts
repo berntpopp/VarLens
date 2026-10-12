@@ -14,6 +14,7 @@ import { replacementCaseName } from '../../shared/utils/case-name'
 import { detectFormat } from '../import/format-detection'
 import { loadImportFilters } from '../import/vcf/import-filters'
 import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
+import { resolveImportGenomeBuild } from '../import/vcf/resolve-genome-build'
 import { resolveVcfSelectedSampleColumn } from '../import/vcf/vcf-line-parser'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import {
@@ -192,9 +193,15 @@ export async function runImportSession(
           }
         }
 
+        const formatInfo = await detectFormat(file.filePath)
+        // Before any case is created: a file without a usable build fails here.
+        const genomeBuild = await resolveImportGenomeBuild({
+          filePath: file.filePath,
+          isVcf: formatInfo.format === 'vcf',
+          explicit: file.vcfGenomeBuild,
+          fallback: file.fallbackGenomeBuild
+        })
         // Create case record
-        // Use VCF genome build override if provided, otherwise default to GRCh38
-        const genomeBuild = file.vcfGenomeBuild ?? 'GRCh38'
         const caseResult = stmts.insertCase.run(
           // cases.name is UNIQUE: a replacement is filled under a temporary name.
           existing ? replacementCaseName(file.caseName, existing.id) : file.caseName,
@@ -232,8 +239,6 @@ export async function runImportSession(
             0,
             0
           )
-
-          const formatInfo = await detectFormat(file.filePath)
 
           const onProgress = (count: number): void => {
             const now = Date.now()

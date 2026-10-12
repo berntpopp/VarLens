@@ -134,3 +134,33 @@ describe('resolveUrlTemplate', () => {
     expect(url).toBe('https://example.com/gnomad_r4')
   })
 })
+
+describe('resolveUrlTemplate — chromosome names', () => {
+  const variant = (chr: string) => ({ chr, pos: 12345, ref: 'A', alt: 'G', gene_symbol: null })
+  const fields = ['chr', 'pos', 'ref', 'alt']
+  const franklin =
+    'https://franklin.genoox.com/clinical-db/variant/snp/chr{chr}-{pos}-{ref}-{alt}/{build}'
+
+  it.each(['1', 'chr1'])('Franklin gets chr1, never chrchr1, for stored %s', (chr) => {
+    expect(resolveUrlTemplate(franklin, variant(chr), 'GRCh38', fields)).toBe(
+      'https://franklin.genoox.com/clinical-db/variant/snp/chr1-12345-A-G/GRCh38'
+    )
+  })
+
+  it('{chr} is the bare name (gnomAD, ClinVar)', () => {
+    expect(resolveUrlTemplate('{chr}', variant('chrX'), 'GRCh38', fields)).toBe('X')
+    expect(resolveUrlTemplate('{chr}', variant('chrM'), 'GRCh38', fields)).toBe('MT')
+  })
+
+  it.each([
+    ['GRCh37', '1', 'chr1'],
+    ['GRCh37', 'chr1', 'chr1'],
+    // GRCh37 MT is rCRS: hg19 calls it chrMT; hg19's own chrM (NC_001807) stays chrM
+    ['GRCh37', 'MT', 'chrMT'],
+    ['GRCh37', 'chrM', 'chrM'],
+    ['GRCh38', 'MT', 'chrM'],
+    ['GRCh38', 'chrM', 'chrM']
+  ] as const)('{chr_ucsc} of %s %s is %s', (build, chr, expected) => {
+    expect(resolveUrlTemplate('{chr_ucsc}', variant(chr), build, fields)).toBe(expected)
+  })
+})

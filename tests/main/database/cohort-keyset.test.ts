@@ -155,18 +155,21 @@ describe('SQLite cohort keyset paging', () => {
     expect(details(0)).toContain(`SCAN cvs USING INDEX ${COHORT_KEYSET_INDEX}`)
     expect(details(0).filter((d) => d.includes('TEMP B-TREE'))).toEqual([])
 
-    // No temp b-tree anywhere in the plan. Since the cohort frequency is
-    // derived at read time (cohort-frequency-sql.ts), the page query joins
-    // `bt`, the per-build totals of published cases: `SELECT genome_build,
-    // COUNT(*) FROM cases WHERE import_status = 'ready' GROUP BY genome_build`.
-    // Migration v40's idx_cases_import_status (import_status, genome_build)
-    // covers it and delivers the rows in group order, so the GROUP BY needs
-    // no sort either (before v40 it scanned `cases` through a temp b-tree).
+    // No temp b-tree anywhere in the plan. The cohort carrier frequency is
+    // derived at read time (cohort-frequency-sql.ts): the page query joins
+    // `bt`, the totals per build and variant class of published cases holding
+    // a call of the class (src/shared/sql/carrier-frequency.ts). Each class
+    // arm reads `cases` through idx_cases_import_status (import_status,
+    // genome_build), in group order, and probes idx_variants_case_type.
     const totals = planRows.find((r) => /^(MATERIALIZE|CO-ROUTINE) bt$/.test(r.detail))
     expect(totals).toBeDefined()
-    expect(details(totals!.id)).toEqual([
-      'SEARCH cases USING COVERING INDEX idx_cases_import_status (import_status=?)'
-    ])
+    const searches = planRows.filter((r) => r.detail.startsWith('SEARCH c'))
+    expect(searches.map((r) => r.detail)).toEqual(
+      Array.from({ length: 4 }, () => [
+        'SEARCH c USING COVERING INDEX idx_cases_import_status (import_status=?)',
+        'SEARCH cv EXISTS USING COVERING INDEX idx_variants_case_type (case_id=? AND variant_type=?)'
+      ]).flat()
+    )
     expect(planRows.filter((r) => r.detail.includes('TEMP B-TREE'))).toEqual([])
   })
 })

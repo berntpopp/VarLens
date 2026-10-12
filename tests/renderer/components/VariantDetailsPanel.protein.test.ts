@@ -48,8 +48,7 @@ function mountPanel(
           'TagsSection',
           'AcmgClassificationPanel',
           'ActivityLogPanel',
-          'ProteinVisualizationModal',
-          'ProteinViewUnavailableDialog'
+          'ProteinPreviewStrip'
         ].map((name) => [name, extra.stubs?.[name] ?? { name, template: '<div />' }])
       ),
       provide: extra.provide
@@ -70,38 +69,17 @@ describe('VariantDetailsPanel protein view mounting', () => {
     delete testWindow.__VARLENS_WEB__
   })
 
-  it('does not mount the protein modal until the user opens it (desktop)', async () => {
-    const wrapper = mountPanel()
-    await flushPromises()
-    expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(false)
-
-    wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
-    await flushPromises()
-    expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
-  })
-
-  it('web, protein lookup off (egress policy default): reason shown, no protein calls', async () => {
-    testWindow.__VARLENS_WEB__ = true
-    const wrapper = mountPanel('web')
-    wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
+  it('the identity buttons and the strip ask the shell to open the protein view on a tab', async () => {
+    const state = createAppState()
+    const wrapper = mountPanel('desktop', false, { provide: { [AppStateKey as symbol]: state } })
     await flushPromises()
 
-    expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(false)
-    expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).exists()).toBe(true)
-    expect(api.protein.getMapping).not.toHaveBeenCalled()
-    expect(
-      wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).attributes('reason')
-    ).toMatch(/Protein view .* turned off on this server/)
-  })
+    wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view', '3d')
+    expect(state.proteinViewOpen.value).toBe(true)
+    expect(state.proteinViewRequest.value).toMatchObject({ variant: { id: 1 }, tab: '3d' })
 
-  it('web, protein lookup enabled by an administrator: mounts the protein modal', async () => {
-    testWindow.__VARLENS_WEB__ = true
-    const wrapper = mountPanel('web', true)
-    wrapper.findComponent({ name: 'VariantIdentitySection' }).vm.$emit('open-protein-view')
-    await flushPromises()
-
-    expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
-    expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).exists()).toBe(false)
+    wrapper.findComponent({ name: 'ProteinPreviewStrip' }).vm.$emit('open', 'lollipop')
+    expect(state.proteinViewRequest.value?.tab).toBe('lollipop')
   })
 
   it('asks the evidence editor about an unsaved draft before the selection changes', async () => {

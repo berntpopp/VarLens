@@ -52,7 +52,7 @@
       variant="tonal"
       size="x-small"
       density="compact"
-      color="amber-darken-2"
+      color="warning"
       :prepend-icon="mdiLightbulbOn"
       @click="$emit('autoSuggest')"
     >
@@ -65,7 +65,7 @@
           variant="tonal"
           size="x-small"
           density="compact"
-          color="grey-darken-1"
+          color="secondary"
           :prepend-icon="mdiPencil"
         >
           Override

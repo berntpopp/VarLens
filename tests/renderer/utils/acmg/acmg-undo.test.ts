@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   evidenceFingerprint,
+  hasDecidingAcmgEvidence,
   hasMeaningfulAcmgEvidence,
   planAcmgUndo,
   summarizeAcmgDraft
@@ -78,5 +79,15 @@ describe('draft helpers', () => {
     const suggestedOnly = JSON.stringify({ pathogenic: [{ code: 'PM2', confirmed: false }] })
     expect(hasMeaningfulAcmgEvidence(suggestedOnly)).toBe(false)
     expect(hasMeaningfulAcmgEvidence(JSON.stringify({ notes: 'segregates' }))).toBe(true)
+  })
+
+  it.each([
+    [{ pathogenic: [{ code: 'PVS1', confirmed: true }] }, true],
+    [{ benign: ['BA1'] }, true],
+    [{ pathogenic: [], is_override: true }, true],
+    [{ pathogenic: [{ code: 'PM2', confirmed: false }] }, false],
+    [{ notes: 'segregates' }, false]
+  ])('only confirmed criteria or an override decide the class: %j -> %s', (evidence, expected) => {
+    expect(hasDecidingAcmgEvidence(JSON.stringify(evidence))).toBe(expected)
   })
 })

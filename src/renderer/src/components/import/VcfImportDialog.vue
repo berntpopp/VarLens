@@ -117,10 +117,17 @@
           :error-messages="caseNameError"
           autofocus
         />
+        <GenomeBuildField
+          ref="buildField"
+          v-model="genomeBuild"
+          :detection="caseBuildDetection"
+          class="mb-3"
+        />
 
         <VcfFileList
           :files="previewResult?.files ?? []"
           :overrides="overrides"
+          :case-build="genomeBuild"
           @update:override="handleOverride"
         />
 
@@ -205,6 +212,7 @@
           :result="importResult"
           :case-name="caseName"
           :file-results="previewResult?.files ?? []"
+          :genome-build="genomeBuild"
           @view-case="handleViewCase"
           @import-more="resetToSelect"
           @close="handleClose"
@@ -253,6 +261,12 @@ import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
 import ImportFilterOptions, { type ImportFilterState } from './ImportFilterOptions.vue'
 import ImportProgressView, { type FileStatusEntry } from './ImportProgressView.vue'
 import ImportSummaryView from './ImportSummaryView.vue'
+import { CASE_NAME_MESSAGES } from '../../config/importConfig'
+import GenomeBuildField from './GenomeBuildField.vue'
+import {
+  combineBuildDetections,
+  isBuildImportBlocked
+} from '../../../../shared/genome/genome-build'
 import {
   mdiAlertCircleOutline,
   mdiCheckCircle,
@@ -313,8 +327,12 @@ const pendingFileCount = ref(0)
 // ---------------------------------------------------------------------------
 const previewResult = ref<VcfMultiPreviewResult | null>(null)
 const caseName = ref('')
+// One case, one build: confirmed by the user unless every file's contig lengths agree.
+const genomeBuild = ref<string | null>(null)
+const buildField = ref<InstanceType<typeof GenomeBuildField> | null>(null)
+const caseBuildDetection = computed(() => combineBuildDetections(previewResult.value?.files ?? []))
 const overrides = ref(new Map<string, VariantTypeOverride>())
-const filters = ref<ImportFilterState>({
+const defaultFilters = (): ImportFilterState => ({
   passOnly: false,
   minQual: null,
   minGq: null,
@@ -322,10 +340,11 @@ const filters = ref<ImportFilterState>({
   bedPath: undefined,
   bedPadding: 50
 })
+const filters = ref<ImportFilterState>(defaultFilters())
 
 const caseNameError = computed<string[]>(() => {
   if (phase.value !== 'review') return []
-  if (caseName.value.trim() === '') return ['Case name is required']
+  if (caseName.value.trim() === '') return [CASE_NAME_MESSAGES.REQUIRED]
   return []
 })
 
@@ -334,7 +353,8 @@ const canImport = computed(
     phase.value === 'review' &&
     caseName.value.trim() !== '' &&
     previewResult.value !== null &&
-    previewResult.value.files.length > 0
+    previewResult.value.files.length > 0 &&
+    !isBuildImportBlocked(caseBuildDetection.value)
 )
 
 const hasLargeFiles = computed(() => {
@@ -486,15 +506,9 @@ function resetToSelect(): void {
   pendingFileCount.value = 0
   previewResult.value = null
   caseName.value = ''
+  genomeBuild.value = null
   overrides.value = new Map()
-  filters.value = {
-    passOnly: false,
-    minQual: null,
-    minGq: null,
-    minDp: null,
-    bedPath: undefined,
-    bedPadding: 50
-  }
+  filters.value = defaultFilters()
   fileStatuses.value = new Map()
   currentFile.value = null
   overallPercent.value = 0
@@ -574,19 +588,14 @@ async function loadPreview(filePaths: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 async function startImport(): Promise<void> {
   if (api === undefined || previewResult.value === null) return
-  if (!canImport.value) return
+  if (!canImport.value || buildField.value?.validate() !== true) return
 
   // Build specs from preview + overrides
   const specs: MultiFileImportSpec[] = previewResult.value.files.map((file) => {
     const override = overrides.value.get(file.filePath)
     const variantType = override?.variantType ?? file.defaultVariantType
     const annotationFormat = file.annotationType === 'none' ? null : file.annotationType
-    return {
-      filePath: file.filePath,
-      variantType,
-      caller: file.callerName,
-      annotationFormat
-    }
+    return { filePath: file.filePath, variantType, caller: file.callerName, annotationFormat }
   })
 
   // Initialize per-file statuses
@@ -629,10 +638,7 @@ async function startImport(): Promise<void> {
         caseName.value.trim(),
         specs,
         {
-          ...(previewResult.value.files[0].detectedGenomeBuild !== null &&
-          previewResult.value.files[0].detectedGenomeBuild !== ''
-            ? { genomeBuild: previewResult.value.files[0].detectedGenomeBuild }
-            : {}),
+          genomeBuild: genomeBuild.value ?? undefined,
           fieldProfile: stripVueProxies(settingsStore.importFieldProfile)
         },
         filtersPayload
@@ -673,10 +679,7 @@ async function startImport(): Promise<void> {
     logService.error(`Multi-file VCF import failed: ${message}`, 'VcfImportDialog')
     // Mark current file as errored
     if (currentFile.value !== null) {
-      markFileStatus(currentFile.value, {
-        status: 'error',
-        error: message
-      })
+      markFileStatus(currentFile.value, { status: 'error', error: message })
     }
     errorMessage.value = message
     // Clear the background pill — the import stopped.

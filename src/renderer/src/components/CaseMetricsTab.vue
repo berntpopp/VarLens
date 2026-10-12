@@ -194,7 +194,7 @@ interface AutocompleteItem {
   title: string
   value: unknown
 }
-import { EMPTY_VALUE_PLACEHOLDER } from '../utils/formatters'
+import { EMPTY_VALUE_PLACEHOLDER } from '../config/displayConfig'
 import { mdiDeleteOutline } from '@mdi/js'
 import { logService } from '../services/LogService'
 import { isIpcError } from '../../../shared/types/errors'

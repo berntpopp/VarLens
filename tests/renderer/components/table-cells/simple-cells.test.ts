@@ -25,6 +25,8 @@ import {
   GeneSymbolCell,
   PositionCell
 } from '../../../../src/renderer/src/components/table-cells'
+import { CONSEQUENCE_LABELS } from '../../../../src/renderer/src/config/displayConfig'
+import { VEP_CONSEQUENCE_SEPARATOR } from '../../../../src/shared/config/vep.config'
 import {
   colorBinding,
   isCssColor
@@ -131,7 +133,9 @@ describe('link cells', () => {
     expect(linked.wrapper.find('.external-link').exists()).toBe(true)
     const unlinked = host(() => h(GeneSymbolCell, { value: 'TTN', linkUrl: null }))
     expect(unlinked.wrapper.text()).toBe('TTN')
-    expect(host(() => h(GeneSymbolCell, { value: null })).wrapper.text()).toBe('--')
+    const empty = host(() => h(GeneSymbolCell, { value: null })).wrapper
+    expect(empty.text()).toBe('--')
+    expect(empty.find('.gene-symbol').exists()).toBe(false) // letter-spacing renders '- -'
   })
 
   it('ClinVarCell renders a labelled chip with a delegated tooltip', async () => {
@@ -167,8 +171,12 @@ describe('value cells', () => {
     expect(chip.find('.v-chip').exists()).toBe(true)
     expect(mount(CaddScoreCell, { props: { score: null } }).text()).toBe('--')
     const consequence = mount(ConsequenceCell, { props: { consequence: 'stop_gained' } })
-    expect(consequence.text()).toBe('stop gained')
+    expect(consequence.text()).toBe(CONSEQUENCE_LABELS.stop_gained)
     expect(consequence.attributes('data-tooltip')).toBe('stop_gained')
+    const multi = mount(ConsequenceCell, {
+      props: { consequence: `missense_variant${VEP_CONSEQUENCE_SEPARATOR}NMD_transcript_variant` }
+    })
+    expect(multi.text()).toBe(`${CONSEQUENCE_LABELS.missense_variant}, NMD transcript variant`)
     expect(mount(EmptyPlaceholder).text()).toBe('--')
   })
 })

@@ -12,6 +12,7 @@
  * ```
  */
 
+import { IMPACT_COLORS, SCORE_THRESHOLDS } from '../../../shared/config/domain.config'
 import { clinvarColorToken } from '../../../shared/config/severity.config'
 
 export interface UseTableColorsReturn {
@@ -28,32 +29,22 @@ export function useTableColors(): UseTableColorsReturn {
   const getClinVarColor = (significance: string | null): string => clinvarColorToken(significance)
 
   /**
-   * Map variant impact (HIGH/MODERATE/LOW/MODIFIER) to Vuetify color
+   * Map variant impact (HIGH/MODERATE/LOW/MODIFIER) to its theme colour token
    */
-  const getImpactColor = (impact: string | null): string => {
-    if (impact === null || impact === '') return 'grey'
-
-    const colorMap: Record<string, string> = {
-      HIGH: 'error',
-      MODERATE: 'warning',
-      LOW: 'info',
-      MODIFIER: 'grey'
-    }
-
-    return colorMap[impact.toUpperCase()] ?? 'grey'
-  }
+  const getImpactColor = (impact: string | null): string =>
+    IMPACT_COLORS[(impact ?? '').toUpperCase()] ?? IMPACT_COLORS.MODIFIER
 
   /**
-   * Map CADD phred score to severity color
-   * Thresholds: >=25 (high), >=20 (moderate-high), >=15 (moderate), >=10 (low-moderate)
+   * Map CADD phred score to a severity token on the impact scale, at the
+   * clinical CADD thresholds shared with the details panel.
    */
   const getCaddColor = (cadd: number | null): string => {
-    if (cadd === null) return 'grey'
-    if (cadd >= 25) return 'error'
-    if (cadd >= 20) return 'orange'
-    if (cadd >= 15) return 'warning'
-    if (cadd >= 10) return 'info'
-    return 'grey'
+    const { red, orange, green } = SCORE_THRESHOLDS.cadd
+    if (cadd === null) return 'muted'
+    if (cadd >= red) return 'error'
+    if (cadd >= orange) return 'warning'
+    if (cadd >= green) return 'info'
+    return 'muted'
   }
 
   return {

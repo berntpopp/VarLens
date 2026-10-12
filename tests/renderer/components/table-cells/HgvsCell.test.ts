@@ -36,4 +36,13 @@ describe('HgvsCell', () => {
     expect(wrapper.text()).toBe('--')
     expect(wrapper.find('.hgvs-notation').exists()).toBe(false)
   })
+
+  it('decodes the VEP %3D escape for databases imported before import-side decoding', () => {
+    const wrapper = mount(HgvsCell, {
+      props: { value: 'ENSP00000354346.4:p.Ala62%3D' },
+      global: { plugins: [vuetify] }
+    })
+
+    expect(wrapper.find('.hgvs-notation').text()).toBe('ENSP00000354346.4:p.Ala62=')
+  })
 })

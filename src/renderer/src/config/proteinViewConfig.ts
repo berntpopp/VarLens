@@ -1,0 +1,50 @@
+import { mdiMolecule, mdiPin } from '@mdi/js'
+import type { CohortVariant } from '../../../shared/types/cohort'
+
+/**
+ * Copy for the protein view entry points (details-panel strip and header
+ * buttons, row quick menu, `p` shortcut). One source so every entry point
+ * gives the same reason when the view cannot open.
+ */
+export const PROTEIN_VIEW_COPY = {
+  lookupsOff: 'Protein view needs external lookups — an administrator can enable them in Settings',
+  noVariant: 'Select a variant to open the protein view',
+  noGene: 'No gene annotated for this variant',
+  noProteinPosition: 'No protein position for this variant',
+  loadFailed: 'Protein data could not be loaded',
+  noDomain: 'no annotated domain',
+  stripLabel: 'Protein view',
+  geneStructure: 'Gene structure'
+} as const
+
+/**
+ * Details strip: wait this long on one gene before its UniProt/InterPro
+ * lookups start, so stepping through rows sends no burst of external calls.
+ */
+export const PROTEIN_STRIP_DWELL_MS = 400
+
+/** Cohort lollipop: carrier rows fetched per gene (the top ones by carrier count). */
+export const COHORT_CARRIER_LIMIT = 1000
+
+/** One gene's carrier rows and how many variants matched in all. */
+export interface GeneCarriers {
+  rows: CohortVariant[]
+  total: number
+}
+
+/** Lollipop note when a gene has more cohort variants than were fetched. */
+export const carriersTruncatedNote = (shown: number, total: number): string =>
+  `${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} variants shown (top by carriers)`
+
+/** Modal tabs, in display order; the strip and buttons open one directly. */
+export type ProteinViewTab = 'lollipop' | 'gene-structure' | '3d'
+
+/** Labelled buttons beside the gene name in the details panel (Gene structure: modal tab). */
+export const PROTEIN_VIEW_BUTTONS: ReadonlyArray<{
+  tab: ProteinViewTab
+  label: string
+  icon: string
+}> = [
+  { tab: 'lollipop', label: 'Lollipop', icon: mdiPin },
+  { tab: '3d', label: '3D structure', icon: mdiMolecule }
+]

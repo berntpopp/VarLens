@@ -12,13 +12,16 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import ShortlistTable from '../../../../src/renderer/src/components/shortlist/ShortlistTable.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import type { ShortlistRow } from '../../../../src/shared/types/shortlist'
+import { clinvarDisplayText } from '../../../../src/shared/config/severity.config'
+import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
+import { installCapabilities } from '../../helpers/capabilities'
 
 // ShortlistTable resolves its Links column through the external-links store
 beforeEach(() => setActivePinia(createPinia()))
@@ -143,13 +146,13 @@ describe('ShortlistTable', () => {
             chr: '2',
             pos: 5000,
             sv_type: 'DEL',
-            sv_length: 1000
+            sv_length: -1000
           })
         ]
       },
       global: { plugins: [vuetify] }
     })
-    expect(wrapper.text()).toContain('2:5000 DEL 1000bp')
+    expect(wrapper.text()).toContain('2:5000 DEL 1.00 kb')
   })
 
   it('renders HGVS c. and p. on SNV rows when cdna and aa_change are present', () => {
@@ -192,6 +195,35 @@ describe('ShortlistTable', () => {
     expect(text).not.toContain('p.p.')
   })
 
+  it('renders ClinVar with the shared ClinVar cell, not the raw token', () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row({ clinvar: 'Uncertain_significance' } as Partial<ShortlistRow>)] },
+      global: { plugins: [vuetify] }
+    })
+    expect(wrapper.text()).toContain(clinvarDisplayText('Uncertain_significance'))
+    expect(wrapper.text()).not.toContain('Uncertain_significance')
+  })
+
+  it('keeps full VEP HGVS as is instead of prefixing c./p. onto the transcript', () => {
+    const wrapper = mount(ShortlistTable, {
+      props: {
+        rows: [
+          row({
+            variant_type: 'snv',
+            cdna: 'ENST00000361682.4:c.186C>T',
+            aa_change: 'ENSP00000354346.4:p.Ala62%3D'
+          } as Partial<ShortlistRow>)
+        ]
+      },
+      global: { plugins: [vuetify] }
+    })
+    const text = wrapper.text()
+    expect(text).toContain('ENST00000361682.4:c.186C>T')
+    expect(text).toContain('ENSP00000354346.4:p.Ala62=')
+    expect(text).not.toContain('c.ENST')
+    expect(text).not.toContain('p.ENSP')
+  })
+
   it('omits HGVS lines on SNV rows when cdna/aa_change are null', () => {
     const wrapper = mount(ShortlistTable, {
       props: {
@@ -230,8 +262,56 @@ describe('ShortlistTable', () => {
       global: { plugins: [vuetify] }
     })
     const text = wrapper.text()
-    expect(text).toContain('3:2000 INS 500bp')
+    expect(text).toContain('3:2000 INS 500 bp')
     expect(text).not.toContain('c.999A>G')
     expect(text).not.toContain('p.Arg1Gly')
+  })
+
+  it('ignores window keys while not interactive (hidden tab)', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row()], interactive: false },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    for (const key of ['ArrowDown', 's', 'Enter']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key }))
+      await wrapper.vm.$nextTick()
+    }
+    expect(wrapper.emitted('toggle-star')).toBeUndefined()
+    expect(wrapper.emitted('row-click')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('handles window keys while interactive', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row()], interactive: true },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    for (const key of ['ArrowDown', 's']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key }))
+      await wrapper.vm.$nextTick()
+    }
+    expect(wrapper.emitted('toggle-star')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('the row actions menu opens the protein view for the row (case-view parity)', async () => {
+    installCapabilities()
+    const state = createAppState()
+    const item = row({ aa_change: 'p.Met180Val' })
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [item] },
+      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      attachTo: document.body
+    })
+    await wrapper.get('[data-testid="shortlist-actions-1"]').trigger('click')
+    await flushPromises()
+    const entry = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find((el) =>
+      el.textContent?.includes('Protein view')
+    )
+    entry!.click()
+    expect(state.proteinViewRequest.value).toEqual({ variant: item, tab: 'lollipop' })
+    wrapper.unmount()
   })
 })

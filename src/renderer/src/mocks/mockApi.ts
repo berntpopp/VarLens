@@ -104,18 +104,16 @@ export const mockApi: WindowAPI = {
         const q = params.search_term.toLowerCase()
         result = result.filter((c) => c.name.toLowerCase().includes(q))
       }
-      const total_count = result.length
       const offset = params.offset ?? 0
-      result = result.slice(offset, offset + params.limit)
       return {
-        data: result.map((c) => ({
+        data: result.slice(offset, offset + params.limit).map((c) => ({
           ...c,
           cohort_names: [] as string[],
           cohort_ids: [] as number[],
           affected_status: null,
           sex: null
         })),
-        total_count
+        total_count: result.length
       }
     },
     delete: async (id: number) => void removeCases((caseId) => caseId === id),
@@ -125,7 +123,9 @@ export const mockApi: WindowAPI = {
       removeCases((id) => target.mode === 'all' || target.ids.includes(id))
       return { jobId: 'mock-delete-job' }
     },
-    availableBuilds: async () => mockAvailableBuilds(cases)
+    availableBuilds: async () => mockAvailableBuilds(cases),
+    buildReviews: async () => ({ reviews: [], renameInProgress: false, renameFailed: false }),
+    resolveBuildReviews: async (choices) => choices.length
   },
 
   variants: {
@@ -231,12 +231,7 @@ export const mockApi: WindowAPI = {
     },
     // Wave 4 — unified shortlist: minimal stub so browser dev mode has a
     // placeholder. Real data flows through the main-process handler.
-    shortlist: async () => ({
-      rows: [],
-      totalCandidates: 0,
-      presetUsed: null,
-      elapsedMs: 0
-    }),
+    shortlist: async () => ({ rows: [], totalCandidates: 0, presetUsed: null, elapsedMs: 0 }),
     onAnnotationChanged: () => () => {}
   },
 
@@ -265,6 +260,12 @@ export const mockApi: WindowAPI = {
       variantCountEstimate: 100,
       annotationType: 'none' as const,
       detectedGenomeBuild: 'GRCh38',
+      buildDetection: {
+        suggested: 'GRCh38',
+        confidence: 'definitive' as const,
+        evidence: [{ build: 'GRCh38', source: 'Contig lengths', detail: '24 of 24' }],
+        excluded: []
+      },
       infoFields: [],
       annotationFields: [],
       callerName: null,
@@ -273,11 +274,7 @@ export const mockApi: WindowAPI = {
       filePath: '/mock/file.vcf.gz',
       fileSize: 1000
     }),
-    jsonPreview: async () => ({
-      format: 'columnar' as const,
-      variantsScanned: 0,
-      fields: []
-    }),
+    jsonPreview: async () => ({ format: 'columnar' as const, variantsScanned: 0, fields: [] }),
     vcfMultiPreview: async () => ({
       files: [],
       siblingBedFiles: [],

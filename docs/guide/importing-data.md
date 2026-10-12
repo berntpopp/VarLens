@@ -51,6 +51,17 @@ Click the case name in the header bar to open the case metadata modal. Here you 
 
 For importing multiple files at once, click the **+** button in the sidebar and choose **Import Multiple Files**, **Import Folder**, or **Import ZIP Archive**. Files are processed sequentially with duplicate detection and a summary on completion.
 
+## Genome Build
+
+Every case is stored with the genome build (GRCh38 or GRCh37) its coordinates use. VarLens suggests the build and you confirm it:
+
+- **Contig lengths** in the VCF header (`##contig=<ID=chr1,length=…>`) decide the build. It is pre-selected, and the line under the choice says why.
+- **Header tags** (the reference path, VEP cache, SnpEff database) only suggest a build. Click it to confirm.
+- If the header names no build or points to more than one, choose the build yourself before importing.
+- A case of several VCF files holds one build. Files of different builds must be imported as separate cases.
+- In a batch, each VCF keeps the build its header names. JSON files carry no build: choose the **Build for files without one**. A file whose header points to more than one build is not imported; import it on its own.
+- T2T-CHM13 files are recognised but cannot be imported yet.
+
 ## Tips
 
 - Large files (>100,000 variants) may take a few minutes to import

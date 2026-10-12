@@ -1,5 +1,10 @@
 <template>
-  <div class="lollipop-legend pa-2 bg-grey-lighten-4">
+  <!-- Light like the plot it explains, in both themes. -->
+  <v-theme-provider
+    theme="warmLight"
+    with-background
+    class="lollipop-legend pa-2 bg-grey-lighten-4"
+  >
     <!-- gnomAD Variants filter row -->
     <div class="d-flex flex-wrap ga-1 align-center mb-2">
       <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium section-label"
@@ -165,13 +170,8 @@
       </span>
       <span class="d-inline-flex align-center ga-1">
         <span
-          style="
-            width: 8px;
-            height: 8px;
-            transform: rotate(45deg);
-            background: #d73027;
-            display: inline-block;
-          "
+          :style="{ background: CLINVAR_COLORS.pathogenic }"
+          style="width: 8px; height: 8px; transform: rotate(45deg); display: inline-block"
         />
         <span class="text-body-2">ClinVar</span>
       </span>
@@ -189,7 +189,7 @@
         <span class="text-body-2">gnomAD</span>
       </span>
     </div>
-  </div>
+  </v-theme-provider>
 </template>
 
 <script setup lang="ts">
@@ -203,7 +203,7 @@ import type {
 import {
   CONSEQUENCE_COLORS,
   CLINVAR_COLORS,
-  DOMAIN_TYPE_COLORS
+  getDomainColor
 } from '../../../../shared/utils/protein-utils'
 
 interface Props {
@@ -251,7 +251,7 @@ const domainTypes = computed(() => {
     const key = domain.type.toLowerCase()
     if (!seen.has(key)) {
       seen.add(key)
-      result.push([domain.type, DOMAIN_TYPE_COLORS[key] ?? '#9E9E9E'])
+      result.push([domain.type, getDomainColor(key)])
     }
   }
   return result

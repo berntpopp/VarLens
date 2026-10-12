@@ -41,6 +41,7 @@ import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lo
 import { getCohortSummaryState, summaryIsStaleSql } from './cohort-summary-state-sql'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import { scheduleSeverityRankBackfill } from './severity-rank-backfill-job'
+import { scheduleContigNaming } from './postgres-contig-naming'
 
 const DEFAULT_SYNC_REBUILD_MAX_CASES = 50
 /** A background rebuild of a large cohort may legitimately run this long. */
@@ -78,11 +79,17 @@ export async function readCohortSummaryStatus({
   schema
 }: ScopedPool): Promise<{ is_stale: boolean; last_rebuilt_at: number }> {
   const client = await pool.connect()
+  let status: { is_stale: boolean; last_rebuilt_at: number }
   try {
-    return await getCohortSummaryState({ schema, client })
+    status = await getCohortSummaryState({ schema, client })
   } finally {
     client.release()
   }
+  // Views that read summary figures without a cohort read (the case view's
+  // carrier frequency, #555) poll this while stale: start the rebuild that a
+  // cohort read would, deduplicated per schema and paused after failures.
+  if (status.is_stale) scheduleBackgroundRebuild({ pool, schema })
+  return status
 }
 
 interface FreshnessProbe {
@@ -98,6 +105,8 @@ interface FreshnessProbe {
   total_cases: number
   /** Variant rows from before migration 0025 still lack stored severity ranks. */
   rank_backfill_pending: boolean
+  /** Cases from before migration 0030 still wait for the chromosome-name check. */
+  contig_naming_pending: boolean
 }
 
 /** The summary must be rebuilt before it can be trusted (see prepareCohortRead). */
@@ -129,6 +138,7 @@ async function probeFreshness({
     flags_pending: boolean
     total_cases: string
     rank_backfill_pending: boolean | null
+    contig_naming_pending: boolean
   }>(
     `SELECT
        (s.last_rebuilt_at IS NULL) AS never_rebuilt,
@@ -143,7 +153,8 @@ async function probeFreshness({
                 WHERE reason = 'annotation') AS flags_pending,
        (SELECT COUNT(*)::bigint FROM ${tbl('cases')}) AS total_cases,
        (SELECT b.completed_at IS NULL FROM ${tbl('severity_rank_backfill')} b
-         WHERE b.id = 1) AS rank_backfill_pending
+         WHERE b.id = 1) AS rank_backfill_pending,
+       EXISTS (SELECT 1 FROM ${tbl('contig_naming_pending')}) AS contig_naming_pending
      FROM ${tbl('cohort_summary_state')} s
      WHERE s.id = 1`
   )
@@ -158,7 +169,8 @@ async function probeFreshness({
     state_stale: row.state_stale,
     flags_pending: row.flags_pending,
     total_cases: Number(row.total_cases),
-    rank_backfill_pending: row.rank_backfill_pending === true
+    rank_backfill_pending: row.rank_backfill_pending === true,
+    contig_naming_pending: row.contig_naming_pending === true
   }
 }
 
@@ -278,6 +290,7 @@ export async function prepareCohortRead(
   // summary: variants with a gene but no gene rows means they were never
   // filled (migration 0023 fills them; this covers a partial restore).
   if (probe.rank_backfill_pending) scheduleSeverityRankBackfill(scope)
+  if (probe.contig_naming_pending) scheduleContigNaming(scope)
   const bootstrap = needsBootstrap(probe)
   const needsRebuild = bootstrap || probe.is_stale
   if (!needsRebuild) {
@@ -346,6 +359,7 @@ export async function checkCohortReadFreshness(
   }
   if (probe === null) return {}
   if (probe.rank_backfill_pending) scheduleSeverityRankBackfill(scope)
+  if (probe.contig_naming_pending) scheduleContigNaming(scope)
   if (!needsBootstrap(probe) && !probe.is_stale) return {}
   scheduleBackgroundRebuild(scope)
   return { warnings: { staleSummary: true } }

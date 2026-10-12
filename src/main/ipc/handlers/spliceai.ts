@@ -5,6 +5,7 @@ import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
 import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import { bareContig } from '../../../shared/utils/contig'
 
 /**
  * SpliceAI Lookup (Broad Institute) IPC handlers
@@ -44,7 +45,7 @@ export function registerSpliceAIHandlers({ ipcMain, getDb }: HandlerDependencies
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = validated.data.chr.replace(/^chr/i, '')
+          const normalizedChr = bareContig(validated.data.chr)
           const variantId = `${normalizedChr}-${validated.data.pos}-${validated.data.ref}-${validated.data.alt}`
           const cacheKey = `spliceai:38:${variantId}`
           const cached = client.getCached(cacheKey)

@@ -66,6 +66,8 @@
           :has-comment="!!getGlobalComment(item.chr, item.pos, item.ref, item.alt)"
           :show-global-indicators="false"
           :read-only="!canWrite"
+          :acmg-locked="hasAcmgEvidence?.(item) === true"
+          :variant="item"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -111,11 +113,11 @@
       </template>
 
       <template #[`item.cdna`]="{ value }">
-        <span class="hgvs-notation">{{ value ?? '--' }}</span>
+        <HgvsCell :value="value" />
       </template>
 
       <template #[`item.aa_change`]="{ value }">
-        <span class="hgvs-notation">{{ value ?? '--' }}</span>
+        <HgvsCell :value="value" />
       </template>
 
       <template #[`item.consequence`]="{ value }">
@@ -124,7 +126,7 @@
 
       <!-- Functional consequence -->
       <template #[`item.func`]="{ value }">
-        <span class="consequence-cell">{{ value ?? '--' }}</span>
+        <ConsequenceCell class="consequence-cell" :consequence="value" />
       </template>
 
       <!-- ClinVar with dynamic link from store -->
@@ -151,7 +153,11 @@
       </template>
 
       <template #[`item.cohort_frequency`]="{ value }">
-        {{ value !== null && value !== undefined ? (value * 100).toFixed(2) + '%' : '--' }}
+        {{
+          value !== null && value !== undefined
+            ? (value * 100).toFixed(2) + '%'
+            : EMPTY_VALUE_PLACEHOLDER
+        }}
       </template>
 
       <!-- Het / Hom combined column -->
@@ -159,7 +165,7 @@
         <span :title="COHORT_ZYGOSITY_HELP">
           {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
           <template v-if="otherZygosityCount(item) > 0">
-            (+{{ otherZygosityCount(item) }} other)
+            (+{{ otherZygosityCount(item) }} {{ ZYGOSITY_REMAINDER_LABEL }})
           </template>
         </span>
       </template>
@@ -189,9 +195,15 @@
 <script setup lang="ts">
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
+import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
+import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import type { CohortVariant } from '../../../../shared/types/cohort'
-import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
+import {
+  COHORT_ZYGOSITY_HELP,
+  ZYGOSITY_REMAINDER_LABEL,
+  otherZygosityCount
+} from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { SortItem } from '../../composables/useOffsetPagination'
 import { useTableScroll } from '../../composables/useTableScroll'
@@ -206,12 +218,14 @@ import {
   GeneSymbolCell,
   ConsequenceCell,
   AnnotationsCell,
+  HgvsCell,
   AnnotationsHeader,
   ExpandToggleCell,
   ExternalLinkCell,
   LinkOutsCell
 } from '../table-cells'
 import CarrierExpandedRow from './CarrierExpandedRow.vue'
+import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
 import { useDatabaseStore } from '../../stores/databaseStore'
 import AcmgQuickMenu from '../table-cells/AcmgQuickMenu.vue'
 import { provideAcmgQuickMenu } from '../table-cells/acmg-quick-menu'
@@ -262,6 +276,8 @@ interface Props {
     alt: string
   ) => AcmgClassification | null
   getGlobalComment: (chr: string, pos: number, ref: string, alt: string) => string | null
+  /** Stored ACMG evidence locks the row's quick classes */
+  hasAcmgEvidence?: (item: CohortVariant) => boolean
 }
 
 const emit = defineEmits<{
@@ -439,7 +455,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Enter',
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -450,7 +466,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     e.preventDefault()
@@ -462,7 +478,7 @@ onKeyStroke(
 
 // Action shortcuts on selected row
 onKeyStroke(
-  's',
+  SHORTCUTS.star.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -473,7 +489,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'c',
+  SHORTCUTS.comment.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -484,7 +500,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'a',
+  SHORTCUTS.acmg.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -495,7 +511,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'e',
+  SHORTCUTS.expandRow.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -510,6 +526,8 @@ onKeyStroke(
   },
   { dedupe: true }
 )
+
+useProteinViewShortcut(() => (viewActive.value ? navSelectedItem.value : null))
 
 // Scroll selected row into view
 watch(selectedIndex, async (newIndex) => {

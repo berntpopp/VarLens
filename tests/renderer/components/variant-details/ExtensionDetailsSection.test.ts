@@ -36,7 +36,7 @@ describe('ExtensionDetailsSection call context', () => {
     )
     expect(text('call-build')).toBe('GRCh38')
     expect(text('call-coordinates')).toBe('7:117,500,000-117,600,000')
-    expect(text('call-length')).toBe('-100.00 kb')
+    expect(text('call-length')).toBe('100.00 kb') // DEL is shown by the type
     expect(text('call-caller')).toBe('CNVkit')
     expect(wrapper.find('[data-testid="missing-evidence"]').exists()).toBe(false)
   })

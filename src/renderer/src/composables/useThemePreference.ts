@@ -18,6 +18,8 @@ export function useThemePreference(): void {
 
   function apply(): void {
     const name = resolveThemeName(settings.themePreference, darkQuery?.matches === true)
+    // index.html's pre-mount CSS keys html/body (and the scrollbar gutter) off this.
+    document.documentElement.dataset.theme = name === 'warmDark' ? 'dark' : 'light'
     if (theme.global.name.value !== name) void theme.change(name)
   }
 

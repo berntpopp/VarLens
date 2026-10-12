@@ -8,7 +8,6 @@
  * - Variant fetching with pagination and filtering
  * - Loading state management
  * - Error handling via ref (consumer decides how to display)
- * - Cohort summary fetching
  * - Summary staleness tracking via IPC listener
  * - Reset method for database context changes
  *
@@ -18,7 +17,7 @@
 import { ref, shallowRef, markRaw, inject, watch } from 'vue'
 import type { Ref, ShallowRef, InjectionKey } from 'vue'
 import { watchSummaryFreshness } from './useSummaryFreshness'
-import type { CohortVariant, CohortSummary } from '../../../shared/types/cohort'
+import type { CohortVariant } from '../../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ColumnFiltersParam } from '../../../shared/types/column-filters'
 import type { AvailableBuild } from '../../../shared/types/database'
@@ -94,8 +93,6 @@ export interface UseCohortDataReturn {
   isLoading: Ref<boolean>
   /** Error state - consumer decides how to display */
   error: Ref<Error | null>
-  /** Cohort summary statistics */
-  summary: Ref<CohortSummary | null>
   /** Whether the cohort summary is stale (being rebuilt) */
   summaryStale: Ref<boolean>
   /** Current rebuild phase key (e.g. 'variant_summary'). Null when not rebuilding. */
@@ -122,8 +119,6 @@ export interface UseCohortDataReturn {
   queryPage: (params: CohortQueryParams) => Promise<CohortQueryResult>
   /** Fetch variants and update reactive state */
   fetchVariants: (params: CohortQueryParams) => Promise<void>
-  /** Fetch cohort summary */
-  fetchSummary: () => Promise<void>
   /** Fetch column metadata for filter auto-detection */
   fetchColumnMeta: () => Promise<void>
   /** Reset all state (for database context changes) */
@@ -162,7 +157,6 @@ export function useCohortData(): UseCohortDataReturn {
   const totalCount = ref(0)
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
-  const summary = ref<CohortSummary | null>(null)
   const summaryStale = ref(false)
   // Phase progress state — populated when the main-side worker emits
   // progress events between SQL statements. When a rebuild completes these
@@ -250,14 +244,12 @@ export function useCohortData(): UseCohortDataReturn {
   }
   readSummaryStatus()
 
-  // PostgreSQL rebuilds in the background without an event: ask while stale,
-  // and reload the summary figures once the rebuild is through.
+  // PostgreSQL rebuilds in the background without an event: ask while stale.
   const freshness = api
     ? watchSummaryFreshness({ cohortApi: api.cohort, onFresh: () => undefined })
     : null
-  watch(summaryStale, (stale, was) => {
+  watch(summaryStale, (stale) => {
     if (stale) freshness?.markStale()
-    else if (was) void fetchSummary()
   })
   if (freshness !== null) {
     watch(freshness.stale, (stale) => {
@@ -500,31 +492,6 @@ export function useCohortData(): UseCohortDataReturn {
   }
 
   /**
-   * Fetch cohort summary statistics
-   */
-  const fetchSummary = async (): Promise<void> => {
-    // Guard for browser dev mode
-    if (!api) {
-      return
-    }
-
-    try {
-      const result = unwrapIpcResult(await api.cohort.getSummary())
-      summary.value = result
-    } catch (err) {
-      logService.error(
-        'Failed to load cohort summary: ' +
-          (err instanceof Error
-            ? err.message
-            : isIpcError(err)
-              ? (err.userMessage ?? err.message)
-              : String(err)),
-        'cohort'
-      )
-    }
-  }
-
-  /**
    * Fetch per-column metadata for filter UI auto-detection
    */
   const fetchColumnMeta = async (): Promise<void> => {
@@ -554,7 +521,6 @@ export function useCohortData(): UseCohortDataReturn {
     variants.value = []
     totalCount.value = 0
     error.value = null
-    summary.value = null
     summaryStale.value = false
     rebuildPhase.value = null
     rebuildPhaseIndex.value = null
@@ -575,7 +541,6 @@ export function useCohortData(): UseCohortDataReturn {
     totalCount,
     isLoading,
     error,
-    summary,
     summaryStale,
     rebuildPhase,
     rebuildPhaseIndex,
@@ -589,7 +554,6 @@ export function useCohortData(): UseCohortDataReturn {
     buildIpcParams,
     queryPage,
     fetchVariants,
-    fetchSummary,
     fetchColumnMeta,
     reset,
     cleanupListeners,

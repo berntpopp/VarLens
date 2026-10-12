@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { buildStatus, formatBpLength, normalizeBuild } from '../../utils/variant-interval'
+import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
 
 /**
  * Conditional detail section showing SV/CNV/STR-specific data based on variant_type.
@@ -93,7 +94,7 @@ const buildChipColor = computed(() =>
 /** chr:start-end for an interval call; a breakend is a single position with its mate in ALT. */
 const coordinates = computed(() => {
   const v = variant.value
-  if (v?.chr === undefined || v.pos === undefined) return '—'
+  if (v?.chr === undefined || v.pos === undefined) return EMPTY_VALUE_PLACEHOLDER
   const start = `${v.chr}:${v.pos.toLocaleString()}`
   if (isBreakend.value) return `${start} (breakend, mate ${v.alt ?? 'not reported'})`
   if (v.end_pos === null || v.end_pos === undefined) return `${start} (end not reported)`
@@ -126,13 +127,13 @@ const sectionTitle = computed(() => {
 })
 
 function formatNumber(val: number | null | undefined, digits = 2): string {
-  if (val === null || val === undefined) return '—'
+  if (val === null || val === undefined) return EMPTY_VALUE_PLACEHOLDER
   return val.toFixed(digits)
 }
 
 function formatText(val: string | null | undefined): string {
-  if (val === null || val === undefined || val === '') return '—'
-  return val
+  if (val === null || val === undefined || val === '') return EMPTY_VALUE_PLACEHOLDER
+  return val.replace(/_/g, ' ') // caller tokens such as full_mutation
 }
 </script>
 
@@ -238,7 +239,7 @@ function formatText(val: string | null | undefined): string {
             >Ref / Var Reads</span
           >
         </template>
-        {{ variant._sv_dr }} / {{ variant._sv_dv ?? '—' }}
+        {{ variant._sv_dr }} / {{ variant._sv_dv ?? EMPTY_VALUE_PLACEHOLDER }}
       </v-list-item>
       <v-list-item v-if="variant?._sv_vaf !== null && variant?._sv_vaf !== undefined" class="px-2">
         <template #prepend>
@@ -360,8 +361,8 @@ function formatText(val: string | null | undefined): string {
             >Thresholds</span
           >
         </template>
-        Normal ≤ {{ variant?._str_normal_max ?? '—' }} | Pathologic ≥
-        {{ variant?._str_pathologic_min ?? '—' }}
+        Normal ≤ {{ variant?._str_normal_max ?? EMPTY_VALUE_PLACEHOLDER }} | Pathologic ≥
+        {{ variant?._str_pathologic_min ?? EMPTY_VALUE_PLACEHOLDER }}
       </v-list-item>
       <v-list-item v-if="variant?._str_inheritance_mode" class="px-2">
         <template #prepend>
@@ -394,7 +395,7 @@ code {
   background: rgba(0, 0, 0, 0.05);
   padding: 1px 4px;
   border-radius: 3px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 </style>

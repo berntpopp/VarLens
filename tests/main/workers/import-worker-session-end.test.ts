@@ -58,7 +58,11 @@ describe('import worker: session housekeeping', () => {
   ): Promise<WorkerMessage[]> {
     const messages: WorkerMessage[] = []
     await runImportSession(
-      { type: 'start', files, dbPath } as StartMessage,
+      {
+        type: 'start',
+        files: files.map((f) => ({ fallbackGenomeBuild: 'GRCh38', ...f })),
+        dbPath
+      } as StartMessage,
       {
         postMessage: (m) => {
           messages.push(m)

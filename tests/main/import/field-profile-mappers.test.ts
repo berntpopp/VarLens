@@ -17,6 +17,7 @@ import { getJsonFieldPreview } from '../../../src/main/import/json-preview'
 import { detectFormat } from '../../../src/main/import/format-detection'
 import { createMapperPipeline } from '../../../src/main/workers/import-mapper-pipeline'
 import { FieldProfileResolver } from '../../../src/shared/utils/import-field-profile'
+import { IMPORT_MESSAGES } from '../../../src/shared/config/import.config'
 
 const FIXTURES = resolve(__dirname, '../../fixtures/import')
 const dictionaries = { gene: {}, impact: {}, transcript: {}, hpoSimScore: {}, moi: {} }
@@ -66,6 +67,7 @@ describe('columnar mapper', () => {
       resolveColumnIndices(HEADER),
       undefined,
       undefined,
+      HEADER.length,
       {
         header: HEADER,
         fields: new FieldProfileResolver()
@@ -76,7 +78,7 @@ describe('columnar mapper', () => {
         ['1', 10, 'A', 'G', 0.5, '1'],
         ['1', 11, 'A', 'G', 0.5]
       ])
-    ).rejects.toThrow('Columnar row 2 has 5 values but the header has 6 columns')
+    ).rejects.toThrow(IMPORT_MESSAGES.rowWidthMismatch(2, 5, 6))
   })
 
   it('stores unmapped columns per the profile, resolving dictionary codes', async () => {
@@ -85,6 +87,7 @@ describe('columnar mapper', () => {
       resolveColumnIndices(HEADER),
       undefined,
       undefined,
+      HEADER.length,
       {
         header: HEADER,
         fields: new FieldProfileResolver()
@@ -112,6 +115,7 @@ describe('columnar transcript values', () => {
       resolveColumnIndices(header),
       undefined,
       undefined,
+      header.length,
       {
         header,
         fields: new FieldProfileResolver()

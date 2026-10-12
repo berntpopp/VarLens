@@ -379,6 +379,30 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
+    it('shows the skipped web uploads summary until a new selection starts', async () => {
+      window.__VARLENS_WEB__ = true
+      window.api = createMockApi()
+      const wrapper = mount(ImportWizard, { global: { plugins: [createPinia(), vuetify] } })
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      const send = (status: string, fileIndex: number, message?: string): void => {
+        const detail = { status, fileName: 'f', fileIndex, totalFiles: 3, loadedBytes: 0 }
+        window.dispatchEvent(
+          new CustomEvent('varlens:web-upload', {
+            detail: { ...detail, totalBytes: null, percent: null, message }
+          })
+        )
+      }
+
+      send('started', 0)
+      send('started', 1)
+      send('skipped', 1, '1 file skipped: bad.txt: Only VCF files')
+      expect(vm.cancelError).toBe('1 file skipped: bad.txt: Only VCF files')
+
+      send('started', 0) // a new selection starts clean
+      expect(vm.cancelError).toBe('')
+      wrapper.unmount()
+    })
+
     it('keeps acknowledged VCF cancellation terminal when the active start call settles later', async () => {
       const mockApi = createMockApi()
       const pendingStart = deferred<{ variantCount: number }>()
@@ -650,6 +674,49 @@ describe('ImportWizard ZIP password unlock', () => {
     await flushPromises()
   }
 
+  /** JSON carries no build: the user picks the "build for files without one". */
+  async function chooseFallbackBuild(build = 'GRCh38'): Promise<void> {
+    const radio = document.body.querySelector<HTMLInputElement>(`input[value="${build}"]`)
+    expect(radio).toBeInstanceOf(HTMLInputElement)
+    radio!.click()
+    await flushPromises()
+  }
+
+  const importButton = (): HTMLButtonElement | undefined =>
+    Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Import 1 file')
+    )
+
+  it('does not start a JSON batch until a build is chosen, then sends it (#557)', async () => {
+    prepareSuccessfulZipReview()
+    mockApi.batchImport.start = vi.fn().mockResolvedValue({
+      succeeded: 1,
+      failed: 0,
+      skipped: 0,
+      cancelled: false,
+      details: []
+    })
+    const wrapper = mountWizard()
+    await openZipReview(wrapper)
+
+    importButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(mockApi.batchImport.start).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Choose the genome build these coordinates use.')
+
+    await chooseFallbackBuild('GRCh37')
+    importButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(mockApi.batchImport.start).toHaveBeenCalledWith(
+      ['/tmp/varlens-zip-entry/case.json'],
+      'skip',
+      undefined,
+      expect.any(String),
+      'GRCh37',
+      { fieldProfile: expect.any(Object) }
+    )
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     mockApi = createMockApi()
@@ -885,6 +952,7 @@ describe('ImportWizard ZIP password unlock', () => {
     mockApi.batchImport.cancel = vi.fn().mockResolvedValue(undefined)
     const wrapper = mountWizard()
     await openZipReview(wrapper)
+    await chooseFallbackBuild()
 
     const start = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Import 1 file')
@@ -926,6 +994,7 @@ describe('ImportWizard ZIP password unlock', () => {
     })
     const wrapper = mountWizard()
     await openZipReview(wrapper)
+    await chooseFallbackBuild()
 
     const start = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Import 1 file')

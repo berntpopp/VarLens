@@ -6,9 +6,12 @@
  */
 
 import Database from 'better-sqlite3-multiple-ciphers'
+import { closeSync, openSync, readSync } from 'node:fs'
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
 import { isNotADatabaseError } from '../database/sqlite-error'
+import { InvalidParametersError } from '../ipc/errors'
+import { DATABASE_CONFIG } from '../../shared/config'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
@@ -86,6 +89,7 @@ export class DatabaseManager {
       return { needsPassword: false }
     } catch (error) {
       if (isNotADatabaseError(error)) {
+        assertNoPlaintextSignature(dbPath)
         return { needsPassword: true }
       }
 
@@ -338,5 +342,25 @@ export class DatabaseManager {
       )
     }
     return createSqliteStorageSession(dbPath, key)
+  }
+}
+
+/** "Not a database" from a file with a known plaintext header: damaged, not encrypted. */
+function assertNoPlaintextSignature(dbPath: string): void {
+  const head = Buffer.alloc(16)
+  const fd = openSync(dbPath, 'r')
+  try {
+    readSync(fd, head, 0, head.length, 0)
+  } finally {
+    closeSync(fd)
+  }
+  // ponytail: only known signatures; random garbage still looks like ciphertext.
+  if (
+    DATABASE_CONFIG.NON_DATABASE_SIGNATURES.some((sig) => head.toString('latin1').startsWith(sig))
+  ) {
+    throw new InvalidParametersError(
+      `Not an encrypted database (plaintext header): ${dbPath}`,
+      DATABASE_CONFIG.MESSAGES.NOT_A_DATABASE
+    )
   }
 }

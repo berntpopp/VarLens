@@ -64,7 +64,7 @@ test('import files, verify case list, then delete all', async ({}, testInfo) => 
     const result = await window.evaluate(
       ([filePath, caseName]) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (window as any).api.import.start(filePath, caseName)
+        return (window as any).api.import.start(filePath, caseName, { genomeBuild: 'GRCh38' })
       },
       [escapedPath, file.name]
     )

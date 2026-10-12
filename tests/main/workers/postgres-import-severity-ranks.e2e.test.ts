@@ -86,9 +86,11 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
         mode: 'single-file',
         caseName,
         filePath,
-        ...(selectedSample !== undefined
-          ? { vcfOptions: { selectedSample, genomeBuild: 'GRCh38' } }
-          : {}),
+        // JSON has no header build, so the caller states it (as every import must)
+        vcfOptions: {
+          ...(selectedSample !== undefined ? { selectedSample } : {}),
+          genomeBuild: 'GRCh38'
+        },
         batchSize: 10_000
       },
       (message) => messages.push(message)

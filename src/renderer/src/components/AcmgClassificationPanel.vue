@@ -45,7 +45,7 @@
       <div class="d-flex flex-wrap ga-1">
         <template v-for="entry in activeCodes" :key="entry.code">
           <v-chip
-            :color="STRENGTH_COLORS[entry.strength]"
+            :color="ACMG_STRENGTH_COLORS[entry.strength]"
             size="small"
             label
             closable
@@ -187,7 +187,7 @@ import {
   hasMeaningfulAcmgEvidence,
   summarizeAcmgDraft
 } from '../utils/acmg/acmg-undo'
-import type { AcmgClassification } from '../../../shared/config/domain.config'
+import { ACMG_STRENGTH_COLORS, type AcmgClassification } from '../../../shared/config/domain.config'
 import type { AcmgCode, EvidenceStrength, AcmgEvidenceCode } from '../utils/acmg/types'
 import {
   PATHOGENIC_CODES,
@@ -221,15 +221,6 @@ const emit = defineEmits<{
   /** Emitted when evidence changes. Payload: { classification, evidenceJson } */
   change: [payload: AcmgDraft]
 }>()
-
-/** Color per strength level for active code chips/buttons */
-const STRENGTH_COLORS: Record<EvidenceStrength, string> = {
-  very_strong: 'deep-purple',
-  strong: 'orange-darken-2',
-  moderate: 'amber-darken-1',
-  supporting: 'blue-grey',
-  stand_alone: 'red-darken-2'
-}
 
 const {
   pathogenicCodes,

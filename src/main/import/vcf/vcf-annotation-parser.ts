@@ -7,6 +7,7 @@
 
 import type { VcfHeader, AnnotationResult } from './types'
 import { IMPACT_RANK_BY_LEVEL } from '../../../shared/config/severity.config'
+import { decodeVepHgvs } from '../../../shared/utils/hgvs'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptInsertRow
@@ -208,8 +209,8 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
       // Canonical model: consequence = IMPACT level, func = SO term.
       consequence: semantics.consequence,
       func: semantics.func,
-      cdna: t.fields.get('HGVSc') ?? null,
-      aa_change: t.fields.get('HGVSp') ?? null,
+      cdna: decodeVepHgvs(t.fields.get('HGVSc') ?? null),
+      aa_change: decodeVepHgvs(t.fields.get('HGVSp') ?? null),
       hpo_sim_score: null,
       moi: null,
       is_selected: 0
@@ -236,8 +237,8 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
     consequence: best?.fields.get('Consequence') ?? null,
     impact: bestSemantics.consequence,
     transcript: best?.fields.get('Feature') ?? null,
-    cdna: best?.fields.get('HGVSc') ?? null,
-    aaChange: best?.fields.get('HGVSp') ?? null,
+    cdna: decodeVepHgvs(best?.fields.get('HGVSc') ?? null),
+    aaChange: decodeVepHgvs(best?.fields.get('HGVSp') ?? null),
     gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
     cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
     clinvar: clinvarStr ?? null,

@@ -34,6 +34,11 @@ describe('deriveZygosity', () => {
     expect(deriveZygosity(r(1, { chr: 'X', pos: 50_000_000, gt_num: '1/1' }), male)).toBe('hemi')
     expect(deriveZygosity(r(1, { chr: 'chrX', pos: 50_000_000, gt_num: '1/1' }), male)).toBe('hemi')
     expect(deriveZygosity(r(1, { chr: 'X', pos: 1_000_000, gt_num: '1/1' }), male)).toBe('hom') // PAR1 GRCh38
+    // Since per-build contig naming GRCh38 stores 'chrX', GRCh37 'X': both reach the PAR check
+    expect(deriveZygosity(r(1, { chr: 'chrX', pos: 1_000_000, gt_num: '1/1' }), male)).toBe('hom')
+    expect(alleleKey({ chr: 'chrX', pos: 5, ref: 'A', alt: 'G' })).toBe(
+      alleleKey({ chr: 'X', pos: 5, ref: 'A', alt: 'G' })
+    )
     expect(deriveZygosity(r(1, { chr: 'X', pos: 50_000_000, gt_num: '1/1' }), female)).toBe('hom')
     expect(
       deriveZygosity(r(1, { chr: 'X', pos: 50_000_000, gt_num: '1/1' }), {

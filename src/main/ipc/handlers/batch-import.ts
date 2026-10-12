@@ -34,6 +34,7 @@ import {
   startSessionBatchImport
 } from './batch-import-session'
 import type { BatchImportCallbacks } from './batch-import-logic'
+import { addDetectedBuilds } from '../../import/batch-utils'
 import {
   IMPORTABLE_VARIANT_EXTENSIONS,
   isImportableVariantFileName
@@ -135,29 +136,35 @@ export function registerBatchImportHandlers({
    */
   ipcMain.handle(
     'batch-import:checkDuplicates',
-    async (_event, filePaths: unknown, stripText?: unknown) => {
+    async (_event, filePaths: unknown, stripText?: unknown, detectBuilds?: unknown) => {
       return wrapHandler(async () => {
-        const parsed = BatchImportCheckDuplicatesParamsSchema.safeParse([filePaths, stripText])
+        const parsed = BatchImportCheckDuplicatesParamsSchema.safeParse([
+          filePaths,
+          stripText,
+          detectBuilds
+        ])
         if (!parsed.success) {
           throw new InvalidParametersError(
             `Invalid batch-import:checkDuplicates params: ${parsed.error.message}`
           )
         }
-        const [validatedFilePaths, validatedStripText] = parsed.data
+        const [validatedFilePaths, validatedStripText, validatedDetectBuilds] = parsed.data
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:checkDuplicates', filePath, `filePaths[${index}]`)
           }
         })
         const session = getDbManager().getCurrentSession()
-        if (session.capabilities.backend === 'postgres') {
-          return checkSessionDuplicates(
-            session,
-            validatedFilePaths.map((filePath) => ({ filePath, fileName: basename(filePath) })),
-            validatedStripText
-          )
-        }
-        return checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
+        const report =
+          session.capabilities.backend === 'postgres'
+            ? await checkSessionDuplicates(
+                session,
+                validatedFilePaths.map((filePath) => ({ filePath, fileName: basename(filePath) })),
+                validatedStripText
+              )
+            : checkDuplicateFiles(getDb, validatedFilePaths, validatedStripText)
+        if (validatedDetectBuilds !== true) return report
+        return { ...report, files: await addDetectedBuilds(report.files, validatedFilePaths) }
       })
     }
   )
@@ -173,6 +180,7 @@ export function registerBatchImportHandlers({
       duplicateStrategy: unknown,
       stripText: unknown,
       runId: unknown,
+      fallbackGenomeBuild?: unknown,
       options?: unknown
     ) => {
       return wrapHandler(async () => {
@@ -181,6 +189,7 @@ export function registerBatchImportHandlers({
           duplicateStrategy,
           stripText,
           runId,
+          fallbackGenomeBuild,
           options
         ])
         if (!parsed.success) {
@@ -193,6 +202,7 @@ export function registerBatchImportHandlers({
           validatedStrategy,
           validatedStripText,
           validatedRunId,
+          validatedFallbackBuild,
           validatedOptions
         ] = parsed.data
         const fieldProfile = validatedOptions?.fieldProfile
@@ -213,6 +223,7 @@ export function registerBatchImportHandlers({
             })),
             duplicateStrategy: validatedStrategy,
             stripText: validatedStripText,
+            fallbackGenomeBuild: validatedFallbackBuild,
             runId: validatedRunId,
             fieldProfile,
             session,
@@ -225,6 +236,7 @@ export function registerBatchImportHandlers({
           validatedStrategy,
           validatedStripText,
           createBatchImportCallbacks(validatedRunId),
+          validatedFallbackBuild,
           fieldProfile
         )
       })

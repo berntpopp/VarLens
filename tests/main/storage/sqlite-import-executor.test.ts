@@ -1,10 +1,54 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { UniqueConstraintError } from '../../../src/main/database/errors'
+import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { SqliteImportExecutor } from '../../../src/main/storage/sqlite/SqliteImportExecutor'
 import type { MultiFileImportResult } from '../../../src/main/ipc/handlers/import-logic'
 import type { StorageImportFileFilters } from '../../../src/main/storage/import-executor'
 
 describe('SqliteImportExecutor', () => {
+  it('rejects a duplicate-name skip with the same CONFLICT error as Postgres', async () => {
+    const start = vi.fn()
+    const executor = new SqliteImportExecutor({
+      getDatabaseService: () =>
+        ({
+          getPath: () => '/tmp/test.varlens',
+          getEncryptionKey: () => undefined,
+          cohort: { invalidateColumnMetaCache: vi.fn() }
+        }) as never,
+      createWorkerClient: () => ({ start, cancel: vi.fn() }) as never
+    })
+    const promise = executor.importSingleFile({
+      filePath: '/tmp/input.vcf',
+      caseName: 'HG005',
+      throttleMs: 100
+    })
+    start.mock.calls[0][0].onComplete({
+      type: 'complete',
+      results: {
+        succeeded: 0,
+        failed: 0,
+        skipped: 1,
+        cancelled: false,
+        details: [
+          {
+            filePath: '/tmp/input.vcf',
+            fileName: 'input.vcf',
+            caseName: 'HG005',
+            status: 'skipped',
+            error: 'Duplicate case name'
+          }
+        ]
+      }
+    })
+    const error = await promise.catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(UniqueConstraintError)
+    expect(toSerializableError(error)).toMatchObject({
+      code: 'CONFLICT',
+      userMessage: "Case 'HG005' already exists. Choose a different name."
+    })
+  })
+
   it('forwards the worker summary-stale notice of a single-file import', async () => {
     const start = vi.fn()
     const executor = new SqliteImportExecutor({

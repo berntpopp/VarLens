@@ -39,7 +39,6 @@ describe('CohortFilterBar', () => {
 
   const defaultProps = {
     totalCount: 100,
-    cohortSummary: { total_cases: 20, unique_variants: 500 },
     columns: [
       { key: 'gene_symbol', title: 'Gene' },
       { key: 'chr', title: 'Chr' }
@@ -305,16 +304,11 @@ describe('CohortFilterBar', () => {
       expect(resultsChip.text()).toContain('42')
     })
 
-    it('accepts cohortSummary prop', () => {
-      const wrapper = mount(CohortFilterBar, {
-        props: {
-          ...defaultProps,
-          cohortSummary: { total_cases: 10, unique_variants: 250 }
-        },
-        global: globalConfig
-      })
+    it('shows no all-type denominator in the count pill', () => {
+      // The cohort summary counts every variant type; on a per-type tab "N / total" would mix them.
+      const wrapper = mount(CohortFilterBar, { props: defaultProps, global: globalConfig })
 
-      expect(wrapper.props('cohortSummary')).toEqual({ total_cases: 10, unique_variants: 250 })
+      expect(wrapper.find('.results-chip').text()).not.toContain('/')
     })
 
     it('accepts columns prop for visibility menu', () => {

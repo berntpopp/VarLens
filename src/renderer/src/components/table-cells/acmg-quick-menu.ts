@@ -8,13 +8,21 @@
  */
 import { inject, provide, type InjectionKey } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import type { Variant } from '../../../../shared/types/api'
+import type { CohortVariant } from '../../../../shared/types/cohort'
 import { useSharedMenu, type SharedMenu } from './shared-menu'
 
 export interface AcmgMenuRequest {
   /** Classification currently shown for the row (highlighted in the menu). */
   current: AcmgClassification | null
+  /** Stored evidence decides the class: quick classes are disabled. */
+  locked: boolean
   select: (classification: AcmgClassification | null) => void
   openEvidence: () => void
+  /** The row's variant: the menu also offers the protein view for it. */
+  variant?: Variant | CohortVariant
+  /** Viewer: classification shown, not editable */
+  readOnly?: boolean
 }
 
 export type AcmgQuickMenuState = SharedMenu<AcmgMenuRequest>

@@ -12,6 +12,7 @@ import {
   ImportMultiFileSpecSchema,
   ImportServerPathArgSchema,
   ImportVariantTypeArgSchema,
+  hasInvalidImportGenomeBuild,
   normalizeImportFiltersPayload,
   normalizeImportMultiFileSpec,
   normalizeImportFieldProfile,
@@ -129,6 +130,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           reply.code(400)
           return { error: 'invalid-case-name', message: 'caseName must be a non-empty string' }
         }
+        if (hasInvalidImportGenomeBuild(vcfOptions)) {
+          reply.code(400)
+          return { error: 'invalid-genome-build', message: 'genomeBuild is invalid' }
+        }
         const resolved = resolveImportPath(validatedFilePath.data, request.session.user?.id)
         if (resolved === null) {
           reply.code(isWebUploadRef(validatedFilePath.data) ? 404 : 403)
@@ -179,6 +184,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
         if (!validatedCaseName.success) {
           reply.code(400)
           return { error: 'invalid-case-name', message: 'caseName must be a non-empty string' }
+        }
+        if (hasInvalidImportGenomeBuild(vcfOptions)) {
+          reply.code(400)
+          return { error: 'invalid-genome-build', message: 'genomeBuild is invalid' }
         }
         const validatedFiles = ImportMultiFileSpecSchema.array().min(1).safeParse(files)
         if (!validatedFiles.success) {

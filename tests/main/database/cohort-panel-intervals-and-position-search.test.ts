@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DatabaseService, type Variant } from '../../../src/main/database'
 import { COHORT_PANEL_INTERVAL_CONDITION } from '../../../src/main/database/cohort'
+import { intervalsForAllSpellings } from '../../../src/shared/utils/contig'
 
 const variant = (chr: string, pos: number, extra: object = {}): Omit<Variant, 'id' | 'case_id'> =>
   ({ chr, pos, ref: 'A', alt: 'T', gt_num: '0/1', ...extra }) as unknown as Omit<
@@ -157,7 +158,11 @@ describe('SQLite cohort + export: region filter equals the overlap predicate', (
 
   afterEach(() => sqlite.close())
 
-  /** Small and large sets of overlapping and nested regions, padded past 0, plus a chr spelling no row has. */
+  /**
+   * Small and large sets of overlapping and nested regions, padded past 0, plus
+   * the other spelling of a contig (`3` for stored `chr3`): a region matches every
+   * stored spelling, so the oracle gets the regions once per spelling.
+   */
   const regionSets = (): Array<Array<{ chr: string; start: number; end: number }>> =>
     [10, 50, 60, 400].map((count) => [
       { chr: '1', start: 950, end: 1050 },
@@ -177,7 +182,7 @@ describe('SQLite cohort + export: region filter equals the overlap predicate', (
           `SELECT chr || ':' || pos || ':' || alt FROM cohort_variant_summary cvs WHERE cvs.rowid IN (${OVERLAP('cohort_variant_summary', '')}) ORDER BY 1`
         )
         .pluck()
-        .all(JSON.stringify(set)) as string[]
+        .all(JSON.stringify(intervalsForAllSpellings(set))) as string[]
       const result = sqlite.cohort.getCohortVariants({ panel_intervals: set, limit: 100_000 })
 
       expect(expected.length).toBeGreaterThan(20)
@@ -193,7 +198,7 @@ describe('SQLite cohort + export: region filter equals the overlap predicate', (
           `SELECT id FROM variants WHERE case_id = ? AND id IN (${OVERLAP('variants', 'pv.case_id = ? AND')}) ORDER BY id`
         )
         .pluck()
-        .all(caseId, JSON.stringify(set), caseId) as number[]
+        .all(caseId, JSON.stringify(intervalsForAllSpellings(set)), caseId) as number[]
       const { sql, parameters } = sqlite.variants.compileExportQuery(
         { case_id: caseId, panel_intervals: set },
         100_000

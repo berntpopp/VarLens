@@ -15,6 +15,7 @@ import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
 import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary-refreshing'
 import type { CohortSearchParams, CohortVariant } from '../../shared/types/cohort'
 import type { ExportColumn } from './export-pipeline'
+import { formatCellValue } from './export-renderer'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
 
@@ -43,12 +44,10 @@ export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
 const PROGRESS_EVERY_ROWS = 5_000
 
 function formatCohortCell(key: string, value: unknown): unknown {
-  if (key === 'gnomad_af' && typeof value === 'number') return value.toExponential(2)
-  if (key === 'cadd_phred' && typeof value === 'number') return value.toFixed(2)
   if (key === 'cohort_frequency' && typeof value === 'number') {
     return `${(value * 100).toFixed(1)}%`
   }
-  return value ?? ''
+  return formatCellValue(key, value)
 }
 
 function buildCohortMetadata(

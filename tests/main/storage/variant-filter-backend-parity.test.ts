@@ -146,16 +146,6 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
         client.release()
       }
     }
-    await pool.query(
-      `INSERT INTO "${schema}".variant_frequency (chr, pos, ref, alt, case_count)
-       SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id) FROM "${schema}".variants
-       GROUP BY chr, pos, ref, alt`
-    )
-    // A.padding has no frequency row: the internal-AF filter must keep it.
-    await pool.query(
-      `DELETE FROM "${schema}".variant_frequency WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4`,
-      [A.padding.chr, A.padding.pos, A.padding.ref, A.padding.alt]
-    )
 
     const panel = async (name: string): Promise<number> => {
       const row = await pool.query<{ id: string }>(
@@ -195,14 +185,6 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     })
     sqlite.cohortSummary.rebuild()
     sqlite.cohort.invalidateColumnMetaCache()
-    sqlite.db.exec(
-      `DELETE FROM variant_frequency;
-       INSERT INTO variant_frequency (chr, pos, ref, alt, case_count)
-       SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id) FROM variants GROUP BY chr, pos, ref, alt`
-    )
-    sqlite.db
-      .prepare('DELETE FROM variant_frequency WHERE chr = ? AND pos = ? AND ref = ? AND alt = ?')
-      .run(A.padding.chr, A.padding.pos, A.padding.ref, A.padding.alt)
 
     sqlitePanelId = sqlite.panels.createPanel({ name: 'parity-panel', source: 'manual' }).id
     sqliteEmptyPanelId = sqlite.panels.createPanel({
@@ -551,18 +533,101 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     }
   }, 120_000)
 
-  it('case-view internal frequency keeps variants without a frequency row; 0 means no filter', async () => {
-    // 3 cases: A.inGene is carried by 2 (0.667), everything else by 1 (0.333).
-    const rare = A_ALL.filter((v) => v !== A.inGene)
+  it('case-view carrier frequency divides by the build and class; 0 means no filter', async () => {
+    // GRCh38 small variants: 2 cases with data, so A.inGene (A + B) is 1.0 and
+    // A's other SNVs 0.5. CNVs: only A has CNV calls, so each is 1/1.
+    const rare = A_ALL.filter((v) => v.variant_type === 'snv' && v !== A.inGene)
     await expectAll(casePaths(0, { max_internal_af: 0.5 }), ok(rare))
     await expectAll(casePaths(0, { max_internal_af: 0 }), ok(A_ALL))
+    // B's SV no-call carries nothing: no frequency, so the filter keeps it.
+    await expectAll(
+      casePaths(1, { max_internal_af: 0.5 }),
+      ok([B.padding, B.unrelated, B.noCallSv])
+    )
+  }, 120_000)
+
+  it('case and cohort report the same carrier frequency per build and class (#555)', async () => {
+    const round = (value: unknown): number | null =>
+      value === null || value === undefined ? null : Math.round(Number(value) * 1e6) / 1e6
+    const frequencies = (rows: Array<Record<string, unknown>>, column: string) =>
+      Object.fromEntries(rows.map((row) => [keyOf(row as never), round(row[column])]))
+    const caseFrequencies = async (index: number) => ({
+      desktop: frequencies(
+        sqlite.variants.getVariants(
+          buildVariantFilter(
+            sqliteCaseIds[index],
+            {},
+            () => sqlite,
+            () => null
+          ),
+          1000,
+          0
+        ).data as never,
+        'internal_af'
+      ),
+      web: frequencies(
+        (
+          await new PostgresVariantReadRepository(pool, schema).queryVariants(
+            { case_id: pgCaseIds[index] },
+            1000,
+            0
+          )
+        ).data as never,
+        'internal_af'
+      )
+    })
+    const cohortFrequencies = async (genomeBuild: string) => {
+      const repos = (sqlite as unknown as { _repos: Repositories })._repos
+      const params = { genome_build: genomeBuild, limit: 1000, offset: 0 }
+      const desktop = dispatchTask(
+        { db: sqlite.db, repos, geneRefDb: geneRef as unknown as GeneReferenceDb },
+        { type: 'cohort:variants', params: [params] } as never
+      ) as { data: Array<Record<string, unknown>> }
+      const web = await new PostgresCohortRepository(pool, schema).queryVariants(params)
+      return {
+        desktop: frequencies(desktop.data, 'cohort_frequency'),
+        web: frequencies(web.data as never, 'cohort_frequency')
+      }
+    }
+    const expected = (entries: Array<[ParityFixtureVariant, number | null]>) =>
+      Object.fromEntries(entries.map(([variant, value]) => [keyOf(variant), value]))
+
+    const expectedByCase = [
+      expected(A_ALL.map((v) => [v, v === A.inGene || v.variant_type === 'cnv' ? 1 : 0.5])),
+      expected([
+        [B.sharedHom, 1],
+        [B.padding, 0.5],
+        [B.unrelated, 0.5],
+        [B.noCallSv, null]
+      ]),
+      // GRCh37 has one case: A.inGene's coordinate there is its own locus (1/1).
+      expected(Object.values(C).map((v) => [v, 1]))
+    ]
+    const builds = ['GRCh38', 'GRCh38', 'GRCh37']
+    for (const [index, build] of builds.entries()) {
+      const caseView = await caseFrequencies(index)
+      const cohortView = await cohortFrequencies(build)
+      expect(caseView.desktop).toEqual(expectedByCase[index])
+      expect(caseView.web).toEqual(expectedByCase[index])
+      for (const [key, value] of Object.entries(expectedByCase[index])) {
+        if (value === null) continue // not carried: no cohort row
+        expect(cohortView.desktop[key]).toBe(value)
+        expect(cohortView.web[key]).toBe(value)
+      }
+    }
+    // The no-call is no cohort row on either backend.
+    const grch38 = await cohortFrequencies('GRCh38')
+    expect(grch38.desktop[keyOf(B.noCallSv)]).toBeUndefined()
+    expect(grch38.web[keyOf(B.noCallSv)]).toBeUndefined()
   }, 120_000)
 
   it('cohort internal frequency: 0 means no filter and a missing frequency is kept', async () => {
+    // B.noCallSv is no carrier, so no cohort row.
     const grch38 = [...A_ALL, B.padding, B.unrelated]
-    const rare = grch38.filter((v) => v !== A.inGene)
+    // 2 GRCh38 cases with small variants: A.inGene is carried by both (1.0),
+    // the other SNVs by one (0.5). Only A has CNV calls: each CNV is 1/1.
+    const rare = grch38.filter((v) => v.variant_type === 'snv' && v !== A.inGene)
     const params = { genome_build: 'GRCh38' }
-    // 2 GRCh38 cases: A.inGene is carried by both (1.0), everything else by one (0.5).
     await expectAll(cohortPaths({ ...params, max_internal_af: 0.6 }), ok(rare))
     await expectAll(cohortPaths({ ...params, max_internal_af: 0 }), ok(grch38))
 
@@ -592,11 +657,16 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
 
   it('carrier cap: every read path of a view returns the same rows on both backends', async () => {
     // A.inGene is carried by cases A and B; every other variant by one case.
-    // A.padding has no frequency row: the case view keeps it.
+    // C carries the same coordinate on GRCh37, a different locus: not counted.
     const rareA = A_ALL.filter((v) => v !== A.inGene)
     await expectAll(casePaths(0, { carrier_count_max: 1 }), ok(rareA))
     await expectAll(casePaths(0, { carrier_count_max: 2 }), ok(A_ALL))
-    await expectAll(casePaths(1, { carrier_count_max: 1 }), ok([B.padding, B.unrelated]))
+    await expectAll(casePaths(2, { carrier_count_max: 1 }), ok(Object.values(C)))
+    // B.noCallSv carries nothing: no carrier count, so the cap keeps it.
+    await expectAll(
+      casePaths(1, { carrier_count_max: 1 }),
+      ok([B.padding, B.unrelated, B.noCallSv])
+    )
     await expectAll(shortlistPaths(0, { maxCarriers: 1 }), ok(rareA))
 
     const grch38 = [...A_ALL, B.padding, B.unrelated]
@@ -695,7 +765,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
   it('null-check column filters mean "no value", never zero, on every path', async () => {
     const isNull = { operator: 'is_null' as const, value: '' }
     const notNull = { operator: 'not_null' as const, value: '' }
-    const unscored = [C.inGrch37Gene, C.grch38Position]
+    const unscored = [C.inGrch37Gene, C.grch38Position, C.sameCoordAsA]
     const grch37 = { genome_build: 'GRCh37' }
 
     await expectAll(casePaths(2, { column_filters: { cadd: isNull } }), ok(unscored))
@@ -718,7 +788,7 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
     await expectAll(casePaths(0, { column_filters: { gene_symbol: notNull } }), ok(withGene))
     await expectAll(
       cohortPaths({ ...grch37, column_filters: { gene_symbol: notNull } }),
-      ok(Object.values(C))
+      ok(Object.values(C).filter((v) => v.gene_symbol !== null))
     )
 
     // Extension column: no fixture variant has a variant_cnv row.

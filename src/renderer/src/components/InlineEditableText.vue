@@ -2,9 +2,19 @@
   <div class="inline-editable">
     <!-- Display mode -->
     <div v-if="readonly" class="d-flex align-center">
-      <span :class="{ 'text-muted': !modelValue }">{{ modelValue || '—' }}</span>
+      <span :class="{ 'text-muted': !modelValue }">{{
+        modelValue || EMPTY_VALUE_PLACEHOLDER
+      }}</span>
     </div>
-    <div v-else-if="!isEditing" class="editable-text d-flex align-center" @click="startEdit">
+    <div
+      v-else-if="!isEditing"
+      class="editable-text d-flex align-center"
+      role="button"
+      tabindex="0"
+      @click="startEdit"
+      @keydown.enter.prevent.stop="startEdit"
+      @keydown.space.prevent.stop="startEdit"
+    >
       <span :class="{ 'text-muted': !modelValue }">
         {{ modelValue || placeholder }}
       </span>
@@ -31,6 +41,8 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { mdiPencil } from '@mdi/js'
+import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
+import { EMPTY_VALUE_PLACEHOLDER } from '../config/displayConfig'
 
 interface Props {
   modelValue: string | null
@@ -43,7 +55,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: 'Click to add...',
+  placeholder: COMMENT_PLACEHOLDERS.default,
   loading: false,
   readonly: false,
   save: undefined
@@ -66,6 +78,8 @@ const startEdit = () => {
 }
 
 const saveEdit = async () => {
+  // Escape cancels before the textarea unmounts; its blur must not save the discarded text
+  if (!isEditing.value) return
   const trimmed = editValue.value.trim()
   const value = trimmed.length > 0 ? trimmed : null
   if (props.save) {

@@ -7,6 +7,7 @@ import { installFocusRefetch } from './queries/focus-refetch'
 import vuetify from './plugins/vuetify'
 import router from './router'
 import { installOverlayEscapeGuard } from './utils/overlay-escape-guard'
+import { installOverlayFocusReturn } from './utils/overlay-focus-return'
 import './assets/styles/main.scss'
 import type { WindowAPI } from '../../shared/types/api'
 
@@ -43,6 +44,7 @@ async function bootstrap(): Promise<void> {
   // Before the first overlay can open: Escape must never race Vuetify's
   // overlay-stack timer (every v-menu / v-dialog; see the guard's header).
   installOverlayEscapeGuard()
+  installOverlayFocusReturn()
   app.mount('#app')
 }
 

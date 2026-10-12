@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { DuplicateChoice } from '../../types/api'
-import { ImportFieldProfileSchema } from './import-schemas'
+import { GenomeBuildIdSchema, ImportFieldProfileSchema } from './import-schemas'
 
 /**
  * Batch-import IPC payload schemas. Used by
@@ -29,7 +29,8 @@ const DuplicateChoiceSchema: z.ZodType<DuplicateChoice> = z.enum(['skip', 'overw
 
 export const BatchImportCheckDuplicatesParamsSchema = z.tuple([
   z.array(NonBlankFilePathSchema).max(5000),
-  StripTextSchema
+  StripTextSchema,
+  z.boolean().optional()
 ])
 
 /** Options for every file of a batch. */
@@ -43,6 +44,7 @@ export const BatchImportStartParamsSchema = z.tuple([
   DuplicateChoiceSchema,
   StripTextSchema,
   BatchImportRunIdSchema,
+  GenomeBuildIdSchema.optional(),
   BatchImportOptionsSchema
 ])
 

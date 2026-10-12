@@ -396,7 +396,7 @@ test.describe('Documentation Screenshots', () => {
           userMessage: 'Screenshot fixture selection failed.'
         }
       }
-      const result = await api.import.start(selectedPath, 'DemoCase')
+      const result = await api.import.start(selectedPath, 'DemoCase', { genomeBuild: 'GRCh38' })
       return JSON.parse(JSON.stringify(result))
     }, tempGzipPath)
 
@@ -1070,7 +1070,7 @@ test.describe('Documentation Screenshots', () => {
     await window.evaluate(() => {
       const drawers = document.querySelectorAll('.v-navigation-drawer')
       for (const drawer of drawers) {
-        if (drawer.textContent?.includes('Variant Details')) {
+        if (drawer.getAttribute('aria-label') === 'Variant details') {
           const scrollContainer = drawer.querySelector('.v-navigation-drawer__content')
           const acmgSection = drawer.querySelector('.acmg-section')
           if (acmgSection && scrollContainer) {
@@ -1092,7 +1092,7 @@ test.describe('Documentation Screenshots', () => {
       await window.evaluate(() => {
         const drawers = document.querySelectorAll('.v-navigation-drawer')
         for (const drawer of drawers) {
-          if (drawer.textContent?.includes('Variant Details')) {
+          if (drawer.getAttribute('aria-label') === 'Variant details') {
             const title = drawer.querySelector('.acmg-section .v-expansion-panel-title')
             if (title) title.scrollIntoView({ block: 'center', behavior: 'instant' })
             break
@@ -1110,7 +1110,7 @@ test.describe('Documentation Screenshots', () => {
       await window.evaluate(() => {
         const drawers = document.querySelectorAll('.v-navigation-drawer')
         for (const drawer of drawers) {
-          if (drawer.textContent?.includes('Variant Details')) {
+          if (drawer.getAttribute('aria-label') === 'Variant details') {
             const btns = drawer.querySelectorAll('.v-btn')
             for (const btn of btns) {
               if (btn.textContent?.includes('Auto-suggest')) {
@@ -1131,7 +1131,7 @@ test.describe('Documentation Screenshots', () => {
     await window.evaluate(() => {
       const drawers = document.querySelectorAll('.v-navigation-drawer')
       for (const drawer of drawers) {
-        if (drawer.textContent?.includes('Variant Details')) {
+        if (drawer.getAttribute('aria-label') === 'Variant details') {
           const acmg = drawer.querySelector('.acmg-section')
           if (acmg) acmg.scrollIntoView({ block: 'start', behavior: 'instant' })
           break
@@ -1150,7 +1150,7 @@ test.describe('Documentation Screenshots', () => {
     await window.evaluate(() => {
       const drawers = document.querySelectorAll('.v-navigation-drawer')
       for (const drawer of drawers) {
-        if (drawer.textContent?.includes('Variant Details')) {
+        if (drawer.getAttribute('aria-label') === 'Variant details') {
           const scrollContainer = drawer.querySelector('.v-navigation-drawer__content')
           const acmg = drawer.querySelector('.acmg-section')
           if (acmg && scrollContainer) {
@@ -1170,7 +1170,7 @@ test.describe('Documentation Screenshots', () => {
       ({ clr }: { clr: string }) => {
         const drawers = document.querySelectorAll('.v-navigation-drawer')
         for (const drawer of drawers) {
-          if (!drawer.textContent?.includes('Variant Details')) continue
+          if (drawer.getAttribute('aria-label') !== 'Variant details') continue
           const acmgSection = drawer.querySelector('.acmg-section') as HTMLElement
           if (!acmgSection) continue
 

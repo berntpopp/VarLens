@@ -14,11 +14,12 @@ export class WorkerPool {
   private maxThreads: number
   private workerPath: string
   private aborted = false
+  private live = new Set<Worker>()
 
-  constructor(maxThreads?: number) {
+  constructor(maxThreads?: number, workerPath = resolve(__dirname, 'statistics-worker.js')) {
     const cpus = os.cpus().length
     this.maxThreads = maxThreads ?? Math.max(1, cpus - 1)
-    this.workerPath = resolve(__dirname, 'statistics-worker.js')
+    this.workerPath = workerPath
   }
 
   async run(
@@ -43,6 +44,7 @@ export class WorkerPool {
         }
 
         const worker = new Worker(this.workerPath)
+        this.live.add(worker)
         const batchResults: GeneAssociationResult[] = []
 
         worker.on('message', (msg: WorkerResponse) => {
@@ -63,7 +65,15 @@ export class WorkerPool {
         })
 
         worker.on('error', (err) => rejectWorker(err))
-        worker.on('exit', () => resolveWorker(batchResults))
+        worker.on('exit', (code) => {
+          this.live.delete(worker)
+          // A crash must not pass for a finished batch; terminate() on abort exits non-zero too.
+          if (code !== 0 && !this.aborted) {
+            rejectWorker(new Error(`Statistics worker exited with code ${code}`))
+          } else {
+            resolveWorker(batchResults)
+          }
+        })
 
         worker.postMessage({
           type: 'run',
@@ -83,6 +93,7 @@ export class WorkerPool {
 
   abort(): void {
     this.aborted = true
+    for (const worker of this.live) void worker.terminate()
   }
 }
 

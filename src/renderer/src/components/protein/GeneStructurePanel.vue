@@ -12,7 +12,7 @@
               icon
               size="small"
               variant="text"
-              @click="plotRef?.zoomIn()"
+              @click="nav.zoom(ZOOM_STEP)"
             >
               <v-icon size="small" :icon="mdiMagnifyPlusOutline" />
             </v-btn>
@@ -28,7 +28,7 @@
               icon
               size="small"
               variant="text"
-              @click="plotRef?.zoomOut()"
+              @click="nav.zoom(1 / ZOOM_STEP)"
             >
               <v-icon size="small" :icon="mdiMagnifyMinusOutline" />
             </v-btn>
@@ -44,7 +44,7 @@
               icon
               size="small"
               variant="text"
-              @click="plotRef?.resetZoom()"
+              @click="nav.reset()"
             >
               <v-icon size="small" :icon="mdiFitToScreenOutline" />
             </v-btn>
@@ -102,13 +102,7 @@
     </v-toolbar>
 
     <!-- Loading bar -->
-    <v-progress-linear
-      v-if="loading || clinvarLoading"
-      indeterminate
-      color="info"
-      height="2"
-      aria-label="Loading gene structure"
-    />
+    <TrackLoadingBar :active="loading || clinvarLoading" label="Loading gene structure" />
 
     <!-- Genome-build context (#539): the gene model is GRCh38 -->
     <v-alert
@@ -125,8 +119,19 @@
     <!-- Error state -->
     <div v-if="error" class="d-flex flex-column align-center justify-center flex-grow-1 pa-8">
       <v-icon size="48" color="warning" :icon="mdiAlertCircleOutline" class="mb-3" />
-      <div class="text-body-1 mb-1">Gene Structure Unavailable</div>
-      <div class="text-body-2 text-medium-emphasis">{{ error }}</div>
+      <div class="text-body-1 mb-1">{{ PLOT_COPY.geneStructureUnavailable }}</div>
+      <div class="text-body-2 text-medium-emphasis mb-3">
+        {{ PLOT_COPY.geneStructureSource }} {{ error }}
+      </div>
+      <v-btn
+        variant="outlined"
+        color="primary"
+        size="small"
+        class="text-none"
+        @click="emit('retry')"
+      >
+        {{ PLOT_COPY.retry }}
+      </v-btn>
     </div>
 
     <!-- No data state -->
@@ -141,20 +146,39 @@
       </div>
     </div>
 
-    <!-- Plot area -->
-    <div v-else-if="geneStructure" class="flex-grow-1 position-relative" style="min-height: 0">
-      <GeneStructurePlot
-        ref="plotRef"
-        :gene-structure="geneStructure"
-        :variant="genomicVariant"
-        :axis-note="variant ? buildNote : null"
-        :clinvar-variants="clinvarVariants"
-        :active-clinvar-categories="activeClinvarCategories"
-      />
-    </div>
+    <!-- Caption, search, plot + overview, neighbourhood of the variant of interest -->
+    <TrackView
+      v-else-if="geneStructure"
+      ref="plotRef"
+      class="flex-grow-1"
+      :nav="nav"
+      unit="bp"
+      :caption="
+        geneCaption(
+          geneStructure.geneSymbol,
+          geneStructure.exons.length,
+          geneStructure.transcriptId
+        )
+      "
+      :plot-label="`Gene structure of ${geneStructure.geneSymbol}`"
+      :search-label="PLOT_COPY.geneSearchLabel"
+      :search-context="searchContext"
+      :extent="extent"
+      :features="track.features"
+      :between-label="PLOT_COPY.betweenExons"
+      :no-features-label="PLOT_COPY.noExons"
+      :search-hint="PLOT_COPY.geneSearchHint"
+      :draw="(ctx) => viewModel && drawGeneView(ctx, viewModel)"
+      :deps="viewModel"
+    />
 
     <!-- Legend -->
-    <div v-if="geneStructure" class="gene-structure-legend pa-2 bg-grey-lighten-4">
+    <v-theme-provider
+      v-if="geneStructure"
+      theme="warmLight"
+      with-background
+      class="gene-structure-legend pa-2 bg-grey-lighten-4"
+    >
       <div class="d-flex align-center ga-1 flex-wrap mb-1">
         <span class="text-body-2 text-medium-emphasis mr-1 font-weight-medium">Legend:</span>
         <v-chip size="small" label variant="flat" color="primary">Exon</v-chip>
@@ -166,13 +190,8 @@
         }}</v-chip>
         <span v-if="clinvarVariants.length > 0" class="d-inline-flex align-center ga-1 ml-2">
           <span
-            style="
-              width: 8px;
-              height: 8px;
-              transform: rotate(45deg);
-              background: #d73027;
-              display: inline-block;
-            "
+            :style="{ background: CLINVAR_COLORS.pathogenic }"
+            style="width: 8px; height: 8px; transform: rotate(45deg); display: inline-block"
           />
           <span class="text-body-2">ClinVar</span>
         </span>
@@ -222,12 +241,12 @@
           All
         </v-chip>
       </div>
-    </div>
+    </v-theme-provider>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComponentPublicInstance } from 'vue'
+import { computed, ref } from 'vue'
 import {
   mdiMagnifyPlusOutline,
   mdiMagnifyMinusOutline,
@@ -237,17 +256,22 @@ import {
   mdiAlertCircleOutline,
   mdiDna
 } from '@mdi/js'
-import GeneStructurePlot from './GeneStructurePlot.vue'
+import TrackView from './track/TrackView.vue'
+import TrackLoadingBar from './track/TrackLoadingBar.vue'
+import { drawGeneView } from '../../composables/track-plot/gene-view'
+import { useTrackNavigator } from '../../composables/useTrackNavigator'
+import { PLOT_COPY, ZOOM_STEP, geneCaption } from '../../config/proteinPlotConfig'
+import { geneTrackData, isInterval, type GenomicVariant } from '../../utils/track-markers'
 import type {
   GeneStructure,
   ClinVarVariant,
-  ClinVarSignificance
+  ClinVarSignificance,
+  LollipopVariant
 } from '../../../../shared/types/protein'
 import { CLINVAR_COLORS, getClinVarCategory } from '../../../../shared/utils/protein-utils'
+import { readableTextOn } from '../../utils/readable-text-color'
 import { downloadBlob } from '../../utils/download'
-import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 import { buildStatus, variantBuildNote } from '../../utils/variant-interval'
-import { isInterval } from '../../composables/gene-structure-variant-layer'
 
 interface Props {
   geneStructure: GeneStructure | null
@@ -262,9 +286,12 @@ interface Props {
   clinvarVariants: ClinVarVariant[]
   /** Whether ClinVar data is loading */
   clinvarLoading: boolean
+  /** Case variants / cohort carriers of the gene (the lollipop's variants) */
+  variants?: LollipopVariant[]
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { variantBuild: null, variants: () => [] })
+const emit = defineEmits<{ retry: [] }>()
 
 // ClinVar significance filter - all active by default
 const activeClinvarCategories = ref<Set<ClinVarSignificance>>(
@@ -323,8 +350,7 @@ function selectAllClinVar(): void {
 
 function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<string, string> {
   if (isClinVarActive(category)) {
-    const textColor = category === 'uncertain' ? '#333' : '#fff'
-    return { backgroundColor: color, color: textColor, borderColor: color }
+    return { backgroundColor: color, color: readableTextOn(color), borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }
@@ -333,19 +359,56 @@ const clinvarEntries = computed(
   () => Object.entries(CLINVAR_COLORS) as [ClinVarSignificance, string][]
 )
 
-const plotRef = ref<ComponentPublicInstance<{
-  resetZoom: () => void
-  zoomIn: () => void
-  zoomOut: () => void
-  exportSvg: () => string
-  exportPng: () => Promise<Blob | null>
-}> | null>(null)
+const plotRef = ref<InstanceType<typeof TrackView> | null>(null)
 
 const buildNote = computed(() => variantBuildNote(props.variantBuild))
 // Coordinates on another build would land on the wrong exons, so they are not drawn.
 const genomicVariant = computed<GenomicVariant | null>(() =>
   buildStatus(props.variantBuild) === 'mismatch' ? null : props.variant
 )
+
+// ── The plot's markers, navigator and drawing model ──────────────────────
+const track = computed(() =>
+  geneTrackData({
+    variants: genomicVariant.value === null && props.variant !== null ? [] : props.variants,
+    clinvar: props.clinvarVariants.filter((cv) =>
+      activeClinvarCategories.value.has(getClinVarCategory(cv.clinicalSignificance))
+    ),
+    exons: props.geneStructure?.exons ?? [],
+    anchor: genomicVariant.value
+  })
+)
+// The gene with a 2 % margin, so the first and last exon do not sit on the edge.
+const extent = computed(() => {
+  const gs = props.geneStructure
+  if (gs === null) return { start: 0, end: 1 }
+  const pad = Math.max(1, (gs.end - gs.start) * 0.02)
+  return { start: gs.start - pad, end: gs.end + pad }
+})
+const nav = useTrackNavigator({
+  view: 'gene',
+  extent,
+  markers: computed(() => track.value.markers),
+  features: computed(() => track.value.features)
+})
+const clipId = `gene-clip-${Math.random().toString(36).slice(2, 8)}`
+const viewModel = computed(() =>
+  props.geneStructure === null
+    ? null
+    : {
+        clipId,
+        gene: props.geneStructure,
+        anchorVariant: genomicVariant.value,
+        axisNote: props.variant ? buildNote.value : null,
+        cohort: props.variants.some((v) => v.carrierCount !== undefined),
+        hasClinvar: props.clinvarVariants.some((cv) => cv.genomicPosition !== null)
+      }
+)
+const searchContext = computed(() => ({
+  view: 'gene' as const,
+  markers: nav.displayMarkers.value,
+  features: track.value.features
+}))
 
 function formatGeneLength(bp: number): string {
   if (bp >= 1_000_000) return `${(bp / 1_000_000).toFixed(1)} Mb`
@@ -354,7 +417,7 @@ function formatGeneLength(bp: number): string {
 }
 
 function handleExportSvg(): void {
-  const svgString = plotRef.value?.exportSvg()
+  const svgString: string | undefined = plotRef.value?.exportSvg()
   if (svgString === undefined || svgString === '') return
 
   const blob = new Blob([svgString], { type: 'image/svg+xml' })
@@ -362,8 +425,8 @@ function handleExportSvg(): void {
 }
 
 async function handleExportPng(): Promise<void> {
-  const blob = await plotRef.value?.exportPng()
-  if (!blob) return
+  const blob: Blob | null | undefined = await plotRef.value?.exportPng()
+  if (blob === null || blob === undefined) return
 
   downloadBlob(blob, `${props.geneSymbol ?? 'gene'}_structure.png`)
 }

@@ -22,6 +22,15 @@ export const HEMI_GENOTYPES = ['1'] as const
  */
 export const REF_GENOTYPES = ['0/0', '0|0', '0'] as const
 
+/**
+ * Genotypes of a row that is not a carrier: the VCF no-call forms, which the
+ * VCF import keeps for SV/CNV/STR rows only (VcfMapper; small no-calls and
+ * reference calls are never stored). Anything else counts as carried — a
+ * JSON `GTNum-Index` value is an undocumented numeric code (0, 1, 2, …), so
+ * even '0' is a reported variant, not a reference call.
+ */
+export const NON_CARRIER_GENOTYPES = ['.', './.', '.|.'] as const
+
 export type Zygosity = 'het' | 'hom' | 'hemi'
 
 const includes = (list: readonly string[], gt: string): boolean => list.includes(gt)
@@ -92,11 +101,20 @@ export const ASSUMED_HET_HELP =
 export const COHORT_ZYGOSITY_HELP =
   'Carriers by zygosity. Het includes assumed het calls. ' +
   ASSUMED_HET_HELP +
-  ' Other: hemizygous, or a genotype without a called zygosity.'
+  ' Other: hemizygous, or a genotype without a called zygosity (e.g. a numeric JSON ' +
+  'genotype code); no-calls are not carriers.'
+
+/**
+ * Label of the carriers − het − hom remainder shown after Het / Hom. Neutral:
+ * it also holds JSON GTNum-Index codes, whose meaning is not documented.
+ */
+export const ZYGOSITY_REMAINDER_LABEL = 'other'
 
 /**
  * Carriers of a cohort row that are neither het nor hom: hemizygous, or a
- * genotype that names no zygosity (no-call SV, missing). Never negative.
+ * genotype that names no zygosity (missing GT, a JSON genotype code). No-calls
+ * are not carriers.
+ * Never negative.
  */
 export function otherZygosityCount(row: {
   carrier_count: number

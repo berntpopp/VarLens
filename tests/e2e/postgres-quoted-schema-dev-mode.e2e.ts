@@ -48,7 +48,9 @@ test('postgres dev mode migrates and queries variants from a quoted non-public s
 
     const results = await launched.window.evaluate(
       async ({ fixturePath, caseName }) => {
-        const importResult = await window.api.import.start(fixturePath, caseName)
+        const importResult = await window.api.import.start(fixturePath, caseName, {
+          genomeBuild: 'GRCh38'
+        })
         const unwrappedImport =
           typeof importResult === 'object' &&
           importResult !== null &&

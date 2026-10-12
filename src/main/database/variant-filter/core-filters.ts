@@ -1,30 +1,10 @@
 import { whereSeverity } from './severity-filter'
-import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
+import { contigQueryNames, intervalsForAllSpellings } from '../../../shared/utils/contig'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../../shared/types/database-schema'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
-
-/**
- * Pre-compute the total case count so the internal-AF filter does not run a
- * per-row subquery. Returns `undefined` when the filter is inactive.
- */
-export function countCasesForInternalAf(
-  db: DatabaseType,
-  kysely: Kysely<VarlensDatabase>,
-  filter: VariantFilter
-): number | undefined {
-  if (filter.max_internal_af === undefined || !(filter.max_internal_af > 0)) return undefined
-  const compiled = kysely
-    .selectFrom('cases')
-    .select(kysely.fn.countAll<number>().as('cnt'))
-    // Same denominator as the internal_af column (base-query-and-joins.ts).
-    .where('import_status', '=', 'ready')
-    .compile()
-  const countResult = db.prepare(compiled.sql).get(...compiled.parameters) as
-    { cnt: number } | undefined
-  return countResult?.cnt ?? 0
-}
+import { CASE_CARRIER_COUNT_SQL, CASE_CARRIER_FREQUENCY_SQL } from './base-query-and-joins'
 
 /** Gene, consequence(s), func and ClinVar filters. */
 export function applyAnnotationValueFilters(
@@ -69,28 +49,17 @@ export function applyScoreRangeFilters(
     )
 }
 
-/** Internal AF filter (NULL-inclusive: variants without frequency data pass). */
+/** Carrier-frequency filter (NULL-inclusive: a variant without a frequency passes; 0 = off). */
 export function applyInternalAfFilter(
   query: VariantQueryBuilder,
-  filter: VariantFilter,
-  totalCaseCount: number | undefined
+  filter: VariantFilter
 ): VariantQueryBuilder {
-  return query.$if(
-    filter.max_internal_af !== undefined &&
-      filter.max_internal_af > 0 &&
-      totalCaseCount !== undefined &&
-      totalCaseCount > 0,
-    (qb) =>
-      qb.where(({ or, eb }) =>
-        or([
-          eb(sql.ref('vf.case_count'), 'is', null),
-          eb(
-            sql<number>`CAST(vf.case_count AS REAL) / ${totalCaseCount!}`,
-            '<=',
-            filter.max_internal_af!
-          )
-        ])
-      )
+  const max = filter.max_internal_af
+  return query.$if(max !== undefined && max > 0, (qb) =>
+    qb.where(
+      // COALESCE keeps a row without a frequency (max > 0) and probes once.
+      sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_FREQUENCY_SQL)}, 0) <= ${max!}`
+    )
   )
 }
 
@@ -101,7 +70,7 @@ export function applyExactVariantMatch(
 ): VariantQueryBuilder {
   return query
     .$if(filter.chr != null && filter.chr !== '', (qb) =>
-      qb.where('variants.chr', '=', filter.chr!)
+      qb.where('variants.chr', 'in', contigQueryNames(filter.chr!))
     )
     .$if(filter.pos != null, (qb) => qb.where('variants.pos', '=', filter.pos!))
     .$if(filter.ref != null && filter.ref !== '', (qb) =>
@@ -150,8 +119,10 @@ export function applyPanelIntervalFilter(
   filter: VariantFilter,
   forceOrChain: boolean | undefined
 ): VariantQueryBuilder {
-  const panelIntervals = filter.panel_intervals
-  if (!panelIntervals || panelIntervals.length === 0) return query
+  if (!filter.panel_intervals || filter.panel_intervals.length === 0) return query
+  // Threshold on the requested regions, as preparePanelIntervals decides the temp table.
+  const requested = filter.panel_intervals.length
+  const panelIntervals = intervalsForAllSpellings(filter.panel_intervals)
   if (forceOrChain === true) {
     // Rows starting inside a region: region-driven, one two-sided index range
     // each (seeking `pos <= end` alone walks the case's chromosome per region).
@@ -161,7 +132,7 @@ export function applyPanelIntervalFilter(
       sql<boolean>`variants.id IN (WITH iv(chr, s, e) AS MATERIALIZED (SELECT value ->> 'chr', value ->> 'start', value ->> 'end' FROM json_each(${JSON.stringify(panelIntervals)})) SELECT pv.id FROM iv CROSS JOIN variants pv WHERE pv.case_id = ${filter.case_id} AND pv.chr = iv.chr AND pv.pos BETWEEN iv.s AND iv.e AND COALESCE(pv.end_pos, pv.pos) >= iv.s UNION ALL SELECT pv.id FROM variants pv WHERE pv.case_id = ${filter.case_id} AND pv.end_pos IS NOT NULL AND EXISTS (SELECT 1 FROM iv WHERE iv.chr = pv.chr AND pv.end_pos >= iv.s AND pv.pos < iv.s))`
     )
   }
-  if (panelIntervals.length < PANEL_TEMP_TABLE_THRESHOLD) {
+  if (requested < PANEL_TEMP_TABLE_THRESHOLD) {
     return query.where(({ or }) =>
       or(
         panelIntervals.map(
@@ -183,8 +154,6 @@ export function applyMaxCarriersFilter(
 ): VariantQueryBuilder {
   const max = filter.carrier_count_max
   return query.$if(max !== undefined && max >= 1, (qb) =>
-    qb.where(({ or, eb }) =>
-      or([eb(sql.ref('vf.case_count'), 'is', null), eb(sql.ref('vf.case_count'), '<=', max!)])
-    )
+    qb.where(sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_COUNT_SQL)}, 0) <= ${max!}`)
   )
 }

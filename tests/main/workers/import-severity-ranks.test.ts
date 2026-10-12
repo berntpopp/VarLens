@@ -99,7 +99,11 @@ describe('SQLite import stores severity ranks (#469)', () => {
   async function importFiles(files: Array<Partial<FileRequest>>): Promise<void> {
     const messages: WorkerMessage[] = []
     await runImportSession(
-      { type: 'start', files, dbPath } as StartMessage,
+      {
+        type: 'start',
+        files: files.map((f) => ({ fallbackGenomeBuild: 'GRCh38', ...f })),
+        dbPath
+      } as StartMessage,
       { postMessage: (message) => messages.push(message) },
       () => false
     )

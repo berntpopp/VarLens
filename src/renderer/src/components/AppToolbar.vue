@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="primary" density="default" :height="appBarHeight" flat>
+  <v-app-bar color="app-bar" density="default" :height="appBarHeight" flat>
     <v-btn
       :icon="sidebarOpen ? mdiChevronDoubleLeft : mdiChevronDoubleRight"
       variant="text"
@@ -128,7 +128,7 @@
           v-if="canWrite"
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
-          :subtitle="importShortcut"
+          :subtitle="SHORTCUTS.import.key"
           @click="$emit('import-click')"
         />
         <v-list-item
@@ -215,6 +215,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch, watchEffect } from 'vue'
+import { SHORTCUTS } from '../config/keyboardShortcuts'
 import { useAuthStore } from '../stores/authStore'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
@@ -279,7 +280,6 @@ watchEffect(() => {
 })
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
-const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
 const { role, canWrite, canAdmin, writeBlockedReason, adminBlockedReason } = usePermissions()
 const { open: openShortlistRanking } = useShortlistRankingDialog()
 // Role- and capability-gated: disabled with the reason instead of failing after a click.
@@ -398,14 +398,14 @@ const showExternalLookups = computed(() => isWebRuntime() && toolbarAuth.isAdmin
 
 .mode-toggle :deep(.v-btn--active),
 .mode-toggle :deep(.mode-toggle--active) {
-  /* Inverted pill: on-primary background, primary text (11.5:1 light, 7.8:1 dark) */
-  background-color: rgb(var(--v-theme-on-primary)) !important;
-  color: rgb(var(--v-theme-primary)) !important;
+  /* Inverted pill: on-app-bar background, app-bar text (11.5:1 light, 9.9:1 dark) */
+  background-color: rgb(var(--v-theme-on-app-bar)) !important;
+  color: rgb(var(--v-theme-app-bar)) !important;
   font-weight: 600;
 }
 
 .mode-toggle :deep(.v-btn:not(.v-btn--active)) {
-  color: rgb(var(--v-theme-on-primary)) !important;
+  color: rgb(var(--v-theme-on-app-bar)) !important;
 }
 
 .sidebar-toggle-btn :deep(.v-icon) {

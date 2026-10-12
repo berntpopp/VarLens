@@ -25,8 +25,9 @@
           :class="{ 'count-updated': countPulsing }"
           aria-live="polite"
           :aria-label="
-            `${filteredCount} of ${totalCount ?? 'unknown'} variants shown` +
-            (totalCountStale ? '; the total is being refreshed' : '')
+            totalCount === null
+              ? `${filteredCount} variants shown`
+              : `${filteredCount} of ${totalCount} variants shown`
           "
         >
           <v-icon start size="small" :icon="mdiFilterVariant" />
@@ -34,14 +35,6 @@
           <template v-if="totalCount !== null">
             <span class="mx-1" style="opacity: 0.7">/</span>
             <span style="opacity: 0.7">{{ totalCount.toLocaleString() }}</span>
-            <v-icon
-              v-if="totalCountStale"
-              end
-              size="x-small"
-              :icon="mdiDatabaseSync"
-              title="The total is being refreshed"
-              data-testid="total-refreshing"
-            />
           </template>
         </v-chip>
 
@@ -54,7 +47,9 @@
         >
           <v-icon start size="small" :icon="mdiFilterOff" />
           Clear
-          <v-tooltip activator="parent" location="bottom">Clear all filters</v-tooltip>
+          <v-tooltip activator="parent" location="bottom">{{
+            withShortcut('Clear all filters', 'clearFilters')
+          }}</v-tooltip>
         </v-btn>
 
         <!-- Open filter drawer -->
@@ -69,9 +64,8 @@
             class="ml-1"
           />
           <v-tooltip activator="parent" location="bottom">
-            Toggle filters ({{ mod }}+Shift+F){{
-              activeFilterCount > 0 ? ` \u2014 ${activeFilterCount} active` : ''
-            }}
+            {{ withShortcut('Toggle filters', 'toggleFilters')
+            }}{{ activeFilterCount > 0 ? ` \u2014 ${activeFilterCount} active` : '' }}
           </v-tooltip>
         </v-btn>
 
@@ -84,9 +78,9 @@
           >
             <v-icon start size="small" :icon="mdiTableColumn" />
             Columns
-            <v-tooltip activator="parent" location="bottom"
-              >Toggle columns ({{ alt }}+Shift+C)</v-tooltip
-            >
+            <v-tooltip activator="parent" location="bottom">{{
+              withShortcut('Toggle columns', 'toggleColumns')
+            }}</v-tooltip>
           </v-btn>
 
           <v-menu v-if="exportFormats && exportBlockedReason == null">
@@ -146,7 +140,13 @@
               :prepend-icon="mdiTableColumn"
               title="Columns"
               @click="emit('open-columns-drawer')"
-            />
+            >
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{
+                  SHORTCUTS.toggleColumns.key
+                }}</kbd>
+              </template>
+            </v-list-item>
             <template v-if="exportFormats && exportBlockedReason == null">
               <v-list-item
                 v-for="option in EXPORT_FORMAT_OPTIONS"
@@ -206,7 +206,7 @@
         variant="text"
         size="x-small"
         color="error"
-        class="ml-auto"
+        class="applied-filters-bar__clear ml-auto"
         @click="clearAll"
       >
         Clear all
@@ -223,10 +223,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
-  mdiDatabaseSync,
   mdiDotsVertical,
   mdiFilterCheck,
   mdiFilterOff,
@@ -260,8 +260,6 @@ interface Props {
   exportBlockedReason?: string | null
   /** Offer a CSV / Excel choice (web: the browser download has no save dialog). */
   exportFormats?: boolean
-  /** The total comes from a summary that is being rebuilt (cohort view). */
-  totalCountStale?: boolean
 }
 
 const EXPORT_FORMAT_OPTIONS = [
@@ -287,13 +285,6 @@ watch(
 // Responsive: collapse Columns/Export into overflow menu at non-full widths
 const { tier } = useResponsiveLayout()
 const showOverflowMenu = computed(() => tier.value !== 'full')
-
-const isMac =
-  typeof navigator !== 'undefined' &&
-  typeof navigator.platform === 'string' &&
-  navigator.platform.toUpperCase().indexOf('MAC') >= 0
-const mod = isMac ? 'Cmd' : 'Ctrl'
-const alt = isMac ? 'Option' : 'Alt'
 
 const emit = defineEmits<{
   'clear-all': []
@@ -363,7 +354,10 @@ function clearAll(): void {
   min-height: 37px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  /* One line that scrolls sideways: a wrapping row pushed the table down. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 4px;
   padding: 6px 16px;
   background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, transparent);
@@ -375,8 +369,20 @@ function clearAll(): void {
   background: transparent;
 }
 
+.applied-filters-bar > * {
+  flex-shrink: 0;
+}
+
 .applied-filters-bar .v-chip {
   max-width: 200px;
+}
+
+/* Stays in view at the row's right edge while the chips scroll beneath it;
+   -16px = the bar's right padding, which chips would otherwise show through. */
+.applied-filters-bar__clear {
+  position: sticky;
+  right: -16px;
+  background: color-mix(in srgb, rgb(var(--v-theme-primary)) 6%, rgb(var(--v-theme-surface)));
 }
 
 .applied-filters-bar .v-chip span {

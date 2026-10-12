@@ -46,6 +46,8 @@ const { canWrite } = usePermissions()
 
 const props = defineProps<{
   caseId: number
+  /** False while the Shortlist tab is hidden; forwarded to the table's key handlers. */
+  interactive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -202,6 +204,7 @@ function dismissError(): void {
       <ShortlistTable
         v-else-if="result"
         :read-only="!canWrite"
+        :interactive="interactive"
         :rows="result.rows"
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"

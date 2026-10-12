@@ -164,14 +164,19 @@ const SHIPPED: Record<string, string> = {
   cnv: 'synthetic-cnv.vcf',
   str: 'synthetic-str.vcf'
 }
+type VcfOptions = { selectedSample?: string; genomeBuild?: string }
 const LONE: FileKey[] = ['depth', 'sv', 'cnv', 'str']
 /** File orders that put every kind of file first once. */
-const ORDERS: Array<{ keys: FileKey[]; vcfOptions?: { selectedSample: string } }> = [
+// The import dialog always sends the build the user confirmed.
+const ORDERS: Array<{ keys: FileKey[]; vcfOptions: VcfOptions }> = [
   // A two-sample file first: the sample is selected, as the per-sample wizard does.
-  { keys: ['snv', 'swapped', ...LONE], vcfOptions: { selectedSample: 'A' } },
-  { keys: ['swapped', 'snv', ...LONE], vcfOptions: { selectedSample: 'A' } },
+  { keys: ['snv', 'swapped', ...LONE], vcfOptions: { selectedSample: 'A', genomeBuild: 'GRCh38' } },
+  { keys: ['swapped', 'snv', ...LONE], vcfOptions: { selectedSample: 'A', genomeBuild: 'GRCh38' } },
   // Each single-sample callset first, with no sample, as the import dialog sends it.
-  ...LONE.map((_, i) => ({ keys: [...LONE.slice(i), ...LONE.slice(0, i)] }))
+  ...LONE.map((_, i) => ({
+    keys: [...LONE.slice(i), ...LONE.slice(0, i)],
+    vcfOptions: { genomeBuild: 'GRCh38' }
+  }))
 ]
 
 const at = (row: string, positions: string[]): boolean =>
@@ -253,7 +258,6 @@ interface FileSpec {
   annotationFormat: null
 }
 
-type VcfOptions = { selectedSample?: string; genomeBuild?: string }
 type Backend = (
   files: FileSpec[],
   c: FilterCase | undefined,
@@ -267,7 +271,7 @@ const rowText = (r: Record<string, unknown>): string =>
 describe('VCF import filters: every file, both backends', () => {
   let dir: string
   let bedPath: string
-  const file = (key: FileKey | 'grch37'): FileSpec => ({
+  const file = (key: FileKey | 'grch37' | 'grch37b'): FileSpec => ({
     filePath: key in SHIPPED ? resolve(VCF_DIR, SHIPPED[key]) : join(dir, `${key}.vcf`),
     variantType: 'auto',
     caller: null,
@@ -280,6 +284,7 @@ describe('VCF import filters: every file, both backends', () => {
     writeFileSync(join(dir, 'swapped.vcf'), SWAPPED_VCF)
     writeFileSync(join(dir, 'depth.vcf'), DEPTH_VCF)
     writeFileSync(join(dir, 'grch37.vcf'), GRCH37_VCF)
+    writeFileSync(join(dir, 'grch37b.vcf'), GRCH37_VCF)
     bedPath = join(dir, 'regions.bed')
     writeFileSync(bedPath, BED)
   })
@@ -380,7 +385,7 @@ describe('VCF import filters: every file, both backends', () => {
       const outcome = await importCase(
         [file('snv'), file('swapped'), file('depth')],
         { name: '', filters: { minGq: 35, minDp: 10 }, expected: [] },
-        undefined
+        { genomeBuild: 'GRCh38' }
       )
       expect(outcome.errors).toEqual({})
       expect(outcome.rows).toEqual(
@@ -418,6 +423,25 @@ describe('VCF import filters: every file, both backends', () => {
         )
       })
       expect(outcome.rows).toEqual([...ROWS.snv].sort())
+    }, 60_000)
+
+    it('takes the case build from the first file, never from a GRCh38 default (#557)', async () => {
+      const outcome = await importCase([file('grch37'), file('snv')], undefined, undefined)
+      expect(outcome.errors).toEqual({})
+      // The case is GRCh37, so every row is stored with GRCh37's bare names.
+      const bare = (row: string): string => row.replace(/^chr/, '')
+      expect(outcome.rows).toEqual(['9:100:A>T snv 0/1 40/30', ...ROWS.snv.map(bare)].sort())
+      await expect(importCase([file('snv'), file('grch37')], undefined, undefined)).rejects.toThrow(
+        /No genome build/
+      )
+    }, 60_000)
+
+    it('checks the files against each other when the user overrides their declared build', async () => {
+      const outcome = await importCase([file('grch37'), file('grch37b')], undefined, {
+        genomeBuild: 'GRCh38'
+      })
+      expect(outcome.errors).toEqual({})
+      expect(outcome.rows).toEqual(['chr9:100:A>T snv 0/1 40/30', 'chr9:100:A>T snv 0/1 40/30'])
     }, 60_000)
   }
 
