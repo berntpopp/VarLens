@@ -20,7 +20,8 @@ type AnyVariant = Variant | CohortVariant
  * (some import formats put the protein notation in the cDNA column).
  */
 export function proteinPositionOf(v: AnyVariant): { position: number; aaChange: string } | null {
-  const fromAa = parseProteinPosition(v.aa_change)
+  // `?? null`: rows from some sources (SV/shortlist fixtures) omit the field.
+  const fromAa = parseProteinPosition(v.aa_change ?? null)
   if (fromAa !== null) return { position: fromAa, aaChange: formatHgvs(v.aa_change) ?? '' }
   const cdna = 'cdna' in v && typeof v.cdna === 'string' ? v.cdna : null
   const fromCdna = parseProteinPosition(cdna)

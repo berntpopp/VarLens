@@ -37,22 +37,7 @@
             Evidence editor...
           </v-list-item-title>
         </v-list-item>
-        <v-list-item
-          v-if="request.variant"
-          class="px-1"
-          :disabled="proteinReason !== null"
-          @click="openProteinView"
-        >
-          <template #prepend>
-            <v-icon size="small" class="mr-1" :icon="PROTEIN_VIEW_BUTTONS[0].icon" />
-          </template>
-          <v-list-item-title class="text-caption font-weight-medium"
-            >Protein view</v-list-item-title
-          >
-          <v-list-item-subtitle v-if="proteinReason" class="text-caption">
-            {{ proteinReason }}
-          </v-list-item-subtitle>
-        </v-list-item>
+        <ProteinViewMenuItem v-if="request.variant" :variant="request.variant" />
         <v-list-item v-if="current && !request.locked" class="px-1" @click="select(null)">
           <v-list-item-title class="text-caption text-medium-emphasis">
             Clear classification
@@ -64,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
 import { mdiClipboardCheckOutline } from '@mdi/js'
 import {
   ACMG_EVIDENCE_LOCK_HINT,
@@ -72,29 +57,13 @@ import {
 } from '../../../../shared/config/domain.config'
 import { ACMG_ABBREV, ACMG_CLASSIFICATIONS, ACMG_COLORS } from '../../composables/useAnnotations'
 import type { AcmgQuickMenuState } from './acmg-quick-menu'
-import { AppStateKey } from '../../composables/useAppState'
-import { useCapabilityStore } from '../../stores/capabilityStore'
-import { PROTEIN_VIEW_BUTTONS } from '../../config/proteinViewConfig'
-import { proteinViewBlockedReason } from '../../utils/protein-view'
+import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
 
 const props = defineProps<{ state: AcmgQuickMenuState }>()
 
 // The state object is created once by the table and never replaced.
 const { open, activator, payload: request } = props.state
 const current = computed(() => request.value?.current ?? null)
-
-const appState = inject(AppStateKey, null)
-// Read on demand: the store is only needed once a row with a variant opens the menu.
-const proteinReason = computed(() =>
-  proteinViewBlockedReason(
-    request.value?.variant ?? null,
-    useCapabilityStore().canUse('proteinViewer')
-  )
-)
-function openProteinView(): void {
-  const variant = request.value?.variant
-  if (variant !== undefined && proteinReason.value === null) appState?.openProteinView(variant)
-}
 
 function select(classification: AcmgClassification | null): void {
   if (request.value?.locked === true) return
