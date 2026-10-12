@@ -102,6 +102,16 @@ describe('GenomeBuildField', () => {
     expect((wrapper.vm as unknown as { validate: () => boolean }).validate()).toBe(false)
   })
 
+  it('warns that hg19 chrM positions are not rCRS', () => {
+    const wrapper = mountField(detectGenomeBuild(['##contig=<ID=chrM,length=16571>']))
+    expect(wrapper.get('[data-testid="genome-build-mito-warning"]').text()).toBe(
+      BUILD_COPY.hg19Mito
+    )
+    expect(
+      mountField(STATES.definitive).find('[data-testid="genome-build-mito-warning"]').exists()
+    ).toBe(false)
+  })
+
   it('exposes the evidence behind an accessible info button', () => {
     const wrapper = mountField(STATES.conflict)
     expect(wrapper.find('[aria-label="Build evidence"]').exists()).toBe(true)

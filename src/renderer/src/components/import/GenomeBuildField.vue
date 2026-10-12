@@ -33,6 +33,13 @@
         </v-tooltip>
       </template>
     </v-radio-group>
+    <div
+      v-if="detection.mitoWarning"
+      class="text-caption text-warning"
+      data-testid="genome-build-mito-warning"
+    >
+      {{ detection.mitoWarning }}
+    </div>
   </div>
 </template>
 

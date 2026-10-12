@@ -9,6 +9,9 @@
 import {
   BUILD_COPY,
   GENOME_BUILD_CONFIG,
+  RCRS_MITO_LENGTH,
+  REFSEQ_CONTIG_NAMES,
+  type BuildTagSource,
   type GenomeBuildConfig,
   type GenomeBuildDef
 } from '../config/genome-builds.config'
@@ -30,20 +33,28 @@ export interface BuildDetection {
   excluded: BuildEvidence[]
   /** Set by {@link combineBuildDetections} when files suggest different builds. */
   mixedFiles?: Array<{ fileName: string; build: string }>
+  /** The mitochondrion is not rCRS (hg19 chrM): its positions differ from GRCh37/GRCh38. */
+  mitoWarning?: string
 }
 
 const LENGTHS = 'Contig lengths'
 const POSITIONS = 'Positions'
 const MITO = 'M'
 
-/** Strip `chr`, fold MT/M to one mito key; naming carries no build evidence. */
+/** Strip `chr`, map RefSeq names, fold MT/M to one mito key; naming carries no build evidence. */
 function contigKey(id: string): string {
+  if (REFSEQ_CONTIG_NAMES.mitochondria.test(id)) return MITO
+  const refseq = REFSEQ_CONTIG_NAMES.chromosome.exec(id)
+  if (refseq !== null) {
+    const n = Number(refseq[1])
+    return REFSEQ_CONTIG_NAMES.sexChromosomes[n] ?? String(n)
+  }
   const bare = id.replace(/^chr/i, '')
   return /^(m|mt)$/i.test(bare) ? MITO : bare.toUpperCase()
 }
 
 function expectedLengths(build: GenomeBuildDef, key: string): number[] {
-  if (key === MITO) return Object.values(build.mito.lengths)
+  if (key === MITO) return Object.values(build.mito)
   const length = build.contigs[key]
   return length === undefined ? [] : [length]
 }
@@ -65,6 +76,8 @@ interface LengthTally {
   matches: number
   primaryMatches: number
   mismatch: BuildEvidence | null
+  /** A matching mitochondrial length that is not rCRS. */
+  nonRcrsMito: boolean
 }
 
 function tallyLengths(
@@ -72,7 +85,7 @@ function tallyLengths(
   builds: readonly GenomeBuildDef[]
 ): { tallies: Map<string, LengthTally>; checked: number } {
   const tallies = new Map<string, LengthTally>(
-    builds.map((b) => [b.id, { matches: 0, primaryMatches: 0, mismatch: null }])
+    builds.map((b) => [b.id, { matches: 0, primaryMatches: 0, mismatch: null, nonRcrsMito: false }])
   )
   let checked = 0
   for (const line of headerLines) {
@@ -91,6 +104,7 @@ function tallyLengths(
       if (expected.includes(length)) {
         tally.matches++
         if (key !== MITO) tally.primaryMatches++
+        else if (length !== RCRS_MITO_LENGTH) tally.nonRcrsMito = true
       } else if (tally.mismatch === null) {
         const detail = BUILD_COPY.lengthMismatch(id, length, expected[0])
         tally.mismatch = { build: build.id, source: LENGTHS, detail }
@@ -101,13 +115,26 @@ function tallyLengths(
   return { tallies, checked }
 }
 
+/** The text of a tag line that may name a build: a command line's reference arguments only. */
+function tagText(line: string, source: BuildTagSource): string {
+  if (source.referenceArgs === undefined) return line.toLowerCase()
+  return source.referenceArgs
+    .flatMap((arg) => {
+      const escaped = arg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const pattern = new RegExp(`(?:^|[\\s"'<,])${escaped}[=\\s]+([^\\s"',>]+)`, 'g')
+      return [...line.matchAll(pattern)].map((m) => m[1])
+    })
+    .join(' ')
+    .toLowerCase()
+}
+
 function tagEvidence(headerLines: readonly string[], config: GenomeBuildConfig): BuildEvidence[] {
   const found: BuildEvidence[] = []
   for (const line of headerLines) {
     const source = config.tagSources.find((s) => line.startsWith(s.prefix))
     if (source === undefined) continue
-    const lower = line.toLowerCase()
-    if (config.liftoverMarkers.some((marker) => lower.includes(marker))) continue
+    if (config.liftoverMarkers.some((marker) => line.toLowerCase().includes(marker))) continue
+    const lower = tagText(line, source)
     for (const build of config.builds) {
       const alias = build.aliases.find((a) => namesAlias(lower, a))
       if (alias !== undefined && !found.some((e) => e.build === build.id)) {
@@ -164,16 +191,20 @@ export function detectGenomeBuild(
   const evidence: BuildEvidence[] = []
   let suggested: string | null = null
   let confidence: BuildConfidence = 'none'
+  let mitoWarning: string | undefined
 
   if (candidates.length === 1) {
     const [id, tally] = candidates[0]
     suggested = id
+    if (tally.nonRcrsMito) mitoWarning = BUILD_COPY.hg19Mito
     evidence.push({
       build: id,
       source: LENGTHS,
       detail: BUILD_COPY.lengthMatch(tally.matches, checked)
     })
     confidence = tags.every((e) => e.build === id) ? 'definitive' : 'conflict'
+    if (mitoWarning !== undefined)
+      evidence.push({ build: id, source: 'Mitochondrion', detail: mitoWarning })
     evidence.push(...tags)
   } else if (partial.length > 0) {
     confidence = 'conflict'
@@ -195,7 +226,13 @@ export function detectGenomeBuild(
   if (suggested !== null && (excludedIds.has(suggested) || liftover)) confidence = 'conflict'
   if (liftover)
     evidence.push({ build: '', source: 'Liftover', detail: BUILD_COPY.liftoverEvidence })
-  return { suggested, confidence, evidence, excluded }
+  return {
+    suggested,
+    confidence,
+    evidence,
+    excluded,
+    ...(mitoWarning !== undefined ? { mitoWarning } : {})
+  }
 }
 
 const RANK: Record<BuildConfidence, number> = { definitive: 3, strong: 2, conflict: 1, none: 0 }
@@ -230,7 +267,15 @@ export function combineBuildDetections(
   )
   const suggested = builds[0] ?? null
   if (suggested === null || excluded.some((e) => e.build === suggested)) confidence = 'conflict'
-  return { suggested, confidence, evidence, excluded }
+  const mitoWarning = perFile.find((f) => f.detection.mitoWarning !== undefined)?.detection
+    .mitoWarning
+  return {
+    suggested,
+    confidence,
+    evidence,
+    excluded,
+    ...(mitoWarning !== undefined ? { mitoWarning } : {})
+  }
 }
 
 /** The build a detection decides on its own: definitive or strong only. */
@@ -279,33 +324,4 @@ export function describeBuildDetection(detection: BuildDetection): string {
     return named.length > 1 ? BUILD_COPY.conflictNone(named) : BUILD_COPY.none
   }
   return BUILD_COPY.none
-}
-
-/**
- * Re-check a stored case's build (for the follow-up migration of mislabelled
- * cases). VarLens stores no VCF header, so the caller supplies the header
- * re-read from `case_import_files.file_path` when the file still exists, and
- * the stored max POS per chromosome (which can only exclude a build).
- */
-export function redetectStoredCaseBuild(input: {
-  genomeBuild: string
-  headerLines: readonly string[]
-  maxPos?: Readonly<Record<string, number>>
-}): {
-  stored: string
-  detected: string | null
-  confidence: BuildConfidence
-  storedExcluded: boolean
-  disagrees: boolean
-} {
-  const detection = detectGenomeBuild(input.headerLines, input.maxPos)
-  const detected = detectionBuild(detection)
-  const storedExcluded = detection.excluded.some((e) => e.build === input.genomeBuild)
-  return {
-    stored: input.genomeBuild,
-    detected,
-    confidence: detection.confidence,
-    storedExcluded,
-    disagrees: storedExcluded || (detected !== null && detected !== input.genomeBuild)
-  }
 }

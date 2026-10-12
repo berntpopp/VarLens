@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { join } from 'node:path'
 import {
+  BUILD_COPY,
   BUILD_TAG_SOURCES,
   GENOME_BUILDS,
   GENOME_BUILD_CONFIG,
@@ -12,8 +13,7 @@ import {
   combineBuildDetections,
   describeBuildDetection,
   detectGenomeBuild,
-  detectionBuild,
-  redetectStoredCaseBuild
+  detectionBuild
 } from '../../../src/shared/genome/genome-build'
 
 const contigLine = (id: string, length: number): string => `##contig=<ID=${id},length=${length}>`
@@ -53,7 +53,12 @@ describe.each(GENOME_BUILDS.map((b) => [b.id, b] as const))(
     it.each(BUILD_TAG_SOURCES.flatMap((s) => build.aliases.map((a) => [s.prefix, a, s.label])))(
       'tag %s with alias %s is strong',
       (prefix, alias, label) => {
-        const d = detectGenomeBuild([`${prefix}x/path/${alias}.fa`])
+        const source = BUILD_TAG_SOURCES.find((s) => s.prefix === prefix)!
+        const line =
+          source.referenceArgs === undefined
+            ? `${prefix}x/path/${alias}.fa`
+            : `${prefix}=<ID=t,CommandLine="tool ${source.referenceArgs[0]} /path/${alias}.fa">`
+        const d = detectGenomeBuild([line])
         expect(d).toMatchObject({ suggested: build.id, confidence: 'strong' })
         expect(d.evidence[0]).toMatchObject({ build: build.id, source: label })
       }
@@ -165,14 +170,64 @@ describe('detectGenomeBuild — fixed cases', () => {
   })
 })
 
+describe('detectGenomeBuild — reviewed edge cases', () => {
+  const grch38 = GENOME_BUILDS.find((b) => b.id === 'GRCh38')!
+  const grch37 = GENOME_BUILDS.find((b) => b.id === 'GRCh37')!
+
+  it('hg19 chrM 16,571 is GRCh37 with a mitochondrial warning', () => {
+    const d = detectGenomeBuild([contigLine('chrM', 16571)])
+    expect(d).toMatchObject({ suggested: 'GRCh37', confidence: 'definitive' })
+    expect(d.mitoWarning).toBe(BUILD_COPY.hg19Mito)
+    expect(d.evidence.map((e) => e.detail)).toContain(BUILD_COPY.hg19Mito)
+  })
+
+  it('an rCRS mitochondrion carries no warning', () => {
+    expect(
+      detectGenomeBuild(fullHeader(grch37, '').concat(contigLine('MT', 16569))).mitoWarning
+    ).toBeUndefined()
+  })
+
+  it.each([
+    ['NC_000001.11', grch38.contigs[1], 'GRCh38'],
+    ['NC_000023.11', grch38.contigs.X, 'GRCh38'],
+    ['NC_000001.10', grch37.contigs[1], 'GRCh37'],
+    ['NC_000024.10', grch37.contigs.Y, 'GRCh37']
+  ])('RefSeq contig %s gives length evidence', (id, length, build) => {
+    expect(detectGenomeBuild([contigLine(id, length)])).toMatchObject({
+      suggested: build,
+      confidence: 'definitive'
+    })
+  })
+
+  it.each([
+    ['gcf_000001405.25', 'GRCh37'],
+    ['GCF_000001405.26', 'GRCh38'],
+    ['GCF_000001405.40', 'GRCh38']
+  ])('RefSeq assembly accession %s names its build', (accession, build) => {
+    expect(detectGenomeBuild([`##reference=/ref/${accession}_genomic.fna`]).suggested).toBe(build)
+  })
+
+  it.each([
+    ['##GATKCommandLine', '--reference /ref/Homo_sapiens_assembly38.fasta'],
+    ['##GATKCommandLine', '-R /ref/hg38.fa'],
+    ['##DRAGENCommandLine', '--ref-dir /staging/hg38']
+  ])('a stray b37 resource path in a GRCh38 %s line is not evidence', (prefix, refArg) => {
+    const line = `${prefix}=<ID=t,CommandLine="tool ${refArg} --known-sites /res/b37_dbsnp.vcf --intervals hg19.bed">`
+    expect(detectGenomeBuild([...fullHeader(grch38, 'chr'), line])).toMatchObject({
+      suggested: 'GRCh38',
+      confidence: 'definitive'
+    })
+    expect(detectGenomeBuild([line])).toMatchObject({ suggested: 'GRCh38', confidence: 'strong' })
+  })
+})
+
 describe('adding a build is config-only', () => {
   const fake: GenomeBuildDef = {
     id: 'FakeBuild1',
     label: 'Fake',
     importable: true,
     aliases: ['fakeref'],
-    primaryPrefix: 'chr',
-    mito: { canonical: 'chrM', lengths: { chrM: 16_000 } },
+    mito: { chrM: 16_000 },
     contigs: { 1: 111, 2: 222 }
   }
   const config = { ...GENOME_BUILD_CONFIG, builds: [...GENOME_BUILD_CONFIG.builds, fake] }
@@ -249,33 +304,5 @@ describe('detectionBuild / describeBuildDetection', () => {
     expect(describeBuildDetection(detectGenomeBuild(fullHeader(GENOME_BUILDS[0], '')))).toBe(
       'Contig lengths match GRCh38 (24 of 24).'
     )
-  })
-})
-
-describe('redetectStoredCaseBuild', () => {
-  it('re-detects from the stored raw header lines', () => {
-    expect(
-      redetectStoredCaseBuild({
-        genomeBuild: 'GRCh38',
-        headerLines: fullHeader(GENOME_BUILDS[1], '')
-      })
-    ).toMatchObject({ stored: 'GRCh38', detected: 'GRCh37', disagrees: true })
-  })
-
-  it('stored positions beyond the stored build flag it, without suggesting another', () => {
-    expect(
-      redetectStoredCaseBuild({
-        genomeBuild: 'GRCh38',
-        headerLines: [],
-        maxPos: { '1': 249_000_000 }
-      })
-    ).toMatchObject({ detected: null, storedExcluded: true, disagrees: true })
-  })
-
-  it('a case without stored header evidence cannot be re-detected', () => {
-    expect(redetectStoredCaseBuild({ genomeBuild: 'GRCh38', headerLines: [] })).toMatchObject({
-      detected: null,
-      disagrees: false
-    })
   })
 })

@@ -35,6 +35,10 @@ export async function resolveImportGenomeBuild(request: {
     const { buildDetection } = (await parseVcfHeader(request.filePath)).header
     if (buildDetection.confidence === 'conflict') throw new Error(BUILD_COPY.skippedConflict)
     const build = detectionBuild(buildDetection)
+    if (buildDetection.mitoWarning !== undefined) {
+      // Runs in the import workers (no IPC logger there); the import UI shows the same warning.
+      console.warn(`[import] ${request.filePath}: ${buildDetection.mitoWarning}`)
+    }
     if (build !== null) return importable(build)
   }
   if (request.fallback !== undefined) return importable(request.fallback)

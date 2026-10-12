@@ -18,10 +18,8 @@ export interface GenomeBuildDef {
   importable: boolean
   /** Lower-case tokens matched in header tag lines. */
   aliases: readonly string[]
-  /** Stored form of the primary contigs (used by chromosome normalisation). */
-  primaryPrefix: 'chr' | ''
-  /** Mitochondrion: stored name and the lengths each naming uses. */
-  mito: { canonical: string; lengths: Readonly<Record<string, number>> }
+  /** Mitochondrion name -> length in this build's references. */
+  mito: Readonly<Record<string, number>>
   /** Bare primary name ('1'..'22', 'X', 'Y') -> length. */
   contigs: Readonly<Record<string, number>>
 }
@@ -38,10 +36,11 @@ export const GENOME_BUILDS = [
       'hs38',
       'b38',
       'homo_sapiens_assembly38',
-      'gca_000001405.15'
+      'gca_000001405.15',
+      // RefSeq GRCh38 and its patches (.26 = GRCh38 ... .40 = GRCh38.p14)
+      ...Array.from({ length: 15 }, (_, i) => `gcf_000001405.${26 + i}`)
     ],
-    primaryPrefix: 'chr',
-    mito: { canonical: 'chrM', lengths: { chrM: 16_569, MT: 16_569 } },
+    mito: { chrM: 16_569, MT: 16_569 },
     contigs: {
       1: 248_956_422,
       2: 242_193_529,
@@ -81,11 +80,12 @@ export const GENOME_BUILDS = [
       'b37',
       'human_g1k_v37',
       'homo_sapiens_assembly19',
-      'grch37lite'
+      'grch37lite',
+      // RefSeq GRCh37 and its patches (.13 = GRCh37 ... .25 = GRCh37.p13)
+      ...Array.from({ length: 13 }, (_, i) => `gcf_000001405.${13 + i}`)
     ],
-    primaryPrefix: '',
     // MT = rCRS (GRCh37); chrM = hg19's NC_001807, two bases longer.
-    mito: { canonical: 'MT', lengths: { MT: 16_569, chrM: 16_571 } },
+    mito: { MT: 16_569, chrM: 16_571 },
     contigs: {
       1: 249_250_621,
       2: 243_199_373,
@@ -119,8 +119,7 @@ export const GENOME_BUILDS = [
     // Needs gene-reference, panel and link data before it can be imported.
     importable: false,
     aliases: ['chm13', 't2t', 'hs1'],
-    primaryPrefix: 'chr',
-    mito: { canonical: 'chrM', lengths: { chrM: 16_569 } },
+    mito: { chrM: 16_569 },
     contigs: {
       1: 248_387_328,
       2: 242_696_752,
@@ -150,18 +149,37 @@ export const GENOME_BUILDS = [
   }
 ] as const satisfies readonly GenomeBuildDef[]
 
-export type GenomeBuildId = (typeof GENOME_BUILDS)[number]['id']
+/** rCRS (NC_012920) length; any other mitochondrial length is hg19's NC_001807. */
+export const RCRS_MITO_LENGTH = 16_569
+
+/** RefSeq contig names (NC_0000NN.<version>) map to primaries; lengths then decide the build. */
+export const REFSEQ_CONTIG_NAMES = {
+  chromosome: /^NC_0000(\d\d)\.\d+$/i,
+  sexChromosomes: { 23: 'X', 24: 'Y' } as Readonly<Record<number, string>>,
+  mitochondria: /^NC_(012920|001807)\.\d+$/i
+}
+
+export interface BuildTagSource {
+  prefix: string
+  label: string
+  /** Command-line tags: only the values of these reference arguments are read. */
+  referenceArgs?: readonly string[]
+}
 
 /** Header lines whose alias tokens name a build, with the label shown as evidence. */
-export const BUILD_TAG_SOURCES: readonly { prefix: string; label: string }[] = [
+export const BUILD_TAG_SOURCES: readonly BuildTagSource[] = [
   { prefix: '##reference=', label: 'Reference' },
   { prefix: '##assembly=', label: 'Assembly' },
   { prefix: '##contig=', label: 'Contig assembly' },
   { prefix: '##VEP=', label: 'VEP cache' },
   { prefix: '##VEP-command-line=', label: 'VEP' },
   { prefix: '##SnpEffCmd=', label: 'SnpEff' },
-  { prefix: '##GATKCommandLine', label: 'GATK' },
-  { prefix: '##DRAGENCommandLine', label: 'DRAGEN' },
+  {
+    prefix: '##GATKCommandLine',
+    label: 'GATK',
+    referenceArgs: ['--reference', '-R', 'reference_sequence']
+  },
+  { prefix: '##DRAGENCommandLine', label: 'DRAGEN', referenceArgs: ['--ref-dir', '-r'] },
   { prefix: '##bcftools_', label: 'bcftools' }
 ]
 
@@ -206,6 +224,8 @@ export const BUILD_COPY = {
   mixedFiles: (a: string, b1: string, b: string, b2: string) =>
     `${a} is ${b1}, ${b} is ${b2}. One case holds one build: remove one file or import them as separate cases.`,
   noLengthMatch: 'Contig lengths match no known build',
+  hg19Mito:
+    'Mitochondrial positions use the hg19 chrM (NC_001807, 16,571 bp), not the rCRS of GRCh37 and GRCh38.',
   liftoverEvidence: 'Header records a liftover',
   lengthMismatch: (contig: string, length: number, expected: number) =>
     `${contig} is ${length.toLocaleString('en-US')} bp, not ${expected.toLocaleString('en-US')}`,
@@ -224,7 +244,7 @@ export const BUILD_COPY = {
 
 export interface GenomeBuildConfig {
   builds: readonly GenomeBuildDef[]
-  tagSources: readonly { prefix: string; label: string }[]
+  tagSources: readonly BuildTagSource[]
   liftoverMarkers: readonly string[]
 }
 
