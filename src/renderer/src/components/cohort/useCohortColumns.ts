@@ -4,6 +4,7 @@ import { linksColumn, type ColumnDef } from '../variant-table/columns'
 import { withFixedWidth } from '../variant-table/column-widths'
 import { useAutoHiddenColumns } from '../../composables/useResponsiveLayout'
 import { useExternalLinksStore } from '../../stores/externalLinksStore'
+import { CARRIER_FREQUENCY_COPY } from '../../config/uiCopyConfig'
 
 /**
  * Static base column definitions for the cohort table. Same clinical-first
@@ -22,7 +23,7 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' },
   { title: 'CADD', key: 'cadd_phred', sortable: true, align: 'end' },
   { title: 'Carriers', key: 'carrier_count', sortable: true, align: 'end' },
-  { title: 'Cohort Freq', key: 'cohort_frequency', sortable: true, align: 'end' },
+  { title: CARRIER_FREQUENCY_COPY.column, key: 'cohort_frequency', sortable: true, align: 'end' },
   { title: 'Het / Hom', key: 'het_count', sortable: true },
   { title: 'Consequence', key: 'func', sortable: true },
   { title: 'Transcript', key: 'transcript', sortable: true },
