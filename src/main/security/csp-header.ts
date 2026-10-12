@@ -22,8 +22,8 @@ const CSP_DIRECTIVES: readonly string[] = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
   "style-src 'self' 'unsafe-inline'",
-  // No third-party fonts: monospace data uses the system mono stack
-  // (`--font-mono` in custom.css), so nothing loads from Google Fonts.
+  // No third-party fonts: Inter + JetBrains Mono are bundled by Vite
+  // (assets/styles/fonts.css), so nothing loads from a font CDN.
   "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'self' data: https://alphafold.ebi.ac.uk https://www.ebi.ac.uk " +

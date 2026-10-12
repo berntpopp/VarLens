@@ -7,6 +7,9 @@
  * Uses @use instead of @import per Dart Sass 3.0 migration guide.
  */
 
+// Bundled Inter + JetBrains Mono (@font-face only; families set in custom.css)
+@use './fonts.css';
+
 // Shared table cell styles (extracted from VariantTable.vue and CohortTableRow.vue)
 @use './table-cells.scss';
 

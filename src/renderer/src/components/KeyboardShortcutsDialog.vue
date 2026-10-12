@@ -39,7 +39,7 @@ const model = defineModel<boolean>({ default: false })
 .shortcut-key {
   display: inline-block;
   padding: 2px 8px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background-color: rgba(var(--v-theme-on-surface), 0.08);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.15);

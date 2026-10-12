@@ -123,7 +123,7 @@
                 density="compact"
                 :error-messages="urlError"
                 class="mb-3"
-                style="font-family: monospace"
+                style="font-family: var(--font-mono)"
               />
 
               <v-select

@@ -1,6 +1,14 @@
 :root {
+  /* Bundled faces (fonts.css) first, so every OS renders the same metrics. */
+  --v-font-body: 'Inter Variable', 'Inter Fallback', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    'JetBrains Mono Variable', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+}
+
+/* Tabular figures on numeric (end-aligned) data cells so AF/CADD/positions align. */
+td.v-data-table-column--align-end {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Thin, unobtrusive scrollbars. No scrollbar-gutter: the app shell never
