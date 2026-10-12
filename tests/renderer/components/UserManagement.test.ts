@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -7,6 +7,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import UserManagement from '../../../src/renderer/src/components/UserManagement.vue'
 import { useAuthStore } from '../../../src/renderer/src/stores/authStore'
 import { createMockApi } from '../../utils/mock-api'
+import {
+  DESKTOP_MIN_PASSWORD_LENGTH,
+  WEB_MIN_PASSWORD_LENGTH
+} from '../../../src/shared/auth/auth-constants'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -134,6 +138,47 @@ describe('UserManagement', () => {
       // Dialog renders via v-dialog which uses teleport - check the dialog model is set
       const dialog = wrapper.findComponent({ name: 'VDialog' })
       expect(dialog.exists()).toBe(true)
+    })
+
+    it.each([
+      { edition: 'desktop', web: false, min: DESKTOP_MIN_PASSWORD_LENGTH },
+      { edition: 'web', web: true, min: WEB_MIN_PASSWORD_LENGTH }
+    ])('keeps Create disabled below the $edition minimum ($min)', async ({ web, min }) => {
+      window.__VARLENS_WEB__ = web
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const wrapper = mount(UserManagement, {
+        global: { plugins: [vuetify, pinia] },
+        attachTo: document.body
+      })
+      useAuthStore().currentUser = { id: 1, username: 'admin', role: 'admin' }
+      await flushPromises()
+      const addBtn = wrapper.findAll('button').find((btn) => btn.text().includes('Add User'))
+      await addBtn?.trigger('click')
+      await flushPromises()
+
+      const input = (label: string): HTMLInputElement =>
+        [...document.querySelectorAll<HTMLInputElement>('.v-overlay--active input')]
+          .filter((el) => el.labels?.[0]?.textContent?.includes(label) === true)
+          .at(-1)!
+      const createBtn = (): HTMLButtonElement =>
+        [...document.querySelectorAll<HTMLButtonElement>('.v-overlay--active button')]
+          .filter((b) => b.textContent?.includes('Create User') === true)
+          .at(-1)!
+      const type = async (el: HTMLInputElement, value: string): Promise<void> => {
+        el.value = value
+        el.dispatchEvent(new Event('input'))
+        await flushPromises()
+      }
+      await type(input('Username'), 'newuser')
+      await type(input('Temporary Password'), 'x'.repeat(min - 1))
+      expect(createBtn().disabled).toBe(true)
+      expect(document.body.textContent).toContain(`At least ${min} characters`)
+
+      await type(input('Temporary Password'), 'x'.repeat(min))
+      expect(createBtn().disabled).toBe(false)
+      wrapper.unmount()
+      window.__VARLENS_WEB__ = false
     })
   })
 })

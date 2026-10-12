@@ -84,6 +84,14 @@ export function roleAtLeast(role: unknown, minimum: UserRole): boolean {
  */
 export const WEB_MIN_PASSWORD_LENGTH = 12
 
+/** Minimum for desktop (local) accounts, and the floor of the shared `PasswordSchema`. */
+export const DESKTOP_MIN_PASSWORD_LENGTH = 8
+
+/** The minimum the server of this edition enforces, for form rules and hints. */
+export function minPasswordLength(web: boolean): number {
+  return web ? WEB_MIN_PASSWORD_LENGTH : DESKTOP_MIN_PASSWORD_LENGTH
+}
+
 /**
  * After this many consecutive failed login attempts the account is
  * temporarily locked. Matches the desktop AuthService constant.

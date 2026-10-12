@@ -15,7 +15,11 @@ import {
   SetRoleArgsSchema,
   UsernameArgsSchema
 } from '../../../shared/api/schemas/auth'
-import { DEFAULT_USER_ROLE, USER_ROLES } from '../../../shared/auth/auth-constants'
+import {
+  DEFAULT_USER_ROLE,
+  USER_ROLES,
+  WEB_MIN_PASSWORD_LENGTH
+} from '../../../shared/auth/auth-constants'
 import { PasswordPolicyError } from '../../auth/PostgresWebAuthService'
 import { UserAdminError } from '../../auth/postgres-user-admin'
 import type { PasswordResetAck } from '../../../shared/ipc/domains/auth'
@@ -108,7 +112,8 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
             reply,
             400,
             'invalid-user-payload',
-            'Username, name and password are required.'
+            'Username, display name and a temporary password of at least ' +
+              `${WEB_MIN_PASSWORD_LENGTH} characters are required.`
           )
         }
         const [username, displayName, tempPassword, requestedRole] = parsed.data
@@ -217,7 +222,12 @@ export function buildAuthAdminOverrides(): Record<string, OverrideHandler> {
         if (admin === undefined) return { error: 'admin-required' }
         const parsed = ResetPasswordArgsSchema.safeParse(args)
         if (!parsed.success) {
-          return fail(reply, 400, 'invalid-reset-payload', 'Username and new password required.')
+          return fail(
+            reply,
+            400,
+            'invalid-reset-payload',
+            `Username and a new password of at least ${WEB_MIN_PASSWORD_LENGTH} characters are required.`
+          )
         }
         const [username, newPassword] = parsed.data
         if (username === admin.username) {

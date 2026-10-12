@@ -4,15 +4,17 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserAdmin, type ManagedUser, type UserRole } from '../composables/useUserAdmin'
 import { mdiAccountCheck, mdiAccountOff, mdiLockReset, mdiPlus } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
-import { DEFAULT_USER_ROLE } from '../../../shared/auth/auth-constants'
+import { DEFAULT_USER_ROLE, minPasswordLength } from '../../../shared/auth/auth-constants'
+import { isWebRuntime } from '../utils/runtime-mode'
 import { ROLE_OPTIONS } from '../utils/role-labels'
 
 const authStore = useAuthStore()
 const { users, busy, error, success, loadUsers, createUser, setRole, resetPassword, setActive } =
   useUserAdmin()
 
-/** Server policy (web): temporary and reset passwords need 12+ characters. */
-const PASSWORD_HINT = 'At least 12 characters. The user must change it at first sign-in.'
+/** The server's rule for temporary and reset passwords in this edition. */
+const MIN_PASSWORD = minPasswordLength(isWebRuntime())
+const PASSWORD_HINT = `At least ${MIN_PASSWORD} characters. The user must change it at first sign-in.`
 
 const showCreateDialog = ref(false)
 const newUsername = ref('')
@@ -197,7 +199,7 @@ onMounted(loadUsers)
               color="primary"
               block
               :loading="busy"
-              :disabled="!newUsername || !newTempPassword"
+              :disabled="!newUsername || newTempPassword.length < MIN_PASSWORD"
             >
               Create User
             </v-btn>
@@ -226,7 +228,7 @@ onMounted(loadUsers)
               color="primary"
               block
               :loading="busy"
-              :disabled="!resetPasswordValue"
+              :disabled="resetPasswordValue.length < MIN_PASSWORD"
             >
               Reset Password
             </v-btn>
