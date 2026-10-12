@@ -23,6 +23,7 @@ import {
   problemKey,
   type EvidenceProblem
 } from '../../../shared/evidence/ruleset-problems'
+import { evidenceShortlistConfig } from '../../../shared/evidence/evidence-shortlist-config'
 import { ShortlistConfigSchema } from '../../../shared/types/ipc-schemas'
 import type { EvidenceRule, EvidenceRuleset } from '../../../shared/types/evidence-ruleset'
 import type { FilterPreset } from '../../../shared/types/filter-presets'
@@ -41,14 +42,8 @@ export interface RankingDraft {
   config: EvidenceShortlistConfig
 }
 
-const {
-  defaultGate,
-  defaultTopN,
-  variantTypes,
-  limits,
-  newGroupReferenceWhen,
-  referenceRuleSuffix
-} = SHORTLIST_EVIDENCE_CONFIG
+const { defaultGate, limits, newGroupReferenceWhen, referenceRuleSuffix } =
+  SHORTLIST_EVIDENCE_CONFIG
 
 /** Paths of the ruleset inside a config, as validation problems report them. */
 export const RULESET_PATH = ['rankConfig', 'ruleset'] as const
@@ -76,24 +71,17 @@ function derivedRulesetId(id: string): string {
   return `${id.replace(/-u[0-9a-z]+$/, '').slice(0, limits.rulesetIdChars - suffix.length)}${suffix}`
 }
 
-/** An evidence config around `ruleset`; `weights` is required by the type but unused by evidence scoring. */
-function evidenceConfig(
-  ruleset: EvidenceRuleset,
-  gate: Partial<FilterState>,
-  topN: number
-): EvidenceShortlistConfig {
-  const rs = clone(ruleset)
+/**
+ * A copy of `config` that is a new ranking: everything kept (gate, pins,
+ * tie-breakers, per-type overrides, scope) except the ruleset identity, which
+ * gets a new id and loses the frozen artifact's `sha256`.
+ */
+function withNewIdentity(config: ShortlistConfig): EvidenceShortlistConfig {
+  const copy = clone(config) as EvidenceShortlistConfig
+  const rs = copy.rankConfig.ruleset
   delete rs.sha256
   rs.id = derivedRulesetId(rs.id)
-  return {
-    variantTypeScope: [...variantTypes],
-    baseFilters: gate,
-    topN,
-    rankConfig: {
-      weights: { impact: 0, pathogenicity: 0, rarity: 0, clinvar: 0, phenotype: 0 },
-      ruleset: rs
-    }
-  }
+  return copy
 }
 
 const templateGate = (): Partial<FilterState> => ({
@@ -172,7 +160,7 @@ export function useShortlistRankingEditor() {
     startDraft(
       COPY.newRankingName,
       null,
-      evidenceConfig(VARVIS_EVIDENCE_TEMPLATE, templateGate(), defaultTopN)
+      withNewIdentity(evidenceShortlistConfig(VARVIS_EVIDENCE_TEMPLATE))
     )
   }
 
@@ -181,11 +169,7 @@ export function useShortlistRankingEditor() {
     const name = `${draft.value?.name ?? selected.value?.name ?? COPY.newRankingName} (${COPY.copySuffix})`
     if (draft.value !== null) {
       const { config, description } = clone(draft.value)
-      startDraft(
-        name,
-        description,
-        evidenceConfig(config.rankConfig.ruleset, config.baseFilters, config.topN)
-      )
+      startDraft(name, description, withNewIdentity(config))
       return
     }
     const legacy = selected.value === null ? null : shortlistConfigOf(selected.value)
@@ -194,7 +178,11 @@ export function useShortlistRankingEditor() {
     if (legacy.baseFilters.maxGnomadAf != null) gate.maxGnomadAf = legacy.baseFilters.maxGnomadAf
     if ((legacy.baseFilters.consequences?.length ?? 0) > 0)
       gate.consequences = [...(legacy.baseFilters.consequences ?? [])]
-    startDraft(name, null, evidenceConfig(VARVIS_EVIDENCE_TEMPLATE, gate, legacy.topN))
+    const config = evidenceShortlistConfig(VARVIS_EVIDENCE_TEMPLATE, {
+      baseFilters: gate,
+      pinStarredTop: legacy.rankConfig.pinStarredTop
+    })
+    startDraft(name, null, withNewIdentity({ ...config, topN: legacy.topN }))
   }
 
   /** Open an exported ranking as a new draft; returns an error message or null. */

@@ -55,6 +55,16 @@ export const DEFAULT_IMPORT_FIELD_PROFILE: ImportFieldProfile = {
   }
 }
 
+/**
+ * Per-import bound on the source field names a resolver keeps (names come
+ * from untrusted files): distinct fields, and their total characters. A VCF
+ * header allows 4,096 INFO plus 256 CSQ / ANN fields.
+ */
+export const IMPORT_FIELD_NAME_LIMITS = {
+  maxDistinctFields: 8_192,
+  maxNameChars: 1024 * 1024
+} as const
+
 /** Per-variant `info_json` budget; the VCF reader enforces the same numbers on raw INFO. */
 export const MAX_INFO_JSON_FIELDS = 4_096
 export const MAX_INFO_JSON_CHARS = 1024 * 1024
@@ -138,6 +148,21 @@ export const COLUMNAR_SLOT_COLUMN: Readonly<Record<ColumnarSlot, string>> = {
   HPO_SIM_SCORE: 'hpo_sim_score',
   MOI: 'moi'
 }
+
+/**
+ * varvis columnar columns without a VarLens column whose array holds one
+ * value per transcript (manual 2.11.1: values of the selected / alternative
+ * transcript). The importer keeps the selected transcript's value; every
+ * other array is a list and is stored comma-joined.
+ */
+export const COLUMNAR_TRANSCRIPT_FIELDS: ReadonlySet<string> = new Set([
+  'ExonIntronRank',
+  'ExonDist',
+  'AltFunc',
+  'AltImpact',
+  'AionShortlist',
+  'InterProDomain'
+])
 
 /** Object-export variant property → column (`ObjectFormatMapper`). */
 export const OBJECT_FORMAT_COLUMNS: Readonly<Record<string, string>> = {

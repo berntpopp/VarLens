@@ -17,7 +17,7 @@
     {
       "id": "xl",
       "label": "X-linked",
-      "when": "chr:=:X AND (moi:~:XR OR moi:~:XD) AND (zygosity:=:hemi OR zygosity:=:hom OR moi:~:XD)",
+      "when": "moi:~:X AND (zygosity:=:hemi OR zygosity:=:hom OR ((moi:~:XD OR moi:~:XLD) AND zygosity:=:het))",
       "points": 2
     },
     {
@@ -264,5 +264,5 @@
       ]
     }
   ],
-  "sha256": "4d7702586359e3e850dd0075f453ebef272f0342fc45bace155826f900a85aec"
+  "sha256": "3795570f1ce9ff5600ae719bb278a4cbab43b14dbe99b839ced6ec6e7889cb00"
 }

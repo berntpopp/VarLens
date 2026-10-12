@@ -14,6 +14,7 @@ import { isValidInfoKey } from '../../../src/shared/filters/info-field-filter'
 import {
   CANONICAL_EVIDENCE_FIELDS,
   COLUMNAR_HEADER_TO_SLOT,
+  IMPORT_FIELD_NAME_LIMITS,
   MAX_INFO_JSON_FIELDS,
   type ImportFieldProfile
 } from '../../../src/shared/config/import-fields.config'
@@ -119,6 +120,40 @@ describe('VCF INFO evidence aliases', () => {
       CLNREVSTAT: 'criteria_provided,_single_submitter',
       CLINVAR_REVSTAT: 'criteria provided, single submitter'
     })
+  })
+})
+
+describe('untrusted field names', () => {
+  it('assigns colliding keys in linear time', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    const names = Array.from(
+      { length: IMPORT_FIELD_NAME_LIMITS.maxDistinctFields },
+      (_, i) => `${'X'.repeat(64)}${i}`
+    )
+    const started = performance.now()
+    const keys = names.map((name) => resolver.resolve('JSON', name).key)
+    // Quadratic suffix search took ~4.4 s for 8k names; linear is a few ms.
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(new Set(keys).size).toBe(names.length)
+    expect(keys.every((key) => key !== null && isValidInfoKey(key))).toBe(true)
+  })
+
+  it('refuses more distinct field names than an import may hold', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    for (let i = 0; i < IMPORT_FIELD_NAME_LIMITS.maxDistinctFields; i++)
+      resolver.resolve('JSON', `F${i}`)
+    expect(() => resolver.resolve('JSON', 'one-more')).toThrow(ImportFieldBudgetError)
+    expect(() => resolver.resolve('JSON', 'one-more')).toThrow(/distinct annotation fields/)
+    // A field already seen still resolves.
+    expect(resolver.resolve('JSON', 'F1').key).toBe('F1')
+  })
+
+  it('refuses field names beyond the name byte budget', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    const long = 'n'.repeat(64 * 1024)
+    expect(() => {
+      for (let i = 0; i < 64; i++) resolver.resolve('JSON', `${long}${i}`)
+    }).toThrow(/field names exceed/)
   })
 })
 

@@ -19,7 +19,7 @@ import {
   type VcfSelectedSampleColumn
 } from '../import/vcf/vcf-line-parser'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
-import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
+import { isFatalImportRowError } from '../import/vcf/vcf-resource-limits'
 
 /** Stream mapped VCF variants for the PostgreSQL COPY import path. */
 export async function* streamMappedVcfRows(
@@ -94,7 +94,7 @@ export async function* streamMappedVcfRows(
           yield variant
         }
       } catch (error) {
-        if (error instanceof VcfResourceLimitError) throw error
+        if (isFatalImportRowError(error)) throw error
         const reason = error instanceof Error ? error.message : String(error)
         console.warn('[postgres-import-worker] Skipping unparseable VCF line:', reason)
         onSkip?.(reason)

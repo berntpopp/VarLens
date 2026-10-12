@@ -83,6 +83,25 @@ describe('useRankingPreview', () => {
     expect(p.compared.value).toBe(false)
   })
 
+  it('marks a result stale when the draft changed while its request was running', async () => {
+    let resolve: (v: unknown) => void = () => undefined
+    shortlist.mockReturnValueOnce(new Promise((r) => (resolve = r)))
+    const cfg = ref<ShortlistConfig>({ ...config })
+    const p = useRankingPreview(
+      ref(1),
+      () => cfg.value,
+      () => null,
+      10
+    )
+    const running = p.run()
+    cfg.value.topN = 9 // edit the draft in place during the request
+    resolve({ rows: [row(1, 1)] })
+    await running
+    expect(shortlist).toHaveBeenCalledWith({ caseId: 1, adHocConfig: config })
+    expect(p.result.value).toHaveLength(1)
+    expect(p.stale.value).toBe(true)
+  })
+
   it('shows the error of a failed run', async () => {
     shortlist.mockRejectedValueOnce(new Error('boom'))
     const p = useRankingPreview(

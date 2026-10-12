@@ -35,6 +35,8 @@ vi.mock('../../../src/main/ipc/handlers/cohort-logic', () => ({
 }))
 
 const { startMultiFileImport } = await import('../../../src/main/ipc/handlers/import-logic')
+const { runSessionBatchImport } =
+  await import('../../../src/main/ipc/handlers/batch-import-session')
 
 const RUN_PG = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -226,6 +228,18 @@ interface Imported {
   rows: Record<string, Record<string, string>>
   dictionary: Record<string, string> | null
 }
+
+/**
+ * A row whose 4,096 INFO fields fit the reader's limit, but whose kept
+ * fields plus the derived CLINVAR_REVSTAT exceed the info_json budget.
+ */
+const OVER_BUDGET_VCF = [
+  '##fileformat=VCFv4.2',
+  '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+  '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1',
+  `chr4\t100\t.\tA\tG\t50\tPASS\t${Array.from({ length: 4095 }, (_, i) => `F${i}=1`).join(';')};CLNREVSTAT=criteria_provided\tGT\t0/1`,
+  ''
+].join('\n')
 
 /** One file: a single-file import; several: one multi-file case. */
 type Backend = (filePath: string | string[], profile?: ImportFieldProfile) => Promise<Imported>
@@ -442,6 +456,56 @@ describe('import field profile: every source, both backends', () => {
 
   contract(importSqlite, 'SQLite')
 
+  it('SQLite: a row over the info_json budget fails the replacement and keeps the old case', async () => {
+    const overBudget = join(dir, 'over-budget.vcf')
+    writeFileSync(overBudget, OVER_BUDGET_VCF)
+    const dbPath = join(dir, `${randomBytes(6).toString('hex')}.db`)
+    const svc = new DatabaseService(dbPath)
+    try {
+      await new Promise<void>((done) => setImmediate(done))
+      const run = (filePath: string) =>
+        new Promise<Record<string, unknown>>((done) => {
+          void runImportSession(
+            {
+              type: 'start',
+              files: [
+                {
+                  filePath,
+                  caseName: 'replace-me',
+                  isDuplicate: false,
+                  duplicateStrategy: 'overwrite'
+                }
+              ],
+              dbPath,
+              encryptionKey: svc.getEncryptionKey(),
+              throttleMs: 1000
+            } as never,
+            {
+              postMessage: (m) => {
+                if (m.type === 'complete') done(m as never) // a file error comes before it
+              }
+            }
+          )
+        })
+      await run(files.vcf)
+      const replaced = (await run(overBudget)) as {
+        results?: { failed: number; details: Array<{ error?: string }> }
+      }
+      expect(replaced.results?.failed).toBe(1)
+      expect(replaced.results?.details[0].error).toMatch(/annotation fields/)
+      const db = new Database(dbPath, { readonly: true })
+      try {
+        expect(db.prepare('SELECT name, variant_count FROM cases').all()).toEqual([
+          { name: 'replace-me', variant_count: EVIDENCE.length }
+        ])
+      } finally {
+        db.close()
+      }
+    } finally {
+      svc.close()
+    }
+  }, 60_000)
+
   describe.skipIf(!RUN_PG)('PostgreSQL (real instance)', () => {
     const schema = `varlens_test_field_profile_${Date.now()}_${randomBytes(4).toString('hex')}`
     let probe: Client
@@ -461,8 +525,8 @@ describe('import field profile: every source, both backends', () => {
       await probe.end()
     }, 60_000)
 
-    const importPostgres: Backend = async (filePath, profile) => {
-      const executor = new PostgresImportExecutor({
+    const postgresExecutor = (): PostgresImportExecutor =>
+      new PostgresImportExecutor({
         schema,
         clientConfig: { connectionString: PG_URL },
         workerClientFactory: () =>
@@ -495,6 +559,9 @@ describe('import field profile: every source, both backends', () => {
             terminate: async () => undefined
           }) as never
       })
+
+    const importPostgres: Backend = async (filePath, profile) => {
+      const executor = postgresExecutor()
       const caseName = `parity-${randomBytes(6).toString('hex')}`
       const vcfOptions = profile && { fieldProfile: profile }
       const result = Array.isArray(filePath)
@@ -526,6 +593,45 @@ describe('import field profile: every source, both backends', () => {
     }
 
     contract(importPostgres, 'PostgreSQL')
+
+    it('PostgreSQL: a row over the info_json budget fails the replacement and keeps the old case', async () => {
+      const overBudget = join(dir, 'over-budget-pg.vcf')
+      writeFileSync(overBudget, OVER_BUDGET_VCF)
+      const caseName = `replace-${randomBytes(4).toString('hex')}`
+      const executor = postgresExecutor()
+      await executor.importSingleFile({ filePath: files.vcf, caseName, throttleMs: 1000 })
+      const readyCases = async () =>
+        (
+          await probe.query(
+            `SELECT id, name, variant_count FROM "${schema}"."cases" WHERE name LIKE $1`,
+            [`${caseName}%`]
+          )
+        ).rows as Array<{ id: number; name: string; variant_count: number }>
+      const session = {
+        capabilities: { backend: 'postgres' },
+        getImportExecutor: () => executor,
+        listCases: async () =>
+          (await readyCases()).map((c) => ({ id: Number(c.id), name: c.name })),
+        getWriteExecutor: () => ({
+          execute: async () => {
+            throw new Error('no case may be deleted or swapped')
+          }
+        })
+      }
+      const result = await runSessionBatchImport({
+        files: [{ inputPath: overBudget, storedPath: overBudget, fileName: 'over-budget-pg.vcf' }],
+        duplicateStrategy: 'overwrite',
+        session: session as never,
+        callbacks: {},
+        signal: new AbortController().signal,
+        concurrency: 1
+      })
+      expect(result.failed).toBe(1)
+      expect(result.details[0].error).toMatch(/annotation fields/)
+      expect((await readyCases()).map((c) => [c.name, Number(c.variant_count)])).toEqual([
+        [caseName, EVIDENCE.length]
+      ])
+    }, 60_000)
 
     it('stores exactly what SQLite stores', async () => {
       for (const filePath of [

@@ -14,7 +14,7 @@ import { VARVIS_EVIDENCE_BETA_V1 } from './evidence-rulesets/artifact'
 
 /** sha256 of the frozen ruleset; a test checks the artifact still matches. */
 export const EVIDENCE_BETA_RULESET_SHA256 =
-  '4d7702586359e3e850dd0075f453ebef272f0342fc45bace155826f900a85aec'
+  '3795570f1ce9ff5600ae719bb278a4cbab43b14dbe99b839ced6ec6e7889cb00'
 
 export const EVIDENCE_BETA_PRESET: {
   name: string

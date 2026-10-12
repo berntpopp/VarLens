@@ -8,6 +8,7 @@ import type { Readable } from 'node:stream'
 
 import {
   COLUMNAR_SLOT_COLUMN,
+  COLUMNAR_TRANSCRIPT_FIELDS,
   OBJECT_FORMAT_COLUMNS,
   VARVIS_SNV_COLUMN_TYPES
 } from '../../shared/config/import-fields.config'
@@ -124,14 +125,12 @@ function columnarRowReader(
   return (value) => {
     if (!Array.isArray(value)) return
     const row = value as RawVariantRow
-    const transcripts = row[cols.TRANSCRIPT]
-    const transcriptCount = Array.isArray(transcripts) ? transcripts.length : 1
     const selected = Number(row[cols.SELECTED_TRANSCRIPT] ?? 0) || 0
     header.forEach((item, index) => {
+      const perTranscript = COLUMNAR_TRANSCRIPT_FIELDS.has(item.id) || slotByIndex.has(index)
       const text = columnarCellText(
         row[index],
-        selected,
-        transcriptCount,
+        perTranscript ? selected : null,
         item.dataDictionary ?? null
       )
       collector.add(entries[index], text)

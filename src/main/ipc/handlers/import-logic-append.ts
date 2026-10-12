@@ -41,7 +41,7 @@ import type { VcfHeader } from '../../import/vcf/types'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/vcf/import-filters'
 import { VcfHeaderBudget } from '../../import/vcf/vcf-header-limits'
-import { VcfResourceLimitError } from '../../import/vcf/vcf-resource-limits'
+import { isFatalImportRowError } from '../../import/vcf/vcf-resource-limits'
 import type { DatabaseService } from '../../database/DatabaseService'
 import { mainLogger } from '../../services/MainLogger'
 import {
@@ -188,7 +188,7 @@ export async function importAdditionalFileToCase(
           if (isCancelled()) {
             throw Object.assign(new Error('Import cancelled by user'), { cause: lineError })
           }
-          if (lineError instanceof VcfResourceLimitError) throw lineError
+          if (isFatalImportRowError(lineError)) throw lineError
           totalSkipped++
           if (errors.length < 10) {
             errors.push(
