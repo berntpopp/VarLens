@@ -172,6 +172,22 @@ describe('CohortTable paging', () => {
     expect(exportCohort.mock.calls[0][0]).toEqual(tableFilters)
   })
 
+  it('protein view: the gene carriers query keeps the active filters but not the search', async () => {
+    filtersCtx.filters.value.starredOnly = true
+    filtersCtx.searchTerm.value = 'chr22:29539391'
+    await flushPromises()
+
+    const exposed = wrapper.vm as unknown as {
+      queryGeneCarriers: (gene: string) => Promise<unknown[]>
+    }
+    const rows = await exposed.queryGeneCarriers('THOC5')
+
+    expect(rows).toEqual([row('v0')])
+    const sent = queries().at(-1) as Query
+    expect(sent).toMatchObject({ gene_symbol: 'THOC5', starred_only: true, limit: 1000 })
+    expect(sent).not.toHaveProperty('search_term')
+  })
+
   it('lets a DSL CADD condition replace the CADD header filter instead of conflicting', async () => {
     // The bar exposes DSL conditions under the DSL key `cadd`; the header uses `cadd_phred`.
     const BarWithDsl = defineComponent({
