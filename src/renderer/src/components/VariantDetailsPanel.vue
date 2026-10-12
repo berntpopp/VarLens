@@ -538,7 +538,7 @@ function getConsequenceColor(consequence: string): string {
   if (consequence.includes('missense') || consequence.includes('inframe')) {
     return 'warning'
   }
-  return 'grey'
+  return 'muted'
 }
 
 // Selection changes and closes wait for the evidence editor's unsaved-draft prompt

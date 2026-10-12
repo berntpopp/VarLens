@@ -439,9 +439,7 @@ onKeyStroke(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
 }
 
 /* Same 18px glyph box the former x-small icon v-btn rendered */

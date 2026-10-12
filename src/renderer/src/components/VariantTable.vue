@@ -681,7 +681,7 @@ defineExpose({
 <style scoped>
 /* Monospace data display */
 .variant-data-mono {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 

@@ -122,7 +122,7 @@ export function acmgLabelCaseSql(rankExpression: string): string {
  * between the two). A filter on a component also selects the aggregate, see
  * {@link severityFilterParts}; a filter on the aggregate selects only it.
  *
- * `color` is the chip colour token of the category in both views (grey =
+ * `color` is the chip colour token of the category in both views (on-surface =
  * neutral), so every spelling of a category looks the same.
  *
  * `axis`: `pathogenicity` categories classify the variant for Mendelian
@@ -142,7 +142,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'pathogenic_likely_pathogenic',
     components: ['pathogenic', 'likely_pathogenic'],
-    color: 'orange',
+    color: 'acmg-lp',
     label: 'Pathogenic/Likely pathogenic',
     rank: 14,
     axis: 'pathogenicity',
@@ -151,7 +151,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'likely_pathogenic',
     components: [],
-    color: 'orange',
+    color: 'acmg-lp',
     label: 'Likely pathogenic',
     rank: 13,
     axis: 'pathogenicity',
@@ -177,7 +177,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'uncertain_significance',
     components: [],
-    color: 'warning',
+    color: 'muted',
     label: 'Uncertain significance',
     rank: 11,
     axis: 'pathogenicity',
@@ -197,7 +197,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'risk_factor',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Risk factor',
     rank: 10,
     axis: 'other',
@@ -206,7 +206,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'association',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Association',
     rank: 9,
     axis: 'other',
@@ -215,7 +215,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'affects',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Affects',
     rank: 8,
     axis: 'other',
@@ -224,7 +224,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'drug_response',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Drug response',
     rank: 7,
     axis: 'other',
@@ -233,7 +233,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'other',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Other',
     rank: 6,
     axis: 'other',
@@ -254,7 +254,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'protective',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Protective',
     rank: 5,
     axis: 'other',
@@ -263,7 +263,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'likely_benign',
     components: [],
-    color: 'light-green',
+    color: 'acmg-lb',
     label: 'Likely benign',
     rank: 4,
     axis: 'pathogenicity',
@@ -272,7 +272,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'benign_likely_benign',
     components: ['likely_benign', 'benign'],
-    color: 'light-green',
+    color: 'acmg-lb',
     label: 'Benign/Likely benign',
     rank: 3,
     axis: 'pathogenicity',
@@ -281,7 +281,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'benign',
     components: [],
-    color: 'success',
+    color: 'acmg-b',
     label: 'Benign',
     rank: 2,
     axis: 'pathogenicity',
@@ -290,7 +290,7 @@ export const CLINVAR_CATEGORIES = [
   {
     id: 'not_provided',
     components: [],
-    color: 'grey',
+    color: 'on-surface',
     label: 'Not provided',
     rank: 1,
     axis: 'none',
@@ -568,7 +568,7 @@ export function withOfferedValues<T extends { key: string; distinctValues?: stri
 }
 
 /** Colour token of a value that has no category. */
-export const NEUTRAL_SEVERITY_COLOR = 'grey'
+export const NEUTRAL_SEVERITY_COLOR = 'on-surface'
 
 /**
  * Chip colour token for a raw ClinVar string: its category's, so `LB`,

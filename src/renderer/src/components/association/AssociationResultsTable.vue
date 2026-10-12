@@ -196,6 +196,6 @@ function exportResults(): void {
 
 <style scoped>
 .gene-symbol {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 </style>

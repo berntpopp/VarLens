@@ -119,7 +119,7 @@ const tooltipStyle = computed(() => {
 }
 
 .tooltip-mono {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 </style>

@@ -409,7 +409,6 @@ export function useLollipopPlot(options: LollipopPlotOptions) {
           .append('path')
           .attr('d', diamondPath)
           .attr('fill', color)
-          .attr('opacity', 0.7)
           .attr('stroke', '#fff')
           .attr('stroke-width', 0.5)
           .attr('cursor', 'pointer')

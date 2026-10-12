@@ -3,6 +3,7 @@ import { computed, ref, toRef, watch } from 'vue'
 import type { VepTranscriptConsequence } from '../../../shared/types/vep'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { useTranscripts } from '../composables/useTranscripts'
+import { getImpactColor } from '../composables/useTableColors'
 import {
   mergeTranscripts,
   normalizeTranscriptId,
@@ -107,14 +108,6 @@ const headers = computed(() => {
   return cols
 })
 
-function impactColor(impact: string | null): string {
-  if (impact === null) return 'grey'
-  if (impact === 'HIGH') return 'error'
-  if (impact === 'MODERATE') return 'warning'
-  if (impact === 'LOW') return 'info'
-  return 'grey'
-}
-
 function sourceIcon(source: string): string {
   if (source === 'imported') return mdiDatabase
   if (source === 'vep') return mdiCloud
@@ -122,9 +115,9 @@ function sourceIcon(source: string): string {
 }
 
 function sourceColor(source: string): string {
-  if (source === 'imported') return 'blue-grey'
-  if (source === 'vep') return 'deep-purple'
-  return 'teal'
+  if (source === 'imported') return 'secondary'
+  if (source === 'vep') return 'info'
+  return 'success'
 }
 
 function sourceLabel(source: string): string {
@@ -134,9 +127,9 @@ function sourceLabel(source: string): string {
 }
 
 function vepSourceColor(vepSource: string | null): string {
-  if (vepSource === 'RefSeq') return 'orange'
-  if (vepSource === 'Ensembl') return 'indigo'
-  return 'grey'
+  if (vepSource === 'RefSeq') return 'secondary'
+  if (vepSource === 'Ensembl') return 'primary'
+  return 'muted'
 }
 
 /**
@@ -201,7 +194,7 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
         v-if="canFetchVep"
         size="small"
         variant="tonal"
-        color="deep-purple"
+        color="primary"
         :prepend-icon="mdiCloudDownload"
         @click="handleFetchVep"
       >
@@ -210,7 +203,7 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
       <v-chip
         v-if="vepFetched && !vepLoading && vepTranscripts.length > 0"
         size="x-small"
-        color="deep-purple"
+        color="info"
         variant="outlined"
       >
         VEP loaded
@@ -289,7 +282,7 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
             <template #activator="{ props: tooltipProps }">
               <v-chip
                 v-bind="consequenceTooltip(item) !== null ? tooltipProps : undefined"
-                :color="impactColor(item.impact ?? item.consequence)"
+                :color="getImpactColor(item.impact ?? item.consequence)"
                 size="x-small"
                 label
               >
@@ -311,8 +304,8 @@ async function handleUse(row: UnifiedTranscriptRow): Promise<void> {
         <template #[`item.status`]="{ item }">
           <div class="d-flex ga-1 align-center">
             <v-chip v-if="item.is_selected" size="x-small" color="primary" label> Selected </v-chip>
-            <v-chip v-if="item.is_mane_select" size="x-small" color="teal" label> MANE </v-chip>
-            <v-chip v-if="item.is_canonical" size="x-small" color="grey" label> Canonical </v-chip>
+            <v-chip v-if="item.is_mane_select" size="x-small" color="success" label> MANE </v-chip>
+            <v-chip v-if="item.is_canonical" size="x-small" color="muted" label> Canonical </v-chip>
             <v-btn
               v-if="mode === 'case' && !item.is_selected"
               size="x-small"

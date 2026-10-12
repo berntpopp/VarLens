@@ -6,6 +6,7 @@ import { h, type Component } from 'vue'
 import type { IconSet, IconProps } from 'vuetify'
 import DnaIcon from '../components/icons/DnaIcon.vue'
 import { resolveInitialThemeName } from '../utils/theme-preference'
+import { SEMANTIC_COLORS } from '../../../shared/config/domain.config'
 
 // Custom icon set registration
 const customSvgNameToComponent: Record<string, Component> = {
@@ -43,10 +44,8 @@ const warmLight: ThemeDefinition = {
     'surface-variant': '#ECF0F4',
     'surface-bright': '#FFFFFF',
     background: '#F0F4F8',
-    error: '#B71C1C', // Deep red → 6.3:1 on surface (AA)
     info: '#1565C0', // Blue → 5.5:1 on surface (AA)
     success: '#1B5E20', // Dark green → 7.6:1 on surface (AAA)
-    warning: '#BF360C', // Deep orange → 5.4:1 on surface (AA)
     'on-primary': '#FFFFFF', // 11.5:1 on primary (AAA)
     'on-secondary': '#FFFFFF',
     'on-surface': '#1A1D23', // 16.3:1 on surface (AAA)
@@ -55,15 +54,19 @@ const warmLight: ThemeDefinition = {
     'on-info': '#FFFFFF',
     'on-success': '#FFFFFF',
     'on-warning': '#FFFFFF',
-    // Secondary/placeholder text. Replaces Material grey (#9E9E9E, 2.6:1) —
-    // 5.8:1 on surface, 5.5:1 on background, 5.2:1 on grey-lighten-3 (AA).
-    muted: '#5C6370',
+    // App bar: the light look of the old primary bar; its own token so the
+    // dark bar can be a calm surface instead of a light-blue slab.
+    'app-bar': '#1E3A5F',
+    'on-app-bar': '#FFFFFF',
     // Filled star (amber). Material amber is 1.6:1 on surface; this keeps the
     // hue at 4.1:1 so the starred state meets 3:1 non-text contrast (1.4.11).
     star: '#B26A00',
-    // ClinVar "conflicting" chip. Material deep-purple is one colour in both
-    // themes (2.0:1 on the dark surface); this pair is 7.4:1 light, 7.2:1 dark.
-    'clinvar-conflicting': '#5E35B1'
+    // ClinVar "conflicting" chip: a plum that stays ΔE00 >= 10 from the ACMG
+    // scale under CVD (8.6:1 light, 6.4:1 dark; semantic-theme-tokens test).
+    'clinvar-conflicting': '#74364B',
+    // error, warning, muted (secondary text, VUS) and acmg-lp/-lb/-b: one
+    // CVD-checked map shared with the protein plots.
+    ...SEMANTIC_COLORS.light
   },
   variables: {
     // Vuetify's light default (0.60) renders on-surface at 4.4:1 — just under AA.
@@ -76,16 +79,14 @@ const warmLight: ThemeDefinition = {
 const warmDark: ThemeDefinition = {
   dark: true,
   colors: {
-    primary: '#7BAED4', // Light slate blue → 7.1:1 on surface (AAA)
+    primary: '#9CC4E4', // Light slate blue → 9.2:1 on surface (AAA), APCA Lc 67
     secondary: '#90A4AE', // Light blue-grey → 6.5:1 on surface (AA)
     surface: '#1A1D22',
     'surface-variant': '#252A32',
     'surface-bright': '#30353E',
     background: '#12141A',
-    error: '#EF9A9A', // Light red → 7.9:1 on surface (AAA)
     info: '#64B5F6', // Light blue → 7.6:1 on surface (AAA)
     success: '#A5D6A7', // Light green → 10.3:1 on surface (AAA)
-    warning: '#FFB74D', // Light orange → 9.8:1 on surface (AAA)
     'on-primary': '#12141A',
     'on-secondary': '#12141A',
     'on-surface': '#E4E7EC', // 13.6:1 on surface (AAA)
@@ -94,9 +95,11 @@ const warmDark: ThemeDefinition = {
     'on-info': '#12141A',
     'on-success': '#12141A',
     'on-warning': '#12141A',
-    muted: '#A0A8B4', // 7.0:1 on surface (AA)
     star: '#FFC107', // 10.4:1 on surface
-    'clinvar-conflicting': '#B39DDB'
+    'clinvar-conflicting': '#B593C4',
+    'app-bar': '#30353E',
+    'on-app-bar': '#E4E7EC',
+    ...SEMANTIC_COLORS.dark
   }
 }
 

@@ -9,6 +9,11 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import OverviewStatsGrid from '../../../src/renderer/src/components/database-overview/OverviewStatsGrid.vue'
+import {
+  ACMG_ABBREV,
+  ACMG_CLASSIFICATIONS,
+  ACMG_COLORS
+} from '../../../src/shared/config/domain.config'
 
 const vuetify = createVuetify({ components, directives })
 const summary = {
@@ -48,5 +53,21 @@ describe('OverviewStatsGrid', () => {
     expect(tiles.find((text) => text.includes('Genes with Variants'))).toContain('Being refreshed')
     expect(tiles.find((text) => text.includes('Total Cases'))).not.toContain('Being refreshed')
     expect(tiles.find((text) => text.includes('Total Variants'))).not.toContain('Being refreshed')
+  })
+})
+
+describe('OverviewStatsGrid ACMG chips', () => {
+  it('colour each class like every other ACMG chip', () => {
+    const acmg_counts = { pathogenic: 1, likely_pathogenic: 2, vus: 3, likely_benign: 4, benign: 5 }
+    const wrapper = mount(OverviewStatsGrid, {
+      props: { summary: { ...summary, acmg_counts } } as never,
+      global: { plugins: [vuetify] }
+    })
+    for (const cls of ACMG_CLASSIFICATIONS) {
+      const chip = wrapper
+        .findAll('.v-chip')
+        .find((c) => c.text().startsWith(`${ACMG_ABBREV[cls]}:`))
+      expect(chip?.classes(), cls).toContain(`text-${ACMG_COLORS[cls]}`)
+    }
   })
 })

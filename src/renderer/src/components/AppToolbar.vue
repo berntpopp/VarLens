@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar color="primary" density="default" :height="appBarHeight" flat>
+  <v-app-bar color="app-bar" density="default" :height="appBarHeight" flat>
     <v-btn
       :icon="sidebarOpen ? mdiChevronDoubleLeft : mdiChevronDoubleRight"
       variant="text"
@@ -388,14 +388,14 @@ const showExternalLookups = computed(() => isWebRuntime() && toolbarAuth.isAdmin
 
 .mode-toggle :deep(.v-btn--active),
 .mode-toggle :deep(.mode-toggle--active) {
-  /* Inverted pill: on-primary background, primary text (11.5:1 light, 7.8:1 dark) */
-  background-color: rgb(var(--v-theme-on-primary)) !important;
-  color: rgb(var(--v-theme-primary)) !important;
+  /* Inverted pill: on-app-bar background, app-bar text (11.5:1 light, 9.9:1 dark) */
+  background-color: rgb(var(--v-theme-on-app-bar)) !important;
+  color: rgb(var(--v-theme-app-bar)) !important;
   font-weight: 600;
 }
 
 .mode-toggle :deep(.v-btn:not(.v-btn--active)) {
-  color: rgb(var(--v-theme-on-primary)) !important;
+  color: rgb(var(--v-theme-on-app-bar)) !important;
 }
 
 .sidebar-toggle-btn :deep(.v-icon) {

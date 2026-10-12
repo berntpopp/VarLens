@@ -17,10 +17,18 @@ describe('index.html first paint (renderer + web)', () => {
       expect(html).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/)
     })
 
-    it(`${name}: declares the light color-scheme and a pre-mount theme background`, () => {
-      expect(html).toMatch(/<meta\s+name="color-scheme"\s+content="light"\s*\/?>/)
-      // Must equal the Vuetify light theme `background` token (plugins/vuetify.ts).
-      expect(html.toLowerCase()).toContain('background: #f0f4f8')
+    it(`${name}: paints the theme background before mount, light or dark`, () => {
+      expect(html).toMatch(/<meta\s+name="color-scheme"\s+content="light dark"\s*\/?>/)
+      // Must equal the Vuetify themes' `background` tokens (plugins/vuetify.ts).
+      const css = html.toLowerCase()
+      expect(css).toContain('background: #f0f4f8')
+      // Dark OS before mount (unless the app chose light), and an app-chosen dark theme.
+      expect(css).toMatch(
+        /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme='light'\]\)[^}]*background: #12141a/
+      )
+      expect(css).toMatch(/:root\[data-theme='dark'\][^}]*background: #12141a/)
+      // No inline script: the CSP (script-src 'self') would block it.
+      expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/)
     })
   }
 

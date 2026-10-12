@@ -365,7 +365,7 @@ defineExpose({ focus })
 }
 
 .dsl-search-bar :deep(.v-field__input) {
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85rem;
 }
 

@@ -145,18 +145,18 @@ async function copyRsId(): Promise<void> {
 
 <style scoped>
 .hgvs-notation {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
 }
 
 .genomic-coordinate {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   color: rgb(var(--v-theme-primary));
 }
 
 .variant-data-mono {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
 }
 </style>
