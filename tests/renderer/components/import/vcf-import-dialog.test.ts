@@ -206,6 +206,10 @@ describe('VcfImportDialog — startImport error surfacing', () => {
     clickButtonByText('Browse files')
     await flushPromises()
 
+    // The header names no build: the user's click confirms it.
+    document.body.querySelector<HTMLInputElement>('input[value="GRCh38"]')!.click()
+    await flushPromises()
+
     // review -> progress -> (rejected) back to review, with the error surfaced
     clickButtonByText('Import 1 file')
     await flushPromises()
@@ -216,5 +220,60 @@ describe('VcfImportDialog — startImport error surfacing', () => {
       expect.stringContaining('Could not open file dialog'),
       'VcfImportDialog'
     )
+  })
+
+  const definitive = (build: string, length: number) => ({
+    suggested: build,
+    confidence: 'definitive' as const,
+    evidence: [{ build, source: 'Contig lengths', detail: `1 of 1 (${length})` }],
+    excluded: []
+  })
+  const startMultiFile = () =>
+    (mockApi.import as unknown as { startMultiFile: ReturnType<typeof vi.fn> }).startMultiFile
+
+  it('does not import a file without a build until one is chosen, then sends it (#557)', async () => {
+    startMultiFile().mockResolvedValue({
+      caseId: 1,
+      totalVariants: 1,
+      totalSkipped: 0,
+      files: [],
+      elapsed: 1
+    })
+    mountDialog()
+    await flushPromises()
+    clickButtonByText('Browse files')
+    await flushPromises()
+
+    clickButtonByText('Import 1 file')
+    await flushPromises()
+    expect(startMultiFile()).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Choose the genome build these coordinates use.')
+
+    document.body.querySelector<HTMLInputElement>('input[value="GRCh37"]')!.click()
+    await flushPromises()
+    clickButtonByText('Import 1 file')
+    await flushPromises()
+    expect(startMultiFile().mock.calls[0][2]).toEqual({ genomeBuild: 'GRCh37' })
+  })
+
+  it('blocks one case whose files are of different builds', async () => {
+    const importDomain = mockApi.import as unknown as { vcfMultiPreview: ReturnType<typeof vi.fn> }
+    importDomain.vcfMultiPreview.mockResolvedValue({
+      ...previewResult,
+      files: [
+        { ...previewFile, filePath: '/tmp/a.vcf', buildDetection: definitive('GRCh38', 1) },
+        { ...previewFile, filePath: '/tmp/b.vcf', buildDetection: definitive('GRCh37', 2) }
+      ]
+    })
+    mountDialog()
+    await flushPromises()
+    clickButtonByText('Browse files')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('a.vcf is GRCh38, b.vcf is GRCh37.')
+    const button = Array.from(document.body.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Import 2 files')
+    )
+    expect(button?.disabled).toBe(true)
   })
 })

@@ -21,7 +21,8 @@ export interface VcfPreviewInfoField {
 /** Samples and case names chosen in the VCF preview step. */
 export interface VcfSampleSelection {
   selectedSamples: string[]
-  genomeBuild: string
+  /** Null until the user confirms a build (GenomeBuildField); never defaulted. */
+  genomeBuild: string | null
   caseNames: Map<string, string>
   /** Every selected sample has a non-empty, new and unique case name. */
   valid: boolean

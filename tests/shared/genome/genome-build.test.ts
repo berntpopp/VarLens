@@ -197,8 +197,8 @@ describe('combineBuildDetections', () => {
 
   it('files that agree keep the build', () => {
     const d = combineBuildDetections([
-      { fileName: 'a.vcf', detection: definitive('GRCh38') },
-      { fileName: 'b.vcf', detection: definitive('GRCh38') }
+      { filePath: 'a.vcf', buildDetection: definitive('GRCh38') },
+      { filePath: 'b.vcf', buildDetection: definitive('GRCh38') }
     ])
     expect(d).toMatchObject({ suggested: 'GRCh38', confidence: 'definitive' })
     expect(d.evidence[0].detail.startsWith('a.vcf: ')).toBe(true)
@@ -206,8 +206,8 @@ describe('combineBuildDetections', () => {
 
   it('files that disagree are a mixed conflict', () => {
     const d = combineBuildDetections([
-      { fileName: 'a.vcf', detection: definitive('GRCh38') },
-      { fileName: 'b.vcf', detection: definitive('GRCh37') }
+      { filePath: 'a.vcf', buildDetection: definitive('GRCh38') },
+      { filePath: 'b.vcf', buildDetection: definitive('GRCh37') }
     ])
     expect(d).toMatchObject({ suggested: null, confidence: 'conflict' })
     expect(d.mixedFiles).toEqual([
@@ -218,17 +218,17 @@ describe('combineBuildDetections', () => {
 
   it('a none file does not lower the weakest confidence', () => {
     const d = combineBuildDetections([
-      { fileName: 'a.vcf', detection: none },
-      { fileName: 'b.vcf', detection: strong },
-      { fileName: 'c.vcf', detection: definitive('GRCh38') }
+      { filePath: 'a.vcf', buildDetection: none },
+      { filePath: 'b.vcf', buildDetection: strong },
+      { filePath: 'c.vcf', buildDetection: definitive('GRCh38') }
     ])
     expect(d).toMatchObject({ suggested: 'GRCh38', confidence: 'strong' })
   })
 
   it('an exclusion that hits the suggestion is a conflict', () => {
     const d = combineBuildDetections([
-      { fileName: 'a.vcf', detection: strong },
-      { fileName: 'b.vcf', detection: detectGenomeBuild([], { chr1: 249_000_000 }) }
+      { filePath: 'a.vcf', buildDetection: strong },
+      { filePath: 'b.vcf', buildDetection: detectGenomeBuild([], { chr1: 249_000_000 }) }
     ])
     expect(d).toMatchObject({ suggested: 'GRCh38', confidence: 'conflict' })
   })

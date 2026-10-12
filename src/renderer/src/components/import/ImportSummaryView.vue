@@ -131,14 +131,14 @@
     <!-- Metadata chips -->
     <div class="d-flex flex-wrap ga-2 mb-4">
       <v-chip
-        v-if="detectedBuild !== null"
+        v-if="genomeBuild"
         size="small"
         variant="tonal"
         label
         color="info"
         :prepend-icon="mdiDna"
       >
-        {{ detectedBuild }}
+        {{ genomeBuild }}
       </v-chip>
       <v-chip v-for="caller in distinctCallers" :key="caller" size="small" variant="tonal" label>
         {{ caller }}
@@ -194,6 +194,8 @@ const props = defineProps<{
   result: MultiFileImportResult
   caseName: string
   fileResults: VcfPreviewResult[]
+  /** The build the case was imported under (confirmed in the review step). */
+  genomeBuild: string | null
 }>()
 
 const emit = defineEmits<{
@@ -227,15 +229,6 @@ const typeBreakdown = computed(() => {
     }
   }
   return Array.from(map.values()).sort((a, b) => b.count - a.count)
-})
-
-const detectedBuild = computed(() => {
-  for (const file of props.fileResults) {
-    if (file.detectedGenomeBuild !== null && file.detectedGenomeBuild !== '') {
-      return file.detectedGenomeBuild
-    }
-  }
-  return null
 })
 
 const distinctCallers = computed(() => {

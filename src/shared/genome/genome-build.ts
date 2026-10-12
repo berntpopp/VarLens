@@ -200,10 +200,14 @@ export function detectGenomeBuild(
 
 const RANK: Record<BuildConfidence, number> = { definitive: 3, strong: 2, conflict: 1, none: 0 }
 
-/** One case, one build: combine the detections of every file of a multi-file import. */
+/** One case, one build: combine the detections of every file (VCF previews) of a multi-file import. */
 export function combineBuildDetections(
-  perFile: ReadonlyArray<{ fileName: string; detection: BuildDetection }>
+  files: ReadonlyArray<{ filePath: string; buildDetection: BuildDetection }>
 ): BuildDetection {
+  const perFile = files.map((f) => ({
+    fileName: f.filePath.split(/[\\/]/).pop() ?? f.filePath,
+    detection: f.buildDetection
+  }))
   const prefix = (fileName: string, list: BuildEvidence[]): BuildEvidence[] =>
     list.map((e) => ({ ...e, detail: `${fileName}: ${e.detail}` }))
   const evidence = perFile.flatMap((f) => prefix(f.fileName, f.detection.evidence))
@@ -234,6 +238,15 @@ export function detectionBuild(detection: BuildDetection): string | null {
   return detection.confidence === 'definitive' || detection.confidence === 'strong'
     ? detection.suggested
     : null
+}
+
+/** Import must not start: a recognised but non-importable build, or one case of mixed builds. */
+export function isBuildImportBlocked(
+  detection: BuildDetection,
+  builds: readonly GenomeBuildDef[] = GENOME_BUILD_CONFIG.builds
+): boolean {
+  const build = builds.find((b) => b.id === detection.suggested)
+  return (build !== undefined && !build.importable) || (detection.mixedFiles?.length ?? 0) > 1
 }
 
 /** One-line "why" shown under the build control. */
