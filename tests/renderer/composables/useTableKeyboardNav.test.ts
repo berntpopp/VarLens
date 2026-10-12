@@ -403,3 +403,22 @@ describe('isControlFocused', () => {
     expect(isControlFocused()).toBe(false)
   })
 })
+
+describe('arrow navigation and a focused control', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  it.each(['moveDown', 'moveUp'] as const)(
+    '%s releases a focused button so Enter opens the row again',
+    (move) => {
+      document.body.innerHTML = '<button>star</button>'
+      document.querySelector('button')!.focus()
+      const [nav, app] = withSetup(() =>
+        useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
+      )
+      nav[move]()
+      expect(isControlFocused()).toBe(false)
+      expect(nav.selectedIndex.value).toBe(0)
+      app.unmount()
+    }
+  )
+})

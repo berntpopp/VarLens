@@ -110,7 +110,14 @@ export function useTableKeyboardNav<T>(
     }
   }
 
+  // ↑ / ↓ hand the keyboard back to the table: a button the mouse left focused
+  // must not take the next Enter (isControlFocused) from the selected row.
+  function releaseControlFocus(): void {
+    if (isControlFocused()) (document.activeElement as HTMLElement).blur()
+  }
+
   function moveDown(): void {
+    releaseControlFocus()
     if (items.value.length === 0) return
     if (selectedIndex.value === null) {
       selectIndex(0)
@@ -120,6 +127,7 @@ export function useTableKeyboardNav<T>(
   }
 
   function moveUp(): void {
+    releaseControlFocus()
     if (items.value.length === 0) return
     if (selectedIndex.value === null) {
       selectIndex(items.value.length - 1)
