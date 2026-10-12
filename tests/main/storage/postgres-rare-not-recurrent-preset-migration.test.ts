@@ -72,11 +72,7 @@ describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#4
     ).rows
 
   const migrate = (): Promise<{ applied: string[] }> =>
-    new PostgresMigrationRunner(
-      pool,
-      schema,
-      POSTGRES_MIGRATIONS.filter((migration) => migration.version <= '0028')
-    ).migrate()
+    new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
 
   it('adds the preset and leaves every other row unchanged', async () => {
     await probe.query(
