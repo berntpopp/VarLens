@@ -128,12 +128,8 @@ export function scoreRow(row: ShortlistCandidate, config: RankConfig): ScoredRow
   }
 }
 
-function compareByKey(a: ScoredCandidate, b: ScoredCandidate, key: string): number {
-  const av = (a as unknown as Record<string, unknown>)[key]
-  const bv = (b as unknown as Record<string, unknown>)[key]
-  if (av == null && bv == null) return 0
-  if (av == null) return 1
-  if (bv == null) return -1
+/** Compares two present values; null handling happens before the direction flip. */
+function compareValues(av: unknown, bv: unknown, key: string): number {
   if (typeof av === 'number' && typeof bv === 'number') return av - bv
   // Natural chromosome order (1..22, X, Y, MT, then others) — same as the SQL sinks.
   if (key === 'chr') return compareChromosomes(String(av), String(bv))
@@ -164,7 +160,14 @@ export function compareScoredRows(
   if (a.rank_score !== b.rank_score) return b.rank_score - a.rank_score
   if (tieBreakers != null) {
     for (const tb of tieBreakers) {
-      const cmp = compareByKey(a, b, tb.key)
+      const av = (a as unknown as Record<string, unknown>)[tb.key]
+      const bv = (b as unknown as Record<string, unknown>)[tb.key]
+      // Nulls last in both directions, like the tables' NULLS LAST.
+      if (av == null || bv == null) {
+        if (av == null && bv == null) continue
+        return av == null ? 1 : -1
+      }
+      const cmp = compareValues(av, bv, tb.key)
       if (cmp !== 0) return tb.order === 'desc' ? -cmp : cmp
     }
   }
