@@ -57,6 +57,8 @@ export interface BinSupport {
   isReference: boolean
   /** Best-supported bin of its group (0 points by construction, spec §11.9). */
   isAnchor?: boolean
+  /** false: a non-tuned template prior (ClinVar bins other than P/LP, spec §15). */
+  tuned?: boolean
   a: number
   b: number
   points: number

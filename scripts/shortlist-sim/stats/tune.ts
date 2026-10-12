@@ -49,6 +49,8 @@ interface Cell {
   group: string
   bin: string
   isReference: boolean
+  /** Non-tuned template points (ClinVar bins other than P/LP, spec §15); null = tuned. */
+  prior: number | null
   inPopulation: (x: Assignment) => boolean
   hit: (x: Assignment) => boolean
 }
@@ -58,21 +60,24 @@ function cellsOf(template: EvidenceRuleset): Cell[] {
     group: MODES_GROUP,
     bin: m.id,
     isReference: m.id === 'fallback',
+    prior: null,
     inPopulation: (x) => x.scenario === 'primary',
     hit: (x) => x.mode === m.id
   }))
   for (const g of template.groups) {
     const scenario = groupScenario(g)
-    for (const r of g.rules) {
+    g.rules.forEach((r, k) => {
       cells.push({
         group: g.id,
         bin: r.id,
         isReference: REFERENCE_RULE_IDS.has(r.id),
+        // ClinVar: only the first bin (P/LP) is identifiable from P/LP-only positives.
+        prior: usesClinvar(g) && k > 0 ? r.points : null,
         inPopulation: (x) =>
           x.scenario === scenario && (g.scope === 'global' || x.mode === g.scope),
         hit: (x) => x.bins[g.id] === r.id
       })
-    }
+    })
   }
   return cells
 }
@@ -114,7 +119,13 @@ function totals(
 
 type CellPoints = { raw: number; points: number; supported: boolean; isAnchor: boolean }
 
-/** Points per cell; each group is estimated on its own population (A, B = its row counts). */
+const REST = 'rest'
+
+/**
+ * Points per cell; each group is estimated on its own population (A, B = its row counts).
+ * A group with prior cells (ClinVar) estimates its tuned bin against the pooled prior bins
+ * (anchor), which keep their template points.
+ */
 function estimate(
   cells: Cell[],
   t: { a: number[]; b: number[] },
@@ -123,18 +134,25 @@ function estimate(
   const out = new Array<CellPoints>(cells.length)
   for (const group of new Set(cells.map((c) => c.group))) {
     const idx = cells.map((c, i) => (c.group === group ? i : -1)).filter((i) => i >= 0)
-    const bins: BinCount[] = idx.map((i) => ({
+    const tuned = idx.filter((i) => cells[i].prior === null)
+    const priors = idx.filter((i) => cells[i].prior !== null)
+    const bins: BinCount[] = tuned.map((i) => ({
       id: String(i),
       a: t.a[i],
       b: t.b[i],
       isReference: cells[i].isReference
     }))
-    const A = bins.reduce((s, x) => s + x.a, 0)
-    const B = bins.reduce((s, x) => s + x.b, 0)
-    const anchor = anchors?.get(group)
-    estimatePoints(bins, A, B, anchor === undefined ? undefined : String(anchor)).forEach(
-      (p, k) => (out[idx[k]] = p)
-    )
+    if (priors.length > 0) {
+      const sum = (xs: number[]): number => priors.reduce((acc, i) => acc + xs[i], 0)
+      bins.push({ id: REST, a: sum(t.a), b: sum(t.b), isReference: true })
+    }
+    const A = bins.reduce((acc, x) => acc + x.a, 0)
+    const B = bins.reduce((acc, x) => acc + x.b, 0)
+    const fixed = priors.length > 0 ? REST : anchors?.get(group)
+    const est = estimatePoints(bins, A, B, fixed === undefined ? undefined : String(fixed))
+    tuned.forEach((i, k) => (out[i] = est[k]))
+    for (const i of priors)
+      out[i] = { raw: Number.NaN, points: cells[i].prior!, supported: false, isAnchor: false }
   }
   return out
 }
@@ -188,6 +206,7 @@ export function tuneRuleset(
       bin: c.bin,
       isReference: c.isReference,
       isAnchor: est[i].isAnchor,
+      tuned: c.prior === null,
       a: t.a[i],
       b: t.b[i],
       points: disabled ? 0 : est[i].points,

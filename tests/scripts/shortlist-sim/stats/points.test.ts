@@ -9,9 +9,9 @@ const bins = (b10 = 1) => [
 ]
 const byId = (r: ReturnType<typeof estimatePoints>) => Object.fromEntries(r.map((p) => [p.id, p]))
 
-describe('estimatePoints (spec §11.9 anchor rule)', () => {
-  it('hand-computed example: anchor = best-supported bin', () => {
-    // anchor ref (a+b = 1010). K = 3, so the K/2 terms cancel in differences:
+describe('estimatePoints (spec §14–15 anchor rule)', () => {
+  it('hand-computed example: anchor = bin with the most positives', () => {
+    // anchor ref (a = 60). K = 3, so the K/2 terms cancel in differences:
     // x: log2(30.5/60.5) − log2(10.5/950.5) = 5.5121 → 5.5; y: 2.0261 → 2
     const r = byId(estimatePoints(bins(), 100, 1000))
     expect(r.ref.isAnchor).toBe(true)
@@ -41,6 +41,25 @@ describe('estimatePoints (spec §11.9 anchor rule)', () => {
     expect(r.ref.supported).toBe(true)
     expect(r.ref.points).toBeLessThan(0)
     expect(r.mid.points).toBeGreaterThan(0)
+  })
+
+  it('a bin with no (or < 5) positives never scores above the anchor', () => {
+    const r = byId(
+      estimatePoints(
+        [
+          { id: 'plp', a: 100, b: 20, isReference: false },
+          { id: 'blb', a: 0, b: 30, isReference: false },
+          { id: 'few', a: 3, b: 12, isReference: false },
+          { id: 'ref', a: 2, b: 2000, isReference: true }
+        ],
+        105,
+        2062
+      )
+    )
+    expect(r.plp.isAnchor).toBe(true)
+    expect(r.blb.points).toBeLessThanOrEqual(0)
+    expect(r.few.points).toBeLessThanOrEqual(0)
+    expect(r.ref.points).toBeLessThanOrEqual(0)
   })
 
   it('row ranking is invariant to the anchor choice', () => {

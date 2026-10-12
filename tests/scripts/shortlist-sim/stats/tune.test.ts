@@ -57,7 +57,8 @@ describe('tuneRuleset (spec §11.1)', () => {
 
   it('tunes ClinVar on clinvar_visible and mode-scoped groups within their mode', () => {
     const r = tune()
-    expect(pts(r, 'clinvar', 'clinvar_plp')).toMatchObject({ a: 40, b: 10 })
+    expect(pts(r, 'clinvar', 'clinvar_plp')).toMatchObject({ a: 40, b: 10, tuned: true })
+    expect(pts(r, 'clinvar', 'clinvar_plp').points).toBeGreaterThan(0)
     expect(pts(r, 'ad_freq', 'ad_af_ref')).toMatchObject({ a: 30, b: 0 })
     expect(pts(r, 'ad_freq', 'ad_af_high')).toMatchObject({ a: 0, b: 10 })
     expect(pts(r, 'modes', 'ad')).toMatchObject({ a: 30, b: 10 })
@@ -76,6 +77,13 @@ describe('tuneRuleset (spec §11.1)', () => {
     expect(
       off.ruleset.groups.find((g) => g.id === 'effect')!.rules.every((x) => x.points === 0)
     ).toBe(true)
+  })
+
+  it('keeps non-P/LP ClinVar bins at their template points as non-tuned priors', () => {
+    const r = tune()
+    const template = VARVIS_EVIDENCE_TEMPLATE.groups.find((g) => g.id === 'clinvar')!.rules
+    for (const rule of template.slice(1))
+      expect(pts(r, 'clinvar', rule.id)).toMatchObject({ tuned: false, points: rule.points })
   })
 
   it('bootstrap intervals bracket the estimate and are deterministic', () => {

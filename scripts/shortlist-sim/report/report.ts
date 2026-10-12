@@ -71,7 +71,25 @@ export function renderReport(runDir: string, outDir: string): ReportData {
     manifest.bootstrapReps || DEFAULT_REPS,
     manifest.seeds.bootstrap ?? 1
   )
-  writeFileSync(join(outDir, 'report.md'), renderMarkdown(data, manifest) + '\n' + cadd + '\n')
+  // Spec §15: the ship rule is evaluated for the fully pre-registered hand-set points too;
+  // the tuned preset ships only if it passes, the hand-set one if only it passes.
+  const hand = analyze(results, {
+    ...manifest,
+    scorers: { ...manifest.scorers, candidate: 'evidence_hand' }
+  })
+  const handVerdict = verdictSection(hand).replace(
+    '## Ship verdict',
+    '## Ship verdict — hand-set points (`evidence_hand`, pre-registered)'
+  )
+  const decision = data.ship.ship
+    ? 'Decision: ship the tuned preset.'
+    : hand.ship.ship
+      ? 'Decision: the tuned preset fails and the hand-set preset passes — ship the hand-set points.'
+      : 'Decision: neither preset passes — nothing is seeded.'
+  writeFileSync(
+    join(outDir, 'report.md'),
+    renderMarkdown(data, manifest) + '\n' + handVerdict + '\n\n' + decision + '\n\n' + cadd + '\n'
+  )
   writeFileSync(join(outDir, 'rank-cdf.svg'), rankCdfSvg(data.cdf))
   writeFileSync(
     join(outDir, 'hit-at-10.svg'),

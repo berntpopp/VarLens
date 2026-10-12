@@ -183,14 +183,18 @@ export function pointsSection(m: RunManifest): string {
     b.bin + (b.isReference ? ' (catch-all)' : '') + (b.isAnchor ? ' (anchor)' : ''),
     String(b.a),
     String(b.b),
-    b.supported ? signed(b.points, 1) : '0 (unsupported)',
+    b.tuned === false
+      ? `${signed(b.points, 1)} (prior, not tuned)`
+      : b.supported
+        ? signed(b.points, 1)
+        : '0 (unsupported)',
     b.lo !== undefined && b.hi !== undefined ? `[${signed(b.lo, 2)}, ${signed(b.hi, 2)}]` : '–'
   ])
   const disabled = m.concordance.disabledGroups
   return [
     '## Tuned points (refit on all folds)',
-    `Spec §11.9 (amends §11.1): points = log2 enrichment (pseudo-count ½) relative to the group’s best-supported bin (the anchor, 0 points), rounded to 0.5, clipped ±8; a group is a complete partition, so the anchor choice does not change any ranking. Positives A = ${m.tuned.A}, background rows B = ${m.tuned.B} (primary scenario). A bin with a + b < 10 gets 0 points; a group with fewer than 20 training positives gets 0 throughout. Intervals: 95 % gene-cluster bootstrap of the unrounded points, relative to the same anchor.`,
-    'Protocol note: the anchor rule replaced the §11.1 reference-bin rule after a smoke run on one background (bg1, provisional annotation mapping) showed degenerate all-zero tuning — positives almost never fall in the catch-all reference bin, so the "reference a, b ≥ 5" support rule zeroed whole groups. No comparative or test-fold result informed the change.',
+    `Spec §14–15 (amend §11.1): points = log2 enrichment (pseudo-count ½) relative to the group’s anchor — the bin with the most training positives (0 points) — rounded to 0.5, clipped ±8; a group is a complete partition, so the anchor choice does not change any ranking. A bin with a + b < 10 gets 0; a bin with fewer than 5 positives can only score at or below the anchor; a group with fewer than 20 training positives gets 0 throughout. ClinVar is tuned only as P/LP vs the pooled other ClinVar bins (spikes are all P/LP, so the other bins are not identifiable); those keep their template points as non-tuned priors. Positives A = ${m.tuned.A}, background rows B = ${m.tuned.B} (primary scenario). Intervals: 95 % gene-cluster bootstrap of the unrounded points, relative to the same anchor.`,
+    'Protocol note: §14 (anchor) and §15 (most-positive anchor, no bonus for bins with < 5 positives, ClinVar priors) amended the §11.1 estimator after a smoke run (bg1, provisional mapping) and the quick run (bg1, 50 cases) exposed estimator artefacts — all-zero groups under the reference-bin support rule, then positive points for bins without positives. The amendments target the estimator, not observed performance; `evidence_hand` (fully pre-registered points) is reported next to `evidence_tuned` as the pre-registered comparator, and the ship rule is evaluated for both.',
     disabled.length
       ? `Groups disabled by annotation acceptance (0 points everywhere): ${disabled.join(', ')}.`
       : '',
