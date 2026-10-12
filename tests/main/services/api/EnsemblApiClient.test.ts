@@ -104,14 +104,82 @@ describe('EnsemblApiClient.fetchGeneStructure', () => {
     expect((await run(new EnsemblApiClient(null))).success).toBe(true)
   })
 
-  it('says what failed when every attempt times out', async () => {
-    fetchMock.mockRejectedValue(timeoutError())
-    const result = await run(new EnsemblApiClient(null))
-    expect(result).toEqual({
+  it('a hanging Ensembl gives up at the shared deadline and frees the limiter slot', async () => {
+    // THOC5 and MTMR3 stall like a dead connection (settle only on abort); BRCA1 answers.
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      /BRCA1|ENST00000490103/.test(String(url))
+        ? Promise.resolve(ok(String(url).includes('/lookup/id/') ? transcript : gene))
+        : new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+          })
+    )
+    const client = new EnsemblApiClient(null)
+    const first = client.fetchGeneStructure('THOC5')
+    const second = client.fetchGeneStructure('MTMR3')
+    const third = client.fetchGeneStructure('BRCA1') // waits for a slot (maxConcurrent 2)
+    let thirdDoneAt = 0
+    void third.then(() => (thirdDoneAt = Date.now()))
+    const start = Date.now()
+    await vi.advanceTimersByTimeAsync(3 * API_CONFIG.ENSEMBL_DEADLINE_MS)
+
+    const gaveUp = {
       success: false,
-      error: `Ensembl did not answer within ${API_CONFIG.ENSEMBL_TIMEOUT_MS / 1000} s (${API_CONFIG.ENSEMBL_RETRIES + 1} attempts)`
+      error: `Ensembl did not answer within ${API_CONFIG.ENSEMBL_DEADLINE_MS / 1000} s`
+    }
+    expect(await first).toEqual(gaveUp)
+    expect(await second).toEqual(gaveUp)
+    // The slot came back at the deadline: the queued lookup ran right after it.
+    expect((await third).success).toBe(true)
+    expect(thirdDoneAt - start).toBeLessThan(API_CONFIG.ENSEMBL_DEADLINE_MS + 2_000)
+  })
+
+  it('retries with growing, capped backoff and stops at the attempt limit', async () => {
+    fetchMock.mockResolvedValue(new Response('busy', { status: 503 }))
+    const result = await run(new EnsemblApiClient(null))
+    expect(result).toEqual({ success: false, error: 'Ensembl API error: 503' })
+    expect(fetchMock).toHaveBeenCalledTimes(API_CONFIG.ENSEMBL_MAX_ATTEMPTS)
+  })
+
+  it('429: waits the Retry-After when it is short, then retries', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '2' } }))
+      .mockResolvedValueOnce(ok(gene))
+      .mockResolvedValueOnce(ok(transcript))
+    expect((await run(new EnsemblApiClient(null))).success).toBe(true)
+  })
+
+  it('429: a long Retry-After is not waited out but named', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('', { status: 429, headers: { 'Retry-After': '120' } })
+    )
+    const result = await run(new EnsemblApiClient(null))
+    expect(result).toEqual({ success: false, error: 'Ensembl rate limit: retry in 120 s' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('an old expand=1 cache entry (every transcript) still parses', async () => {
+    const store = cache()
+    const old = {
+      ...gene,
+      Transcript: [
+        {
+          ...transcript,
+          id: 'ENST1',
+          display_name: 'THOC5-201',
+          is_canonical: 0,
+          Exon: [{ start: 1, end: 2 }]
+        },
+        { ...transcript, is_canonical: 1 }
+      ]
+    }
+    store.set('ensembl:gene:THOC5', JSON.stringify(old), 90)
+    const result = await run(new EnsemblApiClient(store))
+    expect(result).toMatchObject({
+      success: true,
+      geneStructure: { transcriptId: 'THOC5-216' },
+      cacheInfo: { cached: true }
     })
-    expect(fetchMock).toHaveBeenCalledTimes(API_CONFIG.ENSEMBL_RETRIES + 1)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('does not retry an answer that will not change (404)', async () => {

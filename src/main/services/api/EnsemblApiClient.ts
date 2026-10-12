@@ -5,7 +5,8 @@
  * exons: `?expand=1` on the gene returns every transcript with its exons
  * (TTN: 818 KB, 15–21 s), which ran into the timeout.
  * - Bottleneck rate limiting (500ms between requests, max 2 concurrent)
- * - One retry with backoff on a timeout, 5xx or 429 (API_CONFIG.ENSEMBL_*)
+ * - Retries a timeout, 5xx or short 429 with exponential backoff (retry-backoff.ts)
+ *   inside one shared deadline (API_CONFIG.ENSEMBL_*)
  * - SQLite caching with 90-day TTL
  * - Zod response validation
  */
@@ -17,8 +18,14 @@ import type { GeneStructureResult, ProteinApiError } from '../../../shared/types
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { backoffDelay, deadlineSignal, retryAfterMs } from './retry-backoff'
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+/** Wait `ms`, or less when the deadline passes first. */
+const sleep = (ms: number, deadline: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    deadline.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true })
+  })
 
 export class EnsemblApiClient {
   private cache: ApiCache | null
@@ -127,47 +134,74 @@ export class EnsemblApiClient {
 
   /**
    * The gene (small, no expand) plus its canonical transcript with exons,
-   * combined into the gene-lookup shape the parser and the cache use.
+   * combined into the gene-lookup shape the parser and the cache use. Both
+   * calls and all retries share one deadline, so a hanging Ensembl frees its
+   * limiter slot after ENSEMBL_DEADLINE_MS.
    */
   private async makeRequest(geneSymbol: string): Promise<unknown> {
+    const { signal, clear } = deadlineSignal(API_CONFIG.ENSEMBL_DEADLINE_MS)
+    try {
+      return await this.geneWithCanonicalTranscript(geneSymbol, signal)
+    } finally {
+      clear()
+    }
+  }
+
+  private async geneWithCanonicalTranscript(
+    geneSymbol: string,
+    deadline: AbortSignal
+  ): Promise<unknown> {
     const gene = EnsemblGeneLookupSchema.parse(
-      await this.getJson(`/lookup/symbol/homo_sapiens/${encodeURIComponent(geneSymbol)}`)
+      await this.getJson(`/lookup/symbol/homo_sapiens/${encodeURIComponent(geneSymbol)}`, deadline)
     )
     const canonical = gene.canonical_transcript?.split('.')[0]
     if (canonical === undefined || canonical === '') return gene
     const transcript = EnsemblTranscriptLookupSchema.parse(
-      await this.getJson(`/lookup/id/${encodeURIComponent(canonical)}?expand=1`)
+      await this.getJson(`/lookup/id/${encodeURIComponent(canonical)}?expand=1`, deadline)
     )
     return { ...gene, Transcript: [{ ...transcript, is_canonical: 1 }] }
   }
 
-  /** GET with the Ensembl timeout; one retry (after a backoff) on a timeout, 5xx or 429. */
-  private async getJson(path: string): Promise<unknown> {
+  /** GET with a per-try timeout; retries a timeout, 5xx or short 429 with backoff until the deadline. */
+  private async getJson(path: string, deadline: AbortSignal): Promise<unknown> {
     const url = `${this.baseUrl}${path}${path.includes('?') ? '&' : '?'}content-type=application/json`
-    const attempts = API_CONFIG.ENSEMBL_RETRIES + 1
-    let lastError: Error = new Error('Ensembl API error')
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      if (attempt > 1) await sleep(API_CONFIG.ENSEMBL_RETRY_BACKOFF_MS * (attempt - 1))
+    const deadlineError = new Error(
+      `Ensembl did not answer within ${API_CONFIG.ENSEMBL_DEADLINE_MS / 1000} s`
+    )
+    for (let attempt = 1; ; attempt++) {
+      let wait: number
+      const perTry = deadlineSignal(API_CONFIG.ENSEMBL_TIMEOUT_MS)
       try {
         const response = await fetch(url, {
-          signal: AbortSignal.timeout(API_CONFIG.ENSEMBL_TIMEOUT_MS),
+          signal: AbortSignal.any([perTry.signal, deadline]),
           headers: { 'Content-Type': 'application/json' }
         })
         if (response.ok) return await response.json()
-        lastError = new Error(`Ensembl API error: ${response.status}`)
+        const error = new Error(`Ensembl API error: ${response.status}`)
         // 4xx (except 429) will not change on a retry.
-        if (response.status < 500 && response.status !== 429) throw lastError
+        if (response.status < 500 && response.status !== 429) throw error
+        if (attempt >= API_CONFIG.ENSEMBL_MAX_ATTEMPTS) throw error
+        const asked =
+          response.status === 429 ? retryAfterMs(response.headers.get('Retry-After')) : null
+        if (asked !== null && asked > API_CONFIG.RETRY_AFTER_CAP_MS) {
+          throw new Error(`Ensembl rate limit: retry in ${Math.ceil(asked / 1000)} s`)
+        }
+        wait = Math.max(asked ?? 0, backoffDelay(attempt, API_CONFIG.RETRY_BACKOFF))
       } catch (error) {
-        if (error === lastError) throw error
-        const timedOut = error instanceof Error && error.name === 'TimeoutError'
-        if (!timedOut) throw error
-        lastError = new Error(
-          `Ensembl did not answer within ${API_CONFIG.ENSEMBL_TIMEOUT_MS / 1000} s (${attempts} attempts)`
-        )
+        if (deadline.aborted) throw deadlineError
+        if (!(error instanceof Error) || error.name !== 'TimeoutError') throw error
+        if (attempt >= API_CONFIG.ENSEMBL_MAX_ATTEMPTS) throw deadlineError
+        wait = backoffDelay(attempt, API_CONFIG.RETRY_BACKOFF)
+      } finally {
+        perTry.clear()
       }
-      mainLogger.warn(`Ensembl ${path}: ${lastError.message} (attempt ${attempt})`, 'ensembl')
+      mainLogger.warn(
+        `Ensembl ${path}: attempt ${attempt} failed, retrying in ${wait} ms`,
+        'ensembl'
+      )
+      await sleep(wait, deadline)
+      if (deadline.aborted) throw deadlineError
     }
-    throw lastError
   }
 
   /**

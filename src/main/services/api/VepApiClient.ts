@@ -6,7 +6,7 @@
  * - SQLite caching with 30-day TTL
  * - Request cancellation for rapid variant selection
  * - Zod response validation
- * - Exponential backoff retry on 429 (1s, 2s, 4s)
+ * - Retry on 429 with the shared backoff (retry-backoff.ts), honouring Retry-After
  */
 
 import Bottleneck from 'bottleneck'
@@ -21,6 +21,7 @@ import type { VepFetchResult } from '../../../shared/types/api-enrichment'
 import { getSpliceAIMaxDelta } from './clinical-thresholds'
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
+import { backoffDelay, retryAfterMs } from './retry-backoff'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
 
 /**
@@ -116,11 +117,12 @@ export class VepApiClient {
           ? (error as { message: string }).message
           : ''
 
-      if (errorMessage.includes('429') && jobInfo.retryCount < 3) {
-        // Exponential backoff: 1s, 2s, 4s
-        const delay = Math.min(1000 * Math.pow(2, jobInfo.retryCount), 8000)
-        // Add jitter: 50-100% of delay to spread retries
-        return Math.floor(delay * (0.5 + Math.random() * 0.5))
+      if (errorMessage.includes('429') && jobInfo.retryCount < API_CONFIG.VEP_MAX_RETRIES) {
+        // The shared backoff, but never sooner than the server's Retry-After (`429:<value>`).
+        const asked = retryAfterMs(errorMessage.split('429:')[1] ?? null) ?? 0
+        // Asked to wait longer than the cap: fail now rather than hold the queue.
+        if (asked > API_CONFIG.RETRY_AFTER_CAP_MS) return null
+        return Math.max(asked, backoffDelay(jobInfo.retryCount + 1, API_CONFIG.RETRY_BACKOFF))
       }
       return null // Don't retry for other errors
     })
