@@ -114,13 +114,13 @@
                 size="small"
                 label
                 class="cursor-pointer"
-                :disabled="!canWrite"
+                :disabled="!canWrite || hasAcmgEvidence"
                 @click="handleQuickClassify(cls)"
               >
                 {{ ACMG_ABBREV[cls] }}
               </v-chip>
               <v-chip
-                v-if="currentQuickClassification && canWrite"
+                v-if="currentQuickClassification && canWrite && !hasAcmgEvidence"
                 variant="text"
                 size="small"
                 class="cursor-pointer text-medium-emphasis"
@@ -129,6 +129,9 @@
               >
                 <v-icon size="x-small" :icon="mdiClose" />
               </v-chip>
+            </div>
+            <div v-if="hasAcmgEvidence && canWrite" class="text-caption text-medium-emphasis mb-1">
+              {{ ACMG_EVIDENCE_LOCK_HINT }}
             </div>
 
             <!-- Evidence-based classification panel -->
@@ -270,7 +273,10 @@ const ProteinViewUnavailableDialog = defineAsyncComponent(
 )
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
-import type { AcmgClassification } from '../../../shared/config/domain.config'
+import {
+  ACMG_EVIDENCE_LOCK_HINT,
+  type AcmgClassification
+} from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
@@ -441,7 +447,7 @@ const currentQuickClassification = computed<AcmgClassification | null>(() => {
 
 // Handle quick-classify chip click
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
-  if (props.variant === null) return
+  if (props.variant === null || hasAcmgEvidence.value) return
   // Toggle off if already selected
   const value = classification === currentQuickClassification.value ? null : classification
 

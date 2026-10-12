@@ -35,3 +35,24 @@ describe('useAnnotationDialogs comment save', () => {
     expect(dialogs.commentDialogOpen.value).toBe(true)
   })
 })
+
+describe('useAnnotationDialogs hasAcmgEvidence', () => {
+  const EVIDENCE = '{"pathogenic":["PM2","PP3"]}'
+  function withEvidence(scope: 'case' | 'all', perCase: string | null, global: string | null) {
+    const annotations = {
+      getAcmgEvidence: vi.fn(() => perCase),
+      getGlobalAcmgEvidence: vi.fn(() => global)
+    }
+    return useAnnotationDialogs(ref(1), annotations as never, ref(scope))
+  }
+
+  it.each([
+    ['case', EVIDENCE, null, true],
+    ['case', null, EVIDENCE, false],
+    ['all', null, EVIDENCE, true],
+    ['all', EVIDENCE, null, false],
+    ['case', '{"pathogenic":[],"benign":[]}', null, false]
+  ] as const)('scope %s (per-case %s, global %s) -> %s', (scope, perCase, global, expected) => {
+    expect(withEvidence(scope, perCase, global).hasAcmgEvidence(VARIANT as never)).toBe(expected)
+  })
+})

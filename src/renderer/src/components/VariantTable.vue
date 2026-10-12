@@ -69,6 +69,7 @@
           :show-global-indicators="true"
           :annotation-scope="annotationScope"
           :read-only="!canWrite"
+          :acmg-locked="annotationDialogsRef?.hasAcmgEvidence(item) === true"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -393,7 +394,6 @@ const annotationActions = {
   getGlobalAcmgEvidence
 }
 
-// Links
 const { buildOmimEntryUrl, openExternalLink } = useVariantLinks()
 
 // Column preferences and column definitions — swap columns on variant type change

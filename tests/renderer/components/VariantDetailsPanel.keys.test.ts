@@ -6,6 +6,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+import { ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../../../src/shared/config/domain.config'
 import { installCapabilities } from '../helpers/capabilities'
 
 const evidence = vi.hoisted(() => ({ json: null as string | null }))
@@ -62,6 +63,10 @@ function mountPanel(mode: 'case' | 'cohort' = 'case'): VueWrapper {
   return wrapper.findComponent(VariantDetailsPanel)
 }
 
+function quickChip(w: VueWrapper, abbrev: string) {
+  return w.findAll('.acmg-section .v-chip').find((c) => c.text() === abbrev)!
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   installCapabilities({ runtime: 'desktop', role: 'user' })
@@ -99,5 +104,24 @@ describe('VariantDetailsPanel Escape', () => {
     document.body.appendChild(overlay)
     item.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(w.emitted('update:open')).toBeUndefined()
+  })
+})
+
+describe.each(['case', 'cohort'] as const)('ACMG quick chips (%s)', (mode) => {
+  it('write the class when no evidence is stored', async () => {
+    const w = mountPanel(mode)
+    await quickChip(w, ACMG_ABBREV[ACMG_CLASSIFICATIONS[0]]).trigger('click')
+    expect(setAcmgClassification).toHaveBeenCalledOnce()
+  })
+
+  it('are disabled when evidence exists, so they cannot contradict it', async () => {
+    evidence.json = '{"pathogenic":["PM2","PP3"]}'
+    const w = mountPanel(mode)
+    for (const cls of ACMG_CLASSIFICATIONS) {
+      const chip = quickChip(w, ACMG_ABBREV[cls])
+      expect(chip.classes()).toContain('v-chip--disabled')
+      await chip.trigger('click')
+    }
+    expect(setAcmgClassification).not.toHaveBeenCalled()
   })
 })

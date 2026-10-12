@@ -34,6 +34,9 @@ export const ACMG_ABBREV: Record<AcmgClassification, string> = {
   Benign: 'B'
 }
 
+/** Why the quick-classify chips are disabled: stored evidence decides the class. */
+export const ACMG_EVIDENCE_LOCK_HINT = 'Set from evidence: use Override in the Evidence editor.'
+
 export const DOMAIN_CONFIG = {
   MAX_CADD_SCORE: 60
 } as const
