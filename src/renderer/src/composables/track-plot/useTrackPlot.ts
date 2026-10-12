@@ -74,6 +74,10 @@ export function useTrackPlot(opts: {
   const tooltip = ref<TrackTooltipData>({ visible: false, x: 0, y: 0 })
   let frame = 0
   let refocus = false
+  let pin = false
+  /** Drawn markers (not gnomAD) left to right, and the element of each key (bins: every key in them). */
+  let rendered: TrackMarker[] = []
+  const elementOf = new Map<string, SVGGElement>()
 
   const plotWidth = (): number => dimensions.value.width - TRACK_GUTTER_PX - PLOT_RIGHT_PX
   const scale = (): d3.ScaleLinear<number, number> =>
@@ -100,6 +104,8 @@ export function useTrackPlot(opts: {
         ;(el.node() as SVGGElement | null)?.focus()
       })
     if (m.track === 'gnomad') return
+    for (const key of [m.key, ...(m.binnedKeys ?? [])]) elementOf.set(key, el.node() as SVGGElement)
+    rendered.push(m)
     el.attr('tabindex', 0)
       .attr('role', 'button')
       .attr('aria-label', markerAriaLabel(m, opts.unit))
@@ -113,8 +119,7 @@ export function useTrackPlot(opts: {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
           e.preventDefault()
           e.stopPropagation()
-          nav.stepFocus(e.key === 'ArrowRight' ? 1 : -1)
-          refocus = true
+          stepFocus(e.key === 'ArrowRight' ? 1 : -1)
         } else if (e.key === 'Enter' && m.binnedKeys === undefined) {
           e.preventDefault()
           nav.setAnchor(m.key)
@@ -123,6 +128,18 @@ export function useTrackPlot(opts: {
           ;(svgRef.value?.parentElement as HTMLElement | null)?.focus()
         }
       })
+  }
+
+  /** ← / → on a marker: the next drawn one; past the last in view, pan to the next variant. */
+  function stepFocus(direction: 1 | -1): void {
+    const order = [...rendered].sort((a, b) => a.position - b.position)
+    const key = nav.focusedKey.value
+    const at = order.findIndex((m) => m.key === key || m.binnedKeys?.includes(key ?? '') === true)
+    const next = at === -1 ? undefined : order[at + direction]
+    if (next !== undefined) nav.focusedKey.value = next.key
+    else nav.stepFocus(direction)
+    refocus = true
+    schedule()
   }
 
   function bindFeature(
@@ -142,8 +159,12 @@ export function useTrackPlot(opts: {
     const svg = svgRef.value
     const { width, height } = dimensions.value
     if (svg === null || width <= 0 || height <= 0 || plotWidth() <= 0) return
+    // Redrawing replaces the markers: keep the keyboard focus on the focused one.
+    refocus = refocus || svg.contains(document.activeElement)
     const root = d3.select(svg) as Root
     root.selectAll('*').remove()
+    rendered = []
+    elementOf.clear()
     root.attr('width', width).attr('height', height)
     const markers = binMarkers(nav.displayMarkers.value, nav.window.value, plotWidth(), {
       maxUnbinned: MAX_MARKERS_UNBINNED,
@@ -162,12 +183,24 @@ export function useTrackPlot(opts: {
       bindMarker,
       bindFeature
     })
-    if (refocus) {
-      refocus = false
-      const key = nav.focusedKey.value
-      svg.querySelector<SVGGElement>(`[data-key="${CSS.escape(key ?? '')}"]`)?.focus()
+    const focusedEl = elementOf.get(nav.focusedKey.value ?? '') ?? null
+    if (refocus) focusedEl?.focus()
+    else if (pin && focusedEl !== null) {
+      // A search hit or list row: pin its tooltip without moving the keyboard focus.
+      const box = focusedEl.getBoundingClientRect()
+      const marker = rendered.find(
+        (m) =>
+          m.key === nav.focusedKey.value ||
+          m.binnedKeys?.includes(nav.focusedKey.value ?? '') === true
+      )
+      if (marker !== undefined) tooltip.value = { visible: true, x: box.right, y: box.top, marker }
     }
+    refocus = false
+    pin = false
   }
+  watch(nav.focusedKey, () => {
+    pin = true
+  })
   const schedule = (): void => {
     if (frame === 0) frame = requestAnimationFrame(render)
   }

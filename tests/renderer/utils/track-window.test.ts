@@ -75,9 +75,10 @@ describe('binMarkers', () => {
     const markers = [marker(1), marker(2), marker(3, { weight: 4 }), marker(900)]
     const bins = binMarkers(markers, extent, 100, { maxUnbinned: 2, binPx: 10 })
     // 100 px / 10 px = 10 bins of 100 aa
+    // A bin of one is just that marker.
     expect(bins.map((b) => [b.position, b.weight, b.binnedKeys?.length])).toEqual([
       [50, 6, 3],
-      [950, 1, 1]
+      [900, 1, undefined]
     ])
   })
 

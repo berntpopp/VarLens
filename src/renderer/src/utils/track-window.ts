@@ -119,6 +119,7 @@ export function binMarkers(
   if (inView.length <= opts.maxUnbinned || plotWidthPx <= 0) return inView
   const binWidth = (span(w) * opts.binPx) / plotWidthPx
   const bins = new Map<string, TrackMarker>()
+  const first = new Map<string, TrackMarker>()
   const kept: TrackMarker[] = []
   for (const m of inView) {
     if (m.isAnchor === true) {
@@ -129,6 +130,7 @@ export function binMarkers(
     const id = `${m.track}:${index}`
     const bin = bins.get(id)
     if (bin === undefined) {
+      first.set(id, m)
       bins.set(id, {
         key: `bin-${id}`,
         position: w.start + (index + 0.5) * binWidth,
@@ -144,5 +146,7 @@ export function binMarkers(
       bin.label = `${bin.binnedKeys!.length} variants`
     }
   }
-  return [...bins.values(), ...kept]
+  // A bin of one is just that marker.
+  const out = [...bins.entries()].map(([id, b]) => (b.binnedKeys!.length === 1 ? first.get(id)! : b))
+  return [...out, ...kept]
 }
