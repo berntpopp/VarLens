@@ -25,6 +25,7 @@ export interface UpdaterAPI {
   onStatusChange: (callback: (status: UpdateStatus) => void) => () => void
 }
 
+import type { ImportFieldProfile } from '../config/import-fields.config'
 import type { CapabilityDocument } from '../ipc/capability-document'
 
 // Import database and import types for reuse
@@ -400,7 +401,8 @@ export interface BatchImportAPI {
     filePaths: string[],
     duplicateStrategy: DuplicateChoice,
     stripText: string | undefined,
-    runId: string
+    runId: string,
+    options?: { fieldProfile?: ImportFieldProfile }
   ) => Promise<IpcResult<BatchResult>>
   cancel: () => Promise<IpcResult<void>>
   onProgress: (callback: (progress: BatchProgressEvent) => void) => () => void

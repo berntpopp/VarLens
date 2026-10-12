@@ -172,22 +172,30 @@ export function registerBatchImportHandlers({
       filePaths: unknown,
       duplicateStrategy: unknown,
       stripText: unknown,
-      runId: unknown
+      runId: unknown,
+      options?: unknown
     ) => {
       return wrapHandler(async () => {
         const parsed = BatchImportStartParamsSchema.safeParse([
           filePaths,
           duplicateStrategy,
           stripText,
-          runId
+          runId,
+          options
         ])
         if (!parsed.success) {
           throw new InvalidParametersError(
             `Invalid batch-import:start params: ${parsed.error.message}`
           )
         }
-        const [validatedFilePaths, validatedStrategy, validatedStripText, validatedRunId] =
-          parsed.data
+        const [
+          validatedFilePaths,
+          validatedStrategy,
+          validatedStripText,
+          validatedRunId,
+          validatedOptions
+        ] = parsed.data
+        const fieldProfile = validatedOptions?.fieldProfile
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
@@ -206,6 +214,7 @@ export function registerBatchImportHandlers({
             duplicateStrategy: validatedStrategy,
             stripText: validatedStripText,
             runId: validatedRunId,
+            fieldProfile,
             session,
             callbacks: createBatchImportCallbacks(validatedRunId)
           })
@@ -215,7 +224,8 @@ export function registerBatchImportHandlers({
           validatedFilePaths,
           validatedStrategy,
           validatedStripText,
-          createBatchImportCallbacks(validatedRunId)
+          createBatchImportCallbacks(validatedRunId),
+          fieldProfile
         )
       })
     }

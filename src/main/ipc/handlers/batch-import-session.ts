@@ -13,6 +13,7 @@
  * batch, several files load at once on a bounded pool (batch-import-pool.ts);
  * otherwise each file is a nested `import_single` job through `startImport`.
  */
+import type { ImportFieldProfile } from '../../../shared/config/import-fields.config'
 import { buildDuplicateReport, type DuplicateCheckItem } from '../../import/batch-utils'
 import { jobRunner } from '../../services/jobs/runner'
 import type { StorageSession } from '../../storage/session'
@@ -67,6 +68,8 @@ export interface SessionBatchParams {
   stripText?: string
   /** Client correlation id, echoed in the job params. */
   runId?: string
+  /** Where fields without a column go, for every file (default: keep all). */
+  fieldProfile?: ImportFieldProfile
   session: StorageSession
   callbacks: SessionBatchCallbacks
 }
@@ -119,6 +122,7 @@ export async function runSessionBatchImport(params: {
   files: SessionBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText?: string
+  fieldProfile?: ImportFieldProfile
   session: StorageSession
   callbacks: SessionBatchCallbacks
   signal: AbortSignal
@@ -245,6 +249,7 @@ export async function runSessionBatchImport(params: {
   if (parallel) {
     await runFilesInParallel({
       openBatch: () => executor.openBatch!(),
+      fieldProfile: params.fieldProfile,
       chains: groupIntoChains(caseNames),
       concurrency,
       processFile,
@@ -253,7 +258,13 @@ export async function runSessionBatchImport(params: {
     if (signal.aborted) result.cancelled = true
   } else {
     const importOne: ImportOneFile = (file, caseName, onProgress) =>
-      startImport(file.storedPath, caseName, undefined, () => session, { onProgress })
+      startImport(
+        file.storedPath,
+        caseName,
+        params.fieldProfile && { fieldProfile: params.fieldProfile },
+        () => session,
+        { onProgress }
+      )
     for (let index = 0; index < files.length && !result.cancelled; index++) {
       await processFile(index, importOne)
     }
@@ -271,6 +282,7 @@ export async function runSessionBatchImport(params: {
  */
 async function runFilesInParallel(args: {
   openBatch: () => Promise<StorageImportBatch>
+  fieldProfile?: ImportFieldProfile
   chains: number[][]
   concurrency: number
   processFile: (index: number, importOne: ImportOneFile) => Promise<void>
@@ -282,11 +294,13 @@ async function runFilesInParallel(args: {
     async () => {
       batch = await args.openBatch()
       const open = batch
+      const fieldProfile = args.fieldProfile
       try {
         const importOne: ImportOneFile = (file, caseName, onProgress) =>
           open.importFile({
             filePath: file.storedPath,
             caseName,
+            vcfOptions: fieldProfile && { fieldProfile },
             throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
             onProgress
           })

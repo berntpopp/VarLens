@@ -357,7 +357,9 @@ describe('PostgresJsonImportRepository.writeJsonImport', () => {
       'created_at',
       'updated_at',
       'gene_list_id',
-      'region_file_id'
+      'region_file_id',
+      // Migration 0029 (spec §16): the import field dictionary.
+      'field_dictionary'
     ]
 
     // Extract INSERT column list: "(col, col, col)"

@@ -213,7 +213,8 @@ export class PostgresVcfImportRepository {
     caseId: number,
     fileName: string,
     importFileType: string,
-    fence?: ImportFence
+    fence?: ImportFence,
+    fieldDictionary: Record<string, string> | null = null
   ): Promise<void> {
     const current =
       fence === undefined ? '' : ` AND ${importGenerationUnchangedSql(fence.schema, 2)}`
@@ -230,12 +231,15 @@ export class PostgresVcfImportRepository {
     }
     const now = Date.now()
     await client.query(
-      `INSERT INTO ${this.schemaName}."case_data_info"
-         (case_id, import_file_name, import_file_type, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $4)
+      `INSERT INTO ${this.schemaName}."case_data_info" AS cdi
+         (case_id, import_file_name, import_file_type, field_dictionary, created_at, updated_at)
+       VALUES ($1, $2, $3, $5, $4, $4)
        ON CONFLICT (case_id) DO UPDATE SET import_file_name = EXCLUDED.import_file_name,
-         import_file_type = EXCLUDED.import_file_type, updated_at = EXCLUDED.updated_at`,
-      [caseId, fileName, importFileType, now]
+         import_file_type = EXCLUDED.import_file_type, updated_at = EXCLUDED.updated_at,
+         field_dictionary = CASE WHEN EXCLUDED.field_dictionary IS NULL THEN cdi.field_dictionary
+           ELSE (COALESCE(cdi.field_dictionary::jsonb, '{}'::jsonb)
+             || EXCLUDED.field_dictionary::jsonb)::text END`,
+      [caseId, fileName, importFileType, now, fieldDictionaryText(fieldDictionary)]
     )
   }
 
@@ -553,4 +557,8 @@ export class PostgresVcfImportRepository {
     await helper('variant_cnv', VARIANT_CNV_COPY_COLUMNS as unknown as readonly string[], cnvRows)
     await helper('variant_str', VARIANT_STR_COPY_COLUMNS as unknown as readonly string[], strRows)
   }
+}
+
+export function fieldDictionaryText(dictionary: Record<string, string> | null): string | null {
+  return dictionary === null ? null : JSON.stringify(dictionary)
 }

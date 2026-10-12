@@ -18,7 +18,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 45
+export const LATEST_SQLITE_SCHEMA_VERSION = 46
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -1970,6 +1970,22 @@ export function runMigrations(db: Database.Database): void {
     }
 
     db.exec('PRAGMA user_version = 45')
+  }
+
+  // v46: per-case import field dictionary (stored info key → original source
+  // field, spec §16; mirrors PG 0029).
+  if (currentVersion < 46) {
+    const hasDataInfo =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_data_info'")
+        .get() !== undefined
+    const columns = hasDataInfo
+      ? (db.prepare('PRAGMA table_info(case_data_info)').all() as { name: string }[])
+      : []
+    if (hasDataInfo && !columns.some((col) => col.name === 'field_dictionary')) {
+      db.exec('ALTER TABLE case_data_info ADD COLUMN field_dictionary TEXT')
+    }
+    db.exec('PRAGMA user_version = 46')
   }
 }
 

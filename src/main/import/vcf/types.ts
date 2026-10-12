@@ -120,6 +120,8 @@ export interface AnnotationResult {
    * `clinvar`; the mapper gates it on allele specificity (see vep-clin-sig.ts).
    */
   vepClinSig?: string | null
+  /** Every non-empty subfield of the selected transcript (CSQ or ANN names), for the field profile. */
+  selectedFields?: ReadonlyMap<string, string>
 
   /** All transcripts for variant_transcripts table */
   transcripts: TranscriptInsertRow[]
