@@ -2,25 +2,32 @@
   <div class="variant-identity-section">
     <div class="d-flex align-center flex-wrap ga-1 mb-2">
       <h3 class="text-title-large mr-1">{{ title }}</h3>
-      <!-- Disabled buttons get no pointer events: the wrapper carries the reason. -->
-      <span
-        v-for="button in PROTEIN_VIEW_BUTTONS"
-        :key="button.tab"
-        :data-tooltip="reasonFor(button.tab) ?? undefined"
-        data-tooltip-location="top"
-      >
+      <!-- Unavailable buttons stay focusable (aria-disabled) so keyboard and
+           screen-reader users get the reason too, not only a hover tooltip. -->
+      <template v-for="button in PROTEIN_VIEW_BUTTONS" :key="button.tab">
         <v-btn
           size="x-small"
           variant="tonal"
           color="primary"
           class="text-none"
+          :class="{ 'protein-btn--unavailable': reasonFor(button.tab) !== null }"
           :prepend-icon="button.icon"
-          :disabled="reasonFor(button.tab) !== null"
-          @click="emit('open-protein-view', button.tab)"
+          :aria-disabled="reasonFor(button.tab) !== null ? 'true' : undefined"
+          :aria-describedby="reasonFor(button.tab) !== null ? `${uid}-${button.tab}` : undefined"
+          :data-tooltip="reasonFor(button.tab) ?? undefined"
+          data-tooltip-location="top"
+          @click="openTab(button.tab)"
         >
           {{ button.label }}
         </v-btn>
-      </span>
+        <span
+          v-if="reasonFor(button.tab) !== null"
+          :id="`${uid}-${button.tab}`"
+          class="visually-hidden"
+        >
+          {{ reasonFor(button.tab) }}
+        </span>
+      </template>
     </div>
 
     <!-- Transcript + cDNA + protein change -->
@@ -77,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { useClipboard } from '../composables/useClipboard'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
@@ -109,6 +116,10 @@ const lookupsReason = useProteinLookupsReason()
 const proteinReason = computed(() => proteinViewBlockedReason(props.variant, lookupsReason.value))
 const reasonFor = (tab: ProteinViewTab): string | null =>
   proteinReason.value ?? proteinTabReason(props.variant, tab)
+const uid = useId()
+function openTab(tab: ProteinViewTab): void {
+  if (reasonFor(tab) === null) emit('open-protein-view', tab)
+}
 
 /**
  * Check if variant is a full Variant (not CohortVariant)
@@ -179,6 +190,11 @@ async function copyRsId(): Promise<void> {
 </script>
 
 <style scoped>
+.protein-btn--unavailable {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .hgvs-notation {
   font-family: var(--font-mono);
   font-size: 0.875rem;

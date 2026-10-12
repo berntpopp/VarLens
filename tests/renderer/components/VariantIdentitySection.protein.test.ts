@@ -56,11 +56,19 @@ describe('VariantIdentitySection protein buttons', () => {
       true,
       PROTEIN_VIEW_COPY.noProteinPosition
     ]
-  ])('%s: stay visible, disabled, with the reason', (_n, over, lookupsOn, reason) => {
-    const wrapper = mountSection(over, lookupsOn)
-    for (const button of buttonsOf(wrapper)) {
-      expect(button.attributes('disabled')).toBeDefined()
-      expect(button.element.parentElement?.getAttribute('data-tooltip')).toBe(reason)
+  ])(
+    '%s: stay focusable, unavailable, with the reason for keyboard and SR',
+    async (_n, over, lookupsOn, reason) => {
+      const wrapper = mountSection(over, lookupsOn)
+      for (const button of buttonsOf(wrapper)) {
+        expect(button.attributes('disabled')).toBeUndefined()
+        expect(button.attributes('aria-disabled')).toBe('true')
+        const described = wrapper.find(`#${button.attributes('aria-describedby')}`)
+        expect(described.text()).toBe(reason)
+        expect(button.attributes('data-tooltip')).toBe(reason)
+        await button.trigger('click')
+      }
+      expect(wrapper.emitted('open-protein-view')).toBeUndefined()
     }
-  })
+  )
 })
