@@ -2,7 +2,7 @@
  * Migration v47: chromosome names in each build's reference form
  * (.planning/specs/2026-10-12-chr-naming-per-build.md).
  */
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   assertFreeSpaceForMigration,
+  backupBeforeMigrations,
   migrateContigNaming
 } from '../../../src/main/database/contig-naming-migration'
 import {
@@ -319,6 +320,39 @@ describe('migration v47: chromosome names per build', () => {
       })
     )
     expect(() => assertFreeSpaceForMigration(path, () => Number.MAX_SAFE_INTEGER)).not.toThrow()
+  })
+
+  describe('free space before the backup', () => {
+    function fileDb(name: string): string {
+      db.close()
+      const path = join(dir, name)
+      db = new Database(path)
+      initializeSchema(db)
+      runMigrations(db)
+      return path
+    }
+    const oneAndAHalf = (path: string) => () => statSync(path).size * 1.5
+
+    it('a v45 database with nothing to rename needs only room for the copy', () => {
+      const path = fileDb('canonical.db')
+      const d = addCase('D', 'GRCh38', null)
+      addVariant(d, 'chr1', 1)
+      expect(() => backupBeforeMigrations(db, 45, oneAndAHalf(path))).not.toThrow()
+      expect(existsSync(`${path}.pre-v46.bak`)).toBe(true)
+    })
+
+    it('a v45 database whose rows will be renamed needs room for the copy and the WAL', () => {
+      const path = fileDb('renames.db')
+      const a = addCase('A', 'GRCh38', GRCH38_HEADER)
+      addVariant(a, '1', 1)
+      expect(() => backupBeforeMigrations(db, 45, oneAndAHalf(path))).toThrow(
+        expect.objectContaining({
+          code: 'RESOURCE_LIMIT',
+          userMessage: expect.stringMatching(/free disk space/)
+        })
+      )
+      expect(existsSync(`${path}.pre-v46.bak`)).toBe(false)
+    })
   })
 
   it('a filesystem without free-space information skips the check instead of failing', () => {

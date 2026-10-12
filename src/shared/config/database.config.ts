@@ -18,6 +18,8 @@ export const DATABASE_CONFIG = {
    * peak WAL of the rename (measured 0.84x on a 741 MB database), with margin.
    */
   CONTIG_MIGRATION_FREE_SPACE_RATIO: 2.7,
+  /** The same when no row will be renamed: only the backup copy, with margin. */
+  BACKUP_ONLY_FREE_SPACE_RATIO: 1.1,
   /** Busy timeout in milliseconds */
   BUSY_TIMEOUT_MS: 5000,
   /** Max rows sampled per table during ANALYZE (caps optimizer stat-gathering time) */

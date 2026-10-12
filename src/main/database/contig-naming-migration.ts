@@ -85,17 +85,41 @@ function storedCaseContigs(db: Db): Map<number, CaseContigs> {
   return cases
 }
 
+/**
+ * Whether any case stores a name its build would rename: the first test of the
+ * v47 plan (contigRenamePairs), over the distinct (build, name) pairs only. A
+ * case that ends up flagged instead is counted too, so this errs towards space.
+ */
+function hasNamesToRename(db: Db): boolean {
+  if (!hasTable(db, 'variants')) return false
+  const pairs = db
+    .prepare(
+      `SELECT DISTINCT COALESCE(c.genome_build, '') AS build, v.chr
+         FROM variants v JOIN cases c ON c.id = v.case_id`
+    )
+    .all() as Array<{ build: string; chr: string }>
+  return pairs.some((p) => contigRenamePairs([p.chr], p.build).length > 0)
+}
+
 const gigabytes = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GB`
 
-/** Disk space the backup and the rename's WAL need next to the database. */
+type FreeSpace = (dir: string) => number
+
+const statfsFree: FreeSpace = (dir) => {
+  const fs = statfsSync(dir)
+  return fs.bavail * fs.bsize
+}
+
+/**
+ * Disk space the backup (and, when rows will be renamed, the rename's WAL)
+ * needs next to the database, as `ratio` x its size.
+ */
 export function assertFreeSpaceForMigration(
   dbPath: string,
-  free: (dir: string) => number = (dir) => {
-    const fs = statfsSync(dir)
-    return fs.bavail * fs.bsize
-  }
+  free: FreeSpace = statfsFree,
+  ratio: number = DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO
 ): void {
-  const needed = statSync(dbPath).size * DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO
+  const needed = statSync(dbPath).size * ratio
   let available: number
   try {
     available = free(dirname(dbPath))
@@ -127,11 +151,19 @@ export const DATA_REWRITE_VERSION = 47
  * open. The rollback of this release's migrations. Not for an in-memory or
  * empty database: there is nothing to keep.
  */
-export function backupBeforeMigrations(db: Db, fromVersion: number): void {
+export function backupBeforeMigrations(
+  db: Db,
+  fromVersion: number,
+  free: FreeSpace = statfsFree
+): void {
   if (fromVersion >= DATA_REWRITE_VERSION || db.memory || db.name === '') return
   if (!hasTable(db, 'cases') || db.prepare('SELECT 1 FROM cases LIMIT 1').get() === undefined)
     return
-  assertFreeSpaceForMigration(db.name)
+  // Room for the rename's WAL only when v47 will rewrite rows (same rule as its plan).
+  const ratio = hasNamesToRename(db)
+    ? DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO
+    : DATABASE_CONFIG.BACKUP_ONLY_FREE_SPACE_RATIO
+  assertFreeSpaceForMigration(db.name, free, ratio)
   // The copy is only complete when every WAL frame is back in the main file.
   const [checkpoint] = db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
     busy: number

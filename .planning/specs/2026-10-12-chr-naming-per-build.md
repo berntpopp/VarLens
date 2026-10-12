@@ -91,7 +91,10 @@ SQLite (`PRAGMA user_version` 47, `src/main/database/contig-naming-migration.ts`
    its build's form is skipped (no file read, no row written); the others are planned.
 2. Backup, at the **start of the run, before its first pending migration** (`backupBeforeMigrations`,
    called first in `runMigrations`), whenever v47 is pending and the database holds cases: check free
-   space (`DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO`, 2.7 x the DB size: backup + peak WAL),
+   space: `DATABASE_CONFIG.CONTIG_MIGRATION_FREE_SPACE_RATIO` (2.7 x the DB size: backup + peak WAL)
+   when some case stores a name its build would rename (the plan's own first test,
+   `contigRenamePairs`, over the distinct build/name pairs; a case that is later flagged counts too),
+   else `BACKUP_ONLY_FREE_SPACE_RATIO` (1.1 x: the copy alone),
    `wal_checkpoint(TRUNCATE)` and require it complete (busy 0, every frame checkpointed), then
    byte-copy the DB file to `<db>.pre-v<N>.bak`, N = the first pending version (a v45 database gives
    `<db>.pre-v46.bak`, the v45 file before v46 and v47 ran). It is the file the previous release wrote
@@ -150,8 +153,8 @@ twice fails cleanly (no review row).
 
 - Chromosome names are now stored in each build's reference form (GRCh38 `chr1`, GRCh37 `1`); existing
   data is converted on first open. Desktop: before updating, VarLens copies the database next to
-  itself as `<name>.pre-v46.bak` (from the previous release; it needs free space of about 2.7x the
-  database size), which the previous version can open if you need to go back. Web: converted in the
+  itself as `<name>.pre-v46.bak` (from the previous release; it needs free space of about 1.1x the
+  database size, or 2.7x when chromosome names have to be rewritten), which the previous version can open if you need to go back. Web: converted in the
   background; back up PostgreSQL first, the change is one-way. Cases whose build cannot be confirmed are listed for
   the user to confirm.
 - Custom external-link templates: `{chr}` is now always the bare name (`1`, `X`, `MT`); use `{chr_ucsc}`
