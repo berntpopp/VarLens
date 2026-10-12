@@ -19,6 +19,9 @@ import ImportSourceSelector from '../../../src/renderer/src/components/import/Im
 import BatchReviewPhase from '../../../src/renderer/src/components/batch-import/BatchReviewPhase.vue'
 import { useImportStatusStore } from '../../../src/renderer/src/stores/importStatusStore'
 import { createMockApi, type MockApi } from '../../utils/mock-api'
+import { withFieldChoice } from '../../../src/renderer/src/utils/import-field-rows'
+import { stripVueProxies } from '../../../src/renderer/src/utils/stripVueProxies'
+import type { ImportFieldProfile } from '../../../src/shared/config/import-fields.config'
 import type { BatchCompleteEvent, BatchResult } from '../../../src/shared/types/api'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
@@ -160,6 +163,20 @@ describe('ImportWizard IPC safety', () => {
       for (const [i, arg] of args.entries()) {
         expect(() => assertStructuredCloneable(arg, `arg[${i}]`)).not.toThrow()
       }
+    })
+
+    it('should produce a cloneable field profile after table edits', () => {
+      // The table rebuilds the profile from the reactive one: unchanged
+      // entries come back as nested proxies until they are stripped.
+      const profile = ref<ImportFieldProfile>({
+        keepUnknown: 'all',
+        fields: { 'JSON:A': { keep: false } }
+      })
+      profile.value = withFieldChoice(profile.value, { origin: 'JSON', name: 'B' }, { keep: false })
+      expect(() => assertStructuredCloneable(profile.value.fields)).toThrow('Vue Proxy')
+      expect(() =>
+        assertStructuredCloneable({ fieldProfile: stripVueProxies(profile.value) })
+      ).not.toThrow()
     })
 
     it('should FAIL if Proxy array is passed directly (the regression)', () => {

@@ -49,6 +49,15 @@ export function normaliseInfoKey(name: string): string {
   return key.slice(0, MAX_KEY_CHARS)
 }
 
+/**
+ * Whether a field without a per-field choice is kept: `all` keeps every
+ * field, `selected` the evidence aliases (canonical keys), `none` nothing.
+ */
+export function defaultKeep(profile: ImportFieldProfile, name: string): boolean {
+  if (profile.keepUnknown === 'all') return true
+  return profile.keepUnknown === 'selected' && canonicalFieldFor(name) !== null
+}
+
 /** Where one source field goes: an info key (null = skipped) and the canonical key it feeds. */
 export interface ResolvedField {
   key: string | null
@@ -105,7 +114,7 @@ export class FieldProfileResolver {
   private decide(origin: FieldOrigin, name: string): ResolvedField {
     const choice = this.profile.fields[fieldProfileKey(origin, name)]
     const canonical = canonicalFieldFor(name)
-    const keep = choice?.keep ?? (canonical !== null || this.profile.keepUnknown === 'all')
+    const keep = choice?.keep ?? defaultKeep(this.profile, name)
     if (!keep) return { key: null, canonical: null }
     // A synonym is stored under its canonical key; a component of a derived
     // maximum (the four SpliceAI scores) keeps its own key as well.
@@ -168,8 +177,9 @@ export class FieldRecord {
   deriveOnly(origin: FieldOrigin, name: string, text: string): void {
     const canonical = canonicalFieldFor(name)
     if (canonical === null) return
-    const choice = this.resolver.profile.fields[fieldProfileKey(origin, name)]
-    if (choice?.keep === false) return
+    const { profile } = this.resolver
+    const choice = profile.fields[fieldProfileKey(origin, name)]
+    if (!(choice?.keep ?? defaultKeep(profile, name))) return
     this.addCandidate(canonical, origin, name, text)
   }
 

@@ -1,7 +1,7 @@
 <template>
   <v-dialog
     v-model="dialog"
-    max-width="700"
+    :max-width="step === 2 ? 960 : 700"
     :persistent="step === 3"
     scrollable
     transition="dialog-bottom-transition"
@@ -52,7 +52,7 @@
 
       <v-card-text v-if="step === 1" class="pa-4">
         <ImportSourceSelector
-          :sources="allSources"
+          :sources="IMPORT_SOURCES"
           :pending="sourceSelectionPending"
           :upload-file-name="uploadFileName"
           :upload-file-index="uploadFileIndex"
@@ -97,6 +97,7 @@
 
       <v-card-text v-else-if="isVcfImport && step === 2">
         <VcfPreviewStep
+          v-model:field-profile="fieldProfile"
           :file-path="vcfFilePath"
           @preview-loaded="onVcfPreviewLoaded"
           @selection-changed="onVcfSelectionChanged"
@@ -111,6 +112,13 @@
           :file-count="fileCount"
           :duplicate-count="duplicateCount"
           :has-empty-case-names="hasEmptyCaseNames"
+        />
+        <JsonFieldProfileStep
+          v-if="selectedFilePaths.length > 0 && !/\.vcf(\.gz)?$/i.test(selectedFilePaths[0])"
+          :key="selectedFilePaths[0]"
+          v-model="fieldProfile"
+          :file-path="selectedFilePaths[0]"
+          :file-count="fileCount"
         />
       </v-card-text>
 
@@ -179,6 +187,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { stripVueProxies } from '../../utils/stripVueProxies'
 import type {
   DuplicateChoice,
   DuplicateCheckItem,
@@ -199,20 +208,13 @@ import BatchReviewPhase from '../batch-import/BatchReviewPhase.vue'
 import BatchProgressPhase from '../batch-import/BatchProgressPhase.vue'
 import BatchSummaryPhase from '../batch-import/BatchSummaryPhase.vue'
 import ImportSourceSelector from './ImportSourceSelector.vue'
-import type { ImportSourceMode, ImportSourceOption } from './ImportSourceSelector.vue'
+import type { ImportSourceMode } from './ImportSourceSelector.vue'
+import { IMPORT_SOURCES } from './import-sources'
 import VcfPreviewStep from './VcfPreviewStep.vue'
+import JsonFieldProfileStep from './JsonFieldProfileStep.vue'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { isWebRuntime } from '../../utils/runtime-mode'
-import {
-  mdiChevronRight,
-  mdiClose,
-  mdiDatabaseImport,
-  mdiEye,
-  mdiEyeOff,
-  mdiFileDocument,
-  mdiFileMultiple,
-  mdiFolderOpen,
-  mdiZipBox
-} from '@mdi/js'
+import { mdiChevronRight, mdiClose, mdiDatabaseImport, mdiEye, mdiEyeOff } from '@mdi/js'
 
 type ImportMode = ImportSourceMode
 const { api } = useApiService()
@@ -245,6 +247,9 @@ const vcfFilePath = ref('')
 const vcfSelectedSamples = ref<string[]>([])
 const vcfGenomeBuild = ref('GRCh38')
 const vcfCaseNames = ref(new Map<string, string>())
+const settings = useSettingsStore()
+// This import's field profile: starts from the Settings default each time the wizard opens.
+const fieldProfile = ref(settings.importFieldProfile)
 
 const stepLabels = computed(() => {
   if (isVcfImport.value) {
@@ -252,28 +257,6 @@ const stepLabels = computed(() => {
   }
   return ['Source', 'Review', 'Import', 'Summary']
 })
-
-const allSources: ImportSourceOption[] = [
-  {
-    mode: 'single' as ImportMode,
-    icon: mdiFileDocument,
-    title: 'Single File',
-    subtitle: 'JSON / VCF'
-  },
-  {
-    mode: 'files' as ImportMode,
-    icon: mdiFileMultiple,
-    title: 'Multiple Files',
-    subtitle: 'Select files'
-  },
-  {
-    mode: 'folder' as ImportMode,
-    icon: mdiFolderOpen,
-    title: 'Folder',
-    subtitle: 'All files in folder'
-  },
-  { mode: 'zip' as ImportMode, icon: mdiZipBox, title: 'ZIP Archive', subtitle: 'Extract & import' }
-]
 
 const selectedMode = ref<ImportMode | null>(null)
 const selectedFilePaths = ref<string[]>([])
@@ -581,6 +564,7 @@ const { startVcfImport } = useVcfImportExecution({
     selectedSamples: vcfSelectedSamples,
     genomeBuild: vcfGenomeBuild,
     caseNames: vcfCaseNames,
+    fieldProfile,
     step,
     totalFiles,
     currentIndex,
@@ -628,7 +612,8 @@ async function startImport(): Promise<void> {
         [...selectedFilePaths.value],
         duplicateStrategy.value,
         stripText.value || undefined,
-        runId
+        runId,
+        { fieldProfile: stripVueProxies(fieldProfile.value) }
       )
     )
 
@@ -733,6 +718,7 @@ function resetState(): void {
   vcfSelectedSamples.value = []
   vcfGenomeBuild.value = 'GRCh38'
   vcfCaseNames.value = new Map()
+  fieldProfile.value = settings.importFieldProfile
   isZipImport.value = false
   zipPath.value = ''
   zipExtractionId.value = ''

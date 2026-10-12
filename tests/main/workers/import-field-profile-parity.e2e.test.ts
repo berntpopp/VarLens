@@ -361,7 +361,7 @@ describe('import field profile: every source, both backends', () => {
 
     it(`${label}: a profile skips and renames fields`, async () => {
       const { rows } = await importCase(files.columnar, {
-        keepUnknown: 'none',
+        keepUnknown: 'selected',
         fields: {
           'JSON:AltAF-Index': { keep: true, key: 'ALT_AF' },
           'JSON:RevelScore': { keep: false }

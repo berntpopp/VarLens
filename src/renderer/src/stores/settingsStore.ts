@@ -13,6 +13,11 @@ import {
   isThemePreference,
   type ThemePreference
 } from '../utils/theme-preference'
+import {
+  DEFAULT_IMPORT_FIELD_PROFILE,
+  type ImportFieldProfile
+} from '../../../shared/config/import-fields.config'
+import { ImportFieldProfileSchema } from '../../../shared/ipc/domains/import-schemas'
 
 const STORAGE_KEY = SETTINGS_STORAGE_KEY
 
@@ -51,6 +56,8 @@ interface PersistedSettings {
    * another preset with the same id. Key it by database if that bites.
    */
   defaultShortlistPresetId: number | null
+  /** Default import field profile (spec §16): which annotation fields imports keep. */
+  importFieldProfile: ImportFieldProfile
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -61,7 +68,8 @@ const DEFAULTS: PersistedSettings = {
   prefetchEnabled: true,
   defaultCaseTab: 'shortlist',
   themePreference: DEFAULT_THEME_PREFERENCE,
-  defaultShortlistPresetId: null
+  defaultShortlistPresetId: null,
+  importFieldProfile: DEFAULT_IMPORT_FIELD_PROFILE
 }
 
 function load(): PersistedSettings {
@@ -72,6 +80,9 @@ function load(): PersistedSettings {
       const merged = { ...DEFAULTS, ...parsed }
       if (!isThemePreference(merged.themePreference)) {
         merged.themePreference = DEFAULT_THEME_PREFERENCE
+      }
+      if (!ImportFieldProfileSchema.safeParse(merged.importFieldProfile).success) {
+        merged.importFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE
       }
       return merged
     }
@@ -96,6 +107,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const defaultCaseTab = ref<DefaultCaseTab>(persisted.defaultCaseTab)
   const themePreference = ref<ThemePreference>(persisted.themePreference)
   const defaultShortlistPresetId = ref<number | null>(persisted.defaultShortlistPresetId)
+  const importFieldProfile = ref<ImportFieldProfile>(persisted.importFieldProfile)
 
   // Auto-persist on change
   watch(
@@ -107,7 +119,8 @@ export const useSettingsStore = defineStore('settings', () => {
       prefetchEnabled,
       defaultCaseTab,
       themePreference,
-      defaultShortlistPresetId
+      defaultShortlistPresetId,
+      importFieldProfile
     ],
     () => {
       save({
@@ -118,7 +131,8 @@ export const useSettingsStore = defineStore('settings', () => {
         prefetchEnabled: prefetchEnabled.value,
         defaultCaseTab: defaultCaseTab.value,
         themePreference: themePreference.value,
-        defaultShortlistPresetId: defaultShortlistPresetId.value
+        defaultShortlistPresetId: defaultShortlistPresetId.value,
+        importFieldProfile: importFieldProfile.value
       })
     }
   )
@@ -131,6 +145,7 @@ export const useSettingsStore = defineStore('settings', () => {
     prefetchEnabled,
     defaultCaseTab,
     themePreference,
-    defaultShortlistPresetId
+    defaultShortlistPresetId,
+    importFieldProfile
   }
 })

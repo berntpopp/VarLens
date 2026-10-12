@@ -67,9 +67,11 @@ describe('FieldProfileResolver', () => {
   })
 
   it('applies the unknown-field policy, keeping evidence aliases unless skipped', () => {
+    const evidence = new FieldProfileResolver({ keepUnknown: 'selected', fields: {} })
+    expect(evidence.resolve('JSON', 'LocalAF').key).toBeNull()
+    expect(evidence.resolve('JSON', 'RevelScore').key).toBe('REVEL')
     const none = new FieldProfileResolver({ keepUnknown: 'none', fields: {} })
-    expect(none.resolve('JSON', 'LocalAF').key).toBeNull()
-    expect(none.resolve('JSON', 'RevelScore').key).toBe('REVEL')
+    expect(none.resolve('JSON', 'RevelScore').key).toBeNull()
 
     const selected = new FieldProfileResolver({
       keepUnknown: 'selected',

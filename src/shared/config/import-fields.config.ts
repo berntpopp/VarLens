@@ -12,7 +12,10 @@
 /** Where a source field comes from. `JSON` covers the columnar and object exports. */
 export type FieldOrigin = 'INFO' | 'CSQ' | 'ANN' | 'JSON'
 
-/** What happens to fields the profile does not name and no column maps. */
+/**
+ * Whether a field without a per-field choice (and without a column) is kept:
+ * all of them, only the evidence fields (canonical aliases), or none.
+ */
 export type KeepUnknownPolicy = 'all' | 'selected' | 'none'
 
 /** A per-field choice; `key` renames the stored `info.<KEY>`. */
@@ -28,9 +31,9 @@ export interface ImportFieldProfile {
 }
 
 export const KEEP_UNKNOWN_OPTIONS: ReadonlyArray<{ value: KeepUnknownPolicy; title: string }> = [
-  { value: 'all', title: 'Keep all other fields' },
-  { value: 'selected', title: 'Keep only fields marked keep' },
-  { value: 'none', title: 'Keep only mapped and evidence fields' }
+  { value: 'all', title: 'Keep' },
+  { value: 'selected', title: 'Keep evidence fields only' },
+  { value: 'none', title: 'Skip' }
 ]
 
 /** Bounds a profile so it stays a small settings / IPC payload. */
