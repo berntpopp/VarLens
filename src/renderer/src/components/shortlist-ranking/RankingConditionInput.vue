@@ -40,7 +40,7 @@ const errors = computed(() =>
 </script>
 
 <template>
-  <code v-if="readonly" class="condition-text" :aria-label="label">{{ modelValue }}</code>
+  <code v-if="readonly" class="condition-text">{{ modelValue }}</code>
   <DslSearchBar
     v-else
     condition

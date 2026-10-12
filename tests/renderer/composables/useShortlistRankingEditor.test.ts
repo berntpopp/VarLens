@@ -10,6 +10,10 @@ const savePreset = vi.fn()
 const updatePreset = vi.fn()
 const deletePreset = vi.fn()
 
+const canWrite = ref(true)
+vi.mock('../../../src/renderer/src/composables/usePermissions', () => ({
+  usePermissions: () => ({ canWrite })
+}))
 vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', async (orig) => ({
   ...(await orig<object>()),
   useFilterPresetStore: () => ({
@@ -103,6 +107,13 @@ describe('useShortlistRankingEditor — selection', () => {
     expect((await editor()).selectedId.value).toBe(2)
     useSettingsStore().defaultShortlistPresetId = 99
     expect((await editor()).selectedId.value).toBe(1)
+  })
+
+  it('opens everything read-only for viewer accounts', async () => {
+    canWrite.value = false
+    const e = await editor(3)
+    expect(e.readOnly.value).toBe(true)
+    canWrite.value = true
   })
 
   it('opens built-ins read-only and weighted presets without a draft', async () => {

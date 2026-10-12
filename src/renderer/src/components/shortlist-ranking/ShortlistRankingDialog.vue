@@ -4,7 +4,7 @@
  * the left, the evidence-ranking editor on the right, problems and Save in
  * the footer. Logic lives in `useShortlistRankingEditor`; the sections inject it.
  */
-import { computed, nextTick, provide, ref, watch } from 'vue'
+import { nextTick, provide, ref, watch } from 'vue'
 import {
   mdiAlertCircleOutline,
   mdiClose,
@@ -18,6 +18,7 @@ import RankingList from './RankingList.vue'
 import RankingCandidatesSection from './RankingCandidatesSection.vue'
 import RankingModesSection from './RankingModesSection.vue'
 import RankingGroupCard from './RankingGroupCard.vue'
+import RankingPreview from './RankingPreview.vue'
 import {
   RankingEditorKey,
   RULESET_PATH,
@@ -43,7 +44,6 @@ const { showSnack } = useAppState()
 const saving = ref(false)
 const openGroups = ref<number[]>([])
 const editorPane = ref<HTMLElement | null>(null)
-const canEdit = computed(() => canWrite.value && !readOnly.value)
 
 watch(
   open,
@@ -55,7 +55,7 @@ watch(
 
 /** Run `action` unless it would drop unsaved edits the user wants to keep. */
 function guarded(action: () => void): void {
-  if (dirty.value && canEdit.value && !window.confirm(COPY.confirm.discard)) return
+  if (dirty.value && !readOnly.value && !window.confirm(COPY.confirm.discard)) return
   action()
   openGroups.value = []
   editorPane.value?.scrollTo({ top: 0 })
@@ -155,16 +155,19 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
         <div ref="editorPane" class="ranking-dialog__editor" data-testid="ranking-editor">
           <template v-if="draft">
             <div class="editor-head">
-              <template v-if="readOnly || !canWrite">
+              <template v-if="readOnly">
                 <div class="editor-head__name">
                   <span class="text-subtitle-1 font-weight-medium">{{ draft.name }}</span>
                   <v-icon
-                    v-if="readOnly"
+                    v-if="selected?.isBuiltIn"
                     :icon="mdiLockOutline"
                     size="16"
                     class="ml-1"
-                    :aria-label="COPY.labels.builtIn"
+                    aria-hidden="true"
                   />
+                  <span v-if="selected?.isBuiltIn" class="visually-hidden">
+                    {{ COPY.labels.builtIn }}
+                  </span>
                   <div v-if="draft.description" class="text-caption text-medium-emphasis">
                     {{ draft.description }}
                   </div>
@@ -190,16 +193,16 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
               <v-btn
                 v-if="canWrite"
                 size="small"
-                :variant="readOnly ? 'tonal' : 'text'"
-                :color="readOnly ? 'primary' : undefined"
+                :variant="selected?.isBuiltIn ? 'tonal' : 'text'"
+                :color="selected?.isBuiltIn ? 'primary' : undefined"
                 :prepend-icon="mdiContentCopy"
                 data-testid="ranking-duplicate"
                 @click="guarded(editor.duplicate)"
               >
-                {{ COPY.actions.duplicate }}
+                {{ readOnly ? COPY.actions.duplicate : COPY.actions.copy }}
               </v-btn>
               <v-btn
-                v-if="canEdit && selected"
+                v-if="!readOnly && selected"
                 size="small"
                 variant="text"
                 color="error"
@@ -224,7 +227,7 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 />
               </v-expansion-panels>
               <v-btn
-                v-if="canEdit"
+                v-if="!readOnly"
                 variant="text"
                 size="small"
                 :prepend-icon="mdiPlus"
@@ -235,6 +238,7 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 {{ COPY.actions.addGroup }}
               </v-btn>
             </section>
+            <RankingPreview />
           </template>
           <div v-else-if="selected" class="legacy" data-testid="ranking-legacy">
             <div class="d-flex align-center">
@@ -244,8 +248,11 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 :icon="mdiLockOutline"
                 size="16"
                 class="ml-1"
-                :aria-label="COPY.labels.builtIn"
+                aria-hidden="true"
               />
+              <span v-if="selected.isBuiltIn" class="visually-hidden">
+                {{ COPY.labels.builtIn }}
+              </span>
               <v-spacer />
               <v-btn
                 v-if="canWrite"
@@ -292,7 +299,7 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
         <v-spacer />
         <v-btn variant="text" @click="close">{{ COPY.actions.cancel }}</v-btn>
         <v-btn
-          v-if="canEdit && draft"
+          v-if="!readOnly && draft"
           color="primary"
           variant="flat"
           :disabled="!dirty || problems.length > 0"

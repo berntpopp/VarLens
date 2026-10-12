@@ -94,7 +94,8 @@ describe('ShortlistRankingDialog', () => {
   it('lists rankings with built-ins locked and opens a built-in read-only', async () => {
     const w = await mountDialog(2)
     expect(w.find('[data-testid="ranking-list"]').text()).toContain('My lab')
-    expect(w.findAll('[aria-label="Built-in, read-only"]').length).toBeGreaterThanOrEqual(2)
+    const locked = w.findAll('.visually-hidden').filter((e) => e.text() === 'Built-in, read-only')
+    expect(locked.length).toBeGreaterThanOrEqual(2)
     expect(w.find('[data-testid="ranking-duplicate"]').exists()).toBe(true)
     expect(w.find('[data-testid="ranking-save"]').exists()).toBe(false)
     expect(w.find('[data-testid="group-add"]').exists()).toBe(false)
@@ -143,6 +144,12 @@ describe('ShortlistRankingDialog', () => {
     await flushPromises()
     expect(w.findAll('[data-testid="ranking-group"]')).toHaveLength(groups + 1)
     expect(w.find('[data-testid="ranking-problems"]').exists()).toBe(false)
+  })
+
+  it('asks for an open case before previewing', async () => {
+    const w = await mountDialog(3)
+    expect(w.find('[data-testid="ranking-preview"]').text()).toContain('Open a case')
+    expect(w.find('[data-testid="ranking-preview-run"]').exists()).toBe(false)
   })
 
   it('hides editing for read-only accounts', async () => {

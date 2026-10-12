@@ -21,6 +21,7 @@ export const SHORTLIST_RANKING_EDITOR = {
     importRanking: 'Import',
     exportRanking: 'Export',
     duplicate: 'Duplicate to edit',
+    copy: 'Duplicate',
     deleteRanking: 'Delete',
     addRule: 'Add rule',
     addGroup: 'Add group',

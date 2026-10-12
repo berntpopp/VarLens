@@ -45,7 +45,11 @@ interface PersistedSettings {
   defaultCaseTab: DefaultCaseTab
   /** 'system' follows prefers-color-scheme (see utils/theme-preference.ts). */
   themePreference: ThemePreference
-  /** Shortlist preset the Shortlist tab preselects; null = the first in the list. */
+  /**
+   * Shortlist preset the Shortlist tab preselects; null = the first in the list.
+   * ponytail: one id for every database; after switching databases it may name
+   * another preset with the same id. Key it by database if that bites.
+   */
   defaultShortlistPresetId: number | null
 }
 

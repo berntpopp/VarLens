@@ -21,9 +21,9 @@ const value = computed({
 </script>
 
 <template>
-  <code v-if="readonly" class="points-text" :aria-label="label">
+  <span v-if="readonly" class="points-text">
     {{ modelValue > 0 ? `+${modelValue}` : modelValue }}
-  </code>
+  </span>
   <v-text-field
     v-else
     v-model="value"
@@ -44,8 +44,7 @@ const value = computed({
   padding: 6px 4px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: 0.8rem;
-  background: none;
+  font-size: 0.8125rem;
 }
 .points-input :deep(input) {
   text-align: right;

@@ -60,9 +60,10 @@ async function onFile(event: Event): Promise<void> {
           <v-icon
             :icon="mdiLockOutline"
             size="14"
-            :aria-label="COPY.labels.builtIn"
+            aria-hidden="true"
             :data-tooltip="COPY.labels.builtIn"
           />
+          <span class="visually-hidden">{{ COPY.labels.builtIn }}</span>
         </template>
       </v-list-item>
     </v-list>
@@ -110,7 +111,7 @@ async function onFile(event: Event): Promise<void> {
       :label="COPY.defaultRanking.label"
       :hint="COPY.defaultRanking.hint"
       persistent-hint
-      class="mt-3"
+      class="ranking-list__default mt-3"
       data-testid="ranking-default"
     />
   </nav>
@@ -137,6 +138,9 @@ async function onFile(event: Event): Promise<void> {
   overflow-y: auto;
   padding: 0;
   background: transparent;
+}
+.ranking-list__default {
+  flex: 0 0 auto;
 }
 .ranking-list__actions {
   display: flex;

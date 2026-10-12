@@ -39,7 +39,8 @@ const name = (field: string): string => `${rule.value.label} — ${field}`
   >
     <div class="rule-row__order">
       <span v-if="reference" class="rule-row__pin" :data-tooltip="COPY.labels.reference">
-        <v-icon :icon="mdiPin" size="14" :aria-label="COPY.labels.reference" />
+        <v-icon :icon="mdiPin" size="14" aria-hidden="true" />
+        <span class="visually-hidden">{{ COPY.labels.reference }}</span>
       </span>
       <template v-else-if="!readOnly">
         <IconButton

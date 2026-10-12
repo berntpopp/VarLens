@@ -12,6 +12,7 @@
 import { computed, inject, ref, type InjectionKey } from 'vue'
 import { useFilterPresetStore, isShortlistPreset } from './useFilterPresetStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { usePermissions } from './usePermissions'
 import { SHORTLIST_RANKING_EDITOR as COPY } from '../config/shortlistRankingEditor'
 import { parseRankingFile, rankingFileName, serializeRanking } from '../utils/shortlist-ranking-io'
 import { SHORTLIST_EVIDENCE_CONFIG } from '../../../shared/config/shortlist-evidence.config'
@@ -103,6 +104,7 @@ const templateGate = (): Partial<FilterState> => ({
 export function useShortlistRankingEditor() {
   const store = useFilterPresetStore()
   const settings = useSettingsStore()
+  const { canWrite } = usePermissions()
 
   const rankings = computed(() => store.presets.value.filter(isShortlistPreset))
   const selectedId = ref<number | null>(null)
@@ -111,7 +113,8 @@ export function useShortlistRankingEditor() {
   const baseline = ref('null')
 
   const selected = computed(() => rankings.value.find((p) => p.id === selectedId.value) ?? null)
-  const readOnly = computed(() => selected.value?.isBuiltIn === true)
+  // Built-ins are never written; viewer accounts cannot write at all.
+  const readOnly = computed(() => selected.value?.isBuiltIn === true || !canWrite.value)
   const dirty = computed(() => JSON.stringify(draft.value) !== baseline.value)
   const ruleset = computed(() => draft.value?.config.rankConfig.ruleset ?? null)
 
