@@ -86,7 +86,8 @@ function toLollipopVariant(v: AnyVariant, highlighted: boolean): LollipopVariant
     clinvar: v.clinvar ?? null,
     highlighted,
     // Cohort rows: marker size follows the number of carriers.
-    carrierCount: 'carrier_count' in v ? v.carrier_count : undefined
+    carrierCount: 'carrier_count' in v ? v.carrier_count : undefined,
+    cdna: v.cdna ?? null
   }
 }
 

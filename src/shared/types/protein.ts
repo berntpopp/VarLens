@@ -162,4 +162,6 @@ export interface LollipopVariant {
   highlighted?: boolean
   /** Cohort view: carriers of this variant (marker size); absent for case variants */
   carrierCount?: number
+  /** cDNA notation (search by c.) */
+  cdna?: string | null
 }
