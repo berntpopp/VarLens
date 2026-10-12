@@ -386,6 +386,31 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
+    it('ends the upload status once the last file of a selection is uploaded', () => {
+      window.__VARLENS_WEB__ = true
+      window.api = createMockApi()
+      const pinia = createPinia()
+      const wrapper = mount(ImportWizard, { global: { plugins: [pinia, vuetify] } })
+      const store = useImportStatusStore(pinia)
+      const send = (status: string, fileIndex: number): void => {
+        const detail = { status, fileName: 'f', fileIndex, totalFiles: 2, loadedBytes: 0 }
+        window.dispatchEvent(
+          new CustomEvent('varlens:web-upload', {
+            detail: { ...detail, totalBytes: null, percent: 100 }
+          })
+        )
+      }
+
+      send('started', 0)
+      send('complete', 0)
+      expect(store.isActive).toBe(true)
+      send('started', 1)
+      send('complete', 1)
+      // No stale "2/2 (100%)" app-bar chip while the dialog waits for review.
+      expect(store.isActive).toBe(false)
+      wrapper.unmount()
+    })
+
     it('keeps acknowledged VCF cancellation terminal when the active start call settles later', async () => {
       const mockApi = createMockApi()
       const pendingStart = deferred<{ variantCount: number }>()

@@ -76,6 +76,11 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     activeBatchRunId.value = null
   }
 
+  /** A file selection finished uploading: the next step (review, import) owns the status. */
+  function endUpload(): void {
+    if (phase.value === 'uploading') reset()
+  }
+
   function isCurrentBatchRun(runId: string): boolean {
     return activeBatchRunId.value === runId
   }
@@ -193,6 +198,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     fileProgress,
     startUpload,
     updateUploadProgress,
+    endUpload,
     startImport,
     isCurrentBatchRun,
     clearBatchRun,
