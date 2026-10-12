@@ -13,7 +13,7 @@ import { runLocalVep, type LocalVepRecord } from '../annotate/local-vep'
 import { normalizeAlleles } from '../annotate/normalize'
 import { projectToVarvis, vepTermKey } from '../annotate/project-varvis'
 import type { SpikeAnnotation } from '../annotate/spike-annotation'
-import { vepFromLocal } from '../annotate/freeze'
+import { countBy, vepFromLocal } from '../annotate/freeze'
 import {
   GENEFOUNDRY_CACHE_DIR,
   POOL_LOCAL_VEP_FILE,
@@ -178,6 +178,10 @@ export function computeConcordance(
     sites: sites.length,
     matched: sites.filter((s) => s.local !== null).length,
     normalization,
+    transcriptSelection: countBy(
+      sites.filter((x) => x.local !== null),
+      (x) => x.local!.selection
+    ),
     funcMapping,
     impactByFunc,
     funcAgreement: funcAgreement(sites, funcMapping, impactByFunc),
@@ -217,11 +221,21 @@ async function annotateBackgrounds(
   normalization.repositioned = norm.filter((n) => n.status === 'ok' && n.key !== n.input).length
   const ok = [...new Map(norm.filter((n) => n.status === 'ok').map((n) => [n.key, n])).values()]
   // Finished chunks are reused when an earlier run kept PRIVATE_DIR (--keep-private).
+  // Transcript choice restricted to the varvis gene of the site (same rule as for spikes).
+  const geneByKey = new Map<string, string | null>()
+  for (const bg of bgs)
+    for (const r of bg.rows) {
+      const n = normByInput.get(keyOf(r))
+      if (n?.status === 'ok' && !geneByKey.has(n.key)) geneByKey.set(n.key, r.gene_symbol)
+    }
   const vep = await runLocalVep(
     ok.map((n) => ({ key: n.key, chr: n.chr, pos: n.pos, ref: n.ref, alt: n.alt })),
     join(PRIVATE_DIR, 'vep'),
-    // --no-dbnsfp: provisional run without CADD/joint AF (dbNSFP sits on a slow CIFS share).
-    { dbnsfp: !process.argv.includes('--no-dbnsfp') }
+    {
+      // --no-dbnsfp: provisional run without CADD/joint AF (dbNSFP sits on a slow CIFS share).
+      dbnsfp: !process.argv.includes('--no-dbnsfp'),
+      geneOf: (key) => geneByKey.get(key) ?? null
+    }
   )
   const byKey = new Map(vep.map((r) => [r.key, r]))
   const input = bgs.map((bg) => ({
