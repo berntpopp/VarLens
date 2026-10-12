@@ -144,6 +144,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0028',
     name: 'rare_not_recurrent_preset',
     fileName: '0028_rare_not_recurrent_preset.sql'
+  },
+  {
+    version: '0029',
+    name: 'summary_carrier_rows',
+    fileName: '0029_summary_carrier_rows.sql'
   }
 ]
 
