@@ -1,3 +1,5 @@
+import type { ConsequenceCategory } from '../types/protein'
+
 /**
  * Canonical ACMG/AMP 2015 classification labels.
  * Follows ClinVar convention: sentence case for multi-word labels.
@@ -48,6 +50,21 @@ export const SEMANTIC_COLORS = {
  * provided, ...): 3.45:1 on white, ΔE00 >= 10 from the VUS grey under CVD.
  */
 export const CLINVAR_OTHER_MARK = '#8A8A8A'
+
+/**
+ * Lollipop / gnomAD mark colour per consequence category (cBioPortal scheme,
+ * except inframe: purple instead of brown, which merged with missense green
+ * under deuteranopia). Every pair stays at ΔE00 >= 10 under CVD
+ * (tests/renderer/plugins/semantic-theme-tokens.test.ts).
+ */
+export const CONSEQUENCE_COLORS: Record<ConsequenceCategory, string> = {
+  missense: '#008000',
+  truncating: '#000000',
+  inframe: '#7B3294',
+  splice: '#FF8C00',
+  synonymous: '#808080',
+  other: '#C0C0C0'
+}
 
 /** Theme colour token per ACMG classification (row, filter and dialog chips alike). */
 export const ACMG_COLORS: Record<AcmgClassification, string> = {

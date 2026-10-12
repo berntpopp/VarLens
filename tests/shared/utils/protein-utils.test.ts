@@ -3,10 +3,10 @@ import {
   parseProteinPosition,
   getConsequenceCategory,
   getConsequenceColor,
-  CONSEQUENCE_COLORS,
   DOMAIN_TYPE_COLORS,
   getClinVarCategory
 } from '../../../src/shared/utils/protein-utils'
+import { CONSEQUENCE_COLORS } from '../../../src/shared/config/domain.config'
 import type { ConsequenceCategory } from '../../../src/shared/types/protein'
 
 describe('parseProteinPosition', () => {
@@ -136,8 +136,8 @@ describe('getConsequenceColor', () => {
     expect(getConsequenceColor('frameshift_variant')).toBe('#000000')
   })
 
-  it('returns brown (#8B4513) for inframe_deletion', () => {
-    expect(getConsequenceColor('inframe_deletion')).toBe('#8B4513')
+  it('returns the inframe colour for inframe_deletion', () => {
+    expect(getConsequenceColor('inframe_deletion')).toBe(CONSEQUENCE_COLORS.inframe)
   })
 
   it('returns orange (#FF8C00) for splice_donor_variant', () => {

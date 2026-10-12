@@ -24,6 +24,7 @@
         :aria-expanded="menuOpen"
         :aria-label="label + (hasSelection ? ` (${selectedValues.length} selected)` : '')"
         @click:clear="clearAll"
+        @vue:mounted="dropFieldRole"
       >
         <template #prepend-inner>
           <v-icon size="small" class="mr-1">{{ icon }}</v-icon>
@@ -134,6 +135,7 @@
 import { clinvarDisplayText } from '../../../shared/config/severity.config'
 import { ref, computed } from 'vue'
 import type { FilterGroupConfig, FilterGroup } from '../config/filterGroups'
+import { dropFieldRole } from '../utils/combobox-field'
 import { mdiChevronDown, mdiChevronUp, mdiDotsHorizontal, mdiFilterVariant } from '@mdi/js'
 import {
   getGroupValues,

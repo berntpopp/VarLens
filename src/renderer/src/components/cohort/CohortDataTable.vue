@@ -194,7 +194,11 @@
 
 <script setup lang="ts">
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
-import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
+import {
+  useTableKeyboardNav,
+  hasCommandModifier,
+  isControlFocused
+} from '../../composables/useTableKeyboardNav'
 import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../../config/keyboardShortcuts'
@@ -458,7 +462,7 @@ onKeyStroke(
   SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
-    if (navSelectedItem.value === null) return
+    if (navSelectedItem.value === null || isControlFocused()) return
     e.preventDefault()
     emit('row-click', navSelectedItem.value)
   },
