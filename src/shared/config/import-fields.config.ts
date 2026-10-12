@@ -139,6 +139,21 @@ export const COLUMNAR_SLOT_COLUMN: Readonly<Record<ColumnarSlot, string>> = {
   MOI: 'moi'
 }
 
+/**
+ * varvis columnar columns without a VarLens column whose array holds one
+ * value per transcript (manual 2.11.1: values of the selected / alternative
+ * transcript). The importer keeps the selected transcript's value; every
+ * other array is a list and is stored comma-joined.
+ */
+export const COLUMNAR_TRANSCRIPT_FIELDS: ReadonlySet<string> = new Set([
+  'ExonIntronRank',
+  'ExonDist',
+  'AltFunc',
+  'AltImpact',
+  'AionShortlist',
+  'InterProDomain'
+])
+
 /** Object-export variant property → column (`ObjectFormatMapper`). */
 export const OBJECT_FORMAT_COLUMNS: Readonly<Record<string, string>> = {
   chr: 'chr',

@@ -95,6 +95,38 @@ describe('columnar mapper', () => {
   })
 })
 
+describe('columnar transcript values', () => {
+  it('selects the transcript only for transcript-specific columns, other arrays stay lists', async () => {
+    const header = [
+      { id: 'Chr' },
+      { id: 'Pos' },
+      { id: 'Ref' },
+      { id: 'Alt' },
+      { id: 'Transcript' },
+      { id: 'selectedTranscript' },
+      { id: 'GenesOverlapping' },
+      { id: 'ExonIntronRank' }
+    ]
+    const mapper = createFieldMapper(
+      dictionaries,
+      resolveColumnIndices(header),
+      undefined,
+      undefined,
+      {
+        header,
+        fields: new FieldProfileResolver()
+      }
+    )
+    const [row] = await run(mapper, [
+      ['1', 10, 'A', 'G', ['NM_1', 'NM_2'], 1, ['GENE1', 'GENE2'], ['2/10', '3/11']]
+    ])
+    expect(JSON.parse(String(row.info_json))).toEqual({
+      GenesOverlapping: 'GENE1,GENE2',
+      ExonIntronRank: '3/11'
+    })
+  })
+})
+
 describe('object mapper', () => {
   it('keeps properties without a column and skips the per-variant identifiers', async () => {
     const [row] = await run(createObjectFormatMapper(), [
