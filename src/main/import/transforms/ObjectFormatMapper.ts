@@ -3,6 +3,8 @@ import type { Variant } from '../../database/types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 import { setRecordBytes } from '../bounded-batcher'
+import { OBJECT_FORMAT_COLUMNS } from '../../../shared/config/import-fields.config'
+import { FieldProfileResolver, jsonValueText } from '../../../shared/utils/import-field-profile'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -86,12 +88,25 @@ export class ObjectFormatMapper extends Transform {
   /**
    * @param takeRecordBytes source size of the next input record, if tracked
    * @param onSkip told about every record dropped for a missing required field
+   * @param fields decides where properties without a column go (default: keep all)
    */
   constructor(
     private readonly takeRecordBytes?: () => number,
-    private readonly onSkip?: (reason: string) => void
+    private readonly onSkip?: (reason: string) => void,
+    private readonly fields: FieldProfileResolver = new FieldProfileResolver()
   ) {
     super({ objectMode: true })
+  }
+
+  /** Properties without a column as `info_json`, per the field profile. */
+  private infoJson(variant: ObjectFormatVariant): string | null {
+    const record = this.fields.record()
+    for (const [name, value] of Object.entries(variant)) {
+      if (Object.prototype.hasOwnProperty.call(OBJECT_FORMAT_COLUMNS, name)) continue
+      const text = jsonValueText(value)
+      if (text !== null) record.set('JSON', name, text)
+    }
+    return record.toJson()
   }
 
   _transform(
@@ -148,7 +163,7 @@ export class ObjectFormatMapper extends Transform {
         ad_alt: null,
         ab: null,
         filter: null,
-        info_json: null,
+        info_json: this.infoJson(variant),
         source_format: null
       }
 
@@ -199,7 +214,8 @@ export class ObjectFormatMapper extends Transform {
 
 export function createObjectFormatMapper(
   takeRecordBytes?: () => number,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  fields?: FieldProfileResolver
 ): ObjectFormatMapper {
-  return new ObjectFormatMapper(takeRecordBytes, onSkip)
+  return new ObjectFormatMapper(takeRecordBytes, onSkip, fields)
 }

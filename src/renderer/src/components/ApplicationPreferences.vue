@@ -59,6 +59,29 @@
 
         <v-divider class="my-4" />
 
+        <!-- Import Section -->
+        <div class="text-subtitle-2 text-medium-emphasis mb-2">Import</div>
+        <div class="d-flex align-center ga-3 mb-1">
+          <div class="text-body-2 flex-grow-1">
+            Annotation fields without a choice: {{ importPolicyLabel }}
+            <span v-if="importChoiceCount > 0" class="text-medium-emphasis">
+              · {{ importChoiceCount }} customised
+              {{ importChoiceCount === 1 ? 'field' : 'fields' }}
+            </span>
+          </div>
+          <v-btn
+            size="small"
+            variant="tonal"
+            data-testid="open-import-fields"
+            @click="importFieldsOpen = true"
+          >
+            Edit import fields…
+          </v-btn>
+        </div>
+        <ImportFieldsSettingsDialog v-model:open="importFieldsOpen" />
+
+        <v-divider class="my-4" />
+
         <!-- Performance Section -->
         <div class="text-subtitle-2 text-medium-emphasis mb-2">Performance</div>
         <!-- Worker threads size the desktop import/query pool; the web server
@@ -113,11 +136,20 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { THEME_PREFERENCE_OPTIONS } from '../utils/theme-preference'
+import { KEEP_UNKNOWN_OPTIONS } from '../../../shared/config/import-fields.config'
+import ImportFieldsSettingsDialog from './ImportFieldsSettingsDialog.vue'
 
 const settings = useSettingsStore()
 const { api } = useApiService()
 
 const isOpen = ref(false)
+const importFieldsOpen = ref(false)
+const importPolicyLabel = computed(
+  () =>
+    KEEP_UNKNOWN_OPTIONS.find((o) => o.value === settings.importFieldProfile.keepUnknown)?.title ??
+    ''
+)
+const importChoiceCount = computed(() => Object.keys(settings.importFieldProfile.fields).length)
 const { canUse } = useCapabilityStore()
 const workerThreadsAvailable = canUse('workerThreads')
 const cpuCount = ref(navigator.hardwareConcurrency || 4)

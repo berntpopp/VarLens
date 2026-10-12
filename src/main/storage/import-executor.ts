@@ -1,8 +1,11 @@
 import type { MultiFileImportSpec } from '../../shared/types/api'
+import type { ImportFieldProfile } from '../../shared/config/import-fields.config'
 
 export interface StorageImportVcfOptions {
   selectedSample?: string
   genomeBuild?: string
+  /** Applies to JSON as well as VCF: where fields without a column go. */
+  fieldProfile?: ImportFieldProfile
 }
 
 /**

@@ -234,6 +234,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { stripVueProxies } from '../../utils/stripVueProxies'
 import type {
   MultiFileImportResult,
   MultiFileImportSpec,
@@ -245,6 +246,7 @@ import { formatErrorMessage } from '../../../../shared/errors/format-error-messa
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { logService } from '../../services/LogService'
 import { logUnrankedClinvar } from '../../utils/unranked-clinvar'
 import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
@@ -287,6 +289,7 @@ const { selectCase } = useAppState()
 // the persistent status bar, and the user can expand the dialog again to
 // return to the full per-file view.
 const importStore = useImportStatusStore()
+const settingsStore = useSettingsStore()
 
 // ---------------------------------------------------------------------------
 // Phase state
@@ -625,10 +628,13 @@ async function startImport(): Promise<void> {
       await api.import.startMultiFile(
         caseName.value.trim(),
         specs,
-        previewResult.value.files[0].detectedGenomeBuild !== null &&
+        {
+          ...(previewResult.value.files[0].detectedGenomeBuild !== null &&
           previewResult.value.files[0].detectedGenomeBuild !== ''
-          ? { genomeBuild: previewResult.value.files[0].detectedGenomeBuild }
-          : undefined,
+            ? { genomeBuild: previewResult.value.files[0].detectedGenomeBuild }
+            : {}),
+          fieldProfile: stripVueProxies(settingsStore.importFieldProfile)
+        },
         filtersPayload
       )
     )

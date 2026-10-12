@@ -11,6 +11,11 @@ import type { RawVariantRow } from '../types'
 import type { TranscriptInsertRow } from '../../../shared/types/transcript'
 import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcript'
 import { setRecordBytes } from '../bounded-batcher'
+import {
+  canonicalFieldFor,
+  FieldProfileResolver,
+  jsonValueText
+} from '../../../shared/utils/import-field-profile'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -18,8 +23,30 @@ type MappedVariantWithTranscripts = MappedVariant & {
   _transcripts?: TranscriptInsertRow[]
 }
 
+/** One columnar header column as the field profile needs it. */
+export interface ColumnarHeaderItem {
+  id: string
+  dataDictionary?: Record<string, unknown> | null
+  /** varvis value type (`text`, `number`, `dictionary`) and display label, for the preview. */
+  type?: string
+  label?: string
+}
+
+/** A header column the slot mapping leaves to the field profile. */
+interface ProfileColumn {
+  index: number
+  name: string
+  dictionary: Record<string, unknown> | null
+  /** Already stored in a column: it only feeds its canonical key. */
+  deriveOnly: boolean
+}
+
 interface FieldMapperOptions {
   dictionaries: DataDictionaries
+  /** The file's header: rows must match its length; unmapped columns go to the field profile. */
+  header?: ColumnarHeaderItem[]
+  /** Decides where the unmapped columns go (default: keep all). */
+  fields?: FieldProfileResolver
   /** Dynamic column indices resolved from header. Falls back to this.cols. */
   columnIndices?: ColumnIndices
   /** Source size of the next input record, when the JSON budget tracks it. */
@@ -33,6 +60,9 @@ export class FieldMapper extends Transform {
   private cols: ColumnIndices
   private readonly takeRecordBytes?: () => number
   private readonly onSkip?: (reason: string) => void
+  private readonly headerLength: number | null
+  private readonly fields: FieldProfileResolver
+  private readonly profileColumns: ProfileColumn[]
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
@@ -40,6 +70,13 @@ export class FieldMapper extends Transform {
     this.cols = options.columnIndices ?? COLUMN_INDICES
     this.takeRecordBytes = options.takeRecordBytes
     this.onSkip = options.onSkip
+    this.headerLength = options.header?.length ?? null
+    this.fields = options.fields ?? new FieldProfileResolver()
+    this.profileColumns = profileColumnsOf(options.header ?? [], this.cols)
+    this.fields.seed(
+      'JSON',
+      this.profileColumns.filter((c) => !c.deriveOnly).map((c) => c.name)
+    )
   }
 
   _transform(
@@ -50,6 +87,11 @@ export class FieldMapper extends Transform {
     try {
       const recordBytes = this.takeRecordBytes?.()
       const row = chunk.value
+      if (this.headerLength !== null && row.length !== this.headerLength) {
+        throw new Error(
+          `Columnar row ${chunk.key + 1} has ${row.length} values but the header has ${this.headerLength} columns`
+        )
+      }
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0
       const semantics = canonicalizeTranscriptSemantics(
         this.extractValue(row, this.cols.IMPACT, selectedTranscript, true, IMPACT_DICTIONARY) as
@@ -115,7 +157,7 @@ export class FieldMapper extends Transform {
         ad_alt: null,
         ab: null,
         filter: null,
-        info_json: null,
+        info_json: this.infoJson(row, selectedTranscript),
         source_format: null
       }
 
@@ -151,6 +193,26 @@ export class FieldMapper extends Transform {
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)))
     }
+  }
+
+  /** The row's unmapped columns as `info_json`, per the field profile. */
+  private infoJson(row: RawVariantRow, selectedTranscript: number): string | null {
+    if (this.profileColumns.length === 0) return null
+    const transcriptCol = row[this.cols.TRANSCRIPT]
+    const transcriptCount = Array.isArray(transcriptCol) ? transcriptCol.length : 1
+    const record = this.fields.record()
+    for (const column of this.profileColumns) {
+      const text = columnarCellText(
+        row[column.index],
+        selectedTranscript,
+        transcriptCount,
+        column.dictionary
+      )
+      if (text === null) continue
+      if (column.deriveOnly) record.deriveOnly('JSON', column.name, text)
+      else record.set('JSON', column.name, text)
+    }
+    return record.toJson()
   }
 
   private extractValue(
@@ -286,11 +348,57 @@ export class FieldMapper extends Transform {
   }
 }
 
+/** Header columns no slot reads, plus slot columns that also feed a canonical key. */
+function profileColumnsOf(header: ColumnarHeaderItem[], cols: ColumnIndices): ProfileColumn[] {
+  const slotIndexes = new Set<number>(Object.values(cols))
+  const columns: ProfileColumn[] = []
+  header.forEach((item, index) => {
+    const deriveOnly = slotIndexes.has(index)
+    if (deriveOnly && canonicalFieldFor(item.id) === null) return
+    const dictionary = item.dataDictionary ?? null
+    columns.push({ index, name: item.id, dictionary, deriveOnly })
+  })
+  return columns
+}
+
+/**
+ * One cell as stored text: an array as long as the transcript list holds one
+ * value per transcript (the selected one is kept), any other array is a list;
+ * a data-dictionary code is resolved to its label.
+ */
+export function columnarCellText(
+  value: RawVariantRow[number],
+  selectedTranscript: number,
+  transcriptCount: number,
+  dictionary: Record<string, unknown> | null
+): string | null {
+  let selected: unknown = value
+  if (Array.isArray(value) && value.length === transcriptCount && transcriptCount > 1) {
+    selected = value[selectedTranscript] ?? value[0]
+  }
+  const label = (code: unknown): unknown =>
+    dictionary !== null &&
+    code !== null &&
+    typeof code !== 'object' &&
+    Object.prototype.hasOwnProperty.call(dictionary, String(code))
+      ? dictionary[String(code)]
+      : code
+  return jsonValueText(Array.isArray(selected) ? selected.map(label) : label(selected))
+}
+
 export function createFieldMapper(
   dictionaries: DataDictionaries,
   columnIndices?: ColumnIndices,
   takeRecordBytes?: () => number,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  profile?: { header: ColumnarHeaderItem[]; fields: FieldProfileResolver }
 ): FieldMapper {
-  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes, onSkip })
+  return new FieldMapper({
+    dictionaries,
+    columnIndices,
+    takeRecordBytes,
+    onSkip,
+    header: profile?.header,
+    fields: profile?.fields
+  })
 }

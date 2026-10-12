@@ -119,7 +119,8 @@ describe('batch-import preload domain behavior', () => {
       ['/path/to/file1.json'],
       'skip',
       undefined,
-      'desktop-run-1'
+      'desktop-run-1',
+      undefined
     )
     expect(invoke).toHaveBeenNthCalledWith(5, 'batch-import:cancel')
     expect(invoke).toHaveBeenNthCalledWith(6, 'batch-import:selectZip')

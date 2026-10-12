@@ -23,4 +23,6 @@ export interface VcfPreviewResult {
   annotationType: VcfAnnotationType
   detectedGenomeBuild: string | null
   infoFields: VcfPreviewInfoField[]
+  /** CSQ / ANN subfield names in header order. */
+  annotationFields: string[]
 }

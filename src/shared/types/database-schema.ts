@@ -235,6 +235,7 @@ export interface CaseDataInfoTable {
   updated_at: number
   gene_list_id: number | null
   region_file_id: number | null
+  field_dictionary: string | null
 }
 
 // ── Case External IDs ─────────────────────────────────────

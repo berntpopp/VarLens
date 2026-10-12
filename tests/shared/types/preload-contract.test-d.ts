@@ -51,6 +51,7 @@ import type {
 import type { IpcResult } from '../../../src/shared/types/errors'
 import type {
   ImportResult,
+  JsonFieldPreviewResult,
   VcfMultiPreviewResult,
   VcfPreviewResult
 } from '../../../src/shared/types/import'
@@ -108,6 +109,9 @@ describe('batch-import and system domains — C1 renderer unwrap guards', () => 
     >()
     expectTypeOf<Awaited<ReturnType<WindowAPI['import']['vcfPreview']>>>().toEqualTypeOf<
       IpcResult<VcfPreviewResult>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['import']['jsonPreview']>>>().toEqualTypeOf<
+      IpcResult<JsonFieldPreviewResult>
     >()
     expectTypeOf<Awaited<ReturnType<WindowAPI['import']['vcfMultiPreview']>>>().toEqualTypeOf<
       IpcResult<VcfMultiPreviewResult>
