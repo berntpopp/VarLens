@@ -362,6 +362,30 @@ describe('ImportWizard IPC safety', () => {
       wrapper.unmount()
     })
 
+    it('keeps a skipped web upload reason on screen while the batch goes on', async () => {
+      window.__VARLENS_WEB__ = true
+      window.api = createMockApi()
+      const wrapper = mount(ImportWizard, { global: { plugins: [createPinia(), vuetify] } })
+      const vm = wrapper.vm as unknown as ImportWizardVm
+      const send = (status: string, fileIndex: number, message?: string): void => {
+        const detail = { status, fileName: 'f', fileIndex, totalFiles: 3, loadedBytes: 0 }
+        window.dispatchEvent(
+          new CustomEvent('varlens:web-upload', {
+            detail: { ...detail, totalBytes: null, percent: null, message }
+          })
+        )
+      }
+
+      send('started', 0)
+      send('skipped', 1, 'bad.txt: Only VCF files')
+      send('started', 2)
+      expect(vm.cancelError).toBe('bad.txt: Only VCF files')
+
+      send('started', 0) // a new selection starts clean
+      expect(vm.cancelError).toBe('')
+      wrapper.unmount()
+    })
+
     it('keeps acknowledged VCF cancellation terminal when the active start call settles later', async () => {
       const mockApi = createMockApi()
       const pendingStart = deferred<{ variantCount: number }>()

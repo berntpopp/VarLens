@@ -7,29 +7,37 @@
  * CustomEvent (`WEB_UPLOAD_EVENT`) that the import wizard listens to.
  */
 import { API_BASE } from './transport'
-
-export const WEB_UPLOAD_EVENT = 'varlens:web-upload'
-export const WEB_UPLOAD_CANCEL_EVENT = 'varlens:web-upload-cancel'
-/** Sent by the import wizard with `{ refs }` it abandons before any import used them. */
-export const WEB_UPLOAD_DISCARD_EVENT = 'varlens:web-upload-discard'
-
-export type WebUploadStatus = 'started' | 'progress' | 'complete' | 'error' | 'aborted'
-
-export interface WebUploadEventDetail {
-  status: WebUploadStatus
-  fileName: string
-  fileIndex: number
-  totalFiles: number
-  loadedBytes: number
-  totalBytes: number | null
-  percent: number | null
-  message?: string
-}
+import {
+  WEB_UPLOAD_CANCEL_EVENT,
+  WEB_UPLOAD_DISCARD_EVENT,
+  WEB_UPLOAD_EVENT,
+  type WebUploadEventDetail
+} from '../../shared/types/web-upload'
 
 export interface UploadedFileRef {
   ref: string
   fileName: string
   size: number
+}
+
+/** A non-2xx answer; `skippable` when only this file is at fault (type, per-file size). */
+class UploadRefusedError extends Error {
+  constructor(
+    message: string,
+    readonly skippable: boolean
+  ) {
+    super(message)
+  }
+}
+
+/** The server's `{ userMessage | message }`, not the JSON envelope, prefixed with the file name. */
+function refusalMessage(fileName: string, text: string): { message: string; code?: string } {
+  try {
+    const body = JSON.parse(text) as { error?: string; message?: string; userMessage?: string }
+    return { message: `${fileName}: ${body.userMessage ?? body.message ?? text}`, code: body.error }
+  } catch {
+    return { message: `${fileName}: ${text}` }
+  }
 }
 
 let activeUpload: XMLHttpRequest | null = null
@@ -102,9 +110,14 @@ async function uploadImportFileWithProgress(
       activeUpload = null
       const text = xhr.responseText
       if (xhr.status < 200 || xhr.status >= 300) {
-        const message = `web upload: ${xhr.status} ${xhr.statusText}: ${text}`
+        const { message, code } = refusalMessage(
+          file.name,
+          text || `${xhr.status} ${xhr.statusText}`
+        )
+        // A quota refusal (also 413) concerns the whole selection: it still aborts the batch.
+        const skippable = xhr.status === 400 || code === 'upload-too-large'
         dispatchUploadEvent({
-          status: 'error',
+          status: skippable ? 'skipped' : 'error',
           fileName: file.name,
           fileIndex,
           totalFiles,
@@ -113,7 +126,7 @@ async function uploadImportFileWithProgress(
           percent: null,
           message
         })
-        reject(new Error(message))
+        reject(new UploadRefusedError(message, skippable))
         return
       }
 
@@ -129,7 +142,7 @@ async function uploadImportFileWithProgress(
       try {
         resolve(JSON.parse(text) as UploadedFileRef)
       } catch (error) {
-        const message = `web upload: invalid JSON response: ${error instanceof Error ? error.message : String(error)}`
+        const message = `${file.name}: invalid upload response: ${error instanceof Error ? error.message : String(error)}`
         dispatchUploadEvent({
           status: 'error',
           fileName: file.name,
@@ -146,7 +159,7 @@ async function uploadImportFileWithProgress(
 
     xhr.onerror = () => {
       activeUpload = null
-      const message = `web upload: ${xhr.status} ${xhr.statusText}: network error`
+      const message = `${file.name}: upload failed (network error)`
       dispatchUploadEvent({
         status: 'error',
         fileName: file.name,
@@ -196,9 +209,16 @@ async function discardUploads(refs: readonly string[]): Promise<void> {
 
 export async function uploadImportFiles(files: readonly File[]): Promise<UploadedFileRef[]> {
   const uploaded: UploadedFileRef[] = []
+  let refusal: UploadRefusedError | undefined
   try {
     for (let index = 0; index < files.length; index++) {
-      uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+      try {
+        uploaded.push(await uploadImportFileWithProgress(files[index], index, files.length))
+      } catch (error) {
+        // One stray file must not block the good ones; its `skipped` event names it.
+        if (!(error instanceof UploadRefusedError) || !error.skippable) throw error
+        refusal = error
+      }
     }
   } catch (error) {
     // Refused or cancelled part-way: nothing will import the files already
@@ -206,6 +226,7 @@ export async function uploadImportFiles(files: readonly File[]): Promise<Uploade
     void discardUploads(uploaded.map((file) => file.ref))
     throw error
   }
+  if (uploaded.length === 0 && refusal !== undefined) throw refusal
   return uploaded
 }
 
