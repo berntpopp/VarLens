@@ -9,11 +9,8 @@
         <span class="ml-1">{{ formatScoreValue('cadd', (variant as Variant).cadd) }}</span>
       </v-chip>
 
-      <v-chip
-        :color="getScoreColor('gnomad_af', (variant as Variant).gnomad_af)"
-        size="small"
-        label
-      >
+      <!-- Uncoloured: red means pathogenic here, and rarity is in the number. -->
+      <v-chip size="small" label>
         <span class="font-weight-medium">gnomAD</span>
         <span class="ml-1">{{
           formatScoreValue('gnomad_af', (variant as Variant).gnomad_af)
