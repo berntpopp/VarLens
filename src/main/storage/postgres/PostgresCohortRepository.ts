@@ -23,6 +23,7 @@ import { streamLongQuery } from './long-running-client'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
+import { carrierTotalsSql, summaryVersionSql } from './postgres-carrier-totals'
 import {
   SUMMARY_FREQUENCY_SQL,
   buildSummaryExportSql,
@@ -143,9 +144,7 @@ export class PostgresCohortRepository {
    */
   private async summaryVersion(): Promise<string> {
     const result = await this.pool.query<{ version: string }>(
-      `SELECT concat_ws('|', s.last_incremental_at, s.last_rebuilt_at,
-                        (SELECT COUNT(*) FROM ${this.tbl('cases')})) AS version
-         FROM ${this.tbl('cohort_summary_state')} s WHERE s.id = 1`
+      summaryVersionSql((table) => this.tbl(table))
     )
     return result.rows[0]?.version ?? ''
   }
@@ -203,6 +202,7 @@ export class PostgresCohortRepository {
         schema: this.schema,
         table: this.tbl('cohort_variant_summary'),
         tbl: (table) => this.tbl(table),
+        carrierTotals: await carrierTotalsSql(this.pool, this.schema),
         toVariant: (row) => this.toCohortVariant(row, totalCases)
       },
       params,
@@ -381,7 +381,10 @@ export class PostgresCohortRepository {
         parts.whereParts,
         parts.orderBy,
         totalCases,
-        summaryBuildTotalsJoin((table) => this.tbl(table)),
+        summaryBuildTotalsJoin(
+          (table) => this.tbl(table),
+          await carrierTotalsSql(this.pool, this.schema)
+        ),
         limitOffset.join('\n    ')
       ),
       values

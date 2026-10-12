@@ -24,6 +24,7 @@ import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import {
   caseCarrierCountSql,
   classTotalsJoinSql,
+  classTotalsSql,
   singleFrequencyDenominator,
   type CarrierFrequencyRelations
 } from '../../../shared/sql/carrier-frequency'
@@ -85,14 +86,15 @@ export function postgresCarrierFrequencyRelations(
  */
 export function caseCarrierFrequencySql(
   tbl: (table: string) => string,
-  caseIdParam: string
+  caseIdParam: string,
+  totalsSql = liveCarrierTotalsSql(tbl)
 ): { carriers: string; frequency: string; totalsJoin: string } {
   const carriers = caseCarrierCountSql(tbl('cohort_variant_summary'), 'v')
   return {
     carriers,
     frequency: `(${carriers}::double precision / NULLIF(bt.total, 0))`,
     totalsJoin: classTotalsJoinSql(
-      postgresCarrierFrequencyRelations(tbl),
+      totalsSql,
       `(SELECT genome_build FROM ${tbl('cases')} WHERE id = ${caseIdParam})`,
       'v.variant_type'
     )
@@ -104,12 +106,16 @@ export function caseCarrierFrequencySql(
  * `bt.total`: the visible cases of its build holding a call of its variant
  * class (src/shared/sql/carrier-frequency.ts).
  */
-export function summaryBuildTotalsJoin(tbl: (table: string) => string): string {
-  return classTotalsJoinSql(
-    postgresCarrierFrequencyRelations(tbl),
-    'cvs.genome_build',
-    'cvs.variant_type'
-  )
+export function summaryBuildTotalsJoin(
+  tbl: (table: string) => string,
+  totalsSql = liveCarrierTotalsSql(tbl)
+): string {
+  return classTotalsJoinSql(totalsSql, 'cvs.genome_build', 'cvs.variant_type')
+}
+
+/** The denominators computed in the query itself (postgres-carrier-totals.ts caches them). */
+export function liveCarrierTotalsSql(tbl: (table: string) => string): string {
+  return classTotalsSql(postgresCarrierFrequencyRelations(tbl))
 }
 
 /** `WHERE ...` clause (or empty string) for a summary-page query. */

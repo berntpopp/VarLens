@@ -13,6 +13,7 @@
  */
 import {
   classTotalsJoinSql,
+  classTotalsSql,
   singleFrequencyDenominator,
   type CarrierFrequencyRelations
 } from '../../shared/sql/carrier-frequency'
@@ -44,7 +45,7 @@ export const COHORT_FREQUENCY_SQL = `CAST(CAST(${COHORT_SUMMARY_ALIAS}.carrier_c
  * `bt.build`, so unqualified summary column names stay unambiguous.
  */
 export const COHORT_BUILD_TOTALS_JOIN = classTotalsJoinSql(
-  SQLITE_CARRIER_FREQUENCY_RELATIONS,
+  classTotalsSql(SQLITE_CARRIER_FREQUENCY_RELATIONS),
   `${COHORT_SUMMARY_ALIAS}.genome_build`,
   `${COHORT_SUMMARY_ALIAS}.variant_type`
 )

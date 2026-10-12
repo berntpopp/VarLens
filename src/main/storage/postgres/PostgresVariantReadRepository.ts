@@ -4,6 +4,7 @@ import {
 } from '../../../shared/filters/severity-filter'
 import { carrierRanks } from './cohort-summary-representative-sql'
 import { caseCarrierFrequencySql } from './postgres-cohort-summary-query'
+import { carrierTotalsSql } from './postgres-carrier-totals'
 import {
   addPostgresColumnFilters,
   hasPostgresColumnFilterPrefix,
@@ -163,7 +164,8 @@ export interface PostgresVariantQueryParts {
 export function buildPostgresVariantQueryParts(
   filter: VariantFilter,
   schemaName: string,
-  sortBy?: SortItem[]
+  sortBy?: SortItem[],
+  carrierTotals?: string // cached denominators (postgres-carrier-totals.ts), else computed here
 ): PostgresVariantQueryParts {
   assertSupportedPostgresVariantFilter(filter)
 
@@ -228,7 +230,7 @@ export function buildPostgresVariantQueryParts(
     carriers,
     frequency: internalAfExpression,
     totalsJoin
-  } = caseCarrierFrequencySql((table) => `${schemaName}."${table}"`, caseIdParam)
+  } = caseCarrierFrequencySql((table) => `${schemaName}."${table}"`, caseIdParam, carrierTotals)
 
   if (filter.max_internal_af !== undefined && filter.max_internal_af > 0) {
     addWhere(
@@ -441,8 +443,9 @@ export class PostgresVariantReadRepository {
     // Active gene panels become genomic regions (gene coordinates +/- padding
     // for the case's build) before SQL is built; a failure propagates.
     const filter = await this.panelIntervals.resolveCaseFilter(requestedFilter)
+    const totals = await carrierTotalsSql(this.pool, this.schema)
     const { fromAndWhereSql, orderBySql, orderTerms, params, projections } =
-      buildPostgresVariantQueryParts(filter, this.schemaName, sortBy)
+      buildPostgresVariantQueryParts(filter, this.schemaName, sortBy, totals)
 
     let totalCount = 0
     if (skipCount !== true) {

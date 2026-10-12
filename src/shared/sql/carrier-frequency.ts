@@ -44,17 +44,43 @@ export function classTotalsSql(rel: CarrierFrequencyRelations): string {
   ).join('\n        UNION ALL\n        ')
 }
 
+/** One row of {@link classTotalsSql}. */
+export interface ClassTotal {
+  build: string
+  vclass: string
+  total: number
+}
+
+const literal = (text: string): string => `'${text.replace(/'/g, "''")}'`
+
+/**
+ * {@link classTotalsSql} rows already computed, as a literal derived table:
+ * the cached denominators inlined into a query, so it probes no case.
+ */
+export function classTotalsValuesSql(rows: readonly ClassTotal[]): string {
+  if (rows.length === 0) {
+    return 'SELECT CAST(NULL AS TEXT) AS build, CAST(NULL AS TEXT) AS vclass, CAST(NULL AS INTEGER) AS total WHERE 1 = 0'
+  }
+  return rows
+    .map(
+      (row) =>
+        `SELECT ${literal(row.build)} AS build, ${literal(row.vclass)} AS vclass, ${Math.trunc(row.total)} AS total`
+    )
+    .join(' UNION ALL ')
+}
+
 /**
  * LEFT JOIN giving a row of build `buildExpr` and variant type `typeColumn`
- * its denominator as `bt.total` (and the build as `bt.build`).
+ * its denominator as `bt.total` (and the build as `bt.build`). `totalsSql` is
+ * {@link classTotalsSql} (live) or {@link classTotalsValuesSql} (cached).
  */
 export function classTotalsJoinSql(
-  rel: CarrierFrequencyRelations,
+  totalsSql: string,
   buildExpr: string,
   typeColumn: string
 ): string {
   return `LEFT JOIN (
-        ${classTotalsSql(rel)}
+        ${totalsSql}
       ) bt ON ${classTotalsOnSql(buildExpr, typeColumn)}`
 }
 
