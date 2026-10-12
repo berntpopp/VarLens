@@ -18,8 +18,12 @@ export const TRACK_SEARCH_PATTERNS = {
   proteinPosition: /^(?:p\.)?(\d+)$/i,
   /** "Met180Val", "M180V", "p.Met180Val", "p.Arg42*", "R42Ter" (codes checked against AA_THREE_TO_ONE) */
   aaChange: /^(?:p\.)?\(?([a-z]{3}|[a-z*])(\d+)([a-z]{3}|[a-z*=])\)?$/i,
+  /** The protein part of pasted HGVS: "ENSP…:p.Met180Val", "NP_…:p.(Arg248Trp)" */
+  proteinPrefix: /(?:^|:)p\.(.+)$/i,
+  /** Any other p. change (fs, del, dup, ins, delins, ext, ?): searched by its first residue */
+  aaStart: /^\(?([a-z]{3}|[a-z*])(\d+)/i,
   /** "c.538A>G" (matched against the variants' cDNA notation) */
-  cdna: /^c\.(\S+)$/i,
+  cdna: /(?:^|:)c\.(\S+)$/i,
   /** "exon 5", "exon5", "e5" */
   exon: /^(?:exon\s*|e)(\d+)$/i,
   /** "chr22:29539391", "22:29,539,391" */

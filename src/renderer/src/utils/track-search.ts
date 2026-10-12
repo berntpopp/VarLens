@@ -45,8 +45,11 @@ function aaCode(token: string): string | null {
 const normChr = (chr: string): string => chr.replace(/^chr/i, '').toUpperCase()
 
 export function parseTrackQuery(input: string): TrackQuery | null {
-  const q = input.trim()
-  if (q === '') return null
+  const raw = input.trim()
+  if (raw === '') return null
+  // Pasted HGVS: keep only the protein change ("ENSP…:p.Met180Val" → "p.Met180Val").
+  const prefixed = P.proteinPrefix.exec(raw)
+  const q = prefixed === null ? raw : `p.${prefixed[1]}`
   let m = P.proteinPosition.exec(q)
   if (m !== null) return { kind: 'position', position: Number(m[1]) }
   m = P.aaChange.exec(q)
@@ -56,7 +59,11 @@ export function parseTrackQuery(input: string): TrackQuery | null {
       return { kind: 'aa-change', change: `${ref}${m[2]}${alt}`, position: Number(m[2]) }
     }
   }
-  if (P.cdna.test(q)) return { kind: 'cdna', cdna: q.toLowerCase() }
+  // fs / del / dup / ins / delins / ext / ?: go to the first residue it names.
+  m = prefixed === null ? null : P.aaStart.exec(prefixed[1])
+  if (m !== null && aaCode(m[1]) !== null) return { kind: 'position', position: Number(m[2]) }
+  m = P.cdna.exec(q)
+  if (m !== null) return { kind: 'cdna', cdna: `c.${m[1]}`.toLowerCase() }
   m = P.exon.exec(q)
   if (m !== null) return { kind: 'exon', rank: Number(m[1]) }
   m = P.genomic.exec(q)
