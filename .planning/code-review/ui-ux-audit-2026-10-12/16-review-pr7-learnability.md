@@ -1,0 +1,21 @@
+# Review — PR 7 `feat/learnability-lite` (3 commits, 08c items 12 + 14)
+
+**What this change does:** It adds header help text from one map (`config/columnHelp.ts`), used both as the tooltip and as `aria-describedby` on the case and cohort headers. It moves all shortcut labels into one list (`config/keyboardShortcuts.ts`) that feeds the dialog, the tooltips and the menu subtitles. It also caps every tooltip at 480 px wide. The tests check that every titled column has help and that the dialog shows the shared list.
+
+**Must fix** (clinical wording that says more than the evidence supports)
+1. **gnomAD AF / BA1–PM2** (`columnHelp.ts` `gnomad_af`). The column holds the overall AF (`gnomADe_AF`/`gnomADg_AF`), but BA1 is judged on any continental population with ≥2,000 alleles, and the SVI lists exceptions. The text also leaves out PM2_Supporting, and "Empty" can be mistaken for "absent from gnomAD". → *"gnomAD overall allele frequency (AC/AN), exomes or genomes, version as annotated. BA1: AF > 5 % in any continental population with ≥ 2,000 alleles (ClinGen SVI; see its exception list). The overall AF can be lower, so check grpmax. PM2 applies at Supporting strength only (SVI 2020). Empty = no value in the annotation, not proof of absence: check coverage."*
+2. **Cohort frequency** (`cohort_frequency`, `carrier_count`). It does not say these are patients (enriched for disease, relatives included) or that it is not for ACMG frequency criteria. → append *"Patients in this database (relatives included), not a population. Do not use for BA1, BS1 or PM2."*
+3. **CADD** (`CADD_HELP`). "−10·log10 of the rank" is wrong: PHRED is −10·log10(rank ÷ all ~9 billion possible SNVs). The PP3 part leaves out the upper band and BP4. Pejaver 2022 Tbl 2, verified: PP3_Supporting 25.3–<28.1, PP3_Moderate ≥ 28.1, BP4_Supporting > 17.3–≤ 22.7, BP4_Moderate ≤ 17.3, indeterminate in between, no Strong level. → *"…−10·log10 of its rank fraction among all possible SNVs… Missense, calibrated on CADD v1.6 (Pejaver 2022): ≥ 25.3 PP3_Supporting, ≥ 28.1 PP3_Moderate, ≤ 22.7 BP4_Supporting, ≤ 17.3 BP4_Moderate. Use one tool only. A rank, not a pathogenicity call."*
+
+**Should fix**
+4. **ClinVar** (`clinvar`). The value is a snapshot from the annotation's ClinVar release, not live. Add *"as of the ClinVar release used for annotation"*. The rest is accurate: "germline classification", review-status caveat, and the VEP fallback is already allele-specific.
+5. **Impact** (`consequence`). "splice site" should read *"splice donor/acceptor (±1–2 bp)"*: splice_region is LOW. "SnpEff uses the same classes" should read *"similar classes"*. `consequence` = IMPACT and `func` = SO term are **not swapped** (correct).
+
+**Nice to have**
+6. **Row-key hints suggest the hovered row** (`AnnotationsCell.vue`). "Toggle star (s)" sits on every row, but `s/c/a` act on the keyboard-selected row. Also, `a` opens the ACMG evidence dialog, while the button opens the quick menu. Either word it as "(s on selected row)" or keep the hint for the dialog only.
+7. **Dense UI.** The new `:subtitle` on the footer and filter overflow-menu items makes each item two lines tall. A short `<kbd>` in `#append` keeps them one line.
+
+**Extra checks, all OK:** (2) Single source holds: every key in `SHORTCUTS` matches a real binding (`useKeyboardShortcuts.ts`: Alt+Shift D/Q/L/C/O, Ctrl/Cmd+Shift F/X, `/`, `?`; VariantTable/CohortDataTable: arrows, Enter, Escape, s/c/a, cohort-only e). The test only checks the dialog against the list, not the list against the bindings. (3) a11y: the `aria-label` "Sort by X" plus the `aria-describedby` hidden span means no duplicate. The delegated `v-tooltip` uses `target`, not `activator`, so Vuetify adds no second `aria-describedby`. Tooltip shows on `:focus-visible` and closes on Escape. (4) The 480 px cap only affects defaults: no `v-tooltip` sets its own `max-width`/`content-props`, and `RankScoreTooltip` (min 180 px) fits. Other QUAL/GT/HGVS/VCF entries are accurate.
+
+Verdict: fix 1–3 first (text-only edits in `columnHelp.ts`), then 4–5.
+Not checked: tests/typecheck were not run (read-only). The app was not opened. The BA1 exception list and VCEP gene-specific thresholds were not looked up.
