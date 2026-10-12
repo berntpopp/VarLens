@@ -13,10 +13,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#1E3A5F" />
-    <!-- Pre-mount background = the Vuetify themes' `background`, so nothing
-         flashes before Vue mounts: dark for a dark OS (unless the app chose
-         light), and html/body follow <html data-theme> once the app runs
-         (useThemePreference). CSS only: the CSP blocks inline scripts. -->
+    <!-- Pre-mount background = the Vuetify themes' `background`. Before
+         mount it follows the OS only (dark OS -> dark), so a stored explicit
+         theme that differs from the OS shows from mount on. After mount
+         html/body follow <html data-theme> (useThemePreference). CSS only:
+         the CSP blocks inline scripts. -->
     <meta name="color-scheme" content="light dark" />
     <style>
       html,
