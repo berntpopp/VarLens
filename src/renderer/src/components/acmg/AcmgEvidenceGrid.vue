@@ -2,7 +2,7 @@
   <div :class="['criteria-section', `criteria-section--${type}`]" class="mb-3">
     <div class="d-flex align-center justify-space-between mb-1">
       <span class="text-caption font-weight-bold">{{ title }}</span>
-      <v-chip size="x-small" variant="tonal" :color="totalPoints > 0 ? chipColor : 'grey'" label>
+      <v-chip size="x-small" variant="tonal" :color="totalPoints > 0 ? chipColor : 'muted'" label>
         {{ pointsPrefix }}{{ totalPoints }} pts
       </v-chip>
     </div>
@@ -75,6 +75,7 @@ import {
 } from '../../utils/acmg/types'
 import { getDefaultStrength as getDefaultCodeStrength } from '../../utils/acmg/types'
 import { mdiLightbulbOutline } from '@mdi/js'
+import { ACMG_STRENGTH_COLORS } from '../../../../shared/config/domain.config'
 
 interface CodeGroup {
   label: string
@@ -101,33 +102,9 @@ defineEmits<{
   codeClick: [code: AcmgCode]
 }>()
 
-/** Color per strength level for active code chips/buttons */
-const STRENGTH_COLORS: Record<EvidenceStrength, string> = {
-  very_strong: 'deep-purple',
-  strong: 'orange-darken-2',
-  moderate: 'amber-darken-1',
-  supporting: 'blue-grey',
-  stand_alone: 'red-darken-2'
-}
-
-/** Muted color for inactive (unselected) buttons by default strength.
- *  Uses lighten-1 for clearly visible outlined buttons on #FAFBFD surface.
- *  The outline + color text provides sufficient affordance without dominating. */
-const INACTIVE_COLORS: Record<EvidenceStrength, string> = {
-  very_strong: 'deep-purple-lighten-1',
-  strong: 'orange-darken-1',
-  moderate: 'amber-darken-2',
-  supporting: 'blue-grey',
-  stand_alone: 'red-lighten-1'
-}
-
 function getCodeStrength(code: AcmgCode): EvidenceStrength {
   const entry = props.allCodes.find((c) => c.code === code)
   return entry?.strength ?? getDefaultCodeStrength(code)
-}
-
-function getDefaultStrength(code: AcmgCode): EvidenceStrength {
-  return getDefaultCodeStrength(code)
 }
 
 function isDeprecated(code: AcmgCode): boolean {
@@ -135,10 +112,11 @@ function isDeprecated(code: AcmgCode): boolean {
 }
 
 function getButtonColor(code: AcmgCode): string {
-  if (props.isCodeActive(code)) return STRENGTH_COLORS[getCodeStrength(code)]
-  if (props.isCodeSuggested(code)) return 'amber-darken-2'
-  if (isDeprecated(code)) return 'grey'
-  return INACTIVE_COLORS[getDefaultStrength(code)]
+  if (props.isCodeActive(code)) return ACMG_STRENGTH_COLORS[getCodeStrength(code)]
+  if (props.isCodeSuggested(code)) return 'warning'
+  if (isDeprecated(code)) return 'muted'
+  // Inactive: neutral outline; the group header already names the strength.
+  return 'on-surface'
 }
 
 function getButtonVariant(code: AcmgCode): 'flat' | 'outlined' | 'tonal' {

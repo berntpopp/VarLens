@@ -72,6 +72,18 @@ export const ACMG_ABBREV: Record<AcmgClassification, string> = {
   Benign: 'B'
 }
 
+/**
+ * Fill colour of an active ACMG evidence button per strength. Material fills:
+ * their bg-* classes set a readable text colour.
+ */
+export const ACMG_STRENGTH_COLORS = {
+  very_strong: 'deep-purple',
+  strong: 'orange-darken-2',
+  moderate: 'amber-darken-1',
+  supporting: 'blue-grey',
+  stand_alone: 'red-darken-2'
+} as const
+
 /** Clinical score thresholds (higher is more concerning): green = low concern, orange = uncertain, red = high concern. */
 export const SCORE_THRESHOLDS: Record<string, { green: number; orange: number; red: number }> = {
   cadd: { green: 10, orange: 15, red: 20 },
