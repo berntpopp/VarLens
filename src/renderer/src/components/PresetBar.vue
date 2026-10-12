@@ -5,8 +5,9 @@
     v-if="visiblePresets.length > 0 || hasActiveFilters"
     class="preset-bar px-3 py-1 d-flex align-center ga-1"
   >
-    <!-- Preset toggle chips -->
-    <template v-if="visiblePresets.length > 0">
+    <!-- Preset toggle chips: one line that scrolls sideways (arrows only on
+         overflow), so a narrower toolbar never adds a row above the table. -->
+    <v-slide-group v-if="visiblePresets.length > 0" show-arrows class="preset-bar__chips">
       <v-chip
         v-for="preset in visiblePresets"
         :key="preset.id"
@@ -25,7 +26,7 @@
           {{ preset.description || 'No description' }}
         </v-tooltip>
       </v-chip>
-    </template>
+    </v-slide-group>
 
     <v-divider v-if="hasActiveFilters && visiblePresets.length > 0" vertical class="mx-1" />
 
@@ -73,15 +74,22 @@ const emit = defineEmits<{
 .preset-bar {
   background: color-mix(in srgb, rgb(var(--v-theme-surface)) 95%, rgb(var(--v-theme-primary)));
   border-top: 1px solid rgba(var(--v-border-color), 0.08);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
-/* Narrow widths wrap the chips into many rows: 18px chips + 8px row gap keep
-   them >24px apart (WCAG 2.5.8 spacing) without costing desktop table rows. */
-@media (max-width: 839.98px) {
-  .preset-bar {
-    row-gap: 0.5rem;
-  }
+.preset-bar > * {
+  flex-shrink: 0;
+}
+
+/* The chip strip is the one part that gives up width (and scrolls). */
+.preset-bar > .preset-bar__chips {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.preset-bar__chips :deep(.v-slide-group__content) {
+  gap: 4px;
+  align-items: center;
 }
 
 .preset-bar :deep(.v-chip) {
