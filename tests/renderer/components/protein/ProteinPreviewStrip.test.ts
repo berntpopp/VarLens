@@ -107,9 +107,16 @@ describe('ProteinPreviewStrip', () => {
     expect(getMapping).not.toHaveBeenCalled()
   })
 
-  it('no protein position: hidden', () => {
+  it('no protein position (SV, intronic): a gene-level line that opens the gene structure', async () => {
     const wrapper = mountStrip({ aa_change: null })
-    expect(wrapper.find('[data-testid="protein-strip"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(PROTEIN_VIEW_COPY.noProteinPosition)
     expect(getMapping).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="protein-strip-gene"]').trigger('click')
+    expect(wrapper.emitted('open')).toEqual([['gene-structure']])
+  })
+
+  it('no gene: hidden', () => {
+    const wrapper = mountStrip({ gene_symbol: null })
+    expect(wrapper.find('[data-testid="protein-strip"]').exists()).toBe(false)
   })
 })

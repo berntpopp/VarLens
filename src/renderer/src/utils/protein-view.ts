@@ -10,7 +10,7 @@ import {
   getConsequenceColor,
   parseProteinPosition
 } from '../../../shared/utils/protein-utils'
-import { PROTEIN_VIEW_COPY } from '../config/proteinViewConfig'
+import { PROTEIN_VIEW_COPY, type ProteinViewTab } from '../config/proteinViewConfig'
 import { formatHgvs } from './formatters'
 
 type AnyVariant = Variant | CohortVariant
@@ -28,13 +28,27 @@ export function proteinPositionOf(v: AnyVariant): { position: number; aaChange: 
   return fromCdna === null ? null : { position: fromCdna, aaChange: cdna ?? '' }
 }
 
-/** Why the protein view cannot open for this variant, or null when it can. */
+/**
+ * Why the protein view cannot open for this variant, or null when it can. A
+ * variant without a protein position (SV, intronic, splice, UTR) still opens:
+ * on the gene structure, which draws its genomic interval.
+ */
 export function proteinViewBlockedReason(v: AnyVariant | null, lookupsOn: boolean): string | null {
   if (v === null) return PROTEIN_VIEW_COPY.noVariant
   if (!lookupsOn) return PROTEIN_VIEW_COPY.lookupsOff
-  if (v.gene_symbol === null || v.gene_symbol === '') return PROTEIN_VIEW_COPY.noGene
-  return proteinPositionOf(v) === null ? PROTEIN_VIEW_COPY.noProteinPosition : null
+  return v.gene_symbol === null || v.gene_symbol === '' ? PROTEIN_VIEW_COPY.noGene : null
 }
+
+/** Why this tab cannot show the variant: the lollipop and 3D need a protein position. */
+export function proteinTabReason(v: AnyVariant, tab: ProteinViewTab): string | null {
+  return tab !== 'gene-structure' && proteinPositionOf(v) === null
+    ? PROTEIN_VIEW_COPY.noProteinPosition
+    : null
+}
+
+/** The tab to open: the requested one, or the gene structure when that one cannot show it. */
+export const proteinViewTabFor = (v: AnyVariant, tab: ProteinViewTab): ProteinViewTab =>
+  proteinTabReason(v, tab) === null ? tab : 'gene-structure'
 
 export const carrierLabel = (n: number): string => `${n} carrier${n === 1 ? '' : 's'}`
 

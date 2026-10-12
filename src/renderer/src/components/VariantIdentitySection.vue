@@ -6,7 +6,7 @@
       <span
         v-for="button in PROTEIN_VIEW_BUTTONS"
         :key="button.tab"
-        :data-tooltip="proteinReason ?? undefined"
+        :data-tooltip="reasonFor(button.tab) ?? undefined"
         data-tooltip-location="top"
       >
         <v-btn
@@ -15,7 +15,7 @@
           color="primary"
           class="text-none"
           :prepend-icon="button.icon"
-          :disabled="proteinReason !== null"
+          :disabled="reasonFor(button.tab) !== null"
           @click="emit('open-protein-view', button.tab)"
         >
           {{ button.label }}
@@ -84,7 +84,7 @@ import type { CohortVariant } from '../../../shared/types/cohort'
 import type { VepColocatedVariant } from '../../../shared/types/vep'
 import { mdiCheck, mdiContentCopy } from '@mdi/js'
 import { PROTEIN_VIEW_BUTTONS, type ProteinViewTab } from '../config/proteinViewConfig'
-import { proteinViewBlockedReason } from '../utils/protein-view'
+import { proteinTabReason, proteinViewBlockedReason } from '../utils/protein-view'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import IconButton from './common/IconButton.vue'
 import { formatHgvs, variantName } from '../utils/formatters'
@@ -109,6 +109,8 @@ const capabilities = useCapabilityStore()
 const proteinReason = computed(() =>
   proteinViewBlockedReason(props.variant, capabilities.canUse('proteinViewer'))
 )
+const reasonFor = (tab: ProteinViewTab): string | null =>
+  proteinReason.value ?? proteinTabReason(props.variant, tab)
 
 /**
  * Check if variant is a full Variant (not CohortVariant)

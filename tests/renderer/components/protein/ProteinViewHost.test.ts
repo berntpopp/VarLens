@@ -72,11 +72,12 @@ describe('ProteinViewHost', () => {
     expect(wrapper.findComponent({ name: 'ProteinVisualizationModal' }).exists()).toBe(true)
   })
 
-  it('a variant without a protein position (the p shortcut): says why', async () => {
-    const { wrapper } = mountHost('desktop', false, null)
+  it('a variant without a protein position (SV, intronic): opens on the gene structure', async () => {
+    const { wrapper, state } = mountHost('desktop', false, null)
+    state.openProteinView(state.proteinViewRequest.value!.variant, 'lollipop')
     await flushPromises()
-    expect(wrapper.findComponent({ name: 'ProteinViewUnavailableDialog' }).props('reason')).toBe(
-      PROTEIN_VIEW_COPY.noProteinPosition
-    )
+    const modal = wrapper.findComponent({ name: 'ProteinVisualizationModal' })
+    expect(modal.exists()).toBe(true)
+    expect(modal.props('initialTab')).toBe('gene-structure')
   })
 })

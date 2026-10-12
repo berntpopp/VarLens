@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLollipopVariants,
   proteinStripSummary,
-  proteinViewBlockedReason
+  proteinTabReason,
+  proteinViewBlockedReason,
+  proteinViewTabFor
 } from '../../../src/renderer/src/utils/protein-view'
 import { groupLollipopsByPosition } from '../../../src/renderer/src/composables/useLollipopPlot'
 import { PROTEIN_VIEW_COPY } from '../../../src/renderer/src/config/proteinViewConfig'
@@ -29,20 +31,35 @@ describe('proteinViewBlockedReason', () => {
   it.each([
     ['lookups off', row({}), false, PROTEIN_VIEW_COPY.lookupsOff],
     ['no gene', row({ gene_symbol: null }), true, PROTEIN_VIEW_COPY.noGene],
-    ['no protein position', row({ aa_change: null }), true, PROTEIN_VIEW_COPY.noProteinPosition],
+    // SV / intronic / splice / UTR: the gene structure still shows them.
+    ['no protein position', row({ aa_change: null }), true, null],
     ['available', row({}), true, null]
   ])('%s', (_name, variant, lookupsOn, expected) => {
     expect(proteinViewBlockedReason(variant, lookupsOn)).toBe(expected)
   })
 
-  it('reads the protein position from the cDNA column when aa_change has none', () => {
-    expect(
-      proteinViewBlockedReason(row({ aa_change: null, cdna: 'p.Arg42*' } as never), true)
-    ).toBe(null)
-  })
-
   it('no variant: blocked', () => {
     expect(proteinViewBlockedReason(null, true)).toBe(PROTEIN_VIEW_COPY.noVariant)
+  })
+})
+
+describe('protein tabs for a variant', () => {
+  const noPosition = row({ aa_change: null })
+
+  it.each([
+    ['lollipop', row({}), 'lollipop', null],
+    ['3d', row({}), '3d', null],
+    ['lollipop', noPosition, 'gene-structure', PROTEIN_VIEW_COPY.noProteinPosition],
+    ['3d', noPosition, 'gene-structure', PROTEIN_VIEW_COPY.noProteinPosition],
+    ['gene-structure', noPosition, 'gene-structure', null]
+  ] as const)('%s: opens %s', (tab, variant, opened, reason) => {
+    expect(proteinViewTabFor(variant, tab)).toBe(opened)
+    expect(proteinTabReason(variant, tab)).toBe(reason)
+  })
+
+  it('reads the protein position from the cDNA column when aa_change has none', () => {
+    const v = row({ aa_change: null, cdna: 'p.Arg42*' } as never)
+    expect(proteinViewTabFor(v, 'lollipop')).toBe('lollipop')
   })
 })
 

@@ -151,10 +151,10 @@ describe('AnnotationsCell with a table-provided ACMG menu', () => {
 describe('Row quick menu: Protein view (case + cohort tables)', () => {
   const variant = { chr: 'chr22', pos: 1, ref: 'A', alt: 'G', gene_symbol: 'THOC5' }
 
-  async function openMenu(aaChange: string | null) {
+  async function openMenu(aaChange: string | null, gene: string | null = 'THOC5') {
     installCapabilities()
     const state = createAppState()
-    const row = { ...variant, aa_change: aaChange }
+    const row = { ...variant, aa_change: aaChange, gene_symbol: gene }
     const wrapper = mount(AnnotationsCell, {
       props: {
         isStarred: false,
@@ -180,10 +180,10 @@ describe('Row quick menu: Protein view (case + cohort tables)', () => {
     wrapper.unmount()
   })
 
-  it('is disabled with the reason when the row has no protein position', async () => {
-    const { wrapper, state, item } = await openMenu(null)
+  it('is disabled with the reason when the row has no gene', async () => {
+    const { wrapper, state, item } = await openMenu('p.Met180Val', null)
     expect(item.classList).toContain('v-list-item--disabled')
-    expect(item.textContent).toContain(PROTEIN_VIEW_COPY.noProteinPosition)
+    expect(item.textContent).toContain(PROTEIN_VIEW_COPY.noGene)
     item.click()
     expect(state.proteinViewOpen.value).toBe(false)
     wrapper.unmount()

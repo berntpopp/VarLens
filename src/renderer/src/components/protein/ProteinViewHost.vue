@@ -6,7 +6,7 @@
     v-if="reason === null"
     v-model="proteinViewOpen"
     :variant="variant"
-    :initial-tab="proteinViewRequest?.tab"
+    :initial-tab="tab"
     :case-id="caseId"
     :mode="panelMode"
     :genome-build="genomeBuild"
@@ -20,7 +20,7 @@ import { computed, defineAsyncComponent, reactive } from 'vue'
 import { useAppState } from '../../composables/useAppState'
 import { useCapabilityStore } from '../../stores/capabilityStore'
 import { useVariantGenomeBuild } from '../../composables/useVariantGenomeBuild'
-import { proteinViewBlockedReason } from '../../utils/protein-view'
+import { proteinViewBlockedReason, proteinViewTabFor } from '../../utils/protein-view'
 import ProteinViewUnavailableDialog from './ProteinViewUnavailableDialog.vue'
 
 const ProteinVisualizationModal = defineAsyncComponent(
@@ -34,6 +34,12 @@ const capabilities = useCapabilityStore()
 const variant = computed(() => proteinViewRequest.value?.variant ?? null)
 const caseId = computed(() => (activeTab.value === 'case' ? selectedCaseId.value : null))
 const genomeBuild = useVariantGenomeBuild(reactive({ variant, caseId }))
+// No protein position (SV, intronic): the gene structure is the tab that shows it.
+const tab = computed(() =>
+  proteinViewRequest.value === null
+    ? undefined
+    : proteinViewTabFor(proteinViewRequest.value.variant, proteinViewRequest.value.tab)
+)
 const reason = computed(() =>
   proteinViewBlockedReason(variant.value, capabilities.canUse('proteinViewer'))
 )

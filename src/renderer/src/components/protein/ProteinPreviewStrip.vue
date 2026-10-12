@@ -1,67 +1,73 @@
 <template>
   <!-- Mini lollipop under the variant identity: the visible entry to the
        protein view. Every state keeps the same height (no layout shift). -->
-  <div v-if="protein !== null" class="protein-strip" data-testid="protein-strip">
+  <div v-if="gene !== null" class="protein-strip" data-testid="protein-strip">
     <div v-if="!lookupsOn" class="strip-line text-body-small text-muted">
       {{ PROTEIN_VIEW_COPY.lookupsOff }}
     </div>
-    <div v-else-if="error !== null" class="strip-line text-body-small text-muted">
-      {{ PROTEIN_VIEW_COPY.loadFailed }}: {{ error }}
-    </div>
-    <v-skeleton-loader
-      v-else-if="loading"
-      type="image"
-      height="28"
-      class="strip-skeleton"
-      data-testid="protein-strip-loading"
-    />
     <template v-else>
-      <!-- A light "paper" figure in both themes, like the full plot. -->
-      <v-theme-provider theme="warmLight" with-background class="bg-surface strip-figure">
-        <button
-          type="button"
-          class="strip-plot"
-          data-testid="protein-strip-plot"
-          :aria-label="`${summary}. Open the lollipop plot`"
-          :data-tooltip="summary"
-          data-tooltip-location="top"
-          @click="emit('open', 'lollipop')"
-        >
-          <svg width="100%" height="24" aria-hidden="true">
-            <rect x="0" y="10" width="100%" height="4" rx="2" class="strip-backbone" />
-            <rect
-              v-for="d in domains"
-              :key="`${d.accession}-${d.start}`"
-              data-testid="protein-strip-domain"
-              :x="pct(d.start)"
-              y="6"
-              :width="pct(Math.max(1, d.end - d.start))"
-              height="12"
-              rx="2"
-              :fill="getDomainColor(d.type)"
-              opacity="0.85"
-            />
-            <line
-              :x1="pct(protein.position)"
-              :x2="pct(protein.position)"
-              y1="6"
-              y2="18"
-              :stroke="markerColor"
-              stroke-width="2"
-            />
-            <circle
-              :cx="pct(protein.position)"
-              cy="5"
-              r="4"
-              :fill="markerColor"
-              class="strip-head"
-            />
-          </svg>
-        </button>
-      </v-theme-provider>
-      <span class="text-body-small variant-data-mono text-no-wrap ml-2">
-        p.{{ protein.position }} / {{ length }} aa
-      </span>
+      <!-- SV, intronic, splice, UTR: nothing to place on the protein; the gene structure shows it. -->
+      <div v-if="protein === null" class="strip-line text-body-small text-muted">
+        {{ PROTEIN_VIEW_COPY.noProteinPosition }}
+      </div>
+      <div v-else-if="error !== null" class="strip-line text-body-small text-muted">
+        {{ PROTEIN_VIEW_COPY.loadFailed }}: {{ error }}
+      </div>
+      <v-skeleton-loader
+        v-else-if="loading"
+        type="image"
+        height="28"
+        class="strip-skeleton"
+        data-testid="protein-strip-loading"
+      />
+      <template v-else>
+        <!-- A light "paper" figure in both themes, like the full plot. -->
+        <v-theme-provider theme="warmLight" with-background class="bg-surface strip-figure">
+          <button
+            type="button"
+            class="strip-plot"
+            data-testid="protein-strip-plot"
+            :aria-label="`${summary}. Open the lollipop plot`"
+            :data-tooltip="summary"
+            data-tooltip-location="top"
+            @click="emit('open', 'lollipop')"
+          >
+            <svg width="100%" height="24" aria-hidden="true">
+              <rect x="0" y="10" width="100%" height="4" rx="2" class="strip-backbone" />
+              <rect
+                v-for="d in domains"
+                :key="`${d.accession}-${d.start}`"
+                data-testid="protein-strip-domain"
+                :x="pct(d.start)"
+                y="6"
+                :width="pct(Math.max(1, d.end - d.start))"
+                height="12"
+                rx="2"
+                :fill="getDomainColor(d.type)"
+                opacity="0.85"
+              />
+              <line
+                :x1="pct(protein.position)"
+                :x2="pct(protein.position)"
+                y1="6"
+                y2="18"
+                :stroke="markerColor"
+                stroke-width="2"
+              />
+              <circle
+                :cx="pct(protein.position)"
+                cy="5"
+                r="4"
+                :fill="markerColor"
+                class="strip-head"
+              />
+            </svg>
+          </button>
+        </v-theme-provider>
+        <span class="text-body-small variant-data-mono text-no-wrap ml-2">
+          p.{{ protein.position }} / {{ length }} aa
+        </span>
+      </template>
       <v-btn
         size="x-small"
         variant="text"
@@ -96,7 +102,7 @@ const lookupsOn = computed(() => capabilities.canUse('proteinViewer'))
 const gene = computed(() =>
   props.variant.gene_symbol === '' ? null : (props.variant.gene_symbol ?? null)
 )
-// No gene or protein position: nothing to draw, so no strip and no lookup.
+// No gene: no strip. No protein position: a gene-level line, no lookup.
 const protein = computed(() => (gene.value === null ? null : proteinPositionOf(props.variant)))
 
 // The same cached queries as the full view (useProteinData): no extra calls.
@@ -135,6 +141,7 @@ const summary = computed(() =>
 }
 
 .strip-line {
+  flex: 1 1 auto;
   line-height: 1.3;
 }
 
