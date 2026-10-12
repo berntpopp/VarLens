@@ -5,6 +5,7 @@
     temporary
     :width="340"
     @update:model-value="emit('update:open', $event)"
+    @keydown.esc="isPopupOpen() || emit('update:open', false)"
   >
     <!-- Content mounts on first open (off-canvas while closed) -->
     <v-card v-if="contentMounted" flat class="d-flex flex-column h-100">
@@ -12,7 +13,7 @@
       <v-toolbar density="compact" flat>
         <v-toolbar-title class="text-body-large font-weight-medium">
           <v-icon size="small" class="mr-1" :icon="mdiTableColumn" />
-          Columns
+          <span ref="titleRef" tabindex="-1">Columns</span>
         </v-toolbar-title>
         <v-spacer />
         <v-btn
@@ -106,9 +107,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
+import { usePanelFocus } from '../composables/usePanelFocus'
+import { isPopupOpen } from '../composables/useTableKeyboardNav'
 import { groupColumns, getGroupConfig } from '../config/columnGroups'
 import {
   mdiClose,
@@ -138,6 +141,8 @@ const emit = defineEmits<{
 }>()
 
 const contentMounted = useMountOnFirstOpen(() => props.open)
+const titleRef = ref<HTMLElement | null>(null)
+usePanelFocus(() => props.open, titleRef)
 
 /** Columns organized by group */
 const groupedColumns = computed(() => groupColumns(props.columns))

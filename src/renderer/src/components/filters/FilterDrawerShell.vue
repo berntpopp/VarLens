@@ -1,6 +1,7 @@
 <template>
   <!-- disable-route-watcher: every filter click writes the URL query, and a
-       temporary drawer otherwise closes on each route change. -->
+       temporary drawer otherwise closes on each route change. Escape goes to an
+       open menu inside the drawer (e.g. an autocomplete) before the drawer. -->
   <v-navigation-drawer
     :model-value="open"
     location="right"
@@ -10,6 +11,7 @@
     :style="{ zIndex: DRAWER_Z_INDEX }"
     aria-label="Filter options"
     @update:model-value="emit('update:open', $event)"
+    @keydown.esc="isPopupOpen() || emit('update:open', false)"
   >
     <!-- Left-edge resize handle (none at full width: nothing to resize against) -->
     <div
@@ -23,7 +25,9 @@
     <v-card v-if="contentMounted" flat class="h-100 d-flex flex-column">
       <!-- Header -->
       <v-toolbar color="transparent" density="compact" flat>
-        <v-toolbar-title class="text-body-large font-weight-medium"> All Filters </v-toolbar-title>
+        <v-toolbar-title class="text-body-large font-weight-medium">
+          <span ref="titleRef" tabindex="-1">All Filters</span>
+        </v-toolbar-title>
         <v-chip
           v-if="activeFilterCount > 0"
           size="small"
@@ -82,10 +86,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { usePanelResize } from '../../composables/usePanelResize'
 import { useMountOnFirstOpen } from '../../composables/useMountOnFirstOpen'
+import { usePanelFocus } from '../../composables/usePanelFocus'
+import { isPopupOpen } from '../../composables/useTableKeyboardNav'
 import {
   FILTER_DRAWER_MAX_WIDTH,
   FILTER_DRAWER_MIN_WIDTH,
@@ -130,6 +136,8 @@ const emit = defineEmits<{
 }>()
 
 const contentMounted = useMountOnFirstOpen(() => props.open)
+const titleRef = ref<HTMLElement | null>(null)
+usePanelFocus(() => props.open, titleRef)
 
 const allExpanded = computed(
   () =>

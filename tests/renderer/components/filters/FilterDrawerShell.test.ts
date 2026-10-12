@@ -101,3 +101,55 @@ describe('FilterDrawerShell route changes', () => {
     expect(onUpdate).not.toHaveBeenCalledWith(false)
   })
 })
+
+describe('FilterDrawerShell keyboard', () => {
+  it('moves focus to the title on open and closes on Escape', async () => {
+    const onUpdate = vi.fn()
+    const open = ref(false)
+    const wrapper = mount(
+      {
+        render: () =>
+          h(VLayout, () =>
+            h(FilterDrawerShell, {
+              open: open.value,
+              activeFilterCount: 0,
+              expandedPanels: [],
+              allPanelValues: [],
+              'onUpdate:open': onUpdate
+            })
+          )
+      },
+      { attachTo: document.body, global: { plugins: [createVuetify({ components, directives })] } }
+    )
+    open.value = true
+    await nextTick()
+    await nextTick()
+    expect(document.activeElement?.textContent?.trim()).toBe('All Filters')
+    await wrapper.find('.v-navigation-drawer').trigger('keydown', { key: 'Escape' })
+    expect(onUpdate).toHaveBeenCalledWith(false)
+  })
+  it('leaves Escape to a menu open inside the drawer', async () => {
+    const onUpdate = vi.fn()
+    const wrapper = mount(
+      {
+        render: () =>
+          h(VLayout, () =>
+            h(FilterDrawerShell, {
+              open: true,
+              activeFilterCount: 0,
+              expandedPanels: [],
+              allPanelValues: [],
+              'onUpdate:open': onUpdate
+            })
+          )
+      },
+      { attachTo: document.body, global: { plugins: [createVuetify({ components, directives })] } }
+    )
+    const menu = document.createElement('div')
+    menu.className = 'v-menu v-overlay--active'
+    document.body.appendChild(menu)
+    await wrapper.find('.v-navigation-drawer').trigger('keydown', { key: 'Escape' })
+    menu.remove()
+    expect(onUpdate).not.toHaveBeenCalledWith(false)
+  })
+})

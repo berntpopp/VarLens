@@ -44,8 +44,13 @@ export function isTextEntryFocused(): boolean {
  * An open dialog or menu owns the keyboard. A menu opened by mouse leaves
  * focus on its activator, so this cannot be read from the focused element.
  */
-export function isOverlayOpen(): boolean {
+export function isPopupOpen(): boolean {
   return document.querySelector('.v-dialog.v-overlay--active, .v-menu.v-overlay--active') !== null
+}
+
+/** A popup or a modal drawer (one with a scrim) owns the keyboard. */
+export function isOverlayOpen(): boolean {
+  return isPopupOpen() || document.querySelector('.v-navigation-drawer__scrim') !== null
 }
 
 /**
