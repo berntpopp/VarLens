@@ -11,8 +11,15 @@ export const API_CONFIG = {
    * one retry after a short backoff.
    */
   ENSEMBL_TIMEOUT_MS: 25_000,
-  ENSEMBL_RETRIES: 1,
-  ENSEMBL_RETRY_BACKOFF_MS: 1_000,
+  /** One deadline for a whole gene-structure lookup (both calls, every retry) */
+  ENSEMBL_DEADLINE_MS: 50_000,
+  ENSEMBL_MAX_ATTEMPTS: 3,
+  /** Retry delays of every external API client: exponential, full jitter, capped */
+  RETRY_BACKOFF: { baseMs: 1_000, factor: 2, capMs: 8_000 },
+  /** A 429 asking to wait longer than this is reported instead of waited out */
+  RETRY_AFTER_CAP_MS: 10_000,
+  /** VEP retries a 429 this many times (Bottleneck failed hook) */
+  VEP_MAX_RETRIES: 3,
   /** gnomAD gene-wide queries are slower than single-variant lookups */
   GNOMAD_TIMEOUT_MS: 30_000,
   /** Import progress throttle interval (ms) */
