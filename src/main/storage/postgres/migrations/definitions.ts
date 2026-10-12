@@ -149,6 +149,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0029',
     name: 'summary_carrier_rows',
     fileName: '0029_summary_carrier_rows.sql'
+  },
+  {
+    version: '0030',
+    name: 'contig_naming',
+    fileName: '0030_contig_naming.sql'
   }
 ]
 

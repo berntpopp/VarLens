@@ -259,7 +259,29 @@ export const BUILD_COPY = {
       ...(without > 0 ? [`${without} without a build`] : [])
     ].join(' · '),
   skippedConflict: 'Genome build unclear in the header: import this file on its own to choose it.',
-  missingBuild: 'No genome build: choose the build for files without one.'
+  missingBuild: 'No genome build: choose the build for files without one.',
+  // Build check of stored cases before their chromosome names are updated
+  // (contig-naming migration, src/renderer/.../BuildReviewDialog.vue).
+  reviewBanner: (count: number) =>
+    count === 1
+      ? '1 case needs its genome build confirmed before its chromosome names are updated.'
+      : `${count} cases need their genome build confirmed before their chromosome names are updated.`,
+  reviewOpen: 'Review',
+  reviewTitle: 'Confirm genome builds',
+  reviewIntro:
+    "VarLens stores chromosome names in each build's reference form (GRCh38 chr1, GRCh37 1). The build of these cases could not be confirmed, so their names were left unchanged. Choose the build their coordinates use.",
+  reviewReason: {
+    no_evidence: 'No source header or positions confirm the stored build',
+    build_disagrees: 'The source header names another build',
+    build_excluded: 'Stored positions lie beyond the stored build'
+  },
+  reviewStored: 'Stored',
+  reviewSuggested: 'Header',
+  reviewChoice: 'Build',
+  reviewApply: 'Apply',
+  reviewLater: 'Later',
+  reviewApplied: (count: number) =>
+    `Genome build confirmed for ${count} case${count === 1 ? '' : 's'}.`
 } as const
 
 export interface GenomeBuildConfig {
