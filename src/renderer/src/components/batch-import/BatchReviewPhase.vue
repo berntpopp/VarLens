@@ -92,7 +92,10 @@
         <v-list-item-title class="text-body-medium">
           {{ file.caseName }}
           <span v-if="file.isDuplicate" class="text-body-small text-warning ml-1"> (exists) </span>
-          <span v-if="file.build?.suggested" class="text-body-small text-medium-emphasis ml-1">
+          <span
+            v-if="file.build?.confidence === 'definitive' || file.build?.confidence === 'strong'"
+            class="text-body-small text-medium-emphasis ml-1"
+          >
             · {{ file.build.suggested }}
           </span>
         </v-list-item-title>

@@ -89,7 +89,8 @@ function optionLabel(id: string, label: string): string {
   if (definitive.value === null && props.detection.suggested === id) {
     return label + BUILD_COPY.suggestedSuffix
   }
-  return excludedIds.value.has(id) ? label + BUILD_COPY.excludedSuffix : label
+  // Blocked (mixed files, non-importable): the error says why; per-option marks add noise.
+  return !blocked.value && excludedIds.value.has(id) ? label + BUILD_COPY.excludedSuffix : label
 }
 
 function onPick(value: unknown): void {
