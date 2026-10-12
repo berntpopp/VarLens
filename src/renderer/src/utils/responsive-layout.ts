@@ -5,6 +5,8 @@
  * Breakpoints follow Vuetify's default thresholds: md 840, lg 1145, xl 1545.
  */
 
+import { COLUMN_PRIORITY } from '../config/columnPriority'
+
 /** Viewport width (CSS px) at which the details panel docks beside the table. */
 export const DETAIL_PANEL_DOCK_MIN_WIDTH = 1440
 
@@ -54,40 +56,6 @@ export function getMaxAutoVisibleColumns(viewportWidth: number): number {
   if (viewportWidth < 1145) return 10
   if (viewportWidth < 1545) return 14
   return Infinity
-}
-
-/**
- * Column priority for auto-hide (lower = more important, kept first). Shared by
- * the case and cohort tables; cohort-only keys sit next to their case-table
- * equivalents. The merged Links column ranks after every data column, and
- * unknown keys (extension columns) get the lowest priority, so link-outs and
- * extensions are the first to be auto-hidden.
- */
-export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
-  gene_symbol: 1,
-  consequence: 2,
-  clinvar: 3,
-  gnomad_af: 4,
-  cadd: 5,
-  cadd_phred: 5,
-  annotations: 6,
-  func: 7,
-  chr: 8,
-  pos: 9,
-  ref: 10,
-  alt: 11,
-  gt_num: 12,
-  carrier_count: 12,
-  aa_change: 13,
-  cdna: 14,
-  cohort_frequency: 14,
-  transcript: 15,
-  het_count: 15,
-  omim_mim_number: 16,
-  hpo_sim_score: 17,
-  qual: 18,
-  moi: 19,
-  _links: 20
 }
 
 /** Structural columns that never count against the budget and are never auto-hidden. */
