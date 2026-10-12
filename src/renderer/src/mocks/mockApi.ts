@@ -266,11 +266,17 @@ export const mockApi: WindowAPI = {
       annotationType: 'none' as const,
       detectedGenomeBuild: 'GRCh38',
       infoFields: [],
+      annotationFields: [],
       callerName: null,
       callerVersion: null,
       defaultVariantType: 'snv',
       filePath: '/mock/file.vcf.gz',
       fileSize: 1000
+    }),
+    jsonPreview: async () => ({
+      format: 'columnar' as const,
+      variantsScanned: 0,
+      fields: []
     }),
     vcfMultiPreview: async () => ({
       files: [],

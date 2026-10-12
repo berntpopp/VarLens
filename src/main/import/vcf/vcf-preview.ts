@@ -13,6 +13,7 @@ import { detectCaller } from './caller-detector'
 import type { VcfPreviewResult } from './types'
 import type { VcfMultiPreviewResult } from '../../../shared/types/import'
 import { VcfHeaderBudget } from './vcf-header-limits'
+import { ANN_FIELD_NAMES } from '../../../shared/config/import-fields.config'
 
 /** Maximum number of data lines to count before estimating via file size */
 const MAX_COUNTED_LINES = 100_000
@@ -87,6 +88,8 @@ export async function getVcfPreview(filePath: string): Promise<VcfPreviewResult>
           annotationType: header.annotationType,
           detectedGenomeBuild: header.genomeBuild,
           infoFields,
+          annotationFields:
+            header.annotationType === 'ann' ? [...ANN_FIELD_NAMES] : (header.csqFields ?? []),
           callerName: callerInfo.name !== 'unknown' ? callerInfo.name : null,
           callerVersion: callerInfo.version,
           defaultVariantType: callerInfo.defaultVariantType,

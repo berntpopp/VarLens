@@ -16,6 +16,7 @@ import {
   normalizeImportMultiFileSpec,
   normalizeImportVcfOptions
 } from '../../../shared/api/schemas/import'
+import { getJsonFieldPreview } from '../../../main/import/json-preview'
 import type { MultiFileImportSpec } from '../../../shared/types/api'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT, WEB_EVENT_IMPORT_PROGRESS } from '../web-event-types'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
@@ -31,6 +32,24 @@ import {
 
 export function buildImportOverrides(): Record<string, OverrideHandler> {
   return {
+    'import:jsonPreview': {
+      async handle(args, request, reply) {
+        const validatedFilePath = ImportServerPathArgSchema.safeParse(args[0])
+        if (!validatedFilePath.success) {
+          reply.code(400)
+          return { error: 'invalid-file-path', message: 'filePath must be a non-empty string' }
+        }
+        const resolved = resolveImportPath(validatedFilePath.data, request.session.user?.id)
+        if (resolved === null) {
+          reply.code(isWebUploadRef(validatedFilePath.data) ? 404 : 403)
+          return isWebUploadRef(validatedFilePath.data)
+            ? { error: 'upload-not-found', message: 'Uploaded file is no longer available' }
+            : serverPathImportDisabledResponse()
+        }
+        return await getJsonFieldPreview(resolved.path)
+      }
+    },
+
     'import:vcfPreview': {
       async handle(args, request, reply) {
         const [filePath] = args

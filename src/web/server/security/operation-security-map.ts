@@ -159,6 +159,7 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'import:startMultiFile': write(),
   'import:cancel': write(),
   'import:vcfPreview': read('analyst'),
+  'import:jsonPreview': read('analyst'),
   'import:vcfMultiPreview': read('analyst'),
   'batch-import:start': write(),
   'batch-import:cancel': write(),

@@ -178,12 +178,16 @@ export function createMockApi(): MockApi {
         annotationType: 'none',
         detectedGenomeBuild: null,
         infoFields: [],
+        annotationFields: [],
         callerName: null,
         callerVersion: null,
         defaultVariantType: 'snv',
         filePath: '/tmp/mock.vcf',
         fileSize: 0
       }),
+      jsonPreview: vi
+        .fn()
+        .mockResolvedValue({ format: 'columnar', variantsScanned: 0, fields: [] }),
       vcfMultiPreview: vi.fn().mockResolvedValue({
         files: [],
         siblingBedFiles: [],
