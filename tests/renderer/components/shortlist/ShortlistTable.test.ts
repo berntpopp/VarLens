@@ -246,4 +246,33 @@ describe('ShortlistTable', () => {
     expect(text).not.toContain('c.999A>G')
     expect(text).not.toContain('p.Arg1Gly')
   })
+
+  it('ignores window keys while not interactive (hidden tab)', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row()], interactive: false },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    for (const key of ['ArrowDown', 's', 'Enter']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key }))
+      await wrapper.vm.$nextTick()
+    }
+    expect(wrapper.emitted('toggle-star')).toBeUndefined()
+    expect(wrapper.emitted('row-click')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('handles window keys while interactive', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row()], interactive: true },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    for (const key of ['ArrowDown', 's']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key }))
+      await wrapper.vm.$nextTick()
+    }
+    expect(wrapper.emitted('toggle-star')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

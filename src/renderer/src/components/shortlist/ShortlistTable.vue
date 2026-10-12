@@ -43,6 +43,8 @@ const props = defineProps<{
   rows: ShortlistRow[]
   /** Viewer role: the star is display-only. */
   readOnly?: boolean
+  /** False while the tab is hidden (v-show): window keys must not act on unseen rows. */
+  interactive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -211,6 +213,7 @@ function handleRowClick(item: ShortlistRow) {
 onKeyStroke(
   'ArrowDown',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveDown()
@@ -221,6 +224,7 @@ onKeyStroke(
 onKeyStroke(
   'ArrowUp',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || props.rows.length === 0) return
     e.preventDefault()
     moveUp()
@@ -231,6 +235,7 @@ onKeyStroke(
 onKeyStroke(
   'Enter',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
@@ -241,6 +246,7 @@ onKeyStroke(
 onKeyStroke(
   's',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
     if (props.readOnly === true) return
     e.preventDefault()
@@ -252,6 +258,7 @@ onKeyStroke(
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
+    if (props.interactive === false) return
     if (isInputFocused()) return
     e.preventDefault()
     clearSelection()
