@@ -165,7 +165,8 @@ const summary = computed(() =>
 .protein-strip {
   display: flex;
   align-items: center;
-  height: 40px;
+  /* Fixed for every lookup state; only a long server reason (static) may wrap taller. */
+  min-height: 40px;
 }
 
 .strip-line {
