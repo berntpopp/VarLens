@@ -81,41 +81,16 @@
         </div>
         <div class="text-body-small text-medium-emphasis">ACMG Classified</div>
         <div v-if="totalAcmgClassified > 0" class="mt-1 d-flex justify-center ga-1 flex-wrap">
-          <v-chip
-            v-if="summary.acmg_counts.pathogenic > 0"
-            size="x-small"
-            variant="tonal"
-            color="error"
-          >
-            P: {{ summary.acmg_counts.pathogenic }}
-          </v-chip>
-          <v-chip
-            v-if="summary.acmg_counts.likely_pathogenic > 0"
-            size="x-small"
-            variant="tonal"
-            color="deep-orange"
-          >
-            LP: {{ summary.acmg_counts.likely_pathogenic }}
-          </v-chip>
-          <v-chip v-if="summary.acmg_counts.vus > 0" size="x-small" variant="tonal" color="amber">
-            VUS: {{ summary.acmg_counts.vus }}
-          </v-chip>
-          <v-chip
-            v-if="summary.acmg_counts.likely_benign > 0"
-            size="x-small"
-            variant="tonal"
-            color="light-green"
-          >
-            LB: {{ summary.acmg_counts.likely_benign }}
-          </v-chip>
-          <v-chip
-            v-if="summary.acmg_counts.benign > 0"
-            size="x-small"
-            variant="tonal"
-            color="success"
-          >
-            B: {{ summary.acmg_counts.benign }}
-          </v-chip>
+          <template v-for="cls in ACMG_CLASSIFICATIONS" :key="cls">
+            <v-chip
+              v-if="summary.acmg_counts[ACMG_COUNT_KEYS[cls]] > 0"
+              size="x-small"
+              variant="tonal"
+              :color="ACMG_COLORS[cls]"
+            >
+              {{ ACMG_ABBREV[cls] }}: {{ summary.acmg_counts[ACMG_COUNT_KEYS[cls]] }}
+            </v-chip>
+          </template>
         </div>
       </v-card>
     </v-col>
@@ -126,6 +101,12 @@
 import { computed } from 'vue'
 import type { CohortSummary } from '../../../../shared/types/cohort'
 import {
+  ACMG_ABBREV,
+  ACMG_CLASSIFICATIONS,
+  ACMG_COLORS,
+  type AcmgClassification
+} from '../../../../shared/config/domain.config'
+import {
   mdiAccountGroup,
   mdiChartBar,
   mdiDatabaseSync,
@@ -135,6 +116,15 @@ import {
   mdiStar,
   mdiTagCheck
 } from '@mdi/js'
+
+/** Summary count field per ACMG class. */
+const ACMG_COUNT_KEYS: Record<AcmgClassification, keyof CohortSummary['acmg_counts']> = {
+  Pathogenic: 'pathogenic',
+  'Likely pathogenic': 'likely_pathogenic',
+  'Uncertain significance': 'vus',
+  'Likely benign': 'likely_benign',
+  Benign: 'benign'
+}
 
 const props = defineProps<{
   summary: CohortSummary
