@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 684" width="720" height="684" role="img" aria-labelledby="t d">
+<title id="t">Hit@10 (macro over consequence classes) with 95 % CI</title><desc id="d">20 scorers; bar = point estimate, whisker = 95 % gene-cluster bootstrap interval.</desc><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;font-variant-numeric:tabular-nums}
+.grid,.axis{stroke-width:1}.title{font-size:14px;font-weight:600}.ci{stroke-width:1.5}
+.line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.hit{fill:none;stroke:transparent;stroke-width:12}
+.bg{fill:#fcfcfb}text{fill:#52514e}.title{fill:#0b0b0b}.muted{fill:#898781}.grid{stroke:#e1e0d9}.axis{stroke:#c3c2b7}.ci{stroke:#52514e}.s1{stroke:#2a78d6}.f1{fill:#2a78d6}.s2{stroke:#eb6834}.f2{fill:#eb6834}.s3{stroke:#1baf7a}.f3{fill:#1baf7a}.s4{stroke:#eda100}.f4{fill:#eda100}.s5{stroke:#e87ba4}.f5{fill:#e87ba4}.s6{stroke:#008300}.f6{fill:#008300}.s7{stroke:#6250d6}.f7{fill:#6250d6}.s8{stroke:#e34948}.f8{fill:#e34948}
+@media (prefers-color-scheme:dark){.bg{fill:#1a1a19}text{fill:#c3c2b7}.title{fill:#f0efec}.muted{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ci{stroke:#c3c2b7}.s1{stroke:#3987e5}.f1{fill:#3987e5}.s2{stroke:#d95926}.f2{fill:#d95926}.s3{stroke:#199e70}.f3{fill:#199e70}.s4{stroke:#c98500}.f4{fill:#c98500}.s5{stroke:#d55181}.f5{fill:#d55181}.s6{stroke:#008300}.f6{fill:#008300}.s7{stroke:#9085e9}.f7{fill:#9085e9}.s8{stroke:#e66767}.f8{fill:#e66767}}
+</style>
+<rect class="bg" width="720" height="684" rx="8"/>
+<text class="title" x="16" y="24">Hit@10 (macro over consequence classes) with 95 % CI</text>
+<line class="grid" x1="220" x2="220" y1="40" y2="644"/>
+<text x="220" y="660" text-anchor="middle">0%</text>
+<line class="grid" x1="325" x2="325" y1="40" y2="644"/>
+<text x="325" y="660" text-anchor="middle">25%</text>
+<line class="grid" x1="430" x2="430" y1="40" y2="644"/>
+<text x="430" y="660" text-anchor="middle">50%</text>
+<line class="grid" x1="535" x2="535" y1="40" y2="644"/>
+<text x="535" y="660" text-anchor="middle">75%</text>
+<line class="grid" x1="640" x2="640" y1="40" y2="644"/>
+<text x="640" y="660" text-anchor="middle">100%</text>
+<text x="210" y="63" text-anchor="end">Tier 1 candidates</text>
+<g><title>Tier 1 candidates: 14.5 % [13.8 %, 15.4 %]</title><path class="f1" d="M220,51H276.87Q280.87,51 280.87,55V63Q280.87,67 276.87,67H220Z"/><line class="ci" x1="277.83" x2="284.75" y1="59" y2="59"/><line class="ci" x1="277.83" x2="277.83" y1="54" y2="64"/><line class="ci" x1="284.75" x2="284.75" y1="54" y2="64"/><rect x="220" y="44" width="420" height="30" fill="transparent"/></g>
+<text x="292.75" y="63">14.5 %</text>
+<text x="210" y="93" text-anchor="end">All rare damaging</text>
+<g><title>All rare damaging: 13.9 % [13.1 %, 14.8 %]</title><path class="f1" d="M220,81H274.24Q278.24,81 278.24,85V93Q278.24,97 274.24,97H220Z"/><line class="ci" x1="274.98" x2="282.27" y1="89" y2="89"/><line class="ci" x1="274.98" x2="274.98" y1="84" y2="94"/><line class="ci" x1="282.27" x2="282.27" y1="84" y2="94"/><rect x="220" y="74" width="420" height="30" fill="transparent"/></g>
+<text x="290.27" y="93">13.9 %</text>
+<text x="210" y="123" text-anchor="end">CADD descending</text>
+<g><title>CADD descending: 10.8 % [9.8 %, 12.2 %]</title><path class="f1" d="M220,111H261.45Q265.45,111 265.45,115V123Q265.45,127 261.45,127H220Z"/><line class="ci" x1="261.33" x2="271.1" y1="119" y2="119"/><line class="ci" x1="261.33" x2="261.33" y1="114" y2="124"/><line class="ci" x1="271.1" x2="271.1" y1="114" y2="124"/><rect x="220" y="104" width="420" height="30" fill="transparent"/></g>
+<text x="279.1" y="123">10.8 %</text>
+<text x="210" y="153" text-anchor="end">AF ascending</text>
+<g><title>AF ascending: 14.7 % [13.2 %, 16.9 %]</title><path class="f1" d="M220,141H277.92Q281.92,141 281.92,145V153Q281.92,157 277.92,157H220Z"/><line class="ci" x1="275.3" x2="291.12" y1="149" y2="149"/><line class="ci" x1="275.3" x2="275.3" y1="144" y2="154"/><line class="ci" x1="291.12" x2="291.12" y1="144" y2="154"/><rect x="220" y="134" width="420" height="30" fill="transparent"/></g>
+<text x="299.12" y="153">14.7 %</text>
+<text x="210" y="183" text-anchor="end">Evidence, hand-set points</text>
+<g><title>Evidence, hand-set points: 36.1 % [33.6 %, 39.4 %]</title><path class="f1" d="M220,171H367.41Q371.41,171 371.41,175V183Q371.41,187 367.41,187H220Z"/><line class="ci" x1="361.06" x2="385.41" y1="179" y2="179"/><line class="ci" x1="361.06" x2="361.06" y1="174" y2="184"/><line class="ci" x1="385.41" x2="385.41" y1="174" y2="184"/><rect x="220" y="164" width="420" height="30" fill="transparent"/></g>
+<text x="393.41" y="183">36.1 %</text>
+<text x="210" y="213" text-anchor="end">Evidence, tuned points</text>
+<g><title>Evidence, tuned points: 41.8 % [38.8 %, 45.7 %]</title><path class="f1" d="M220,201H391.63Q395.63,201 395.63,205V213Q395.63,217 391.63,217H220Z"/><line class="ci" x1="382.82" x2="412.04" y1="209" y2="209"/><line class="ci" x1="382.82" x2="382.82" y1="204" y2="214"/><line class="ci" x1="412.04" x2="412.04" y1="204" y2="214"/><rect x="220" y="194" width="420" height="30" fill="transparent"/></g>
+<text x="420.04" y="213">41.8 %</text>
+<text x="210" y="243" text-anchor="end">Tier 1 scoring, evidence gate</text>
+<g><title>Tier 1 scoring, evidence gate: 13.9 % [13.1 %, 14.8 %]</title><path class="f1" d="M220,231H274.24Q278.24,231 278.24,235V243Q278.24,247 274.24,247H220Z"/><line class="ci" x1="274.98" x2="282.27" y1="239" y2="239"/><line class="ci" x1="274.98" x2="274.98" y1="234" y2="244"/><line class="ci" x1="282.27" x2="282.27" y1="234" y2="244"/><rect x="220" y="224" width="420" height="30" fill="transparent"/></g>
+<text x="290.27" y="243">13.9 %</text>
+<text x="210" y="273" text-anchor="end">Tuned evidence, Tier 1 gate</text>
+<g><title>Tuned evidence, Tier 1 gate: 42.9 % [39.8 %, 47.2 %]</title><path class="f1" d="M220,261H396.12Q400.12,261 400.12,265V273Q400.12,277 396.12,277H220Z"/><line class="ci" x1="387" x2="418.05" y1="269" y2="269"/><line class="ci" x1="387" x2="387" y1="264" y2="274"/><line class="ci" x1="418.05" x2="418.05" y1="264" y2="274"/><rect x="220" y="254" width="420" height="30" fill="transparent"/></g>
+<text x="426.05" y="273">42.9 %</text>
+<text x="210" y="303" text-anchor="end">Tuned without Population frequency</text>
+<g><title>Tuned without Population frequency: 42.5 % [39.6 %, 46.3 %]</title><path class="f1" d="M220,291H394.44Q398.44,291 398.44,295V303Q398.44,307 394.44,307H220Z"/><line class="ci" x1="386.25" x2="414.44" y1="299" y2="299"/><line class="ci" x1="386.25" x2="386.25" y1="294" y2="304"/><line class="ci" x1="414.44" x2="414.44" y1="294" y2="304"/><rect x="220" y="284" width="420" height="30" fill="transparent"/></g>
+<text x="422.44" y="303">42.5 %</text>
+<text x="210" y="333" text-anchor="end">Tuned without Variant effect</text>
+<g><title>Tuned without Variant effect: 47.6 % [43.8 %, 52.7 %]</title><path class="f1" d="M220,321H416.1Q420.1,321 420.1,325V333Q420.1,337 416.1,337H220Z"/><line class="ci" x1="403.79" x2="441.18" y1="329" y2="329"/><line class="ci" x1="403.79" x2="403.79" y1="324" y2="334"/><line class="ci" x1="441.18" x2="441.18" y1="324" y2="334"/><rect x="220" y="314" width="420" height="30" fill="transparent"/></g>
+<text x="449.18" y="333">47.6 %</text>
+<text x="210" y="363" text-anchor="end">Tuned without CADD</text>
+<g><title>Tuned without CADD: 46.7 % [43.3 %, 51.2 %]</title><path class="f1" d="M220,351H412.19Q416.19,351 416.19,355V363Q416.19,367 412.19,367H220Z"/><line class="ci" x1="401.9" x2="435.12" y1="359" y2="359"/><line class="ci" x1="401.9" x2="401.9" y1="354" y2="364"/><line class="ci" x1="435.12" x2="435.12" y1="354" y2="364"/><rect x="220" y="344" width="420" height="30" fill="transparent"/></g>
+<text x="443.12" y="363">46.7 %</text>
+<text x="210" y="393" text-anchor="end">Tuned without ClinVar</text>
+<g><title>Tuned without ClinVar: 41.8 % [38.8 %, 45.7 %]</title><path class="f1" d="M220,381H391.63Q395.63,381 395.63,385V393Q395.63,397 391.63,397H220Z"/><line class="ci" x1="382.82" x2="412.04" y1="389" y2="389"/><line class="ci" x1="382.82" x2="382.82" y1="384" y2="394"/><line class="ci" x1="412.04" x2="412.04" y1="384" y2="394"/><rect x="220" y="374" width="420" height="30" fill="transparent"/></g>
+<text x="420.04" y="393">41.8 %</text>
+<text x="210" y="423" text-anchor="end">Tuned without Phenotype match</text>
+<g><title>Tuned without Phenotype match: 37.0 % [34.5 %, 40.6 %]</title><path class="f1" d="M220,411H371.52Q375.52,411 375.52,415V423Q375.52,427 371.52,427H220Z"/><line class="ci" x1="364.94" x2="390.37" y1="419" y2="419"/><line class="ci" x1="364.94" x2="364.94" y1="414" y2="424"/><line class="ci" x1="390.37" x2="390.37" y1="414" y2="424"/><rect x="220" y="404" width="420" height="30" fill="transparent"/></g>
+<text x="398.37" y="423">37.0 %</text>
+<text x="210" y="453" text-anchor="end">Tuned without Disease gene</text>
+<g><title>Tuned without Disease gene: 41.8 % [38.8 %, 45.7 %]</title><path class="f1" d="M220,441H391.63Q395.63,441 395.63,445V453Q395.63,457 391.63,457H220Z"/><line class="ci" x1="382.82" x2="412.04" y1="449" y2="449"/><line class="ci" x1="382.82" x2="382.82" y1="444" y2="454"/><line class="ci" x1="412.04" x2="412.04" y1="444" y2="454"/><rect x="220" y="434" width="420" height="30" fill="transparent"/></g>
+<text x="420.04" y="453">41.8 %</text>
+<text x="210" y="483" text-anchor="end">Tuned without Frequency for dominant</text>
+<g><title>Tuned without Frequency for dominant: 41.3 % [38.4 %, 45.2 %]</title><path class="f1" d="M220,471H389.36Q393.36,471 393.36,475V483Q393.36,487 389.36,487H220Z"/><line class="ci" x1="381.28" x2="409.96" y1="479" y2="479"/><line class="ci" x1="381.28" x2="381.28" y1="474" y2="484"/><line class="ci" x1="409.96" x2="409.96" y1="474" y2="484"/><rect x="220" y="464" width="420" height="30" fill="transparent"/></g>
+<text x="417.96" y="483">41.3 %</text>
+<text x="210" y="513" text-anchor="end">Tuned without mode ar_hom</text>
+<g><title>Tuned without mode ar_hom: 41.8 % [38.8 %, 45.7 %]</title><path class="f1" d="M220,501H391.63Q395.63,501 395.63,505V513Q395.63,517 391.63,517H220Z"/><line class="ci" x1="382.82" x2="412.04" y1="509" y2="509"/><line class="ci" x1="382.82" x2="382.82" y1="504" y2="514"/><line class="ci" x1="412.04" x2="412.04" y1="504" y2="514"/><rect x="220" y="494" width="420" height="30" fill="transparent"/></g>
+<text x="420.04" y="513">41.8 %</text>
+<text x="210" y="543" text-anchor="end">Tuned without mode ar_comphet</text>
+<g><title>Tuned without mode ar_comphet: 36.7 % [34.4 %, 39.6 %]</title><path class="f1" d="M220,531H370.05Q374.05,531 374.05,535V543Q374.05,547 370.05,547H220Z"/><line class="ci" x1="364.58" x2="386.26" y1="539" y2="539"/><line class="ci" x1="364.58" x2="364.58" y1="534" y2="544"/><line class="ci" x1="386.26" x2="386.26" y1="534" y2="544"/><rect x="220" y="524" width="420" height="30" fill="transparent"/></g>
+<text x="394.26" y="543">36.7 %</text>
+<text x="210" y="573" text-anchor="end">Tuned without mode xl</text>
+<g><title>Tuned without mode xl: 42.2 % [39.1 %, 46.2 %]</title><path class="f1" d="M220,561H393.09Q397.09,561 397.09,565V573Q397.09,577 393.09,577H220Z"/><line class="ci" x1="384.27" x2="413.87" y1="569" y2="569"/><line class="ci" x1="384.27" x2="384.27" y1="564" y2="574"/><line class="ci" x1="413.87" x2="413.87" y1="564" y2="574"/><rect x="220" y="554" width="420" height="30" fill="transparent"/></g>
+<text x="421.87" y="573">42.2 %</text>
+<text x="210" y="603" text-anchor="end">Tuned without mode ad</text>
+<g><title>Tuned without mode ad: 37.6 % [36.4 %, 39.2 %]</title><path class="f1" d="M220,591H373.89Q377.89,591 377.89,595V603Q377.89,607 373.89,607H220Z"/><line class="ci" x1="372.9" x2="384.83" y1="599" y2="599"/><line class="ci" x1="372.9" x2="372.9" y1="594" y2="604"/><line class="ci" x1="384.83" x2="384.83" y1="594" y2="604"/><rect x="220" y="584" width="420" height="30" fill="transparent"/></g>
+<text x="392.83" y="603">37.6 %</text>
+<text x="210" y="633" text-anchor="end">Tuned without inheritance modes</text>
+<g><title>Tuned without inheritance modes: 37.4 % [36.1 %, 39.0 %]</title><path class="f1" d="M220,621H372.94Q376.94,621 376.94,625V633Q376.94,637 372.94,637H220Z"/><line class="ci" x1="371.47" x2="383.95" y1="629" y2="629"/><line class="ci" x1="371.47" x2="371.47" y1="624" y2="634"/><line class="ci" x1="383.95" x2="383.95" y1="624" y2="634"/><rect x="220" y="614" width="420" height="30" fill="transparent"/></g>
+<text x="391.95" y="633">37.4 %</text>
+<line class="axis" x1="220" x2="220" y1="40" y2="644"/></svg>

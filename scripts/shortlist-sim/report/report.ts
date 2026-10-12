@@ -91,10 +91,12 @@ export function renderReport(
     ...manifest,
     scorers: { ...manifest.scorers, candidate: 'evidence_hand' }
   })
-  const handVerdict = verdictSection(hand).replace(
-    '## Ship verdict',
-    '## Ship verdict — hand-set points (`evidence_hand`, pre-registered)'
-  )
+  const handVerdict = verdictSection(hand)
+    .replace(
+      '## Ship verdict',
+      '## Ship verdict — hand-set points (`evidence_hand`, pre-registered)'
+    )
+    .replace('the tuned preset may be seeded', 'the hand-set preset may be seeded')
   const decision = data.ship.ship
     ? 'Decision: ship the tuned preset.'
     : hand.ship.ship
