@@ -279,9 +279,13 @@ class Parser {
     const column = colDef?.key ?? colToken.value
     // Reject before any request: the other view's backend cannot filter on it
     if (colDef && !isColumnInScope(colDef, this.scope)) {
-      return fail(`'${colToken.value}' is a per-case field and cannot filter the cohort view`)
+      return fail(
+        colDef.shortlistOnly === true
+          ? `'${colToken.value}' is a derived shortlist field and can only be used in shortlist rules`
+          : `'${colToken.value}' is a per-case field and cannot filter the cohort view`
+      )
     }
-    if (this.scope === 'case' && COHORT_ONLY_COLUMNS.some((c) => c.key === column)) {
+    if (this.scope !== 'cohort' && COHORT_ONLY_COLUMNS.some((c) => c.key === column)) {
       return fail(`'${colToken.value}' is a cohort field and cannot filter a single case`)
     }
     const numeric = colDef ? colDef.type === 'numeric' : NUMERIC_COLUMN_FILTER_KEYS.has(column)

@@ -263,3 +263,18 @@ describe('parseDsl', () => {
     })
   })
 })
+
+describe('parseDsl — shortlist scope', () => {
+  it('accepts derived shortlist fields only in shortlist rules', () => {
+    expect(parseDsl('zygosity:=:het', 'case').errors).not.toEqual([])
+    expect(parseDsl('gene_het_hits:>=:2', 'cohort').errors).not.toEqual([])
+    expect(parseDsl('zygosity:=:het', 'shortlist').errors).toEqual([])
+    expect(parseDsl('gene_het_hits:>=:2', 'shortlist').errors).toEqual([])
+  })
+
+  it('treats shortlist like the case view for case fields, INFO and cohort-only fields', () => {
+    expect(parseDsl('qual:>:30', 'shortlist').errors).toEqual([])
+    expect(parseDsl('info.DP:>:3', 'shortlist').errors).toEqual([])
+    expect(parseDsl('carrier_count:>:3', 'shortlist').errors).not.toEqual([])
+  })
+})
