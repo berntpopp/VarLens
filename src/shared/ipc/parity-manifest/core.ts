@@ -24,7 +24,9 @@ export const casesManifest = {
   deleteAll: sharedWrite({ authz: 'admin' }),
   deleteBatch: sharedWrite(),
   startDelete: sharedWrite(),
-  availableBuilds: sharedRead()
+  availableBuilds: sharedRead(),
+  buildReviews: sharedRead(),
+  resolveBuildReviews: sharedWrite()
 } satisfies DomainManifest<'cases'>
 
 export const variantsManifest = {

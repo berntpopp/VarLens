@@ -7,7 +7,7 @@
     type="number"
     step="1"
     min="1"
-    label="Seen in at most N cases"
+    :label="CARRIER_FREQUENCY_COPY.maxCarriersLabel"
     :hint="hint"
     persistent-hint
     clearable
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { parseMaxCarriers } from '../../utils/filters/maxCarriers'
+import { CARRIER_FREQUENCY_COPY } from '../../config/uiCopyConfig'
 
 const props = defineProps<{
   /** The cap, or null when the filter is off */
@@ -31,9 +32,5 @@ const emit = defineEmits<{
   'update:modelValue': [value: number | null]
 }>()
 
-const hint = computed(() =>
-  props.scope === 'case'
-    ? 'Counts all cases in this database, including this case.'
-    : 'Counts all cases in this database that carry the variant.'
-)
+const hint = computed(() => CARRIER_FREQUENCY_COPY.maxCarriersHint[props.scope])
 </script>

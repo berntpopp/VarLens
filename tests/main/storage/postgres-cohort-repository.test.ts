@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// The denominators computed in each query (no cache round trips in the mocked pool).
+vi.mock('../../../src/main/storage/postgres/postgres-carrier-totals', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../src/main/storage/postgres/postgres-carrier-totals')
+  >()),
+  carrierTotalsSql: async () => undefined
+}))
+
 const geneReferenceMocks = vi.hoisted(() => ({
   getCoordinatesForGenes: vi.fn()
 }))
@@ -134,8 +142,8 @@ describe('PostgresCohortRepository', () => {
 
     expect(dataSql).toContain('FROM "tenant""schema"."cohort_variant_summary" cvs')
     // No per-variant grouping: the only GROUP BY is the tiny cases-per-build
-    // subquery that supplies the frequency denominator.
-    expect(dataSql).not.toMatch(/GROUP BY (?!genome_build)/)
+    // (and class) subquery that supplies the frequency denominator.
+    expect(dataSql).not.toMatch(/GROUP BY (?!c\.genome_build)/)
     expect(dataSql).not.toContain('HAVING')
     expect(dataSql).toContain('cvs.carrier_count')
     expect(countSql).toContain('SELECT COUNT(*)::bigint AS total_count')
@@ -157,6 +165,10 @@ describe('PostgresCohortRepository', () => {
       `%TP53\\%' OR TRUE --%`,
       `%TP53\\%' OR TRUE --%`,
       `%TP53\\%' OR TRUE --%`,
+      // A region matches every stored spelling of its contig (flagged cases keep theirs).
+      'chr1',
+      200,
+      100,
       '1',
       200,
       100,
@@ -194,7 +206,6 @@ describe('PostgresCohortRepository', () => {
   it('resolves active panels to padded genomic intervals across the cohort', async () => {
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ chr: '1' }] })
       .mockResolvedValueOnce({ rows: [{ total_cases: '10' }] })
       .mockResolvedValueOnce({ rows: [{ total_count: '1' }] })
       .mockResolvedValueOnce({ rows: [] })
@@ -209,16 +220,16 @@ describe('PostgresCohortRepository', () => {
       offset: 0
     })
 
-    const dataSql = normalizeSql(callText(query.mock.calls[3]))
-    const dataParams = callParams(query.mock.calls[3])
+    const dataSql = normalizeSql(callText(query.mock.calls[2]))
+    const dataParams = callParams(query.mock.calls[2])
 
-    expect(resolveIntervals).toHaveBeenCalledWith([3, 4], 'GRCh37', 7500, false)
+    expect(resolveIntervals).toHaveBeenCalledWith([3, 4], 'GRCh37', 7500)
     expect(dataSql).toContain('(cvs.chr = $')
     expect(dataSql).toContain('cvs.pos <= $')
     expect(dataSql).toContain('COALESCE(cvs.end_pos, cvs.pos) >= $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['1', 200, 100, 'GRCh37', 10, 0])
+    expect(dataParams).toEqual(['chr1', 200, 100, '1', 200, 100, 'GRCh37', 10, 0])
   })
 
   it('propagates the error instead of silently running unfiltered when panel interval resolution fails', async () => {
@@ -227,7 +238,7 @@ describe('PostgresCohortRepository', () => {
     // query must reject (surface the failure) rather than silently fall
     // back to an unfiltered result set — see PostgresCohortRepository's
     // resolvePanelParams for the contract this mirrors from panelIntervalHelper.ts.
-    const query = vi.fn().mockResolvedValueOnce({ rows: [{ chr: '1' }] })
+    const query = vi.fn()
     const resolveIntervals = vi
       .fn()
       .mockRejectedValue(new Error('Simulated panel interval computation failure'))
@@ -262,7 +273,6 @@ describe('PostgresCohortRepository', () => {
     )
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ chr: 'chr1' }] })
       .mockResolvedValueOnce({ rows: [{ hgnc_id: 'HGNC:1100' }] })
       .mockResolvedValueOnce({ rows: [{ total_cases: '10' }] })
       .mockResolvedValueOnce({ rows: [{ total_count: '1' }] })
@@ -275,10 +285,10 @@ describe('PostgresCohortRepository', () => {
       offset: 0
     })
 
-    const panelSql = normalizeSql(callText(query.mock.calls[1]))
-    const panelParams = callParams(query.mock.calls[1])
-    const dataSql = normalizeSql(callText(query.mock.calls[4]))
-    const dataParams = callParams(query.mock.calls[4])
+    const panelSql = normalizeSql(callText(query.mock.calls[0]))
+    const panelParams = callParams(query.mock.calls[0])
+    const dataSql = normalizeSql(callText(query.mock.calls[3]))
+    const dataParams = callParams(query.mock.calls[3])
 
     expect(panelSql).toContain('FROM "public"."panel_genes"')
     expect(panelParams).toEqual([[3]])
@@ -286,7 +296,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('(cvs.chr = $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['chr1', 7000, 1, 10, 0])
+    expect(dataParams).toEqual(['chr1', 7000, 1, '1', 7000, 1, 10, 0])
   })
 
   it('uses resolved panel intervals instead of active panel IDs when both are present', async () => {
@@ -314,7 +324,7 @@ describe('PostgresCohortRepository', () => {
     expect(dataSql).toContain('COALESCE(cvs.end_pos, cvs.pos) >= $')
     expect(dataSql).not.toContain('panel_genes')
     expect(dataSql).not.toContain('case_active_panels')
-    expect(dataParams).toEqual(['1', 200, 100, 10, 0])
+    expect(dataParams).toEqual(['chr1', 200, 100, '1', 200, 100, 10, 0])
   })
 
   it('supports whitelisted parameterized cohort column filters', async () => {
@@ -475,10 +485,12 @@ describe('PostgresCohortRepository', () => {
     expect(normalizeSql(query.mock.calls[0][0] as string)).toContain('WHERE genome_build = $1')
     expect(query.mock.calls[0][1]).toEqual(['GRCh38'])
     const dataSql = normalizeSql(callText(query.mock.calls[2]))
-    // cohort_frequency is carriers over the visible cases of the row's build.
+    // cohort_frequency is carriers over the visible cases of the row's build
+    // that hold a call of its variant class.
     expect(dataSql).toContain('cvs.genome_build = $')
     expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
-    expect(dataSql).toContain('FROM "public"."cases" GROUP BY genome_build')
+    expect(dataSql).toContain('FROM "public"."cases" c WHERE EXISTS')
+    expect(dataSql).toContain('GROUP BY c.genome_build')
   })
 
   it('reads C5a-maintained annotation flags from the summary table', async () => {

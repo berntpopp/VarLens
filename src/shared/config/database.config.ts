@@ -12,6 +12,14 @@ export const DATABASE_CONFIG = {
   IMPORT_CACHE_SIZE_KB: -64000,
   /** Memory-mapped I/O size in bytes (1 GB — virtual address reservation is free on 64-bit) */
   MMAP_SIZE_BYTES: 1_073_741_824,
+  /**
+   * Free disk space the v47 chromosome-name migration needs next to the
+   * database, as a multiple of its size: the pre-migration backup (1x) plus the
+   * peak WAL of the rename (measured 0.84x on a 741 MB database), with margin.
+   */
+  CONTIG_MIGRATION_FREE_SPACE_RATIO: 2.7,
+  /** The same when no row will be renamed: only the backup copy, with margin. */
+  BACKUP_ONLY_FREE_SPACE_RATIO: 1.1,
   /** Busy timeout in milliseconds */
   BUSY_TIMEOUT_MS: 5000,
   /** Max rows sampled per table during ANALYZE (caps optimizer stat-gathering time) */

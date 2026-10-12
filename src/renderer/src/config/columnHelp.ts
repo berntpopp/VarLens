@@ -69,9 +69,13 @@ export const COLUMN_HELP: Readonly<Record<string, string>> = {
   moi: 'Mode(s) of inheritance of the gene’s disorders from the imported file, e.g. AD, AR, XLD, XLR.',
   // Cohort-only columns (src/main/database/cohort-frequency-sql.ts).
   carrier_count:
-    'Number of imported cases of this genome build that carry the variant.' + COHORT_CAVEAT,
-  cohort_frequency:
-    'Carriers ÷ imported cases of this genome build: a carrier frequency, not an allele frequency.' +
+    'Number of imported cases of this genome build that carry the variant (no-calls excluded).' +
     COHORT_CAVEAT,
-  het_count: 'Carriers that are heterozygous / homozygous alternate.'
+  cohort_frequency:
+    'Carriers ÷ imported cases of this genome build with calls of the same variant type ' +
+    '(SNV/indel, SV, CNV or STR): a carrier frequency, not an allele frequency. Cases whose ' +
+    'assay does not cover the position count as non-carriers. SV/CNV/STR: exact breakpoints only.' +
+    COHORT_CAVEAT,
+  het_count:
+    'Carriers that are heterozygous / homozygous alternate; + other: hemizygous or no called zygosity.'
 }

@@ -54,13 +54,13 @@ describe('PostgresPanelIntervalResolver', () => {
     expect(lookup).not.toHaveBeenCalled()
   })
 
-  it('resolves a case filter with the build and chromosome style of that case', async () => {
+  it('resolves a case filter with the build (and so the contig names) of that case', async () => {
     geneReferenceMocks.getCoordinatesForGenes.mockReturnValue(
       new Map([['HGNC:1100', { chromosome: '7', start_pos: 100_000, end_pos: 200_000 }]])
     )
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh37', chr: 'chr7' }] })
+      .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh37' }] })
       .mockResolvedValueOnce({ rows: [{ hgnc_id: 'HGNC:1100' }] })
     const resolver = new PostgresPanelIntervalResolver({ query } as never, 'tenant')
 
@@ -70,8 +70,8 @@ describe('PostgresPanelIntervalResolver', () => {
       active_panel_ids: [3, 4]
     })
 
-    expect(sqlOf(query.mock.calls[0])).toContain('FROM "tenant"."cases" c WHERE c.id = $1')
-    expect(sqlOf(query.mock.calls[0])).toContain('FROM "tenant"."variants" v WHERE v.case_id = $1')
+    expect(sqlOf(query.mock.calls[0])).toContain('FROM "tenant"."cases" WHERE id = $1')
+    expect(sqlOf(query.mock.calls[0])).not.toContain('"variants"')
     expect(query.mock.calls[0][1]).toEqual([42])
     expect(sqlOf(query.mock.calls[1])).toContain('FROM "tenant"."panel_genes"')
     expect(query.mock.calls[1][1]).toEqual([[3, 4]])
@@ -80,23 +80,23 @@ describe('PostgresPanelIntervalResolver', () => {
     expect(resolved).toEqual({
       case_id: 42,
       gene_symbol: 'X',
-      panel_intervals: [{ chr: 'chr7', start: 95_000, end: 205_000 }]
+      panel_intervals: [{ chr: '7', start: 95_000, end: 205_000 }]
     })
   })
 
-  it('defaults to GRCh38 and unprefixed chromosomes for a case with no rows', async () => {
+  it('defaults to GRCh38 for a case without a build', async () => {
     const lookup = vi.fn().mockResolvedValue([{ chr: '7', start: 1, end: 2 }])
-    const query = vi.fn().mockResolvedValue({ rows: [{ genome_build: null, chr: null }] })
+    const query = vi.fn().mockResolvedValue({ rows: [{ genome_build: null }] })
     const resolver = new PostgresPanelIntervalResolver({ query } as never, 'public', lookup)
 
     await resolver.resolveCaseFilter({ case_id: 1, active_panel_ids: [3], panel_padding_bp: 0 })
 
-    expect(lookup).toHaveBeenCalledWith([3], 'GRCh38', 0, false)
+    expect(lookup).toHaveBeenCalledWith([3], 'GRCh38', 0)
   })
 
   it('resolves cohort params with the selected build', async () => {
     const lookup = vi.fn().mockResolvedValue([{ chr: '1', start: 100, end: 200 }])
-    const query = vi.fn().mockResolvedValue({ rows: [{ chr: '1' }] })
+    const query = vi.fn()
     const resolver = new PostgresPanelIntervalResolver({ query } as never, 'public', lookup)
 
     const resolved = await resolver.resolveCohortParams({
@@ -106,7 +106,8 @@ describe('PostgresPanelIntervalResolver', () => {
       limit: 10
     })
 
-    expect(lookup).toHaveBeenCalledWith([3], 'GRCh37', 7500, false)
+    expect(lookup).toHaveBeenCalledWith([3], 'GRCh37', 7500)
+    expect(query).not.toHaveBeenCalled()
     // genome_build stays: on a cohort query it is the build restriction itself.
     expect(resolved).toEqual({
       genome_build: 'GRCh37',

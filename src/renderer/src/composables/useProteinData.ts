@@ -53,6 +53,8 @@ export function useProteinData(geneSymbol: Ref<string | null>) {
     geneStructure: computed(() => geneQuery.data.value ?? null),
     geneStructureLoading: computed(() => geneQuery.asyncStatus.value === 'loading'),
     geneStructureError: computed(() => message(geneQuery.error.value)),
+    /** The gene structure alone (its own Retry: the lollipop does not wait for it) */
+    refetchGeneStructure: (): void => void geneQuery.refetch().catch(() => undefined),
     refetch
   }
 }

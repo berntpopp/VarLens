@@ -493,7 +493,7 @@ describe('VariantFilterBuilder characterization (compiled SQL + parameters)', ()
     expect({ sql: compiled.sql, parameters: compiled.parameters }).toMatchSnapshot()
   })
 
-  it('max_internal_af is a no-op when the cases table is empty', () => {
+  it('max_internal_af compiles NULL-inclusive, so an empty cases table filters nothing', () => {
     const emptyDb = new Database(':memory:')
     initializeSchema(emptyDb)
     runMigrations(emptyDb)
@@ -541,9 +541,9 @@ describe('VariantFilterBuilder characterization (compiled SQL + parameters)', ()
         )
         .all()
     ).toMatchSnapshot()
-    // Re-preparing replaces rather than appends.
+    // Re-preparing replaces rather than appends (2 regions x 2 stored spellings).
     builder.setupPanelIntervalsTable(intervals(2))
-    expect(db.prepare('SELECT COUNT(*) AS n FROM _panel_intervals').get()).toEqual({ n: 2 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM _panel_intervals').get()).toEqual({ n: 4 })
     builder.cleanupPanelIntervalsTable()
     expect(
       db

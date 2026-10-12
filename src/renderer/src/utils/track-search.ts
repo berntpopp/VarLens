@@ -5,6 +5,7 @@
  */
 import { AA_THREE_TO_ONE, TRACK_SEARCH_PATTERNS as P } from '../config/proteinPlotConfig'
 import type { TrackFeature, TrackMarker, TrackWindow } from './track-window'
+import { normalizeContigName } from '../../../shared/sql/chromosome-order'
 
 export type TrackQuery =
   | { kind: 'position'; position: number }
@@ -42,7 +43,7 @@ function aaCode(token: string): string | null {
   return ONE_LETTER.has(one) || one === '=' ? one : null
 }
 
-const normChr = (chr: string): string => chr.replace(/^chr/i, '').toUpperCase()
+const normChr = normalizeContigName
 
 export function parseTrackQuery(input: string): TrackQuery | null {
   const raw = input.trim()

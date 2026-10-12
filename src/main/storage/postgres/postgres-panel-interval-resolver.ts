@@ -47,8 +47,7 @@ import { quoteIdentifier } from './identifiers'
 export type PanelIntervalLookup = (
   panelIds: number[],
   genomeBuild: string,
-  paddingBp: number,
-  chrPrefix: boolean
+  paddingBp: number
 ) => Promise<GenomicInterval[]>
 
 interface PanelRequest {
@@ -84,46 +83,30 @@ export class PostgresPanelIntervalResolver {
 
   /**
    * Resolve the panel request of a single-case filter. Regions use the genome
-   * build and chromosome naming of the case being queried.
+   * build of the case being queried, and so its stored contig names.
    */
   async resolveCaseFilter(filter: VariantFilter): Promise<VariantFilter> {
     return this.resolve(filter, 'variants', async () => {
-      const result = await this.pool.query<{ genome_build: string | null; chr: string | null }>(
-        `SELECT
-           (SELECT c.genome_build FROM ${this.schemaName}."cases" c WHERE c.id = $1) AS genome_build,
-           (SELECT v.chr FROM ${this.schemaName}."variants" v WHERE v.case_id = $1 LIMIT 1) AS chr`,
+      const requestedBuild = (filter as VariantFilter & { genome_build?: string }).genome_build
+      if (requestedBuild !== undefined && requestedBuild !== '') return requestedBuild
+      const result = await this.pool.query<{ genome_build: string | null }>(
+        `SELECT genome_build FROM ${this.schemaName}."cases" WHERE id = $1`,
         [filter.case_id]
       )
-      const row = result.rows[0]
-      const requestedBuild = (filter as VariantFilter & { genome_build?: string }).genome_build
-      return {
-        genomeBuild:
-          requestedBuild !== undefined && requestedBuild !== ''
-            ? requestedBuild
-            : (row?.genome_build ?? DEFAULT_PANEL_GENOME_BUILD),
-        chrPrefix: row?.chr?.startsWith('chr') ?? false
-      }
+      return result.rows[0]?.genome_build ?? DEFAULT_PANEL_GENOME_BUILD
     })
   }
 
   /**
    * Resolve the panel request of a cohort query. Regions use the cohort's
-   * selected genome build; chromosome naming is sampled from any variant
-   * (mixed `chr7` / `7` imports are unsupported, as on SQLite).
+   * selected genome build and its stored contig names.
    */
   async resolveCohortParams(params: CohortSearchParams): Promise<CohortSearchParams> {
-    return this.resolve(params, 'cohort', async () => {
-      const result = await this.pool.query<{ chr?: string }>(
-        `SELECT chr FROM ${this.schemaName}."variants" LIMIT 1`
-      )
-      return {
-        genomeBuild:
-          params.genome_build !== undefined && params.genome_build !== ''
-            ? params.genome_build
-            : DEFAULT_PANEL_GENOME_BUILD,
-        chrPrefix: result.rows[0]?.chr?.startsWith('chr') ?? false
-      }
-    })
+    return this.resolve(params, 'cohort', async () =>
+      params.genome_build !== undefined && params.genome_build !== ''
+        ? params.genome_build
+        : DEFAULT_PANEL_GENOME_BUILD
+    )
   }
 
   /**
@@ -162,7 +145,7 @@ export class PostgresPanelIntervalResolver {
   private async resolve<T extends PanelRequest>(
     filter: T,
     source: 'variants' | 'cohort',
-    readContext: () => Promise<{ genomeBuild: string; chrPrefix: boolean }>
+    readGenomeBuild: () => Promise<string>
   ): Promise<T> {
     // Already-resolved regions win; the request fields are then redundant.
     if (isNonEmptyArray(filter.panel_intervals)) return withoutPanelRequest(filter)
@@ -173,12 +156,11 @@ export class PostgresPanelIntervalResolver {
     if (panelIds.length === 0) return withoutPanelRequest(filter)
 
     try {
-      const { genomeBuild, chrPrefix } = await readContext()
+      const genomeBuild = await readGenomeBuild()
       const intervals = await this.lookup(
         panelIds,
         genomeBuild,
-        filter.panel_padding_bp ?? DEFAULT_PANEL_PADDING_BP,
-        chrPrefix
+        filter.panel_padding_bp ?? DEFAULT_PANEL_PADDING_BP
       )
       const resolved = withoutPanelRequest(filter)
       if (intervals.length > 0) resolved.panel_intervals = intervals
@@ -195,8 +177,7 @@ export class PostgresPanelIntervalResolver {
   private async lookupFromGeneReference(
     panelIds: number[],
     genomeBuild: string,
-    paddingBp: number,
-    chrPrefix: boolean
+    paddingBp: number
   ): Promise<GenomicInterval[]> {
     const panelResult = await this.pool.query<{ hgnc_id: string }>(
       `SELECT DISTINCT hgnc_id
@@ -208,7 +189,6 @@ export class PostgresPanelIntervalResolver {
       panelResult.rows.map((row) => row.hgnc_id),
       genomeBuild,
       paddingBp,
-      chrPrefix,
       (hgncIds, build) => getGeneReferenceDb().getCoordinatesForGenes(hgncIds, build)
     )
   }

@@ -26,6 +26,7 @@
  *   chr = region.chr AND pos <= region.end AND COALESCE(end_pos, pos) >= region.start
  */
 import { ErrorCode } from '../types/errors'
+import { canonicalContig } from '../utils/contig'
 import type { GenomicInterval, PanelResolutionStatus } from '../types/panels'
 
 /** Padding applied around each panel gene when the filter does not carry one. */
@@ -71,23 +72,18 @@ export function mergeOverlappingIntervals(intervals: GenomicInterval[]): Genomic
  *
  * @param coordinates Gene coordinates for ONE genome build.
  * @param paddingBp   Bases added on each side of every gene (start clamps at 1).
- * @param chrPrefix   Whether the variant data names chromosomes `chr7` rather
- *                    than `7`; regions are emitted in the same style.
+ * @param genomeBuild Build of the coordinates; regions use its stored contig
+ *                    names (contig.ts), as every imported case does.
  */
 export function buildPaddedPanelIntervals(
   coordinates: Iterable<PanelGeneCoordinates>,
   paddingBp: number,
-  chrPrefix: boolean
+  genomeBuild: string
 ): GenomicInterval[] {
   const intervals: GenomicInterval[] = []
   for (const coords of coordinates) {
-    const chr = chrPrefix
-      ? coords.chromosome.startsWith('chr')
-        ? coords.chromosome
-        : `chr${coords.chromosome}`
-      : coords.chromosome
     intervals.push({
-      chr,
+      chr: canonicalContig(coords.chromosome, genomeBuild),
       start: Math.max(1, coords.start_pos - paddingBp),
       end: coords.end_pos + paddingBp
     })
@@ -136,12 +132,11 @@ export function resolvePanelGeneRegions(
   hgncIds: readonly string[],
   genomeBuild: string,
   paddingBp: number,
-  chrPrefix: boolean,
   getCoordinates: PanelGeneCoordinateLookup
 ): GenomicInterval[] {
   if (hgncIds.length === 0) return []
   const coordinates = getCoordinates([...hgncIds], genomeBuild)
-  const intervals = buildPaddedPanelIntervals(coordinates.values(), paddingBp, chrPrefix)
+  const intervals = buildPaddedPanelIntervals(coordinates.values(), paddingBp, genomeBuild)
   if (intervals.length === 0) throw new PanelRegionsUnavailableError(hgncIds.length, genomeBuild)
   return intervals
 }

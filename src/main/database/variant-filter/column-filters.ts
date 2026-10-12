@@ -153,8 +153,8 @@ export function applyBareColumnFilters(
       filtered = whereSeverity(filtered, column, severity.values, severity.negate)
       continue
     }
-    // Always table-qualified: the `variant_frequency` join in the base query
-    // also exposes `chr` / `pos`, so a bare reference is ambiguous in SQLite.
+    // Always table-qualified, so no join of the base query can make a bare
+    // column reference ambiguous in SQLite.
     filtered = applyColumnFilter(
       filtered,
       `variants.${baseColumn}`,

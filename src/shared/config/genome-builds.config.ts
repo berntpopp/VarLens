@@ -22,6 +22,23 @@ export interface GenomeBuildDef {
   mito: Readonly<Record<string, number>>
   /** Bare primary name ('1'..'22', 'X', 'Y') -> length. */
   contigs: Readonly<Record<string, number>>
+  /**
+   * Stored names (src/shared/utils/contig.ts): the build's reference-dictionary
+   * form of the 25 primary contigs. Every other contig is stored verbatim.
+   */
+  naming: {
+    /** Prefix of 1..22, X, Y. */
+    primaryPrefix: 'chr' | ''
+    /** Stored mitochondrion name. */
+    mito: string
+    /** Mito names (upper case, `chr` stripped) that are this build's rCRS mitochondrion. */
+    mitoAliases: readonly string[]
+  }
+  /**
+   * External-link placeholders: `{build_ucsc}`, `{dataset_gnomad}`, and the
+   * UCSC name of this build's rCRS mitochondrion (`{chr_ucsc}` of MT).
+   */
+  links?: { ucscDb: string; gnomadDataset: string; ucscRcrsMito: string }
 }
 
 export const GENOME_BUILDS = [
@@ -41,6 +58,8 @@ export const GENOME_BUILDS = [
       ...Array.from({ length: 15 }, (_, i) => `gcf_000001405.${26 + i}`)
     ],
     mito: { chrM: 16_569, MT: 16_569 },
+    naming: { primaryPrefix: 'chr', mito: 'chrM', mitoAliases: ['M', 'MT'] },
+    links: { ucscDb: 'hg38', gnomadDataset: 'gnomad_r4', ucscRcrsMito: 'chrM' },
     contigs: {
       1: 248_956_422,
       2: 242_193_529,
@@ -86,6 +105,10 @@ export const GENOME_BUILDS = [
     ],
     // MT = rCRS (GRCh37); chrM = hg19's NC_001807, two bases longer.
     mito: { MT: 16_569, chrM: 16_571 },
+    // hg19 chrM / M (NC_001807) is a different sequence: never renamed to MT.
+    naming: { primaryPrefix: '', mito: 'MT', mitoAliases: ['MT'] },
+    // hg19's chrM is NC_001807; its rCRS is chrMT (hg19.p13.plusMT).
+    links: { ucscDb: 'hg19', gnomadDataset: 'gnomad_r2_1', ucscRcrsMito: 'chrMT' },
     contigs: {
       1: 249_250_621,
       2: 243_199_373,
@@ -120,6 +143,7 @@ export const GENOME_BUILDS = [
     importable: false,
     aliases: ['chm13', 't2t', 'hs1'],
     mito: { chrM: 16_569 },
+    naming: { primaryPrefix: 'chr', mito: 'chrM', mitoAliases: ['M', 'MT'] },
     contigs: {
       1: 248_387_328,
       2: 242_696_752,
@@ -239,7 +263,41 @@ export const BUILD_COPY = {
       ...(without > 0 ? [`${without} without a build`] : [])
     ].join(' · '),
   skippedConflict: 'Genome build unclear in the header: import this file on its own to choose it.',
-  missingBuild: 'No genome build: choose the build for files without one.'
+  missingBuild: 'No genome build: choose the build for files without one.',
+  // Build check of stored cases before their chromosome names are updated
+  // (contig-naming migration, src/renderer/.../BuildReviewDialog.vue).
+  reviewBanner: (count: number) =>
+    count === 1
+      ? '1 case needs its genome build confirmed before its chromosome names are updated.'
+      : `${count} cases need their genome build confirmed before their chromosome names are updated.`,
+  reviewOpen: 'Review',
+  reviewTitle: 'Confirm genome builds',
+  reviewIntro:
+    "VarLens stores chromosome names in each build's reference form (GRCh38 chr1, GRCh37 1). The build of these cases could not be confirmed, so their names were left unchanged. Choose the build their coordinates use.",
+  reviewReason: {
+    no_evidence: 'No source header or positions confirm the stored build',
+    build_disagrees: 'The source header names another build',
+    build_excluded: 'Stored positions lie beyond the stored build'
+  },
+  reviewCase: 'Case',
+  reviewStored: 'Stored',
+  reviewSuggested: 'Header',
+  reviewChoice: 'Build',
+  reviewSetSelected: 'Set selected to',
+  reviewSelectGroup: (reason: string) => `Select all: ${reason}`,
+  reviewApplySelected: (count: number) => `Confirm selected (${count})`,
+  reviewApplyAll: (count: number) => `Confirm all (${count})`,
+  renameFailed:
+    'The background update of chromosome names keeps failing; VarLens retries it automatically. Ask your VarLens administrator to check the server log (entries "Chromosome-name update").',
+  renameInProgress:
+    'Chromosome names are being updated in the background. Until it finishes, cohort counts can mix old and new names.',
+  reviewLater: 'Later',
+  migrationNoSpace: (needed: string, free: string) =>
+    `Updating the chromosome names of this database needs about ${needed} of free disk space next to it (a backup copy and the change log), but only ${free} is free. Free some space and open the database again; nothing has been changed.`,
+  migrationBusy:
+    'The database is open in another program, so VarLens cannot take the backup it needs before updating chromosome names. Close the other program and open the database again; nothing has been changed.',
+  reviewApplied: (count: number) =>
+    `Genome build confirmed for ${count} case${count === 1 ? '' : 's'}.`
 } as const
 
 export interface GenomeBuildConfig {
@@ -257,6 +315,12 @@ export const GENOME_BUILD_CONFIG: GenomeBuildConfig = {
 export const IMPORTABLE_GENOME_BUILDS: readonly GenomeBuildDef[] = GENOME_BUILDS.filter(
   (b) => b.importable
 )
+
+/** Link placeholders of a build; an unknown build gets GRCh38's. */
+export function genomeBuildLinks(id: string): NonNullable<GenomeBuildDef['links']> {
+  const builds: readonly GenomeBuildDef[] = GENOME_BUILDS
+  return (builds.find((b) => b.id === id) ?? builds[0]).links ?? builds[0].links!
+}
 
 export function isImportableGenomeBuild(id: string): boolean {
   return IMPORTABLE_GENOME_BUILDS.some((b) => b.id === id)

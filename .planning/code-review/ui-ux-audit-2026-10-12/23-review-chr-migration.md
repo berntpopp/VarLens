@@ -1,0 +1,26 @@
+# Review: feat/chr-naming-per-build (chr names per build, SQLite v46 / PG 0029)
+
+What this change does: stores the 25 main contigs in each build's form, rewrites stored cases (SQLite: one transaction after a file backup; PG: background job, one case per transaction), flags cases whose build it cannot confirm, and asks the user to confirm them. Query inputs accept every spelling.
+Verified by running: branch tests (v46, planner, contig: 116 pass; PG job: 4 pass), plus my own scripts on temp DBs and a throwaway PG schema (dropped).
+
+**Must fix**
+1. **SQLite moves a shared annotation away from a case that keeps the key** (`contig-naming-migration.ts` `moveGlobalAnnotations`, `stillUsed … NOT IN (renaming)`). Excluding all renamed cases is wrong: a GRCh37 case with `1` + `chrMT` is renamed (MT) but keeps `1`. Ran it: shared `1:100` note moved to `chr1`, the GRCh37 case lost it. Second case, ran: GRCh38 `1` and hg19 `chr1` at the same pos/ref/alt swap keys; A's note is merged into C's and ends on GRCh37 `1`, the GRCh38 locus has none. Fix: pass `[caseId]` like PG (self-merge later is harmless), and move a target row that is itself renamed away before merging into it.
+2. **Build review does not scale** (`BuildReviewBanner.vue`, `useBuildReviews.ts`). Web uploads are deleted from staging, JSON has no header: almost every old non-canonical case gets `no_evidence`. The dialog has one empty select per case, no default, no "apply to all", no virtual scrolling, and makes one IPC call per case (each recounts frequencies). With hundreds or 10k cases it is unusable. Fix: preselect `suggestedBuild ?? storedBuild`, add "apply to all selected", and send one batch write.
+3. **PG asks for a full cohort rebuild after every case** (`renameCaseContigsPg` inserts `cohort_summary_rebuild_requests`). For an hours-long job the summary rebuilds again and again and stays stale. The spec says once, when the queue empties. Fix: in the step, `INSERT … SELECT 'contig_naming' WHERE NOT EXISTS (SELECT 1 FROM contig_naming_pending)` after the dequeue (crash-safe).
+
+**Should fix**
+4. **Backup can be silently corrupt** (`backupDatabase`). The `wal_checkpoint(TRUNCATE)` result is not checked. Ran with an encrypted WAL DB and a second open reader: `busy: 1`, the `.bak` is "database disk image is malformed". Normally the migration worker is the only connection, so this is insurance. Fix: throw unless `busy === 0 && log === checkpointed`. Verified OK otherwise: the encrypted `.bak` opens with the key (wrong key rejected); an ENOSPC in backup aborts before data changes. But then the app only shows a generic DatabaseError, and nothing checks free space first. Needs about 2.7× the DB size (741 MB DB: 741 MB `.bak` + 620 MB peak WAL). Add `statfsSync` and a clear message.
+5. **PG merge can lose a concurrent edit** (`postgres-contig-naming.ts`): source and target rows are read without `FOR UPDATE`, so a user's comment saved between that read and the UPDATE is overwritten. Fix: add `FOR UPDATE` to both selects.
+6. **Changing a build leaves no audit row**: `resolveBuildReview` (both backends) changes `cases.genome_build` on a multi-user server and logs nothing. Add one `audit_log` row.
+7. **Links**: `{chr_ucsc}` maps GRCh37 `MT` (rCRS) to hg19 `chrM`, which is NC_001807, a different sequence. hg19's rCRS is `chrMT`. Make it per build. Also, user-made templates that used `{chr}` silently switch from the stored name to the bare name; only the built-in UCSC template is upgraded. Say so in the release notes.
+8. **Web job blocks the event loop**: `readVcfHeaderLinesSync` (read up to 8 MiB + `gunzipSync`) runs in the web server process, once per queued case. Use async reads in the PG job.
+9. **Tests miss the risky paths**: no test for findings 1 or 4, no PG test that kills the job mid-case, none with a concurrent import or edit. Collision merges (star, comments, newer ACMG + evidence, audit, copy vs move) are covered on both backends, and my run confirmed them.
+
+**Nice to have**
+10. The spec and the SQLite header point to `contig-naming-job.ts`; the file is `postgres-contig-naming.ts`. Design doc 09 asked for `db.backup()`. The byte copy is fine once 4 is fixed.
+
+Checked OK: idempotent (ran v45→v46 twice: no change, no new backup); PG frequency sums correct after rename; no table missed (transcripts, tags, extensions and per-case annotations use `variant_id`; BED region files are only an import prefilter via `bareContig`; DSL/presets translate at query time); search, exact `chr`, DSL and cohort search accept all spellings.
+Scale (measured): SQLite with 2M rows / 741 MB encrypted takes 34–36 s in one transaction, ~200 MB RSS, so a 5 GB DB is about 4 min on the splash. PG: about 3 s and 210 MB WAL per 100k-variant case (dev container, `wal_level=minimal`), so 10k exomes is about 8 h serial and about 2 TB WAL, and the table is fully rewritten (needs vacuum). Locks are per row. During the job, cohort counts mix renamed and unrenamed cases.
+
+Verdict: fix 1, 2 and 3 first.
+Not checked: crash mid-case on PG (only reasoned: one transaction per case); deadlocks between the job's `variant_frequency` updates and concurrent imports; real 10k-case PG timing with production WAL settings.

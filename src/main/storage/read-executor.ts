@@ -18,6 +18,7 @@ export type StorageReadTask =
       type: 'cases:availableBuilds'
       params: []
     }
+  | { type: 'cases:buildReviews'; params: [] }
   | { type: 'case-metadata:get'; params: [caseId: number] }
   | { type: 'case-metadata:listCohorts'; params: [] }
   | { type: 'case-metadata:getCohortByName'; params: [name: string] }

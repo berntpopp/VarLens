@@ -111,7 +111,6 @@ export function buildVariantFilter(
           panel_padding_bp: fullFilter.panel_padding_bp,
           genome_build: genomeBuild
         },
-        fullFilter.case_id,
         'variants'
       )
       fullFilter.panel_intervals = intervals

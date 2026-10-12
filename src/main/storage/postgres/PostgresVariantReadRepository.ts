@@ -3,6 +3,9 @@ import {
   type SeverityFilterTarget
 } from '../../../shared/filters/severity-filter'
 import { carrierRanks } from './cohort-summary-representative-sql'
+import { caseCarrierFrequencySql } from './postgres-cohort-summary-query'
+import { carrierTotalsSql } from './postgres-carrier-totals'
+import { contigQueryNames } from '../../../shared/utils/contig'
 import {
   addPostgresColumnFilters,
   hasPostgresColumnFilterPrefix,
@@ -102,8 +105,8 @@ function emitCaseSearchTermSql(
 ): string {
   const coordMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
   if (coordMatch) {
-    const chr = coordMatch[1].toUpperCase()
-    return `(v.chr IN (${addParam(chr)}, ${addParam(`chr${chr}`)}) AND v.pos = ${addParam(Number(coordMatch[2]))})`
+    const names = contigQueryNames(coordMatch[1]).map(addParam).join(', ')
+    return `(v.chr IN (${names}) AND v.pos = ${addParam(Number(coordMatch[2]))})`
   }
   const tokens = searchTokens(term)
   const hgvsTokens = tokens.filter((t) => HGVS_TOKEN.test(t))
@@ -162,7 +165,8 @@ export interface PostgresVariantQueryParts {
 export function buildPostgresVariantQueryParts(
   filter: VariantFilter,
   schemaName: string,
-  sortBy?: SortItem[]
+  sortBy?: SortItem[],
+  carrierTotals?: string // cached denominators (postgres-carrier-totals.ts), else computed here
 ): PostgresVariantQueryParts {
   assertSupportedPostgresVariantFilter(filter)
 
@@ -176,7 +180,8 @@ export function buildPostgresVariantQueryParts(
     whereParts.push(sql)
   }
 
-  addWhere(`v.case_id = ${addParam(filter.case_id)}`)
+  const caseIdParam = addParam(filter.case_id)
+  addWhere(`v.case_id = ${caseIdParam}`)
 
   const exactVariantType = filter.exact_variant_type === true
   if (filter.variant_type !== undefined && filter.variant_type !== '') {
@@ -222,15 +227,18 @@ export function buildPostgresVariantQueryParts(
     addWhere(`(v.cadd IS NULL OR v.cadd >= ${addParam(filter.cadd_min)})`)
   }
 
-  const internalAfExpression = `vf.case_count::double precision / NULLIF((SELECT COUNT(*) FROM ${schemaName}."cases"), 0)`
+  const {
+    carriers,
+    frequency: internalAfExpression,
+    totalsJoin
+  } = caseCarrierFrequencySql((table) => `${schemaName}."${table}"`, caseIdParam, carrierTotals)
 
   if (filter.max_internal_af !== undefined && filter.max_internal_af > 0) {
-    addWhere(
-      `(vf.case_count IS NULL OR ${internalAfExpression} <= ${addParam(filter.max_internal_af)})`
-    )
+    addWhere(`COALESCE(${internalAfExpression}, 0) <= ${addParam(filter.max_internal_af)}`)
   }
   if (filter.carrier_count_max !== undefined && filter.carrier_count_max >= 1) {
-    addWhere(`(vf.case_count IS NULL OR vf.case_count <= ${addParam(filter.carrier_count_max)})`)
+    // ::bigint: API callers may send any positive safe integer, beyond int4.
+    addWhere(`COALESCE(${carriers}, 0) <= ${addParam(filter.carrier_count_max)}::bigint`)
   }
 
   const searchQuery = (filter.search_query ?? '').trim()
@@ -244,7 +252,7 @@ export function buildPostgresVariantQueryParts(
   }
 
   if (filter.chr !== undefined && filter.chr !== '') {
-    addWhere(`v.chr = ${addParam(filter.chr)}`)
+    addWhere(`v.chr IN (${contigQueryNames(filter.chr).map(addParam).join(', ')})`)
   }
   if (filter.pos !== undefined) {
     addWhere(`v.pos = ${addParam(filter.pos)}`)
@@ -256,7 +264,7 @@ export function buildPostgresVariantQueryParts(
     addWhere(`v.alt = ${addParam(filter.alt)}`)
   }
 
-  const joins = [`LEFT JOIN ${schemaName}."variant_frequency" vf ON vf.coord_hash = v.coord_hash`]
+  const joins = [totalsJoin]
   const projections = [`v.*`, `${internalAfExpression} AS internal_af`]
 
   if (filter.variant_type === 'sv' || hasPostgresColumnFilterPrefix(filter, 'sv.')) {
@@ -432,8 +440,9 @@ export class PostgresVariantReadRepository {
     // Active gene panels become genomic regions (gene coordinates +/- padding
     // for the case's build) before SQL is built; a failure propagates.
     const filter = await this.panelIntervals.resolveCaseFilter(requestedFilter)
+    const totals = await carrierTotalsSql(this.pool, this.schema)
     const { fromAndWhereSql, orderBySql, orderTerms, params, projections } =
-      buildPostgresVariantQueryParts(filter, this.schemaName, sortBy)
+      buildPostgresVariantQueryParts(filter, this.schemaName, sortBy, totals)
 
     let totalCount = 0
     if (skipCount !== true) {

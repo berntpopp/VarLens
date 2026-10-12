@@ -12,6 +12,8 @@ import { useFilterComputed } from '@renderer/composables/useFilterComputed'
 import type { FilterState } from '../../../src/shared/types/filters'
 import type { Tag } from '../../../src/shared/types/api'
 import type { UseFilterComputedOptions } from '@renderer/composables/useFilterComputed'
+import { buildActiveFiltersList } from '@renderer/utils/filters/activeFilters'
+import { CARRIER_FREQUENCY_COPY } from '@renderer/config/uiCopyConfig'
 
 function makeFilters(overrides: Partial<FilterState> = {}): FilterState {
   return {
@@ -351,6 +353,25 @@ describe('useFilterComputed', () => {
       expect(resetPresets).toHaveBeenCalled()
       expect(onResetSort).toHaveBeenCalled()
     })
+  })
+})
+
+describe('useFilterComputed: carrier frequency chip (#555)', () => {
+  it('uses the carrier-frequency label of the cohort chip list', () => {
+    const [result, app] = withSetup(() => {
+      const filters = ref(makeFilters({ maxInternalAf: 0.05 }))
+      return { filters, ...useFilterComputed(makeOptions(filters)) }
+    })
+    try {
+      const caseChip = result.activeFiltersList.value.find((f) => f.id === 'internal-frequency')
+      const cohortChip = buildActiveFiltersList(makeFilters({ maxInternalAf: 0.05 })).find(
+        (f) => f.id === 'internal-frequency'
+      )
+      expect(caseChip?.label).toBe(`${CARRIER_FREQUENCY_COPY.chip} \u2264`)
+      expect(cohortChip?.label).toBe(CARRIER_FREQUENCY_COPY.chip)
+    } finally {
+      app.unmount()
+    }
   })
 })
 

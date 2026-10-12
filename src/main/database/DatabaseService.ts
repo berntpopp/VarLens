@@ -10,6 +10,7 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from './schema'
+import { AppError } from '../ipc/errors'
 import { runMigrations } from './migrations'
 import { DatabaseError, TransactionError } from './errors'
 import { DATABASE_CONFIG } from '../../shared/config'
@@ -96,6 +97,8 @@ export class DatabaseService {
       // window can render while these run on the next event-loop tick.
       this._deferredInit()
     } catch (error) {
+      // A migration that stops with a message for the user (no disk space) keeps it.
+      if (error instanceof AppError) throw error
       throw new DatabaseError(
         `Failed to initialize database at ${dbPath}`,
         error instanceof Error ? error : undefined

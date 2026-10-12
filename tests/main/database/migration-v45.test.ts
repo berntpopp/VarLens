@@ -53,8 +53,8 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(45)
-    expect(db.pragma('user_version', { simple: true })).toBe(45)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(47)
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
   })
 
   it('a new database has the preset once, after the eight existing built-ins', () => {
@@ -92,7 +92,7 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
 
     runMigrations(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(45)
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
     expect(preset()).toHaveLength(1)
     expect(preset()[0]).toMatchObject({ is_built_in: 1, sort_order: 8, kind: 'filter' })
     expect(otherRows()).toEqual(before)
@@ -134,6 +134,6 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
     db.exec('DROP TABLE filter_presets')
     db.exec('PRAGMA user_version = 44')
     expect(() => runMigrations(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(45)
+    expect(db.pragma('user_version', { simple: true })).toBe(47)
   })
 })

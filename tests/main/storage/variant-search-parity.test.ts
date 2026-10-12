@@ -3,6 +3,14 @@ import { randomBytes } from 'node:crypto'
 import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// The denominators computed in each query (no cache round trips in the mocked pool).
+vi.mock('../../../src/main/storage/postgres/postgres-carrier-totals', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../src/main/storage/postgres/postgres-carrier-totals')
+  >()),
+  carrierTotalsSql: async () => undefined
+}))
+
 import { DatabaseService, type Variant } from '../../../src/main/database'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'

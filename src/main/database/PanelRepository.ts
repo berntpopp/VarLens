@@ -183,14 +183,13 @@ export class PanelRepository extends BaseRepository {
    *
    * 1. Collects distinct HGNC IDs from the given panel IDs
    * 2. Looks up coordinates from the gene reference database
-   * 3. Applies padding, optional chr prefix, sorts and merges overlapping intervals
+   * 3. Applies padding and the build's contig names, sorts and merges overlapping intervals
    */
   computeIntervals(
     panelIds: number[],
     assembly: string,
     paddingBp: number,
-    geneRefDb: GeneReferenceDb,
-    chrPrefix: boolean = false
+    geneRefDb: GeneReferenceDb
   ): GenomicInterval[] {
     if (panelIds.length === 0) return []
 
@@ -200,14 +199,13 @@ export class PanelRepository extends BaseRepository {
       .prepare(`SELECT DISTINCT hgnc_id FROM panel_genes WHERE panel_id IN (${placeholders})`)
       .all(...panelIds) as Array<{ hgnc_id: string }>
 
-    // Padding, chr-prefix style, merging and the "genes but no regions" error
+    // Padding, contig names, merging and the "genes but no regions" error
     // are shared with the PostgreSQL resolver so both backends derive
     // identical regions and fail identically (issue #447).
     return resolvePanelGeneRegions(
       rows.map((r) => r.hgnc_id),
       assembly,
       paddingBp,
-      chrPrefix,
       (hgncIds, build) => geneRefDb.getCoordinatesForGenes(hgncIds, build)
     )
   }

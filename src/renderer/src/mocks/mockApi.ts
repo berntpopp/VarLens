@@ -104,18 +104,16 @@ export const mockApi: WindowAPI = {
         const q = params.search_term.toLowerCase()
         result = result.filter((c) => c.name.toLowerCase().includes(q))
       }
-      const total_count = result.length
       const offset = params.offset ?? 0
-      result = result.slice(offset, offset + params.limit)
       return {
-        data: result.map((c) => ({
+        data: result.slice(offset, offset + params.limit).map((c) => ({
           ...c,
           cohort_names: [] as string[],
           cohort_ids: [] as number[],
           affected_status: null,
           sex: null
         })),
-        total_count
+        total_count: result.length
       }
     },
     delete: async (id: number) => void removeCases((caseId) => caseId === id),
@@ -125,7 +123,9 @@ export const mockApi: WindowAPI = {
       removeCases((id) => target.mode === 'all' || target.ids.includes(id))
       return { jobId: 'mock-delete-job' }
     },
-    availableBuilds: async () => mockAvailableBuilds(cases)
+    availableBuilds: async () => mockAvailableBuilds(cases),
+    buildReviews: async () => ({ reviews: [], renameInProgress: false, renameFailed: false }),
+    resolveBuildReviews: async (choices) => choices.length
   },
 
   variants: {

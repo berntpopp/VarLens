@@ -141,7 +141,7 @@ describe('buildSummaryQueryParts', () => {
 
     expect(where).toContain('cvs.chr IN ($1, $2) AND cvs.pos = $3')
     expect(where).toContain('cvs.pos =')
-    expect(result.parts.values).toEqual(['17', 'chr17', 43044295])
+    expect(result.parts.values).toEqual(['chr17', '17', 43044295])
   })
 
   it('builds the gene/consequence/OMIM ILIKE search on cvs', () => {
@@ -200,7 +200,21 @@ describe('buildSummaryQueryParts', () => {
     expect(where).toContain(
       'cvs.chr = $4 AND cvs.pos <= $5 AND COALESCE(cvs.end_pos, cvs.pos) >= $6'
     )
-    expect(result.parts.values).toEqual(['17', 43100000, 43000000, '13', 32400000, 32000000])
+    // Each region once per stored spelling of its contig.
+    expect(result.parts.values).toEqual([
+      'chr17',
+      43100000,
+      43000000,
+      '17',
+      43100000,
+      43000000,
+      'chr13',
+      32400000,
+      32000000,
+      '13',
+      32400000,
+      32000000
+    ])
   })
 
   it('falls back (unavailable) when an extension-table predicate is present', () => {
@@ -282,10 +296,22 @@ describe('buildSummaryQueryParts', () => {
     )
     expect(freq.parts.orderBy).toContain(`${FREQUENCY} DESC`)
 
-    // Within one genome build the denominator is constant, so the indexed
-    // carrier count gives the same order.
-    const freqOneBuild = buildSummaryQueryParts(
+    // One build alone still has a denominator per variant class.
+    const freqBuildOnly = buildSummaryQueryParts(
       { sort_by: 'cohort_frequency', sort_order: 'desc', genome_build: 'GRCh38' },
+      TOTAL_CASES
+    )
+    expect(freqBuildOnly.parts.orderBy).toContain(`${FREQUENCY} DESC`)
+
+    // Within one genome build and one type selection the denominator is
+    // constant, so the indexed carrier count gives the same order.
+    const freqOneBuild = buildSummaryQueryParts(
+      {
+        sort_by: 'cohort_frequency',
+        sort_order: 'desc',
+        genome_build: 'GRCh38',
+        variant_type: 'snv'
+      },
       TOTAL_CASES
     )
     expect(freqOneBuild.parts.orderBy).toContain('cvs.carrier_count DESC')
@@ -319,7 +345,7 @@ describe('buildSummaryQueryParts', () => {
 
 describe('summary SQL with read-time cohort frequency', () => {
   const TABLE = '"s"."cohort_variant_summary"'
-  const JOIN = summaryBuildTotalsJoin('"s"."cases"')
+  const JOIN = summaryBuildTotalsJoin((table) => `"s"."${table}"`)
 
   it('never reads the stored cohort_frequency column', () => {
     const page = buildSummaryPageSql(TABLE, [], 'ORDER BY cvs.pos', TOTAL_CASES, 1, 2, JOIN)
@@ -327,10 +353,11 @@ describe('summary SQL with read-time cohort frequency', () => {
     expect(page).not.toContain('cvs.cohort_frequency')
   })
 
-  it('counts cases per genome build from the visible cases only', () => {
-    expect(JOIN).toContain('FROM "s"."cases"')
-    expect(JOIN).toContain('GROUP BY genome_build')
-    expect(JOIN).toContain('bt.genome_build = cvs.genome_build')
+  it('counts visible cases per build that hold a call of the variant class', () => {
+    expect(JOIN).toContain('FROM "s"."cases" c')
+    expect(JOIN).toContain('FROM "s"."variants_all" cv')
+    expect(JOIN).toContain('GROUP BY c.genome_build')
+    expect(JOIN).toContain('bt.build = cvs.genome_build AND bt.vclass = CASE')
   })
 
   it('does not need build totals when no predicate uses the frequency', () => {

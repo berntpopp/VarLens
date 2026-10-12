@@ -43,6 +43,16 @@
       "assignedTo": "rebuildTransaction"
     },
     {
+      "file": "src/main/database/contig-naming-migration.ts",
+      "callerFunction": "migrateContigNaming",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/contig-rename-sqlite.ts",
+      "callerFunction": "resolveBuildReviews",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/DatabaseService.ts",
       "callerFunction": "runTransaction",
       "assignedTo": "transactionFn"
@@ -70,6 +80,11 @@
     {
       "file": "src/main/database/severity-rank-migration.ts",
       "callerFunction": "migrateSeverityRanks",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/summary-key-repair.ts",
+      "callerFunction": "recreateWithKey",
       "assignedTo": null
     },
     {

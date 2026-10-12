@@ -5,6 +5,7 @@
  * Summary tables are populated by CohortSummaryService.rebuild() after import/delete.
  */
 
+import { intervalsForAllSpellings } from '../../shared/utils/contig'
 import { offeredFilterValues } from '../../shared/config/severity.config'
 import type Database from 'better-sqlite3-multiple-ciphers'
 import type { Statement } from 'better-sqlite3-multiple-ciphers'
@@ -135,7 +136,7 @@ export class CohortService {
 
     // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
     if (params.panel_intervals && params.panel_intervals.length > 0) {
-      paramsArray.push(JSON.stringify(params.panel_intervals))
+      paramsArray.push(JSON.stringify(intervalsForAllSpellings(params.panel_intervals)))
       whereConditions.push(COHORT_PANEL_INTERVAL_CONDITION)
     }
 
@@ -216,7 +217,8 @@ export class CohortService {
     const sortBy = cohortSortExpression(
       validatedSortKey,
       SORTABLE_COLUMNS[validatedSortKey],
-      params.genome_build
+      params.genome_build,
+      params.variant_type
     )
     const sortOrder = params.sort_order ?? 'desc'
 

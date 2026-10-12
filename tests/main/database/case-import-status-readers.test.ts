@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DatabaseService } from '../../../src/main/database'
 import { DatabaseOverviewService } from '../../../src/main/database/DatabaseOverviewService'
 import { VariantFrequencyService } from '../../../src/main/database/VariantFrequencyService'
-import { countCasesForInternalAf } from '../../../src/main/database/variant-filter/core-filters'
 import { deleteCasesIncrementally } from '../../../src/main/workers/delete-operations'
 
 describe('provisional cases and their readers', () => {
@@ -118,10 +117,9 @@ describe('provisional cases and their readers', () => {
       expect(cohort.data).toEqual([])
     })
 
-    it('internal allele frequency: denominator of the max_internal_af filter', () => {
-      expect(countCasesForInternalAf(db(), service.kysely, { max_internal_af: 0.5 } as never)).toBe(
-        1
-      )
+    it('carrier frequency: numerator and denominator leave the provisional case out', () => {
+      const rows = service.variants.getVariants({ case_id: readyId }, 50, 0).data
+      expect(rows.map((row) => row.internal_af)).toEqual([1, 1])
     })
 
     it('internal allele frequency: a full recount of the numerators', () => {

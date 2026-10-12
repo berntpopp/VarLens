@@ -94,21 +94,17 @@ describe('PanelRepository.computeIntervals', () => {
     expect(intervals[0].start).toBe(1)
   })
 
-  // ── chrPrefix ──────────────────────────────────────────────
+  // ── Contig names ───────────────────────────────────────────
 
-  it('adds chr prefix when chrPrefix is true', () => {
-    const panel = repo.createPanel({ name: 'ChrPrefix', source: 'manual' })
+  it("uses the build's stored contig names (GRCh38 chr17, GRCh37 17)", () => {
+    const panel = repo.createPanel({ name: 'ContigNames', source: 'manual' })
     repo.setGenes(panel.id, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }])
 
-    const withoutPrefix = repo.computeIntervals([panel.id], 'GRCh38', 0, geneRefDb, false)
-    const withPrefix = repo.computeIntervals([panel.id], 'GRCh38', 0, geneRefDb, true)
-
-    expect(withoutPrefix).toHaveLength(1)
-    expect(withPrefix).toHaveLength(1)
-    // Without prefix: bare chromosome number
-    expect(withoutPrefix[0].chr).not.toMatch(/^chr/)
-    // With prefix: "chr" prepended
-    expect(withPrefix[0].chr).toMatch(/^chr/)
+    const grch38 = repo.computeIntervals([panel.id], 'GRCh38', 0, geneRefDb)
+    expect(grch38).toHaveLength(1)
+    expect(grch38[0].chr).toBe('chr17')
+    const grch37 = repo.computeIntervals([panel.id], 'GRCh37', 0, geneRefDb)
+    if (grch37.length > 0) expect(grch37[0].chr).toBe('17')
   })
 
   // ── Overlapping merge ──────────────────────────────────────
@@ -127,7 +123,7 @@ describe('PanelRepository.computeIntervals', () => {
 
     // With enormous padding, they should merge into 1
     const bigPad = repo.computeIntervals([panel.id], 'GRCh38', 50000000, geneRefDb)
-    const chr17Intervals = bigPad.filter((iv) => iv.chr === '17')
+    const chr17Intervals = bigPad.filter((iv) => iv.chr === 'chr17')
     expect(chr17Intervals.length).toBe(1)
   })
 

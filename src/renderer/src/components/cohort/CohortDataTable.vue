@@ -165,7 +165,7 @@
         <span :title="COHORT_ZYGOSITY_HELP">
           {{ item.het_count ?? 0 }} / {{ item.hom_count ?? 0 }}
           <template v-if="otherZygosityCount(item) > 0">
-            (+{{ otherZygosityCount(item) }} other)
+            (+{{ otherZygosityCount(item) }} {{ ZYGOSITY_REMAINDER_LABEL }})
           </template>
         </span>
       </template>
@@ -199,7 +199,11 @@ import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut
 import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import type { CohortVariant } from '../../../../shared/types/cohort'
-import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
+import {
+  COHORT_ZYGOSITY_HELP,
+  ZYGOSITY_REMAINDER_LABEL,
+  otherZygosityCount
+} from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { SortItem } from '../../composables/useOffsetPagination'
 import { useTableScroll } from '../../composables/useTableScroll'

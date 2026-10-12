@@ -261,17 +261,6 @@ export class VariantRepository extends BaseRepository {
     return variants.length
   }
 
-  /**
-   * Lightweight check for whether variants use 'chr' prefix (e.g. 'chr1' vs '1').
-   * Only fetches a single row instead of loading full variant data.
-   */
-  getChrPrefix(caseId: number): boolean {
-    const row = this.db
-      .prepare('SELECT chr FROM variants WHERE case_id = ? LIMIT 1')
-      .get(caseId) as { chr: string } | undefined
-    return row?.chr?.startsWith('chr') ?? false
-  }
-
   getVariantCount(caseId: number): number {
     const result = this.execFirst<{ count: number }>(
       this.kysely

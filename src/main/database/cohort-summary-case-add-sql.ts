@@ -18,6 +18,7 @@ import {
   transcriptOrderBy
 } from '../../shared/sql/cohort-representative'
 import {
+  carrierRowSql,
   HET_GT_SQL as HET,
   HOM_GT_SQL as HOM,
   resolvedGtSql
@@ -116,6 +117,7 @@ export const CAPTURE_GENE_COORDS_SQL = `
     END
   FROM variants v
   WHERE v.case_id = @caseId AND v.gene_symbol IS NOT NULL AND v.gene_symbol != ''
+    AND ${carrierRowSql('v')}
   GROUP BY v.gene_symbol, v.chr, v.pos, v.ref, v.alt`
 
 export const COUNT_UNRESOLVED_GENE_COORDS_SQL = `
@@ -128,7 +130,7 @@ export const RESOLVE_GENE_COORDS_SQL = `
       WHERE r.chr = added_case_gene_coords.chr AND r.pos = added_case_gene_coords.pos
         AND r.ref = added_case_gene_coords.ref AND r.alt = added_case_gene_coords.alt
         AND r.gene_symbol = added_case_gene_coords.gene_symbol
-        AND r.case_id != @caseId AND rc.genome_build = @build
+        AND r.case_id != @caseId AND rc.genome_build = @build AND ${carrierRowSql('r')}
     ) THEN ${GENE_COORD_KNOWN} ELSE ${GENE_COORD_NEW} END
   WHERE state = ${GENE_COORD_UNRESOLVED}`
 
@@ -171,7 +173,7 @@ export const CAPTURE_CASE_COORDS_SQL = `
       ${resolvedGtSql('v.gt_num', 'sqlite', ' OVER case_key')} AS gt_num,
       ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
-    WHERE v.case_id = @caseId
+    WHERE v.case_id = @caseId AND ${carrierRowSql('v')}
     WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type)
   ) d
   LEFT JOIN cohort_variant_summary s

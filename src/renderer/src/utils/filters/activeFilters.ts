@@ -11,6 +11,7 @@ import { activeMaxCarriers, maxCarriersLabel } from './maxCarriers'
 import type { FilterState, ActiveFilter } from '../../../../shared/types/filters'
 import type { ColumnFiltersParam } from '../../../../shared/types/column-filters'
 import { INHERITANCE_MODE_META } from '../../../../shared/types/inheritance'
+import { CARRIER_FREQUENCY_COPY } from '../../config/uiCopyConfig'
 
 /**
  * AF fraction as a percentage: two decimals when that is the exact value,
@@ -23,7 +24,7 @@ export function formatAfPercent(af: number): string {
   return Number(twoDecimals) === pct ? twoDecimals : String(pct)
 }
 
-/** Collapsed summary of the "Internal Frequency" drawer panel (both drawers). */
+/** Collapsed summary of the carrier-frequency drawer panel (both drawers). */
 export function summarizeInternalFilters(
   filters: Pick<FilterState, 'maxInternalAf' | 'maxCarriers'>
 ): string {
@@ -53,12 +54,12 @@ const COLUMN_LABELS: Record<string, string> = {
   cadd: 'CADD',
   transcript: 'Transcript',
   carrier_count: 'Carriers',
-  cohort_frequency: 'Cohort Freq',
+  cohort_frequency: CARRIER_FREQUENCY_COPY.chip,
   het_count: 'Het',
   hom_count: 'Hom',
   ref: 'Ref',
   alt: 'Alt',
-  internal_af: 'Internal AF'
+  internal_af: CARRIER_FREQUENCY_COPY.chip
 }
 
 /**
@@ -138,7 +139,11 @@ export function buildActiveFiltersList(
   }
   if (filters.maxInternalAf !== null && filters.maxInternalAf > 0) {
     const pct = formatAfPercent(filters.maxInternalAf)
-    list.push({ id: 'internal-frequency', label: 'Internal AF', value: `\u2264 ${pct}%` })
+    list.push({
+      id: 'internal-frequency',
+      label: CARRIER_FREQUENCY_COPY.chip,
+      value: `\u2264 ${pct}%`
+    })
   }
 
   const maxCarriers = activeMaxCarriers(filters.maxCarriers)

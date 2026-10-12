@@ -36,6 +36,7 @@ import {
 } from '../../../shared/sql/cohort-representative'
 import { impactRankCaseSql } from '../../../shared/config/severity.config'
 import {
+  carrierRowSql,
   HET_GT_SQL as HET,
   HOM_GT_SQL as HOM,
   resolvedGtSql
@@ -153,7 +154,7 @@ export function caseContributionCte(tbl: Tbl, includeProvisional = false): strin
            ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num
     FROM ${tbl(includeProvisional ? 'variants_all' : 'variants')} v
     JOIN ${tbl(includeProvisional ? 'cases_all' : 'cases')} c ON c.id = v.case_id
-    WHERE v.case_id = $1
+    WHERE v.case_id = $1 AND ${carrierRowSql('v')}
     GROUP BY ${keyList('v').replace('v.genome_build', 'c.genome_build')}
   ),
   per_case AS (
@@ -181,7 +182,7 @@ export function summaryRowsCte(tbl: Tbl, variantFilter = ''): string {
                ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num
         FROM ${tbl('variants')} v
         JOIN ${tbl('cases')} c ON c.id = v.case_id
-        ${variantFilter === '' ? '' : `WHERE ${variantFilter}`}
+        WHERE ${carrierRowSql('v')}${variantFilter === '' ? '' : ` AND ${variantFilter}`}
         GROUP BY ${caseKey}
       ),
       key_rows AS (
@@ -235,7 +236,7 @@ function recomputeSql(tbl: Tbl, keysCte: string, extraFilter: string): string {
         FROM keys m
         JOIN ${tbl('variants')} v
           ON v.chr = m.chr AND v.pos = m.pos AND v.ref = m.ref AND v.alt = m.alt
-         AND v.variant_type = m.variant_type ${extraFilter}
+         AND v.variant_type = m.variant_type AND ${carrierRowSql('v')} ${extraFilter}
         JOIN ${tbl('cases')} c ON c.id = v.case_id AND c.genome_build = m.genome_build
         WINDOW key_rows AS (PARTITION BY ${keyList('m')})
       ) ranked
@@ -269,7 +270,7 @@ function removalKeysCte(tbl: Tbl): string {
           JOIN ${tbl('cases')} rc ON rc.id = r.case_id
           WHERE r.chr = k.chr AND r.pos = k.pos AND r.ref = k.ref AND r.alt = k.alt
             AND r.variant_type = k.variant_type AND rc.genome_build = k.genome_build
-            AND r.case_id <> $1
+            AND r.case_id <> $1 AND ${carrierRowSql('r')}
             AND ${remainingRowCovers('r', 'k', 's', 'postgres')}
         )
     )`

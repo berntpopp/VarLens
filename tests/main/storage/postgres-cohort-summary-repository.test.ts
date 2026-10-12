@@ -820,9 +820,11 @@ describe.skipIf(!RUN)('cohort frequency derived at read time', () => {
 
   it("divides by the cases of the row's own genome build", async () => {
     const case38a = await seedCase('freq-38-a', 'GRCh38')
-    await seedCase('freq-38-b', 'GRCh38')
+    const case38b = await seedCase('freq-38-b', 'GRCh38')
     const case37 = await seedCase('freq-37', 'GRCh37')
     await seedVariant({ caseId: case38a, chr: '1', pos: 100, ref: 'A', alt: 'T', gtNum: '0/1' })
+    // A case counts in the denominator when it holds a call of the variant class.
+    await seedVariant({ caseId: case38b, chr: '3', pos: 300, ref: 'G', alt: 'A', gtNum: '0/1' })
     await seedVariant({ caseId: case37, chr: '2', pos: 200, ref: 'C', alt: 'G', gtNum: '0/1' })
 
     await withClient((client) => repo.rebuild({ schema, client: client as never }))
