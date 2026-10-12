@@ -41,6 +41,10 @@ function tieGroups(alleles: AlleleRank[]): TieGroups {
     if (g) g.n += 1
     else groups.set(a.higher, { higher: a.higher, m: a.equal + 1, n: 1 })
   }
+  for (const g of groups.values()) {
+    if (g.n > g.m)
+      throw new Error(`inconsistent tie stats: ${g.n} alleles share a tie group of size ${g.m}`)
+  }
   return [...groups.values()]
 }
 

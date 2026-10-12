@@ -66,6 +66,14 @@ describe('tie-averaged metrics (equal = other tied rows, itself excluded)', () =
     expect(caseTieReciprocal(a)).toBeCloseTo((1 / 5 + 1 / 6) / 2, 12)
   })
 
+  it('rejects alleles sharing a tie group that is too small for them', () => {
+    const bad = [
+      { rank: 1, higher: 0, equal: 0 },
+      { rank: 1, higher: 0, equal: 0 }
+    ]
+    expect(() => caseTieHit(bad, 10)).toThrow(/inconsistent tie stats/)
+  })
+
   it('absent allele → 0', () => {
     expect(caseTieHit([{ rank: null, higher: 0, equal: 0 }], 10)).toBe(0)
     expect(caseTieReciprocal([{ rank: null, higher: 0, equal: 0 }])).toBe(0)
