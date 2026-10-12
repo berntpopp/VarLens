@@ -68,12 +68,10 @@ async function fetchOne(key: string): Promise<void> {
   writeFileSync(cacheFile(key), JSON.stringify(entry))
 }
 
-/** Missing, or a null from before the annotated-endpoint fallback existed. */
+/** Missing or null: the API answers [] intermittently under load, so nulls are retried. */
 function needsFetch(key: string): boolean {
   const f = cacheFile(key)
-  if (!existsSync(f)) return true
-  const e = JSON.parse(readFileSync(f, 'utf8')) as CaddApiEntry
-  return e.phred === null && e.endpoint === undefined
+  return !existsSync(f) || (JSON.parse(readFileSync(f, 'utf8')) as CaddApiEntry).phred === null
 }
 
 async function main(argv: string[]): Promise<void> {

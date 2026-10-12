@@ -1,5 +1,5 @@
 /**
- * Point tuning (spec §11.1): counts from the actual first-match assignments the production
+ * Point tuning (spec §11.1, anchor rule §11.9): counts from the actual first-match assignments the production
  * engine reports (`rank_mode`, `rank_evidence`), estimated with `estimatePoints`.
  *
  * Counting units: positives = training causal spike instances after the gate (one per case and
@@ -112,14 +112,16 @@ function totals(
   return { a, b }
 }
 
-/** Raw and rounded points per cell; groups estimated independently (A, B = group population). */
+type CellPoints = { raw: number; points: number; supported: boolean; isAnchor: boolean }
+
+/** Points per cell; each group is estimated on its own population (A, B = its row counts). */
 function estimate(
   cells: Cell[],
-  t: { a: number[]; b: number[] }
-): Array<{ raw: number; points: number; supported: boolean }> {
-  const out = new Array<{ raw: number; points: number; supported: boolean }>(cells.length)
-  const groups = [...new Set(cells.map((c) => c.group))]
-  for (const group of groups) {
+  t: { a: number[]; b: number[] },
+  anchors?: Map<string, number>
+): CellPoints[] {
+  const out = new Array<CellPoints>(cells.length)
+  for (const group of new Set(cells.map((c) => c.group))) {
     const idx = cells.map((c, i) => (c.group === group ? i : -1)).filter((i) => i >= 0)
     const bins: BinCount[] = idx.map((i) => ({
       id: String(i),
@@ -129,15 +131,19 @@ function estimate(
     }))
     const A = bins.reduce((s, x) => s + x.a, 0)
     const B = bins.reduce((s, x) => s + x.b, 0)
-    estimatePoints(bins, A, B).forEach((p, k) => (out[idx[k]] = p))
+    const anchor = anchors?.get(group)
+    estimatePoints(bins, A, B, anchor === undefined ? undefined : String(anchor)).forEach(
+      (p, k) => (out[idx[k]] = p)
+    )
   }
   return out
 }
 
-/** 95 % gene-cluster bootstrap interval of each cell's unrounded points. */
+/** 95 % gene-cluster bootstrap of each cell's unrounded points, relative to the fixed anchors. */
 function bootstrapCells(
   cells: Cell[],
   byGene: GeneCounts,
+  anchors: Map<string, number>,
   reps: number,
   seed: number
 ): Array<[number, number]> {
@@ -149,7 +155,7 @@ function bootstrapCells(
       { length: genes.length },
       () => genes[Math.floor(rnd() * genes.length)]
     )
-    estimate(cells, totals(cells, sample)).forEach((p, i) => {
+    estimate(cells, totals(cells, sample), anchors).forEach((p, i) => {
       if (Number.isFinite(p.raw)) draws[i].push(p.raw)
     })
   }
@@ -170,8 +176,10 @@ export function tuneRuleset(
   const byGene = countByGene(cells, input, isTraining)
   const t = totals(cells, byGene.values())
   const est = estimate(cells, t)
+  const anchors = new Map<string, number>()
+  est.forEach((p, i) => p.isAnchor && anchors.set(cells[i].group, i))
   const ci = opts.bootstrap
-    ? bootstrapCells(cells, byGene, opts.bootstrap.reps, opts.bootstrap.seed)
+    ? bootstrapCells(cells, byGene, anchors, opts.bootstrap.reps, opts.bootstrap.seed)
     : null
   const support: BinSupport[] = cells.map((c, i) => {
     const disabled = disabledGroups.includes(c.group)
@@ -179,6 +187,7 @@ export function tuneRuleset(
       group: c.group,
       bin: c.bin,
       isReference: c.isReference,
+      isAnchor: est[i].isAnchor,
       a: t.a[i],
       b: t.b[i],
       points: disabled ? 0 : est[i].points,

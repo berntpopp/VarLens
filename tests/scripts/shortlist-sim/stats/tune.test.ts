@@ -64,9 +64,13 @@ describe('tuneRuleset (spec §11.1)', () => {
     expect(pts(r, 'modes', 'fallback')).toMatchObject({ a: 70, b: 990, points: 0 })
   })
 
-  it('gives an unsupported group 0 and a disabled group 0 everywhere', () => {
-    // ad_freq reference has b = 0 < 5 → whole group unsupported.
-    expect(pts(tune(), 'ad_freq', 'ad_af_high')).toMatchObject({ supported: false, points: 0 })
+  it('anchors each group at its best-supported bin; thin groups and disabled groups score 0', () => {
+    const r = tune()
+    // ad_freq: anchor = ad_af_ref (a 30); the too-common bin gets a penalty, not a forced 0.
+    expect(pts(r, 'ad_freq', 'ad_af_ref')).toMatchObject({ isAnchor: true, points: 0 })
+    expect(pts(r, 'ad_freq', 'ad_af_high').points).toBeLessThan(0)
+    // phenotype: no training positives (A < 20) → 0 throughout.
+    expect(pts(r, 'phenotype', 'hpo_15')).toMatchObject({ supported: false, points: 0 })
     const off = tune(['effect'])
     expect(pts(off, 'effect', 'lof').points).toBe(0)
     expect(

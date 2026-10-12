@@ -180,7 +180,7 @@ export function sensitivitySection(d: ReportData): string {
 export function pointsSection(m: RunManifest): string {
   const rows = m.tuned.bins.map((b) => [
     b.group,
-    b.bin + (b.isReference ? ' (reference)' : ''),
+    b.bin + (b.isReference ? ' (catch-all)' : '') + (b.isAnchor ? ' (anchor)' : ''),
     String(b.a),
     String(b.b),
     b.supported ? signed(b.points, 1) : '0 (unsupported)',
@@ -189,7 +189,8 @@ export function pointsSection(m: RunManifest): string {
   const disabled = m.concordance.disabledGroups
   return [
     '## Tuned points (refit on all folds)',
-    `Spec §11.1: points = log2 enrichment vs the group’s reference bin with pseudo-count ½, rounded to 0.5, clipped ±8. Positives A = ${m.tuned.A}, background rows B = ${m.tuned.B}. A bin with a + b < 10 or a group whose reference has a or b < 5 gets 0 points.`,
+    `Spec §11.9 (amends §11.1): points = log2 enrichment (pseudo-count ½) relative to the group’s best-supported bin (the anchor, 0 points), rounded to 0.5, clipped ±8; a group is a complete partition, so the anchor choice does not change any ranking. Positives A = ${m.tuned.A}, background rows B = ${m.tuned.B} (primary scenario). A bin with a + b < 10 gets 0 points; a group with fewer than 20 training positives gets 0 throughout. Intervals: 95 % gene-cluster bootstrap of the unrounded points, relative to the same anchor.`,
+    'Protocol note: the anchor rule replaced the §11.1 reference-bin rule after a smoke run on one background (bg1, provisional annotation mapping) showed degenerate all-zero tuning — positives almost never fall in the catch-all reference bin, so the "reference a, b ≥ 5" support rule zeroed whole groups. No comparative or test-fold result informed the change.',
     disabled.length
       ? `Groups disabled by annotation acceptance (0 points everywhere): ${disabled.join(', ')}.`
       : '',

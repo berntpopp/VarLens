@@ -55,6 +55,8 @@ export interface BinSupport {
   group: string
   bin: string
   isReference: boolean
+  /** Best-supported bin of its group (0 points by construction, spec §11.9). */
+  isAnchor?: boolean
   a: number
   b: number
   points: number
