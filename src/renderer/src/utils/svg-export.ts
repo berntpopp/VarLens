@@ -6,7 +6,11 @@ export function svgMarkup(svg: SVGSVGElement | null): string {
 }
 
 /** The SVG drawn on a white canvas at 2× for high-DPI screens. */
-export function svgToPng(svg: SVGSVGElement | null, width: number, height: number): Promise<Blob | null> {
+export function svgToPng(
+  svg: SVGSVGElement | null,
+  width: number,
+  height: number
+): Promise<Blob | null> {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')

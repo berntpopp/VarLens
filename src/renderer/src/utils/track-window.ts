@@ -147,6 +147,8 @@ export function binMarkers(
     }
   }
   // A bin of one is just that marker.
-  const out = [...bins.entries()].map(([id, b]) => (b.binnedKeys!.length === 1 ? first.get(id)! : b))
+  const out = [...bins.entries()].map(([id, b]) =>
+    b.binnedKeys!.length === 1 ? first.get(id)! : b
+  )
   return [...out, ...kept]
 }

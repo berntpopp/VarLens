@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { nextTick, ref } from 'vue'
 
 import { useTrackNavigator } from '../../../src/renderer/src/composables/useTrackNavigator'
-import { NEIGHBOURHOOD_HALF_WIDTHS, ZOOM_STEP } from '../../../src/renderer/src/config/proteinPlotConfig'
+import {
+  NEIGHBOURHOOD_HALF_WIDTHS,
+  ZOOM_STEP
+} from '../../../src/renderer/src/config/proteinPlotConfig'
 import type { TrackFeature, TrackMarker } from '../../../src/renderer/src/utils/track-window'
 
 const m = (key: string, position: number, over: Partial<TrackMarker> = {}): TrackMarker => ({
@@ -16,7 +19,9 @@ const m = (key: string, position: number, over: Partial<TrackMarker> = {}): Trac
   ...over
 })
 
-function setup(markers: TrackMarker[] = [m('anchor', 180, { isAnchor: true }), m('b', 300), m('c', 600)]) {
+function setup(
+  markers: TrackMarker[] = [m('anchor', 180, { isAnchor: true }), m('b', 300), m('c', 600)]
+) {
   const features = ref<TrackFeature[]>([{ key: 'd', name: 'THO', start: 150, end: 250 }])
   const nav = useTrackNavigator({
     view: 'protein',
@@ -52,7 +57,9 @@ describe('useTrackNavigator', () => {
     await nextTick()
     const start = nav.window.value
     nav.onKeydown(key('-'))
-    expect(nav.window.value.end - nav.window.value.start).toBeCloseTo((start.end - start.start) * ZOOM_STEP)
+    expect(nav.window.value.end - nav.window.value.start).toBeCloseTo(
+      (start.end - start.start) * ZOOM_STEP
+    )
     nav.onKeydown(key('+'))
     nav.onKeydown(key('ArrowRight'))
     expect(nav.window.value.start).toBeGreaterThan(start.start)
@@ -77,7 +84,13 @@ describe('useTrackNavigator', () => {
     expect(nav.window.value).toEqual({ start: 600 - half, end: 600 + half })
     expect([...nav.highlighted.value]).toEqual(['c'])
     expect(nav.focusedKey.value).toBe('c')
-    nav.goTo({ key: 'd', label: 'THO', detail: '', target: { start: 150, end: 250 }, markerKeys: [] })
+    nav.goTo({
+      key: 'd',
+      label: 'THO',
+      detail: '',
+      target: { start: 150, end: 250 },
+      markerKeys: []
+    })
     expect(nav.window.value).toEqual({ start: 140, end: 260 })
   })
 
