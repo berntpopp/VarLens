@@ -28,8 +28,12 @@ export async function addDetectedBuilds(
   files: DuplicateCheckItem[],
   readablePaths: readonly string[]
 ): Promise<DuplicateCheckItem[]> {
-  const builds = await Promise.all(readablePaths.map((path) => detectFileBuild(path)))
-  return files.map((file, index) => ({ ...file, build: builds[index] }))
+  // One header at a time: a folder can hold thousands of files (open handles, memory).
+  const withBuilds: DuplicateCheckItem[] = []
+  for (const [index, file] of files.entries()) {
+    withBuilds.push({ ...file, build: await detectFileBuild(readablePaths[index]) })
+  }
+  return withBuilds
 }
 
 /**

@@ -271,7 +271,7 @@ const rowText = (r: Record<string, unknown>): string =>
 describe('VCF import filters: every file, both backends', () => {
   let dir: string
   let bedPath: string
-  const file = (key: FileKey | 'grch37'): FileSpec => ({
+  const file = (key: FileKey | 'grch37' | 'grch37b'): FileSpec => ({
     filePath: key in SHIPPED ? resolve(VCF_DIR, SHIPPED[key]) : join(dir, `${key}.vcf`),
     variantType: 'auto',
     caller: null,
@@ -284,6 +284,7 @@ describe('VCF import filters: every file, both backends', () => {
     writeFileSync(join(dir, 'swapped.vcf'), SWAPPED_VCF)
     writeFileSync(join(dir, 'depth.vcf'), DEPTH_VCF)
     writeFileSync(join(dir, 'grch37.vcf'), GRCH37_VCF)
+    writeFileSync(join(dir, 'grch37b.vcf'), GRCH37_VCF)
     bedPath = join(dir, 'regions.bed')
     writeFileSync(bedPath, BED)
   })
@@ -431,6 +432,14 @@ describe('VCF import filters: every file, both backends', () => {
       await expect(importCase([file('snv'), file('grch37')], undefined, undefined)).rejects.toThrow(
         /No genome build/
       )
+    }, 60_000)
+
+    it('checks the files against each other when the user overrides their declared build', async () => {
+      const outcome = await importCase([file('grch37'), file('grch37b')], undefined, {
+        genomeBuild: 'GRCh38'
+      })
+      expect(outcome.errors).toEqual({})
+      expect(outcome.rows).toEqual(['chr9:100:A>T snv 0/1 40/30', 'chr9:100:A>T snv 0/1 40/30'])
     }, 60_000)
   }
 

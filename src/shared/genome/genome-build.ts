@@ -241,21 +241,15 @@ export function detectionBuild(detection: BuildDetection): string | null {
 }
 
 /** Import must not start: a recognised but non-importable build, or one case of mixed builds. */
-export function isBuildImportBlocked(
-  detection: BuildDetection,
-  builds: readonly GenomeBuildDef[] = GENOME_BUILD_CONFIG.builds
-): boolean {
-  const build = builds.find((b) => b.id === detection.suggested)
+export function isBuildImportBlocked(detection: BuildDetection): boolean {
+  const build = GENOME_BUILD_CONFIG.builds.find((b) => b.id === detection.suggested)
   return (build !== undefined && !build.importable) || (detection.mixedFiles?.length ?? 0) > 1
 }
 
 /** One-line "why" shown under the build control. */
-export function describeBuildDetection(
-  detection: BuildDetection,
-  builds: readonly GenomeBuildDef[] = GENOME_BUILD_CONFIG.builds
-): string {
+export function describeBuildDetection(detection: BuildDetection): string {
   const { suggested, confidence, evidence, excluded } = detection
-  const build = builds.find((b) => b.id === suggested)
+  const build = GENOME_BUILD_CONFIG.builds.find((b) => b.id === suggested)
   if (build !== undefined && !build.importable) return BUILD_COPY.notImportable(build.label)
   if (detection.mixedFiles !== undefined && detection.mixedFiles.length > 1) {
     const [a, b] = [

@@ -348,10 +348,16 @@ async function startMultiFileImportSqlite(
   const unrankedLists: Array<string[] | undefined> = [firstResult.unrankedClinvar]
   let totalSkipped = firstResult.skipped
 
-  // Resolve the case-level locked genome build. Prefer the wizard-supplied
-  // value; otherwise read back the case row: the worker stored the build the
-  // first file's header decided (resolveImportGenomeBuild), never a default.
-  let lockedGenomeBuild: string | null = vcfOptions?.genomeBuild ?? null
+  // The files of one case are checked against each other: the first file's own
+  // header build, else the user's choice, else the case row (the build the
+  // worker resolved, never a default). A user who overrides the build the
+  // headers declare does not get the other files rejected.
+  let lockedGenomeBuild: string | null =
+    (files.length > 1
+      ? await detectGenomeBuildFromFile(firstFile.filePath).catch(() => null)
+      : null) ??
+    vcfOptions?.genomeBuild ??
+    null
   if (lockedGenomeBuild === null) {
     try {
       const caseRow = db.cases.getCase(caseId)
