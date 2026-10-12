@@ -230,7 +230,13 @@ function freeze(): void {
   const jsonl = (rows: object[]): string => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   const spikes = jsonl(anns)
   const cross = jsonl(crossCheck)
-  writeFileSync(join(SPIKES_DIR, 'pool.json.gz'), gzipSync(readFileSync(POOL_FILE), { level: 9 }))
+  // JSONL (line 1: metadata + funnel, then one variant per line); *.json.gz is git-ignored as a
+  // guard against committing patient data, so public files use other extensions.
+  const { variants, ...meta } = poolFile
+  writeFileSync(
+    join(SPIKES_DIR, 'pool.jsonl.gz'),
+    gzipSync(jsonl([meta, ...variants]), { level: 9 })
+  )
   writeFileSync(join(SPIKES_DIR, 'annotations.jsonl.gz'), gzipSync(spikes, { level: 9 }))
   writeFileSync(join(SPIKES_DIR, 'genefoundry-crosscheck.jsonl.gz'), gzipSync(cross, { level: 9 }))
   const fetched = crossCheck.map((a) => a.fetchedAt).sort()
@@ -239,7 +245,7 @@ function freeze(): void {
     hpoaRelease: poolFile.hpoaRelease,
     seed: poolFile.seed,
     poolVariants: poolFile.variants.length,
-    poolFile: 'pool.json.gz (PoolFile incl. funnel)',
+    poolFile: 'pool.jsonl.gz (line 1: release/seed/funnel; then PoolVariant per line)',
     normalization: countBy(alleles, (a) => a.status),
     annotations: {
       file: 'annotations.jsonl.gz',

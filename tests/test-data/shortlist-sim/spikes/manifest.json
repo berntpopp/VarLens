@@ -3,7 +3,7 @@
   "hpoaRelease": "2026-09-02",
   "seed": 20261012,
   "poolVariants": 5427,
-  "poolFile": "pool.json.gz (PoolFile incl. funnel)",
+  "poolFile": "pool.jsonl.gz (line 1: release/seed/funnel; then PoolVariant per line)",
   "normalization": {
     "ok": 5427
   },
