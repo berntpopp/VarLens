@@ -128,7 +128,7 @@
           v-if="canWrite"
           :prepend-icon="mdiDatabaseImport"
           title="Import Data"
-          :subtitle="importShortcut"
+          :subtitle="SHORTCUTS.import.key"
           @click="$emit('import-click')"
         />
         <v-list-item
@@ -209,6 +209,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch, watchEffect } from 'vue'
+import { SHORTCUTS } from '../config/keyboardShortcuts'
 import { useAuthStore } from '../stores/authStore'
 import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
@@ -270,7 +271,6 @@ watchEffect(() => {
 })
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
-const importShortcut = /mac/i.test(navigator.platform ?? '') ? 'Option+Shift+O' : 'Alt+Shift+O'
 const { role, canWrite, canAdmin, writeBlockedReason, adminBlockedReason } = usePermissions()
 // Role- and capability-gated: disabled with the reason instead of failing after a click.
 const deleteAllReason = computed(

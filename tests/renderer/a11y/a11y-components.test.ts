@@ -7,6 +7,7 @@ import { defineComponent, h } from 'vue'
 import { mdiCog } from '@mdi/js'
 import IconButton from '../../../src/renderer/src/components/common/IconButton.vue'
 import CaseStatusIcons from '../../../src/renderer/src/components/CaseStatusIcons.vue'
+import { SHORTCUTS } from '../../../src/renderer/src/config/keyboardShortcuts'
 import AnnotationsCell from '../../../src/renderer/src/components/table-cells/AnnotationsCell.vue'
 import ExpandToggleCell from '../../../src/renderer/src/components/table-cells/ExpandToggleCell.vue'
 import {
@@ -65,10 +66,12 @@ describe('AnnotationsCell', () => {
     const wrapper = mount(AnnotationsCell, { props: baseProps, global })
     const buttons = wrapper.findAll('button.annotation-btn')
     expect(buttons).toHaveLength(3)
-    for (const b of buttons) {
+    // The tooltip adds the row shortcut from the shared shortcut list.
+    const keys = [SHORTCUTS.star.key, SHORTCUTS.acmg.key, SHORTCUTS.comment.key]
+    buttons.forEach((b, i) => {
       expect(b.attributes('aria-label')).toBeTruthy()
-      expect(b.attributes('data-tooltip')).toBe(b.attributes('aria-label'))
-    }
+      expect(b.attributes('data-tooltip')).toBe(`${b.attributes('aria-label')} (${keys[i]})`)
+    })
     expect(buttons[0].attributes('aria-pressed')).toBe('true')
     expect(buttons[2].attributes('aria-label')).toBe('Add comment')
     expect(wrapper.find('.v-tooltip').exists()).toBe(false)
