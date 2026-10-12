@@ -244,6 +244,7 @@ import type {
   ClinVarSignificance
 } from '../../../../shared/types/protein'
 import { CLINVAR_COLORS, getClinVarCategory } from '../../../../shared/utils/protein-utils'
+import { readableTextOn } from '../../utils/readable-text-color'
 import { downloadBlob } from '../../utils/download'
 import type { GenomicVariant } from '../../composables/useGeneStructurePlot'
 import { buildStatus, variantBuildNote } from '../../utils/variant-interval'
@@ -323,8 +324,7 @@ function selectAllClinVar(): void {
 
 function clinvarChipStyle(category: ClinVarSignificance, color: string): Record<string, string> {
   if (isClinVarActive(category)) {
-    const textColor = category === 'uncertain' ? '#333' : '#fff'
-    return { backgroundColor: color, color: textColor, borderColor: color }
+    return { backgroundColor: color, color: readableTextOn(color), borderColor: color }
   }
   return { borderColor: color, color, opacity: '0.6' }
 }

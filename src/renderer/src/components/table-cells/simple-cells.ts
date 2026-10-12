@@ -265,7 +265,7 @@ export const ConsequenceCell: FunctionalComponent<{
   const text = formatConsequence(props.consequence)
   const tooltip = { 'data-tooltip': props.consequence, 'data-tooltip-location': TOOLTIP_TOP }
   if (props.asChip !== true) return h('span', tooltip, text)
-  const color = hasText(props.impact) ? getImpactColor(props.impact) : 'grey'
+  const color = getImpactColor(props.impact ?? null)
   return chipVNode(text, { color, size: 'small', label: true, attrs: tooltip })
 }
 ConsequenceCell.displayName = 'ConsequenceCell'

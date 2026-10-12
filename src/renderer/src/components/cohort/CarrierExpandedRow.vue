@@ -67,6 +67,7 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
 import type { CohortVariant } from '../../../../shared/types/cohort'
+import { ZYGOSITY_COLORS } from '../../../../shared/config/domain.config'
 import {
   ASSUMED_HET_HELP,
   genotypeZygosity,
@@ -90,8 +91,6 @@ const emit = defineEmits<Emits>()
 const { data, status, refetch } = useQuery(() => carriersQuery(props.variant))
 const error = computed(() => status.value === 'error')
 const carriers = computed(() => (error.value ? [] : (data.value ?? [])))
-
-const ZYGOSITY_COLORS = { hom: 'error', het: 'warning', hemi: 'info' } as const
 
 const zygosityColor = (gt: string): string | undefined => {
   const zygosity = genotypeZygosity(gt)

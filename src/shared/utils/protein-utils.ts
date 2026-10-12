@@ -4,6 +4,7 @@
  */
 
 import type { ConsequenceCategory, ClinVarSignificance } from '../types/protein'
+import { SEMANTIC_COLORS } from '../config/domain.config'
 
 /**
  * Consequence category color scheme (cBioPortal convention)
@@ -56,14 +57,17 @@ export const DOMAIN_TYPE_COLORS: Record<string, string> = {
 }
 
 /**
- * ClinVar clinical significance color scheme
+ * ClinVar clinical significance colours for the protein plots, gene structure
+ * and Mol*: the light ACMG tokens, since these figures always render on a
+ * light surface (and export as such). `other` is a lighter neutral so it does
+ * not read as VUS.
  */
 export const CLINVAR_COLORS: Record<ClinVarSignificance, string> = {
-  pathogenic: '#d73027',
-  likely_pathogenic: '#fc8d59',
-  uncertain: '#fee08b',
-  likely_benign: '#91cf60',
-  benign: '#1a9850',
+  pathogenic: SEMANTIC_COLORS.light.error,
+  likely_pathogenic: SEMANTIC_COLORS.light['acmg-lp'],
+  uncertain: SEMANTIC_COLORS.light.muted,
+  likely_benign: SEMANTIC_COLORS.light['acmg-lb'],
+  benign: SEMANTIC_COLORS.light['acmg-b'],
   other: '#999999'
 }
 
