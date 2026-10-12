@@ -396,7 +396,7 @@ test.describe('Documentation Screenshots', () => {
           userMessage: 'Screenshot fixture selection failed.'
         }
       }
-      const result = await api.import.start(selectedPath, 'DemoCase')
+      const result = await api.import.start(selectedPath, 'DemoCase', { genomeBuild: 'GRCh38' })
       return JSON.parse(JSON.stringify(result))
     }, tempGzipPath)
 
