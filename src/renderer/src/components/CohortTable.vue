@@ -196,7 +196,11 @@ const {
 const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = useAcmgUndo()
 const { prefs, resetToDefaults, toggleColumnVisibility, setColumnOrder } =
   useColumnPreferences('cohort-table')
-const { orderedColumns, visibleHeaders, isVisible: isColumnShown } = useCohortColumns(prefs)
+const {
+  orderedColumns,
+  visibleHeaders,
+  isVisible: isColumnShown
+} = useCohortColumns(prefs, selectedVariantType)
 
 async function getCohortQueryBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('cohort.query')
