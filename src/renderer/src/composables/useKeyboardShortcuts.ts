@@ -1,5 +1,6 @@
 import { onKeyStroke } from '@vueuse/core'
 import { isTextEntryFocused } from './useTableKeyboardNav'
+import { SHORTCUTS } from '../config/keyboardShortcuts'
 
 interface KeyboardShortcutCallbacks {
   /** Alt+Shift+D (Option+Shift+D on macOS): Show disclaimer */
@@ -60,13 +61,13 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void
     }
   })
 
-  onKeyStroke('/', (e: KeyboardEvent) => {
+  onKeyStroke(SHORTCUTS.search.key, (e: KeyboardEvent) => {
     if (isTextEntryFocused()) return
     e.preventDefault()
     callbacks.onSearchFocus?.()
   })
 
-  onKeyStroke('?', (e: KeyboardEvent) => {
+  onKeyStroke(SHORTCUTS.help.key, (e: KeyboardEvent) => {
     if (isTextEntryFocused()) return
     e.preventDefault()
     callbacks.onHelp?.()

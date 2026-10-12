@@ -278,6 +278,7 @@ import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
 import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
+import { SHORTCUTS } from '../config/keyboardShortcuts'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
 import TableLoadIndicator from './table-state/TableLoadIndicator.vue'
@@ -583,7 +584,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Enter',
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null) return
@@ -594,7 +595,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     e.preventDefault()
@@ -612,9 +613,9 @@ onKeyStroke(
 // Action shortcuts on selected row (bare letters only: Ctrl/Cmd/Alt+key
 // belongs to the browser, see hasCommandModifier)
 const rowActionKeys: Record<string, (item: NonNullable<typeof selectedItem.value>) => void> = {
-  s: (item) => annotationDialogsRef.value?.handleStarToggle(item),
-  c: (item) => annotationDialogsRef.value?.openCommentDialog(item),
-  a: (item) => annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
+  [SHORTCUTS.star.key]: (item) => annotationDialogsRef.value?.handleStarToggle(item),
+  [SHORTCUTS.comment.key]: (item) => annotationDialogsRef.value?.openCommentDialog(item),
+  [SHORTCUTS.acmg.key]: (item) => annotationDialogsRef.value?.openAcmgEvidenceDialog(item)
 }
 for (const [key, action] of Object.entries(rowActionKeys)) {
   onKeyStroke(
