@@ -108,7 +108,7 @@ function onPick(value: unknown): void {
 function validate(): boolean {
   touched.value = true
   const ok = !blocked.value && props.modelValue !== null
-  if (!ok) root.value?.querySelector<HTMLInputElement>('input[type="radio"]')?.focus()
+  if (!ok) root.value?.querySelector<HTMLElement>('input[type="radio"]')?.focus()
   return ok
 }
 
