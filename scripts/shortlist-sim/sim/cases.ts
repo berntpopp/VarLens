@@ -61,9 +61,10 @@ const severest = (classes: ConsequenceClass[]): ConsequenceClass =>
   CLASS_ORDER[Math.min(...classes.map((c) => CLASS_ORDER.indexOf(c)))]
 
 export function popmaxOf(src: SpikeSource): number | null {
-  const v = src.vep
-  if (v.popmaxAf !== null) return v.popmaxAf
-  const parts = [v.exomePopmaxAf, v.genomePopmaxAf].filter((x): x is number => x !== null)
+  const g = src.ann.gnomad
+  if (g === null) return null
+  if (g.popmaxAf !== null) return g.popmaxAf
+  const parts = [g.exomePopmaxAf, g.genomePopmaxAf].filter((x): x is number => x !== null)
   return parts.length > 0 ? Math.max(...parts) : null
 }
 

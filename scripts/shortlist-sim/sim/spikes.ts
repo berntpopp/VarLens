@@ -8,11 +8,11 @@ import {
   type ObjectFormatVariant
 } from '../../../src/main/import/transforms/ObjectFormatMapper'
 import { alleleKey } from '../../../src/main/services/scoring/evidence'
-import type { LocalVepRecord } from '../annotate/local-vep'
 import type { NormalizedAllele } from '../annotate/normalize'
 import { projectToVarvis, type FuncMappingRow, type ImpactRow } from '../annotate/project-varvis'
 import type { MappedVariant } from '../concordance/load-backgrounds'
-import { localAf, type AfField } from '../concordance/metrics'
+import { spikeAf, type AfField } from '../concordance/metrics'
+import type { SpikeAnnotation, SpikeVep } from '../annotate/spike-annotation'
 import type { PoolVariant } from '../pool/select-pool'
 import { alleleClassOf, type BackgroundInfo } from './background-db'
 
@@ -21,7 +21,8 @@ export type CaddSource = 'cadd-api' | 'local-vep' | 'imputed' | 'none'
 export interface SpikeSource {
   pv: PoolVariant
   norm: NormalizedAllele
-  vep: LocalVepRecord
+  /** Frozen annotation (local VEP 115 + dbNSFP); only sources with a VEP record are loaded. */
+  ann: SpikeAnnotation & { vep: SpikeVep }
   /** CADD API PHRED for SNVs: number, null ([] response) or undefined (not fetched). */
   caddApi: number | null | undefined
 }
@@ -75,8 +76,8 @@ function spikeCadd(
   const cls = alleleClassOf(src.norm.ref, src.norm.alt)
   if (cls === 'snv' && typeof src.caddApi === 'number')
     return { cadd: src.caddApi, caddSource: 'cadd-api' }
-  if (cls === 'snv' && src.caddApi === undefined && src.vep.caddPhred !== null)
-    return { cadd: src.vep.caddPhred, caddSource: 'local-vep' }
+  if (cls === 'snv' && src.caddApi === undefined && src.ann.vep.caddPhred !== null)
+    return { cadd: src.ann.vep.caddPhred, caddSource: 'local-vep' }
   // Indels and SNVs without a precomputed score: sample a varvis value (null included) of the
   // same func and allele class, so the imputed missingness matches varvis.
   const pool = impute ? bg.caddByFuncClass.get(`${func}|${cls}`) : undefined
@@ -97,11 +98,18 @@ export function spikeRow(
   rnd: () => number,
   opts: SpikeOptions
 ): SpikeRow | SpikeSkip {
-  const { pv, norm, vep } = src
+  const { pv, norm } = src
+  const vep = src.ann.vep
   const gene = bg.geneFields.get(pv.gene)
   if (gene === undefined) return 'gene_absent'
   if (bgNormKeys.has(norm.key) || bg.prodKeys.has(alleleKey(norm))) return 'collision'
-  const proj = projectToVarvis(vep.mostSevere, vep.terms, opts.funcMapping, opts.impactByFunc, norm)
+  const proj = projectToVarvis(
+    vep.mostSevere,
+    vep.consequenceTerms,
+    opts.funcMapping,
+    opts.impactByFunc,
+    norm
+  )
   if (proj.func === null) return 'unmapped'
   const cls = alleleClassOf(norm.ref, norm.alt)
   const encodings = bg.encodings[`${cls}:${zyg}`] ?? bg.encodings[`snv:${zyg}`] ?? []
@@ -116,7 +124,7 @@ export function spikeRow(
     gene_symbol: pv.gene,
     omim_mim_number: gene.omim_mim_number,
     consequence: proj.consequence,
-    gnomad_af: localAf(vep, opts.afField),
+    gnomad_af: spikeAf(src.ann, opts.afField),
     cadd,
     clinvar: pv.clnsig,
     gt_num: gt,

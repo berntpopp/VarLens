@@ -1,5 +1,4 @@
 // Fabricated background and pool for the simulation tests (no patient data).
-import type { LocalVepRecord } from '../../../../scripts/shortlist-sim/annotate/local-vep'
 import type { NormalizedAllele } from '../../../../scripts/shortlist-sim/annotate/normalize'
 import type {
   Background,
@@ -106,22 +105,32 @@ export function poolSpike(
     key,
     status: 'ok'
   }
-  const vep: LocalVepRecord = {
+  const ann: SpikeSource['ann'] = {
     key,
-    mostSevere: term,
-    impact: 'HIGH',
-    terms: [term],
-    transcript: 'ENST1',
-    isMane: true,
-    gene,
-    caddPhred: 33,
-    gnomadJointAf: af,
-    gnomadExomeAf: af,
-    gnomadGenomeAf: null,
-    popmaxAf: af,
-    exomePopmaxAf: null,
-    genomePopmaxAf: null,
-    inGnomadCache: af !== null
+    poolKey: key,
+    vep: {
+      mostSevere: term,
+      consequenceTerms: [term],
+      impact: 'HIGH',
+      transcript: 'ENST1',
+      isMane: true,
+      hgvsc: null,
+      hgvsp: null,
+      gene,
+      caddPhred: 33
+    },
+    gnomad: {
+      found: af !== null,
+      exomeAf: af,
+      genomeAf: null,
+      jointAf: af,
+      popmaxAf: af,
+      exomePopmaxAf: null,
+      genomePopmaxAf: null,
+      dataset: 'test'
+    },
+    fetchedAt: '',
+    errors: []
   }
-  return { pv: { ...pv, key }, norm, vep, caddApi: 31 }
+  return { pv: { ...pv, key }, norm, ann, caddApi: 31 }
 }

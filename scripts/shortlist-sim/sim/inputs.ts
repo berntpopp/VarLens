@@ -1,24 +1,20 @@
 /**
- * Frozen simulation inputs: pool, normalisation, local VEP annotations, CADD API cache and the
+ * Frozen simulation inputs: the committed pool and spike annotations
+ * (tests/test-data/shortlist-sim/spikes, local VEP 115 + dbNSFP), the CADD API cache and the
  * concordance report with its §11.4 acceptance (which fixes the AF field and disabled groups).
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LocalVepRecord } from '../annotate/local-vep'
-import { normalizeAlleles, type NormalizedAllele } from '../annotate/normalize'
+import type { FrozenSpike } from '../annotate/freeze'
+import { normalizeAlleles } from '../annotate/normalize'
 import { projectToVarvis } from '../annotate/project-varvis'
-import {
-  POOL_FILE,
-  POOL_LOCAL_VEP_FILE,
-  POOL_NORMALIZED_FILE,
-  PRIVATE_DIR,
-  REPO_ROOT
-} from '../common/paths'
+import { PRIVATE_DIR, REPO_ROOT } from '../common/paths'
 import type { ConcordanceCheck } from '../common/types'
 import type { Background } from '../concordance/load-backgrounds'
 import { TOLERANCE, type AfField, type ConcordanceReport } from '../concordance/metrics'
-import type { PoolFile } from '../pool/select-pool'
+import type { PoolFile, PoolVariant } from '../pool/select-pool'
+import { gunzipSync } from 'node:zlib'
 import { loadCaddApiCache } from './cadd-api'
 import type { SpikeOptions, SpikeSource } from './spikes'
 
@@ -26,6 +22,23 @@ export const CONCORDANCE_FILE = join(
   REPO_ROOT,
   '.planning/artifacts/shortlist-sim/concordance.json'
 )
+
+export const SPIKES_DIR = join(REPO_ROOT, 'tests/test-data/shortlist-sim/spikes')
+const POOL_JSONL = join(SPIKES_DIR, 'pool.jsonl.gz')
+const ANNOTATIONS_JSONL = join(SPIKES_DIR, 'annotations.jsonl.gz')
+
+const readJsonl = <T>(path: string): T[] =>
+  gunzipSync(readFileSync(path))
+    .toString('utf8')
+    .split('\n')
+    .filter((l) => l.trim() !== '')
+    .map((l) => JSON.parse(l) as T)
+
+/** pool.jsonl.gz: line 1 = release, seed and funnel; then one PoolVariant per line. */
+function readPool(): PoolFile {
+  const [head, ...variants] = readJsonl<Record<string, unknown>>(POOL_JSONL)
+  return { ...(head as Omit<PoolFile, 'variants'>), variants: variants as unknown as PoolVariant[] }
+}
 
 export const sha256 = (text: string | Buffer): string =>
   createHash('sha256').update(text).digest('hex')
@@ -120,26 +133,34 @@ export interface SimInputs {
 }
 
 export function loadInputs(concordanceFile = CONCORDANCE_FILE): SimInputs {
-  const pool = readJson<PoolFile>(POOL_FILE)
-  const norm = new Map(readJson<NormalizedAllele[]>(POOL_NORMALIZED_FILE).map((n) => [n.input, n]))
-  const vep = new Map(readJson<LocalVepRecord[]>(POOL_LOCAL_VEP_FILE).map((v) => [v.key, v]))
+  const pool = readPool()
+  const anns = new Map(readJsonl<FrozenSpike>(ANNOTATIONS_JSONL).map((a) => [a.poolKey, a]))
   const concordance = readJson<ConcordanceReport>(concordanceFile)
   const acceptance = acceptanceOf(concordance)
-  const okNorm = [...norm.values()].filter((n) => n.status === 'ok')
-  const cadd = loadCaddApiCache(okNorm.map((n) => n.key))
+  const cadd = loadCaddApiCache([...anns.values()].map((a) => a.key))
   const sources = new Map<string, SpikeSource>()
   let unmapped = 0
   for (const pv of pool.variants) {
-    const n = norm.get(pv.key)
-    const v = n?.status === 'ok' ? vep.get(n.key) : undefined
-    if (n === undefined || v === undefined) continue
-    sources.set(pv.key, { pv, norm: n, vep: v, caddApi: cadd.get(n.key) })
+    const ann = anns.get(pv.key)
+    if (ann === undefined || ann.vep === null) continue
+    const [chr, pos, ref, alt] = ann.key.split(':')
+    const norm = {
+      input: pv.key,
+      chr,
+      pos: Number(pos),
+      ref,
+      alt,
+      key: ann.key,
+      status: 'ok' as const
+    }
+    sources.set(pv.key, { pv, norm, ann: { ...ann, vep: ann.vep }, caddApi: cadd.get(ann.key) })
+    const { mostSevere, consequenceTerms } = ann.vep
     const proj = projectToVarvis(
-      v.mostSevere,
-      v.terms,
+      mostSevere,
+      consequenceTerms,
       concordance.funcMapping,
       concordance.impactByFunc,
-      n
+      norm
     )
     if (proj.func === null) unmapped++
   }
@@ -150,9 +171,8 @@ export function loadInputs(concordanceFile = CONCORDANCE_FILE): SimInputs {
     acceptance,
     funcUnmapped: { n: unmapped, of: sources.size },
     hashes: {
-      pool: fileHash(POOL_FILE),
-      poolNormalized: fileHash(POOL_NORMALIZED_FILE),
-      poolLocalVep: fileHash(POOL_LOCAL_VEP_FILE),
+      pool: fileHash(POOL_JSONL),
+      annotations: fileHash(ANNOTATIONS_JSONL),
       concordance: fileHash(concordanceFile),
       caddApiValues: sha256(JSON.stringify([...cadd.entries()].sort()))
     }
