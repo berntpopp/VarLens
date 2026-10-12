@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg'
 
+import { canonicalContig } from '../../../shared/utils/contig'
 import { UniqueConstraintError } from '../../database/errors'
 import { quoteIdentifier } from './identifiers'
 import { runBulkCopy } from './postgres-bulk-write'
@@ -467,6 +468,9 @@ export class PostgresVcfImportRepository {
     const variantsRowsWithIds = variants.map((row, i) => {
       const picked = setSeverityRanks(pickColumns(row, VARIANT_COPY_COLUMNS as readonly string[]))
       if (picked.variant_type === null) picked.variant_type = 'snv'
+      // Stored in the case build's reference form (contig.ts), whatever the file used.
+      if (typeof picked.chr === 'string')
+        picked.chr = canonicalContig(picked.chr, request.genomeBuild)
       picked.id = variantIds[i]
       picked.case_id = caseId
       return picked as Record<string, unknown>

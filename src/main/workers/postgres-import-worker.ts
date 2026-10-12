@@ -133,8 +133,7 @@ const defaultDeps: RunImportDeps = {
       options.selectedSample,
       options.filters,
       options.onSkip,
-      options.appendedTo,
-      options.genomeBuild
+      options.appendedTo
     )
 }
 
