@@ -194,6 +194,7 @@
 import { ref, toRef, watch, computed, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useTableKeyboardNav, hasCommandModifier } from '../../composables/useTableKeyboardNav'
 import { onKeyStroke } from '@vueuse/core'
+import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import { COHORT_ZYGOSITY_HELP, otherZygosityCount } from '../../../../shared/utils/genotype'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
@@ -445,7 +446,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Enter',
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -456,7 +457,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (!viewActive.value || isInputFocused()) return
     e.preventDefault()
@@ -468,7 +469,7 @@ onKeyStroke(
 
 // Action shortcuts on selected row
 onKeyStroke(
-  's',
+  SHORTCUTS.star.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -479,7 +480,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'c',
+  SHORTCUTS.comment.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -490,7 +491,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'a',
+  SHORTCUTS.acmg.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return
@@ -501,7 +502,7 @@ onKeyStroke(
 )
 
 onKeyStroke(
-  'e',
+  SHORTCUTS.expandRow.key,
   (e: KeyboardEvent) => {
     if (hasCommandModifier(e) || !viewActive.value || isInputFocused()) return
     if (navSelectedItem.value === null) return

@@ -186,7 +186,11 @@ export default createVuetify({
       openDelay: 400,
       closeDelay: 0,
       transition: 'fade-transition',
-      contentClass: 'bg-secondary'
+      contentClass: 'bg-secondary',
+      // Column-header help is a few sentences: wrap it instead of spanning the
+      // window; a single over-long token (allele, HGVS) breaks only if it can't fit.
+      maxWidth: 480,
+      contentProps: { style: 'overflow-wrap: break-word' }
     },
     VNavigationDrawer: {
       disableResizeWatcher: true

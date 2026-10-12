@@ -54,7 +54,9 @@
         >
           <v-icon start size="small" :icon="mdiFilterOff" />
           Clear
-          <v-tooltip activator="parent" location="bottom">Clear all filters</v-tooltip>
+          <v-tooltip activator="parent" location="bottom">{{
+            withShortcut('Clear all filters', 'clearFilters')
+          }}</v-tooltip>
         </v-btn>
 
         <!-- Open filter drawer -->
@@ -69,9 +71,8 @@
             class="ml-1"
           />
           <v-tooltip activator="parent" location="bottom">
-            Toggle filters ({{ mod }}+Shift+F){{
-              activeFilterCount > 0 ? ` \u2014 ${activeFilterCount} active` : ''
-            }}
+            {{ withShortcut('Toggle filters', 'toggleFilters')
+            }}{{ activeFilterCount > 0 ? ` \u2014 ${activeFilterCount} active` : '' }}
           </v-tooltip>
         </v-btn>
 
@@ -84,9 +85,9 @@
           >
             <v-icon start size="small" :icon="mdiTableColumn" />
             Columns
-            <v-tooltip activator="parent" location="bottom"
-              >Toggle columns ({{ alt }}+Shift+C)</v-tooltip
-            >
+            <v-tooltip activator="parent" location="bottom">{{
+              withShortcut('Toggle columns', 'toggleColumns')
+            }}</v-tooltip>
           </v-btn>
 
           <v-menu v-if="exportFormats && exportBlockedReason == null">
@@ -146,7 +147,13 @@
               :prepend-icon="mdiTableColumn"
               title="Columns"
               @click="emit('open-columns-drawer')"
-            />
+            >
+              <template #append>
+                <kbd class="text-caption text-medium-emphasis ms-4">{{
+                  SHORTCUTS.toggleColumns.key
+                }}</kbd>
+              </template>
+            </v-list-item>
             <template v-if="exportFormats && exportBlockedReason == null">
               <v-list-item
                 v-for="option in EXPORT_FORMAT_OPTIONS"
@@ -223,6 +230,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
@@ -287,13 +295,6 @@ watch(
 // Responsive: collapse Columns/Export into overflow menu at non-full widths
 const { tier } = useResponsiveLayout()
 const showOverflowMenu = computed(() => tier.value !== 'full')
-
-const isMac =
-  typeof navigator !== 'undefined' &&
-  typeof navigator.platform === 'string' &&
-  navigator.platform.toUpperCase().indexOf('MAC') >= 0
-const mod = isMac ? 'Cmd' : 'Ctrl'
-const alt = isMac ? 'Option' : 'Alt'
 
 const emit = defineEmits<{
   'clear-all': []
