@@ -18,7 +18,7 @@ describe('buildPaddedPanelIntervals', () => {
           { chromosome: '1', start_pos: 1_000, end_pos: 2_000 }
         ],
         5_000,
-        false
+        'GRCh37'
       )
     ).toEqual([
       { chr: '1', start: 1, end: 7_000 },
@@ -26,18 +26,21 @@ describe('buildPaddedPanelIntervals', () => {
     ])
   })
 
-  it('emits regions in the chromosome naming style of the variant data', () => {
+  it("emits regions in the build's stored contig names", () => {
     const coordinates = [
       { chromosome: '7', start_pos: 10, end_pos: 20 },
-      { chromosome: 'chrX', start_pos: 10, end_pos: 20 }
+      { chromosome: 'chrX', start_pos: 10, end_pos: 20 },
+      { chromosome: 'MT', start_pos: 10, end_pos: 20 }
     ]
-    expect(buildPaddedPanelIntervals(coordinates, 0, true).map((iv) => iv.chr)).toEqual([
+    expect(buildPaddedPanelIntervals(coordinates, 0, 'GRCh38').map((iv) => iv.chr)).toEqual([
       'chr7',
+      'chrM',
       'chrX'
     ])
-    expect(buildPaddedPanelIntervals(coordinates, 0, false).map((iv) => iv.chr)).toEqual([
+    expect(buildPaddedPanelIntervals(coordinates, 0, 'GRCh37').map((iv) => iv.chr)).toEqual([
       '7',
-      'chrX'
+      'MT',
+      'X'
     ])
   })
 
@@ -50,7 +53,7 @@ describe('buildPaddedPanelIntervals', () => {
           { chromosome: '7', start_pos: 500, end_pos: 600 }
         ],
         10,
-        false
+        'GRCh37'
       )
     ).toEqual([
       { chr: '7', start: 90, end: 310 },
@@ -80,7 +83,7 @@ describe('resolvePanelGeneRegions', () => {
       expect(build).toBe('GRCh38')
       return coordinates
     }
-    expect(resolvePanelGeneRegions(['HGNC:1', 'HGNC:2'], 'GRCh38', 10, true, lookup)).toEqual([
+    expect(resolvePanelGeneRegions(['HGNC:1', 'HGNC:2'], 'GRCh38', 10, lookup)).toEqual([
       { chr: 'chr7', start: 90, end: 210 }
     ])
   })
@@ -89,12 +92,12 @@ describe('resolvePanelGeneRegions', () => {
     const lookup = (): never => {
       throw new Error('must not be called')
     }
-    expect(resolvePanelGeneRegions([], 'GRCh38', 10, false, lookup)).toEqual([])
+    expect(resolvePanelGeneRegions([], 'GRCh38', 10, lookup)).toEqual([])
   })
 
   it('throws a typed, user-facing error when no panel gene has coordinates for the build', () => {
     const run = (): unknown =>
-      resolvePanelGeneRegions(['HGNC:1', 'HGNC:2'], 'GRCh37', 10, false, () => new Map())
+      resolvePanelGeneRegions(['HGNC:1', 'HGNC:2'], 'GRCh37', 10, () => new Map())
 
     expect(run).toThrow(PanelRegionsUnavailableError)
     try {

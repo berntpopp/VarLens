@@ -5,6 +5,7 @@ import { ApiCache } from '../../services/api/ApiCache'
 import { networkStatus } from '../../services/network/NetworkStatus'
 import { VariantCoordsSchema } from '../../../shared/types/ipc-schemas'
 import { mainLogger } from '../../services/MainLogger'
+import { bareContig } from '../../../shared/utils/contig'
 
 /**
  * MyVariant.info IPC handlers
@@ -47,7 +48,7 @@ export function registerMyVariantHandlers({ ipcMain, getDb }: HandlerDependencie
 
         // If offline, try to get cached data
         if (!isOnline) {
-          const normalizedChr = validated.data.chr.replace(/^chr/i, '')
+          const normalizedChr = bareContig(validated.data.chr)
           const hgvs = `chr${normalizedChr}:g.${validated.data.pos}${validated.data.ref}>${validated.data.alt}`
           const cacheKey = `myvariant:hg38:${hgvs}`
           const cached = client.getCached(cacheKey)

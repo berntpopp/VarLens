@@ -50,7 +50,6 @@ export function createRepositories(db: DatabaseType) {
     // Same filter pipeline (including FTS search) as the case variant table.
     filterBuilder: new VariantFilterBuilder(db, kysely, new VariantSearchService(db, kysely)),
     cases,
-    variants,
     panels
   })
 

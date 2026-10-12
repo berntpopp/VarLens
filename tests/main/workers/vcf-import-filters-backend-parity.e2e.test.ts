@@ -428,7 +428,9 @@ describe('VCF import filters: every file, both backends', () => {
     it('takes the case build from the first file, never from a GRCh38 default (#557)', async () => {
       const outcome = await importCase([file('grch37'), file('snv')], undefined, undefined)
       expect(outcome.errors).toEqual({})
-      expect(outcome.rows).toEqual(['chr9:100:A>T snv 0/1 40/30', ...ROWS.snv].sort())
+      // The case is GRCh37, so every row is stored with GRCh37's bare names.
+      const bare = (row: string): string => row.replace(/^chr/, '')
+      expect(outcome.rows).toEqual(['9:100:A>T snv 0/1 40/30', ...ROWS.snv.map(bare)].sort())
       await expect(importCase([file('snv'), file('grch37')], undefined, undefined)).rejects.toThrow(
         /No genome build/
       )

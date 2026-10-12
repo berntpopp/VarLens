@@ -139,8 +139,7 @@ describe('PostgreSQL clinical variant filters', () => {
     const query = vi.fn(async (arg: unknown) => {
       const sql = typeof arg === 'string' ? arg : ((arg as { text?: string }).text ?? '')
       calls.push(sql)
-      if (sql.includes('AS genome_build'))
-        return { rows: [{ genome_build: 'GRCh37', chr: 'chr7' }] }
+      if (sql.includes('SELECT genome_build FROM')) return { rows: [{ genome_build: 'GRCh37' }] }
       return { rows: sql.includes('SELECT COUNT(*)::int AS count') ? [{ count: 0 }] : [] }
     })
     const lookup = vi.fn().mockResolvedValue([{ chr: 'chr7', start: 95_000, end: 205_000 }])
@@ -152,7 +151,7 @@ describe('PostgreSQL clinical variant filters', () => {
 
     await repo.queryVariants({ case_id: 1, active_panel_ids: [3, 4], panel_padding_bp: 2500 }, 25)
 
-    expect(lookup).toHaveBeenCalledWith([3, 4], 'GRCh37', 2500, true)
+    expect(lookup).toHaveBeenCalledWith([3, 4], 'GRCh37', 2500)
     const filterSql = calls.filter((sql) => sql.includes('FROM "public"."variants" v')).join('\n')
     expect(filterSql).toContain('(v.chr = $2 AND v.pos <= $4 AND COALESCE(v.end_pos, v.pos) >= $3)')
     // The gene-symbol fallback is gone: it ignored padding and genome build.

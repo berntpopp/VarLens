@@ -10,6 +10,7 @@ import { createInterface } from 'node:readline'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { deleteCaseSqls } from '../database/case-dependents'
 import { clinvarRankForImport, impactRank } from '../../shared/config/severity.config'
+import { canonicalContig } from '../../shared/utils/contig'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/types'
 import { createCappedLineStream } from '../import/stream-utils'
@@ -114,11 +115,25 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
     )
   }
 
+  // Chromosome names are stored in the case build's reference form (contig.ts).
+  const caseBuildStmt = db.prepare('SELECT genome_build FROM cases WHERE id = ?')
+  const caseBuilds = new Map<number, string>()
+  const caseBuild = (caseId: number): string => {
+    let build = caseBuilds.get(caseId)
+    if (build === undefined) {
+      const row = caseBuildStmt.get(caseId) as { genome_build: string | null } | undefined
+      build = row?.genome_build ?? ''
+      caseBuilds.set(caseId, build)
+    }
+    return build
+  }
+
   const insertBatch = db.transaction((caseId: number, variants: Array<Record<string, unknown>>) => {
+    const build = caseBuild(caseId)
     for (const v of variants) {
       const result = insertVariantStmt.run(
         caseId,
-        v.chr,
+        typeof v.chr === 'string' ? canonicalContig(v.chr, build) : v.chr,
         v.pos,
         v.ref,
         v.alt,

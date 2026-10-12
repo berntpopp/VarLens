@@ -54,6 +54,7 @@ import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pi
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
 import { resolveImportGenomeBuild } from '../import/vcf/resolve-genome-build'
+import { canonicalContig } from '../../shared/utils/contig'
 import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
 import type { ImportFilters } from '../import/vcf/import-filters'
 import { splitVcfRows } from './postgres-vcf-batch'
@@ -132,7 +133,8 @@ const defaultDeps: RunImportDeps = {
       options.selectedSample,
       options.filters,
       options.onSkip,
-      options.appendedTo
+      options.appendedTo,
+      options.genomeBuild
     )
 }
 
@@ -454,6 +456,9 @@ export async function runImport(
           maxRows: batchSize,
           maxBytes: maxBatchBytes,
           flush: async (rows) => {
+            for (const row of rows) {
+              if (typeof row.chr === 'string') row.chr = canonicalContig(row.chr, jsonGenomeBuild)
+            }
             await session.insertVariantBatch(rows)
             totalInserted += rows.length
             post({ type: 'progress', phase: 'inserting', rowsProcessed: totalInserted, filePath })

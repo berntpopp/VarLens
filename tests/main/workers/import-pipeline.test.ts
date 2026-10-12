@@ -44,6 +44,24 @@ describe('prepareStatements', () => {
     expect(Number(result.lastInsertRowid)).toBeGreaterThan(0)
   })
 
+  it("insertBatch stores chromosome names in the case build's reference form", () => {
+    const stmts = prepareStatements(db)
+    const g38 = Number(stmts.insertCase.run('g38', '/p', 1, 1, 'GRCh38').lastInsertRowid)
+    const g37 = Number(stmts.insertCase.run('g37', '/p', 1, 1, 'GRCh37').lastInsertRowid)
+    const rows = (chrs: string[]) => chrs.map((chr) => ({ chr, pos: 10, ref: 'A', alt: 'G' }))
+    stmts.insertBatch(g38, rows(['1', 'chr2', 'MT', 'chrUn_x']))
+    stmts.insertBatch(g37, rows(['chr1', '2', 'chrMT', 'chrM']))
+    const chrs = (caseId: number) =>
+      (
+        db.prepare('SELECT chr FROM variants WHERE case_id = ? ORDER BY id').all(caseId) as Array<{
+          chr: string
+        }>
+      ).map((r) => r.chr)
+    expect(chrs(g38)).toEqual(['chr1', 'chr2', 'chrM', 'chrUn_x'])
+    // hg19 chrM is not rCRS: it keeps its name.
+    expect(chrs(g37)).toEqual(['1', '2', 'MT', 'chrM'])
+  })
+
   it('getCaseByName finds existing case', () => {
     const stmts = prepareStatements(db)
     stmts.insertCase.run('test-case', '/path', 100, Date.now(), 'GRCh38')

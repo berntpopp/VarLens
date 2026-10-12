@@ -147,10 +147,34 @@ describe('translateAst Boolean fidelity (#526)', () => {
   })
 })
 
+describe('translateAst — chromosome', () => {
+  const translate = (input: string) => translateAst(parseDsl(input).ast!)
+
+  it('chr equality matches the stored spelling of every build', () => {
+    const result = translate('chr:=:1')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.chr).toEqual({ operator: 'in', value: ['1', 'chr1'] })
+  })
+
+  it('a mitochondrion matches chrM and MT', () => {
+    expect(translate('chr:=:MT').columnFilters.chr.value).toEqual(
+      expect.arrayContaining(['chrM', 'MT'])
+    )
+  })
+
+  it('OR alternatives expand without duplicates', () => {
+    expect(translate('chr:=:1 OR chr:=:chr1').columnFilters.chr).toEqual({
+      operator: 'in',
+      value: ['1', 'chr1']
+    })
+  })
+})
+
 describe('serializeColumnFilters', () => {
   it.each([
     'gene:=:BRCA1 OR gene:=:TP53',
     'cadd:>=:20 AND gnomad_af:<:0.01 AND chr:=:01',
+    'chr:=:X AND gene:=:DMD',
     'clinvar:~:"Likely \\"odd\\" pathogenic" AND gnomad_af:is:notnull',
     'cnv.copy_number:<:2 AND gene:=:"AND"'
   ])('round-trips %s', (input) => {

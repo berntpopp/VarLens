@@ -22,6 +22,20 @@ export interface GenomeBuildDef {
   mito: Readonly<Record<string, number>>
   /** Bare primary name ('1'..'22', 'X', 'Y') -> length. */
   contigs: Readonly<Record<string, number>>
+  /**
+   * Stored names (src/shared/utils/contig.ts): the build's reference-dictionary
+   * form of the 25 primary contigs. Every other contig is stored verbatim.
+   */
+  naming: {
+    /** Prefix of 1..22, X, Y. */
+    primaryPrefix: 'chr' | ''
+    /** Stored mitochondrion name. */
+    mito: string
+    /** Mito names (upper case, `chr` stripped) that are this build's rCRS mitochondrion. */
+    mitoAliases: readonly string[]
+  }
+  /** External-link placeholders `{build_ucsc}` and `{dataset_gnomad}`. */
+  links?: { ucscDb: string; gnomadDataset: string }
 }
 
 export const GENOME_BUILDS = [
@@ -41,6 +55,8 @@ export const GENOME_BUILDS = [
       ...Array.from({ length: 15 }, (_, i) => `gcf_000001405.${26 + i}`)
     ],
     mito: { chrM: 16_569, MT: 16_569 },
+    naming: { primaryPrefix: 'chr', mito: 'chrM', mitoAliases: ['M', 'MT'] },
+    links: { ucscDb: 'hg38', gnomadDataset: 'gnomad_r4' },
     contigs: {
       1: 248_956_422,
       2: 242_193_529,
@@ -86,6 +102,9 @@ export const GENOME_BUILDS = [
     ],
     // MT = rCRS (GRCh37); chrM = hg19's NC_001807, two bases longer.
     mito: { MT: 16_569, chrM: 16_571 },
+    // hg19 chrM / M (NC_001807) is a different sequence: never renamed to MT.
+    naming: { primaryPrefix: '', mito: 'MT', mitoAliases: ['MT'] },
+    links: { ucscDb: 'hg19', gnomadDataset: 'gnomad_r2_1' },
     contigs: {
       1: 249_250_621,
       2: 243_199_373,
@@ -120,6 +139,7 @@ export const GENOME_BUILDS = [
     importable: false,
     aliases: ['chm13', 't2t', 'hs1'],
     mito: { chrM: 16_569 },
+    naming: { primaryPrefix: 'chr', mito: 'chrM', mitoAliases: ['M', 'MT'] },
     contigs: {
       1: 248_387_328,
       2: 242_696_752,
@@ -257,6 +277,12 @@ export const GENOME_BUILD_CONFIG: GenomeBuildConfig = {
 export const IMPORTABLE_GENOME_BUILDS: readonly GenomeBuildDef[] = GENOME_BUILDS.filter(
   (b) => b.importable
 )
+
+/** Link placeholders of a build; an unknown build gets GRCh38's. */
+export function genomeBuildLinks(id: string): { ucscDb: string; gnomadDataset: string } {
+  const builds: readonly GenomeBuildDef[] = GENOME_BUILDS
+  return (builds.find((b) => b.id === id) ?? builds[0]).links ?? builds[0].links!
+}
 
 export function isImportableGenomeBuild(id: string): boolean {
   return IMPORTABLE_GENOME_BUILDS.some((b) => b.id === id)

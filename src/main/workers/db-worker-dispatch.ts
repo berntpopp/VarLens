@@ -48,7 +48,7 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         const filter = params[0] as PanelAwareFilter & VariantFilter
         // Resolve panel intervals off the main thread (no-op when gene ref DB unavailable)
         if ((filter.active_panel_ids?.length ?? 0) > 0) {
-          resolvePanelIntervalsInPlace(filter, repos, geneRefDb, db, filter.case_id)
+          resolvePanelIntervalsInPlace(filter, repos, geneRefDb, filter.case_id)
         }
         return repos.variants.getVariants(
           filter,
@@ -65,7 +65,7 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         // off the Electron main thread like every other variant read.
         const filter = params[0] as PanelAwareFilter & VariantFilter
         if ((filter.active_panel_ids?.length ?? 0) > 0) {
-          resolvePanelIntervalsInPlace(filter, repos, geneRefDb, db, filter.case_id)
+          resolvePanelIntervalsInPlace(filter, repos, geneRefDb, filter.case_id)
         }
         return repos.variants.getExportCount(filter)
       }
@@ -114,7 +114,7 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
           Parameters<typeof repos.cohort.getCohortVariants>[0]
         // Resolve panel intervals off the main thread (cohort mode: no specific case)
         if ((cohortParams.active_panel_ids?.length ?? 0) > 0) {
-          resolvePanelIntervalsInPlace(cohortParams, repos, geneRefDb, db)
+          resolvePanelIntervalsInPlace(cohortParams, repos, geneRefDb)
         }
         return repos.cohort.getCohortVariants(cohortParams)
       }

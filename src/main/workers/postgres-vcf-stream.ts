@@ -18,6 +18,7 @@ import {
   type VcfSelectedSampleColumn
 } from '../import/vcf/vcf-line-parser'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
+import { canonicalContig } from '../../shared/utils/contig'
 import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
 
 /** Stream mapped VCF variants for the PostgreSQL COPY import path. */
@@ -27,7 +28,9 @@ export async function* streamMappedVcfRows(
   filters?: ImportFilters,
   onSkip?: (reason: string) => void,
   /** Set for a file appended to an existing case (files 2..N of a multi-file import). */
-  appendedTo?: { genomeBuild: string }
+  appendedTo?: { genomeBuild: string },
+  /** The case's build: chromosome names are stored in its reference form. */
+  genomeBuild = ''
 ): AsyncGenerator<VcfMappedVariant, void, void> {
   // createReadStream reports open failures asynchronously; fail before the
   // worker's per-file error boundary can lose ownership of that event.
@@ -87,6 +90,7 @@ export async function* streamMappedVcfRows(
           // Charge every variant split from this line the whole line, so the
           // worker can bound its batches by source bytes.
           setRecordBytes(variant, line.length)
+          variant.chr = canonicalContig(variant.chr, genomeBuild)
           yield variant
         }
       } catch (error) {

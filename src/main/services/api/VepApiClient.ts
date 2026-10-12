@@ -10,6 +10,7 @@
  */
 
 import Bottleneck from 'bottleneck'
+import { bareContig } from '../../../shared/utils/contig'
 import { ApiCache } from './ApiCache'
 import {
   VepResponseSchema,
@@ -33,15 +34,7 @@ import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
  * normalizeChromosome('mt') => 'MT'
  */
 export function normalizeChromosome(chr: string): string {
-  // Remove 'chr' prefix if present
-  let normalized = chr.replace(/^chr/i, '')
-
-  // Standardize mitochondrial chromosome to MT
-  if (normalized.toLowerCase() === 'm' || normalized.toLowerCase() === 'mt') {
-    normalized = 'MT'
-  }
-
-  return normalized
+  return bareContig(chr)
 }
 
 /**

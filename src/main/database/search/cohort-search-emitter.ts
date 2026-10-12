@@ -1,5 +1,6 @@
 import { emitBooleanSql, type AstNode } from '../../../shared/utils/boolean-search'
 import { escapeLikePattern } from './search-clause-emitter'
+import { contigQueryNames } from '../../../shared/utils/contig'
 
 /**
  * Emit LIKE-based SQL from a boolean search AST.
@@ -17,13 +18,13 @@ export function emitCohortSearch(ast: AstNode): { sql: string; params: (string |
  * Column names use cvs. prefix matching cohort_variant_summary table alias.
  */
 export function emitTerm(term: string, params: (string | number)[]): string {
-  // Genomic coordinate: chr1:12345 or 1:12345. Import stores `chr` verbatim, so
-  // match both spellings whichever one the user typed (#492).
+  // Genomic coordinate: chr1:12345 or 1:12345. Each build stores its own
+  // spelling, so match every stored name of the typed contig (#492).
   const coordMatch = term.match(/^(?:chr)?(\d{1,2}|X|Y|MT?):(\d+)$/i)
   if (coordMatch) {
-    const chr = coordMatch[1].toUpperCase()
-    params.push(chr, `chr${chr}`, Number(coordMatch[2]))
-    return '(cvs.chr IN (?, ?) AND cvs.pos = ?)'
+    const names = contigQueryNames(coordMatch[1])
+    params.push(...names, Number(coordMatch[2]))
+    return `(cvs.chr IN (${names.map(() => '?').join(', ')}) AND cvs.pos = ?)`
   }
 
   // HGVS pattern: c.1234A>G or p.Val600Glu

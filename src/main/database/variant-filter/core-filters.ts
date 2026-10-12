@@ -1,4 +1,5 @@
 import { whereSeverity } from './severity-filter'
+import { contigQueryNames } from '../../../shared/utils/contig'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../../shared/types/database-schema'
 import type { VariantFilter } from '../types'
@@ -69,7 +70,7 @@ export function applyExactVariantMatch(
 ): VariantQueryBuilder {
   return query
     .$if(filter.chr != null && filter.chr !== '', (qb) =>
-      qb.where('variants.chr', '=', filter.chr!)
+      qb.where('variants.chr', 'in', contigQueryNames(filter.chr!))
     )
     .$if(filter.pos != null, (qb) => qb.where('variants.pos', '=', filter.pos!))
     .$if(filter.ref != null && filter.ref !== '', (qb) =>
