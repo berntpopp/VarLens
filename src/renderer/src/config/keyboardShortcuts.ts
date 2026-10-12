@@ -7,6 +7,8 @@
 export interface Shortcut {
   key: string
   description: string
+  /** Tooltip hint when the bare key would mislead (row keys act on the selected row). */
+  hint?: string
 }
 
 const isMac =
@@ -16,13 +18,21 @@ const isMac =
 const MOD = isMac ? 'Cmd' : 'Ctrl'
 const ALT = isMac ? 'Option' : 'Alt'
 
+/** Row keys act on the keyboard-selected row, not the row under the pointer. */
+const rowKey = (key: string, description: string, effect?: string): Shortcut => ({
+  key,
+  description,
+  hint: `${key} on selected row${effect === undefined ? '' : `: ${effect}`}`
+})
+
 export const SHORTCUTS = {
   moveSelection: { key: '↑ / ↓', description: 'Move selection up / down' },
   openDetails: { key: 'Enter', description: 'Open variant detail panel' },
   closeDetails: { key: 'Escape', description: 'Close detail panel / deselect row' },
-  star: { key: 's', description: 'Toggle star' },
-  comment: { key: 'c', description: 'Open comment dialog' },
-  acmg: { key: 'a', description: 'Open ACMG classification' },
+  star: rowKey('s', 'Toggle star'),
+  comment: rowKey('c', 'Open comment dialog'),
+  // The ACMG cell button opens the quick menu; the key opens the evidence dialog.
+  acmg: rowKey('a', 'Open ACMG evidence dialog', 'evidence dialog'),
   expandRow: { key: 'e', description: 'Expand / collapse row (Cohort)' },
   search: { key: '/', description: 'Focus search field' },
   toggleFilters: { key: `${MOD}+Shift+F`, description: 'Toggle filter panel' },
@@ -51,5 +61,6 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; shortcuts: readonly
 
 /** Tooltip text with its shortcut: `withShortcut('Filters', 'toggleFilters')` → "Filters (Ctrl+Shift+F)". */
 export function withShortcut(label: string, id: ShortcutId): string {
-  return `${label} (${SHORTCUTS[id].key})`
+  const shortcut: Shortcut = SHORTCUTS[id]
+  return `${label} (${shortcut.hint ?? shortcut.key})`
 }

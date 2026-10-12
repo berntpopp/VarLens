@@ -66,12 +66,15 @@ describe('AnnotationsCell', () => {
     const wrapper = mount(AnnotationsCell, { props: baseProps, global })
     const buttons = wrapper.findAll('button.annotation-btn')
     expect(buttons).toHaveLength(3)
-    // The tooltip adds the row shortcut from the shared shortcut list.
+    // The tooltip adds the row key and says it acts on the selected row, not the hovered one.
     const keys = [SHORTCUTS.star.key, SHORTCUTS.acmg.key, SHORTCUTS.comment.key]
     buttons.forEach((b, i) => {
       expect(b.attributes('aria-label')).toBeTruthy()
-      expect(b.attributes('data-tooltip')).toBe(`${b.attributes('aria-label')} (${keys[i]})`)
+      expect(b.attributes('data-tooltip')).toMatch(
+        new RegExp(`^${b.attributes('aria-label')} \\(${keys[i]} on selected row(: .+)?\\)$`)
+      )
     })
+    expect(buttons[1].attributes('data-tooltip')).toContain('evidence dialog')
     expect(buttons[0].attributes('aria-pressed')).toBe('true')
     expect(buttons[2].attributes('aria-label')).toBe('Add comment')
     expect(wrapper.find('.v-tooltip').exists()).toBe(false)
