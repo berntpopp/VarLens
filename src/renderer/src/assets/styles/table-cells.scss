@@ -12,13 +12,13 @@
 
 // Monospace for variant data (ref, alt, cDNA, AA change)
 .variant-data-mono {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
 // HGVS notation styling
 .hgvs-notation {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 

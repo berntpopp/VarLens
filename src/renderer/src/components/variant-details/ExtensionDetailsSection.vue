@@ -395,7 +395,7 @@ code {
   background: rgba(0, 0, 0, 0.05);
   padding: 1px 4px;
   border-radius: 3px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 </style>
