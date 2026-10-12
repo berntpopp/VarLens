@@ -47,7 +47,7 @@ export function filterDrawerWidth(preferredWidth: number, viewportWidth: number)
   return Math.max(FILTER_DRAWER_MIN_WIDTH, Math.min(cap, preferredWidth))
 }
 
-/** Structural columns that never count against the budget and are never auto-hidden. */
+/** Structural columns: never auto-hidden and not counted in the minimum (their width still counts). */
 const ALWAYS_SHOWN_COLUMNS: ReadonlySet<string> = new Set(['data-table-expand', 'annotations'])
 
 export function getColumnPriority(key: string): number {
