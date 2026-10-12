@@ -4,7 +4,8 @@ import {
   getConsequenceCategory,
   getConsequenceColor,
   CONSEQUENCE_COLORS,
-  DOMAIN_TYPE_COLORS
+  DOMAIN_TYPE_COLORS,
+  getClinVarCategory
 } from '../../../src/shared/utils/protein-utils'
 import type { ConsequenceCategory } from '../../../src/shared/types/protein'
 
@@ -193,5 +194,21 @@ describe('DOMAIN_TYPE_COLORS', () => {
   it.each(commonDomainTypes)('has a valid hex color for domain type "%s"', (type) => {
     expect(DOMAIN_TYPE_COLORS[type]).toBeDefined()
     expect(DOMAIN_TYPE_COLORS[type]).toMatch(/^#[0-9A-Fa-f]{6}$/)
+  })
+})
+
+describe('getClinVarCategory', () => {
+  it.each([
+    ['Pathogenic', 'pathogenic'],
+    ['Likely pathogenic', 'likely_pathogenic'],
+    ['Uncertain significance', 'uncertain'],
+    ['Likely benign', 'likely_benign'],
+    ['Benign', 'benign'],
+    // Conflicting mentions "pathogenicity" but is not a pathogenic call.
+    ['Conflicting classifications of pathogenicity', 'other'],
+    ['Conflicting interpretations of pathogenicity', 'other'],
+    ['not provided', 'other']
+  ])('%s -> %s', (significance, category) => {
+    expect(getClinVarCategory(significance)).toBe(category)
   })
 })

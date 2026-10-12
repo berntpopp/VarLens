@@ -76,6 +76,8 @@ export const CLINVAR_COLORS: Record<ClinVarSignificance, string> = {
  */
 export function getClinVarCategory(significance: string): ClinVarSignificance {
   const lower = significance.toLowerCase()
+  // "Conflicting classifications of pathogenicity" is not a pathogenic call.
+  if (lower.includes('conflicting')) return 'other'
   if (lower.includes('pathogenic') && !lower.includes('likely')) return 'pathogenic'
   if (lower.includes('likely') && lower.includes('pathogenic')) return 'likely_pathogenic'
   if (lower.includes('uncertain') || lower.includes('vus')) return 'uncertain'
