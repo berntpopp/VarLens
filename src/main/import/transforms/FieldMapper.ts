@@ -26,6 +26,8 @@ interface FieldMapperOptions {
   takeRecordBytes?: () => number
   /** Told about every row dropped for a missing required field. */
   onSkip?: (reason: string) => void
+  /** Number of header columns; a row of any other length would shift every later value. */
+  columnCount?: number
 }
 
 export class FieldMapper extends Transform {
@@ -33,6 +35,7 @@ export class FieldMapper extends Transform {
   private cols: ColumnIndices
   private readonly takeRecordBytes?: () => number
   private readonly onSkip?: (reason: string) => void
+  private readonly columnCount?: number
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
@@ -40,6 +43,7 @@ export class FieldMapper extends Transform {
     this.cols = options.columnIndices ?? COLUMN_INDICES
     this.takeRecordBytes = options.takeRecordBytes
     this.onSkip = options.onSkip
+    this.columnCount = options.columnCount
   }
 
   _transform(
@@ -50,6 +54,11 @@ export class FieldMapper extends Transform {
     try {
       const recordBytes = this.takeRecordBytes?.()
       const row = chunk.value
+      if (this.columnCount !== undefined && row.length !== this.columnCount) {
+        throw new Error(
+          `Row ${chunk.key + 1} has ${row.length} values but the header declares ${this.columnCount} columns`
+        )
+      }
       const selectedTranscript = (row[this.cols.SELECTED_TRANSCRIPT] as number) ?? 0
       const semantics = canonicalizeTranscriptSemantics(
         this.extractValue(row, this.cols.IMPACT, selectedTranscript, true, IMPACT_DICTIONARY) as
@@ -290,7 +299,8 @@ export function createFieldMapper(
   dictionaries: DataDictionaries,
   columnIndices?: ColumnIndices,
   takeRecordBytes?: () => number,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  columnCount?: number
 ): FieldMapper {
-  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes, onSkip })
+  return new FieldMapper({ dictionaries, columnIndices, takeRecordBytes, onSkip, columnCount })
 }
