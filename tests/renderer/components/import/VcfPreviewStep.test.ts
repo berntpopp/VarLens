@@ -17,7 +17,8 @@ async function mountStep(samples: string[], existing: string[]) {
     annotationType: 'csq',
     variantCountEstimate: 10,
     samples,
-    detectedGenomeBuild: 'GRCh38',
+    detectedGenomeBuild: null,
+    buildDetection: { suggested: null, confidence: 'none', evidence: [], excluded: [] },
     infoFields: []
   })
   api.cases.list = vi.fn().mockResolvedValue(existing.map((name, id) => ({ id, name })))
