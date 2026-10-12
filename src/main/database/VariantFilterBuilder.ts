@@ -22,7 +22,6 @@ import {
   applyPanelIntervalFilter,
   applyScoreRangeFilters,
   applyTagFilter,
-  countCasesForInternalAf,
   PANEL_TEMP_TABLE_THRESHOLD
 } from './variant-filter/core-filters'
 import { applyInheritanceFilters } from './variant-filter/inheritance-filters'
@@ -63,14 +62,13 @@ export class VariantFilterBuilder {
   build(filter: VariantFilter, options?: VariantFilterBuildOptions): VariantQueryBuilder {
     assertValidColumnFilterValues(filter.column_filters) // shared with Postgres (#447)
     let query = createBaseVariantQuery(this.kysely, filter)
-    const totalCaseCount = countCasesForInternalAf(this.db, this.kysely, filter)
 
     query = applyVariantTypeFilter(query, filter)
     query = applyVariantTypeProjectionJoin(query, filter)
     query = applyExtensionFiltersAndSortJoins(query, filter, options?.sortBy)
     query = applyAnnotationValueFilters(query, filter)
     query = applyScoreRangeFilters(query, filter)
-    query = applyInternalAfFilter(query, filter, totalCaseCount)
+    query = applyInternalAfFilter(query, filter)
     query = applyMaxCarriersFilter(query, filter)
     query = this.applySearch(query, filter)
     query = applyExactVariantMatch(query, filter)

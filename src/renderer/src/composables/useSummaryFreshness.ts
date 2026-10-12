@@ -1,7 +1,8 @@
-import { ref, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 
 import type { WindowAPI } from '../../../shared/types/api'
 import { unwrapIpcResult } from '../../../shared/types/errors'
+import { useApiService } from './useApiService'
 
 /** How often a view asks whether a stale cohort summary has been rebuilt. */
 export const SUMMARY_STALE_POLL_MS = 5000
@@ -72,4 +73,18 @@ export function watchSummaryFreshness(options: {
     },
     markStale: () => apply(true)
   }
+}
+
+/**
+ * {@link watchSummaryFreshness} for the lifetime of the calling component:
+ * whether the cohort summary is stale, with `onFresh` called once it is
+ * rebuilt. Without a cohort API (tests, browser dev mode) it is never stale.
+ */
+export function useCohortSummaryStale(onFresh: () => void = () => undefined): Ref<boolean> {
+  const cohortApi = useApiService().api?.cohort
+  if (cohortApi === undefined) return ref(false)
+  const freshness = watchSummaryFreshness({ cohortApi, onFresh })
+  onMounted(freshness.start)
+  onUnmounted(freshness.stop)
+  return freshness.stale
 }

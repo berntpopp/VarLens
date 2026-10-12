@@ -8,6 +8,7 @@ import { useColumnFilters } from '../../composables/useColumnFilters'
 import { useDebounce } from '../../composables/useDebounce'
 import { useDeferredReload } from '../../composables/useDeferredReload'
 import { useApiService } from '../../composables/useApiService'
+import { useCohortSummaryStale } from '../../composables/useSummaryFreshness'
 import { stripVueProxies } from '../../utils/stripVueProxies'
 import { traceStart, traceEnd } from '../../services/PerfTrace'
 import type { PerfBudgetKey } from '../../../../shared/config/perf-budgets'
@@ -256,6 +257,15 @@ export function useVariantData(options: UseVariantDataOptions) {
     { immediate: false }
   )
 
+  // The carrier frequency and carrier cap read the cohort summary (#555):
+  // say when it is being rebuilt, and reload a query that filters on them.
+  const usesSummaryFigures = (): boolean =>
+    (filters.value.max_internal_af ?? 0) > 0 || (filters.value.carrier_count_max ?? 0) >= 1
+  const cohortSummaryStale = useCohortSummaryStale(() => {
+    if (usesSummaryFigures()) void invalidateAndReload()
+  })
+  const summaryStale = computed(() => cohortSummaryStale.value && usesSummaryFigures())
+
   return {
     // Table state
     variants,
@@ -269,6 +279,8 @@ export function useVariantData(options: UseVariantDataOptions) {
     itemsPerPageOptions,
     selectedVariantId,
     columnMeta,
+    /** The query filters on summary figures that are being rebuilt. */
+    summaryStale,
 
     // Methods
     loadVariants,

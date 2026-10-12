@@ -5,6 +5,7 @@ import {
   formatAfPercent
 } from '../../../../src/renderer/src/utils/filters/activeFilters'
 import type { FilterState } from '../../../../src/shared/types/filters'
+import { CARRIER_FREQUENCY_COPY } from '../../../../src/renderer/src/config/uiCopyConfig'
 import type { ColumnFiltersParam } from '../../../../src/shared/types/column-filters'
 
 function makeDefaultFilters(overrides: Partial<FilterState> = {}): FilterState {
@@ -89,7 +90,7 @@ describe('buildActiveFiltersList', () => {
       const result = buildActiveFiltersList(makeDefaultFilters({ maxInternalAf: 0.05 }))
       const chip = result.find((f) => f.id === 'internal-frequency')
       expect(chip).toBeDefined()
-      expect(chip!.label).toBe('Internal AF')
+      expect(chip!.label).toBe(CARRIER_FREQUENCY_COPY.chip)
       expect(chip!.value).toBe('\u2264 5.00%')
     })
 

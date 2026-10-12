@@ -1,30 +1,9 @@
 import { whereSeverity } from './severity-filter'
-import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { sql, type Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../../shared/types/database-schema'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
-
-/**
- * Pre-compute the total case count so the internal-AF filter does not run a
- * per-row subquery. Returns `undefined` when the filter is inactive.
- */
-export function countCasesForInternalAf(
-  db: DatabaseType,
-  kysely: Kysely<VarlensDatabase>,
-  filter: VariantFilter
-): number | undefined {
-  if (filter.max_internal_af === undefined || !(filter.max_internal_af > 0)) return undefined
-  const compiled = kysely
-    .selectFrom('cases')
-    .select(kysely.fn.countAll<number>().as('cnt'))
-    // Same denominator as the internal_af column (base-query-and-joins.ts).
-    .where('import_status', '=', 'ready')
-    .compile()
-  const countResult = db.prepare(compiled.sql).get(...compiled.parameters) as
-    { cnt: number } | undefined
-  return countResult?.cnt ?? 0
-}
+import { CASE_CARRIER_COUNT_SQL, CASE_CARRIER_FREQUENCY_SQL } from './base-query-and-joins'
 
 /** Gene, consequence(s), func and ClinVar filters. */
 export function applyAnnotationValueFilters(
@@ -69,28 +48,17 @@ export function applyScoreRangeFilters(
     )
 }
 
-/** Internal AF filter (NULL-inclusive: variants without frequency data pass). */
+/** Carrier-frequency filter (NULL-inclusive: a variant without a frequency passes; 0 = off). */
 export function applyInternalAfFilter(
   query: VariantQueryBuilder,
-  filter: VariantFilter,
-  totalCaseCount: number | undefined
+  filter: VariantFilter
 ): VariantQueryBuilder {
-  return query.$if(
-    filter.max_internal_af !== undefined &&
-      filter.max_internal_af > 0 &&
-      totalCaseCount !== undefined &&
-      totalCaseCount > 0,
-    (qb) =>
-      qb.where(({ or, eb }) =>
-        or([
-          eb(sql.ref('vf.case_count'), 'is', null),
-          eb(
-            sql<number>`CAST(vf.case_count AS REAL) / ${totalCaseCount!}`,
-            '<=',
-            filter.max_internal_af!
-          )
-        ])
-      )
+  const max = filter.max_internal_af
+  return query.$if(max !== undefined && max > 0, (qb) =>
+    qb.where(
+      // COALESCE keeps a row without a frequency (max > 0) and probes once.
+      sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_FREQUENCY_SQL)}, 0) <= ${max!}`
+    )
   )
 }
 
@@ -183,8 +151,6 @@ export function applyMaxCarriersFilter(
 ): VariantQueryBuilder {
   const max = filter.carrier_count_max
   return query.$if(max !== undefined && max >= 1, (qb) =>
-    qb.where(({ or, eb }) =>
-      or([eb(sql.ref('vf.case_count'), 'is', null), eb(sql.ref('vf.case_count'), '<=', max!)])
-    )
+    qb.where(sql<boolean>`COALESCE(${sql.raw(CASE_CARRIER_COUNT_SQL)}, 0) <= ${max!}`)
   )
 }

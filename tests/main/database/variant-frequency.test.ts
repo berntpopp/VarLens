@@ -66,7 +66,7 @@ describe('VariantRepository — variant frequency', () => {
     expect(freq).toBeUndefined()
   })
 
-  it('getVariants returns internal_af computed from variant_frequency', () => {
+  it('getVariants returns internal_af: carriers / cases of the build and class', () => {
     const c1 = service.cases.createCase('case-1', '/a.json', 100)
     const c2 = service.cases.createCase('case-2', '/b.json', 100)
 
@@ -74,6 +74,7 @@ describe('VariantRepository — variant frequency', () => {
     service.variants.updateFrequencies(c1)
     service.variants.insertVariantsBatch(c2, [makeVariant({ pos: 200, ref: 'C', alt: 'T' })])
     service.variants.updateFrequencies(c2)
+    service.cohortSummary.rebuild()
 
     const result = service.variants.getVariants({ case_id: c1 }, 50, 0)
     const v = result.data[0]
@@ -90,6 +91,7 @@ describe('VariantRepository — variant frequency', () => {
     service.variants.updateFrequencies(c1)
     service.variants.insertVariantsBatch(c2, [shared])
     service.variants.updateFrequencies(c2)
+    service.cohortSummary.rebuild()
 
     // Shared variant: 2/2 = 100%, unique: 1/2 = 50%
     // Filter max 60% should keep only the unique variant
@@ -101,7 +103,7 @@ describe('VariantRepository — variant frequency', () => {
   it('variants without frequency data pass max_internal_af filter', () => {
     const c1 = service.cases.createCase('case-1', '/a.json', 100)
     service.variants.insertVariantsBatch(c1, [makeVariant({ pos: 100 })])
-    // Don't call updateFrequencies — no frequency data
+    // No summary rebuild — no frequency data
 
     const result = service.variants.getVariants({ case_id: c1, max_internal_af: 0.01 }, 50, 0)
     // Should still return the variant (NULL-inclusive)

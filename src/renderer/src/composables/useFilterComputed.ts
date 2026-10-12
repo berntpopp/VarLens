@@ -16,6 +16,7 @@ import {
   summarizeInternalFilters
 } from '../utils/filters'
 import type { Tag } from '../../../shared/types/database-entities'
+import { CARRIER_FREQUENCY_COPY } from '../config/uiCopyConfig'
 
 /**
  * Options for useFilterComputed
@@ -203,7 +204,11 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
       filters.value.maxInternalAf > 0
     ) {
       const pct = formatAfPercent(filters.value.maxInternalAf)
-      list.push({ id: 'internal-frequency', label: 'Internal AF \u2264', value: `${pct}%` })
+      list.push({
+        id: 'internal-frequency',
+        label: `${CARRIER_FREQUENCY_COPY.chip} \u2264`,
+        value: `${pct}%`
+      })
     }
 
     const maxCarriers = activeMaxCarriers(filters.value.maxCarriers)

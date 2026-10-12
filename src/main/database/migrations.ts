@@ -18,7 +18,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 45
+export const LATEST_SQLITE_SCHEMA_VERSION = 46
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -1917,17 +1917,7 @@ export function runMigrations(db: Database.Database): void {
   // resolve to the highest dosage (#516). The stored counts predate both: flag
   // a populated summary stale, the app start rebuilds it.
   if (currentVersion < 43) {
-    const summaryTables = db
-      .prepare(
-        "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cohort_variant_summary', 'cohort_summary_meta')"
-      )
-      .get() as { c: number }
-    if (
-      summaryTables.c === 2 &&
-      db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
-    ) {
-      db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
-    }
+    markPopulatedSummaryStale(db)
     db.exec('PRAGMA user_version = 43')
   }
 
@@ -1971,6 +1961,15 @@ export function runMigrations(db: Database.Database): void {
 
     db.exec('PRAGMA user_version = 45')
   }
+
+  // v46 (#555, mirrors PG 0029): no-call rows are no longer carriers in the
+  // cohort summary and gene burden (carrierRowSql). Counts written before
+  // include them, and the incremental delete subtracts carrier rows only:
+  // flag a populated summary stale, the next delete or app start rebuilds it.
+  if (currentVersion < 46) {
+    markPopulatedSummaryStale(db)
+    db.exec('PRAGMA user_version = 46')
+  }
 }
 
 function backfillMissingCaseDataInfo(db: Database.Database): void {
@@ -2005,4 +2004,19 @@ function backfillMissingCaseDataInfo(db: Database.Database): void {
     }
   })
   backfillTransaction()
+}
+
+/** Flag a populated cohort summary stale so the next rebuild recounts it (v43, v46). */
+function markPopulatedSummaryStale(db: Database.Database): void {
+  const summaryTables = db
+    .prepare(
+      "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cohort_variant_summary', 'cohort_summary_meta')"
+    )
+    .get() as { c: number }
+  if (
+    summaryTables.c === 2 &&
+    db.prepare('SELECT 1 FROM cohort_variant_summary LIMIT 1').get() !== undefined
+  ) {
+    db.exec("INSERT OR REPLACE INTO cohort_summary_meta (key, value) VALUES ('is_stale', '1')")
+  }
 }

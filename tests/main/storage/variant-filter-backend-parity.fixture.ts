@@ -139,7 +139,17 @@ export const B = {
   /** Same coordinate as A.inGene (homozygous here). */
   sharedHom: { ...A.inGene, gt_num: '1/1' },
   padding: variant({ chr: '7', pos: 203_000, ref: 'T', alt: 'C' }),
-  unrelated: variant({ chr: '9', pos: 100, gene_symbol: 'ZZZ', gnomad_af: 0.3, cadd: 5 })
+  unrelated: variant({ chr: '9', pos: 100, gene_symbol: 'ZZZ', gnomad_af: 0.3, cadd: 5 }),
+  /** SV no-call (imported, as the VCF mapper does): B has SV data but carries nothing. */
+  noCallSv: variant({
+    chr: '9',
+    pos: 50_000,
+    end_pos: 60_000,
+    ref: 'N',
+    alt: '<DEL>',
+    variant_type: 'sv',
+    gt_num: './.'
+  })
 }
 
 /** Case C — GRCh37: the gene sits at 500,000-600,000 in this build. */
@@ -148,7 +158,9 @@ export const C = {
   /** Inside the GRCh38 coordinates only — must NOT match for a GRCh37 case. */
   grch38Position: variant({ chr: '7', pos: 150_000, alt: 'C', gene_symbol: 'PARITY1' }),
   /** Scores that ARE zero — a null check must not confuse them with "no value". */
-  zeroScores: variant({ chr: '9', pos: 500, gene_symbol: 'ZERO', gnomad_af: 0, cadd: 0 })
+  zeroScores: variant({ chr: '9', pos: 500, gene_symbol: 'ZERO', gnomad_af: 0, cadd: 0 }),
+  /** A.inGene's coordinate on the other build: a different locus (#555). */
+  sameCoordAsA: variant({ chr: '7', pos: 150_000 })
 }
 
 export const FIXTURE: ParityFixtureCase[] = [

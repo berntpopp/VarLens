@@ -87,7 +87,9 @@ describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#4
 
     const result = await migrate()
 
-    expect(result.applied).toEqual(['0028'])
+    expect(result.applied).toEqual(
+      POSTGRES_MIGRATIONS.filter((m) => m.version >= '0028').map((m) => m.version)
+    )
     expect(await preset()).toEqual([
       {
         name: 'Rare, not recurrent',

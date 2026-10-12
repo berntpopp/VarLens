@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// The denominators computed in each query (no cache round trips in the mocked pool).
+vi.mock('../../../src/main/storage/postgres/postgres-carrier-totals', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../src/main/storage/postgres/postgres-carrier-totals')
+  >()),
+  carrierTotalsSql: async () => undefined
+}))
+
 import {
   buildPostgresVariantOrderTerms,
   decodeVariantCursor,

@@ -31,6 +31,7 @@ import { buildPostgresVariantQueryParts } from '../../../src/main/storage/postgr
 import { buildSummaryQueryParts } from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
 import { dispatchTask } from '../../../src/main/workers/db-worker-dispatch'
 import type { ColumnFiltersParam } from '../../../src/shared/types/column-filters'
+import { caseCarrierCountSql } from '../../../src/shared/sql/carrier-frequency'
 
 /** `chr:pos:ref:alt` of a cohort row; its variant_key is opaque (#503). */
 const coord = (row: unknown): string => {
@@ -459,14 +460,15 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
   })
 })
 
-describe('PostgreSQL case view carrier cap (#455, no PostgreSQL required)', () => {
-  it('caps vf.case_count and keeps rows without a frequency row', () => {
+describe('PostgreSQL case view carrier cap (#455, #555, no PostgreSQL required)', () => {
+  it('caps the summary carrier count and keeps rows without a summary row', () => {
     const { fromAndWhereSql, params } = buildPostgresVariantQueryParts(
       { case_id: 1, carrier_count_max: 3 },
       '"public"'
     )
-    expect(fromAndWhereSql).toContain('(vf.case_count IS NULL OR vf.case_count <= $2)')
-    expect(fromAndWhereSql).toContain('LEFT JOIN "public"."variant_frequency" vf')
+    const carriers = caseCarrierCountSql('"public"."cohort_variant_summary"', 'v')
+    expect(fromAndWhereSql).toContain(`COALESCE(${carriers}, 0) <= $2::bigint`)
+    expect(fromAndWhereSql).not.toContain('variant_frequency')
     expect(params).toEqual([1, 3])
   })
 
@@ -475,7 +477,7 @@ describe('PostgreSQL case view carrier cap (#455, no PostgreSQL required)', () =
       { case_id: 1, carrier_count_max: 0 },
       '"public"'
     )
-    expect(fromAndWhereSql).not.toContain('vf.case_count <=')
+    expect(fromAndWhereSql).not.toContain('::bigint)')
     expect(params).toEqual([1])
   })
 })

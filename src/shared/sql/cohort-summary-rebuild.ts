@@ -11,7 +11,12 @@ import {
   summaryColumnsOverWindow,
   transcriptOrderBy
 } from './cohort-representative'
-import { HET_GT_SQL as HET, HOM_GT_SQL as HOM, resolvedGtSql } from './genotype-dosage'
+import {
+  carrierRowSql,
+  HET_GT_SQL as HET,
+  HOM_GT_SQL as HOM,
+  resolvedGtSql
+} from './genotype-dosage'
 
 const SUMMARY_KEY = ['chr', 'pos', 'ref', 'alt', 'variant_type', 'genome_build'] as const
 
@@ -54,7 +59,8 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
         ${resolvedGtSql('v.gt_num', 'sqlite', ' OVER case_key')} AS gt_num,
         ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS case_rn
       FROM variants v
-      JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'${variantFilter}
+      JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'
+        AND ${carrierRowSql('v')}${variantFilter}
       WINDOW case_key AS (
         PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build, v.case_id
       )
@@ -137,7 +143,7 @@ export function geneBurdenInsertSql(geneFilter = ''): string {
     c.genome_build
   FROM variants v
   JOIN cases c ON c.id = v.case_id AND c.import_status = 'ready'
-  WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != ''${geneFilter}
+  WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol != '' AND ${carrierRowSql('v')}${geneFilter}
   GROUP BY v.gene_symbol, c.genome_build;
 `
 }
@@ -233,7 +239,7 @@ export const INCREMENTAL_ADD_SQL = `
       ROW_NUMBER() OVER (case_key ORDER BY ${transcriptOrderBy('v', 'sqlite')}) AS rn
     FROM variants v
     JOIN cases c ON c.id = v.case_id
-    WHERE v.case_id = ?
+    WHERE v.case_id = ? AND ${carrierRowSql('v')}
     WINDOW case_key AS (PARTITION BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build)
   ) d
   WHERE d.rn = 1
@@ -254,7 +260,7 @@ export const INCREMENTAL_REMOVE_SQL = `
       CASE WHEN ${resolvedGtSql('v.gt_num', 'sqlite')} IN ${HOM} THEN 1 ELSE 0 END AS hom_count
     FROM variants v
     JOIN cases c ON c.id = v.case_id
-    WHERE v.case_id = ?
+    WHERE v.case_id = ? AND ${carrierRowSql('v')}
     GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
   ) sub
   WHERE cohort_variant_summary.chr = sub.chr

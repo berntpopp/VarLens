@@ -78,11 +78,17 @@ export async function readCohortSummaryStatus({
   schema
 }: ScopedPool): Promise<{ is_stale: boolean; last_rebuilt_at: number }> {
   const client = await pool.connect()
+  let status: { is_stale: boolean; last_rebuilt_at: number }
   try {
-    return await getCohortSummaryState({ schema, client })
+    status = await getCohortSummaryState({ schema, client })
   } finally {
     client.release()
   }
+  // Views that read summary figures without a cohort read (the case view's
+  // carrier frequency, #555) poll this while stale: start the rebuild that a
+  // cohort read would, deduplicated per schema and paused after failures.
+  if (status.is_stale) scheduleBackgroundRebuild({ pool, schema })
+  return status
 }
 
 interface FreshnessProbe {

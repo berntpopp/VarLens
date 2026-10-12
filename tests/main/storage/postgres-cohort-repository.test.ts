@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// The denominators computed in each query (no cache round trips in the mocked pool).
+vi.mock('../../../src/main/storage/postgres/postgres-carrier-totals', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../src/main/storage/postgres/postgres-carrier-totals')
+  >()),
+  carrierTotalsSql: async () => undefined
+}))
+
 const geneReferenceMocks = vi.hoisted(() => ({
   getCoordinatesForGenes: vi.fn()
 }))
@@ -134,8 +142,8 @@ describe('PostgresCohortRepository', () => {
 
     expect(dataSql).toContain('FROM "tenant""schema"."cohort_variant_summary" cvs')
     // No per-variant grouping: the only GROUP BY is the tiny cases-per-build
-    // subquery that supplies the frequency denominator.
-    expect(dataSql).not.toMatch(/GROUP BY (?!genome_build)/)
+    // (and class) subquery that supplies the frequency denominator.
+    expect(dataSql).not.toMatch(/GROUP BY (?!c\.genome_build)/)
     expect(dataSql).not.toContain('HAVING')
     expect(dataSql).toContain('cvs.carrier_count')
     expect(countSql).toContain('SELECT COUNT(*)::bigint AS total_count')
@@ -475,10 +483,12 @@ describe('PostgresCohortRepository', () => {
     expect(normalizeSql(query.mock.calls[0][0] as string)).toContain('WHERE genome_build = $1')
     expect(query.mock.calls[0][1]).toEqual(['GRCh38'])
     const dataSql = normalizeSql(callText(query.mock.calls[2]))
-    // cohort_frequency is carriers over the visible cases of the row's build.
+    // cohort_frequency is carriers over the visible cases of the row's build
+    // that hold a call of its variant class.
     expect(dataSql).toContain('cvs.genome_build = $')
     expect(dataSql).toContain('(cvs.carrier_count::double precision / NULLIF(bt.total, 0)) <= $')
-    expect(dataSql).toContain('FROM "public"."cases" GROUP BY genome_build')
+    expect(dataSql).toContain('FROM "public"."cases" c WHERE EXISTS')
+    expect(dataSql).toContain('GROUP BY c.genome_build')
   })
 
   it('reads C5a-maintained annotation flags from the summary table', async () => {

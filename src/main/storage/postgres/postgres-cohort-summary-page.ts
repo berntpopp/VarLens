@@ -30,8 +30,10 @@ export interface SummaryPageContext {
   schema: string
   /** Schema-qualified `cohort_variant_summary`. */
   table: string
-  /** Schema-qualified `cases` view (visible cases only), the frequency denominator. */
-  casesTable: string
+  /** Schema-qualifies a table name (the frequency denominator reads `cases`). */
+  tbl: (table: string) => string
+  /** Cached denominators (postgres-carrier-totals.ts); computed in the query when absent. */
+  carrierTotals?: string
   toVariant: (row: Record<string, unknown>) => CohortVariant
 }
 
@@ -49,7 +51,7 @@ export async function querySummaryPage(
   const summary = buildSummaryQueryParts(params, totalCases, ctx.schema)
   if (summary.unavailable) return null
   const { whereParts, orderBy, values, keyset, needsBuildTotals } = summary.parts
-  const buildTotalsJoin = summaryBuildTotalsJoin(ctx.casesTable)
+  const buildTotalsJoin = summaryBuildTotalsJoin(ctx.tbl, ctx.carrierTotals)
 
   let totalCount = 0
   if (params._count_needed !== false) {
