@@ -15,6 +15,12 @@ export const PROTEIN_VIEW_COPY = {
   noDomain: 'no annotated domain'
 } as const
 
+/**
+ * Details strip: wait this long on one gene before its UniProt/InterPro
+ * lookups start, so stepping through rows sends no burst of external calls.
+ */
+export const PROTEIN_STRIP_DWELL_MS = 400
+
 /** Cohort lollipop: carrier rows fetched per gene (the top ones by carrier count). */
 export const COHORT_CARRIER_LIMIT = 1000
 

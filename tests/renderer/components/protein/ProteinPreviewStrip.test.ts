@@ -7,7 +7,10 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import ProteinPreviewStrip from '../../../../src/renderer/src/components/protein/ProteinPreviewStrip.vue'
-import { PROTEIN_VIEW_COPY } from '../../../../src/renderer/src/config/proteinViewConfig'
+import {
+  PROTEIN_STRIP_DWELL_MS,
+  PROTEIN_VIEW_COPY
+} from '../../../../src/renderer/src/config/proteinViewConfig'
 import { createQueryPinia, queryPlugins } from '../../helpers/with-queries'
 import { CAPABILITY_FEATURES } from '../../../../src/shared/ipc/capability-features'
 import { installCapabilities } from '../../helpers/capabilities'
@@ -29,6 +32,12 @@ const variant = {
 const getMapping = vi.fn()
 const getDomains = vi.fn()
 
+/** Wait out the selection dwell, then let the lookups answer. */
+async function dwell(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(PROTEIN_STRIP_DWELL_MS)
+  await flushPromises()
+}
+
 function mountStrip(over: Record<string, unknown> = {}, web = false) {
   const pinia = createQueryPinia()
   if (web) {
@@ -47,6 +56,7 @@ function mountStrip(over: Record<string, unknown> = {}, web = false) {
 
 describe('ProteinPreviewStrip', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     getMapping.mockReset().mockResolvedValue({
       success: true,
       mapping: { uniprotAccession: 'Q13769', proteinName: 'THOC5', proteinLength: 683 }
@@ -58,11 +68,36 @@ describe('ProteinPreviewStrip', () => {
     })
     Object.assign(window, { api: { protein: { getMapping, getDomains } } })
   })
-  afterEach(() => delete (window as { api?: unknown }).api)
+  afterEach(() => {
+    vi.useRealTimers()
+    delete (window as { api?: unknown }).api
+  })
+
+  it('stepping quickly through rows issues no lookup until a row is dwelt on', async () => {
+    const wrapper = mountStrip()
+    for (const gene of ['GENE1', 'GENE2', 'GENE3', 'THOC5']) {
+      await wrapper.setProps({ variant: { ...variant, gene_symbol: gene } as never })
+      await vi.advanceTimersByTimeAsync(PROTEIN_STRIP_DWELL_MS / 4)
+    }
+    expect(getMapping).not.toHaveBeenCalled()
+    await dwell()
+    expect(getMapping.mock.calls).toEqual([['THOC5']])
+    expect(wrapper.text()).toContain('p.180 / 683 aa')
+  })
+
+  it('a gene already looked up renders from the cache at once', async () => {
+    const wrapper = mountStrip()
+    await dwell()
+    await wrapper.setProps({ variant: { ...variant, gene_symbol: 'OTHER' } as never })
+    await wrapper.setProps({ variant: { ...variant } as never })
+    await flushPromises()
+    expect(wrapper.text()).toContain('p.180 / 683 aa')
+    expect(getMapping).toHaveBeenCalledTimes(1)
+  })
 
   it('draws the variant on the protein and opens the lollipop on click', async () => {
     const wrapper = mountStrip()
-    await flushPromises()
+    await dwell()
 
     const plot = wrapper.get('[data-testid="protein-strip-plot"]')
     expect(plot.attributes('aria-label')).toContain('Variant at p.180 of 683 in THOC5 domain')
@@ -75,13 +110,13 @@ describe('ProteinPreviewStrip', () => {
   it('takes the length from the mapping when InterPro answers 0 (no domains)', async () => {
     getDomains.mockResolvedValue({ success: true, proteinLength: 0, domains: [] })
     const wrapper = mountStrip()
-    await flushPromises()
+    await dwell()
     expect(wrapper.text()).toContain('p.180 / 683 aa')
   })
 
   it('the Gene link opens the gene structure tab', async () => {
     const wrapper = mountStrip()
-    await flushPromises()
+    await dwell()
     await wrapper.get('[data-testid="protein-strip-gene"]').trigger('click')
     expect(wrapper.emitted('open')).toEqual([['gene-structure']])
   })
@@ -96,7 +131,7 @@ describe('ProteinPreviewStrip', () => {
   it('a failed lookup is one muted line with the reason', async () => {
     getMapping.mockResolvedValue({ success: false, error: 'Gene not found in UniProt' })
     const wrapper = mountStrip()
-    await flushPromises()
+    await dwell()
     expect(wrapper.text()).toContain(PROTEIN_VIEW_COPY.loadFailed)
     expect(wrapper.text()).toContain('Gene not found in UniProt')
   })

@@ -83,12 +83,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useQuery } from '@pinia/colada'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useQuery, useQueryCache } from '@pinia/colada'
+import { queryKeys } from '../../queries/keys'
 import type { Variant } from '../../../../shared/types/api'
 import type { CohortVariant } from '../../../../shared/types/cohort'
 import { getConsequenceColor, getDomainColor } from '../../../../shared/utils/protein-utils'
-import { PROTEIN_VIEW_COPY, type ProteinViewTab } from '../../config/proteinViewConfig'
+import {
+  PROTEIN_STRIP_DWELL_MS,
+  PROTEIN_VIEW_COPY,
+  type ProteinViewTab
+} from '../../config/proteinViewConfig'
 import { proteinMappingQuery, proteinDomainsQuery } from '../../queries/protein'
 import { useProteinLookupsReason } from '../../composables/useProteinLookupsReason'
 import { formatError } from '../../utils/ipc-result'
@@ -104,8 +109,26 @@ const gene = computed(() =>
 // No gene: no strip. No protein position: a gene-level line, no lookup.
 const protein = computed(() => (gene.value === null ? null : proteinPositionOf(props.variant)))
 
-// The same cached queries as the full view (useProteinData): no extra calls.
-const mappingQuery = useQuery(() => proteinMappingQuery(protein.value === null ? null : gene.value))
+// The full view's cached queries (useProteinData). A gene not looked up yet
+// waits for a dwell on it, so stepping through rows sends no burst of lookups.
+const queryCache = useQueryCache()
+const lookupGene = ref<string | null>(null)
+let dwellTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => (protein.value === null || lookupsReason.value !== null ? null : gene.value),
+  (next) => {
+    clearTimeout(dwellTimer)
+    const cached =
+      next === null ? undefined : queryCache.getQueryData(queryKeys.protein('mapping', next))
+    lookupGene.value = cached === undefined ? null : next
+    if (next !== null && lookupGene.value === null) {
+      dwellTimer = setTimeout(() => (lookupGene.value = next), PROTEIN_STRIP_DWELL_MS)
+    }
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => clearTimeout(dwellTimer))
+const mappingQuery = useQuery(() => proteinMappingQuery(lookupGene.value))
 const accession = computed(() => mappingQuery.data.value?.uniprotAccession ?? null)
 const domainsQuery = useQuery(() => proteinDomainsQuery(accession.value))
 
