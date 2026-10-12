@@ -99,3 +99,14 @@ Merged from `08a` (data safety), `08b` (theme/colour/type), `08c` (layout/a11y/l
 - PR 3/4: `make ui-gates` + `make perf-interaction-gates`, plus a visual check in light and dark.
 - PR 5: `make preflight-full`.
 - Re-run this audit's scripts (`~/.cache/varlens-session/uiux-1012/`) for the before/after scores.
+
+## Addendum 2026-10-12 (after rebase onto v0.84.0 / `56ca9cb9`)
+`main` gained PR #565 (filtering-UX audit batch) after this audit ran on 0.83.0. Items it may already fix, so they must be re-tested before coding: D-01 DSL chips + D-02 DSL errors (13c9f304, 6f70e993, 9ff2ed38), cohort `/` and Ctrl+Shift+F (bd935b61), "View in Case" exact carrier (abd00e5f), filter drawer on narrow viewports (15e6bddd), cohort genome build from URL (95b06e43).
+
+Open issues from the parallel review (#545–#564, filed 2026-10-12) that this program covers — reference them in the PRs:
+- #545 burden worker never exits → PR 5 (E-01).
+- #547 VEP percent-encoding → PR 2 (decode at import + display). The issue's backfill migration remains open.
+- #557 batch genome build → build-detection PR (doc `10`).
+- #555 internal AF partitioned by build → denominator PR (doc `09`).
+
+Decisions: chr names per build; merge colliding ACMG by keeping the newer one and logging the other; SV/CNV/STR no-calls stop counting as carriers; separate per-build annotations outside the main contigs is deferred (schema). Builds stored wrongly by past batch/JSON imports are re-checked **before** the chr migration (doc `10` risk). Everything config-driven (`src/shared/config`); every PR gets a ponytail review.
