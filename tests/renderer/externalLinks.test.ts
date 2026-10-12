@@ -153,11 +153,14 @@ describe('resolveUrlTemplate — chromosome names', () => {
   })
 
   it.each([
-    ['1', 'chr1'],
-    ['chr1', 'chr1'],
-    ['MT', 'chrM'],
-    ['chrM', 'chrM']
-  ])('{chr_ucsc} of %s is %s', (chr, expected) => {
-    expect(resolveUrlTemplate('{chr_ucsc}', variant(chr), 'GRCh37', fields)).toBe(expected)
+    ['GRCh37', '1', 'chr1'],
+    ['GRCh37', 'chr1', 'chr1'],
+    // GRCh37 MT is rCRS: hg19 calls it chrMT; hg19's own chrM (NC_001807) stays chrM
+    ['GRCh37', 'MT', 'chrMT'],
+    ['GRCh37', 'chrM', 'chrM'],
+    ['GRCh38', 'MT', 'chrM'],
+    ['GRCh38', 'chrM', 'chrM']
+  ] as const)('{chr_ucsc} of %s %s is %s', (build, chr, expected) => {
+    expect(resolveUrlTemplate('{chr_ucsc}', variant(chr), build, fields)).toBe(expected)
   })
 })
