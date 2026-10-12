@@ -65,7 +65,7 @@ export class PostgresBuildReviewRepository {
     for (const c of choices) {
       if (!isImportableGenomeBuild(c.build)) throw new Error(`Unknown genome build: ${c.build}`)
     }
-    const user = auditActorName(null)
+    const user = auditActorName('local') // desktop on PostgreSQL has no request actor
     await withTransaction(this.pool, async (client) => {
       for (const { caseId, build } of choices) {
         const review = await client.query<{ genome_build: string | null }>(
