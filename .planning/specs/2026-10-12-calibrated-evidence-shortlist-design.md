@@ -94,7 +94,7 @@ Three varvis exomes (GRCh38, ~6.6–6.7k rows, all three inferred female from ch
 ### 4.2 Public candidate pool (patient-independent)
 Built **without any patient information**, then frozen and committed (public data):
 - Source: local ClinVar VCF `2026-04-26`; parsed header-aware (`CLNREVSTAT` compared as the full string).
-- P/LP: `CLNSIG` exactly `Pathogenic`, `Likely_pathogenic` or `Pathogenic/Likely_pathogenic`; review status `criteria_provided,_multiple_submitters,_no_conflicts`, `reviewed_by_expert_panel` or `practice_guideline`; `ORIGIN` has a germline-related bit (1 germline, 4 prenatal, 16 inherited, 32 paternal, 64 maternal, 128 de novo, 256 biparental, 512 uniparental) and no somatic bit (2) — unknown-only (8) excluded; a named disease; exactly one gene; SNV/indel ≤ 50 bp.
+- P/LP: `CLNSIG` exactly `Pathogenic`, `Likely_pathogenic` or `Pathogenic/Likely_pathogenic`; review status `criteria_provided,_multiple_submitters,_no_conflicts`, `reviewed_by_expert_panel` or `practice_guideline`; `ORIGIN` has a germline-related bit and no somatic bit — bits read from the VCF header (1 germline, 2 somatic, 4 inherited, 8 paternal, 16 maternal, 32 de-novo, 64 biparental, 128 uniparental; 0 unknown, 256 not-tested, 512 tested-inconclusive and 1073741824 other do not count as germline); a named disease; exactly one gene; SNV/indel ≤ 50 bp.
 - **Variant-level MOI:** from the asserted disease (`CLNDISDB` OMIM/Orphanet id) via the HPO annotation file `phenotype.hpoa` (public, pinned release). Exactly one of AD / AR / XLD / XLR required; otherwise excluded (counted).
 - Frequency plausibility (after annotation): AD popmax ≤ 1e-4, AR/XL ≤ 1e-2.
 - Benign decoys: `Benign`, `Likely_benign`, `Benign/Likely_benign`, same review/origin/size rules, popmax ≤ 1e-2.

@@ -6,19 +6,23 @@
       variant="outlined"
       density="compact"
       :placeholder="placeholder"
-      :prepend-inner-icon="mdiMagnify"
+      :prepend-inner-icon="condition ? undefined : mdiMagnify"
       hide-details="auto"
-      clearable
+      :clearable="!condition"
       :error-messages="errorMessages"
       :messages="notApplied && !hasErrors ? NOT_APPLIED_MESSAGE : []"
       class="dsl-search-bar"
-      aria-label="Search variants (text or filter DSL)"
+      :aria-label="label"
       aria-autocomplete="list"
       :aria-expanded="String(listOpen)"
       :aria-controls="listOpen ? suggestionsId : undefined"
       :aria-activedescendant="activeOptionId"
       :aria-invalid="hasErrors ? 'true' : undefined"
-      :class="{ 'dsl-mode': isDslMode, 'fts-mode': !isDslMode && localInput !== '' }"
+      :class="{
+        'dsl-mode': isDslMode,
+        'fts-mode': !isDslMode && localInput !== '',
+        'dsl-search-bar--condition': condition
+      }"
       @update:model-value="onInput"
       @click:clear="onClear"
       @keydown="onKeydown"
@@ -26,7 +30,7 @@
       @blur="onBlur"
     >
       <!-- Append inner: mode indicator -->
-      <template #append-inner>
+      <template v-if="!condition" #append-inner>
         <v-chip v-if="isDslMode" size="x-small" color="primary" variant="tonal" label class="mr-1">
           DSL
         </v-chip>
@@ -132,10 +136,19 @@ interface Props {
   /** The text differs from the applied (committed) filter */
   notApplied?: boolean
   placeholder?: string
+  /** Accessible name of the input. */
+  label?: string
+  /**
+   * Edit a single rule condition (shortlist ranking editor) instead of searching:
+   * no search icon, mode chip or clear button, and messages flow under the field.
+   */
+  condition?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: 'Gene, chr:pos, or filter expression (e.g. gnomad_af:<:0.01)'
+  placeholder: 'Gene, chr:pos, or filter expression (e.g. gnomad_af:<:0.01)',
+  label: 'Search variants (text or filter DSL)',
+  condition: false
 })
 
 const emit = defineEmits<{
@@ -342,6 +355,16 @@ defineExpose({ focus })
   border-radius: 4px;
   background: rgb(var(--v-theme-surface));
   box-shadow: 0 2px 6px rgb(0 0 0 / 15%);
+}
+
+/* A condition in an editor row has room below it: keep its message in flow. */
+.dsl-search-bar--condition :deep(.v-input__details) {
+  position: static;
+  margin-top: 0;
+  padding: 2px 0 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
 }
 
 .dsl-search-bar.v-input--error :deep(.v-input__details) {

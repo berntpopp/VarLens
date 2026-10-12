@@ -25,6 +25,7 @@ import type { FilterPreset } from '../../../src/shared/types/filter-presets'
 // ─── Mock useFilterPresetStore so every harness call gets the same ref ────────
 // Needs to live outside the harness so the `vi.mock` hoisting sees it.
 let mockVisiblePresets: Ref<FilterPreset[]>
+let mockExtraPreset = false
 
 const mockLoadPresets = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', () => ({
@@ -36,6 +37,7 @@ vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', () => ({
 
 // Import under test — AFTER vi.mock call so the mock resolves correctly.
 import { useShortlistQuery } from '../../../src/renderer/src/composables/useShortlistQuery'
+import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
 
 type AnnotationCallback = (ev: AnnotationChangeEvent) => void
 
@@ -94,6 +96,10 @@ function harness(caseId = 1) {
     }
   ])
 
+  if (mockExtraPreset) {
+    mockVisiblePresets.value.push({ ...mockVisiblePresets.value[0], id: 2, name: 'Mine' })
+  }
+
   const caseIdRef = ref(caseId)
 
   const [composable, app] = withSetup(() => useShortlistQuery(caseIdRef))
@@ -147,6 +153,18 @@ describe('useShortlistQuery', () => {
     app = h.app
     await nextTick()
     expect(h.composable.selectedPresetId.value).toBe(1)
+  })
+
+  it('auto-selects the default ranking from the settings when it is listed', async () => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    useSettingsStore().defaultShortlistPresetId = 2
+    mockExtraPreset = true
+    const h = harness()
+    app = h.app
+    await nextTick()
+    expect(h.composable.selectedPresetId.value).toBe(2)
+    mockExtraPreset = false
   })
 
   it('fetches when a preset is auto-selected', async () => {

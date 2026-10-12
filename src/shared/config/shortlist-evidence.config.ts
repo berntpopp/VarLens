@@ -67,6 +67,14 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
   /** Evidence scores have their own unit, so only these types may be mixed. */
   variantTypes: ['snv', 'indel'] as const,
 
+  /**
+   * Rule ids ending in this suffix are a group's catch-all reference bin
+   * (spec §11.1, §14–15): last in the group; its points may be tuned.
+   */
+  referenceRuleSuffix: '_ref',
+  /** Catch-all condition of the reference rule of a group added in the editor. */
+  newGroupReferenceWhen: 'func:is:notnull OR func:is:null',
+
   /** Pre-registered candidate gate (spec §3.4). */
   defaultGate: { maxGnomadAf: 0.01, consequences: ['HIGH', 'MODERATE', 'LOW'] },
   defaultTopN: 100,
