@@ -69,8 +69,8 @@ export interface EvidencePassInput {
 }
 
 /**
- * Both passes on the SQLite connection. No transaction is needed: the whole
- * call is synchronous on one connection, so no write can interleave.
+ * Both passes on the SQLite connection inside a single DEFERRED read snapshot
+ * so concurrent import-worker connections cannot mutate variants between passes.
  * Per-type failures are returned for `throwShortlistQueryErrors`.
  */
 export function rankEvidenceSqlite(input: EvidencePassInput): {
@@ -79,25 +79,36 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
   queryErrors: Array<{ type: VariantTypeKey; error: Error }>
 } {
   const { source, filters, config, limit } = input
-  const builder = new GeneContextBuilder(input.info)
-  let totalCandidates = 0
-  const queryErrors = eachType(filters, (filter) =>
-    forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
-      totalCandidates += page.length
-      builder.add(page.map(toLightRow))
-    })
-  )
-  if (queryErrors.length > 0) return { kept: [], totalCandidates, queryErrors }
+  const db = source.db
+  const startedTx = !db.inTransaction
+  if (startedTx) {
+    db.exec('BEGIN DEFERRED')
+  }
+  try {
+    const builder = new GeneContextBuilder(input.info)
+    let totalCandidates = 0
+    const queryErrors = eachType(filters, (filter) =>
+      forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
+        totalCandidates += page.length
+        builder.add(page.map(toLightRow))
+      })
+    )
+    if (queryErrors.length > 0) return { kept: [], totalCandidates, queryErrors }
 
-  const ctx = builder.build()
-  let kept: ScoredCandidate[] = []
-  const pass2Errors = eachType(filters, (filter) =>
-    forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
-      const scored = scoreEvidencePage(page, ctx, input.compiled, config.rankConfig)
-      kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
-    })
-  )
-  return { kept, totalCandidates, queryErrors: pass2Errors }
+    const ctx = builder.build()
+    let kept: ScoredCandidate[] = []
+    const pass2Errors = eachType(filters, (filter) =>
+      forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
+        const scored = scoreEvidencePage(page, ctx, input.compiled, config.rankConfig)
+        kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
+      })
+    )
+    return { kept, totalCandidates, queryErrors: pass2Errors }
+  } finally {
+    if (startedTx && db.inTransaction) {
+      db.exec('COMMIT')
+    }
+  }
 }
 
 function eachType(

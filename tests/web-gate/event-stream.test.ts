@@ -135,4 +135,21 @@ describe('GET /api/events', () => {
     expect(hub.subscriberCount()).toBe(1)
     other.res.destroy()
   })
+
+  test('broadcast events are delivered to all connected users', async () => {
+    const { hub, open } = await harness()
+    const u1 = await open({ 'x-test-user': '1' })
+    const u2 = await open({ 'x-test-user': '2' })
+    await u1.waitFor(/: connected/)
+    await u2.waitFor(/: connected/)
+
+    hub.publish(undefined, 'cohort:summaryRebuilt', { is_stale: true })
+    await u1.waitFor(/cohort:summaryRebuilt/)
+    await u2.waitFor(/cohort:summaryRebuilt/)
+
+    expect(u1.text()).toContain('"is_stale":true')
+    expect(u2.text()).toContain('"is_stale":true')
+    u1.res.destroy()
+    u2.res.destroy()
+  })
 })

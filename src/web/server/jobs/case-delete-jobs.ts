@@ -78,11 +78,15 @@ export class PostgresCaseDeleteJobs {
   private readonly shutdown = new AbortController()
   private readonly owners = new Map<string, number | undefined>()
   private readonly running = new Set<Promise<unknown>>()
+  private readonly unsubscribePrune?: () => void
 
   constructor(private readonly options: CaseDeleteJobRunnerOptions) {
     options.runner.onLifecycle((job) => {
       if (job.kind !== 'case_delete') return
       options.onJobChanged?.(snapshot(job), this.owners.get(job.id))
+    })
+    this.unsubscribePrune = options.runner.onPrune?.((jobId) => {
+      this.owners.delete(jobId)
     })
   }
 
@@ -136,6 +140,7 @@ export class PostgresCaseDeleteJobs {
 
   /** Abort between purge batches and wait for the running job to stop. */
   async close(): Promise<void> {
+    this.unsubscribePrune?.()
     this.shutdown.abort()
     await Promise.all([...this.running])
   }

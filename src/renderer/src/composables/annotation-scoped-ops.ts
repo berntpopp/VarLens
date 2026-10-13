@@ -355,7 +355,9 @@ async function load(
       'annotations'
     )
   } finally {
-    setLoading(key, false)
+    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
+      setLoading(key, false)
+    }
   }
 }
 
@@ -418,7 +420,9 @@ async function loadBatch(
       'annotations'
     )
   } finally {
-    for (const vk of uncached) setLoading(variantKey(vk), false)
+    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
+      for (const vk of uncached) setLoading(variantKey(vk), false)
+    }
   }
 }
 

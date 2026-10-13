@@ -81,9 +81,14 @@ describe('GeneContextBuilder', () => {
     b.add([r(1, {})]) // SNV page 1
     b.add([r(2, { ref: 'CT', alt: 'C' })]) // indel, another page
     const ctx = b.build()
-    expect(ctx.derived(r(1, {})).gene_het_hits).toBe(2)
-    expect(ctx.derived(r(1, {})).partners).toEqual([2])
+    const d1 = ctx.derived(r(1, {}))
+    expect(d1.gene_het_hits).toBe(2)
+    expect(d1.partners).toEqual([2])
+    expect(d1.compoundHetPartnerVariantIds).toEqual([2])
+    expect(d1.partners).toBe(d1.partners) // memoized reference
+    expect(d1.compoundHetPartnerVariantIds).toBe(d1.partners)
     expect(ctx.derived(r(2, { ref: 'CT', alt: 'C' })).partners).toEqual([1])
+    expect(ctx.derived(r(2, { ref: 'CT', alt: 'C' })).compoundHetPartnerVariantIds).toEqual([1])
   })
 
   it('two spellings of the same allele are one allele (Review Focus 3)', () => {

@@ -106,6 +106,16 @@ interface ActiveImportOperation {
 // Keep the full operation (not only a worker client) reachable for cancellation.
 let activeImportOperation: ActiveImportOperation | null = null
 
+export function isImportInProgress(): boolean {
+  return activeImportOperation !== null
+}
+
+export function assertNoActiveImport(): void {
+  if (activeImportOperation !== null) {
+    throw new ConflictError('An import operation is already in progress')
+  }
+}
+
 /**
  * Run `operation` as THE import operation of this process: a second one is
  * refused with a conflict, and `cancelImport` reaches it through `cancel`.
@@ -114,9 +124,7 @@ export async function withActiveImportOperation<T>(
   cancel: () => void,
   operation: () => Promise<T>
 ): Promise<T> {
-  if (activeImportOperation !== null) {
-    throw new ConflictError('An import operation is already in progress')
-  }
+  assertNoActiveImport()
   const current = { cancel }
   activeImportOperation = current
   try {

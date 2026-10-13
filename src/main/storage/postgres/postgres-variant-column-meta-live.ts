@@ -22,16 +22,16 @@ function toOptionalNumber(value: unknown): number | undefined {
   return Number.isFinite(numberValue) ? numberValue : undefined
 }
 
-/** LEFT JOIN to the extension table backing an `sv.*` / `cnv.*` / `str.*` key. */
+/** INNER JOIN to the extension table backing an `sv.*` / `cnv.*` / `str.*` key. */
 export function buildColumnMetaJoins(schemaName: string, columnKey: string): string {
   if (columnKey.startsWith('sv.')) {
-    return `LEFT JOIN ${schemaName}."variant_sv" sv ON sv.variant_id = v.id`
+    return `INNER JOIN ${schemaName}."variant_sv" sv ON sv.variant_id = v.id`
   }
   if (columnKey.startsWith('cnv.')) {
-    return `LEFT JOIN ${schemaName}."variant_cnv" cnv ON cnv.variant_id = v.id`
+    return `INNER JOIN ${schemaName}."variant_cnv" cnv ON cnv.variant_id = v.id`
   }
   if (columnKey.startsWith('str.')) {
-    return `LEFT JOIN ${schemaName}."variant_str" str_ext ON str_ext.variant_id = v.id`
+    return `INNER JOIN ${schemaName}."variant_str" str_ext ON str_ext.variant_id = v.id`
   }
   return ''
 }

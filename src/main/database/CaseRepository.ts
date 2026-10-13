@@ -272,7 +272,9 @@ export class CaseRepository extends BaseRepository {
              c.genome_build,
              (SELECT cm.affected_status FROM case_metadata cm WHERE cm.case_id = c.id) AS affected_status,
              (SELECT cm.sex FROM case_metadata cm WHERE cm.case_id = c.id) AS sex,
-             (SELECT GROUP_CONCAT(cg.id || ':' || cg.name, '|')
+             (SELECT json_group_array(
+               CASE WHEN cg.id IS NOT NULL THEN json_object('id', cg.id, 'name', cg.name) END
+             )
               FROM case_cohort_links ccl
               JOIN cohort_groups cg ON cg.id = ccl.cohort_id
               WHERE ccl.case_id = c.id) AS cohorts_raw
@@ -285,15 +287,31 @@ export class CaseRepository extends BaseRepository {
     const dataParams = [...whereParams, limit, offset]
     const rawRows = this.db.prepare(dataSQL).all(...dataParams) as CaseQueryRawRow[]
 
-    // Post-process: split "id:name|id:name" into separate arrays
+    // Post-process: parse json_group_array of { id, name }
     const data: CaseWithCohorts[] = rawRows.map((row) => {
-      const pairs =
-        row.cohorts_raw !== null && row.cohorts_raw !== ''
-          ? row.cohorts_raw.split('|').map((pair) => {
+      let pairs: { id: number; name: string }[] = []
+      if (row.cohorts_raw !== null && row.cohorts_raw !== '') {
+        try {
+          const parsed = JSON.parse(row.cohorts_raw)
+          if (Array.isArray(parsed)) {
+            pairs = parsed.filter(
+              (p): p is { id: number; name: string } =>
+                p !== null &&
+                typeof p === 'object' &&
+                typeof p.id === 'number' &&
+                typeof p.name === 'string'
+            )
+          }
+        } catch {
+          pairs = row.cohorts_raw
+            .split('|')
+            .map((pair) => {
               const sep = pair.indexOf(':')
               return { id: Number(pair.slice(0, sep)), name: pair.slice(sep + 1) }
             })
-          : []
+            .filter((p) => !Number.isNaN(p.id))
+        }
+      }
       return {
         id: row.id,
         name: row.name,

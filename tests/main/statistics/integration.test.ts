@@ -54,6 +54,16 @@ describe('Association analysis integration', () => {
     }
   })
 
+  it('rejects duplicate case IDs within groupA or groupB', () => {
+    const builder = new AssociationDataBuilder(db)
+    expect(() => builder.build([1, 1, 2], [6, 7], {}, [])).toThrow(
+      'Duplicate case IDs in groupA or groupB'
+    )
+    expect(() => builder.build([1, 2], [6, 6, 7], {}, [])).toThrow(
+      'Duplicate case IDs in groupA or groupB'
+    )
+  })
+
   it('detects BRCA1 enrichment with Fisher test', () => {
     const builder = new AssociationDataBuilder(db)
     const genes = builder.build([1, 2, 3, 4, 5], [6, 7, 8, 9, 10], {}, []).genes

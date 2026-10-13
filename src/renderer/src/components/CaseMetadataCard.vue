@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted } from 'vue'
+import { computed, watch } from 'vue'
 import StatusSelector from './StatusSelector.vue'
 import CohortCombobox from './CohortCombobox.vue'
 import HpoTermSelector from './HpoTermSelector.vue'
@@ -217,8 +217,4 @@ async function handleAddHpoTerm(term: { hpoId: string; hpoLabel: string }) {
 async function handleRemoveHpoTerm(hpoId: string) {
   await runMutation('remove HPO term', () => removeHpoTerm(props.caseId, hpoId), true)
 }
-
-onMounted(async () => {
-  await loadCohortGroups()
-})
 </script>

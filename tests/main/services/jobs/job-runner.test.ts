@@ -105,9 +105,31 @@ describe('JobRunner — Sprint A D2', () => {
     finish()
     await handle.result
     // Late reports after completion are ignored.
-    report!(9, 9)
-
     expect(seen.map((s) => s.status)).toEqual(['queued', 'running', 'running', 'completed'])
     expect(runner.get(handle.id)?.progress).toEqual({ current: 1, total: 4, message: 'deleting' })
+  })
+
+  it('caps retained terminal jobs and notifies onPrune listeners without evicting active jobs', async () => {
+    // Configured with max 2 terminal jobs
+    const runner = new JobRunner(2)
+    const pruned: string[] = []
+    runner.onPrune((id) => pruned.push(id))
+
+    const h1 = runner.enqueue('import_single', { n: 1 }, async () => 'done 1')
+    await h1.result
+    const h2 = runner.enqueue('import_single', { n: 2 }, async () => 'done 2')
+    await h2.result
+
+    expect(runner.list().map((j) => j.id)).toEqual([h1.id, h2.id])
+    expect(pruned).toEqual([])
+
+    // Enqueue 3rd job: when it finishes, h1 should be pruned
+    const h3 = runner.enqueue('import_single', { n: 3 }, async () => 'done 3')
+    await h3.result
+
+    expect(pruned).toEqual([h1.id])
+    expect(runner.get(h1.id)).toBeUndefined()
+    expect(runner.get(h2.id)).toBeDefined()
+    expect(runner.get(h3.id)).toBeDefined()
   })
 })

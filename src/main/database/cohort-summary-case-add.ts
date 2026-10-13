@@ -108,7 +108,7 @@ export interface ImportSummarySession {
    */
   invalidate(): void
   /** Orderly session end: rebuild if upkeep was abandoned, ANALYZE, clear the marker. */
-  finish(): void
+  finish(clearSession?: boolean): void
 }
 
 /**
@@ -156,6 +156,23 @@ export interface ImportSummarySessionOptions {
 /** True when an import session did not reach its orderly end. */
 export function isImportSessionOpen(db: DatabaseType): boolean {
   return db.prepare(sql.IS_IMPORT_SESSION_OPEN_SQL).get() !== undefined
+}
+
+/** Clear the open-session marker unless the summary is stale. */
+export function clearImportSession(db: DatabaseType): void {
+  if (!isCohortSummaryStale(db)) {
+    db.exec(sql.CLEAR_IMPORT_SESSION_OPEN_SQL)
+  }
+}
+
+function hasCoordIndex(db: DatabaseType): boolean {
+  return (
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_variants_chr_pos_ref_alt'"
+      )
+      .get() !== undefined
+  )
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
@@ -269,8 +286,7 @@ export function openImportSummarySession(
       if (exact && stmts) {
         const s = stmts
         try {
-          // The removal looks other carriers up by coordinate.
-          db.exec(sql.ENSURE_COORD_INDEX_SQL)
+          if (!hasCoordIndex(db)) throw new Error('idx_variants_chr_pos_ref_alt is missing')
           removal ??= openCaseSummaryRemoval(db)
           if (!removal) throw new Error('summary is stale')
           const remover = removal
@@ -295,7 +311,9 @@ export function openImportSummarySession(
       if (exact && stmts) {
         const s = stmts
         try {
-          if (rebuildIsCheaper(s, filesAfterThis + 1)) {
+          const coordIndexExists = hasCoordIndex(db)
+          const useIncremental = coordIndexExists && !rebuildIsCheaper(s, filesAfterThis + 1)
+          if (!useIncremental) {
             // Not a failure: no warning. `finish` rebuilds once.
             publishStale(caseId)
             abandon()
@@ -321,7 +339,7 @@ export function openImportSummarySession(
             // was before this case joined it.
             s.captureGeneCoords.run(params)
             if ((s.countUnresolved.get() as { c: number }).c > 0) {
-              db.exec(sql.ENSURE_COORD_INDEX_SQL)
+              if (!hasCoordIndex(db)) throw new Error('idx_variants_chr_pos_ref_alt is missing')
               s.resolveGeneCoords.run(params)
             }
             s.upsertGeneBurden.run({ build: params.build })
@@ -360,18 +378,20 @@ export function openImportSummarySession(
       abandon()
     },
 
-    finish() {
+    finish(clearSession = true) {
       try {
         // Stale without `exact` having dropped: flagged after the last file
         // by an edit outside the session, which told the renderer "stale".
         // Announce it here too, so the import reports "current" afterwards.
         if (exact && isCohortSummaryStale(db)) abandon()
-        if (!exact) options.rebuild()
-        else {
+        if (!exact) {
+          db.exec(sql.ENSURE_COORD_INDEX_SQL)
+          options.rebuild()
+        } else {
           db.exec('ANALYZE cohort_variant_summary')
           db.exec('ANALYZE gene_burden_summary')
         }
-        if (!isCohortSummaryStale(db)) db.exec(sql.CLEAR_IMPORT_SESSION_OPEN_SQL)
+        if (clearSession) clearImportSession(db)
       } catch (e) {
         options.onWarning(`Failed to finish cohort summary upkeep: ${message(e)}`)
       }

@@ -19,6 +19,7 @@ import {
   resolveExtensionColumnKey,
   type ExtensionTypeKey
 } from '../../shared/types/variant-extension-registry-data'
+import { carrierRowSql } from '../../shared/sql/genotype-dosage'
 import { escapeLikePattern } from './search/search-clause-emitter'
 
 export * from '../../shared/types/variant-extension-registry-data'
@@ -243,6 +244,7 @@ export function buildExtensionExistsClauses(
           AND v.ref = ${cvsAlias}.ref
           AND v.alt = ${cvsAlias}.alt
           AND v.variant_type = ${cvsAlias}.variant_type
+          AND ${carrierRowSql('v')}
           AND ${innerConditions.join(' AND ')}
       )`
     )

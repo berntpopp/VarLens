@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   buildDuplicateReport,
+  enqueueSessionBatchImport,
   runSessionBatchImport,
   type SessionBatchFile
 } from '../../../../src/main/ipc/handlers/batch-import-session'
@@ -257,6 +258,36 @@ describe('runSessionBatchImport', () => {
       signal: controller.signal
     })
     expect(result).toMatchObject({ succeeded: 0, cancelled: true })
+  })
+
+  it('does not invoke cancelImport when cancelled before owning active import', async () => {
+    const importLogic = await import('../../../../src/main/ipc/handlers/import-logic')
+    const cancelSpy = vi.spyOn(importLogic, 'cancelImport')
+    const { jobRunner } = await import('../../../../src/main/services/jobs/runner')
+
+    let resolveList!: (cases: Array<{ id: number; name: string }>) => void
+    const session = {
+      listCases: () =>
+        new Promise<Array<{ id: number; name: string }>>((r) => {
+          resolveList = r
+        }),
+      getImportExecutor: () => ({ importSingleFile: vi.fn(), cancel: vi.fn() })
+    }
+
+    const { jobId, result } = enqueueSessionBatchImport({
+      files: [file('HG001.json')],
+      duplicateStrategy: 'skip',
+      session: session as never,
+      callbacks: {}
+    })
+
+    // Cancel while waiting for listCases (before owning active import)
+    await jobRunner.cancel(jobId)
+    resolveList([])
+    await result
+
+    expect(cancelSpy).not.toHaveBeenCalled()
+    cancelSpy.mockRestore()
   })
 })
 

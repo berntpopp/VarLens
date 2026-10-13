@@ -256,7 +256,7 @@ import type {
   ColumnFiltersParam
 } from '../../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../../shared/types/filters'
-import { buildActiveFiltersList } from '../../utils/filters/activeFilters'
+import { buildColumnFilterChips } from '../../utils/filters/activeFilters'
 import FilterEmptyState from '../filters/FilterEmptyState.vue'
 import { useDebounce } from '../../composables/useDebounce'
 import { useLinkResolvers } from '../../composables/useLinkResolvers'
@@ -334,7 +334,7 @@ const acmgQuickMenu = provideAcmgQuickMenu() // one shared ACMG menu, not one pe
 // @ts-expect-error - These refs ARE used in template bindings
 const { topScrollbarRef, topScrollbarInnerRef, initScrollSync } = useTableScroll()
 const { getRowProps } = useTableRowProps<CohortVariant>({
-  selectedId: ref(props.selectedVariantKey),
+  selectedId: toRef(props, 'selectedVariantKey'),
   getItemId: (item: CohortVariant) => item.variant_key
 })
 // Expanded rows (variant keys). Each expanded row loads its own carriers.
@@ -575,35 +575,7 @@ onMounted(async () => {
 
 // Column active filter chips for the toolbar
 const columnActiveFilters = computed<ActiveFilter[]>(() => {
-  const colFilters = getColumnFiltersParam()
-  if (!colFilters) return []
-  return buildActiveFiltersList(
-    {
-      searchQuery: '',
-      geneSymbol: '',
-      consequences: [],
-      funcs: [],
-      clinvars: [],
-      maxGnomadAf: null,
-      minCadd: null,
-      maxInternalAf: null,
-      maxCarriers: null,
-      minCarriers: null,
-      starredOnly: false,
-      hasCommentOnly: false,
-      acmgClassifications: [],
-      tagIds: [],
-      annotationScope: 'case',
-      activePanelIds: [],
-      panelPaddingBp: 5000,
-      inheritanceModes: [],
-      analysisGroupId: null,
-      considerPhasing: false,
-      columnFilters: {}
-    },
-    [],
-    colFilters
-  ).filter((f) => f.id.startsWith('col:'))
+  return buildColumnFilterChips(getColumnFiltersParam())
 })
 
 // Expose column filter state for the parent

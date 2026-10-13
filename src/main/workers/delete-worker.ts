@@ -107,7 +107,7 @@ async function runDelete(msg: Extract<DeleteWorkerRequest, { type: 'start' }>): 
 /** Bounded statistics refresh instead of the old whole-database ANALYZE. */
 function optimizeAfterDelete(db: DatabaseType): void {
   try {
-    db.pragma('analysis_limit = 1000')
+    db.pragma(`analysis_limit = ${DATABASE_CONFIG.ANALYSIS_LIMIT}`)
     db.pragma('optimize')
   } catch (e) {
     console.warn(
@@ -145,8 +145,10 @@ function openDatabase(dbPath: string, encryptionKey?: string): DatabaseType {
   db.pragma('synchronous = NORMAL')
   db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
   db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
-  db.pragma('temp_store = MEMORY')
+  const isEncrypted = encryptionKey !== undefined && encryptionKey !== ''
+  db.pragma(isEncrypted ? 'temp_store = MEMORY' : 'temp_store = DEFAULT')
   db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
+  db.pragma('journal_size_limit = 67108864')
 
   return db
 }

@@ -88,7 +88,12 @@
       @comment-click="handleCommentClick"
       @navigate-to-case="handleNavigateToCase"
       @column-filters-change="handleColumnFiltersChange"
-      @deselect="emit('deselect')"
+      @deselect="
+        () => {
+          selectedVariantKey = null
+          emit('deselect')
+        }
+      "
       @clear-filter="cohortFilterBarRef?.handleClearFilter($event)"
       @clear-filters="cohortFilterBarRef?.handleClearAll()"
     />
@@ -649,6 +654,7 @@ onUnmounted(() => {
 
 onActivated(() => {
   activate()
+  hydrateAnnotations(variants.value)
 })
 
 onDeactivated(() => {

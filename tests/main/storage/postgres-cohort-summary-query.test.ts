@@ -217,6 +217,24 @@ describe('buildSummaryQueryParts', () => {
     ])
   })
 
+  it('builds unnest-based panel interval predicate with <= 10 parameters for a 12,000-interval panel (#618)', () => {
+    const intervals = Array.from({ length: 12_000 }, (_, i) => ({
+      chr: '1',
+      start: i * 100,
+      end: i * 100 + 50
+    }))
+    const result = buildSummaryQueryParts({ panel_intervals: intervals }, TOTAL_CASES)
+    const where = result.parts.whereParts.join(' ')
+    expect(where).toContain(
+      'EXISTS (SELECT 1 FROM unnest($1::text[], $2::bigint[], $3::bigint[]) AS pi(chr, start_pos, end_pos) WHERE cvs.chr = pi.chr AND cvs.pos <= pi.end_pos AND COALESCE(cvs.end_pos, cvs.pos) >= pi.start_pos)'
+    )
+    expect(result.parts.values.length).toBeLessThanOrEqual(10)
+    expect(result.parts.values).toHaveLength(3)
+    expect(result.parts.values[0]).toHaveLength(24_000)
+    expect(result.parts.values[1]).toHaveLength(24_000)
+    expect(result.parts.values[2]).toHaveLength(24_000)
+  })
+
   it('falls back (unavailable) when an extension-table predicate is present', () => {
     const params: CohortSearchParams = {
       gene_symbol: 'BRCA1',

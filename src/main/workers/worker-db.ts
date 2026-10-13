@@ -54,7 +54,9 @@ export function openWorkerDatabase(dbPath: string, encryptionKey?: string): Data
   db.pragma('synchronous = OFF')
   db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
   db.pragma(`cache_size = ${DATABASE_CONFIG.IMPORT_CACHE_SIZE_KB}`)
-  db.pragma('temp_store = MEMORY')
+  // shortcut: SQLite3MC < 2.6.0 does not encrypt disk temp files; keep MEMORY when encrypted (#614).
+  const isEncrypted = encryptionKey !== undefined && encryptionKey !== ''
+  db.pragma(isEncrypted ? 'temp_store = MEMORY' : 'temp_store = DEFAULT')
   db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
   db.pragma('wal_autocheckpoint = 0')
   // Bounds the ANALYZE / PRAGMA optimize at session end, as on the main connection.
@@ -64,22 +66,28 @@ export function openWorkerDatabase(dbPath: string, encryptionKey?: string): Data
 }
 
 /**
- * Bound the write-ahead log of an import session. The session disables the
- * automatic checkpoint (see openWorkerDatabase), so without this the log keeps
- * every page version of every file until the final TRUNCATE — about 3 GiB for
- * 20 exomes, 3.5x the finished database. PASSIVE never waits for or blocks a
- * reader; whatever a reader still pins is picked up after a later file, and
- * once the log is fully checkpointed the next file overwrites it from the start.
+ * Run a PASSIVE write-ahead log checkpoint. PASSIVE never waits for or blocks
+ * a reader; whatever a reader still pins is picked up later.
  */
-export function checkpointBetweenFiles(db: DatabaseType): void {
+export function checkpointWal(db: DatabaseType): void {
   try {
     db.pragma('wal_checkpoint(PASSIVE)')
   } catch (e) {
     console.warn(
-      '[worker-db] Failed to checkpoint between files:',
+      '[worker-db] Failed to checkpoint WAL:',
       e instanceof Error ? e.message : String(e)
     )
   }
+}
+
+/**
+ * Bound the write-ahead log of an import session. The session disables the
+ * automatic checkpoint (see openWorkerDatabase), so without this the log keeps
+ * every page version of every file until the final TRUNCATE — about 3 GiB for
+ * 20 exomes, 3.5x the finished database.
+ */
+export function checkpointBetweenFiles(db: DatabaseType): void {
+  checkpointWal(db)
 }
 
 /**
@@ -102,8 +110,7 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
 
 /**
  * Rebuild the FTS index, recreate triggers, run ANALYZE, and optimize the index.
- * Throws on failure: the caller must keep its recovery state (an import leaves
- * its session marker, so the next start repairs the index).
+ * Returns false on failure so the caller can keep its recovery state.
  *
  * The rebuild step delegates to `rebuildAllFtsIndexes` from the shared
  * `fts-trigger-management` module so every present FTS table (variants_fts
@@ -113,28 +120,53 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
  * there is no snapshot to restore from and we fall back to the
  * "ensure triggers exist" semantics.
  */
-export function rebuildFts(db: DatabaseType): void {
-  rebuildAllFtsIndexes(db)
-  db.exec(createFTSTriggers)
-  ensureExtensionFtsTriggers(db)
-  db.exec('ANALYZE')
-  db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
+export function rebuildFts(db: DatabaseType): boolean {
+  try {
+    rebuildAllFtsIndexes(db)
+    db.exec(createFTSTriggers)
+    ensureExtensionFtsTriggers(db)
+    try {
+      db.exec('ANALYZE')
+    } catch (e) {
+      console.warn(
+        '[worker-db] Failed to ANALYZE during FTS rebuild:',
+        e instanceof Error ? e.message : String(e)
+      )
+    }
+    db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
+    return true
+  } catch (e) {
+    console.warn(
+      '[worker-db] Failed to rebuild FTS index:',
+      e instanceof Error ? e.message : String(e)
+    )
+    return false
+  }
 }
 
 /**
  * End of an import session whose FTS triggers were down: index only the rows
  * above `watermark` (null: rebuild the whole index) and restore the triggers.
  * A small session ends with a bounded PRAGMA optimize, not a full ANALYZE.
- * Throws like {@link rebuildFts}.
+ * Returns true on success or false on failure.
  */
-export function restoreFts(db: DatabaseType, watermark: number | null): void {
+export function restoreFts(db: DatabaseType, watermark: number | null): boolean {
   // Triggers back mid-session (a concurrent delete or rebuild job): rows went
   // in or out by trigger, so the watermark no longer says what is indexed.
   if (watermark === null || anyFtsTrigger(db)) return rebuildFts(db)
-  indexFtsRowsAbove(db, watermark)
-  db.exec(createFTSTriggers)
-  ensureExtensionFtsTriggers(db)
-  db.pragma('optimize')
+  try {
+    indexFtsRowsAbove(db, watermark)
+    db.exec(createFTSTriggers)
+    ensureExtensionFtsTriggers(db)
+    db.pragma('optimize')
+    return true
+  } catch (e) {
+    console.warn(
+      '[worker-db] Failed to restore FTS index:',
+      e instanceof Error ? e.message : String(e)
+    )
+    return false
+  }
 }
 
 /**

@@ -53,6 +53,11 @@ interface UploadRouteBody extends FastifyRequest {
 const stagedUploads = new Map<string, StagedUpload>()
 /** Upload id → imports currently reading it. A held upload is never swept. */
 const heldUploads = new Map<string, number>()
+const inFlightBytesByUser = new Map<number, number>()
+
+export function inFlightBytesOf(userId: number): number {
+  return inFlightBytesByUser.get(userId) ?? 0
+}
 
 /**
  * Boot-time sweep. The index above is in memory, so whatever is on disk belongs
@@ -62,6 +67,7 @@ const heldUploads = new Map<string, number>()
 export async function clearStagedUploads(): Promise<void> {
   stagedUploads.clear()
   heldUploads.clear()
+  inFlightBytesByUser.clear()
   const root = resolveUploadRoot()
   const entries = await readdir(root, { withFileTypes: true }).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
@@ -112,7 +118,7 @@ export function holdWebUploads(refs: readonly unknown[]): (imported?: boolean) =
 /** Delete staged uploads now, e.g. the files of an extraction that was refused. */
 export function discardWebUploads(uploads: readonly StagedUpload[]): void {
   for (const upload of uploads) {
-    void deleteUpload(upload)
+    void deleteUpload(upload).catch(() => undefined)
     stagedUploads.delete(upload.id)
   }
 }
@@ -338,20 +344,23 @@ async function stageUpload(params: {
         'then try again with fewer files'
     )
 
-  const quotaLeft = maxStagedBytes - stagedBytesOf(params.userId)
+  const quotaLeft = maxStagedBytes - (stagedBytesOf(params.userId) + inFlightBytesOf(params.userId))
+  if (quotaLeft <= 0) throw quotaExceeded()
 
   await mkdir(uploadDir, { recursive: true, mode: 0o700 })
 
   let size: number
   try {
-    const written = await writeLimitedUpload(params.source, storedPath, (bytes) => {
+    const written = await writeLimitedUpload(params.source, storedPath, params.userId, (bytes) => {
       if (bytes > maxBytes) {
         throw new UploadTooLargeError(
           'upload-too-large',
           `Upload exceeds the configured ${maxBytes} byte limit`
         )
       }
-      if (bytes > quotaLeft) throw quotaExceeded()
+      if (stagedBytesOf(params.userId) + inFlightBytesOf(params.userId) > maxStagedBytes) {
+        throw quotaExceeded()
+      }
     })
     // No await between this re-check and stagedUploads.set below: parallel
     // uploads of one user cannot each fit and together pass the cap.
@@ -385,27 +394,49 @@ async function stageUpload(params: {
 async function writeLimitedUpload(
   source: Readable,
   storedPath: string,
+  userId: number,
   assertWithinLimits: (written: number) => void
 ): Promise<number> {
   const target = createWriteStream(storedPath, { mode: 0o600 })
   let written = 0
+  let inFlightThisUpload = 0
+
+  let streamError: Error | null = null
+  const onTargetError = (err: Error): void => {
+    streamError = err
+    source.destroy(err)
+  }
+  target.on('error', onTargetError)
 
   try {
     for await (const chunk of source) {
+      if (streamError !== null) throw streamError
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       written += buffer.length
+      inFlightThisUpload += buffer.length
+      inFlightBytesByUser.set(userId, (inFlightBytesByUser.get(userId) ?? 0) + buffer.length)
       assertWithinLimits(written)
       if (!target.write(buffer)) {
         await once(target, 'drain')
       }
+      if (streamError !== null) throw streamError
     }
 
     target.end()
     await finished(target)
     return written
   } catch (error) {
+    source.destroy()
     target.destroy()
     throw error
+  } finally {
+    target.off('error', onTargetError)
+    if (inFlightThisUpload > 0) {
+      const current = inFlightBytesByUser.get(userId) ?? 0
+      const next = Math.max(0, current - inFlightThisUpload)
+      if (next === 0) inFlightBytesByUser.delete(userId)
+      else inFlightBytesByUser.set(userId, next)
+    }
   }
 }
 
@@ -512,5 +543,5 @@ function cleanupExpiredUploads(): void {
 }
 
 async function deleteUpload(upload: StagedUpload): Promise<void> {
-  await rm(dirname(upload.storedPath), { recursive: true, force: true })
+  await rm(dirname(upload.storedPath), { recursive: true, force: true }).catch(() => undefined)
 }

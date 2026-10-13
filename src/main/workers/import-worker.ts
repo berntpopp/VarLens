@@ -22,10 +22,14 @@ import { resolveVcfSelectedSampleColumn } from '../import/vcf/vcf-line-parser'
 import { resolveBatchSize } from '../import/bounded-batcher'
 import {
   openImportSummarySession,
+  clearImportSession,
+  isImportSessionOpen,
   type ImportSummarySession
 } from '../database/cohort-summary-case-add'
+import { SET_IMPORT_SESSION_OPEN_SQL } from '../database/cohort-summary-case-add-sql'
 import {
   checkpointBetweenFiles,
+  checkpointWal,
   openWorkerDatabase,
   restoreFts,
   rebuildCohortSummary
@@ -44,7 +48,7 @@ import {
 import { appendFileToCase, streamFileIntoCase } from './import-append'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { ftsTriggersComplete, tearDownFtsTriggers } from '../database/fts-trigger-management'
-import { discardInterruptedImports } from './import-recovery'
+import { discardInterruptedImports, hasInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 
@@ -80,24 +84,37 @@ export async function runImportSession(
     // was filling, named by the main process, and every case that was never
     // published. The FTS triggers, still up, take its rows out of the index.
     const ftsTriggersLive = ftsTriggersComplete(db)
+    const priorRecoveryNeeded = hasInterruptedImports(db) || isImportSessionOpen(db)
+
     discardInterruptedImports(
       db,
       msg.discardCaseIds ?? [],
       (caseId) => void stmts.deleteCase.run(caseId)
     )
 
-    // FTS row triggers are down for every session: per-row FTS upkeep costs
-    // about 25x a bulk index (#551: 300k SVs into 1.2M rows, 349 s against
-    // 14 s). A bulk load relative to what is stored (import-index-sql.ts)
-    // also drops the non-essential indexes and rebuilds both at the end. A
-    // small session keeps the indexes and indexes only its own rows, above
-    // the watermark, instead of rebuilding the whole index (#559). Missing
-    // triggers (a session that died) force the rebuild.
+    // FTS row triggers are retained on clean incremental sessions (#612).
+    // A bulk load relative to what is stored (import-index-sql.ts) drops
+    // the non-essential indexes and rebuilds both at the end. A small session
+    // with prior recovery or discarded cases keeps indexes but drops triggers
+    // and indexes above the watermark (#559). Clean small imports keep triggers
+    // live so rows are indexed incrementally.
     const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
     const keepIndexes = keepsIndexesForSession(storedCases, msg.files.length)
-    let ftsWatermark = keepIndexes && ftsTriggersLive ? maxVariantId(db) : null
-    tearDownFtsTriggers(db)
-    ftsFinalizationState.ftsTriggersDropped = true
+    const keepsFtsTriggersForSession =
+      keepIndexes &&
+      !priorRecoveryNeeded &&
+      (msg.discardCaseIds ?? []).length === 0 &&
+      ftsTriggersLive
+
+    let ftsWatermark: number | null = null
+    if (keepsFtsTriggersForSession) {
+      ftsFinalizationState.ftsTriggersDropped = false
+    } else {
+      ftsWatermark = keepIndexes && ftsTriggersLive ? maxVariantId(db) : null
+      tearDownFtsTriggers(db)
+      ftsFinalizationState.ftsTriggersDropped = true
+    }
+
     if (!keepIndexes) db.exec(DROP_INDEXES)
 
     // The cohort summary stays exact after every file instead of going stale
@@ -439,9 +456,23 @@ export async function runImportSession(
     // gets rows for indexes that exist at that moment.
     sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
     recreateSessionIndexes(db)
-    restoreFts(db, ftsWatermark)
-    ftsFinalizationState.ftsRebuilt = true
-    summary.finish()
+    checkpointWal(db)
+    let ftsRebuilt = false
+    if (keepsFtsTriggersForSession && ftsTriggersComplete(db)) {
+      try {
+        db.exec('ANALYZE')
+      } catch (e) {
+        console.warn('[import-worker] Failed to ANALYZE:', String(e))
+      }
+      ftsRebuilt = true
+    } else {
+      ftsRebuilt = restoreFts(db, ftsWatermark)
+    }
+    checkpointWal(db)
+    ftsFinalizationState.ftsRebuilt = ftsRebuilt
+    summary.finish(false)
+    if (ftsRebuilt) clearImportSession(db)
+    else db.exec(SET_IMPORT_SESSION_OPEN_SQL)
 
     const completeMsg: WorkerMessage = {
       type: 'complete',
@@ -536,10 +567,7 @@ function recreateSessionIndexes(db: DatabaseType): void {
   try {
     db.exec(RECREATE_INDEXES)
   } catch (e) {
-    console.warn(
-      '[import-worker] Failed to recreate indexes (will be recreated on next app start):',
-      e instanceof Error ? e.message : String(e)
-    )
+    console.warn('[import-worker] Failed to recreate indexes:', String(e))
   }
 }
 
@@ -553,7 +581,7 @@ function sendProgress(
   variantCount: number,
   skipped: number
 ): void {
-  const msg: WorkerMessage = {
+  port.postMessage({
     type: 'progress',
     fileIndex,
     totalFiles,
@@ -562,6 +590,5 @@ function sendProgress(
     phase,
     variantCount,
     skipped
-  }
-  port.postMessage(msg)
+  })
 }

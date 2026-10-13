@@ -108,6 +108,12 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
           )
         )
 
+      case 'variants:shortlist':
+        return repos.shortlistService.getShortlist(
+          params[0] as Parameters<typeof repos.shortlistService.getShortlist>[0],
+          () => geneRefDb
+        )
+
       // ── Cohort ────────────────────────────────────────────
       case 'cohort:variants': {
         const cohortParams = params[0] as PanelAwareFilter &

@@ -99,8 +99,10 @@ port.on('message', (msg: RebuildWorkerRequest) => {
     db.pragma('synchronous = NORMAL')
     db.pragma(`busy_timeout = ${DATABASE_CONFIG.BUSY_TIMEOUT_MS}`)
     db.pragma(`cache_size = ${DATABASE_CONFIG.CACHE_SIZE_KB}`)
-    db.pragma('temp_store = MEMORY')
+    const isEncrypted = msg.encryptionKey !== undefined && msg.encryptionKey !== ''
+    db.pragma(isEncrypted ? 'temp_store = MEMORY' : 'temp_store = DEFAULT')
     db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
+    db.pragma(`analysis_limit = ${DATABASE_CONFIG.ANALYSIS_LIMIT}`)
 
     // Before the rebuild: it clears the marker this keys off.
     repairInterruptedImportSession(db)

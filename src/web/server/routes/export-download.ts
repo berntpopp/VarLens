@@ -33,6 +33,22 @@ import type { DispatcherDeps, OverrideHandler } from './types'
 
 export const DOWNLOAD_ROUTE = '/api/download/:token'
 const PROGRESS_INTERVAL_MS = 250
+export const MAX_ACTIVE_DOWNLOADS = 4
+export const MAX_ACTIVE_DOWNLOADS_PER_USER = 2
+
+let activeDownloads = 0
+const activeDownloadsByUser = new Map<number, number>()
+
+export function isDownloadLimitReached(userId: number): boolean {
+  if (activeDownloads >= MAX_ACTIVE_DOWNLOADS) return true
+  const count = activeDownloadsByUser.get(userId) ?? 0
+  return count >= MAX_ACTIVE_DOWNLOADS_PER_USER
+}
+
+export function resetActiveDownloadsForTesting(): void {
+  activeDownloads = 0
+  activeDownloadsByUser.clear()
+}
 
 let defaultGrants: DownloadGrantRegistry<ExportArtifactRequest> | null = null
 
@@ -63,6 +79,13 @@ export function buildExportDownloadOverrides(): Record<string, OverrideHandler> 
         if (user === undefined) {
           reply.code(401)
           return { error: 'unauthenticated' }
+        }
+        if (isDownloadLimitReached(user.id)) {
+          reply.code(429)
+          return {
+            error: 'too-many-downloads',
+            message: 'Too many concurrent downloads. Please wait for an ongoing download to finish.'
+          }
         }
         const parsed = ExportArtifactRequestSchema.safeParse(args[0])
         if (!parsed.success) {
@@ -126,6 +149,16 @@ async function handleDownload(
     )
   }
 
+  if (isDownloadLimitReached(actor.id)) {
+    return jsonError(
+      reply,
+      429,
+      ErrorCode.UNKNOWN,
+      'too-many-downloads',
+      'Too many concurrent downloads. Please wait for an ongoing download to finish.'
+    )
+  }
+
   const redeemed = downloadGrants(deps).redeem(request.params.token, actor.id)
   if (!redeemed.ok) {
     request.log.warn({ event: 'web-export', reason: redeemed.reason }, 'download grant refused')
@@ -142,6 +175,21 @@ async function handleDownload(
     )
   }
 
+  activeDownloads += 1
+  activeDownloadsByUser.set(actor.id, (activeDownloadsByUser.get(actor.id) ?? 0) + 1)
+  let downloadSlotReleased = false
+  const releaseDownloadSlot = (): void => {
+    if (downloadSlotReleased) return
+    downloadSlotReleased = true
+    activeDownloads = Math.max(0, activeDownloads - 1)
+    const count = activeDownloadsByUser.get(actor.id) ?? 1
+    if (count <= 1) {
+      activeDownloadsByUser.delete(actor.id)
+    } else {
+      activeDownloadsByUser.set(actor.id, count - 1)
+    }
+  }
+
   const { grant } = redeemed
   let progress: (rows: number, done: boolean) => void = () => undefined
   let artifact
@@ -150,36 +198,53 @@ async function handleDownload(
       progress(rows, done)
     )
   } catch (error) {
+    releaseDownloadSlot()
     return mapOpenError(reply, error)
   }
-  progress = progressPublisher(deps, actor.id, grant.id, artifact.fileName)
-  await recordApiReadAudit(deps, { key: artifact.auditKey, username: actor.username })
 
-  const source = Readable.from(artifact.body, { objectMode: false })
-  let completed = false
-  source.once('end', () => {
-    completed = true
-    request.log.info({ event: 'web-export', key: artifact.auditKey }, 'web export finished')
-  })
-  source.once('close', () => {
-    if (completed) return
-    artifact.release().catch((error: unknown) => {
+  const releaseArtifact = async (): Promise<void> => {
+    releaseDownloadSlot()
+    await artifact.release().catch((error: unknown) => {
       request.log.warn({ event: 'web-export', err: error }, 'export source release failed')
     })
-  })
+  }
 
-  return reply
-    .header('content-type', artifact.contentType)
-    .header('content-disposition', attachmentDisposition(artifact.fileName))
-    .header('cache-control', 'no-store')
-    .header('x-content-type-options', 'nosniff')
-    .send(source)
+  try {
+    progress = progressPublisher(deps, actor.id, grant.id, artifact.fileName)
+    await recordApiReadAudit(deps, { key: artifact.auditKey, username: actor.username })
+
+    const source = Readable.from(artifact.body, { objectMode: false })
+    let completed = false
+    source.once('end', () => {
+      completed = true
+      releaseDownloadSlot()
+      request.log.info({ event: 'web-export', key: artifact.auditKey }, 'web export finished')
+    })
+    source.once('close', () => {
+      releaseDownloadSlot()
+      if (completed) return
+      artifact.release().catch((error: unknown) => {
+        request.log.warn({ event: 'web-export', err: error }, 'export source release failed')
+      })
+    })
+
+    return reply
+      .header('content-type', artifact.contentType)
+      .header('content-disposition', attachmentDisposition(artifact.fileName))
+      .header('cache-control', 'no-store')
+      .header('x-content-type-options', 'nosniff')
+      .send(source)
+  } catch (error) {
+    await releaseArtifact()
+    throw error
+  }
 }
 
 export function registerExportDownloadRoutes(app: FastifyInstance, deps: DispatcherDeps): void {
   app.get<{ Params: { token: string } }>(
     DOWNLOAD_ROUTE,
     {
+      exposeHeadRoute: false,
       schema: {
         tags: ['export'],
         summary: 'Download a prepared export artifact (CSV, XLSX or BED)',

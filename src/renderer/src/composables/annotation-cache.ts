@@ -129,9 +129,14 @@ export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null
 
 /** Set loading state and trigger shallowRef reactivity. */
 export function setLoading(key: string, value: boolean, kind: AnnotationBatchKind = 'case'): void {
-  loadingStates.value.set(key, value)
-  if (value && kind === 'global') globalOnlyLoading.add(key)
-  else globalOnlyLoading.delete(key)
+  if (value) {
+    loadingStates.value.set(key, true)
+    if (kind === 'global') globalOnlyLoading.add(key)
+    else globalOnlyLoading.delete(key)
+  } else {
+    loadingStates.value.delete(key)
+    globalOnlyLoading.delete(key)
+  }
   triggerRef(loadingStates)
 }
 

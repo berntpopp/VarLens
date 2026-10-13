@@ -160,4 +160,67 @@ describe('useAssociation', () => {
       cohortIds: []
     })
   })
+
+  it('loadCasesWithMetadata uses api.cases.query when available', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window.api.cases as any).query = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          name: 'Case A',
+          affected_status: 'affected',
+          sex: 'male',
+          cohort_ids: [20],
+          genome_build: 'GRCh38'
+        },
+        {
+          id: 2,
+          name: 'Case B',
+          affected_status: 'unaffected',
+          sex: 'female',
+          cohort_ids: [10],
+          genome_build: 'GRCh37'
+        }
+      ],
+      total_count: 2
+    })
+    window.api.caseMetadata.listCohorts.mockResolvedValue([
+      { id: 10, name: 'Controls' },
+      { id: 20, name: 'Cases' }
+    ])
+
+    const [result, appInstance] = withSetup(() => useAssociation())
+    app = appInstance
+
+    const data = await result.loadCasesWithMetadata()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((window.api.cases as any).query).toHaveBeenCalledWith({
+      limit: 1000,
+      offset: 0,
+      _count_needed: false
+    })
+    expect(window.api.caseMetadata.getFullMetadata).not.toHaveBeenCalled()
+    expect(data.cases).toEqual([
+      {
+        id: 1,
+        name: 'Case A',
+        status: 'affected',
+        sex: 'male',
+        cohortIds: [20],
+        genomeBuild: 'GRCh38'
+      },
+      {
+        id: 2,
+        name: 'Case B',
+        status: 'unaffected',
+        sex: 'female',
+        cohortIds: [10],
+        genomeBuild: 'GRCh37'
+      }
+    ])
+    expect(data.cohortGroups).toEqual([
+      { id: 10, name: 'Controls' },
+      { id: 20, name: 'Cases' }
+    ])
+  })
 })

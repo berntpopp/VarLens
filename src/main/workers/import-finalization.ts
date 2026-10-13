@@ -10,7 +10,7 @@ export interface ImportFtsFinalizationState {
   ftsRebuilt: boolean
 }
 
-type RebuildFtsFn = (db: DatabaseType) => void
+type RebuildFtsFn = (db: DatabaseType) => boolean | void
 type CleanupFn = () => void
 type PostMessageFn<T> = (message: T) => void
 
@@ -22,7 +22,8 @@ export function finalizeInterruptedImportFts(
   if (!state.ftsTriggersDropped || state.ftsRebuilt) return false
 
   try {
-    rebuild(db)
+    const result = rebuild(db)
+    if (result === false) return false
     state.ftsRebuilt = true
     return true
   } catch {
@@ -38,10 +39,15 @@ export function finalizeInterruptedImportFts(
  * the marker was set, #551); idempotent. Must run before a summary rebuild, which clears the marker.
  */
 export function repairInterruptedImportSession(db: DatabaseType): boolean {
-  if (!isImportSessionOpen(db) && !sessionIndexesMissing(db) && ftsTriggersComplete(db))
+  const isSessionOpen = isImportSessionOpen(db)
+  const indexesMissing = sessionIndexesMissing(db)
+  if (!isSessionOpen && !indexesMissing && ftsTriggersComplete(db)) {
     return false
+  }
   db.exec(RECREATE_INDEXES)
-  rebuildFts(db)
+  if (!rebuildFts(db)) {
+    throw new Error('FTS repair failed')
+  }
   return true
 }
 

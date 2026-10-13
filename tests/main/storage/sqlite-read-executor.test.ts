@@ -212,6 +212,48 @@ describe('SqliteReadExecutor', () => {
     expect(databaseService.transcripts.getVariantTranscripts).toHaveBeenCalledWith(42)
   })
 
+  it('uses the worker read pool for variants:shortlist when a pool exists', async () => {
+    const expected = { rows: [], totalCandidates: 0 }
+    const dbPool = {
+      run: vi.fn().mockResolvedValue(expected)
+    }
+    const databaseService = {
+      shortlistService: {
+        getShortlist: vi.fn()
+      }
+    }
+    const executor = new SqliteReadExecutor(databaseService as never, dbPool as never)
+    const shortlistParams = { caseId: 1 }
+
+    await expect(
+      executor.execute({ type: 'variants:shortlist', params: [shortlistParams as never] })
+    ).resolves.toBe(expected)
+    expect(dbPool.run).toHaveBeenCalledWith({
+      type: 'variants:shortlist',
+      params: [shortlistParams]
+    })
+    expect(databaseService.shortlistService.getShortlist).not.toHaveBeenCalled()
+  })
+
+  it('falls back to DatabaseService for variants:shortlist when no pool exists', async () => {
+    const expected = { rows: [], totalCandidates: 0 }
+    const databaseService = {
+      shortlistService: {
+        getShortlist: vi.fn().mockReturnValue(expected)
+      }
+    }
+    const executor = new SqliteReadExecutor(databaseService as never, null)
+    const shortlistParams = { caseId: 1 }
+
+    await expect(
+      executor.execute({ type: 'variants:shortlist', params: [shortlistParams as never] })
+    ).resolves.toBe(expected)
+    expect(databaseService.shortlistService.getShortlist).toHaveBeenCalledWith(
+      shortlistParams,
+      expect.any(Function)
+    )
+  })
+
   describe('panels:resolutionStatus', () => {
     const expected = { genomeBuild: 'x', totalGenes: 1, unmappedCount: 0, unmappedGenes: [] }
 

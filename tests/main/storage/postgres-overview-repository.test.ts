@@ -24,7 +24,7 @@ describe('PostgresOverviewRepository', () => {
       ) {
         return { rows: [{ unique_variants: '8' }] }
       }
-      if (sql.includes('"cohort_gene_summary") AS genes_with_variants')) {
+      if (sql.includes('"cohort_gene_summary"') && sql.includes('AS genes_with_variants')) {
         return { rows: [{ genes_with_variants: '4' }] }
       }
       if (sql.includes('FROM "public"."cases" c')) {

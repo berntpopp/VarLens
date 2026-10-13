@@ -90,6 +90,7 @@ export function enqueueSessionBatchImport(params: SessionBatchParams): {
   jobId: string
   result: Promise<BatchResult>
 } {
+  let ownsActiveImport = false
   const handle = jobRunner.enqueue(
     'import_batch',
     {
@@ -98,8 +99,17 @@ export function enqueueSessionBatchImport(params: SessionBatchParams): {
       ...(params.runId !== undefined ? { runId: params.runId } : {})
     },
     async (ctx) => {
-      ctx.registerCancel(cancelImport)
-      return await runSessionBatchImport({ ...params, signal: ctx.signal, ctx })
+      ctx.registerCancel(() => {
+        if (ownsActiveImport) cancelImport()
+      })
+      return await runSessionBatchImport({
+        ...params,
+        signal: ctx.signal,
+        ctx,
+        onActiveImportChange: (active) => {
+          ownsActiveImport = active
+        }
+      })
     }
   )
   return { jobId: handle.id, result: handle.result }
@@ -139,6 +149,7 @@ export async function runSessionBatchImport(params: {
   ctx?: { reportProgress: (current: number, total: number, message?: string) => void }
   /** Files imported at the same time. Default: {@link resolveImportConcurrency}. */
   concurrency?: number
+  onActiveImportChange?: (active: boolean) => void
 }): Promise<BatchResult> {
   const { files, session, callbacks, signal } = params
   const vcfOptions =
@@ -260,18 +271,31 @@ export async function runSessionBatchImport(params: {
   const parallel = concurrency > 1 && files.length > 1 && executor.openBatch !== undefined
 
   if (parallel) {
-    await runFilesInParallel({
-      openBatch: () => executor.openBatch!(),
-      vcfOptions,
-      chains: groupIntoChains(caseNames),
-      concurrency,
-      processFile,
-      shouldStop: () => signal.aborted || result.cancelled
-    })
+    params.onActiveImportChange?.(true)
+    try {
+      await runFilesInParallel({
+        openBatch: () => executor.openBatch!(),
+        vcfOptions,
+        chains: groupIntoChains(caseNames),
+        concurrency,
+        processFile,
+        shouldStop: () => signal.aborted || result.cancelled
+      })
+    } finally {
+      params.onActiveImportChange?.(false)
+    }
     if (signal.aborted) result.cancelled = true
   } else {
-    const importOne: ImportOneFile = (file, caseName, onProgress) =>
-      startImport(file.storedPath, caseName, vcfOptions, () => session, { onProgress })
+    const importOne: ImportOneFile = async (file, caseName, onProgress) => {
+      params.onActiveImportChange?.(true)
+      try {
+        return await startImport(file.storedPath, caseName, vcfOptions, () => session, {
+          onProgress
+        })
+      } finally {
+        params.onActiveImportChange?.(false)
+      }
+    }
     for (let index = 0; index < files.length && !result.cancelled; index++) {
       await processFile(index, importOne)
     }

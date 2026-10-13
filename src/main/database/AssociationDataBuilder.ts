@@ -1,5 +1,9 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
-import type { AssociationBuildResult, VariantFilters } from '../statistics/types'
+import type {
+  AssociationBuildResult,
+  GeneContingencyData,
+  VariantFilters
+} from '../statistics/types'
 import {
   assertSingleGenomeBuild,
   buildCovariateMap,
@@ -8,7 +12,7 @@ import {
   type CaseMetaRow,
   type CaseMetricRow
 } from '../statistics/contingency'
-import { autosomeSql } from '../../shared/sql/chromosome-order'
+import { autosomeSql, chrRankSql } from '../../shared/sql/chromosome-order'
 import { gtDosageSql } from '../../shared/sql/genotype-dosage'
 import { sqlPlaceholders } from './sql-utils'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
@@ -34,6 +38,13 @@ export class AssociationDataBuilder {
     filters: VariantFilters,
     covariateNames: string[]
   ): AssociationBuildResult {
+    if (
+      new Set(groupA_ids).size !== groupA_ids.length ||
+      new Set(groupB_ids).size !== groupB_ids.length
+    ) {
+      throw new Error('Duplicate case IDs in groupA or groupB')
+    }
+
     const allIds = [...groupA_ids, ...groupB_ids]
     if (allIds.length === 0) return { genes: [], non_autosomal_variants: 0 }
 
@@ -47,15 +58,41 @@ export class AssociationDataBuilder {
 
     const site = this.siteFilter(filters)
     const non_autosomal_variants = this.countNonAutosomalVariants(allIds, placeholders, site)
-    const variantRows = this.loadVariantRows(allIds, placeholders, site)
-    if (variantRows.length === 0) return { genes: [], non_autosomal_variants }
 
     const covariateMap =
       covariateNames.length > 0
         ? this.loadCovariates(allIds, covariateNames)
         : new Map<number, number[]>()
+
+    const stmt = this.prepareVariantRows(placeholders, site)
+    const iterable: Iterable<AssociationVariantRow> =
+      typeof stmt.iterate === 'function'
+        ? (stmt.iterate(...allIds, ...site.params) as Iterable<AssociationVariantRow>)
+        : (stmt.all(...allIds, ...site.params) as AssociationVariantRow[])
+
+    const genes: GeneContingencyData[] = []
+    let currentGene: string | null = null
+    let currentRows: AssociationVariantRow[] = []
+
+    const flush = () => {
+      if (currentRows.length > 0) {
+        const geneData = buildGeneContingencyData(currentRows, groupA_ids, groupB_ids, covariateMap)
+        for (const g of geneData) genes.push(g)
+        currentRows = []
+      }
+    }
+
+    for (const row of iterable) {
+      if (currentGene !== null && row.gene_symbol !== currentGene) {
+        flush()
+      }
+      currentGene = row.gene_symbol
+      currentRows.push(row)
+    }
+    flush()
+
     return {
-      genes: buildGeneContingencyData(variantRows, groupA_ids, groupB_ids, covariateMap),
+      genes,
       non_autosomal_variants
     }
   }
@@ -89,7 +126,7 @@ export class AssociationDataBuilder {
   ): number {
     const where = [
       `v.case_id IN (${placeholders})`,
-      `NOT (${autosomeSql('v.chr')})`,
+      `${chrRankSql('v.chr')} > 22`,
       ...site.conditions
     ]
     return this.db
@@ -114,15 +151,10 @@ export class AssociationDataBuilder {
    * filter cannot turn a carrier into a reference sample. The case ids are
    * bound once (`picked`), which keeps the SQLite parameter count at one per case.
    */
-  private loadVariantRows(
-    allIds: number[],
-    placeholders: string,
-    site: SiteFilter
-  ): AssociationVariantRow[] {
+  private prepareVariantRows(placeholders: string, site: SiteFilter) {
     const where = ['v.case_id IN (SELECT id FROM picked)', autosomeSql('v.chr'), ...site.conditions]
-    return this.db
-      .prepare(
-        `
+    return this.db.prepare(
+      `
       WITH picked(id) AS (SELECT id FROM cases WHERE id IN (${placeholders})),
       selected AS (
         SELECT DISTINCT v.gene_symbol, v.chr, v.pos, v.ref, v.alt
@@ -142,8 +174,7 @@ export class AssociationDataBuilder {
       WHERE r.case_id IN (SELECT id FROM picked)
       ORDER BY s.gene_symbol, r.chr, r.pos, r.ref, r.alt, r.case_id
     `
-      )
-      .all(...allIds, ...site.params) as AssociationVariantRow[]
+    )
   }
 
   private loadCovariates(caseIds: number[], covariateNames: string[]): Map<number, number[]> {

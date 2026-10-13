@@ -75,11 +75,18 @@ function exactSql(spec: CohortColumnMetaSpec, candidates: readonly string[]): st
              ${numeric.map((key) => `, MIN(k_${key}) AS min_${key}, MAX(k_${key}) AS max_${key}`).join('')}
       FROM src
       GROUP BY GROUPING SETS (${sets.join(', ')})
+    ),
+    ranked AS (
+      SELECT col_key,
+             value,
+             ROW_NUMBER() OVER (PARTITION BY col_key ORDER BY value NULLS LAST) AS rn
+             ${numeric.map((key) => `, min_${key}, max_${key}`).join('')}
+      FROM grouped
     )
     SELECT col_key,
            COUNT(value)::int AS cnt,
            CASE WHEN COUNT(value) <= ${COHORT_DISTINCT_VALUES_LIMIT}
-                THEN ARRAY_AGG(value) FILTER (WHERE value IS NOT NULL) END AS vals
+                THEN ARRAY_AGG(value) FILTER (WHERE value IS NOT NULL AND rn <= ${COHORT_DISTINCT_VALUES_LIMIT}) END AS vals
            ${numeric
              .map(
                (key) =>
@@ -87,7 +94,7 @@ function exactSql(spec: CohortColumnMetaSpec, candidates: readonly string[]): st
                  `, MAX(max_${key}) FILTER (WHERE col_key = '') AS max_${key}`
              )
              .join('')}
-    FROM grouped
+    FROM ranked
     GROUP BY col_key`
 }
 

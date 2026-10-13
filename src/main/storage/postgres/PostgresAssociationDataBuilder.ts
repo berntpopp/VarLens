@@ -21,7 +21,7 @@ import {
 } from '../../statistics/contingency'
 import type { AssociationBuildResult, VariantFilters } from '../../statistics/types'
 import { gtDosageSql } from '../../../shared/sql/genotype-dosage'
-import { autosomeSql } from '../../../shared/sql/chromosome-order'
+import { autosomeSql, chrRankSql } from '../../../shared/sql/chromosome-order'
 import { quoteIdentifier } from './identifiers'
 
 type Queryable = Pick<Pool, 'query'>
@@ -70,6 +70,13 @@ export class PostgresAssociationDataBuilder {
     filters: VariantFilters,
     covariateNames: string[]
   ): Promise<AssociationBuildResult> {
+    if (
+      new Set(groupA_ids).size !== groupA_ids.length ||
+      new Set(groupB_ids).size !== groupB_ids.length
+    ) {
+      throw new Error('Duplicate case IDs in groupA or groupB')
+    }
+
     const allIds = [...groupA_ids, ...groupB_ids]
     if (allIds.length === 0) return { genes: [], non_autosomal_variants: 0 }
 
@@ -136,7 +143,7 @@ export class PostgresAssociationDataBuilder {
     const { joins, whereParts, params } = this.buildSiteFilter(
       allIds,
       filters,
-      `NOT (${autosomeSql('v.chr')})`
+      `${chrRankSql('v.chr')} > 22`
     )
 
     const result = await this.pool.query<{ count: string }>(

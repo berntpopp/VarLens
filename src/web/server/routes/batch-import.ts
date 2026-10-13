@@ -1,6 +1,6 @@
 import { basename, isAbsolute } from 'node:path'
 
-import { cancelImport } from '../../../main/ipc/handlers/import-logic'
+import { assertNoActiveImport, cancelImport } from '../../../main/ipc/handlers/import-logic'
 import {
   cleanupZipTemp,
   extractZip,
@@ -128,6 +128,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           reply.code(400)
           return { error: 'invalid-run-id', message: 'runId is invalid' }
         }
+        assertNoActiveImport()
         // Not awaited: the request ends here, the job runs on. A refusal to
         // enqueue (an import is already running) still throws synchronously
         // and is answered as an error.

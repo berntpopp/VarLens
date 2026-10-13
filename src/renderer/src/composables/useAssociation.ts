@@ -18,6 +18,7 @@ interface CaseInfo {
   status: string | null
   sex: string | null
   cohortIds: number[]
+  genomeBuild?: string
 }
 
 interface CohortGroup {
@@ -61,12 +62,27 @@ export function useAssociation() {
     cohortGroups: CohortGroup[]
   }> {
     if (!api) return { cases: [], cohortGroups: [] }
-    const [caseListResult, cohortsResult] = await Promise.all([
-      api.cases.list(),
-      api.caseMetadata.listCohorts()
-    ])
-    const caseList = unwrapIpcResult(caseListResult)
+
+    const cohortsResult = await api.caseMetadata.listCohorts()
     const cohorts = unwrapIpcResult(cohortsResult)
+
+    if (typeof api.cases.query === 'function') {
+      const queryResult = await api.cases.query({ limit: 1000, offset: 0, _count_needed: false })
+      const paginated = unwrapIpcResult(queryResult)
+      const rawCases = paginated?.data ?? []
+      const cases: CaseInfo[] = rawCases.map((c) => ({
+        id: c.id,
+        name: c.name,
+        status: c.affected_status ?? null,
+        sex: c.sex ?? null,
+        cohortIds: c.cohort_ids ?? [],
+        genomeBuild: c.genome_build ?? 'GRCh38'
+      }))
+      return { cases, cohortGroups: cohorts }
+    }
+
+    const caseListResult = await api.cases.list()
+    const caseList = unwrapIpcResult(caseListResult)
     const cases = await Promise.all(
       caseList.map(async (c: { id: number; name: string }) => {
         try {

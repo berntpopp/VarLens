@@ -315,8 +315,10 @@ export class VariantRepository extends BaseRepository {
       let unfiltered_count: number | undefined
       if (includeUnfilteredCount === true) {
         const result = this.db
-          .prepare('SELECT COUNT(*) as count FROM variants WHERE case_id = ?')
-          .get(filter.case_id) as { count: number }
+          .prepare(
+            'SELECT COALESCE(NULLIF((SELECT variant_count FROM cases WHERE id = ?), 0), (SELECT COUNT(*) FROM variants WHERE case_id = ?)) as count'
+          )
+          .get(filter.case_id, filter.case_id) as { count: number }
         unfiltered_count = result.count
       }
 
@@ -610,25 +612,19 @@ export class VariantRepository extends BaseRepository {
     const { def, column, columnDef } = resolved
     const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
     if (caseIds.length === 0) {
-      return {
-        key: columnKey,
-        dataType: columnDef.kind === 'number' ? 'numeric' : 'text',
-        distinctCount: 0
-      }
+      const type = columnDef.kind === 'number' ? 'numeric' : 'text'
+      return { key: columnKey, dataType: type, distinctCount: 0 }
     }
     const placeholders = caseIds.map(() => '?').join(', ')
     // Driven from the small extension table (CROSS JOIN fixes the loop order),
-    // each row's case looked up by primary key: never every variant id of the
-    // scope materialised (#560).
+    // each row's case looked up by primary key (#560).
     const scoped = `FROM ${def.table} e CROSS JOIN variants v ON v.id = e.variant_id
            WHERE v.case_id IN (${placeholders})`
 
     if (columnDef.kind === 'number') {
       const row = this.db
         .prepare(
-          `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max,
-                  COUNT(DISTINCT e."${column}") AS distinctCount
-           ${scoped}`
+          `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max, COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`
         )
         .get(...caseIds) as { min: number | null; max: number | null; distinctCount: number }
       return {

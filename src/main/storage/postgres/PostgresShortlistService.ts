@@ -102,6 +102,7 @@ export class PostgresShortlistService {
     let totalCandidates = 0
     const queryErrors: Array<{ type: VariantTypeKey; error: Error }> = []
 
+    let starredVariantIds: Set<number> | null = null
     for (const type of scope) {
       try {
         const mergedFilters: Partial<FilterState> = {
@@ -115,7 +116,8 @@ export class PostgresShortlistService {
         const flush = async (): Promise<void> => {
           if (page.length === 0) return
           totalCandidates += page.length
-          const candidates = await this.hydrateCandidates(caseId, page)
+          starredVariantIds ??= await this.loadStarredVariantIds(caseId, this.options.pool)
+          const candidates = this.hydrateCandidates(page, starredVariantIds)
           const scored = candidates.map((row) => ({ ...row, ...scoreRow(row, config.rankConfig) }))
           kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
           page = []
@@ -165,6 +167,7 @@ export class PostgresShortlistService {
     return this.inSnapshot(async (client) => {
       const info = await this.caseInfo(client, caseId)
       const builder = new GeneContextBuilder(info)
+      const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
       let totalCandidates = 0
       await this.forEachPage(client, queries, async (rows) => {
         totalCandidates += rows.length
@@ -173,7 +176,7 @@ export class PostgresShortlistService {
       const ctx = builder.build()
       let kept: ScoredCandidate[] = []
       await this.forEachPage(client, queries, async (rows) => {
-        const candidates = await this.hydrateCandidates(caseId, rows, client)
+        const candidates = this.hydrateCandidates(rows, starredVariantIds)
         const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
         kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
       })
@@ -289,26 +292,22 @@ export class PostgresShortlistService {
     return result.rows.map((row) => row.variant_type)
   }
 
-  private async hydrateCandidates(
+  private async loadStarredVariantIds(
     caseId: number,
-    rows: Variant[],
     db: Queryable = this.options.pool
-  ): Promise<ShortlistCandidate[]> {
-    if (rows.length === 0) return []
-
-    const ids = rows.map((row) => row.id)
-    const result = await db.query<{ variant_id: number; starred: number }>(
+  ): Promise<Set<number>> {
+    const res = await db.query<{ variant_id: number | string }>(
       `
-        SELECT variant_id, COALESCE(starred, 0)::int AS starred
+        SELECT variant_id
         FROM ${this.schemaName}."case_variant_annotations"
-        WHERE case_id = $1 AND variant_id = ANY($2::bigint[])
+        WHERE case_id = $1 AND COALESCE(starred, 0)::int = 1
       `,
-      [caseId, ids]
+      [caseId]
     )
-    const starredById = new Map(
-      result.rows.map((row) => [Number(row.variant_id), Number(row.starred) === 1])
-    )
+    return new Set<number>(res.rows.map((row) => Number(row.variant_id)))
+  }
 
-    return rows.map((row) => toShortlistCandidate(row, starredById.get(row.id) === true))
+  private hydrateCandidates(rows: Variant[], starredVariantIds: Set<number>): ShortlistCandidate[] {
+    return rows.map((row) => toShortlistCandidate(row, starredVariantIds.has(row.id)))
   }
 }

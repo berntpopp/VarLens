@@ -276,6 +276,36 @@ describe('PostgresJsonImportRepository.writeJsonImport', () => {
     expect(hasOrdinalStrategy || hasOneAtATimeStrategy).toBe(true)
   })
 
+  it('empty _transcripts: [] stays on the fast bulk insert path', async () => {
+    const client = makeClient([
+      { rows: [] }, // duplicate check
+      { rows: [{ id: '4' }] }, // case insert
+      { rows: [] }, // base-only batch insert
+      { rows: [] }, // case_data_info
+      { rows: [] } // update variant_count
+    ])
+    const repo = new PostgresJsonImportRepository(makeForbiddenPool() as never, 'public')
+
+    await repo.writeJsonImport(client as never, baseRequest, async (session) => {
+      await session.insertVariantBatch([
+        { chr: '1', pos: 100, ref: 'A', alt: 'G', _transcripts: [] },
+        { chr: '1', pos: 200, ref: 'C', alt: 'T', _transcripts: [] }
+      ])
+    })
+
+    const returningIdCalls = findAllCalls(client, /RETURNING\s+id/i)
+    expect(returningIdCalls).toHaveLength(1)
+    expect(returningIdCalls[0].sql).toContain('"cases"')
+
+    const batchCall = findCall(
+      client,
+      /INSERT INTO\s+"public"\."variants"[\s\S]+jsonb_to_recordset\(\$1::jsonb\)/i
+    )
+    expect(batchCall).toBeDefined()
+    const payload = JSON.parse(String(batchCall?.params[0])) as Array<Record<string, unknown>>
+    expect(payload).toHaveLength(2)
+  })
+
   it('extension table inserts use jsonb_to_recordset with variant_id populated', async () => {
     const client = makeClient([
       { rows: [] }, // duplicate check
