@@ -13,7 +13,7 @@ import {
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
-import { TRIO_MODES } from '../../../shared/types/inheritance'
+import { isTrioMode } from '../../../shared/types/inheritance'
 
 export interface PostgresClinicalVariantFilterSqlContext {
   schemaName: string
@@ -137,6 +137,7 @@ function addAnnotationPredicate(
         ))`)
 }
 
+/** Inheritance modes as one OR group; a trio mode without a group matches no row (#553). */
 function addInheritanceFilters(
   filter: VariantFilter,
   { schemaName, addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
@@ -170,11 +171,13 @@ function addInheritanceFilters(
 
   // Bound only when a trio mode reads them: PostgreSQL rejects a parameter
   // no placeholder uses (a solo mode with an analysis group selected).
-  const wantsTrio = modes.some((mode) => (TRIO_MODES as readonly string[]).includes(mode))
-  if (filter.analysis_group_id !== undefined && wantsTrio) {
+  const wantsTrio = modes.some(isTrioMode)
+  if (wantsTrio && filter.analysis_group_id != null) {
     const caseParam = addParam(filter.case_id)
     const groupParam = addParam(filter.analysis_group_id)
     addTrioInheritanceFilters(modes, conditions, schemaName, caseParam, groupParam)
+  } else if (wantsTrio) {
+    conditions.push('FALSE')
   }
 
   if (conditions.length === 0) return

@@ -4702,7 +4702,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1'))",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR FALSE)",
 }
 `;
 
@@ -4962,7 +4962,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
 }
 `;
 
-exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio autosomal_recessive without group (no-op) 1`] = `
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio autosomal_recessive without group (fails closed, #553) 1`] = `
 {
   "parameters": [
     2,
@@ -5002,7 +5002,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and (FALSE)",
 }
 `;
 
@@ -5095,7 +5095,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
 }
 `;
 
-exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio compound_het without group (no-op) 1`] = `
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio compound_het without group (fails closed, #553) 1`] = `
 {
   "parameters": [
     2,
@@ -5135,7 +5135,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and (FALSE)",
 }
 `;
 
@@ -5215,7 +5215,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
 }
 `;
 
-exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio de_novo without group (no-op) 1`] = `
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inheritance modes > inheritance trio de_novo without group (fails closed, #553) 1`] = `
 {
   "parameters": [
     2,
@@ -5255,7 +5255,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and (FALSE)",
 }
 `;
 

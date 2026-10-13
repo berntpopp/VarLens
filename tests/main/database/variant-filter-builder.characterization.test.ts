@@ -325,7 +325,7 @@ const INHERITANCE_SCENARIOS: Scenario[] = [
     filter: { inheritance_modes: [mode], analysis_group_id: 7 }
   })),
   ...TRIO_MODES.map((mode) => ({
-    name: `inheritance trio ${mode} without group (no-op)`,
+    name: `inheritance trio ${mode} without group (fails closed, #553)`,
     filter: { inheritance_modes: [mode] }
   })),
   { name: 'inheritance all solo', filter: { inheritance_modes: SOLO_MODES } },

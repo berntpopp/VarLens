@@ -292,6 +292,16 @@ describe('PostgreSQL clinical variant filters', () => {
     expect(xHemizygousSql('v', 'cm_table', true)).toContain("cm.sex = 'male'")
   })
 
+  // Issue #553: rows on a real database in postgres-inheritance-parity.test.ts.
+  it('fails closed on a trio mode without an analysis group', async () => {
+    const { repo, calls, paramsByCall } = repoWithQueryCapture()
+    await repo.queryVariants({ case_id: 1, inheritance_modes: ['homozygous', 'de_novo'] }, 25)
+
+    expect(calls[0]).toContain('OR FALSE')
+    expect(calls[0]).not.toContain('analysis_group_members')
+    paramsByCall[0].forEach((_, i) => expect(calls[0]).toMatch(new RegExp(`\\$${i + 1}(?!\\d)`)))
+  })
+
   it('accepts consider_phasing as an inheritance no-op', async () => {
     const { repo, calls } = repoWithQueryCapture()
 

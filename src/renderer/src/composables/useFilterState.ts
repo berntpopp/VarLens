@@ -18,6 +18,7 @@ import { useFilterEmitScheduler } from './useFilterEmitScheduler'
 import { useTags } from './useTags'
 import { useApiService } from './useApiService'
 import { createFilterState } from '../../../shared/filters/filterDefaults'
+import { isTrioMode } from '../../../shared/types/inheritance'
 import { buildVariantFilterFromState } from '../utils/filters/filterSerialization'
 import {
   type FilterState,
@@ -90,6 +91,20 @@ export function useFilterState(
 
   // Discrete changes apply immediately; typed fields wait 250 ms (shared with cohort)
   const { emitNow, onStateChange } = useFilterEmitScheduler(emitFilters)
+
+  // Trio modes need a family: clearing it drops them, keeping solo modes (#553).
+  // The drawer disables trio chips without a family, so they could not be unticked.
+  watch(
+    () => filters.value.analysisGroupId === null && filters.value.inheritanceModes.some(isTrioMode),
+    (orphaned) => {
+      if (orphaned) {
+        filters.value.inheritanceModes = filters.value.inheritanceModes.filter(
+          (m) => !isTrioMode(m)
+        )
+      }
+    },
+    { immediate: true }
+  )
 
   // Watch filters and emit changes (serialized key avoids deep traversal)
   const filterEmitKey = computed(() => JSON.stringify(filters.value))

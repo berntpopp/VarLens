@@ -14,6 +14,7 @@ import {
   xHemizygousSql,
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
+import { isTrioMode } from '../../../shared/types/inheritance'
 
 // The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
 const HET = sql.raw(HET_GT_SQL)
@@ -150,9 +151,9 @@ function whereAnyCondition(
 /**
  * Apply the selected inheritance modes as one OR group.
  *
- * NOTE: If only trio modes are selected without an analysis group, no
- * condition is produced and no inheritance filter is applied. The UI
- * prevents this by disabling trio chips when no group is set.
+ * A trio mode without an analysis group cannot be evaluated, so it matches no
+ * row (fail closed, #553): a stored shortlist or export filter that kept a
+ * trio mode after its family was cleared must never fall back to unfiltered.
  */
 export function applyInheritanceFilters(
   query: VariantQueryBuilder,
@@ -162,6 +163,10 @@ export function applyInheritanceFilters(
   const modes = filter.inheritance_modes
   const groupId = filter.analysis_group_id ?? null
   const conditions = buildSoloConditions(modes, filter.case_id)
-  if (groupId !== null) conditions.push(...buildTrioConditions(modes, filter.case_id, groupId))
+  if (groupId !== null) {
+    conditions.push(...buildTrioConditions(modes, filter.case_id, groupId))
+  } else if (modes.some(isTrioMode)) {
+    conditions.push(sql`FALSE`)
+  }
   return whereAnyCondition(query, conditions)
 }

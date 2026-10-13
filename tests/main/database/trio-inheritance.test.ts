@@ -27,6 +27,35 @@ describe('Trio inheritance filters', () => {
     service.close()
   })
 
+  // Issue #553: a trio mode that cannot be evaluated must never fall back to unfiltered.
+  describe('trio modes without an analysis group', () => {
+    beforeEach(() => {
+      service.variants.insertVariantsBatch(probandId, [
+        makeVariant({ gt_num: '0/1', pos: 100 }),
+        makeVariant({ gt_num: '1/1', pos: 200 })
+      ])
+    })
+    const positions = (modes: string[], group?: number): number[] =>
+      service.variants
+        .getVariants(
+          { case_id: probandId, inheritance_modes: modes, analysis_group_id: group },
+          50,
+          0
+        )
+        .data.map((v) => v.pos)
+
+    it.each(['de_novo', 'autosomal_recessive', 'compound_het'])(
+      '%s alone matches no row',
+      (mode) => {
+        expect(positions([mode])).toEqual([])
+      }
+    )
+
+    it('mixed with a solo mode keeps only the solo rows', () => {
+      expect(positions(['homozygous', 'de_novo'])).toEqual([200])
+    })
+  })
+
   describe('de_novo', () => {
     it('finds variants in proband absent in both parents', () => {
       service.variants.insertVariantsBatch(probandId, [
