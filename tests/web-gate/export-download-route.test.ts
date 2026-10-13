@@ -129,9 +129,10 @@ describe('web export: prepare + signed download', () => {
     const lines = res.body.split('\r\n')
     expect(lines[0]).toBe(
       'Chromosome,Position,Reference,Alternate,Genotype,Gene,Consequence,Impact,Transcript,' +
-        'cDNA,AA Change,gnomAD AF,CADD,Quality,ClinVar,HPO Similarity,MOI'
+        'cDNA,AA Change,gnomAD AF,CADD,Quality,ClinVar,HPO Similarity,MOI,' +
+        'ACMG Class,ACMG Points,ACMG Override Reason,Case Comment,Global Comment'
     )
-    expect(lines[1]).toBe('chr22,100,A,G,,COMT,,,,,,0.000123,25.46,,,,')
+    expect(lines[1]).toBe('chr22,100,A,G,,COMT,,,,,,0.000123,25.46,,,,,,,,,')
     expect(lines[2]).toContain('"A,B ""quoted"""')
     expect(lines).toHaveLength(4)
     expect(execute).toHaveBeenCalledWith({
