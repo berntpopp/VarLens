@@ -76,6 +76,35 @@ describe.skipIf(!RUN)('Postgres case_data_info writers — real instance', () =>
     expect(row.created_at as number).toBeGreaterThan(0)
   })
 
+  it('JSON import round-trips hpo_match; an absent value stays null (#580)', async () => {
+    const repo = new PostgresJsonImportRepository(pool, schema)
+    const { caseId } = await repo.writeJsonImport(
+      client as never,
+      {
+        filePath: '/tmp/hpo.json',
+        fileName: 'hpo.json',
+        caseName: 'hpo-case',
+        fileSize: 1,
+        genomeBuild: 'GRCh38',
+        importFileType: 'object'
+      },
+      async (session) => {
+        await session.insertVariantBatch([
+          { chr: 'chr1', pos: 1, ref: 'A', alt: 'G', hpo_match: 'HP:0004322 Short stature' },
+          { chr: 'chr1', pos: 2, ref: 'A', alt: 'G', hpo_match: null }
+        ])
+      }
+    )
+    const res = await client.query(
+      `SELECT hpo_match FROM "${schema}"."variants" WHERE case_id = $1 ORDER BY pos`,
+      [caseId]
+    )
+    expect(res.rows.map((r: { hpo_match: string | null }) => r.hpo_match)).toEqual([
+      'HP:0004322 Short stature',
+      null
+    ])
+  })
+
   it('VCF single-file import and provisional finish write provenance', async () => {
     const repo = new PostgresVcfImportRepository(schema)
     const { caseId } = await repo.writeVcfFile(client as never, {

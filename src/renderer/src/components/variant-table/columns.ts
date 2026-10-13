@@ -75,6 +75,7 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'AA Change', key: 'aa_change', sortable: true },
   { title: 'Qual', key: 'qual', sortable: true, align: 'end' },
   { title: 'HPO Score', key: 'hpo_sim_score', sortable: true, align: 'end' },
+  { title: 'HPO Match', key: 'hpo_match', sortable: true },
   { title: 'MoI', key: 'moi', sortable: true }
 ]
 

@@ -101,6 +101,7 @@ export class VariantRepository extends BaseRepository {
               cdna: v.cdna,
               aa_change: v.aa_change,
               moi: v.moi,
+              hpo_match: v.hpo_match ?? null,
               gq: v.gq ?? null,
               dp: v.dp ?? null,
               ad_ref: v.ad_ref ?? null,

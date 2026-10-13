@@ -114,6 +114,7 @@ type ImportOneFile = (
   variantCount: number
   unrankedClinvar?: string[]
   afOutOfRange?: number
+  csqAmbiguousSites?: number
 }>
 
 /**
@@ -241,7 +242,10 @@ export async function runSessionBatchImport(params: {
         ...(imported.unrankedClinvar !== undefined
           ? { unrankedClinvar: imported.unrankedClinvar }
           : {}),
-        ...(imported.afOutOfRange !== undefined ? { afOutOfRange: imported.afOutOfRange } : {})
+        ...(imported.afOutOfRange !== undefined ? { afOutOfRange: imported.afOutOfRange } : {}),
+        ...(imported.csqAmbiguousSites !== undefined
+          ? { csqAmbiguousSites: imported.csqAmbiguousSites }
+          : {})
       }
       finish(
         { ...base, status: 'success', variantCount: imported.variantCount, ...unranked },

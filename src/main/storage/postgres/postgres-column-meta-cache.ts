@@ -39,6 +39,7 @@ export const PER_CASE_META_COLUMNS = [
   'hpo_sim_score',
   'clinvar',
   'moi',
+  'hpo_match',
   'variant_type',
   'end_pos',
   'sv_type',

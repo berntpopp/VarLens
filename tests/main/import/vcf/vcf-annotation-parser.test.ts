@@ -5,6 +5,10 @@ import {
 } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
+  resetAmbiguousCsqSites,
+  takeAmbiguousCsqSites
+} from '../../../../src/main/import/vcf/vcf-csq-allele'
+import {
   MAX_VCF_ANNOTATION_FIELDS,
   MAX_VCF_ANNOTATIONS,
   VcfResourceLimitError
@@ -274,6 +278,22 @@ describe('vcf-annotation-parser', () => {
       expect(second.transcripts).toHaveLength(0)
       expect(first.geneSymbol).toBeNull()
       expect(second.geneSymbol).toBeNull()
+    })
+
+    it('counts each --minimal site whose annotations are dropped as ambiguous (#556)', () => {
+      const minimalHeader = makeHeader({
+        annotationType: 'csq',
+        csqFields,
+        rawHeaderLines: ["##VEP-command-line='vep --cache --minimal --vcf'"]
+      })
+      const block = (allele: string): string =>
+        `${allele}|intron_variant|MODIFIER|G|E|Transcript|T|protein_coding||||||||||||||||`
+      resetAmbiguousCsqSites()
+      parseAnnotationsForAlleles(new Map([['CSQ', block('-')]]), minimalHeader, ['C', 'CA'], 'CAT')
+      parseAnnotationsForAlleles(new Map([['CSQ', block('T')]]), minimalHeader, ['C', 'CT'], 'CAT')
+      parseAnnotationsForAlleles(new Map([['CSQ', block('G')]]), minimalHeader, ['G'], 'A')
+      expect(takeAmbiguousCsqSites()).toBe(1)
+      expect(takeAmbiguousCsqSites()).toBeUndefined()
     })
 
     it.each([

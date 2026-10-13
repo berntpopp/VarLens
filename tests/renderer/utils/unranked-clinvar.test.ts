@@ -48,4 +48,13 @@ describe('unranked ClinVar report in the renderer (#469)', () => {
       IMPORT_MESSAGES.afOutOfRange(2)
     ])
   })
+
+  it('lists --minimal CSQ sites that could not be matched to an allele (#556)', () => {
+    expect(importDataNotices({ csqAmbiguousSites: 0 })).toEqual([])
+    expect(importDataNotices({ csqAmbiguousSites: 25 })).toEqual([
+      IMPORT_MESSAGES.csqAmbiguousSites(25)
+    ])
+    expect(IMPORT_MESSAGES.csqAmbiguousSites(1)).toMatch(/^1 multi-allelic site could not/)
+    expect(IMPORT_MESSAGES.csqAmbiguousSites(25)).toMatch(/--allele_number/)
+  })
 })

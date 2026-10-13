@@ -129,6 +129,8 @@ export interface Variant {
   aa_change: string | null
   /** Mode of inheritance, nullable */
   moi: string | null
+  /** Patient HPO terms matching the gene (`HP:… label; …`), JSON imports only */
+  hpo_match?: string | null
   /** Genotype quality (VCF GQ), nullable */
   gq: number | null
   /** Read depth (VCF DP), nullable */

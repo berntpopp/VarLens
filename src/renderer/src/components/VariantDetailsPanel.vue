@@ -86,6 +86,12 @@
             class="mb-4"
           />
 
+          <InfoFieldsSection
+            v-if="mode === 'case'"
+            :info-json="(variant as Variant).info_json"
+            :case-id="caseId"
+          />
+
           <!-- VEP metadata (consequence + cache indicator) -->
           <div v-if="mostSevereConsequence" class="text-body-small mb-2">
             <v-chip size="x-small" :color="getConsequenceColor(mostSevereConsequence)" label>
@@ -225,6 +231,7 @@ import { isOverlayOpen, isTextEntryFocused } from '../composables/useTableKeyboa
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
+import InfoFieldsSection from './variant-details/InfoFieldsSection.vue'
 
 // Lazy-load non-critical panel sections to speed up initial open
 import SectionSkeleton from './SectionSkeleton.vue'

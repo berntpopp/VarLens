@@ -18,6 +18,7 @@ export interface AppendedFile {
   error?: string
   unrankedClinvar?: string[]
   afOutOfRange?: number
+  csqAmbiguousSites?: number
 }
 
 export interface AppendFilesParams {
@@ -75,12 +76,14 @@ export function appendFilesInWorker(p: AppendFilesParams): Promise<AppendedFile[
       onProgress: (msg) => p.onProgress?.(msg.fileIndex, msg.variantCount, msg.skipped),
       onSummaryStale: () => p.onSummaryStale?.(),
       onFileComplete: (msg) => {
-        const { variantCount, skipped, unrankedClinvar, afOutOfRange } = msg.result
+        const { variantCount, skipped, unrankedClinvar, afOutOfRange, csqAmbiguousSites } =
+          msg.result
         outcomes[msg.fileIndex] = {
           variantCount,
           skipped: skipped ?? 0,
           unrankedClinvar,
-          afOutOfRange
+          afOutOfRange,
+          csqAmbiguousSites
         }
       },
       onError: (msg) => {

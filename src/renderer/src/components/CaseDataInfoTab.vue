@@ -30,6 +30,7 @@
         />
       </v-col>
     </v-row>
+    <KeptFieldsList :field-dictionary="dataInfo?.field_dictionary" />
 
     <!-- Platform -->
     <div class="text-subtitle-2 text-medium-emphasis mb-2">
@@ -121,6 +122,7 @@ import { useQuery } from '@pinia/colada'
 import ExternalIdsEditor from './case-data-info/ExternalIdsEditor.vue'
 import GeneListEditorDialog from './case-data-info/GeneListEditorDialog.vue'
 import PrefilteringSection from './case-data-info/PrefilteringSection.vue'
+import KeptFieldsList from './case-data-info/KeptFieldsList.vue'
 import RegionFileImportDialog from './case-data-info/RegionFileImportDialog.vue'
 import { mdiChip, mdiFileImportOutline, mdiNoteTextOutline } from '@mdi/js'
 import { logService } from '../services/LogService'

@@ -24,6 +24,7 @@ export interface VariantInsertRow {
   cdna: string | null
   aa_change: string | null
   moi: string | null
+  hpo_match?: string | null
   gq: number | null
   dp: number | null
   ad_ref: number | null
@@ -55,6 +56,7 @@ export const VARIANT_INSERT_COLUMNS = [
   'cdna',
   'aa_change',
   'moi',
+  'hpo_match',
   'gq',
   'dp',
   'ad_ref',
@@ -151,6 +153,7 @@ export type WorkerMessage =
         unrankedClinvar?: string[]
         /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
         afOutOfRange?: number
+        csqAmbiguousSites?: number
       }
     }
   | {
@@ -182,6 +185,7 @@ export type WorkerMessage =
           unrankedClinvar?: string[]
           /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
           afOutOfRange?: number
+          csqAmbiguousSites?: number
         }>
       }
     }

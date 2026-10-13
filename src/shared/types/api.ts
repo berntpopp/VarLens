@@ -259,6 +259,7 @@ export interface MultiFileImportResult {
   unrankedClinvar?: string[]
   /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
   afOutOfRange?: number
+  csqAmbiguousSites?: number
 }
 
 export interface ImportAPI extends ImportDomainContract {
@@ -323,6 +324,7 @@ export interface BatchFileDetail {
   unrankedClinvar?: string[]
   /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
   afOutOfRange?: number
+  csqAmbiguousSites?: number
 }
 
 export interface BatchProgress {
@@ -361,6 +363,7 @@ export interface BatchFileComplete {
   unrankedClinvar?: string[]
   /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
   afOutOfRange?: number
+  csqAmbiguousSites?: number
 }
 
 export interface BatchResult {

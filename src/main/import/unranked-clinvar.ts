@@ -56,6 +56,9 @@ export function mergeUnrankedClinvar(
 export function importDataReport(result: ImportDataReport): ImportDataReport {
   return {
     ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {}),
-    ...(result.afOutOfRange !== undefined ? { afOutOfRange: result.afOutOfRange } : {})
+    ...(result.afOutOfRange !== undefined ? { afOutOfRange: result.afOutOfRange } : {}),
+    ...(result.csqAmbiguousSites !== undefined
+      ? { csqAmbiguousSites: result.csqAmbiguousSites }
+      : {})
   }
 }

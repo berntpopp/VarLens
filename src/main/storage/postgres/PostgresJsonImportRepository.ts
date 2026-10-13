@@ -40,6 +40,7 @@ const VARIANT_BATCH_RECORDSET_TYPES: Record<string, string> = {
   cdna: 'text',
   aa_change: 'text',
   moi: 'text',
+  hpo_match: 'text',
   gq: 'double precision',
   dp: 'bigint',
   ad_ref: 'bigint',

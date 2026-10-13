@@ -21,7 +21,7 @@ import {
   splitBounded,
   VcfResourceLimitError
 } from './vcf-resource-limits'
-import { csqAlleleSpellings, isVepMinimal } from './vcf-csq-allele'
+import { csqAlleleSpellings, isVepMinimal, noteAmbiguousCsqSite } from './vcf-csq-allele'
 
 const MAX_VCF_TOTAL_ANNOTATION_MATCHES = 100_000
 
@@ -176,12 +176,13 @@ function parseCsqForAlleles(
     const spellingsOf = (alt: string): Set<string> =>
       csqAlleleSpellings(alt, ref, originalAltAlleles, minimal)
     assertCsqPotentialMatchBudget(parsed, altAlleles, spellingsOf)
-    const targetIndexes = buildCsqAlleleTargetIndex(
+    const { targets: targetIndexes, ambiguous } = buildCsqAlleleTargetIndex(
       altAlleles,
       originalAltIndexes,
       originalAltAlleles,
       spellingsOf
     )
+    if (parsed.some((transcript) => ambiguous.has(transcript.allele))) noteAmbiguousCsqSite()
     for (const transcript of parsed) {
       for (const targetIndex of targetIndexes.get(transcript.allele) ?? []) {
         totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'CSQ')
@@ -414,7 +415,7 @@ function buildCsqAlleleTargetIndex(
   originalAltIndexes: number[],
   originalAltAlleles: string[],
   spellingsOf: (alt: string) => Set<string>
-): Map<string, number[]> {
+): { targets: Map<string, number[]>; ambiguous: Set<string> } {
   // A spelling two ALTs share is ambiguous: neither gets it (fail closed).
   const spellingCounts = new Map<string, number>()
   for (const originalAlt of originalAltAlleles) {
@@ -431,7 +432,8 @@ function buildCsqAlleleTargetIndex(
       if (spellingCounts.get(spelling) === 1) addTarget(targets, spelling, targetIndex)
     }
   }
-  return targets
+  const ambiguous = new Set([...spellingCounts].filter(([, n]) => n > 1).map(([s]) => s))
+  return { targets, ambiguous }
 }
 
 function assertCsqPotentialMatchBudget(

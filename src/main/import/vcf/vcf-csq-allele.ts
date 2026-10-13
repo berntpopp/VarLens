@@ -48,3 +48,23 @@ export function isVepMinimal(header: VcfHeader): boolean {
   }
   return minimal
 }
+
+// Sites whose CSQ Allele matched more than one ALT and so annotated none (fail
+// closed), counted per import like ../af-out-of-range.ts for the import report.
+let ambiguousSites = 0
+
+export function noteAmbiguousCsqSite(): void {
+  ambiguousSites++
+}
+
+/** Forget what an earlier import counted. */
+export function resetAmbiguousCsqSites(): void {
+  ambiguousSites = 0
+}
+
+/** The count since the last call (undefined when none), and start over. */
+export function takeAmbiguousCsqSites(): number | undefined {
+  const count = ambiguousSites
+  ambiguousSites = 0
+  return count === 0 ? undefined : count
+}

@@ -35,6 +35,7 @@ import {
   unrankedClinvarLogLine
 } from '../import/unranked-clinvar'
 import { resetAfOutOfRange, takeAfOutOfRange } from '../import/af-out-of-range'
+import { resetAmbiguousCsqSites, takeAmbiguousCsqSites } from '../import/vcf/vcf-csq-allele'
 import { publishDerivedDataForImport } from './postgres-import-publication'
 import {
   acquireWorkspaceImportLock,
@@ -192,6 +193,7 @@ export async function runImport(
   cancelled = false // reset at entry; the parentPort handler also resets, this covers test/direct paths
   resetUnrankedClinvar()
   resetAfOutOfRange()
+  resetAmbiguousCsqSites()
   // The worker is terminated when its final message arrives, so ClinVar
   // strings the import could not rank (and the out-of-range gnomAD AF count)
   // are reported just before it is sent.
@@ -199,6 +201,7 @@ export async function runImport(
     if (msg.type !== 'complete') return postMessage(msg)
     const unrankedClinvar = takeUnrankedClinvar()
     const afOutOfRange = takeAfOutOfRange()
+    const csqAmbiguousSites = takeAmbiguousCsqSites()
     const name = start.caseName ?? start.filePath ?? 'import'
     if (unrankedClinvar !== undefined) {
       console.warn(`[postgres-import-worker] ${unrankedClinvarLogLine(name, unrankedClinvar)}`)
@@ -208,13 +211,19 @@ export async function runImport(
         `[postgres-import-worker] ${name}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
       )
     }
+    if (csqAmbiguousSites !== undefined) {
+      console.warn(
+        `[postgres-import-worker] ${name}: ${IMPORT_MESSAGES.csqAmbiguousSites(csqAmbiguousSites)}`
+      )
+    }
     // With the result too: the log alone never reaches the user.
     postMessage({
       ...msg,
       result: {
         ...msg.result,
         ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-        ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
+        ...(afOutOfRange !== undefined ? { afOutOfRange } : {}),
+        ...(csqAmbiguousSites !== undefined ? { csqAmbiguousSites } : {})
       }
     })
   }
