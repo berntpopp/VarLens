@@ -427,6 +427,23 @@ export function cleanupZipTemp(extractionId: string): void {
   orphanedZipExtractions.delete(extractionId)
 }
 
+/**
+ * Remove every ZIP extraction still held (quit time, #562). A failed removal is
+ * logged and the rest still run; the startup sweep catches what remains.
+ */
+export function cleanupAllZipExtractions(): void {
+  for (const extractionId of [...zipExtractions.keys()]) {
+    try {
+      cleanupZipTemp(extractionId)
+    } catch (error) {
+      mainLogger.error(
+        `Failed to remove ZIP extraction ${extractionId}: ${formatErrorMessage(error, 'cleanup failed')}`,
+        'import'
+      )
+    }
+  }
+}
+
 function retryOrphanedZipCleanups(): void {
   for (const extractionId of [...orphanedZipExtractions]) {
     cleanupZipTemp(extractionId)

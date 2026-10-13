@@ -31,6 +31,8 @@ import { beginDatabaseStartup, completeDatabaseStartup } from './database/startu
 import { openDefaultDatabaseAfterWindow, startSqliteHousekeeping } from './startup-sequence'
 import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
 import { installQuitCleanup } from './quit-cleanup'
+import { sweepStaleZipTempDirs } from './import/TempDirectoryManager'
+import { cleanupAllZipExtractions } from './ipc/handlers/batch-import-logic'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -185,6 +187,9 @@ if (gotTheLock !== true) {
     )
     mainLogger.info(`Log file: ${mainLogger.getLogFilePath()}`, 'app')
 
+    // Decrypted ZIP extractions a crash left behind; safe under the single-instance lock.
+    sweepStaleZipTempDirs()
+
     // Log GPU feature status for diagnosing 3D viewer / WebGL issues on Windows
     try {
       const gpuStatus = app.getGPUFeatureStatus()
@@ -328,8 +333,12 @@ if (gotTheLock !== true) {
     })
   })
 
-  // Hold the quit until the database closed (the session owns its worker pool)
-  installQuitCleanup(app, closeDatabaseManager)
+  // Hold the quit until ZIP extractions are removed and the database closed
+  // (the session owns its worker pool).
+  installQuitCleanup(app, async () => {
+    cleanupAllZipExtractions()
+    await closeDatabaseManager()
+  })
 
   // Quit when all windows are closed, except on macOS. There, it's common
   // for applications and their menu bar to stay active until the user quits
