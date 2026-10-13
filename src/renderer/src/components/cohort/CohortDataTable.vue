@@ -187,6 +187,16 @@
           @navigate-to-case="(caseId) => emit('navigate-to-case', { caseId, item })"
         />
       </template>
+
+      <!-- Empty state: each active filter, removable in one click (#568) -->
+      <template #no-data>
+        <FilterEmptyState
+          v-if="!loadFailed"
+          :filters="activeFilters ?? []"
+          @remove="emit('clear-filter', $event)"
+          @clear-all="emit('clear-filters')"
+        />
+      </template>
     </v-data-table-server>
     <AcmgQuickMenu :state="acmgQuickMenu" />
   </div>
@@ -247,6 +257,7 @@ import type {
 } from '../../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../../shared/types/filters'
 import { buildActiveFiltersList } from '../../utils/filters/activeFilters'
+import FilterEmptyState from '../filters/FilterEmptyState.vue'
 import { useDebounce } from '../../composables/useDebounce'
 import { useLinkResolvers } from '../../composables/useLinkResolvers'
 import { useAutoPageSize } from '../../composables/useAutoPageSize'
@@ -282,6 +293,9 @@ interface Props {
   getGlobalComment: (chr: string, pos: number, ref: string, alt: string) => string | null
   /** Stored ACMG evidence locks the row's quick classes */
   hasAcmgEvidence?: (item: CohortVariant) => boolean
+  /** Active filter clauses for the empty state; hidden while a load failed (#568). */
+  activeFilters?: ActiveFilter[]
+  loadFailed?: boolean
 }
 
 const emit = defineEmits<{
@@ -294,6 +308,8 @@ const emit = defineEmits<{
   'navigate-to-case': [payload: { caseId: number; item: CohortVariant }]
   'column-filters-change': [filters: ColumnFiltersParam | undefined]
   deselect: []
+  'clear-filter': [id: string]
+  'clear-filters': []
 }>()
 
 // v-model props for pagination state (controlled by parent via useOffsetPagination)

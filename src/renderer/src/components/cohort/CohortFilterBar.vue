@@ -623,7 +623,9 @@ defineExpose({
   focusSearch: () => searchFieldRef.value?.focus(),
   toggleFilterDrawer: () => (filterDrawerOpen.value = !filterDrawerOpen.value),
   toggleColumnsDrawer: () => (columnsDrawerOpen.value = !columnsDrawerOpen.value),
-  handleClearAll
+  handleClearAll,
+  handleClearFilter,
+  activeFilters: mergedActiveFilters
 })
 </script>
 

@@ -686,6 +686,8 @@ defineExpose({
   toggleColumnsDrawer,
   focusSearch,
   handleClearAll,
+  handleClearFilter,
+  activeFilters: mergedActiveFiltersList,
   filterOptions
 })
 

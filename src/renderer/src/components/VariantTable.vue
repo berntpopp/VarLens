@@ -216,24 +216,14 @@
         <TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" />
       </template>
 
-      <!-- Empty state when filters produce no results -->
+      <!-- Empty state: each active filter, removable in one click (#568) -->
       <template #no-data>
-        <div
+        <FilterEmptyState
           v-if="loadError === null"
-          class="text-center pa-8"
-          role="status"
-          aria-label="No variants match the current filters"
-        >
-          <v-icon size="48" color="grey-lighten-1" class="mb-4" :icon="mdiFilterOffOutline" />
-          <div class="text-h6 text-medium-emphasis mb-2">No variants match your filters</div>
-          <div class="text-body-2 text-medium-emphasis mb-4">
-            Try adjusting your filter criteria or clearing all filters.
-          </div>
-          <v-btn variant="tonal" color="primary" size="small" @click="emit('clear-filters')">
-            <v-icon start size="small" :icon="mdiFilterOff" />
-            Clear filters
-          </v-btn>
-        </div>
+          :filters="activeFilters"
+          @remove="emit('clear-filter', $event)"
+          @clear-all="emit('clear-filters')"
+        />
       </template>
     </v-data-table-server>
 
@@ -294,7 +284,7 @@ import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../composables/useTableLoadingState'
 import { useVariantColumns } from './variant-table/columns'
 import { useVariantData } from './variant-table/useVariantData'
-import { mdiFilterOff, mdiFilterOffOutline } from '@mdi/js'
+import FilterEmptyState from './filters/FilterEmptyState.vue'
 import { useApiService } from '../composables/useApiService'
 import { AppStateKey } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
@@ -337,11 +327,14 @@ interface Props {
    * Default `true` preserves existing behavior for every existing caller.
    */
   interactive?: boolean
+  /** Active filter clauses, listed in the empty state (#568). */
+  activeFilters?: ActiveFilter[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   annotationScope: 'case',
   columnMeta: () => [],
+  activeFilters: () => [],
   variantType: 'snv',
   interactive: true
 })
@@ -351,6 +344,7 @@ const emit = defineEmits<{
   'update:hasSort': [hasSort: boolean]
   'row-click': [variant: Variant]
   deselect: []
+  'clear-filter': [id: string]
   'clear-filters': []
 }>()
 

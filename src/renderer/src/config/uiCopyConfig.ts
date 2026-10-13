@@ -12,6 +12,15 @@ export const FILTER_TOOLBAR_COPY = {
   filters: 'Filters'
 } as const
 
+/** Table empty state (case + cohort, #568): names each active filter so it can be removed. */
+export const FILTER_EMPTY_STATE_COPY = {
+  title: 'No variants match your filters',
+  hint: 'These filters are active. Remove one to widen the results:',
+  removeLabel: 'Remove filter',
+  clearAll: 'Clear all filters',
+  noFiltersTitle: 'No variants to show'
+} as const
+
 export const PROTEIN_VIEW_COPY = {
   lengthUnknown: 'Protein length unknown, so the plot is unavailable.'
 } as const
