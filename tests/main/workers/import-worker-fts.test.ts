@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as fts from '../../../src/main/database/fts-trigger-management'
+import { createFTSTriggers } from '../../../src/main/database/schema'
 import {
   openSummarySessionHarness,
   sessionStatuses,
@@ -79,6 +80,9 @@ describe('import worker: FTS upkeep per session (#559)', () => {
     expect(hits('NEWGENE')).toEqual({ indexed: 1, stored: 1 })
     expect(hits('GONEGENE')).toEqual({ indexed: 0, stored: 0 })
     expect(fts.ftsTriggersComplete(h.db)).toBe(true)
+    expect(() =>
+      h.db.exec("INSERT INTO variants_fts(variants_fts, rank) VALUES('integrity-check', 1)")
+    ).not.toThrow()
   })
 
   it('a bulk session rebuilds the index once and restores the triggers', async () => {
@@ -99,5 +103,34 @@ describe('import worker: FTS upkeep per session (#559)', () => {
     expect(fts.rebuildAllFtsIndexes).toHaveBeenCalledTimes(1)
     expect(hits('NEWGENE')).toEqual({ indexed: 1, stored: 1 })
     expect(fts.ftsTriggersComplete(h.db)).toBe(true)
+  })
+
+  it('a delete or rebuild job that restores the triggers mid-session leaves the index exact', async () => {
+    await populate()
+    let restored = false
+
+    // A delete job (delete-worker.ts) or startup repair runs createFTSTriggers
+    // while this session is still inserting: later rows go in by trigger.
+    await h.run(
+      [h.file('new', [variantAt(200, 'NEWA'), variantAt(300, 'NEWB'), variantAt(400, 'NEWC')])],
+      {
+        batchSize: 1,
+        onMessage: (m) => {
+          if (restored || m.type !== 'progress' || m.phase !== 'inserting') return
+          restored = true
+          h.db.exec(createFTSTriggers)
+        }
+      }
+    )
+
+    expect(restored).toBe(true)
+    expect(() =>
+      h.db.exec("INSERT INTO variants_fts(variants_fts, rank) VALUES('integrity-check', 1)")
+    ).not.toThrow()
+    const count = (sql: string): number => (h.db.prepare(sql).get() as { c: number }).c
+    expect(count('SELECT COUNT(*) AS c FROM variants_fts_docsize')).toBe(
+      count('SELECT COUNT(*) AS c FROM variants')
+    )
+    expect(hits('NEWC')).toEqual({ indexed: 1, stored: 1 })
   })
 })

@@ -10,6 +10,7 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createFTSTriggers } from '../database/schema'
 import {
+  anyFtsTrigger,
   ensureExtensionFtsTriggers,
   indexFtsRowsAbove,
   rebuildAllFtsIndexes
@@ -127,7 +128,9 @@ export function rebuildFts(db: DatabaseType): void {
  * Throws like {@link rebuildFts}.
  */
 export function restoreFts(db: DatabaseType, watermark: number | null): void {
-  if (watermark === null) return rebuildFts(db)
+  // Triggers back mid-session (a concurrent delete or rebuild job): rows went
+  // in or out by trigger, so the watermark no longer says what is indexed.
+  if (watermark === null || anyFtsTrigger(db)) return rebuildFts(db)
   indexFtsRowsAbove(db, watermark)
   db.exec(createFTSTriggers)
   ensureExtensionFtsTriggers(db)
