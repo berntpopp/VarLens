@@ -12,7 +12,9 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
+import { ftsTriggersComplete } from '../../../src/main/database/fts-trigger-management'
 import { repairInterruptedImportSession } from '../../../src/main/workers/import-finalization'
+import { sessionIndexesMissing } from '../../../src/main/workers/import-index-sql'
 import type { MainMessage, WorkerMessage } from '../../../src/shared/types/import-worker'
 import { bundleWorker } from '../../utils/bundle-worker'
 import { referenceSummary, snapshotSummary, summaryMeta } from './support/summary-reference'
@@ -163,6 +165,21 @@ describe('import worker: multi-file append (#551)', () => {
     expect(stored).toBe(6)
   })
 
+  it('names the case it appends to as a replacement, so a crash recovery never deletes it', async () => {
+    await h.run([h.file('A', [variantAt(100, 'BASEGENE')])])
+    const id = caseId('A')
+
+    const messages = await h.run([appendFile(svFile('sv', 5, 'chr1', 'SVGENE'), id)])
+
+    // ImportWorkerClient runs a recovery session after a crash and passes
+    // discardCaseIds [] for a replacement (import-worker-heap-limit.test.ts).
+    const started = messages.filter((m) => m.type === 'case-started')
+    expect(started).toEqual([{ type: 'case-started', fileIndex: 0, caseId: id, replacement: true }])
+    expect(messages.indexOf(started[0])).toBeLessThan(
+      messages.findIndex((m) => m.type === 'file-complete')
+    )
+  })
+
   it('refuses a case that is not published', async () => {
     const messages = await h.run([appendFile(svFile('sv', 5, 'chr1', 'SVGENE'), 999)])
     expect(sessionStatuses(messages)).toEqual(['A:failed'])
@@ -197,10 +214,19 @@ describe('import worker: multi-file append (#551)', () => {
       } satisfies MainMessage)
     })
 
-    // Reopen as the app does: startup repairs an interrupted session.
+    // The recovery session ImportWorkerClient starts for a crashed
+    // replacement (discardCaseIds []): the case stays, FTS and indexes return.
+    await h.run([], { discardCaseIds: [] })
+    expect(h.db.prepare('SELECT import_status FROM cases WHERE id = ?').get(id)).toEqual({
+      import_status: 'ready'
+    })
+    expect(ftsTriggersComplete(h.db)).toBe(true)
+    expect(sessionIndexesMissing(h.db)).toBe(false)
+
+    // Reopen as the app does: startup repair has nothing left to do.
     const reopened = new Database(h.dbPath)
     try {
-      repairInterruptedImportSession(reopened)
+      expect(repairInterruptedImportSession(reopened)).toBe(false)
       const sv = svRows(reopened, id)
       const row = reopened
         .prepare(

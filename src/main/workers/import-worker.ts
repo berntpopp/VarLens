@@ -240,6 +240,14 @@ export async function runImportSession(
       try {
         if (file.appendToCaseId !== undefined) {
           // Multi-file case: rows go into the published case (import-append.ts).
+          // Named as a replacement: after a crash the client runs a recovery
+          // session (FTS, indexes) that must not delete the published case.
+          port.postMessage({
+            type: 'case-started',
+            fileIndex,
+            caseId: file.appendToCaseId,
+            replacement: true
+          })
           const added = await appendFileToCase({
             db: workerDb,
             summary,
