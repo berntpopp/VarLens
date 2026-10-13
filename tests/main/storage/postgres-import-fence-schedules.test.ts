@@ -208,14 +208,12 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     allCases: number
     readyCases: number
     provisionalRows: number
-    frequencyRows: number
     summaryRows: number
   }> {
     const result = await probe.query<Record<string, string>>(
       `SELECT (SELECT COUNT(*) FROM "${schema}"."cases_all") AS all_cases,
               (SELECT COUNT(*) FROM "${schema}"."cases") AS ready_cases,
               (SELECT COUNT(*) FROM "${schema}"."variants_all") AS provisional_rows,
-              (SELECT COUNT(*) FROM "${schema}"."variant_frequency") AS frequency_rows,
               (SELECT COUNT(*) FROM "${schema}"."cohort_variant_summary") AS summary_rows`
     )
     const row = result.rows[0]
@@ -223,7 +221,6 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
       allCases: Number(row.all_cases),
       readyCases: Number(row.ready_cases),
       provisionalRows: Number(row.provisional_rows),
-      frequencyRows: Number(row.frequency_rows),
       summaryRows: Number(row.summary_rows)
     }
   }
@@ -244,7 +241,6 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     allCases: 0,
     readyCases: 0,
     provisionalRows: 0,
-    frequencyRows: 0,
     summaryRows: 0
   }
 
@@ -271,7 +267,7 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     barrier.resume.resolve() // the old worker attempts its next row batch
     expectSuperseded(await worker)
     // Recovery is still paused before its first delete: nothing was added.
-    expect(await counts()).toMatchObject({ provisionalRows: 6, readyCases: 0, frequencyRows: 0 })
+    expect(await counts()).toMatchObject({ provisionalRows: 6, readyCases: 0 })
 
     owner.resumeRecovery()
     const lease = await owner.lease
@@ -292,7 +288,7 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
 
     barrier.resume.resolve() // the old worker attempts publication
     expectSuperseded(await worker)
-    expect(await counts()).toMatchObject({ readyCases: 0, frequencyRows: 0, summaryRows: 0 })
+    expect(await counts()).toMatchObject({ readyCases: 0, summaryRows: 0 })
 
     owner.resumeRecovery()
     const lease = await owner.lease
@@ -362,13 +358,6 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     }
     const after = await counts()
     expect(after).toMatchObject({ allCases: 3, readyCases: 3, provisionalRows: 3 * ROWS })
-    // Three cases of the same rows: one frequency row per coordinate, counted 3 times.
-    expect(after.frequencyRows).toBeGreaterThan(0)
-    const frequency = await probe.query<{ lowest: string; highest: string }>(
-      `SELECT MIN(case_count) AS lowest, MAX(case_count) AS highest
-         FROM "${schema}"."variant_frequency"`
-    )
-    expect(frequency.rows[0]).toEqual({ lowest: '3', highest: '3' })
   }, 120_000)
 
   it('a worker whose backend is terminated inside a row-batch transaction leaves nothing listed or counted; the next import cleans up', async () => {
@@ -402,7 +391,6 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
       allCases: 1,
       readyCases: 0,
       provisionalRows: 1,
-      frequencyRows: 0,
       summaryRows: 0
     })
 
@@ -411,15 +399,6 @@ describe.skipIf(!RUN)('import recovery fence — schedules on a real instance', 
     expect(next.at(-1)).toMatchObject({ type: 'complete', result: { variantCount: ROWS } })
     const after = await counts()
     expect(after).toMatchObject({ allCases: 1, readyCases: 1, provisionalRows: ROWS })
-    const frequency = await probe.query<{ rows: string; lowest: string; highest: string }>(
-      `SELECT COUNT(*) AS rows, MIN(case_count) AS lowest, MAX(case_count) AS highest
-         FROM "${schema}"."variant_frequency"`
-    )
-    expect(frequency.rows[0]).toEqual({
-      rows: String(after.frequencyRows),
-      lowest: '1',
-      highest: '1'
-    })
   }, 120_000)
 
   it('recovery whose connection is killed while it holds the fence, after it superseded older imports, is completed by the next recovery', async () => {

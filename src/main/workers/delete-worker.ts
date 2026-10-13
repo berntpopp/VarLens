@@ -68,7 +68,6 @@ async function runDelete(msg: Extract<DeleteWorkerRequest, { type: 'start' }>): 
     if (summary === null) markCohortSummaryStale(db)
 
     const result = await deleteCasesIncrementally(db, ids, {
-      deletingAll,
       summary,
       isCancelled: () => cancelled,
       onProgress: (current, total) => postPhase('deleting', current, total)

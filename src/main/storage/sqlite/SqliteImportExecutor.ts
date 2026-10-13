@@ -213,9 +213,6 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 skipped: 0
               })
 
-              // Variant frequencies were already updated inside the import
-              // worker's transaction — nothing to do on the main thread.
-
               resolve({
                 caseId: capturedCaseId,
                 variantCount: detail.variantCount ?? 0,

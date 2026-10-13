@@ -97,7 +97,7 @@ describe('SqliteImportExecutor', () => {
         ({
           getPath: () => '/tmp/test.varlens',
           getEncryptionKey: () => 'secret',
-          variants: { updateFrequencies: vi.fn() },
+
           cohort: { invalidateColumnMetaCache }
         }) as never,
       createWorkerClient: () => worker as never
@@ -173,8 +173,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -238,8 +237,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -284,8 +282,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -323,8 +320,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -382,8 +378,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -470,8 +465,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -770,8 +764,7 @@ describe('SqliteImportExecutor.importMultiFile', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never,
       multiFileImportDelegate: delegate

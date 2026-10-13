@@ -466,23 +466,3 @@ export class PostgresJsonImportRepository {
     ])
   }
 }
-
-export async function rebuildVariantFrequencyForCase(
-  client: Pick<PoolClient, 'query'>,
-  schema: string,
-  caseId: number,
-  includeProvisional = false
-): Promise<void> {
-  const schemaName = quoteIdentifier(schema)
-  const variantsTable = includeProvisional ? 'variants_all' : 'variants'
-  await client.query(
-    `INSERT INTO ${schemaName}."variant_frequency" (chr, pos, ref, alt, case_count)
-     SELECT chr, pos, ref, alt, 1
-     FROM ${schemaName}.${quoteIdentifier(variantsTable)}
-     WHERE case_id = $1
-     GROUP BY chr, pos, ref, alt
-     ON CONFLICT (coord_hash)
-     DO UPDATE SET case_count = ${schemaName}."variant_frequency".case_count + 1`,
-    [caseId]
-  )
-}

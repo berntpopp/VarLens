@@ -21,7 +21,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 49
+export const LATEST_SQLITE_SCHEMA_VERSION = 51
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -75,6 +75,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 49
  * - 45: built-in filter preset "Rare, not recurrent" (carrier cap, #455; mirrors PG 0028)
  * - 46: no-call rows are not carriers in the cohort summary (mirrors PG 0029)
  * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
+ * - 51: drop the unread variant_frequency table (#595; mirrors PG 0034)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2025,6 +2026,13 @@ export function runMigrations(db: Database.Database): void {
       )
     }
     db.exec('PRAGMA user_version = 49')
+  }
+
+  // v51 (mirrors PG 0034): variant_frequency has had no reader since the
+  // carrier frequency moved to the cohort summary (#555, #595).
+  if (currentVersion < 51) {
+    db.exec('DROP TABLE IF EXISTS variant_frequency')
+    db.exec('PRAGMA user_version = 51')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

@@ -103,19 +103,6 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
         [chr, pos]
       )
     ).rows[0]
-  const frequencies = async (): Promise<unknown[]> =>
-    (
-      await probe.query(
-        `SELECT chr, pos::int AS pos, case_count::int AS n FROM ${t('variant_frequency')} ORDER BY chr COLLATE "C", pos`
-      )
-    ).rows
-  const recount = async (): Promise<unknown[]> =>
-    (
-      await probe.query(
-        `SELECT chr, pos::int AS pos, COUNT(DISTINCT case_id)::int AS n FROM ${t('variants')}
-          GROUP BY chr, pos ORDER BY chr COLLATE "C", pos`
-      )
-    ).rows
   const runJob = async (): Promise<void> => {
     while (await runContigNamingStep({ pool, schema })) {
       // one case per transaction
@@ -133,10 +120,6 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     await addVariant(b, 'chrM', 60)
     await addVariant(c, '1', 100)
     await addVariant(d, 'chr1', 100)
-    await probe.query(
-      `INSERT INTO ${t('variant_frequency')} (chr, pos, ref, alt, case_count)
-       SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id) FROM ${t('variants')} GROUP BY chr, pos, ref, alt`
-    )
     await annotate('1', 100, 'a', 1, 'Benign', 1)
     await annotate('chr1', 100, 'b', 0, 'Pathogenic', 2)
     await annotate('1', 300, 'only A', 0, null, 1)
@@ -174,7 +157,6 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     )
     expect(audit.rows).toHaveLength(1)
     expect(audit.rows[0].entity_key).toBe('chr1:100:A:G')
-    expect(await frequencies()).toEqual(await recount())
     expect(
       (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t('cohort_summary_rebuild_requests')}`))
         .rows[0].n
@@ -316,7 +298,6 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     expect(await count('contig_naming_pending')).toBeGreaterThan(0)
     await runJob()
     expect(await chrsOf(a)).toEqual(['chr1', 'chrM'])
-    expect(await frequencies()).toEqual(await recount())
     expect(await count('contig_naming_pending')).toBe(0)
   }, 60_000)
 
@@ -385,12 +366,6 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     }
     const late = await addCase('LATE', 'GRCh38', null)
     await addVariant(late, 'chr1', 300)
-    // What a publication counts for the new case (it is not queued: already canonical).
-    await probe.query(
-      `INSERT INTO ${t('variant_frequency')} (chr, pos, ref, alt, case_count)
-       VALUES ('chr1', 300, 'A', 'G', 1)
-       ON CONFLICT (coord_hash) DO UPDATE SET case_count = ${t('variant_frequency')}.case_count + 1`
-    )
     await probe.query(
       `UPDATE ${t('variant_annotations')} SET global_comment = 'edited', updated_at = 5
         WHERE chr = '1' AND pos = 300`
@@ -399,6 +374,5 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
     expect(await chrsOf(a)).toEqual(['chr1', 'chrM'])
     expect(await chrsOf(late)).toEqual(['chr1'])
     expect(await annotation('chr1', 300)).toMatchObject({ global_comment: 'edited' })
-    expect(await frequencies()).toEqual(await recount())
   }, 60_000)
 })

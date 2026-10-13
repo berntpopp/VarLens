@@ -36,7 +36,6 @@ import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { VariantSearchService } from './VariantSearchService'
-import { VariantFrequencyService } from './VariantFrequencyService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
@@ -48,7 +47,6 @@ export class VariantRepository extends BaseRepository {
   private cases: CaseRepository
   private readonly filterBuilder: VariantFilterBuilder
   private readonly searchService: VariantSearchService
-  private readonly frequencyService: VariantFrequencyService
   private ftsSnapshot: TriggerSnapshot = {}
 
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
@@ -56,7 +54,6 @@ export class VariantRepository extends BaseRepository {
     this.cases = cases
     this.searchService = new VariantSearchService(db, kysely)
     this.filterBuilder = new VariantFilterBuilder(db, kysely, this.searchService)
-    this.frequencyService = new VariantFrequencyService(db)
   }
 
   /**
@@ -698,20 +695,6 @@ export class VariantRepository extends BaseRepository {
       )
       .all(...caseIds) as { variant_type: string }[]
     return new Set(rows.map((r) => r.variant_type))
-  }
-
-  // ── Frequency delegators ────────────────────────────────────
-
-  updateFrequencies(caseId: number): void {
-    this.frequencyService.updateFrequencies(caseId)
-  }
-
-  decrementFrequencies(caseId: number): void {
-    this.frequencyService.decrementFrequencies(caseId)
-  }
-
-  recomputeAllFrequencies(): void {
-    this.frequencyService.recomputeAllFrequencies()
   }
 
   getFilterOptions(caseId: number): FilterOptions {

@@ -95,12 +95,10 @@ describe('PostgresCaseLifecycleRepository — non-blocking deletion', () => {
     const idx = (needle: string): number => sql.findIndex((s) => s.includes(needle))
     const flags = idx('v.case_id <> $1')
     const subtract = idx('carrier_count = s.carrier_count - k.carrier_delta')
-    const vfDecrement = idx('SET case_count = vf.case_count - 1')
     const flip = idx("SET import_status = 'deleting'")
     expect(flags).toBeGreaterThan(0)
     expect(subtract).toBeGreaterThan(flags)
-    expect(vfDecrement).toBeGreaterThan(subtract)
-    expect(flip).toBeGreaterThan(vfDecrement)
+    expect(flip).toBeGreaterThan(subtract)
     // The per-gene aggregates lose the case in the same transaction, from the
     // case's own rows and while those rows are still visible.
     const geneSubtract = idx('variant_count = s.variant_count - g.row_count')

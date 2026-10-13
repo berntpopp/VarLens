@@ -46,7 +46,6 @@ import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { discardInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
-import { VariantFrequencyService } from '../database/VariantFrequencyService'
 
 export interface ImportWorkerPort {
   postMessage: (message: WorkerMessage) => void
@@ -74,10 +73,6 @@ export async function runImportSession(
     // Opened below, once the leftovers of a dead worker are gone.
     const summaryRef: { session?: ImportSummarySession } = {}
     const stmts = prepareStatements(db, () => summaryRef.session?.keepSessionOpen())
-    // Internal allele-frequency upkeep runs here, on the worker connection
-    // that already holds the write lock, instead of on the Electron main
-    // thread after the worker finishes (audit 05 finding M-1).
-    const frequencies = new VariantFrequencyService(db)
 
     // Drop FTS triggers at start, and the non-essential indexes when the
     // session is a bulk load relative to what is stored (import-index-sql.ts).
@@ -91,8 +86,7 @@ export async function runImportSession(
     discardInterruptedImports(
       db,
       msg.discardCaseIds ?? [],
-      (caseId) => void stmts.deleteCase.run(caseId),
-      frequencies
+      (caseId) => void stmts.deleteCase.run(caseId)
     )
 
     const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
@@ -226,9 +220,7 @@ export async function runImportSession(
         let variantCount = 0
         const skipTracker = new ImportSkipTracker()
         // What the case has contributed outside its own rows so far: nothing
-        // until it is published, then its frequencies (if counted) and its
-        // part of the cohort summary.
-        let frequenciesCounted = false
+        // until it is published, then its part of the cohort summary.
         let published = false
 
         try {
@@ -331,11 +323,10 @@ export async function runImportSession(
 
           // The file's rows are committed and it was not cancelled: publish
           // the case before anyone is told the file is done.
-          frequenciesCounted = publishCase(db, caseId, frequencies, () => {
+          publishCase(db, () => {
             if (existing) {
               // In the publishing transaction: the old case goes, with its
-              // frequencies and summary contribution, only if the new one arrives.
-              frequencies.decrementFrequencies(existing.id)
+              // summary contribution, only if the new one arrives.
               summary.replaceCase(existing.id, () => stmts.deleteCase.run(existing.id))
               workerDb.prepare('UPDATE cases SET name = ? WHERE id = ?').run(file.caseName, caseId)
             }
@@ -392,16 +383,6 @@ export async function runImportSession(
           // file is reported failed: the case it replaced is already gone (#493).
           if (published && existing) throw importError
           // The case goes, and with it everything it already contributed.
-          if (frequenciesCounted) {
-            try {
-              frequencies.decrementFrequencies(caseId)
-            } catch (e) {
-              console.warn(
-                '[import-worker] Failed to revert variant frequencies:',
-                e instanceof Error ? e.message : String(e)
-              )
-            }
-          }
           const deleteCase = (): void => void stmts.deleteCase.run(caseId)
           if (published) summary.replaceCase(caseId, deleteCase)
           else summary.discardCase(deleteCase)
@@ -516,36 +497,13 @@ if (parentPort) {
 }
 
 /**
- * Publish an imported case in ONE transaction: its `variant_frequency` counts,
- * its cohort-summary state (merged, or flagged stale) and the flip from
- * 'provisional' to 'ready'. Readers divide the frequency counts by the number
- * of ready cases, and crash recovery deletes a provisional case without
- * touching either table — both rely on a provisional case having contributed
- * nothing. A throw rolls all of it back. Returns whether the frequencies were
- * counted (a failure there is logged, as before, and does not fail the file).
+ * Publish an imported case in ONE transaction: its cohort-summary state
+ * (merged, or flagged stale) and the flip from 'provisional' to 'ready'.
+ * Crash recovery deletes a provisional case without touching the summary, so
+ * a provisional case must have contributed nothing. A throw rolls it all back.
  */
-function publishCase(
-  db: DatabaseType,
-  caseId: number,
-  frequencies: VariantFrequencyService,
-  publishInSummary: () => void
-): boolean {
-  return db
-    .transaction(() => {
-      let counted = false
-      try {
-        db.transaction(() => frequencies.updateFrequencies(caseId))()
-        counted = true
-      } catch (e) {
-        console.warn(
-          '[import-worker] Failed to update variant frequencies:',
-          e instanceof Error ? e.message : String(e)
-        )
-      }
-      publishInSummary()
-      return counted
-    })
-    .immediate()
+function publishCase(db: DatabaseType, publishInSummary: () => void): void {
+  db.transaction(publishInSummary).immediate()
 }
 
 /** Recreate the indexes dropped for the bulk insert (idempotent, best-effort). */

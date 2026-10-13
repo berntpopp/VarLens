@@ -76,7 +76,6 @@ describe('SQLite multi-file import cohort summary', () => {
       importSingleFile: vi.fn(async ({ caseName }: { caseName: string }) => {
         const caseId = db.cases.createCase(caseName, '/x/first.vcf', 1)
         db.variants.insertVariantsBatch(caseId, firstFileCoords.map(toVariant))
-        db.variants.updateFrequencies(caseId)
         db.cohortSummary.rebuild()
         return { caseId, variantCount: firstFileCoords.length, skipped: 0, errors: [], elapsed: 0 }
       }),

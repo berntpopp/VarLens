@@ -17,7 +17,6 @@ import { importDataReport, mergeUnrankedClinvar } from '../../import/unranked-cl
 import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
-import { VariantFrequencyService } from '../../database/VariantFrequencyService'
 import {
   createCohortStaleAnnouncer,
   markCohortSummaryStaleBeforeAppend,
@@ -221,8 +220,7 @@ export interface MultiFileImportResult extends ImportDataReport {
  * End-of-session housekeeping (executed once after all files):
  *   1. Rebuild FTS index + restore FTS triggers (single pass across all appends)
  *   2. Recompute case variant_count from the variants table atomically
- *   3. Update variant_frequency table
- *   4. Rebuild the cohort summary (only when files were appended: the worker
+ *   3. Rebuild the cohort summary (only when files were appended: the worker
  *      keeps it exact for the first file, the appends are not merged into it)
  *
  * A case-level genome-build lock is enforced: every subsequent file must
@@ -363,12 +361,6 @@ async function startMultiFileImportSqlite(
     }
   }
 
-  // The worker counted the case once per coordinate of the first file. Record
-  // the case's last variant id so the end-of-session upkeep can count only
-  // coordinates the appended files add (see updateFrequenciesForAppend).
-  const frequencies = files.length > 1 ? new VariantFrequencyService(db.database) : null
-  const frequencyWatermark = frequencies?.caseVariantWatermark(caseId) ?? 0
-
   // Wrap all main-thread appends in a single bulk-insert session so FTS
   // triggers are only torn down and rebuilt ONCE across all appended files.
   // Without this bracket, the FTS `ai` trigger fires per row and the append
@@ -453,10 +445,8 @@ async function startMultiFileImportSqlite(
   }
 
   // ── End-of-session housekeeping ────────────────────────────────
-  // Order matters: refresh variant_count first (it's the authoritative total
-  // of the variants table for this case), then update cross-case frequency
-  // counts, then bring the cohort summary up to date. We do this ONCE per
-  // session, not per file.
+  // Refresh variant_count (the authoritative total of the variants table for
+  // this case), then bring the cohort summary up to date, ONCE per session.
   try {
     db.variants.recalculateCaseVariantCount(caseId)
   } catch (e) {
@@ -466,22 +456,6 @@ async function startMultiFileImportSqlite(
       }`,
       'import'
     )
-  }
-
-  if (frequencies !== null) {
-    // Incremental, not "decrement the merged case then re-add": the merged
-    // case holds coordinates the worker never counted, and decrementing those
-    // would steal a count from other cases that carry them.
-    try {
-      frequencies.updateFrequenciesForAppend(caseId, frequencyWatermark)
-    } catch (e) {
-      mainLogger.warn(
-        `Failed to refresh variant frequencies after multi-file import: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-        'import'
-      )
-    }
   }
 
   // The worker merged the first file into the cohort summary; the appended

@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { DatabaseService } from '../../src/main/database/DatabaseService'
 import { isCohortSummaryStale } from '../../src/main/database/cohort-summary-case-removal'
 import { openConfiguredDatabase } from '../../src/main/database/startup'
+import { LATEST_SQLITE_SCHEMA_VERSION } from '../../src/main/database/migrations'
 import { triggerStartupRebuildIfNeeded as triggerFromIndex } from '../../src/main/ipc/handlers/cohort'
 import { triggerStartupRebuildIfNeeded } from '../../src/main/ipc/handlers/cohort-logic'
 import { exportCohort } from '../../src/main/ipc/handlers/export-logic'
@@ -133,7 +134,9 @@ describe('automatic start with a summary flagged stale by migration v42', () => 
       await startApp(key)
 
       const db = manager.getCurrent()
-      expect(db.database.pragma('user_version', { simple: true })).toBe(49)
+      expect(db.database.pragma('user_version', { simple: true })).toBe(
+        LATEST_SQLITE_SCHEMA_VERSION
+      )
       expect(db.isEncrypted()).toBe(key !== undefined)
       await vi.waitFor(() => expect(isCohortSummaryStale(db.database)).toBe(false), {
         timeout: 20_000

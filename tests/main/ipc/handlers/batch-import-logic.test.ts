@@ -90,8 +90,8 @@ afterEach(() => {
 
 /**
  * Minimal DatabaseService stub covering the methods batch-import-logic touches:
- * checkDuplicates -> cases.getExistingCaseNames, getPath/getEncryptionKey, and
- * the onComplete frequency-update path (cases.getCaseByName, variants.updateFrequencies).
+ * checkDuplicates -> cases.getExistingCaseNames, getPath/getEncryptionKey and
+ * cases.getCaseByName.
  */
 function makeDb(overrides?: { existingNames?: Set<string>; summaryStale?: () => boolean }) {
   return {
@@ -108,9 +108,6 @@ function makeDb(overrides?: { existingNames?: Set<string>; summaryStale?: () => 
     cases: {
       getExistingCaseNames: vi.fn(() => overrides?.existingNames ?? new Set<string>()),
       getCaseByName: vi.fn((name: string) => ({ id: 1, name }))
-    },
-    variants: {
-      updateFrequencies: vi.fn()
     }
   } as never
 }
@@ -195,22 +192,6 @@ describe('startBatchImport — Sprint A D3 (iii) / Gate 12', () => {
         }
       ]
     })
-  })
-
-  it('(a) frequency update: no main-thread updateFrequencies (the import worker maintains frequencies)', async () => {
-    const db = makeDb()
-    const promise = startBatchImport(
-      () => db,
-      ['/data/a.json', '/data/b.json'],
-      'skip',
-      undefined,
-      {}
-    )
-    await new Promise((r) => queueMicrotask(r as () => void))
-    FakeImportWorkerClient.instances[0].emit(COMPLETE_MSG)
-    await promise
-
-    expect(db.variants.updateFrequencies).not.toHaveBeenCalled()
   })
 
   it('(b) conflict: a second concurrent batch surfaces "A batch import is already in progress"', async () => {

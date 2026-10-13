@@ -3,14 +3,13 @@
  *
  * A case is provisional while its file is being imported: its rows are
  * committed batch by batch but it is no part of the database yet. Everything
- * a user reads must leave it out — lists, counts, cohort, the internal allele
+ * a user reads must leave it out — lists, counts, cohort, the carrier
  * frequency (numerator and denominator alike) — while the import's own
  * bookkeeping (duplicate-name check, lookup and delete by id) must find it.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DatabaseService } from '../../../src/main/database'
 import { DatabaseOverviewService } from '../../../src/main/database/DatabaseOverviewService'
-import { VariantFrequencyService } from '../../../src/main/database/VariantFrequencyService'
 import { deleteCasesIncrementally } from '../../../src/main/workers/delete-operations'
 
 describe('provisional cases and their readers', () => {
@@ -38,7 +37,6 @@ describe('provisional cases and their readers', () => {
     db()
       .prepare('INSERT INTO variant_sv (variant_id, support) VALUES (?, 3)')
       .run(addVariant(readyId, 500, 'sv'))
-    new VariantFrequencyService(db()).updateFrequencies(readyId)
     service.cohortSummary.rebuild()
 
     // An import in flight: rows committed, nothing counted, not published.
@@ -61,9 +59,6 @@ describe('provisional cases and their readers', () => {
   afterEach(() => {
     service.close()
   })
-
-  const frequencies = (): unknown[] =>
-    db().prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
 
   describe('readers that must not see it', () => {
     it('case list (cases:list)', () => {
@@ -121,14 +116,6 @@ describe('provisional cases and their readers', () => {
       const rows = service.variants.getVariants({ case_id: readyId }, 50, 0).data
       expect(rows.map((row) => row.internal_af)).toEqual([1, 1])
     })
-
-    it('internal allele frequency: a full recount of the numerators', () => {
-      new VariantFrequencyService(db()).recomputeAllFrequencies()
-      expect(frequencies()).toEqual([
-        { pos: 100, case_count: 1 },
-        { pos: 500, case_count: 1 }
-      ])
-    })
   })
 
   describe('bookkeeping that must see it', () => {
@@ -143,18 +130,14 @@ describe('provisional cases and their readers', () => {
       expect(service.cases.getCase(provisionalId).name).toBe('in-flight')
     })
 
-    it('delete by id, without taking back frequencies it never counted', async () => {
-      const before = frequencies()
-
+    it('delete by id', async () => {
       const result = await deleteCasesIncrementally(db(), [provisionalId], {
-        deletingAll: false,
         isCancelled: () => false,
         onProgress: () => undefined
       })
 
       expect(result).toEqual({ deleted: 1, cancelled: false })
       expect(db().prepare('SELECT COUNT(*) AS c FROM variants').get()).toEqual({ c: 2 })
-      expect(frequencies()).toEqual(before)
     })
   })
 })

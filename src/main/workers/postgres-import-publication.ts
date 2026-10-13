@@ -13,11 +13,9 @@
  *                    session-local temporary tables) and the case's column
  *                    metadata
  *   under the lock   only the upserts into the shared tables, in a fixed
- *                    order: variant_frequency, cohort_variant_summary, the
- *                    gene aggregates
+ *                    order: cohort_variant_summary, the gene aggregates
  *
- * Failure handling is unchanged. The frequency upsert is bookkeeping: its
- * failure fails the import. Summary maintenance is wrapped in savepoints: a
+ * Summary maintenance is wrapped in savepoints: a
  * failure (while preparing or while upserting) rolls back to the savepoint
  * and marks the summary stale in this same transaction, so the case is still
  * published and the next cohort read rebuilds. Staleness is not surfaced on
@@ -26,7 +24,6 @@
 import type { Client, PoolClient } from 'pg'
 
 import { PostgresCohortSummaryRepository } from '../storage/postgres/PostgresCohortSummaryRepository'
-import { rebuildVariantFrequencyForCase } from '../storage/postgres/PostgresJsonImportRepository'
 import { profilePhase } from '../storage/postgres/postgres-import-profile'
 
 type WorkerClient = Pick<Client, 'query'>
@@ -101,8 +98,6 @@ async function markSummaryStale(
  */
 export async function publishDerivedDataForImport(
   args: PublicationArgs & {
-    /** The case's rows are still provisional (VCF) or already visible (JSON). */
-    frequencyIncludesProvisional: boolean
     /** Waits for the summary write lock; a cancel during the wait throws. */
     lockSummary: (client: Pick<PoolClient, 'query'>) => Promise<void>
   }
@@ -120,9 +115,6 @@ export async function publishDerivedDataForImport(
   const prepareFailure = await prepareSummaryBeforeLock(summary, scope, client)
 
   await profilePhase('pub-lock-wait', () => args.lockSummary(pooled))
-  await profilePhase('pub-variant-frequency', () =>
-    rebuildVariantFrequencyForCase(pooled, schema, caseId, args.frequencyIncludesProvisional)
-  )
 
   if (prepareFailure !== null) {
     await markSummaryStale(summary, scope, prepareFailure.error)

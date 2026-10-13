@@ -43,12 +43,11 @@ test('postgres dev schema exposes phase 7 variant read tables and seed data', as
        ORDER BY table_name`,
       [
         process.env.VARLENS_PG_SCHEMA ?? 'public',
-        ['variants', 'variant_frequency', 'variant_sv', 'variant_cnv', 'variant_str']
+        ['variants', 'variant_sv', 'variant_cnv', 'variant_str']
       ]
     )
     expect(tables.rows.map((row) => row.table_name)).toEqual([
       'variant_cnv',
-      'variant_frequency',
       'variant_str',
       'variant_sv',
       'variants'
