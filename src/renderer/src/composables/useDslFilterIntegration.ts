@@ -15,6 +15,7 @@ import { serializeColumnFilters } from '../dsl/translator'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { DslParseError } from '../dsl/types'
 import type { SuggestionScope } from '../dsl/autocomplete'
+import type { CaseInfoField } from '../../../shared/utils/case-info-fields'
 
 interface DslFilterIntegrationOptions {
   /** Saved presets, referenced in the DSL as `@name` (spaces → `_`, lower case) */
@@ -33,6 +34,8 @@ interface DslFilterIntegrationOptions {
   urlRoute?: ViewRoute
   /** View being filtered; autocomplete offers only its fields (default: case) */
   scope?: SuggestionScope
+  /** The open case's `info.<KEY>` fields, offered by autocomplete (case view) */
+  infoFields?: () => readonly CaseInfoField[]
 }
 
 export function useDslFilterIntegration(options: DslFilterIntegrationOptions) {
@@ -51,7 +54,11 @@ export function useDslFilterIntegration(options: DslFilterIntegrationOptions) {
     applySuggestion,
     clear: clearDsl,
     parseNow
-  } = useDslSearch(() => options.presets().map((p) => presetKey(p.name)), options.scope)
+  } = useDslSearch(
+    () => options.presets().map((p) => presetKey(p.name)),
+    options.scope,
+    options.infoFields
+  )
 
   // Unknown @presets, found on Enter (presets may still be loading while typing)
   const presetErrors = ref<DslParseError[]>([])

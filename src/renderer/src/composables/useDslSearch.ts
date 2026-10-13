@@ -14,9 +14,14 @@ import {
   type SuggestionScope
 } from '../dsl/autocomplete'
 import type { DslParseError, DslParseResult } from '../dsl/types'
+import type { CaseInfoField } from '../../../shared/utils/case-info-fields'
 import { useDebounceFn } from '@vueuse/core'
 
-export function useDslSearch(presetNames: () => string[], scope: SuggestionScope = 'case') {
+export function useDslSearch(
+  presetNames: () => string[],
+  scope: SuggestionScope = 'case',
+  infoFields: () => readonly CaseInfoField[] = () => []
+) {
   /** Raw input text in the search bar */
   const rawInput = ref('')
 
@@ -71,7 +76,12 @@ export function useDslSearch(presetNames: () => string[], scope: SuggestionScope
 
   /** Update autocomplete suggestions (called on every keystroke) */
   function updateSuggestions(): void {
-    suggestions.value = getAutocompleteSuggestions(rawInput.value, presetNames(), scope)
+    suggestions.value = getAutocompleteSuggestions(
+      rawInput.value,
+      presetNames(),
+      scope,
+      infoFields()
+    )
   }
 
   // Debounce parse (250 ms — the only typing delay before a table query, see

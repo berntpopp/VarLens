@@ -56,6 +56,7 @@ export const queryKeys = {
   caseComments: (caseId: number) => [...caseScope(caseId), 'comments'] as const,
   caseMetrics: (caseId: number) => [...caseScope(caseId), 'metrics'] as const,
   caseDataInfo: (caseId: number) => [...caseScope(caseId), 'data-info'] as const,
+  caseInfoFields: (caseId: number) => [...caseScope(caseId), 'info-fields'] as const,
   filterOptions: (caseId: number) => [...caseScope(caseId), 'filter-options'] as const,
   variantTags: (caseId: number, variantId: number) =>
     [...caseScope(caseId), VARIANT_TAGS, variantId] as const,

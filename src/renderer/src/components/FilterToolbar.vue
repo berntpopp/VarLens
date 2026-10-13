@@ -154,6 +154,7 @@ import { useFilterState } from '../composables/useFilterState'
 import { useColumnPreferences } from '../composables/useColumnPreferences'
 import { useFilterPresetStore } from '../composables/useFilterPresetStore'
 import { useDslFilterIntegration } from '../composables/useDslFilterIntegration'
+import { useCaseInfoFields } from '../composables/useCaseInfoFields'
 import SlimFilterToolbar from './SlimFilterToolbar.vue'
 import DslSearchBar from './DslSearchBar.vue'
 import IconButton from './common/IconButton.vue'
@@ -225,6 +226,7 @@ interface Emits {
 const emit = defineEmits<Emits>()
 
 const { api } = useApiService()
+const { fields: caseInfoFields } = useCaseInfoFields(() => props.caseId)
 const { canUse } = useCapabilityStore()
 
 function warnUnsupported(reason: string): void {
@@ -379,6 +381,7 @@ const {
   applySuggestion
 } = useDslFilterIntegration({
   urlRoute: 'case',
+  infoFields: () => caseInfoFields.value,
   columnFiltersRef: dslColumnFiltersRef,
   presets: () => allPresets.value,
   searchQueryRef: computed({

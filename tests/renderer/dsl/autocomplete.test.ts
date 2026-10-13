@@ -91,3 +91,42 @@ describe('getAutocompleteSuggestions', () => {
     expect(hint.label).toContain('press Enter')
   })
 })
+
+describe('getAutocompleteSuggestions — case info.<KEY> fields (#596, #538)', () => {
+  const fields = [
+    { key: 'REVEL', source: 'CSQ:REVEL_score' },
+    { key: 'AltAF_Index', source: 'JSON:AltAF-Index' }
+  ]
+
+  it('lists the case keys with their source when typing info. or a key', () => {
+    const byPrefix = getAutocompleteSuggestions('info.', [], 'case', fields)
+    expect(byPrefix.map((s) => s.value)).toEqual(['info.REVEL', 'info.AltAF_Index'])
+    expect(byPrefix[0]).toMatchObject({ category: 'column', description: 'CSQ:REVEL_score' })
+    const byKey = getAutocompleteSuggestions('rev', [], 'case', fields)
+    expect(byKey.some((s) => s.value === 'info.REVEL')).toBe(true)
+  })
+
+  it('does not flood the empty picker or offer INFO keys in the cohort view', () => {
+    expect(
+      getAutocompleteSuggestions('', [], 'case', fields).some((s) => s.value.startsWith('info.'))
+    ).toBe(false)
+    expect(getAutocompleteSuggestions('info.', [], 'cohort', fields)).toEqual([])
+  })
+
+  it('offers the INFO operators for an info key', () => {
+    const ops = getAutocompleteSuggestions('info.REVEL:', [], 'case', fields).map((s) => s.value)
+    expect(ops).toEqual(expect.arrayContaining(['=', '>=', '~']))
+  })
+
+  it('explains a key this case does not have', () => {
+    const [hint] = getAutocompleteSuggestions('info.CADD_RAW:', [], 'case', fields)
+    expect(hint.category).toBe('hint')
+    expect(hint.label).toMatch(/CADD_RAW is not an imported field of this case/)
+  })
+
+  it('stays silent about unknown keys when the case has no field dictionary', () => {
+    const suggestions = getAutocompleteSuggestions('info.DP:', [], 'case', [])
+    expect(suggestions.some((s) => s.category === 'hint')).toBe(false)
+    expect(suggestions.some((s) => s.value === '>=')).toBe(true)
+  })
+})
