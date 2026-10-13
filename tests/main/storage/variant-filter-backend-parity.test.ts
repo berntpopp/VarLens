@@ -37,7 +37,6 @@ import { DatabaseService } from '../../../src/main/database'
 import type { Repositories } from '../../../src/main/database/createRepositories'
 import type { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
 import { prepareVariantExport } from '../../../src/main/ipc/handlers/export-logic'
-import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
 import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresPanelIntervalResolver } from '../../../src/main/storage/postgres/postgres-panel-interval-resolver'
@@ -225,7 +224,6 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
   }, 120_000)
 
   beforeEach(() => {
-    clearPanelIntervalCache()
     geneRef.getCoordinatesForGenes.mockReset()
     geneRef.getCoordinatesForGenes.mockImplementation(fixtureGeneCoordinates)
   })

@@ -21,7 +21,6 @@ import { mainLogger } from '../../services/MainLogger'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import { PanelAppClient } from '../../services/api/PanelAppClient'
 import { StringDbClient } from '../../services/api/StringDbClient'
-import { clearPanelIntervalCache } from './variants'
 import { dialog } from 'electron'
 import { writeFile } from 'fs/promises'
 import { assertNotDatabaseFile } from '../../security/database-path-allowlist'
@@ -35,17 +34,11 @@ import {
   searchPanelApp,
   generateBedContent
 } from './panels-logic'
-import type { PanelCacheCallbacks } from './panels-logic'
 import {
   importPanelAppForSession,
   generateStringDbForSession,
   generateBedContentForSession
 } from './panels-session'
-
-/** Shared cache-clearing callback wired to the variant module's interval cache. */
-const cacheCallbacks: PanelCacheCallbacks = {
-  clearPanelIntervalCache: () => clearPanelIntervalCache()
-}
 
 /**
  * Panel and gene reference IPC handlers
@@ -87,7 +80,6 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       const result = await session
         .getWriteExecutor()
         .execute({ type: 'panels:create', params: [validated.data] })
-      cacheCallbacks.clearPanelIntervalCache()
       return result
     })
   })
@@ -111,7 +103,6 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
           }
         ]
       })
-      cacheCallbacks.clearPanelIntervalCache()
       return result
     })
   })
@@ -125,7 +116,6 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       }
       const session = getDbManager().getCurrentSession()
       await session.getWriteExecutor().execute({ type: 'panels:delete', params: [validated.data] })
-      cacheCallbacks.clearPanelIntervalCache()
       return { success: true }
     })
   })
@@ -161,7 +151,6 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         type: 'panels:setGenes',
         params: [validated.data.panelId, validated.data.genes]
       })
-      cacheCallbacks.clearPanelIntervalCache()
       return { success: true }
     })
   })
@@ -320,7 +309,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       const client = new PanelAppClient()
       const geneRef = getGeneReferenceDb()
       const session = getDbManager().getCurrentSession()
-      return importPanelAppForSession(session, validated.data, geneRef, client, cacheCallbacks)
+      return importPanelAppForSession(session, validated.data, geneRef, client)
     })
   })
 
@@ -337,7 +326,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       const client = new StringDbClient()
       const geneRef = getGeneReferenceDb()
       const session = getDbManager().getCurrentSession()
-      return generateStringDbForSession(session, validated.data, geneRef, client, cacheCallbacks)
+      return generateStringDbForSession(session, validated.data, geneRef, client)
     })
   })
 

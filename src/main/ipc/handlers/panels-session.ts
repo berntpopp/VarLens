@@ -7,7 +7,6 @@ import type { StringDbClient } from '../../services/api/StringDbClient'
 import type { StorageSession } from '../../storage/session'
 import type { CreatePanelInput, PanelGeneRow, PanelRow } from '../../../shared/types/panels'
 import type { PanelAppImportSchema } from '../../../shared/types/ipc-schemas'
-import type { PanelCacheCallbacks } from './panels-logic'
 
 const GREEN_LEVELS = new Set(['3', '4', 'green'])
 const GREEN_AMBER_LEVELS = new Set(['2', '3', '4', 'green', 'amber'])
@@ -51,8 +50,7 @@ function resolveValidatedGenes(validationResults: ValidationResult[]): ResolvedG
 async function createPanelWithGenes(
   session: StorageSession,
   input: CreatePanelInput,
-  genes: ResolvedGene[],
-  callbacks: PanelCacheCallbacks
+  genes: ResolvedGene[]
 ): Promise<PanelRow & { genes: PanelGeneRow[] }> {
   const createdPanel = (await session
     .getWriteExecutor()
@@ -68,7 +66,6 @@ async function createPanelWithGenes(
     .getReadExecutor()
     .execute({ type: 'panels:getGenes', params: [createdPanel.id] })) as PanelGeneRow[]
 
-  callbacks.clearPanelIntervalCache()
   return { ...createdPanel, genes: panelGenes }
 }
 
@@ -76,8 +73,7 @@ export async function importPanelAppForSession(
   session: StorageSession,
   params: PanelAppImportParams,
   geneRef: GeneReferenceDb,
-  client: PanelAppClient,
-  callbacks: PanelCacheCallbacks
+  client: PanelAppClient
 ): Promise<PanelRow & { genes: PanelGeneRow[] }> {
   const panel: PanelAppPanel = await client.getPanel(params.panelId, params.region)
   const confidenceSet =
@@ -110,8 +106,7 @@ export async function importPanelAppForSession(
         panel_version: panel.version
       }
     },
-    resolvedGenes,
-    callbacks
+    resolvedGenes
   )
 }
 
@@ -124,8 +119,7 @@ export async function generateStringDbForSession(
     name?: string
   },
   geneRef: GeneReferenceDb,
-  client: StringDbClient,
-  callbacks: PanelCacheCallbacks
+  client: StringDbClient
 ): Promise<PanelRow & { genes: PanelGeneRow[] }> {
   const partners = await client.getInteractionPartners(params.seedGenes, {
     requiredScore: params.requiredScore,
@@ -151,8 +145,7 @@ export async function generateStringDbForSession(
         partners_found: partners.length
       }
     },
-    resolvedGenes,
-    callbacks
+    resolvedGenes
   )
 }
 
