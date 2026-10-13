@@ -189,10 +189,7 @@
             : 'Your Variant'
         }}</v-chip>
         <span v-if="clinvarVariants.length > 0" class="d-inline-flex align-center ga-1 ml-2">
-          <span
-            :style="{ background: CLINVAR_COLORS.pathogenic }"
-            style="width: 8px; height: 8px; transform: rotate(45deg); display: inline-block"
-          />
+          <ClinVarMark cls="pathogenic" :color="CLINVAR_COLORS.pathogenic" />
           <span class="text-body-2">ClinVar</span>
         </span>
       </div>
@@ -218,6 +215,7 @@
             class="cursor-pointer"
             @click="toggleClinVar(category)"
           >
+            <ClinVarMark :cls="category" class="mr-1" />
             {{ CLINVAR_LABELS[category] }}
             ({{ clinvarCounts[category] ?? 0 }})
           </v-chip>
@@ -269,6 +267,7 @@ import type {
   LollipopVariant
 } from '../../../../shared/types/protein'
 import { CLINVAR_COLORS, getClinVarCategory } from '../../../../shared/utils/protein-utils'
+import ClinVarMark from './ClinVarMark.vue'
 import { readableTextOn } from '../../utils/readable-text-color'
 import { downloadBlob } from '../../utils/download'
 import { buildStatus, variantBuildNote } from '../../utils/variant-interval'

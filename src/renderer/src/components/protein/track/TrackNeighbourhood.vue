@@ -54,7 +54,7 @@
         :aria-pressed="isOn(g.keys)"
         @click="toggle(g.keys)"
       >
-        <span class="count-dot" :style="{ background: CLINVAR_COLORS[g.cls] }" />
+        <ClinVarMark :cls="g.cls" :color="CLINVAR_COLORS[g.cls]" class="mr-1" />
         {{ g.keys.length }} {{ g.label }}
       </v-btn>
       <v-btn
@@ -109,6 +109,7 @@ import { mdiCrosshairsGps, mdiUndoVariant } from '@mdi/js'
 import IconButton from '../../common/IconButton.vue'
 import TrackVariantList from './TrackVariantList.vue'
 import { CLINVAR_COLORS } from '../../../../../shared/utils/protein-utils'
+import ClinVarMark from '../ClinVarMark.vue'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
 import {
@@ -164,14 +165,5 @@ function toggle(keys: string[]): void {
 
 .count-row {
   min-height: 24px;
-}
-
-.count-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 4px;
-  border-radius: 2px;
-  transform: rotate(45deg);
 }
 </style>

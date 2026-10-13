@@ -12,7 +12,7 @@ import { exonsInInterval, geneAxisLabel } from '../../utils/variant-interval'
 import {
   anchorMarker,
   axis,
-  diamondTrack,
+  clinvarTrack,
   gutterLabel,
   lollipopTrack,
   plotGroup,
@@ -111,7 +111,7 @@ export function drawGeneView(ctx: TrackDrawContext, model: GeneViewModel): void 
   }
 
   lollipopTrack(g, ctx, ['variant', 'cohort'], baseY, baseY - TOP_PX)
-  if (model.hasClinvar) diamondTrack(g, ctx, clinvarY)
+  if (model.hasClinvar) clinvarTrack(g, ctx, clinvarY)
   const starTop = Math.max(TOP_PX, exonY - 190)
   if (a !== null && isInterval(a)) {
     // The CNV/SV keeps its band and label even when another variant is the anchor.

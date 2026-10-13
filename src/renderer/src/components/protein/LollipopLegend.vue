@@ -67,6 +67,7 @@
           class="cursor-pointer"
           @click="toggleClinVar(category)"
         >
+          <ClinVarMark :cls="category" class="mr-1" />
           {{ formatClinVarCategory(category) }}
           ({{ clinvarCounts[category] ?? 0 }})
         </v-chip>
@@ -169,10 +170,7 @@
         <span class="text-body-2">Your variant</span>
       </span>
       <span class="d-inline-flex align-center ga-1">
-        <span
-          :style="{ background: CLINVAR_COLORS.pathogenic }"
-          style="width: 8px; height: 8px; transform: rotate(45deg); display: inline-block"
-        />
+        <ClinVarMark cls="pathogenic" :color="CLINVAR_COLORS.pathogenic" />
         <span class="text-body-2">ClinVar</span>
       </span>
       <span class="d-inline-flex align-center ga-1">
@@ -202,6 +200,7 @@ import type {
 } from '../../../../shared/types/protein'
 import { CONSEQUENCE_COLORS } from '../../../../shared/config/domain.config'
 import { CLINVAR_COLORS, getDomainColor } from '../../../../shared/utils/protein-utils'
+import ClinVarMark from './ClinVarMark.vue'
 
 interface Props {
   activeCategories: Set<ConsequenceCategory>
