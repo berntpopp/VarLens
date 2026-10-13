@@ -1802,13 +1802,13 @@ test.describe('Documentation Screenshots', () => {
     await window.waitForTimeout(500)
 
     // First ensure we have an active filter so the Save button appears
-    // Activate a preset chip (e.g. "Rare (1%)")
+    // Activate a preset chip (e.g. "Rare in population")
     await window.evaluate(() => {
       const presetBar = document.querySelector('.preset-bar')
       if (!presetBar) return
       const chips = presetBar.querySelectorAll('.v-chip')
       for (const chip of chips) {
-        if (chip.textContent?.includes('Rare (1%)')) {
+        if (chip.textContent?.includes('Rare in population')) {
           ;(chip as HTMLElement).click()
           break
         }
@@ -1853,7 +1853,7 @@ test.describe('Documentation Screenshots', () => {
       if (!presetBar) return
       const chips = presetBar.querySelectorAll('.v-chip')
       for (const chip of chips) {
-        if (chip.textContent?.includes('Rare (1%)')) {
+        if (chip.textContent?.includes('Rare in population')) {
           ;(chip as HTMLElement).click()
           break
         }

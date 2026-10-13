@@ -8,7 +8,11 @@
 import type Database from 'better-sqlite3-multiple-ciphers'
 import { CLINICAL_METRICS } from './clinical-metrics'
 import { caseDependents } from './case-dependents'
-import { BUILT_IN_PRESETS, RARE_NOT_RECURRENT_PRESET_NAME } from './built-in-presets'
+import {
+  BUILT_IN_PRESETS,
+  BUILT_IN_PRESET_RENAMES_V54,
+  RARE_NOT_RECURRENT_PRESET_NAME
+} from '../../shared/config/filter-presets.config'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
 import { EVIDENCE_BETA_PRESET, evidenceBetaFilterJson } from './evidence-ranking-preset'
 import { createChrRankIndexes } from './chr-rank-indexes'
@@ -21,7 +25,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 51
+export const LATEST_SQLITE_SCHEMA_VERSION = 54
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -77,6 +81,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 51
  * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
  * - 50: decode VEP's %3D / %3B escapes in stored cdna / aa_change (#547; mirrors PG 0033)
  * - 51: drop variant_frequency (#595) and idx_variants_coords (#564), recount variant_count (#560)
+ * - 54: built-in filter presets named by clinical question (#570; mirrors PG 0037)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2069,6 +2074,28 @@ export function runMigrations(db: Database.Database): void {
          WHERE counted.id = cases.id AND cases.variant_count IS NOT counted.n`)
     }
     db.exec('PRAGMA user_version = 51')
+  }
+
+  // v54 (#570, mirrors PG 0037): built-in presets named by clinical question. A
+  // preset keeps its old name when a user preset already has the new one.
+  if (currentVersion < 54) {
+    const hasPresetTable =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'filter_presets'")
+        .get() !== undefined
+    if (hasPresetTable) {
+      const rename = db.prepare(
+        `UPDATE filter_presets SET name = ?, description = ?, updated_at = ?
+          WHERE name = ? AND is_built_in = 1
+            AND NOT EXISTS (SELECT 1 FROM filter_presets WHERE name = ?)`
+      )
+      const now = Date.now()
+      for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V54) {
+        const description = BUILT_IN_PRESETS.find((p) => p.name === newName)?.description ?? null
+        rename.run(newName, description, now, oldName, newName)
+      }
+    }
+    db.exec('PRAGMA user_version = 54')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.
