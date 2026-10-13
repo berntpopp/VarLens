@@ -6,13 +6,17 @@
  * the case's variant_count, its field dictionary and the stale flag on the
  * cohort summary (the session rebuilds it at its end) commit together, and a
  * failure, a cancel or a crash leaves nothing of the file behind. FTS follows
- * the session's rule (import-worker.ts): live row triggers, or one rebuild at
- * the end of a bulk session, with its open-session marker set first so a
- * crash is repaired at the next start.
+ * the session's rule (import-worker.ts): the row triggers are down for the
+ * session, which at its end indexes the rows above its watermark or rebuilds
+ * the whole index (bulk session, overwrite, triggers back meanwhile). The
+ * case is reported started as a replacement, so a crash gets the client's
+ * recovery run (FTS, indexes) without the published case being deleted, and
+ * the open-session marker makes the next app start repair it too.
  *
  * Runs inside worker threads: no MainLogger / Electron imports.
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
+import { basename } from 'node:path'
 
 import type { FileImportRequest } from '../../shared/types/import-worker'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
@@ -117,7 +121,11 @@ export async function appendFileToCase(a: AppendArgs): Promise<number | null> {
     }
     db.prepare('UPDATE cases SET variant_count = variant_count + ? WHERE id = ?').run(added, caseId)
     const dictionary = fields.dictionary()
-    if (dictionary !== null) {
+    if (stored === undefined) {
+      // No provenance row yet: the pipeline's upsert creates it, with the keys.
+      a.stmts.insertDataInfo.run(caseId, basename(a.file.filePath), formatInfo.format, dictionary)
+    } else if (dictionary !== null) {
+      // Patch the keys only: the row keeps the file the case was created from.
       db.prepare(
         `UPDATE case_data_info SET field_dictionary = json_patch(COALESCE(field_dictionary, '{}'), ?)
           WHERE case_id = ?`

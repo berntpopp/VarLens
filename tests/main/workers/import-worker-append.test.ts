@@ -180,6 +180,36 @@ describe('import worker: multi-file append (#551)', () => {
     )
   })
 
+  it('keeps the field dictionary of a case that has no provenance row yet', async () => {
+    await h.run([h.file('A', [variantAt(100, 'BASEGENE')])])
+    const id = caseId('A')
+    h.db.prepare('DELETE FROM case_data_info WHERE case_id = ?').run(id)
+
+    await h.run([appendFile(svFile('sv', 5, 'chr1', 'SVGENE'), id)])
+
+    const row = h.db
+      .prepare('SELECT field_dictionary FROM case_data_info WHERE case_id = ?')
+      .get(id) as { field_dictionary: string | null } | undefined
+    expect(row?.field_dictionary).not.toBeNull()
+    expect(Object.keys(JSON.parse(row?.field_dictionary ?? '{}')).length).toBeGreaterThan(0)
+  })
+
+  it('merges the field dictionary into an existing provenance row, keeping its file name', async () => {
+    await h.run([h.file('A', [variantAt(100, 'BASEGENE')])])
+    const id = caseId('A')
+    const before = h.db
+      .prepare('SELECT import_file_name FROM case_data_info WHERE case_id = ?')
+      .get(id) as { import_file_name: string }
+
+    await h.run([appendFile(svFile('sv', 5, 'chr1', 'SVGENE'), id)])
+
+    const row = h.db
+      .prepare('SELECT import_file_name, field_dictionary FROM case_data_info WHERE case_id = ?')
+      .get(id) as { import_file_name: string; field_dictionary: string | null }
+    expect(row.import_file_name).toBe(before.import_file_name)
+    expect(Object.keys(JSON.parse(row.field_dictionary ?? '{}')).length).toBeGreaterThan(0)
+  })
+
   it('refuses a case that is not published', async () => {
     const messages = await h.run([appendFile(svFile('sv', 5, 'chr1', 'SVGENE'), 999)])
     expect(sessionStatuses(messages)).toEqual(['A:failed'])
