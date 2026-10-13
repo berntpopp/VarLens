@@ -17,7 +17,12 @@ export interface ContigRename {
 }
 
 /** Why a case waits for the user to confirm its build. */
-export type BuildReviewReason = 'no_evidence' | 'build_disagrees' | 'build_excluded'
+export type BuildReviewReason =
+  | 'no_evidence'
+  | 'build_disagrees'
+  | 'build_excluded'
+  /** A stored build value VarLens does not know (v52 / 0035, #577). */
+  | 'build_unknown'
 
 export type ContigNamingPlan =
   | { action: 'none' }

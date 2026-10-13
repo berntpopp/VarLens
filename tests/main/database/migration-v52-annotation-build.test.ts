@@ -150,6 +150,30 @@ describe('migration v52: global annotations keyed by genome build', () => {
     expect(rowsAt(100)).toEqual([copy('GRCh37'), copy('GRCh38')])
   })
 
+  it('normalises stored build aliases before the split; flags unknown ones', () => {
+    backToV51()
+    db.exec(`
+      UPDATE cases SET genome_build = 'hg19' WHERE id = 1;
+      INSERT INTO cases (id, name, file_path, file_size, variant_count, created_at, genome_build)
+        VALUES (3, 'odd', '/c', 1, 0, 0, 'my-build');
+      INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (3, 'chrUn_x', 9, 'A', 'G');
+      INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred,
+        acmg_classification, acmg_evidence, created_at, updated_at)
+        VALUES ('chrUn_x', 9, 'A', 'G', ${NOTE});
+      PRAGMA user_version = 51;`)
+    runMigrations(db)
+    expect(db.prepare('SELECT id, genome_build FROM cases ORDER BY id').all()).toEqual([
+      { id: 1, genome_build: 'GRCh37' },
+      { id: 2, genome_build: 'GRCh38' },
+      { id: 3, genome_build: 'my-build' }
+    ])
+    expect(rowsAt(5)).toEqual([copy('GRCh37')]) // split under the canonical build
+    expect(rowsAt(9)).toEqual([copy('my-build')]) // kept, under the value as stored
+    expect(
+      db.prepare('SELECT case_id, stored_build, reason FROM contig_build_review').all()
+    ).toEqual([{ case_id: 3, stored_build: 'my-build', reason: 'build_unknown' }])
+  })
+
   it('a fresh database has the build in the key', () => {
     const repo = new AnnotationRepository(db, createKysely(db))
     repo.upsertGlobalAnnotation('1', 1, 'A', 'G', 'GRCh37', { global_comment: 'x' })

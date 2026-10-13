@@ -9,6 +9,73 @@
 -- least one copy was written.
 -- "__schema__" is the migration-runner template placeholder.
 
+-- Before the split: imports before f51a8e6c stored any build string, but the
+-- key needs build ids. Aliases become their id (case-insensitive, a .pN patch
+-- suffix ignored: 'hg19', 'GRCh37.p13' -> GRCh37); a value matching no build
+-- is kept and its cases get a build review. The alias list and the id list
+-- are genome-builds.config.ts (genomeBuildAliasPairs, GENOME_BUILDS); a drift
+-- test (tests/main/storage/postgres-build-alias-drift.test.ts) keeps them equal.
+UPDATE "__schema__"."cases_all" c
+   SET genome_build = a.id
+  FROM (VALUES
+  ('b37', 'GRCh37'),
+  ('b38', 'GRCh38'),
+  ('chm13', 'T2T-CHM13'),
+  ('gca_000001405.15', 'GRCh38'),
+  ('gcf_000001405.13', 'GRCh37'),
+  ('gcf_000001405.14', 'GRCh37'),
+  ('gcf_000001405.15', 'GRCh37'),
+  ('gcf_000001405.16', 'GRCh37'),
+  ('gcf_000001405.17', 'GRCh37'),
+  ('gcf_000001405.18', 'GRCh37'),
+  ('gcf_000001405.19', 'GRCh37'),
+  ('gcf_000001405.20', 'GRCh37'),
+  ('gcf_000001405.21', 'GRCh37'),
+  ('gcf_000001405.22', 'GRCh37'),
+  ('gcf_000001405.23', 'GRCh37'),
+  ('gcf_000001405.24', 'GRCh37'),
+  ('gcf_000001405.25', 'GRCh37'),
+  ('gcf_000001405.26', 'GRCh38'),
+  ('gcf_000001405.27', 'GRCh38'),
+  ('gcf_000001405.28', 'GRCh38'),
+  ('gcf_000001405.29', 'GRCh38'),
+  ('gcf_000001405.30', 'GRCh38'),
+  ('gcf_000001405.31', 'GRCh38'),
+  ('gcf_000001405.32', 'GRCh38'),
+  ('gcf_000001405.33', 'GRCh38'),
+  ('gcf_000001405.34', 'GRCh38'),
+  ('gcf_000001405.35', 'GRCh38'),
+  ('gcf_000001405.36', 'GRCh38'),
+  ('gcf_000001405.37', 'GRCh38'),
+  ('gcf_000001405.38', 'GRCh38'),
+  ('gcf_000001405.39', 'GRCh38'),
+  ('gcf_000001405.40', 'GRCh38'),
+  ('grch37', 'GRCh37'),
+  ('grch37lite', 'GRCh37'),
+  ('grch38', 'GRCh38'),
+  ('hg19', 'GRCh37'),
+  ('hg38', 'GRCh38'),
+  ('homo_sapiens_assembly19', 'GRCh37'),
+  ('homo_sapiens_assembly38', 'GRCh38'),
+  ('hs1', 'T2T-CHM13'),
+  ('hs37', 'GRCh37'),
+  ('hs37d5', 'GRCh37'),
+  ('hs38', 'GRCh38'),
+  ('hs38dh', 'GRCh38'),
+  ('human_g1k_v37', 'GRCh37'),
+  ('t2t', 'T2T-CHM13'),
+  ('t2t-chm13', 'T2T-CHM13')
+  ) AS a(alias, id)
+ WHERE regexp_replace(lower(btrim(c.genome_build)), '\.p[0-9]+$', '') = a.alias
+   AND c.genome_build <> a.id;
+
+INSERT INTO "__schema__"."contig_build_review"
+  (case_id, stored_build, suggested_build, reason, created_at)
+SELECT id, genome_build, NULL, 'build_unknown', (EXTRACT(EPOCH FROM now()) * 1000)::bigint
+  FROM "__schema__"."cases_all"
+ WHERE genome_build NOT IN ('GRCh38', 'GRCh37', 'T2T-CHM13')
+ON CONFLICT (case_id) DO NOTHING;
+
 ALTER TABLE "__schema__"."variant_annotations" ADD COLUMN genome_build TEXT;
 ALTER TABLE "__schema__"."variant_annotations"
   DROP CONSTRAINT variant_annotations_chr_pos_ref_alt_key;

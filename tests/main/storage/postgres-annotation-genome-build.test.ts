@@ -124,6 +124,37 @@ describe.skipIf(!RUN)('migration 0035: global annotations keyed by genome build'
     expect((await repo.getBatch(null, key))['chrUn_x:100:A:G'].global).toBeNull()
   }, 60_000)
 
+  it('normalises stored build aliases before the split; flags unknown ones', async () => {
+    const hg19 = await addCase('hg19-case', 'hg19')
+    const odd = await addCase('odd', 'my-build')
+    await addVariant(hg19, 5)
+    await addVariant(odd, 9)
+    for (const pos of [5, 9]) {
+      await probe.query(
+        `INSERT INTO ${t('variant_annotations')} (chr, pos, ref, alt, global_comment, starred,
+           acmg_classification, created_at, updated_at)
+         VALUES ('chrUn_x', $1, 'A', 'G', 'note', 1, 'Pathogenic', 10, 20)`,
+        [pos]
+      )
+    }
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    const builds = await probe.query(
+      `SELECT name, genome_build FROM ${t('cases_all')} ORDER BY name`
+    )
+    expect(builds.rows).toEqual([
+      { name: 'hg19-case', genome_build: 'GRCh37' },
+      { name: 'odd', genome_build: 'my-build' }
+    ])
+    expect(await rowsAt(5)).toEqual([copy('GRCh37')])
+    expect(await rowsAt(9)).toEqual([copy('my-build')])
+    const reviews = await probe.query(
+      `SELECT case_id::int AS case_id, stored_build, reason FROM ${t('contig_build_review')}`
+    )
+    expect(reviews.rows).toEqual([
+      { case_id: odd, stored_build: 'my-build', reason: 'build_unknown' }
+    ])
+  }, 60_000)
+
   it('a case confirmed in another build takes a copy of its notes along', async () => {
     const { b37 } = await seed()
     await probe.query(
