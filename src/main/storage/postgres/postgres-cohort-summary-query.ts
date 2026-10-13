@@ -23,6 +23,7 @@ import { booleanSearchSql } from '../../../shared/utils/boolean-search'
 import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { singleFrequencyDenominator } from '../../../shared/sql/carrier-frequency'
+import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
 import { SUMMARY_FREQUENCY_SQL } from './postgres-carrier-frequency-sql'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
 
@@ -292,6 +293,7 @@ function extensionExistsConditions(
           AND ext_v.ref = cvs.ref
           AND ext_v.alt = cvs.alt
           AND ext_v.variant_type = cvs.variant_type
+          AND ${carrierRowSql('ext_v')}
           AND ${inner.join('\n          AND ')}
       )`)
     filtered.push(prefix)
@@ -420,11 +422,29 @@ export function buildSummaryQueryParts(
   if (isNonEmptyArray(params.panel_intervals)) {
     // Pass-9 #7: mirror PostgresCohortRepository.buildQueryParts verbatim so
     // spanning SV/CNV variants overlap correctly.
-    const intervalParts = intervalsForAllSpellings(params.panel_intervals).map(
-      (interval) =>
-        `(cvs.chr = ${addParam(interval.chr)} AND cvs.pos <= ${addParam(interval.end)} AND COALESCE(cvs.end_pos, cvs.pos) >= ${addParam(interval.start)})`
-    )
-    whereParts.push(`(${intervalParts.join(' OR ')})`)
+    const expandedIntervals = intervalsForAllSpellings(params.panel_intervals)
+    if (expandedIntervals.length > 500) {
+      const chrs: string[] = []
+      const starts: number[] = []
+      const ends: number[] = []
+      for (const interval of expandedIntervals) {
+        chrs.push(interval.chr)
+        starts.push(interval.start)
+        ends.push(interval.end)
+      }
+      const chrParam = addParam(chrs)
+      const startParam = addParam(starts)
+      const endParam = addParam(ends)
+      whereParts.push(
+        `EXISTS (SELECT 1 FROM unnest(${chrParam}::text[], ${startParam}::bigint[], ${endParam}::bigint[]) AS pi(chr, start_pos, end_pos) WHERE cvs.chr = pi.chr AND cvs.pos <= pi.end_pos AND COALESCE(cvs.end_pos, cvs.pos) >= pi.start_pos)`
+      )
+    } else {
+      const intervalParts = expandedIntervals.map(
+        (interval) =>
+          `(cvs.chr = ${addParam(interval.chr)} AND cvs.pos <= ${addParam(interval.end)} AND COALESCE(cvs.end_pos, cvs.pos) >= ${addParam(interval.start)})`
+      )
+      whereParts.push(`(${intervalParts.join(' OR ')})`)
+    }
   }
 
   if (params.gene_symbol !== undefined && params.gene_symbol !== '') {

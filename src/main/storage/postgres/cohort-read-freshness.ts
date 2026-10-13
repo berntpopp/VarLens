@@ -35,6 +35,7 @@ import {
   COHORT_EXPORT_REFRESH_WAIT_MS,
   CohortSummaryRefreshingError
 } from '../../../shared/errors/cohort-summary-refreshing'
+import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
 import { PostgresCohortSummaryRepository } from './PostgresCohortSummaryRepository'
 import { refreshAnnotationFlags } from './cohort-annotation-flags-sql'
 import { lockSummaryForWrite, tryLockSummaryForWrite } from './cohort-summary-lock'
@@ -142,7 +143,7 @@ async function probeFreshness({
   }>(
     `SELECT
        (s.last_rebuilt_at IS NULL) AS never_rebuilt,
-       EXISTS (SELECT 1 FROM ${tbl('variants')} LIMIT 1) AS variants_present,
+       EXISTS (SELECT 1 FROM ${tbl('variants')} v WHERE ${carrierRowSql('v')} LIMIT 1) AS variants_present,
        EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')} LIMIT 1) AS summary_present,
        (NOT EXISTS (SELECT 1 FROM ${tbl('cohort_gene_summary')} LIMIT 1)
         AND EXISTS (SELECT 1 FROM ${tbl('cohort_variant_summary')}
@@ -243,25 +244,32 @@ const REBUILD_RETRY_MAX_MS = 6 * 60 * 60 * 1000
  */
 const rebuildFailures = new Map<string, { count: number; retryAt: number }>()
 
+function isRebuildCoolingDown(schema: string): boolean {
+  const failed = rebuildFailures.get(schema)
+  return failed !== undefined && Date.now() < failed.retryAt
+}
+
+function recordRebuildFailure(schema: string, error: unknown, context: string): void {
+  const count = (rebuildFailures.get(schema)?.count ?? 0) + 1
+  const wait = Math.min(REBUILD_RETRY_MAX_MS, REBUILD_RETRY_BASE_MS * 2 ** (count - 1))
+  rebuildFailures.set(schema, { count, retryAt: Date.now() + wait })
+  const message = error instanceof Error ? error.message : String(error)
+  mainLogger.error(
+    `${context} cohort summary rebuild of ${schema} failed (attempt ${count}): ` +
+      `${message}. The summary stays stale; next attempt in ${Math.round(wait / 60000)} min.`,
+    'cohort'
+  )
+}
+
 function scheduleBackgroundRebuild(scope: ScopedPool): void {
-  if (backgroundRebuilds.has(scope.schema)) return
-  const failed = rebuildFailures.get(scope.schema)
-  if (failed !== undefined && Date.now() < failed.retryAt) return
+  if (backgroundRebuilds.has(scope.schema) || isRebuildCoolingDown(scope.schema)) return
 
   const task = runRebuild(scope, true)
     .then(() => {
       rebuildFailures.delete(scope.schema)
     })
     .catch((error: unknown) => {
-      const count = (rebuildFailures.get(scope.schema)?.count ?? 0) + 1
-      const wait = Math.min(REBUILD_RETRY_MAX_MS, REBUILD_RETRY_BASE_MS * 2 ** (count - 1))
-      rebuildFailures.set(scope.schema, { count, retryAt: Date.now() + wait })
-      const message = error instanceof Error ? error.message : String(error)
-      mainLogger.error(
-        `Background cohort summary rebuild of ${scope.schema} failed (attempt ${count}): ` +
-          `${message}. The summary stays stale; next attempt in ${Math.round(wait / 60000)} min.`,
-        'cohort'
-      )
+      recordRebuildFailure(scope.schema, error, 'Background')
     })
     .finally(() => {
       backgroundRebuilds.delete(scope.schema)
@@ -296,12 +304,31 @@ export async function prepareCohortRead(
   if (!needsRebuild) {
     // Only annotation saves are pending: one UPDATE of the flags, no rebuild.
     // A busy lock means a publication or a rebuild is running; the next read retries.
-    if (!probe.flags_pending || (await runRebuild(scope, false, true))) return {}
+    if (!probe.flags_pending) return {}
+    try {
+      if (await runRebuild(scope, false, true)) return {}
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      mainLogger.warn(
+        `Synchronous annotation flags refresh of ${scope.schema} failed: ${message}`,
+        'cohort'
+      )
+    }
     return { warnings: { staleSummary: true } }
   }
 
-  const rebuildNow = bootstrap || probe.total_cases < syncRebuildMaxCases()
-  if (rebuildNow && (await runRebuild(scope, false))) return {}
+  const rebuildNow =
+    (bootstrap || probe.total_cases < syncRebuildMaxCases()) && !isRebuildCoolingDown(scope.schema)
+  if (rebuildNow) {
+    try {
+      if (await runRebuild(scope, false)) {
+        rebuildFailures.delete(scope.schema)
+        return {}
+      }
+    } catch (error) {
+      recordRebuildFailure(scope.schema, error, 'Synchronous')
+    }
+  }
 
   // Large cohort, or an import is publishing right now: serve what is there
   // and refresh in the background.

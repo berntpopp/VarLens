@@ -5,7 +5,6 @@
  * and never touch IPC/Electron APIs directly. This makes them testable
  * without mocking Electron internals.
  */
-import { once } from 'node:events'
 import { createWriteStream } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { mainLogger } from '../../services/MainLogger'
@@ -211,29 +210,57 @@ async function exportRowsToCsv(
   signal?: AbortSignal
 ): Promise<ExportResult> {
   const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
+  let fileOpened = false
+  let streamError: Error | null = null
+  const onStreamError = (err: Error): void => {
+    streamError = err
+  }
+  stream.on('error', onStreamError)
+  stream.once('open', () => {
+    fileOpened = true
+  })
 
   const writeLine = async (line: string): Promise<void> => {
+    if (streamError !== null) throw streamError
     if (stream.write(`${line}\r\n`)) {
+      if (streamError !== null) throw streamError
       return
     }
 
-    await Promise.race([
-      once(stream, 'drain'),
-      once(stream, 'error').then(([error]) => Promise.reject(error))
-    ])
+    let onDrain: () => void
+    let onError: (err: unknown) => void
+    await new Promise<void>((resolve, reject) => {
+      onDrain = () => resolve()
+      onError = (err) => reject(err)
+      stream.once('drain', onDrain)
+      stream.once('error', onError)
+    }).finally(() => {
+      stream.off('drain', onDrain)
+      stream.off('error', onError)
+    })
   }
 
   try {
-    await Promise.race([
-      once(stream, 'open'),
-      once(stream, 'error').then(([error]) => Promise.reject(error))
-    ])
+    let onOpen: () => void
+    let onOpenError: (err: unknown) => void
+    await new Promise<void>((resolve, reject) => {
+      onOpen = () => resolve()
+      onOpenError = (err) => reject(err)
+      stream.once('open', onOpen)
+      stream.once('error', onOpenError)
+    }).finally(() => {
+      stream.off('open', onOpen)
+      stream.off('error', onOpenError)
+    })
     await writeLine(columns.map((column) => csvEscape(column.header)).join(','))
 
     let rowCount = 0
     for await (const row of rows) {
       if (signal?.aborted === true) {
         stream.destroy()
+        if (fileOpened) {
+          await rm(outputFilePath, { force: true }).catch(() => undefined)
+        }
         mainLogger.info(`${label} cancelled after ${rowCount} rows`, 'export')
         return CANCELLED_RESULT
       }
@@ -249,8 +276,12 @@ async function exportRowsToCsv(
     }
 
     await new Promise<void>((resolve, reject) => {
-      stream.on('finish', resolve)
-      stream.on('error', reject)
+      if (streamError !== null) {
+        reject(streamError)
+        return
+      }
+      stream.once('finish', resolve)
+      stream.once('error', reject)
       stream.end()
     })
 
@@ -259,12 +290,16 @@ async function exportRowsToCsv(
   } catch (error) {
     stream.destroy()
     // A file with a header and some of the rows must not be left behind.
-    await rm(outputFilePath, { force: true }).catch(() => undefined)
+    if (fileOpened) {
+      await rm(outputFilePath, { force: true }).catch(() => undefined)
+    }
     const message = error instanceof Error ? error.message : String(error)
     mainLogger.error(`${label} error: ${message}`, 'export')
     // Typed, user-facing: reported as it is rather than as a failed export.
     if (error instanceof CohortSummaryRefreshingError) throw error
     return { success: false, error: message }
+  } finally {
+    stream.off('error', onStreamError)
   }
 }
 

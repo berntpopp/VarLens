@@ -96,10 +96,10 @@ describe('PostgresShortlistService', () => {
         gnomad_af_max: 0.01
       })
     )
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('case_variant_annotations'), [
-      1,
-      [1, 2]
-    ])
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('case_variant_annotations'),
+      [1]
+    )
     expect(result.totalCandidates).toBe(2)
     expect(result.rows).toHaveLength(2)
     expect(result.rows[0]).toMatchObject({

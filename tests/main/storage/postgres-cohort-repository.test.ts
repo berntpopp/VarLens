@@ -624,7 +624,7 @@ describe('PostgresCohortRepository', () => {
     expect(sql).toContain(')::bigint) AS unique_variants')
     // The summary is read only as the fallback for a missing counter row.
     expect(sql).toContain(
-      '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary") AS genes_with_variants'
+      '(SELECT COUNT(*)::bigint FROM "public"."cohort_gene_summary" WHERE gene_symbol IS NOT NULL AND gene_symbol != \'\') AS genes_with_variants'
     )
     expect(sql).not.toContain('"variants"')
   })
@@ -649,6 +649,7 @@ describe('PostgresCohortRepository', () => {
 
     expect(query.mock.calls[0][1]).toEqual(['1', 123, 'A', 'G', 'snv', 'GRCh38'])
     expect(query.mock.calls[0][0]).toContain('v.variant_type = $5 AND c.genome_build = $6')
+    expect(query.mock.calls[0][0]).toContain("v.gt_num NOT IN ('.','./.','.|.')")
     const noCall = {
       qual: null,
       filter: null,
@@ -700,6 +701,8 @@ describe('PostgresCohortRepository', () => {
       'chr',
       'pos',
       'gene_symbol',
+      'cdna',
+      'aa_change',
       'carrier_count',
       'cohort_frequency',
       'het_count',

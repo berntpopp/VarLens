@@ -43,7 +43,10 @@ const SINGLE_FLIGHT_MESSAGES: Record<JobKind, string> = {
   case_delete: 'A delete operation is already in progress. Please wait for it to finish.'
 }
 
+export const MAX_TERMINAL_JOBS = 200
+
 type Listener = (job: Job) => void
+type PruneListener = (jobId: string) => void
 
 // Crockford base32 alphabet (ULID spec) — chronologically sortable.
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -96,6 +99,9 @@ export class JobRunner {
   private cancelHandlers = new Map<string, Array<() => void | Promise<void>>>()
   private controllers = new Map<string, AbortController>()
   private listeners: Listener[] = []
+  private pruneListeners: PruneListener[] = []
+
+  constructor(private readonly maxTerminalJobs = MAX_TERMINAL_JOBS) {}
 
   /**
    * Enqueue a job. Returns SYNCHRONOUSLY: the single-flight check,
@@ -152,6 +158,7 @@ export class JobRunner {
         job.status = controller.signal.aborted ? 'cancelled' : 'completed'
         job.finishedAt = Date.now()
         this.fireLifecycle(job)
+        this.pruneTerminalJobs()
         return r
       })
       .catch((err) => {
@@ -163,6 +170,7 @@ export class JobRunner {
         }
         job.finishedAt = Date.now()
         this.fireLifecycle(job)
+        this.pruneTerminalJobs()
         throw err
       })
       .finally(() => {
@@ -208,6 +216,39 @@ export class JobRunner {
     this.listeners.push(listener)
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener)
+    }
+  }
+
+  onPrune(listener: PruneListener): () => void {
+    this.pruneListeners.push(listener)
+    return () => {
+      this.pruneListeners = this.pruneListeners.filter((l) => l !== listener)
+    }
+  }
+
+  private firePrune(jobId: string): void {
+    for (const l of this.pruneListeners) {
+      try {
+        l(jobId)
+      } catch {
+        /* swallow — a misbehaving listener must not break job tracking */
+      }
+    }
+  }
+
+  private pruneTerminalJobs(): void {
+    const terminalIds: string[] = []
+    for (const [id, job] of this.jobs) {
+      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+        terminalIds.push(id)
+      }
+    }
+    const excess = terminalIds.length - this.maxTerminalJobs
+    if (excess <= 0) return
+    for (let i = 0; i < excess; i++) {
+      const id = terminalIds[i]
+      this.jobs.delete(id)
+      this.firePrune(id)
     }
   }
 

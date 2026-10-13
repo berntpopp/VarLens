@@ -17,7 +17,7 @@
 import { randomBytes } from 'node:crypto'
 
 import { Client, Pool } from 'pg'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 import { lockSummaryForWrite } from '../../../src/main/storage/postgres/cohort-summary-lock'
@@ -360,6 +360,40 @@ describe.skipIf(!RUN)('cohort-read freshness — Sprint A C5 (PR3-17)', () => {
       await rebuilder.query('COMMIT')
     } finally {
       rebuilder.release()
+    }
+  }, 60_000)
+
+  it('does not force rebuild on workspace containing only non-carrier variants (./.)', async () => {
+    const caseA = await seedCase('non-carrier-a')
+    await probe.query(
+      `INSERT INTO "${schema}".variants
+         (case_id, chr, pos, ref, alt, variant_type, gene_symbol, gt_num)
+         VALUES ($1, '1', 150, 'A', 'T', 'snv', 'GENE1', './.')`,
+      [caseA]
+    )
+    expect(await summaryRowCount()).toBe(0)
+
+    const result = await prepareCohortRead({ pool, schema })
+
+    expect(await summaryRowCount()).toBe(0)
+    expect(result.warnings).toBeUndefined()
+  }, 60_000)
+
+  it('falls back to staleSummary and schedules background rebuild when synchronous rebuild fails', async () => {
+    const caseA = await seedCase('sync-fail-a')
+    await seedVariant(caseA, '10', 1000)
+    expect(await summaryRowCount()).toBe(0)
+
+    const rebuildSpy = vi
+      .spyOn(PostgresCohortSummaryRepository.prototype, 'rebuild')
+      .mockRejectedValueOnce(new Error('statement timeout (30s)'))
+
+    try {
+      const result = await prepareCohortRead({ pool, schema })
+      expect(result.warnings).toEqual({ staleSummary: true })
+    } finally {
+      rebuildSpy.mockRestore()
+      await awaitBackgroundRebuild(schema)
     }
   }, 60_000)
 })

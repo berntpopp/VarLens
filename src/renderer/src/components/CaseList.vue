@@ -210,6 +210,7 @@ const { api } = useApiService()
 const currentOffset = ref(0)
 const totalCaseCount = ref(0)
 const scrollKey = ref(0)
+let generation = 0
 
 const multiSelected = ref<Set<number>>(new Set())
 const isMultiSelectMode = computed(() => multiSelected.value.size > 0)
@@ -290,21 +291,20 @@ const onLoad = async ({
     done('empty')
     return
   }
-
+  const gen = generation
   loading.value = true
   try {
     const result = await fetchCasePage(currentOffset.value)
-
+    if (gen !== generation) return
     cases.value = markRaw([...cases.value, ...result.data])
-
     if (currentOffset.value === 0) {
       totalCaseCount.value = result.total_count
       emit('cases-loaded', result.total_count)
     }
-
     currentOffset.value += result.data.length
     done(result.data.length < PAGE_SIZE ? 'empty' : 'ok')
   } catch (e) {
+    if (gen !== generation) return
     logService.error(
       'Failed to load cases page: ' + formatErrorMessage(e, 'Unknown error'),
       'case-list'
@@ -312,12 +312,13 @@ const onLoad = async ({
     if (currentOffset.value === 0) emit('cases-load-failed')
     done('error')
   } finally {
-    loading.value = false
+    if (gen === generation) loading.value = false
   }
 }
 
 // Reset list (for search/filter changes)
 const resetList = (): void => {
+  generation++
   cases.value = markRaw([])
   currentOffset.value = 0
   scrollKey.value++

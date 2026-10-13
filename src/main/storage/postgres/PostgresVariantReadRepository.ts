@@ -59,31 +59,11 @@ const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
 )
 POSTGRES_BASE_SORT_COLUMNS.id = 'v.id'
 
-const NUMERIC_VARIANT_FIELDS = new Set([
-  'id',
-  'case_id',
-  'pos',
-  'end_pos',
-  'sv_length',
-  'dp',
-  'ad_ref',
-  'ad_alt',
-  'internal_af',
-  '_sv_support',
-  '_sv_dr',
-  '_sv_dv',
-  '_sv_vaf',
-  '_sv_is_precise',
-  '_sv_stdev_len',
-  '_sv_stdev_pos',
-  '_cnv_copy_number',
-  '_cnv_gq',
-  '_cnv_ho_ref',
-  '_cnv_ho_alt',
-  '_str_ref_copies',
-  '_str_normal_max',
-  '_str_pathologic_min'
-])
+const NUMERIC_VARIANT_FIELDS = new Set(
+  'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
+    ','
+  )
+)
 
 function searchTokens(query: string): string[] {
   return query.trim().split(/\s+/)
@@ -491,7 +471,7 @@ export class PostgresVariantReadRepository {
     let unfilteredCount: number | undefined
     if (includeUnfilteredCount === true) {
       const result = await this.pool.query(
-        `SELECT COUNT(*)::int AS count FROM ${this.schemaName}."variants" WHERE case_id = $1`,
+        `SELECT COALESCE(NULLIF((SELECT variant_count FROM ${this.schemaName}."cases" WHERE id = $1), 0), (SELECT COUNT(*)::int FROM ${this.schemaName}."variants" WHERE case_id = $1)) AS count`,
         [filter.case_id]
       )
       unfilteredCount = toNumber((result.rows[0] as { count?: unknown } | undefined)?.count)

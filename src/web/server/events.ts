@@ -39,6 +39,7 @@ interface StoredEvent extends WebEvent {
   seq: number
   userId: number | undefined
   admins: boolean
+  broadcast?: boolean
 }
 
 interface Subscription {
@@ -49,6 +50,7 @@ interface Subscription {
 
 export const EVENT_RESYNC = 'events:resync'
 export const EVENT_SESSION_REVOKED = 'session:revoked'
+export const MAX_EVENT_BUFFER_BYTES = 1024 * 1024
 const DEFAULT_RING_SIZE = 1000
 
 export class WebEventHub {
@@ -75,9 +77,9 @@ export class WebEventHub {
     }
   }
 
-  /** Event for one user. */
-  publish(userId: number, type: string, payload: unknown): void {
-    this.emit({ userId, admins: false, type, payload })
+  /** Event for one user, or broadcast to all if userId is undefined. */
+  publish(userId: number | undefined, type: string, payload: unknown): void {
+    this.emit({ userId, admins: false, type, payload, broadcast: userId === undefined })
   }
 
   /** Event for one user (if any) and every admin. */
@@ -138,6 +140,7 @@ export class WebEventHub {
 }
 
 function visibleTo(event: StoredEvent, viewer: EventViewer): boolean {
+  if (event.broadcast === true) return true
   if (event.userId !== undefined && event.userId === viewer.userId) return true
   return event.admins && viewer.role === 'admin'
 }
@@ -187,7 +190,6 @@ export function registerEventStream(
       connection: 'keep-alive',
       'x-accel-buffering': 'no'
     })
-    out.write('retry: 3000\n: connected\n\n')
 
     let ended = false
     const timers: NodeJS.Timeout[] = []
@@ -197,23 +199,50 @@ export function registerEventStream(
       ended = true
       for (const timer of timers) clearInterval(timer)
       unsubscribe()
+      if (reason === 'stalled') {
+        out.destroy()
+        return
+      }
       if (reason !== undefined && !out.writableEnded) {
         out.write(`event: ${EVENT_SESSION_REVOKED}\ndata: ${JSON.stringify({ reason })}\n\n`)
       }
-      if (!out.writableEnded) out.end()
+      if (!out.writableEnded) {
+        out.end()
+      }
     }
+
+    const safeWrite = (chunk: string): boolean => {
+      if (ended || out.writableEnded) return false
+      const ok = out.write(chunk)
+      if (out.writableLength > MAX_EVENT_BUFFER_BYTES) {
+        request.log.warn(
+          { event: 'event-stream', userId: viewer.userId },
+          'event stream write exceeded buffer, dropping stalled client'
+        )
+        end('stalled')
+        return false
+      }
+      return ok
+    }
+
+    safeWrite('retry: 3000\n: connected\n\n')
 
     const lastEventId = lastEventIdOf(request)
     if (lastEventId !== undefined) {
       const missed = events.replaySince(lastEventId, viewer)
-      if (missed === undefined) out.write(formatEvent({ id: '', type: EVENT_RESYNC, payload: {} }))
-      else for (const event of missed) out.write(formatEvent(event))
+      if (missed === undefined) safeWrite(formatEvent({ id: '', type: EVENT_RESYNC, payload: {} }))
+      else {
+        for (const event of missed) {
+          safeWrite(formatEvent(event))
+          if (ended) break
+        }
+      }
     }
 
     unsubscribe = events.subscribe(
       viewer,
       (event) => {
-        if (!ended) out.write(formatEvent(event))
+        if (!ended) safeWrite(formatEvent(event))
       },
       () => end('revoked')
     )
@@ -221,7 +250,8 @@ export function registerEventStream(
     let revalidating = false
     const timer = setInterval(() => {
       if (ended || revalidating) return
-      out.write(`: heartbeat ${Date.now()}\n\n`)
+      safeWrite(`: heartbeat ${Date.now()}\n\n`)
+      if (ended) return
       revalidating = true
       options
         .revalidate(request)

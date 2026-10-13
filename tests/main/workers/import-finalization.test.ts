@@ -5,6 +5,7 @@ import { DatabaseService } from '../../../src/main/database'
 import { SET_IMPORT_SESSION_OPEN_SQL } from '../../../src/main/database/cohort-summary-case-add-sql'
 import { createFTSTriggers } from '../../../src/main/database/schema'
 import { DROP_FTS_TRIGGERS, DROP_INDEXES } from '../../../src/main/workers/import-pipeline'
+import { RECREATE_INDEXES, sessionIndexesMissing } from '../../../src/main/workers/import-index-sql'
 import {
   finalizeInterruptedImportFts,
   postTerminalMessageAfterCleanup,
@@ -35,11 +36,25 @@ describe('finalizeInterruptedImportFts', () => {
       ftsRebuilt: true
     }
     const rebuildFts = vi.fn()
-
     const rebuilt = finalizeInterruptedImportFts(db, state, rebuildFts)
 
     expect(rebuilt).toBe(false)
     expect(rebuildFts).not.toHaveBeenCalled()
+  })
+
+  it('does not mark FTS rebuilt when rebuild returns false', () => {
+    const db = {} as DatabaseType
+    const state: ImportFtsFinalizationState = {
+      ftsTriggersDropped: true,
+      ftsRebuilt: false
+    }
+    const rebuildFts = vi.fn(() => false)
+
+    const rebuilt = finalizeInterruptedImportFts(db, state, rebuildFts)
+
+    expect(rebuilt).toBe(false)
+    expect(rebuildFts).toHaveBeenCalledExactlyOnceWith(db)
+    expect(state.ftsRebuilt).toBe(false)
   })
 })
 
@@ -111,6 +126,18 @@ describe('repairInterruptedImportSession', () => {
     expect(repairInterruptedImportSession(service.database)).toBe(true)
 
     expect(indexNames(service)).toEqual(expect.arrayContaining(SESSION_INDEXES))
+    expect(service.variants.searchVariants(caseId, 'KILLEDGENE')).toHaveLength(1)
+    service.close()
+  })
+
+  it('repairs FTS index when session is open even if indexes are not missing (#612)', () => {
+    const { service, caseId } = killedWhileFinalizing(true)
+    service.database.exec(RECREATE_INDEXES)
+    expect(sessionIndexesMissing(service.database)).toBe(false)
+    expect(service.variants.searchVariants(caseId, 'KILLEDGENE')).toHaveLength(0)
+
+    expect(repairInterruptedImportSession(service.database)).toBe(true)
+
     expect(service.variants.searchVariants(caseId, 'KILLEDGENE')).toHaveLength(1)
     service.close()
   })

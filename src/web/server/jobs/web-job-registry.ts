@@ -57,6 +57,7 @@ export function publicJobParams(params: unknown): Record<string, unknown> {
 export class WebJobRegistry {
   private readonly owners = new Map<string, JobOwner | null>()
   private readonly unsubscribe: () => void
+  private readonly unsubscribePrune: () => void
 
   constructor(
     private readonly runner: JobRunner,
@@ -67,10 +68,15 @@ export class WebJobRegistry {
       const snapshot = this.snapshot(job)
       events.publishToUserAndAdmins(snapshot.owner?.userId, JOBS_CHANNELS.changed, snapshot)
     })
+    this.unsubscribePrune =
+      runner.onPrune?.((jobId) => {
+        this.owners.delete(jobId)
+      }) ?? (() => undefined)
   }
 
   close(): void {
     this.unsubscribe()
+    this.unsubscribePrune()
   }
 
   ownerOf(jobId: string): JobOwner | undefined {

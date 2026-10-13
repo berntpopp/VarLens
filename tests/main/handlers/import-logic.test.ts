@@ -23,6 +23,36 @@ describe('import-logic exports', () => {
     expect(typeof logic.cancelImport).toBe('function')
     expect(typeof logic.startMultiFileImport).toBe('function')
     expect(typeof logic.getVcfPreview).toBe('function')
+    expect(typeof logic.isImportInProgress).toBe('function')
+    expect(typeof logic.assertNoActiveImport).toBe('function')
+  })
+
+  it('tracks isImportInProgress and assertNoActiveImport during active operation', async () => {
+    const { isImportInProgress, assertNoActiveImport } =
+      await import('../../../src/main/ipc/handlers/import-logic')
+    expect(isImportInProgress()).toBe(false)
+    expect(() => assertNoActiveImport()).not.toThrow()
+
+    let resolveImport!: (v: unknown) => void
+    const session = {
+      getImportExecutor: () => ({
+        importSingleFile: () =>
+          new Promise((r) => {
+            resolveImport = r
+          }),
+        cancel: vi.fn()
+      })
+    }
+
+    const pending = startImport('/tmp/x.json', 'test', undefined, () => session as never, {})
+    expect(isImportInProgress()).toBe(true)
+    expect(() => assertNoActiveImport()).toThrow(/already in progress/i)
+
+    resolveImport({ caseId: 1, variantCount: 0, skipped: 0, errors: [], elapsed: 0 })
+    await pending
+
+    expect(isImportInProgress()).toBe(false)
+    expect(() => assertNoActiveImport()).not.toThrow()
   })
 })
 

@@ -171,6 +171,22 @@ describe('useFilters', () => {
       expect(result.hasActiveFilters.value).toBe(true)
     })
 
+    it('returns true when activePanelIds is not empty', () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+
+      result.filters.value.activePanelIds = ['panel-1']
+      expect(result.hasActiveFilters.value).toBe(true)
+    })
+
+    it('returns true when inheritanceModes is not empty', () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+
+      result.filters.value.inheritanceModes = ['AD']
+      expect(result.hasActiveFilters.value).toBe(true)
+    })
+
     it('returns false after clearAllFilters()', () => {
       const [result, appInstance] = withSetup(() => createFilters())
       app = appInstance
@@ -352,6 +368,16 @@ describe('useFilters', () => {
       await nextTick()
 
       result.customGnomadAf.value = empty as unknown as number
+      await nextTick()
+
+      expect(result.filters.value.maxGnomadAf).toBeNull()
+    })
+
+    it('setting customGnomadAf to 0 clears maxGnomadAf when no preset selected', async () => {
+      const [result, appInstance] = withSetup(() => createFilters())
+      app = appInstance
+      result.filters.value.maxGnomadAf = 0.01
+      result.customGnomadAf.value = 0
       await nextTick()
 
       expect(result.filters.value.maxGnomadAf).toBeNull()

@@ -8,7 +8,10 @@ import * as XLSX from 'xlsx'
 
 import { buildDispatcher, registerDispatcher } from '../../src/web/server/dispatcher'
 import { DownloadGrantRegistry } from '../../src/web/server/downloads/download-grants'
-import { registerExportDownloadRoutes } from '../../src/web/server/routes/export-download'
+import {
+  registerExportDownloadRoutes,
+  resetActiveDownloadsForTesting
+} from '../../src/web/server/routes/export-download'
 import { makeDeps } from './helpers/dispatcher-adapters'
 
 type Row = Record<string, unknown>
@@ -103,6 +106,7 @@ const VARIANTS_REQUEST = {
 
 let openApp: FastifyInstance | undefined
 afterEach(async () => {
+  resetActiveDownloadsForTesting()
   await openApp?.close()
   openApp = undefined
 })
@@ -380,4 +384,75 @@ describe('web export: prepare + signed download', () => {
       expect(source.state.yielded).toBe(yieldedAtRelease)
     }
   )
+
+  test('HEAD request does not burn the token (exposeHeadRoute: false)', async () => {
+    const source = trackedRows(VARIANT_ROWS)
+    const { app } = buildApp(() => source.iterable)
+    openApp = app
+
+    const prepared = await prepare(app, VARIANTS_REQUEST)
+    expect(prepared.statusCode).toBe(200)
+
+    const headRes = await app.inject({ method: 'HEAD', url: prepared.path! })
+    expect(headRes.statusCode).toBe(404)
+    expect(source.state.yielded).toBe(0)
+
+    const getRes = await app.inject({ method: 'GET', url: prepared.path! })
+    expect(getRes.statusCode).toBe(200)
+    expect(source.state.yielded).toBeGreaterThan(0)
+  })
+
+  test('concurrency cap limits active downloads and does not redeem token when rejected', async () => {
+    const source = trackedRows(VARIANT_ROWS, { endless: true })
+    const { app } = buildApp(() => source.iterable)
+    openApp = app
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const { port } = app.server.address() as AddressInfo
+
+    // Start 2 concurrent downloads for analyst (MAX_ACTIVE_DOWNLOADS_PER_USER = 2)
+    const p1 = await prepare(app, VARIANTS_REQUEST)
+    const p2 = await prepare(app, VARIANTS_REQUEST)
+    const p3 = await prepare(app, VARIANTS_REQUEST)
+
+    const openStream = (path: string) =>
+      new Promise<{
+        req: ReturnType<typeof httpRequest>
+        res: import('node:http').IncomingMessage
+      }>((resolve, reject) => {
+        const req = httpRequest(
+          { host: '127.0.0.1', port, path, headers: { 'x-test-user': 'analyst' } },
+          (res) => resolve({ req, res })
+        )
+        req.on('error', reject)
+        req.end()
+      })
+
+    const s1 = await openStream(p1.path!)
+    const s2 = await openStream(p2.path!)
+    expect(s1.res.statusCode).toBe(200)
+    expect(s2.res.statusCode).toBe(200)
+
+    // Third download should return 429
+    const res3 = await app.inject({
+      method: 'GET',
+      url: p3.path!,
+      headers: { 'x-test-user': 'analyst' }
+    })
+    expect(res3.statusCode).toBe(429)
+    expect(res3.json()).toMatchObject({ message: 'too-many-downloads' })
+
+    // Closing streams frees the slots, allowing p3 to be redeemed
+    s1.res.destroy()
+    s2.res.destroy()
+    s1.req.destroy()
+    s2.req.destroy()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const res3Retry = await app.inject({
+      method: 'GET',
+      url: p3.path!,
+      headers: { 'x-test-user': 'analyst' }
+    })
+    expect(res3Retry.statusCode).toBe(200)
+  })
 })

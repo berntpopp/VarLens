@@ -225,6 +225,17 @@ describe('batch-import:start as a job', () => {
     expect(JSON.stringify(answer)).not.toContain('in use')
     void reply
   })
+
+  test('refuses to start when an import is already in progress', async () => {
+    const { start } = await setup()
+    const { withActiveImportOperation } = await import('../../src/main/ipc/handlers/import-logic')
+    await withActiveImportOperation(
+      () => {},
+      async () => {
+        await expect(start(alice, nextRunId())).rejects.toThrow(/already in progress/i)
+      }
+    )
+  })
 })
 
 describe('batch-import:status security policy', () => {

@@ -126,4 +126,28 @@ describe('import summary session: merge per file or rebuild once', () => {
     session.finish()
     expect(rebuilds).toBe(0)
   })
+
+  it('defers to rebuild when idx_variants_chr_pos_ref_alt is missing without recreating index mid-batch (#612)', () => {
+    const session = openSession(DEFAULT_UPKEEP_POLICY.minSummaryRows)
+    // Simulate import-worker dropping the coordinate index for a bulk import
+    db().exec('DROP INDEX IF EXISTS idx_variants_chr_pos_ref_alt')
+
+    session.addCase(importCase('f-no-idx', 100, 10), 0)
+
+    expect(session.isExact()).toBe(false)
+    expect(isCohortSummaryStale(db())).toBe(true)
+    // Index must NOT have been recreated mid-batch
+    expect(
+      db()
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_variants_chr_pos_ref_alt'"
+        )
+        .get()
+    ).toBeUndefined()
+    expect(staleNotices).toBe(1)
+    expect(warnings).toEqual([])
+
+    session.finish()
+    expect(rebuilds).toBe(1)
+  })
 })

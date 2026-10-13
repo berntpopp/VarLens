@@ -75,7 +75,7 @@ export class PostgresOverviewRepository {
         schema: this.schema
       }),
       runNamed<Row>(this.pool as Pool, {
-        name: 'overview:genes_with_variants:v2',
+        name: 'overview:genes_with_variants:v3',
         text: `SELECT (${totals.genesWithVariants}) AS genes_with_variants`,
         values: [],
         schema: this.schema

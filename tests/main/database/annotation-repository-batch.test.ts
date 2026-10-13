@@ -129,4 +129,79 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
     const result = repo.getBatch(999, keys)
     expect(result['chr1:10000:A:G']).toEqual({ global: null, perCase: null })
   })
+
+  it('prevents per-case annotation collision across duplicate-coordinate rows (#623)', () => {
+    const v1 = 1001
+    const v2 = 1002
+    db.prepare(
+      'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+    ).run(v1, 'chr2', 20000, 'C', 'T')
+    db.prepare(
+      'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+    ).run(v2, 'chr2', 20000, 'C', 'T')
+
+    // Scenario A: only the first variant has a case_variant_annotations record
+    db.prepare(
+      'INSERT INTO case_variant_annotations (case_id, variant_id, starred, comment) VALUES (1, ?, 1, ?)'
+    ).run(v1, 'first-annotated')
+
+    let res = repo.getBatch(1, [
+      { chr: 'chr2', pos: 20000, ref: 'C', alt: 'T', variantId: v1 },
+      { chr: 'chr2', pos: 20000, ref: 'C', alt: 'T', variantId: v2 }
+    ])
+    expect(res['chr2:20000:C:T'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v1, starred: 1, comment: 'first-annotated' })
+    )
+
+    res = repo.getBatch(1, [{ chr: 'chr2', pos: 20000, ref: 'C', alt: 'T' }])
+    expect(res['chr2:20000:C:T'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v1, starred: 1, comment: 'first-annotated' })
+    )
+
+    // Clear annotation and test Scenario B: only the second variant has a record
+    db.prepare('DELETE FROM case_variant_annotations WHERE case_id = 1 AND variant_id = ?').run(v1)
+    db.prepare(
+      'INSERT INTO case_variant_annotations (case_id, variant_id, starred, comment) VALUES (1, ?, 1, ?)'
+    ).run(v2, 'second-annotated')
+
+    res = repo.getBatch(1, [
+      { chr: 'chr2', pos: 20000, ref: 'C', alt: 'T', variantId: v1 },
+      { chr: 'chr2', pos: 20000, ref: 'C', alt: 'T', variantId: v2 }
+    ])
+    expect(res['chr2:20000:C:T'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v2, starred: 1, comment: 'second-annotated' })
+    )
+
+    res = repo.getBatch(1, [{ chr: 'chr2', pos: 20000, ref: 'C', alt: 'T' }])
+    expect(res['chr2:20000:C:T'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v2, starred: 1, comment: 'second-annotated' })
+    )
+  })
+
+  it('prefers matching variantId when multiple annotated rows share coordinates (#623)', () => {
+    const v1 = 2001
+    const v2 = 2002
+    db.prepare(
+      'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+    ).run(v1, 'chr3', 30000, 'A', 'C')
+    db.prepare(
+      'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+    ).run(v2, 'chr3', 30000, 'A', 'C')
+    db.prepare(
+      'INSERT INTO case_variant_annotations (case_id, variant_id, starred, comment) VALUES (1, ?, 1, ?)'
+    ).run(v1, 'v1-note')
+    db.prepare(
+      'INSERT INTO case_variant_annotations (case_id, variant_id, starred, comment) VALUES (1, ?, 0, ?)'
+    ).run(v2, 'v2-note')
+
+    const res1 = repo.getBatch(1, [{ chr: 'chr3', pos: 30000, ref: 'A', alt: 'C', variantId: v1 }])
+    expect(res1['chr3:30000:A:C'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v1, comment: 'v1-note' })
+    )
+
+    const res2 = repo.getBatch(1, [{ chr: 'chr3', pos: 30000, ref: 'A', alt: 'C', variantId: v2 }])
+    expect(res2['chr3:30000:A:C'].perCase).toEqual(
+      expect.objectContaining({ variant_id: v2, comment: 'v2-note' })
+    )
+  })
 })

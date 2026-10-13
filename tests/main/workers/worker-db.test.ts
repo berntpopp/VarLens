@@ -111,6 +111,15 @@ describe('openWorkerDatabase', () => {
     const db = trackDb(openWorkerDatabase(':memory:'))
     expect(db.pragma('analysis_limit', { simple: true })).toBe(DATABASE_CONFIG.ANALYSIS_LIMIT)
   })
+
+  it('sets temp_store DEFAULT when unencrypted and MEMORY when encrypted (#614)', () => {
+    const unencryptedDb = trackDb(openWorkerDatabase(':memory:'))
+    expect(unencryptedDb.pragma('temp_store', { simple: true })).toBe(0)
+
+    const encryptedPath = makeTempPath()
+    const encryptedDb = trackDb(openWorkerDatabase(encryptedPath, 'secret-key'))
+    expect(encryptedDb.pragma('temp_store', { simple: true })).toBe(2)
+  })
 })
 
 describe('openWorkerDatabaseReadOnly', () => {
@@ -191,20 +200,20 @@ describe('rebuildFts', () => {
     ).toBeDefined()
   })
 
-  it('lets a failure propagate so the caller keeps its recovery state (#559)', () => {
+  it('lets a failure return false so the caller keeps its recovery state (#559, #612)', () => {
     const db = trackDb(new Database(':memory:'))
     initializeSchema(db)
     runMigrations(db)
     db.exec('DROP TABLE variants_fts')
     db.exec('CREATE TABLE variants_fts (x)')
-    expect(() => rebuildFts(db)).toThrow()
+    expect(rebuildFts(db)).toBe(false)
   })
 
-  it('does not throw on a schema-initialized DB', () => {
+  it('does not throw on a schema-initialized DB and returns true', () => {
     const db = trackDb(new Database(':memory:'))
     initializeSchema(db)
     runMigrations(db)
-    expect(() => rebuildFts(db)).not.toThrow()
+    expect(rebuildFts(db)).toBe(true)
   })
 
   it('FTS table is queryable after rebuild', () => {

@@ -22,7 +22,6 @@ import { buildFilterIpcParams } from '../utils/filters/filterSerialization'
 import {
   clearFilter as clearFilterUtil,
   buildActiveFiltersList,
-  summarizeInternalFilters,
   type FilterId,
   type ActiveFilter,
   type FilterIpcParams
@@ -162,6 +161,8 @@ export function createFilters(): UseFiltersReturn {
       // Convert percentage (0-100) to decimal (0-1)
       filters.value.maxGnomadAf = value / 100
       selectedAfPreset.value = null
+    } else {
+      if (selectedAfPreset.value === null) filters.value.maxGnomadAf = null
     }
   })
 
@@ -243,35 +244,6 @@ export function createFilters(): UseFiltersReturn {
     }
   }
 
-  // Computed: has active filters
-  const hasActiveFilters = computed(() => {
-    const afActive =
-      filters.value.maxGnomadAf !== null &&
-      !Number.isNaN(filters.value.maxGnomadAf) &&
-      filters.value.maxGnomadAf > 0
-    const caddActive =
-      filters.value.minCadd !== null &&
-      !Number.isNaN(filters.value.minCadd) &&
-      filters.value.minCadd >= 0
-    return (
-      searchTerm.value !== '' ||
-      filters.value.geneSymbol !== '' ||
-      filters.value.consequences.length > 0 ||
-      filters.value.funcs.length > 0 ||
-      filters.value.clinvars.length > 0 ||
-      afActive ||
-      caddActive ||
-      (filters.value.minCarriers !== null && filters.value.minCarriers > 0) ||
-      summarizeInternalFilters(filters.value) !== '' ||
-      filters.value.starredOnly ||
-      filters.value.hasCommentOnly ||
-      filters.value.acmgClassifications.length > 0 ||
-      selectedImpactPresets.value.length > 0 ||
-      selectedAfPreset.value !== null ||
-      selectedCaddPreset.value !== null
-    )
-  })
-
   // Computed: active filters list for chip display
   const activeFiltersList = computed<ActiveFilter[]>(() => {
     const stateWithSearch = {
@@ -280,6 +252,14 @@ export function createFilters(): UseFiltersReturn {
     }
     return buildActiveFiltersList(stateWithSearch, selectedImpactPresets.value)
   })
+
+  // Computed: has active filters
+  const hasActiveFilters = computed(
+    () =>
+      activeFiltersList.value.length > 0 ||
+      selectedAfPreset.value !== null ||
+      selectedCaddPreset.value !== null
+  )
 
   /**
    * Build IPC-safe filter parameters

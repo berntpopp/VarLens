@@ -161,10 +161,10 @@ function pickColumns<T extends string>(
 
 function hasExtensions(row: Record<string, unknown>): boolean {
   return (
-    Array.isArray(row._transcripts) ||
-    row._sv !== undefined ||
-    row._cnv !== undefined ||
-    row._str !== undefined
+    (Array.isArray(row._transcripts) && row._transcripts.length > 0) ||
+    (row._sv !== undefined && row._sv !== null) ||
+    (row._cnv !== undefined && row._cnv !== null) ||
+    (row._str !== undefined && row._str !== null)
   )
 }
 

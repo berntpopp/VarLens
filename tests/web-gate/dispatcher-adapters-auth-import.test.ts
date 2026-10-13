@@ -938,7 +938,6 @@ describe('web dispatcher adapters: auth and import', () => {
       })
       const { overrides } = buildDispatcher(deps)
       const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
-
       await overrides['import:start'].handle(
         [upload.ref, 'Case A'],
         request as never,
@@ -950,6 +949,59 @@ describe('web dispatcher adapters: auth and import', () => {
         phase: 'parsing',
         count: 5
       })
+      expect(deps.events.publish).toHaveBeenCalledWith(undefined, 'cohort:summaryRebuilt', {
+        is_stale: true
+      })
+      expect(deps.events.publish).toHaveBeenCalledWith(undefined, 'cohort:summaryRebuilt', {
+        is_stale: false
+      })
+    } finally {
+      if (prevNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = prevNodeEnv
+      if (prevRecoveryDir === undefined) delete process.env.VARLENS_RECOVERY_KEY_DIR
+      else process.env.VARLENS_RECOVERY_KEY_DIR = prevRecoveryDir
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  test('import.start refuses admission and does not publish is_stale: true when import in progress', async () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevRecoveryDir = process.env.VARLENS_RECOVERY_KEY_DIR
+    const tempDir = await mkdtemp(join(tmpdir(), 'varlens-web-import-refuse-'))
+    process.env.NODE_ENV = 'production'
+    process.env.VARLENS_RECOVERY_KEY_DIR = tempDir
+    try {
+      const sourcePath = join(tempDir, 'input.vcf')
+      await writeFile(sourcePath, '##fileformat=VCFv4.2\n')
+      const upload = await stageExistingFileUpload({
+        userId: 7,
+        originalName: 'input.vcf',
+        sourcePath
+      })
+      const { deps, reply } = makeDeps()
+      const { overrides } = buildDispatcher(deps)
+      const request = { session: { user: { id: 7, username: 'admin', role: 'admin' } } }
+      const { withActiveImportOperation } = await import('../../src/main/ipc/handlers/import-logic')
+
+      await withActiveImportOperation(
+        () => {},
+        async () => {
+          await expect(
+            overrides['import:start'].handle(
+              [upload.ref, 'Case A'],
+              request as never,
+              reply as never,
+              deps
+            )
+          ).rejects.toThrow(/already in progress/i)
+        }
+      )
+
+      expect(deps.events.publish).not.toHaveBeenCalledWith(
+        undefined,
+        'cohort:summaryRebuilt',
+        expect.anything()
+      )
     } finally {
       if (prevNodeEnv === undefined) delete process.env.NODE_ENV
       else process.env.NODE_ENV = prevNodeEnv

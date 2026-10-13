@@ -7,8 +7,8 @@ import { isRef, toRaw, unref } from 'vue'
  * on Vue proxies; JSON round-trip works but is opaque. This walker handles
  * proxies natively, then returns plain JS that is safe to ship over IPC.
  *
- * Cross-process / main-side callers should use `cloneForIpc` (now backed by
- * structuredClone — see the shared util) on already-plain input.
+ * Cross-process / main-side callers should use `structuredClone` directly
+ * on already-plain input.
  */
 export function stripVueProxies<T>(value: T): T {
   return stripInner(value, new WeakMap()) as T

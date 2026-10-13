@@ -54,7 +54,25 @@ function addPanelFilter(
   { addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
 ): void {
   if ((filter.panel_intervals?.length ?? 0) > 0) {
-    const intervalClauses = intervalsForAllSpellings(filter.panel_intervals!).map((interval) => {
+    const expandedIntervals = intervalsForAllSpellings(filter.panel_intervals!)
+    if (expandedIntervals.length > 500) {
+      const chrs: string[] = []
+      const starts: number[] = []
+      const ends: number[] = []
+      for (const interval of expandedIntervals) {
+        chrs.push(interval.chr)
+        starts.push(interval.start)
+        ends.push(interval.end)
+      }
+      const chrParam = addParam(chrs)
+      const startParam = addParam(starts)
+      const endParam = addParam(ends)
+      addWhere(
+        `EXISTS (SELECT 1 FROM unnest(${chrParam}::text[], ${startParam}::bigint[], ${endParam}::bigint[]) AS pi(chr, start_pos, end_pos) WHERE v.chr = pi.chr AND v.pos <= pi.end_pos AND COALESCE(v.end_pos, v.pos) >= pi.start_pos)`
+      )
+      return
+    }
+    const intervalClauses = expandedIntervals.map((interval) => {
       const chr = addParam(interval.chr)
       const start = addParam(interval.start)
       const end = addParam(interval.end)

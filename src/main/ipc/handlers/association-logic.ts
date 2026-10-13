@@ -30,6 +30,12 @@ export interface InProcessAssociationOptions {
 export function assertDisjointGroups(
   config: Pick<AssociationConfig, 'groupA_ids' | 'groupB_ids'>
 ): void {
+  if (
+    new Set(config.groupA_ids).size !== config.groupA_ids.length ||
+    new Set(config.groupB_ids).size !== config.groupB_ids.length
+  ) {
+    throw new Error('Duplicate case IDs in groupA or groupB')
+  }
   const groupA = new Set(config.groupA_ids)
   const overlap = config.groupB_ids.filter((id) => groupA.has(id))
   if (overlap.length > 0) {

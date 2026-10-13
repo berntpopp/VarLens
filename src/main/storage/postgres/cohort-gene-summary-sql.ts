@@ -334,6 +334,6 @@ export function cohortVariantTotalsSql(tbl: Tbl): {
   return {
     totalVariants: `SELECT COALESCE(SUM(variant_count), 0)::bigint FROM ${tbl('cases')}`,
     uniqueVariants: uniqueVariantsSql(tbl),
-    genesWithVariants: `SELECT COUNT(*)::bigint FROM ${tbl('cohort_gene_summary')}`
+    genesWithVariants: `SELECT COUNT(*)::bigint FROM ${tbl('cohort_gene_summary')} WHERE gene_symbol IS NOT NULL AND gene_symbol != ''`
   }
 }

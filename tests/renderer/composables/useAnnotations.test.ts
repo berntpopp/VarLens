@@ -13,6 +13,7 @@ import {
   annotationCache,
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
+import { setLoading, isKeyLoading } from '@renderer/composables/annotation-cache'
 
 describe('useAnnotations', () => {
   let app: { unmount: () => void }
@@ -563,5 +564,51 @@ describe('stale-request guard (annotation generation)', () => {
     await result2.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 500, ref: 'A', alt: 'G' }])
     expect(result2.getAnnotations('chr1', 500, 'A', 'G')).toBeDefined()
     expect(before).toBe(0) // confirm reset happened
+  })
+
+  it('setLoading deletes key on false instead of storing false', () => {
+    setLoading('chr1:100:A:T', true)
+    expect(isKeyLoading('chr1:100:A:T')).toBe(true)
+
+    setLoading('chr1:100:A:T', false)
+    expect(isKeyLoading('chr1:100:A:T')).toBe(false)
+  })
+
+  it('an old case batch settling does not clear loading state of a switched case', async () => {
+    let resolveCase1: (val: unknown) => void = () => {}
+    const p1 = new Promise((r) => {
+      resolveCase1 = r
+    })
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(p1)
+
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+
+    // Start loading for case 1
+    const pLoad1 = result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Switch case to case 2, which also requests chr1:100:A:T
+    let resolveCase2: (val: unknown) => void = () => {}
+    const p2 = new Promise((r) => {
+      resolveCase2 = r
+    })
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(p2)
+
+    const pLoad2 = result.loadAnnotationsBatch(2, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Case 1 finishes first
+    resolveCase1({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad1
+
+    // Key should STILL be loading because case 2 is in flight!
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Now case 2 finishes
+    resolveCase2({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad2
+
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(false)
   })
 })

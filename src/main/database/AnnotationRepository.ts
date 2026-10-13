@@ -253,11 +253,26 @@ export class AnnotationRepository extends BaseRepository {
 
     // Per-case lookup — only when caseId !== null (2nd prepared statement).
     if (caseId !== null) {
+      const requestedVariantIdsByKey = new Map<string, Set<number>>()
+      for (const k of keys) {
+        if (typeof k.variantId === 'number') {
+          const key = `${k.chr}:${k.pos}:${k.ref}:${k.alt}`
+          let set = requestedVariantIdsByKey.get(key)
+          if (!set) {
+            set = new Set()
+            requestedVariantIdsByKey.set(key, set)
+          }
+          set.add(k.variantId)
+        }
+      }
+
       const variantIds = keys
         .map((k) => k.variantId)
         .filter((v): v is number => typeof v === 'number')
-      const idClause =
-        variantIds.length > 0 ? ` AND v.id IN (${variantIds.map(() => '?').join(', ')})` : ''
+      const allHaveVariantIds = variantIds.length === keys.length && variantIds.length > 0
+      const idClause = allHaveVariantIds
+        ? ` AND v.id IN (${variantIds.map(() => '?').join(', ')})`
+        : ''
       const perCaseRows = this.db
         .prepare(
           `SELECT cva.*, v.chr AS _vchr, v.pos AS _vpos, v.ref AS _vref, v.alt AS _valt
@@ -265,15 +280,32 @@ export class AnnotationRepository extends BaseRepository {
            JOIN variants v ON v.id = cva.variant_id
            WHERE cva.case_id = ?
              AND v.case_id = ?
-             AND (v.chr, v.pos, v.ref, v.alt) IN (${coordPlaceholders})${idClause}`
+             AND (v.chr, v.pos, v.ref, v.alt) IN (${coordPlaceholders})${idClause}
+           ORDER BY cva.variant_id ASC`
         )
-        .all(caseId, caseId, ...coordParams, ...variantIds) as Array<
+        .all(caseId, caseId, ...coordParams, ...(allHaveVariantIds ? variantIds : [])) as Array<
         CaseVariantAnnotation & { _vchr: string; _vpos: number; _vref: string; _valt: string }
       >
+      // shortcut: getBatch returns a coordinate-keyed map per the IPC contract; prefer a matching requested variantId (#623).
       for (const row of perCaseRows) {
         const { _vchr, _vpos, _vref, _valt, ...cva } = row
         const key = `${_vchr}:${_vpos}:${_vref}:${_valt}`
-        if (key in result) result[key].perCase = cva
+        if (!(key in result)) continue
+        const perCase = cva as CaseVariantAnnotation
+        const requested = requestedVariantIdsByKey.get(key)
+        if (result[key].perCase !== null) {
+          if (requested) {
+            const currentVid = result[key].perCase.variant_id
+            const currentMatches = typeof currentVid === 'number' && requested.has(currentVid)
+            const newMatches =
+              typeof perCase.variant_id === 'number' && requested.has(perCase.variant_id)
+            if (!currentMatches && newMatches) {
+              result[key].perCase = perCase
+            }
+          }
+        } else {
+          result[key].perCase = perCase
+        }
       }
     }
 

@@ -5,7 +5,7 @@
  * (identity on SQLite, schema-qualified on PostgreSQL).
  */
 import type { SqlDialect } from './chromosome-order'
-import { resolvedGtSql } from './genotype-dosage'
+import { carrierRowSql, resolvedGtSql } from './genotype-dosage'
 
 /** Call metrics, each read from the case's chosen call (`call_rank = 1`). */
 const METRICS: ReadonlyArray<[expression: string, alias: string]> = [
@@ -50,6 +50,7 @@ export function cohortCarriersSql(
         JOIN ${table('cases')} c ON c.id = v.case_id
        WHERE ${ready}v.chr = ${chr} AND v.pos = ${pos} AND v.ref = ${ref} AND v.alt = ${alt}
          AND v.variant_type = ${type} AND c.genome_build = ${build}
+         AND ${carrierRowSql('v')}
     ) r
     LEFT JOIN ${table('variant_sv')} sv ON sv.variant_id = r.id
     LEFT JOIN ${table('variant_cnv')} cnv ON cnv.variant_id = r.id

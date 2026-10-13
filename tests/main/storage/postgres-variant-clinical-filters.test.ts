@@ -73,6 +73,28 @@ describe('PostgreSQL clinical variant filters', () => {
     ])
   })
 
+  it('supports large panel interval lists with unnest when exceeding 500 intervals (#618)', async () => {
+    const { repo, calls, paramsByCall } = repoWithQueryCapture()
+    const intervals = Array.from({ length: 300 }, (_, i) => ({
+      chr: '1',
+      start: i * 100,
+      end: i * 100 + 50
+    }))
+    await repo.queryVariants(
+      {
+        case_id: 1,
+        panel_intervals: intervals
+      },
+      25
+    )
+
+    const sql = calls.join('\n')
+    expect(sql).toContain(
+      'EXISTS (SELECT 1 FROM unnest($2::text[], $3::bigint[], $4::bigint[]) AS pi(chr, start_pos, end_pos) WHERE v.chr = pi.chr AND v.pos <= pi.end_pos AND COALESCE(v.end_pos, v.pos) >= pi.start_pos)'
+    )
+    expect(paramsByCall[0]).toHaveLength(4)
+  })
+
   it('filters by case-scoped variant tags with a bigint array parameter', async () => {
     const { repo, calls, paramsByCall } = repoWithQueryCapture()
     await repo.queryVariants({ case_id: 1, tag_ids: [7, 8] }, 25)

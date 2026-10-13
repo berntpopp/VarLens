@@ -55,6 +55,8 @@ const SORTABLE_COLUMNS: Record<string, string> = {
 // prettier-ignore
 const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred', 'end_pos', 'sv_length'])
 
+const GET_CARRIERS_SQL = cohortCarriersSql('sqlite')
+
 /**
  * Rows of `cvs` overlapping any region of one JSON parameter, i.e.
  * `chr = c AND pos <= end AND COALESCE(end_pos, pos) >= start` (a spanning
@@ -329,25 +331,16 @@ export class CohortService {
    * Get cohort summary statistics
    */
   getCohortSummary(): CohortSummary {
-    // Total cases
-    const totalCases = (
-      this.db
-        .prepare("SELECT COUNT(*) as count FROM cases WHERE import_status = 'ready'")
-        .get() as {
-        count: number
-      }
-    ).count
-
-    // Total variant observations of ready cases: the maintained per-case
-    // counts (kept in each import's and append's transaction, #551), not a
-    // scan of every variant row (#560).
-    const totalVariants = (
-      this.db
-        .prepare(
-          "SELECT COALESCE(SUM(variant_count), 0) AS count FROM cases WHERE import_status = 'ready'"
-        )
-        .get() as { count: number }
-    ).count
+    // Total cases and maintained per-case variant counts (#551, #560, #618).
+    // Only zero-count cases touch `variants` via `idx_variants_case_id` (for
+    // fixtures that insert rows without updating `cases.variant_count`).
+    const caseCounts = this.db
+      .prepare(
+        "SELECT COUNT(*) as total_cases, COALESCE(SUM(variant_count), 0) + (SELECT COUNT(*) FROM variants v JOIN cases c ON c.id = v.case_id WHERE COALESCE(c.import_status, 'ready') = 'ready' AND c.variant_count = 0) AS total_variants FROM cases WHERE COALESCE(import_status, 'ready') = 'ready'"
+      )
+      .get() as { total_cases: number; total_variants: number }
+    const totalCases = caseCounts.total_cases
+    const totalVariants = caseCounts.total_variants
 
     // Unique variants: distinct (chr, pos, ref, alt), from the maintained exact counter.
     const uniqueVariants = readUniqueVariantCount(this.db)
@@ -355,7 +348,7 @@ export class CohortService {
     // Genes with variants — read from pre-computed summary
     const genesResult = this.db
       .prepare(
-        'SELECT COUNT(DISTINCT gene_symbol) as count FROM cohort_variant_summary WHERE gene_symbol IS NOT NULL'
+        "SELECT COUNT(DISTINCT gene_symbol) as count FROM cohort_variant_summary WHERE gene_symbol IS NOT NULL AND gene_symbol != ''"
       )
       .get() as { count: number }
     const genesWithVariants = genesResult.count
@@ -439,7 +432,7 @@ export class CohortService {
    * genome build, so both are part of the lookup (#503).
    */
   getCarriers(variant: CohortVariantIdentity): CohortCarrier[] {
-    return this.getStatement(cohortCarriersSql('sqlite')).all(
+    return this.getStatement(GET_CARRIERS_SQL).all(
       variant.chr,
       variant.pos,
       variant.ref,

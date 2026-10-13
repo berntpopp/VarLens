@@ -133,4 +133,23 @@ describe('import worker: FTS upkeep per session (#559)', () => {
     )
     expect(hits('NEWC')).toEqual({ indexed: 1, stored: 1 })
   })
+
+  it('retains FTS triggers on a clean small import without tearing them down (#612)', async () => {
+    await populate()
+    let triggersExistedDuringInsert = false
+
+    const messages = await h.run([h.file('clean', [variantAt(500, 'CLEANGENE')])], {
+      onMessage: (m) => {
+        if (m.type === 'progress' && m.phase === 'inserting') {
+          triggersExistedDuringInsert = fts.ftsTriggersComplete(h.db)
+        }
+      }
+    })
+
+    expect(sessionStatuses(messages)).toEqual(['clean:success'])
+    expect(triggersExistedDuringInsert).toBe(true)
+    expect(fts.rebuildAllFtsIndexes).not.toHaveBeenCalled()
+    expect(hits('CLEANGENE')).toEqual({ indexed: 1, stored: 1 })
+    expect(fts.ftsTriggersComplete(h.db)).toBe(true)
+  })
 })

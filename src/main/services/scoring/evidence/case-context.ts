@@ -33,7 +33,13 @@ export interface DerivedFields {
   gene_hits: number
   /** IDs of the other het alleles in the gene; empty unless the row is het. */
   partners: number[]
+  /** Alias for partners (lazy compound-het partner IDs). */
+  readonly compoundHetPartnerVariantIds?: number[]
 }
+
+export type CaseAlleleLookup = DerivedFields
+export const lookupCaseContext = (ctx: GeneContext, row: LightRow): DerivedFields =>
+  ctx.derived(row)
 
 export interface GeneContext {
   info: CaseInfo
@@ -124,14 +130,38 @@ export class GeneContextBuilder {
             ? undefined
             : genes.get(row.gene_symbol)
         if (entry === undefined) {
-          return { zygosity, gene_het_hits: zygosity === 'het' ? 1 : 0, gene_hits: 1, partners: [] }
+          const empty: number[] = []
+          return {
+            zygosity,
+            gene_het_hits: zygosity === 'het' ? 1 : 0,
+            gene_hits: 1,
+            partners: empty,
+            compoundHetPartnerVariantIds: empty
+          }
         }
-        const own = alleleKey(row)
-        const partners =
-          zygosity === 'het'
-            ? [...entry.het.entries()].filter(([key]) => key !== own).map(([, id]) => id)
-            : []
-        return { zygosity, gene_het_hits: entry.het.size, gene_hits: entry.all.size, partners }
+        let memoPartners: number[] | undefined
+        const computePartners = (): number[] => {
+          if (memoPartners !== undefined) return memoPartners
+          if (zygosity !== 'het') return (memoPartners = [])
+          const own = alleleKey(row)
+          const result: number[] = []
+          for (const [key, id] of entry.het.entries()) {
+            if (key !== own) result.push(id)
+          }
+          return (memoPartners = result)
+        }
+
+        return {
+          zygosity,
+          gene_het_hits: entry.het.size,
+          gene_hits: entry.all.size,
+          get partners(): number[] {
+            return computePartners()
+          },
+          get compoundHetPartnerVariantIds(): number[] {
+            return computePartners()
+          }
+        }
       }
     }
   }

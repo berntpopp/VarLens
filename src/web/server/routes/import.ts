@@ -1,6 +1,7 @@
 import { isAbsolute } from 'node:path'
 
 import {
+  assertNoActiveImport,
   cancelImport,
   getVcfMultiPreview,
   getVcfPreview,
@@ -142,10 +143,11 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
             : serverPathImportDisabledResponse()
         }
 
+        assertNoActiveImport()
+
         const userId = request.session?.user?.id
-        if (userId !== undefined) {
-          events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
-        }
+        events.publish(undefined, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
+        const stalePublished = true
         const releaseUploads = holdWebUploads([validatedFilePath.data])
         let imported = false
         try {
@@ -166,8 +168,8 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           return result
         } finally {
           releaseUploads(imported)
-          if (userId !== undefined) {
-            events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
+          if (stalePublished) {
+            events.publish(undefined, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }
         }
       }
@@ -252,10 +254,11 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           }
         }
 
+        assertNoActiveImport()
+
         const userId = request.session?.user?.id
-        if (userId !== undefined) {
-          events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
-        }
+        events.publish(undefined, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: true })
+        const stalePublished = true
         const releaseUploads = holdWebUploads([
           ...pathToRef.values(),
           (filters as { bedFile?: unknown } | null | undefined)?.bedFile
@@ -286,8 +289,8 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
           }
         } finally {
           releaseUploads(imported)
-          if (userId !== undefined) {
-            events.publish(userId, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
+          if (stalePublished) {
+            events.publish(undefined, WEB_EVENT_COHORT_SUMMARY_REBUILT, { is_stale: false })
           }
         }
       }

@@ -135,7 +135,7 @@ describe.skipIf(!RUN)('per-gene cohort aggregates', () => {
             SELECT 1 FROM ${t('variants')} v GROUP BY v.chr, v.pos, v.ref, v.alt
           ) unique_variants) AS unique_variants,
          (SELECT COUNT(DISTINCT v.gene_symbol)::bigint FROM ${t('variants')} v
-           WHERE v.gene_symbol IS NOT NULL) AS genes_with_variants`
+           WHERE v.gene_symbol IS NOT NULL AND v.gene_symbol <> '') AS genes_with_variants`
     )
     return {
       total_variants: Number(res.rows[0].total_variants),

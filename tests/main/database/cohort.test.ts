@@ -733,6 +733,19 @@ describe('CohortService', () => {
       expect(summary.avg_variants_per_case).toBe(2)
       expect(summary.genes_with_variants).toBe(2)
     })
+
+    it('falls back to scanning variants when a case has variant_count = 0 (#618)', () => {
+      const caseId = insertCase('ZeroCountCase')
+      db.prepare(
+        `
+        INSERT INTO variants (case_id, chr, pos, ref, alt, gt_num)
+        VALUES (?, '1', 100, 'A', 'G', '0/1')
+      `
+      ).run(caseId)
+      rebuildSummary()
+      const summary = cohortService.getCohortSummary()
+      expect(summary.total_variants).toBe(1)
+    })
   })
 
   describe('getCarriers', () => {
@@ -761,6 +774,26 @@ describe('CohortService', () => {
 
       const patientB = carriers.find((c) => c.case_name === 'Patient B')
       expect(patientB?.gt_num).toBe('1/1')
+    })
+
+    it('excludes structural ./. no-call rows from carriers list (#618)', () => {
+      const case1 = insertCase('Patient Carrier')
+      const case2 = insertCase('Patient NoCall')
+
+      insertVariant(case1, '1', 54321, 'A', 'G', { gt_num: '0/1' })
+      insertVariant(case2, '1', 54321, 'A', 'G', { gt_num: './.' })
+
+      const carriers = cohortService.getCarriers({
+        chr: '1',
+        pos: 54321,
+        ref: 'A',
+        alt: 'G',
+        variant_type: 'snv',
+        genome_build: 'GRCh38'
+      })
+
+      expect(carriers.length).toBe(1)
+      expect(carriers[0].case_name).toBe('Patient Carrier')
     })
   })
 
@@ -1089,6 +1122,28 @@ describe('CohortService', () => {
 
       expect(result.data.some((r) => r.pos === 300)).toBe(true)
       expect(result.data.some((r) => r.pos === 400)).toBe(false)
+    })
+
+    it('non-carrier with extension row does not match cohort carrier extension filter (#618)', () => {
+      const caseId = insertCase('Case NoCall CNV')
+      db.prepare(
+        "INSERT INTO variants (case_id, chr, pos, ref, alt, variant_type, gt_num) VALUES (?, '1', 500, 'N', '<CNV>', 'cnv', './.')"
+      ).run(caseId)
+      const vId = (
+        db.prepare('SELECT id FROM variants WHERE case_id = ? AND pos = 500').get(caseId) as {
+          id: number
+        }
+      ).id
+      db.prepare('INSERT INTO variant_cnv (variant_id, copy_number) VALUES (?, 4)').run(vId)
+
+      rebuildSummary()
+
+      const result = cohortService.getCohortVariants({
+        column_filters: { 'cnv.copy_number': { operator: '>=', value: 3 } },
+        variant_type: 'cnv'
+      })
+
+      expect(result.data.some((r) => r.pos === 500)).toBe(false)
     })
   })
 })
