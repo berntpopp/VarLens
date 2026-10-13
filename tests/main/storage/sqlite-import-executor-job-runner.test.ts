@@ -24,8 +24,7 @@ import { jobRunner } from '../../../src/main/services/jobs/runner'
 function makeDb() {
   return {
     getPath: () => '/tmp/test.varlens',
-    getEncryptionKey: () => undefined,
-    variants: { updateFrequencies: vi.fn() }
+    getEncryptionKey: () => undefined
   } as never
 }
 

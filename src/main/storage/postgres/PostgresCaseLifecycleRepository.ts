@@ -84,14 +84,12 @@ const DELETING_NAME_PREFIX = '__deleting__:'
 /**
  * Case deletion without global locks (2026-10 blocking audit, W-1).
  *
- * The old single-transaction delete TRUNCATEd and rebuilt `variant_frequency`
- * (ACCESS EXCLUSIVE: every `variants:query` joins it, so every web user
- * blocked) and cascade-deleted the whole case in one statement. Now:
+ * The old single-transaction delete TRUNCATEd and rebuilt a frequency table
+ * (ACCESS EXCLUSIVE, so every web user blocked) and cascade-deleted the whole case in one statement. Now:
  *
  *   1. `hideCase` — ONE short transaction, row locks only: annotation flags,
- *      cohort-summary carrier/het/hom subtraction, zero-carrier cleanup and
- *      the variant_frequency decrement are all scoped to the case's own
- *      coordinates; column metas are dropped; the row is renamed (freeing the
+ *      cohort-summary carrier/het/hom subtraction and zero-carrier cleanup
+ *      are scoped to the case's own coordinates; column metas are dropped; the row is renamed (freeing the
  *      UNIQUE name for re-import) and flipped to import_status='deleting'.
  *      The `cases` / `variants` views (migration 0015) hide it from every
  *      reader at commit. Doing the summary maths in the same transaction as
@@ -353,24 +351,6 @@ export class PostgresCaseLifecycleRepository {
     if (!(await summaryAwaitsRebuild({ schema: this.schema, client }))) {
       await this.subtractCaseFromSummaries(client, caseId)
     }
-
-    const tbl = (t: string): string => this.tbl(t)
-    // variant_frequency: symmetric decrement of rebuildVariantFrequencyForCase
-    // (one count per distinct coordinate per case) — replaces TRUNCATE+rebuild.
-    const caseCoords = `SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1`
-    await client.query(
-      `UPDATE ${tbl('variant_frequency')} vf
-          SET case_count = vf.case_count - 1
-         FROM (${caseCoords}) coords
-        WHERE vf.coord_hash = coords.coord_hash`,
-      [caseId]
-    )
-    await client.query(
-      `DELETE FROM ${tbl('variant_frequency')} vf
-        USING (${caseCoords}) coords
-        WHERE vf.coord_hash = coords.coord_hash AND vf.case_count <= 0`,
-      [caseId]
-    )
 
     await this.summary.removeColumnMetas({
       schema: this.schema,

@@ -22,9 +22,6 @@ import { getWebGeneReferenceService } from '../web-gene-reference'
 import { badRequest } from './common'
 import type { OverrideHandler } from './types'
 
-/** Web has no per-process panel interval cache to invalidate. */
-const NO_CACHE = { clearPanelIntervalCache: () => undefined }
-
 export function buildPanelOverrides(): Record<string, OverrideHandler> {
   return {
     'panels:get': {
@@ -130,8 +127,7 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
               deps.session,
               parsed.data,
               getWebGeneReferenceService(),
-              clients.panelApp(),
-              NO_CACHE
+              clients.panelApp()
             )
         })
       }
@@ -155,8 +151,7 @@ export function buildPanelOverrides(): Record<string, OverrideHandler> {
               deps.session,
               parsed.data,
               getWebGeneReferenceService(),
-              clients.stringDb(),
-              NO_CACHE
+              clients.stringDb()
             )
         })
       }

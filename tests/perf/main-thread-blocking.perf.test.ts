@@ -24,7 +24,6 @@ import { Worker } from 'node:worker_threads'
 import { createRequire } from 'node:module'
 import AdmZip from 'adm-zip'
 import { DatabaseService } from '../../src/main/database/DatabaseService'
-import { VariantFrequencyService } from '../../src/main/database/VariantFrequencyService'
 import { ZipExtractor } from '../../src/main/import/ZipExtractor'
 import {
   extractZipOffThread,
@@ -149,7 +148,6 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
   const results: Measurement[] = []
   let dir: string
   let db: DatabaseService
-  let caseIds: number[]
   let workers: Record<'delete' | 'export' | 'write' | 'zip', string>
 
   beforeAll(async () => {
@@ -161,9 +159,7 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
     }
     dir = mkdtempSync(join(tmpdir(), 'varlens-blocking-perf-'))
     db = new DatabaseService(join(dir, 'perf.db'))
-    caseIds = seedCases(db, 1, CASES)
-    const frequencies = new VariantFrequencyService(db.database)
-    for (const id of caseIds) frequencies.updateFrequencies(id)
+    seedCases(db, 1, CASES)
     rebuildCohortSummary(db.database)
   }, 600_000)
 
@@ -202,28 +198,6 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
     )
   })
 
-  it('frequency upkeep after import (one case)', async () => {
-    const frequencies = new VariantFrequencyService(db.database)
-    const id = caseIds[0]
-    frequencies.decrementFrequencies(id)
-    // After this PR the statement runs inside the import worker's own
-    // transaction; the main thread executes nothing for it (no after row).
-    results.push(
-      await measure('frequency upkeep: updateFrequencies(case)', 'before (inline on main)', () =>
-        frequencies.updateFrequencies(id)
-      )
-    )
-  }, 600_000)
-
-  it('frequency upkeep after batch delete (recompute all)', async () => {
-    const frequencies = new VariantFrequencyService(db.database)
-    results.push(
-      await measure('frequency upkeep: recomputeAllFrequencies()', 'before (inline on main)', () =>
-        frequencies.recomputeAllFrequencies()
-      )
-    )
-  }, 600_000)
-
   it('cohort export (XLSX)', async () => {
     const params = { genome_build: 'GRCh38' } as never
     results.push(
@@ -252,11 +226,9 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
 
   it('case delete (one case)', async () => {
     const before = seedCases(db, 1000, 1)[0]
-    new VariantFrequencyService(db.database).updateFrequencies(before)
     results.push(
       await measure('case delete (1 case)', 'before (inline on main)', async () => {
-        // Pre-PR: decrement on main, then the delete worker.
-        db.variants.decrementFrequencies(before)
+        // Pre-PR: the delete worker, awaited inline.
         await runDeleteWorker(
           { type: 'start', mode: 'ids', dbPath: db.getPath(), ids: [before] },
           { workerPath: workers.delete }
@@ -264,7 +236,6 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
       })
     )
     const after = seedCases(db, 2000, 1)[0]
-    new VariantFrequencyService(db.database).updateFrequencies(after)
     results.push(
       await measure(
         'case delete (1 case)',

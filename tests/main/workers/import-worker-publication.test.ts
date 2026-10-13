@@ -2,7 +2,7 @@
 /**
  * The import worker's side of case publication (`cases.import_status`): a file
  * is reported done only with its case 'ready', a file that failed or was
- * cancelled leaves no case behind, and a case counts in `variant_frequency`
+ * cancelled leaves no case behind, and a case counts in the cohort summary
  * from exactly the moment it is published.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -36,8 +36,6 @@ describe('import worker: case publication', () => {
 
   const statuses = (): unknown[] =>
     h.db.prepare('SELECT name, import_status FROM cases ORDER BY name').all()
-  const frequencies = (): unknown[] =>
-    h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
 
   it('reports a file done with its case ready when the summary merge throws', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
@@ -64,14 +62,11 @@ describe('import worker: case publication', () => {
     expect(messages.some((m) => m.type === 'summary-stale')).toBe(true)
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
-    expect(h.db.prepare('SELECT case_count FROM variant_frequency WHERE pos = 100').get()).toEqual({
-      case_count: 2
-    })
   })
 
   it('fails the file and deletes its case when the case cannot be published', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const before = { summary: snapshotSummary(h.db) }
     h.db.exec(BREAK_PUBLICATION)
 
     const messages = await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])])
@@ -81,14 +76,13 @@ describe('import worker: case publication', () => {
     expect(messages.some((m) => m.type === 'file-complete')).toBe(false)
     expect(statuses()).toEqual([{ name: 'A', import_status: 'ready' }])
     expect(h.db.prepare('SELECT COUNT(*) AS c FROM variants').get()).toEqual({ c: 2 })
-    expect(frequencies()).toEqual(before.frequencies)
     expect(snapshotSummary(h.db)).toEqual(before.summary)
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
   })
 
   it('deletes a cancelled case instead of leaving it provisional', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
-    const before = frequencies()
+    const before = snapshotSummary(h.db)
     let cancelled = false
 
     const messages = await h.run(
@@ -104,11 +98,11 @@ describe('import worker: case publication', () => {
 
     expect(sessionStatuses(messages)).toEqual(['B:skipped'])
     expect(statuses()).toEqual([{ name: 'A', import_status: 'ready' }])
-    expect(frequencies()).toEqual(before)
+    expect(snapshotSummary(h.db)).toEqual(before)
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
   })
 
-  it('does not count a case in variant_frequency before it is published', async () => {
+  it('does not count a case in the cohort summary before it is published', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
     const seen: Array<{ status: string; count: number }> = []
 
@@ -119,13 +113,13 @@ describe('import worker: case publication', () => {
         const b = h.db.prepare("SELECT import_status FROM cases WHERE name = 'B'").get() as
           { import_status: string } | undefined
         const f = h.db
-          .prepare('SELECT case_count FROM variant_frequency WHERE pos = 100')
-          .get() as { case_count: number }
-        if (b !== undefined) seen.push({ status: b.import_status, count: f.case_count })
+          .prepare('SELECT carrier_count FROM cohort_variant_summary WHERE pos = 100')
+          .get() as { carrier_count: number }
+        if (b !== undefined) seen.push({ status: b.import_status, count: f.carrier_count })
       }
     })
 
-    // Internal AF = case_count / ready cases: both move in one commit.
+    // Carrier frequency = carrier_count / ready cases: both move in one commit.
     expect(seen.length).toBeGreaterThan(1)
     for (const s of seen) expect(s.count).toBe(s.status === 'ready' ? 2 : 1)
     expect(seen.at(-1)).toEqual({ status: 'ready', count: 2 })

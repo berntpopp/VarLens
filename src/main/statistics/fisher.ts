@@ -10,22 +10,29 @@ import type { FisherResult } from './types'
 export function fisherExactTest(a: number, b: number, c: number, d: number): FisherResult {
   const n = a + b + c + d
   if (n === 0) {
-    return { p_value: null, odds_ratio: null, ci_lower: null, ci_upper: null }
+    return {
+      p_value: null,
+      odds_ratio: null,
+      odds_ratio_infinite: false,
+      ci_lower: null,
+      ci_upper: null
+    }
   }
 
   const r1 = a + b
   const c1 = a + c
 
   // Two-sided p-value via hypergeometric enumeration
-  const pObserved = hypergeometricPmf(a, n, c1, r1)
+  // Compared in log space with R's relative tolerance: an absolute epsilon swamps tiny p-values.
+  const logPObserved = logHypergeometricPmf(a, n, c1, r1) + Math.log1p(1e-7)
   let pValue = 0
   const minA = Math.max(0, r1 - (b + d))
   const maxA = Math.min(r1, c1)
 
   for (let x = minA; x <= maxA; x++) {
-    const px = hypergeometricPmf(x, n, c1, r1)
-    if (px <= pObserved + 1e-14) {
-      pValue += px
+    const logPx = logHypergeometricPmf(x, n, c1, r1)
+    if (logPx <= logPObserved) {
+      pValue += Math.exp(logPx)
     }
   }
   pValue = Math.min(pValue, 1.0)
@@ -37,11 +44,17 @@ export function fisherExactTest(a: number, b: number, c: number, d: number): Fis
   // CI with Haldane-Anscombe correction
   const { ci_lower, ci_upper } = computeOddsRatioCI(a, b, c, d)
 
-  return { p_value: pValue, odds_ratio: oddsRatio, ci_lower, ci_upper }
+  return {
+    p_value: pValue,
+    odds_ratio: oddsRatio,
+    odds_ratio_infinite: oddsRatio === Infinity,
+    ci_lower,
+    ci_upper
+  }
 }
 
-function hypergeometricPmf(k: number, N: number, K: number, n: number): number {
-  return Math.exp(logChoose(K, k) + logChoose(N - K, n - k) - logChoose(N, n))
+function logHypergeometricPmf(k: number, N: number, K: number, n: number): number {
+  return logChoose(K, k) + logChoose(N - K, n - k) - logChoose(N, n)
 }
 
 function logChoose(n: number, k: number): number {

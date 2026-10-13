@@ -12,7 +12,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { registerIpcHandlers, destroyDbPool } from './ipc'
+import { registerIpcHandlers } from './ipc'
 import {
   initDatabaseManager,
   initDatabaseManagerSafe,
@@ -30,6 +30,9 @@ import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 import { beginDatabaseStartup, completeDatabaseStartup } from './database/startup-gate'
 import { openDefaultDatabaseAfterWindow, startSqliteHousekeeping } from './startup-sequence'
 import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
+import { installQuitCleanup } from './quit-cleanup'
+import { sweepStaleZipTempDirs } from './import/TempDirectoryManager'
+import { cleanupAllZipExtractions } from './ipc/handlers/batch-import-logic'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -184,6 +187,9 @@ if (gotTheLock !== true) {
     )
     mainLogger.info(`Log file: ${mainLogger.getLogFilePath()}`, 'app')
 
+    // Decrypted ZIP extractions a crash left behind; safe under the single-instance lock.
+    sweepStaleZipTempDirs()
+
     // Log GPU feature status for diagnosing 3D viewer / WebGL issues on Windows
     try {
       const gpuStatus = app.getGPUFeatureStatus()
@@ -327,20 +333,11 @@ if (gotTheLock !== true) {
     })
   })
 
-  // Clean up database and worker pool on quit
-  app.on('before-quit', () => {
-    destroyDbPool().catch((e) => {
-      mainLogger.warn(
-        `DbPool destruction failed during quit: ${e instanceof Error ? e.message : String(e)}`,
-        'app'
-      )
-    })
-    closeDatabaseManager().catch((e) => {
-      mainLogger.warn(
-        `DatabaseManager close failed during quit: ${e instanceof Error ? e.message : String(e)}`,
-        'app'
-      )
-    })
+  // Hold the quit until ZIP extractions are removed and the database closed
+  // (the session owns its worker pool).
+  installQuitCleanup(app, async () => {
+    cleanupAllZipExtractions()
+    await closeDatabaseManager()
   })
 
   // Quit when all windows are closed, except on macOS. There, it's common

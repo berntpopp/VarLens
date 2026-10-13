@@ -114,7 +114,6 @@ describe('import session cancellation via the injected isCancelled', () => {
     try {
       expect(db.prepare('SELECT name FROM cases').all()).toEqual([])
       expect(db.prepare('SELECT COUNT(*) AS n FROM variants').get()).toEqual({ n: 0 })
-      expect(db.prepare('SELECT COUNT(*) AS n FROM variant_frequency').get()).toEqual({ n: 0 })
     } finally {
       db.close()
     }

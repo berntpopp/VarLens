@@ -5,17 +5,15 @@
  * into a reusable composable with explicit return types.
  *
  * Provides:
- * - Variant fetching with pagination and filtering
- * - Loading state management
- * - Error handling via ref (consumer decides how to display)
+ * - Page queries with keyset cursors (the table's pager owns rows and loading state)
  * - Summary staleness tracking via IPC listener
  * - Reset method for database context changes
  *
  * SOL-02: Centralized cohort data management for CohortTable.vue.
  */
 
-import { ref, shallowRef, markRaw, inject, watch } from 'vue'
-import type { Ref, ShallowRef, InjectionKey } from 'vue'
+import { ref, inject, watch } from 'vue'
+import type { Ref, InjectionKey } from 'vue'
 import { watchSummaryFreshness } from './useSummaryFreshness'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
@@ -85,14 +83,6 @@ export interface CohortQueryResult {
 }
 
 export interface UseCohortDataReturn {
-  /** Array of cohort variants */
-  variants: ShallowRef<CohortVariant[]>
-  /** Total count for pagination */
-  totalCount: Ref<number>
-  /** Loading state */
-  isLoading: Ref<boolean>
-  /** Error state - consumer decides how to display */
-  error: Ref<Error | null>
   /** Whether the cohort summary is stale (being rebuilt) */
   summaryStale: Ref<boolean>
   /** Current rebuild phase key (e.g. 'variant_summary'). Null when not rebuilding. */
@@ -117,8 +107,6 @@ export interface UseCohortDataReturn {
   buildIpcParams: (params: CohortQueryParams) => Record<string, unknown>
   /** Query one page (keyset cursor aware) without touching reactive state */
   queryPage: (params: CohortQueryParams) => Promise<CohortQueryResult>
-  /** Fetch variants and update reactive state */
-  fetchVariants: (params: CohortQueryParams) => Promise<void>
   /** Fetch column metadata for filter auto-detection */
   fetchColumnMeta: () => Promise<void>
   /** Reset all state (for database context changes) */
@@ -153,10 +141,6 @@ export function useCohortData(): UseCohortDataReturn {
   const { api } = useApiService()
 
   // State refs
-  const variants = shallowRef<CohortVariant[]>([])
-  const totalCount = ref(0)
-  const isLoading = ref(false)
-  const error = ref<Error | null>(null)
   const summaryStale = ref(false)
   // Phase progress state — populated when the main-side worker emits
   // progress events between SQL statements. When a rebuild completes these
@@ -173,10 +157,6 @@ export function useCohortData(): UseCohortDataReturn {
   const genomeBuild = ref<string>('GRCh38')
   const selectedVariantType = ref<string>('snv')
   const availableBuilds = ref<AvailableBuild[]>([])
-
-  // Generation counter and filter cache for count optimization
-  let requestGeneration = 0
-  let cachedFilterHash = ''
 
   // Activation state for <keep-alive> gating
   const isActive = ref(true)
@@ -395,7 +375,7 @@ export function useCohortData(): UseCohortDataReturn {
    * carrier-count sort): the cursor the previous page returned for this
    * offset + query scope is sent along, and the cursor this page returns is
    * kept for the next one. Touches no reactive state, so any pager (the
-   * table's offset pagination and its prefetch, `fetchVariants`) can use it.
+   * table's offset pagination and its prefetch) can use it.
    * A stale or unsupported cursor is ignored by the backend (OFFSET fallback).
    */
   const queryPage = async (params: CohortQueryParams): Promise<CohortQueryResult> => {
@@ -425,73 +405,6 @@ export function useCohortData(): UseCohortDataReturn {
   }
 
   /**
-   * Fetch variants and update reactive state.
-   * Uses generation counter to discard stale responses and count caching
-   * to skip COUNT queries on pagination/sort changes.
-   */
-  const fetchVariants = async (params: CohortQueryParams): Promise<void> => {
-    if (!api) {
-      logService.warn('API not available - running outside Electron', 'cohort')
-      return
-    }
-
-    const thisGeneration = ++requestGeneration
-    isLoading.value = true
-    error.value = null
-
-    try {
-      // Determine if filters changed (exclude pagination/sort params).
-      // genome_build and variant_type are part of the filter identity — changing
-      // either one must invalidate the cached count so totals recompute.
-      const filterHash = JSON.stringify({
-        search_term: params.search_term,
-        gene_symbol: params.gene_symbol,
-        consequences: params.consequences,
-        funcs: params.funcs,
-        clinvars: params.clinvars,
-        gnomad_af_max: params.gnomad_af_max,
-        cadd_min: params.cadd_min,
-        max_internal_af: params.max_internal_af,
-        carrier_count_min: params.carrier_count_min,
-        carrier_count_max: params.carrier_count_max,
-        starred_only: params.starred_only,
-        has_comment: params.has_comment,
-        acmg_classifications: params.acmg_classifications,
-        column_filters: params.column_filters,
-        active_panel_ids: params.active_panel_ids,
-        panel_padding_bp: params.panel_padding_bp,
-        genome_build: params.genome_build ?? genomeBuild.value,
-        variant_type: params.variant_type ?? selectedVariantType.value
-      })
-      const filtersChanged = filterHash !== cachedFilterHash
-
-      // Skip the COUNT when the filters are the ones already counted.
-      const result = await queryPage(filtersChanged ? params : { ...params, _count_needed: false })
-
-      // Discard stale responses from superseded requests
-      if (thisGeneration !== requestGeneration) return
-
-      variants.value = markRaw(result.data)
-      if (filtersChanged) {
-        totalCount.value = result.total_count
-        cachedFilterHash = filterHash
-      }
-    } catch (err) {
-      if (thisGeneration !== requestGeneration) return
-      error.value =
-        err instanceof Error
-          ? err
-          : new Error(isIpcError(err) ? (err.userMessage ?? err.message) : String(err))
-      variants.value = []
-      totalCount.value = 0
-    } finally {
-      if (thisGeneration === requestGeneration) {
-        isLoading.value = false
-      }
-    }
-  }
-
-  /**
    * Fetch per-column metadata for filter UI auto-detection
    */
   const fetchColumnMeta = async (): Promise<void> => {
@@ -518,9 +431,6 @@ export function useCohortData(): UseCohortDataReturn {
    * Reset all state (for database context changes)
    */
   const reset = (): void => {
-    variants.value = []
-    totalCount.value = 0
-    error.value = null
     summaryStale.value = false
     rebuildPhase.value = null
     rebuildPhaseIndex.value = null
@@ -530,17 +440,11 @@ export function useCohortData(): UseCohortDataReturn {
     availableBuilds.value = []
     genomeBuild.value = 'GRCh38'
     selectedVariantType.value = 'snv'
-    cachedFilterHash = ''
-    requestGeneration = 0
     // Cursors belong to the database they were issued by.
     pageCursors.clear()
   }
 
   return {
-    variants,
-    totalCount,
-    isLoading,
-    error,
     summaryStale,
     rebuildPhase,
     rebuildPhaseIndex,
@@ -553,7 +457,6 @@ export function useCohortData(): UseCohortDataReturn {
     loadAvailableBuilds,
     buildIpcParams,
     queryPage,
-    fetchVariants,
     fetchColumnMeta,
     reset,
     cleanupListeners,

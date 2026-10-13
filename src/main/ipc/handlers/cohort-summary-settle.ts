@@ -14,8 +14,8 @@
  *    renderer is told at once that the cohort is stale, and told again when it
  *    is current;
  *  - if the summary is nevertheless out of date at the end (the worker's
- *    upkeep fell back and its own rebuild failed, the worker died, or rows
- *    were appended to a case behind the summary's back), the renderer is told
+ *    upkeep fell back and its own rebuild failed, or the worker died), the
+ *    renderer is told
  *    the truth and the existing rebuild worker repairs it.
  */
 import { mainLogger } from '../../services/MainLogger'
@@ -163,35 +163,4 @@ export async function settleAfterWorkerImport(
       'cohort'
     )
   }
-}
-
-/**
- * Rows are about to be added to an existing case outside the import worker
- * (multi-file append). Flag the summary BEFORE the first row: each append
- * commits on its own, and a crash after one of them must not leave variants
- * outside a summary that claims to be current.
- */
-export function markCohortSummaryStaleBeforeAppend(db: DatabaseService): void {
-  try {
-    db.cohortSummary.markStale()
-  } catch (e) {
-    mainLogger.warn(
-      `Failed to mark cohort summary stale: ${formatErrorMessage(e, 'unknown error')}`,
-      'cohort'
-    )
-  }
-}
-
-/**
- * Rows were added to an existing case outside the import worker (multi-file
- * append), so the summary no longer matches the variants: rebuild it. The
- * flag was set before the appends; it is set again here in case that failed.
- */
-export async function rebuildCohortSummaryAfterAppend(
-  db: DatabaseService,
-  emit: EmitCohortStale | undefined,
-  rebuild?: RebuildCohortSummary
-): Promise<void> {
-  markCohortSummaryStaleBeforeAppend(db)
-  await rebuildCohortSummaryAndNotify(db, emit, rebuild)
 }

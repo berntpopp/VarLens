@@ -11,7 +11,7 @@ const spawnRebuildWorker = vi.hoisted(() => vi.fn())
 vi.mock('../../../src/main/ipc/handlers/cohort-logic', () => ({ spawnRebuildWorker }))
 vi.mock('../../../src/main/ipc/handlers/import-logic-append', () => ({
   detectGenomeBuildFromFile: vi.fn(async () => null),
-  importAdditionalFileToCase: vi.fn()
+  appendFilesInWorker: vi.fn()
 }))
 
 const { startImport, startMultiFileImport } =

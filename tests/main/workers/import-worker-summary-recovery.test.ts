@@ -102,9 +102,7 @@ describe('import worker: cohort summary recovery', () => {
 
   it('takes a merged case out of the summary again when reporting it fails', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const frequencies = (): unknown[] =>
-      h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const before = { summary: snapshotSummary(h.db) }
 
     // B is inserted and merged; then telling the main process throws.
     const messages = await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])], {
@@ -117,7 +115,6 @@ describe('import worker: cohort summary recovery', () => {
     expect(h.db.prepare("SELECT 1 FROM cases WHERE name = 'B'").get()).toBeUndefined()
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
     expect(snapshotSummary(h.db)).toEqual(before.summary)
-    expect(frequencies()).toEqual(before.frequencies)
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
   })
 
@@ -152,12 +149,6 @@ describe('import worker: cohort summary recovery', () => {
     ])
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
-    expect(
-      h.db.prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
-    ).toEqual([
-      { pos: 100, case_count: 1 },
-      { pos: 400, case_count: 1 }
-    ])
   })
 
   it('tells the main process when it stops keeping the summary current', async () => {

@@ -258,19 +258,9 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
     inInsertTransaction?.()
   })
 
-  /**
-   * Drop FTS triggers before a bulk insert session.
-   * The worker-level DROP_FTS_TRIGGERS already runs at session start,
-   * but this method mirrors the VariantRepository API for per-file control.
-   */
-  function beginBulkInsert(): void {
-    db.exec(DROP_FTS_TRIGGERS)
-  }
-
   function finishBulkInsert(caseId: number, totalInserted: number): void {
-    // QW-11: Per-file FTS rebuild + trigger recreate removed (audit Perf-01 #8).
-    // Session-end rebuildFts(db) in import-worker.ts handles the single FTS
-    // rebuild for the whole import session.
+    // FTS is the session's business (import-worker.ts): row triggers, or one
+    // rebuild at the end of a bulk session.
     updateVariantCountStmt.run(totalInserted, caseId)
   }
 
@@ -294,7 +284,6 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
       }
     },
     insertBatch,
-    beginBulkInsert,
     finishBulkInsert
   }
 }

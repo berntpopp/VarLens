@@ -6,7 +6,6 @@
  *
  *   - the deduped per-case UPDATE subtracts carrier/het/hom together,
  *   - zero-carrier rows are deleted,
- *   - variant_frequency.case_count is rebuilt after the cascade,
  *   - cohort_frequency denominators exclude the deleted case,
  *   - cohort_column_meta rows for the deleted case are gone,
  *   - a sibling case's summary contributions survive.
@@ -26,7 +25,6 @@ import {
   lockSummaryForWrite,
   tryLockSummaryForWrite
 } from '../../../src/main/storage/postgres/cohort-summary-lock'
-import { rebuildVariantFrequencyForCase } from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
 import { COHORT_FREQUENCY_SELECT, summaryWithFrequencyFrom } from './helpers/cohort-read-frequency'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
@@ -99,9 +97,6 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
       await client.query('BEGIN')
       await summary.incrementalAdd({ schema, client: client as never, caseId, genomeBuild })
       await summary.refreshColumnMetas({ schema, client: client as never, caseId })
-      // Imports maintain variant_frequency per case; deletion decrements it
-      // symmetrically instead of rebuilding the whole table.
-      await rebuildVariantFrequencyForCase(client, schema, caseId)
       await client.query('COMMIT')
     } finally {
       ;(client as { release: () => void }).release()
@@ -199,7 +194,7 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
     expect(Number(after.rows[0].cohort_frequency)).toBeCloseTo(1.0)
   }, 60_000)
 
-  it('decrements variant_frequency and drops the deleted case and its variants', async () => {
+  it('drops the deleted case and its variants', async () => {
     const caseA = await seedCase('vf-a')
     const caseB = await seedCase('vf-b')
     await seedVariant({ caseId: caseA, chr: '1', pos: 100, ref: 'A', alt: 'T', gtNum: '0/1' })
@@ -210,14 +205,6 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository.deleteCase — Sprint A C
 
     const repo = new PostgresCaseLifecycleRepository(pool, schema)
     await repo.deleteCase(caseA)
-
-    // variant_frequency.case_count powers internal_af — must reflect 1 case now.
-    const vf = await probe.query<{ case_count: string }>(
-      `SELECT case_count FROM "${schema}".variant_frequency
-         WHERE chr = '1' AND pos = 100 AND ref = 'A' AND alt = 'T'`
-    )
-    expect(vf.rows).toHaveLength(1)
-    expect(Number(vf.rows[0].case_count)).toBe(1)
 
     // Case row + cascade-deleted variants gone.
     const caseGone = await probe.query(`SELECT 1 FROM "${schema}".cases WHERE id = $1`, [caseA])
@@ -302,12 +289,6 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
          SELECT $1, '1', g, 'A', 'T', 'snv', '0/1' FROM generate_series(1, $2::int) g`,
       [caseId, count]
     )
-    const client = await pool.connect()
-    try {
-      await rebuildVariantFrequencyForCase(client, schema, caseId)
-    } finally {
-      client.release()
-    }
     return caseId
   }
 
@@ -331,9 +312,6 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
       [caseId]
     )
     expect(Number(stored.rows[0].n)).toBe(50)
-    // variant_frequency already reflects the deletion.
-    const vf = await probe.query(`SELECT 1 FROM "${schema}".variant_frequency`)
-    expect(vf.rows).toHaveLength(0)
 
     // The UNIQUE name is free for an immediate re-import.
     await expect(seedCaseWithVariants('hide-me', 1)).resolves.toBeGreaterThan(caseId)
@@ -395,8 +373,6 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
         oldId
       ])
       expect(kept.rows).toHaveLength(5)
-      const frequencies = await probe.query(`SELECT 1 FROM "${schema}".variant_frequency`)
-      expect(frequencies.rows).toHaveLength(5)
     },
     60_000
   )
@@ -417,9 +393,9 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
     expect((await caseRows()).map((row) => row.id)).toEqual([oldId, orphan, otherName])
     // The discarded copy no longer counts: positions 1..3 were carried by both.
     const counts = await probe.query<{ case_count: number }>(
-      `SELECT case_count FROM "${schema}".variant_frequency vf
-         JOIN "${schema}".variants v ON v.coord_hash = vf.coord_hash
-        WHERE v.case_id = $1 ORDER BY v.pos`,
+      `SELECT COUNT(DISTINCT o.case_id) AS case_count FROM "${schema}".variants v
+         JOIN "${schema}".variants o ON o.coord_hash = v.coord_hash
+        WHERE v.case_id = $1 GROUP BY v.pos ORDER BY v.pos`,
       [oldId]
     )
     expect(counts.rows.map((row) => Number(row.case_count))).toEqual([3, 1, 1, 1, 1])
@@ -495,9 +471,7 @@ describe.skipIf(!RUN)('PostgresCaseLifecycleRepository — background deletion p
       try {
         await reader.query("SET lock_timeout = '200ms'")
         const res = await reader.query<{ n: number }>(
-          `SELECT count(*)::int AS n FROM "${schema}".variants v
-             LEFT JOIN "${schema}".variant_frequency vf ON vf.coord_hash = v.coord_hash
-            WHERE v.case_id = $1`,
+          `SELECT count(*)::int AS n FROM "${schema}".variants v WHERE v.case_id = $1`,
           [bystander]
         )
         expect(res.rows[0].n).toBe(10)

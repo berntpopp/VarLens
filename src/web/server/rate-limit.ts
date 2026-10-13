@@ -69,29 +69,40 @@ export function registerAuthLoginRateLimit(
   app: FastifyInstance,
   env: NodeJS.ProcessEnv = process.env
 ): void {
-  const checkRateLimit = app.createRateLimit({
-    max: positiveIntegerFromEnv({
-      env,
-      name: AUTH_LOGIN_RATE_LIMIT_MAX_ENV,
-      fallback: 10,
-      max: 10_000
-    }),
+  const max = positiveIntegerFromEnv({
+    env,
+    name: AUTH_LOGIN_RATE_LIMIT_MAX_ENV,
+    fallback: 10,
+    max: 10_000
+  })
+  const checkLogin = app.createRateLimit({
+    max,
     timeWindow: RATE_LIMIT_WINDOW_MS,
     keyGenerator: (request) => `auth-login:${request.ip}`
   })
+  // Each changePassword runs a 64 MiB Argon2 verify; key on the signed-in
+  // user so a stolen session cannot brute-force or flood it (#563).
+  const checkChangePassword = app.createRateLimit({
+    max,
+    timeWindow: RATE_LIMIT_WINDOW_MS,
+    keyGenerator: (request) => `auth-change-password:${request.session?.user?.id ?? request.ip}`
+  })
 
   app.addHook('preHandler', async (request, reply) => {
-    if (request.method !== 'POST' || requestPath(request) !== '/api/auth/login') return
+    if (request.method !== 'POST') return
+    const path = requestPath(request)
+    const isLogin = path === '/api/auth/login'
+    if (!isLogin && path !== '/api/auth/changePassword') return
 
-    const result = await checkRateLimit(request)
+    const result = await (isLogin ? checkLogin : checkChangePassword)(request)
     if (result.isAllowed || !result.isExceeded) return
 
     reply.code(429)
     reply.header('retry-after', String(Math.max(1, result.ttlInSeconds)))
     return reply.send({
       code: 'RATE_LIMITED',
-      message: 'login rate limit exceeded',
-      userMessage: 'Too many login attempts. Try again shortly.'
+      message: isLogin ? 'login rate limit exceeded' : 'password change rate limit exceeded',
+      userMessage: 'Too many attempts. Try again shortly.'
     })
   })
 }

@@ -21,6 +21,7 @@ import CohortTable from '../../../src/renderer/src/components/CohortTable.vue'
 import { FiltersKey, createFilters } from '../../../src/renderer/src/composables/useFilters'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
 import { _resetAnnotationsForTesting } from '../../../src/renderer/src/composables/useAnnotations'
+import { applyPresetStateToFilters } from '../../../src/renderer/src/utils/filters/presetApplication'
 import { COHORT_CARRIER_LIMIT } from '../../../src/renderer/src/config/proteinViewConfig'
 
 const vuetify = createVuetify({ components, directives })
@@ -307,6 +308,25 @@ describe('CohortTable paging', () => {
     filtersCtx.filters.value.maxCarriers = null
     await bar.vm.$emit('filter-change')
     await vi.waitFor(() => expect(queries().at(-1)).not.toHaveProperty('carrier_count_max'))
+  })
+
+  // #554: a preset's carrier minimum reaches the table query and the export.
+  it('sends the carrier minimum of a preset with the table query and the export', async () => {
+    const exportCohort = vi.fn(async () => ({ success: true, filePath: '/tmp/cohort.xlsx' }))
+    window.api.export.cohort = exportCohort as never
+    const bar = wrapper.findComponent({ name: 'CohortFilterBar' })
+
+    applyPresetStateToFilters({
+      filters: filtersCtx.filters,
+      presetState: { minCarriers: 3 },
+      includeCohortFields: true
+    })
+    await bar.vm.$emit('filter-change')
+    await vi.waitFor(() => expect(queries().at(-1)).toMatchObject({ carrier_count_min: 3 }))
+
+    await bar.vm.$emit('export')
+    await flushPromises()
+    expect(exportCohort.mock.calls[0][0]).toMatchObject({ carrier_count_min: 3 })
   })
 
   // #530 parity: a failed refresh labels the rows still shown as previous results.

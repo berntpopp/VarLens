@@ -1,5 +1,4 @@
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
-import { VariantFrequencyService } from '../database/VariantFrequencyService'
 import { isImportSessionOpen } from '../database/cohort-summary-case-add'
 import {
   openCaseSummaryRemoval,
@@ -12,12 +11,6 @@ import {
  */
 
 export interface IncrementalDeleteOptions {
-  /**
-   * When true the caller is deleting every case: per-case frequency
-   * decrements are skipped and the frequency table is cleared (or recomputed
-   * after a cancel) once at the end.
-   */
-  deletingAll: boolean
   /** Polled between cases; returning true stops before the next case. */
   isCancelled: () => boolean
   /** Called after each case with (deletedSoFar, total). */
@@ -61,27 +54,23 @@ export function listAllCaseIds(db: DatabaseType): number[] {
 }
 
 /**
- * Delete cases one transaction per case, keeping `variant_frequency`
- * consistent inside the same transaction as the delete. Yields to the worker
+ * Delete cases one transaction per case. Yields to the worker
  * event loop between cases so a `cancel` message can be observed, which makes
  * the job cancellable at case granularity (every committed case is complete:
- * its variants, annotations, FTS rows (row triggers), frequency contribution
- * and — with `options.summary` — cohort-summary contribution are gone together).
+ * its variants, annotations, FTS rows (row triggers) and — with `options.summary` — cohort-summary contribution are gone together).
  */
 export async function deleteCasesIncrementally(
   db: DatabaseType,
   caseIds: readonly number[],
   options: IncrementalDeleteOptions
 ): Promise<IncrementalDeleteResult> {
-  const frequencies = new VariantFrequencyService(db)
   const deleteCase = db.prepare('DELETE FROM cases WHERE id = ?')
   const summary = options.summary ?? null
   const isUnpublished = db.prepare("SELECT 1 FROM cases WHERE id = ? AND import_status != 'ready'")
   const deleteOne = db.transaction((caseId: number): number => {
-    // A case that was never published is in no frequency count and no
-    // summary row (import-worker.ts publishCase): only its rows go.
+    // A case that was never published is in no summary row
+    // (import-worker.ts publishCase): only its rows go.
     if (isUnpublished.get(caseId) !== undefined) return deleteCase.run(caseId).changes
-    if (!options.deletingAll) frequencies.decrementFrequencies(caseId, false)
     summary?.beforeDelete(caseId)
     const changes = deleteCase.run(caseId).changes
     if (changes > 0) summary?.afterDelete()
@@ -100,14 +89,6 @@ export async function deleteCasesIncrementally(
     deleted += deleteOne(caseId)
     options.onProgress(index + 1, caseIds.length)
     await yieldToEventLoop()
-  }
-
-  if (options.deletingAll) {
-    // All cases gone → empty table; a cancelled delete-all must recount.
-    if (cancelled) frequencies.recomputeAllFrequencies()
-    else frequencies.clearAll()
-  } else {
-    frequencies.pruneZeroCounts()
   }
 
   return { deleted, cancelled }

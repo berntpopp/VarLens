@@ -389,21 +389,32 @@ function makePostgresConfig(schema: string): PostgresStorageConfig {
   }
 }
 
+async function withRealPostgres(
+  passwordProvider: PasswordProvider | undefined,
+  run: (auth: PostgresWebAuthService, pg: Client, schema: string) => Promise<void>
+): Promise<void> {
+  const schema = `varlens_auth_e2e_${Date.now()}_${randomBytes(4).toString('hex')}`
+  const pg = new Client({ connectionString: PG_URL })
+  await pg.connect()
+  await pg.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
+  const session = await createPostgresStorageSession(makePostgresConfig(schema))
+  try {
+    await run(
+      new PostgresWebAuthService({ pool: session.getPool(), schema, passwordProvider }),
+      pg,
+      schema
+    )
+  } finally {
+    await session.close()
+    await pg.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    await pg.end()
+  }
+}
+
 describe.skipIf(!RUN_POSTGRES_AUTH_E2E)('PostgresWebAuthService — real Postgres', () => {
   it('creates a bootstrap hash with the production provider and logs in', async () => {
-    const schema = `varlens_auth_e2e_${Date.now()}_${randomBytes(4).toString('hex')}`
     const password = 'real-postgres-auth-password-2026'
-    const provisioner = new Client({ connectionString: PG_URL })
-    await provisioner.connect()
-    await provisioner.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
-    await provisioner.end()
-
-    const session = await createPostgresStorageSession(makePostgresConfig(schema))
-    try {
-      const auth = new PostgresWebAuthService({
-        pool: session.getPool(),
-        schema
-      })
+    await withRealPostgres(undefined, async (auth) => {
       const passwordHash = await defaultPasswordProvider.hashPassword(password)
 
       expect(isLikelyArgon2idHash(passwordHash)).toBe(true)
@@ -415,13 +426,29 @@ describe.skipIf(!RUN_POSTGRES_AUTH_E2E)('PostgresWebAuthService — real Postgre
       expect(result.success).toBe(true)
       expect(result.user?.username).toBe('admin')
       expect(result.mustChangePassword).toBe(true)
-    } finally {
-      await session.close()
-      const cleaner = new Client({ connectionString: PG_URL })
-      await cleaner.connect()
-      await cleaner.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
-      await cleaner.end()
-    }
+    })
+  }, 60_000)
+
+  // #563: one wrong password after an expired lock must not relock the account.
+  it('restarts the failed count at 1 after an expired lock instead of relocking', async () => {
+    await withRealPostgres(fakePasswordProvider, async (auth, pg, schema) => {
+      await auth.createFirstUser('admin', 'Admin', FIXTURE_PW)
+      await pg.query(
+        `UPDATE "${schema}"."users" SET failed_login_count = $1,
+           locked_until = now() - interval '1 minute' WHERE username = 'admin'`,
+        [MAX_FAILED_ATTEMPTS]
+      )
+
+      expect((await auth.authenticate('admin', 'wrong-password')).locked).toBeUndefined()
+      const after = await auth.getUser('admin')
+      expect(after?.failed_login_count).toBe(1)
+      expect(after?.locked_until).toBeNull()
+
+      // A wrong current password in changePassword counts through the same UPDATE.
+      expect(await auth.changePassword('admin', 'wrong-password', FIXTURE_NEW_PW)).toBe(false)
+      expect((await auth.getUser('admin'))?.failed_login_count).toBe(2)
+      expect((await auth.authenticate('admin', FIXTURE_PW)).success).toBe(true)
+    })
   }, 60_000)
 })
 
@@ -501,20 +528,17 @@ describe('PostgresWebAuthService — authenticate', () => {
 
     await svc.authenticate('alice', 'wrong')
 
-    const update = pool.queries.find((q) =>
-      /failed_login_count\s*=\s*failed_login_count\s*\+\s*1/i.test(q.text)
-    )
-    expect(update, 'failed_login_count must be incremented atomically (server-side)').toBeDefined()
-    // CASE expression encodes the lockout threshold without a JS read.
-    expect(update!.text).toMatch(/CASE\s+WHEN[\s\S]+failed_login_count\s*\+\s*1\s*>=\s*\$1/i)
-    // First param is the threshold, second is the candidate lock-until,
-    // third is the user id. Verify the threshold matches the constant.
+    const update = pool.queries.find((q) => /SET\s+failed_login_count\s*=/i.test(q.text))
+    expect(update, 'failed_login_count must be updated server-side').toBeDefined()
+    // The count and the lockout threshold are computed in SQL, without a JS read;
+    // an expired lock (locked_until <= $2) restarts the count at 1 (#563).
+    expect(update!.text).toMatch(/locked_until\s*<=\s*\$2\s+THEN 1 ELSE failed_login_count \+ 1/i)
+    expect(update!.text).toMatch(/>=\s*\$1\s+THEN\s+\$3/i)
     expect(update!.values[0]).toBe(MAX_FAILED_ATTEMPTS)
-    expect(update!.values[1]).toBeInstanceOf(Date)
-    const lockUntil = update!.values[1] as Date
-    const deltaMs = lockUntil.getTime() - Date.now()
-    expect(deltaMs).toBeGreaterThan((LOCKOUT_DURATION_MINUTES - 1) * 60_000)
-    expect(deltaMs).toBeLessThan((LOCKOUT_DURATION_MINUTES + 1) * 60_000)
+    const [now, lockUntil] = update!.values.slice(1, 3) as Date[]
+    expect(now).toBeInstanceOf(Date)
+    expect(lockUntil.getTime() - now.getTime()).toBe(LOCKOUT_DURATION_MINUTES * 60_000)
+    expect(Math.abs(now.getTime() - Date.now())).toBeLessThan(60_000)
   })
 
   it('row-maps PG types to the cross-backend User shape', async () => {
@@ -761,7 +785,10 @@ describe('PostgresWebAuthService — deactivateUser / resetPassword / changePass
       rows: [pgUserRow({ password_hash: 'hashed::differentpw' })],
       rowCount: 1
     })
+    pool.enqueueResponse({ rows: [], rowCount: 1 })
     expect(await svc.changePassword('alice', 'wrong-pwd-12', FIXTURE_NEW_PW)).toBe(false)
+    // #563: a wrong current password is recorded like a failed login.
+    expect(pool.queries[1].text).toMatch(/SET\s+failed_login_count\s*=/i)
   })
 
   it('changePassword updates hash and clears must_change_password on valid old password', async () => {

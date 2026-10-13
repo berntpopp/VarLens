@@ -286,9 +286,9 @@ describe('postgres-import-worker runImport', () => {
     expect(queries).toContain('BEGIN')
     expect(queries).toContain('COMMIT')
     // VCF imports now write via COPY FROM STDIN (mocked at the runBulkCopy
-    // boundary in this test's deps), but the post-loop bookkeeping
-    // (variant_frequency rebuild + variant_count update) is unchanged.
-    expect(queries.find((q) => q.includes('"variant_frequency"'))).toBeDefined()
+    // boundary in this test's deps), but the post-loop variant_count update
+    // is unchanged.
+    expect(queries.find((q) => q.includes('"variant_frequency"'))).toBeUndefined()
     expect(queries.find((q) => q.startsWith('UPDATE') && q.includes('variant_count'))).toBeDefined()
     const reserveIndexes = queries.flatMap((query, index) =>
       query.includes('generate_series') ? [index] : []
@@ -597,7 +597,6 @@ describe('postgres-import-worker runImport', () => {
     expect(queries).toContain('BEGIN')
     expect(queries.some((q) => q.startsWith('SELECT id FROM'))).toBe(true)
     expect(queries.some((q) => q.includes('"cases"') && q.startsWith('INSERT'))).toBe(true)
-    expect(queries.some((q) => q.includes('"variant_frequency"'))).toBe(true)
     expect(queries).toContain('COMMIT')
     expect(queries.at(-1)).toContain('pg_advisory_unlock')
 
@@ -993,9 +992,6 @@ describe('postgres-import-worker — C3 import wiring', () => {
     expect(index('-- refreshColumnMetas')).toBeGreaterThan(index('-- prepareAdd'))
     expect(index('RELEASE SAVEPOINT cohort_prepare')).toBeLessThan(lockIndex)
     // Serialised: only the upserts into the shared tables.
-    expect(queries.findIndex((query) => query.includes('"variant_frequency"'))).toBeGreaterThan(
-      lockIndex
-    )
     expect(index('-- incrementalAdd')).toBeGreaterThan(lockIndex)
     expect(incrementalAddSpy).toHaveBeenCalledWith(
       expect.objectContaining({ caseId: 13, prepared: true, includeProvisional: true })
@@ -1014,10 +1010,6 @@ describe('postgres-import-worker — C3 import wiring', () => {
     await runVcfSingleFile(client, messages)
 
     expect(queries).toContain('ROLLBACK TO SAVEPOINT cohort_prepare')
-    // The frequency bookkeeping still runs, under the lock.
-    expect(queries.findIndex((query) => query.includes('"variant_frequency"'))).toBeGreaterThan(
-      queries.findIndex((query) => query.includes('pg_try_advisory_xact_lock'))
-    )
     expect(incrementalAddSpy).not.toHaveBeenCalled()
     expect(markStaleSpy).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'post_import_summary_failed_case_13' })
@@ -1036,14 +1028,13 @@ describe('postgres-import-worker — C3 import wiring', () => {
     const countIndex = queries.findIndex(
       (query) => query.startsWith('UPDATE') && query.includes('variant_count')
     )
-    const frequencyIndex = queries.findIndex((query) => query.includes('"variant_frequency"'))
+    const summaryIndex = queries.indexOf('SAVEPOINT cohort_summary')
     const readyIndex = queries.findIndex(
       (query) => query.startsWith('UPDATE') && query.includes("import_status = 'ready'")
     )
 
     expect(queries[countIndex]).toContain('"cases_all"')
-    expect(queries[frequencyIndex]).toContain('"variants_all"')
-    expect(readyIndex).toBeGreaterThan(frequencyIndex)
+    expect(readyIndex).toBeGreaterThan(summaryIndex)
 
     const publicationBeginIndex = queries.findLastIndex(
       (query, index) => index < countIndex && query === 'BEGIN'
@@ -1053,11 +1044,10 @@ describe('postgres-import-worker — C3 import wiring', () => {
     )
 
     expect(publicationBeginIndex).toBeGreaterThanOrEqual(0)
-    expect(queries.slice(frequencyIndex, readyIndex)).not.toContain('COMMIT')
+    expect(queries.slice(summaryIndex, readyIndex)).not.toContain('COMMIT')
     expect(publicationCommitIndex).toBeGreaterThan(readyIndex)
 
     const publicationQueries = queries.slice(publicationBeginIndex, publicationCommitIndex + 1)
-    expect(publicationQueries.some((query) => query.includes('"variant_frequency"'))).toBe(true)
     expect(publicationQueries).toContain('SAVEPOINT cohort_summary')
   })
 
@@ -1250,17 +1240,16 @@ describe('postgres-import-worker — C3 import wiring', () => {
     )
   })
 
-  it('preserves variant_count + rebuildVariantFrequencyForCase on summary failure', async () => {
+  it('preserves variant_count on summary failure', async () => {
     incrementalAddSpy.mockRejectedValueOnce(new Error('boom in incrementalAdd'))
     const queries: string[] = []
     const client = makeClient(queries)
     const messages: unknown[] = []
     await runVcfSingleFile(client, messages)
 
-    // Bookkeeping committed: the variant_count UPDATE and the variant_frequency
-    // rebuild ran before the savepoint and survive the savepoint rollback.
+    // Bookkeeping committed: the variant_count UPDATE ran before the savepoint
+    // and survives the savepoint rollback.
     expect(queries.find((q) => q.startsWith('UPDATE') && q.includes('variant_count'))).toBeDefined()
-    expect(queries.find((q) => q.includes('"variant_frequency"'))).toBeDefined()
 
     // Savepoint opened, then rolled back; the outer transaction still committed.
     expect(queries).toContain('SAVEPOINT cohort_summary')

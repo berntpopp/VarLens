@@ -333,6 +333,30 @@ export class PostgresWebAuthService {
     }
   }
 
+  /**
+   * Atomic increment + conditional lockout, single round trip (a
+   * SELECT-then-UPDATE lets two concurrent failures both write N). An expired
+   * lock restarts the count at 1 and is cleared, so one wrong password after
+   * expiry cannot relock the account (#563). `now` is the caller's clock
+   * reading, the same one its lock check used.
+   */
+  private async recordFailedAttempt(userId: number, now: Date): Promise<void> {
+    const lockUntil = new Date(now.getTime() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
+    const newCount = `CASE WHEN locked_until IS NOT NULL AND locked_until <= $2
+                       THEN 1 ELSE failed_login_count + 1 END`
+    await this.pool.query(
+      `UPDATE ${this.schemaQuoted}."users"
+          SET failed_login_count = ${newCount},
+              locked_until = CASE
+                WHEN ${newCount} >= $1 THEN $3
+                WHEN locked_until <= $2 THEN NULL
+                ELSE locked_until
+              END
+        WHERE id = $4`,
+      [MAX_FAILED_ATTEMPTS, now, lockUntil, userId]
+    )
+  }
+
   // ---------- authenticate ----------
 
   async authenticate(username: string, password: string): Promise<AuthResult> {
@@ -358,8 +382,10 @@ export class PostgresWebAuthService {
     }
     const user = mapPgRowToUser(sel.rows[0])
 
+    // One clock reading for both the lock check and the failed-attempt UPDATE.
+    const now = new Date()
     if (user.locked_until !== null && user.locked_until !== '') {
-      if (new Date(user.locked_until).getTime() > Date.now()) {
+      if (new Date(user.locked_until).getTime() > now.getTime()) {
         await this.passwordProvider.verifyPassword(user.password_hash, password)
         // `locked` is for the server-side audit only; routes/auth.ts strips it.
         return { success: false, user: null, locked: true }
@@ -369,23 +395,7 @@ export class PostgresWebAuthService {
     const valid = await this.passwordProvider.verifyPassword(user.password_hash, password)
 
     if (!valid) {
-      // Atomic increment + conditional lockout, single round trip. The
-      // previous SELECT-then-UPDATE pattern was racy under pg's
-      // concurrency model: two concurrent failed logins could both read
-      // failed_login_count = N-1 and both write N, defeating the
-      // MAX_FAILED_ATTEMPTS gate. SQLite's single-writer model hid the
-      // race on desktop; the web path needs DB-level atomicity.
-      const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
-      await this.pool.query(
-        `UPDATE ${sch}."users"
-            SET failed_login_count = failed_login_count + 1,
-                locked_until = CASE
-                  WHEN failed_login_count + 1 >= $1 THEN $2
-                  ELSE locked_until
-                END
-          WHERE id = $3`,
-        [MAX_FAILED_ATTEMPTS, lockUntil, user.id]
-      )
+      await this.recordFailedAttempt(user.id, now)
       return { success: false, user: null }
     }
 
@@ -550,7 +560,11 @@ export class PostgresWebAuthService {
     const user = mapPgRowToUser(sel.rows[0])
 
     const valid = await this.passwordProvider.verifyPassword(user.password_hash, oldPassword)
-    if (!valid) return false
+    if (!valid) {
+      // A wrong current password is a failed attempt like a wrong login (#563).
+      await this.recordFailedAttempt(user.id, new Date())
+      return false
+    }
 
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
     await this.pool.query(

@@ -23,7 +23,6 @@ const SESSION_INDEXES = [
   'idx_variants_gene',
   'idx_variants_pos',
   'idx_variants_filters',
-  'idx_variants_chr_pos_ref_alt',
   'idx_variants_filter_covering',
   'idx_variants_case_coords',
   'idx_variants_gene_notnull',

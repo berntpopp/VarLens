@@ -97,6 +97,23 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts[0].aa_change).toBe('ENSP00000354346.4:p.Ala62=')
     })
 
+    it('decodes VEP percent-escapes in every CSQ value once, leaving unknown escapes and & alone', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant&intron_variant|LOW|COMT|E1|Transcript|T1|protein_coding|||c.1%3B2del|p.Pro814%253D||||||||||%2C%7C%20%3b%ZZ|'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'T')
+
+      expect(result.consequence).toBe('synonymous_variant&intron_variant')
+      expect(result.cdna).toBe('c.1;2del')
+      // %25 decodes to a literal %, never a second pass that would turn it into '='.
+      expect(result.aaChange).toBe('p.Pro814%3D')
+      expect(result.clinvar).toBe(',| ;%ZZ')
+    })
+
     it('rejects a non-enum IMPACT while preserving its SO consequence', () => {
       const info = new Map([
         [
@@ -200,10 +217,10 @@ describe('vcf-annotation-parser', () => {
     })
 
     it('disambiguates multi-allelic deletions via ALLELE_NUM when both use "-" notation', () => {
-      // REF=CAT, ALT=C,CA — a two-deletion multi-allelic site. VEP emits "-" for
-      // BOTH deletion ALTs, so the Allele-string heuristic alone cannot tell them
-      // apart. ALLELE_NUM (1-based index of the ALT this block annotates) must
-      // disambiguate: block 1 belongs to ALT index 1 (C), block 2 to ALT index 2 (CA).
+      // REF=CAT, ALT=C,CA — a two-deletion multi-allelic site. With --minimal VEP
+      // emits "-" for BOTH deletion ALTs (default VEP writes '-','A'). Whatever the
+      // Allele strings say, ALLELE_NUM (1-based index of the ALT this block
+      // annotates) wins: block 1 belongs to ALT index 1 (C), block 2 to ALT index 2 (CA).
       const fields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'ALLELE_NUM']
       const alleleNumHeader = makeHeader({ annotationType: 'csq', csqFields: fields })
       const info = new Map([
@@ -237,7 +254,12 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts).toHaveLength(1)
     })
 
-    it('fails closed when a CSQ allele heuristic matches multiple original ALT alleles', () => {
+    it('fails closed when --minimal gives two ALT alleles the same CSQ spelling', () => {
+      const minimalHeader = makeHeader({
+        annotationType: 'csq',
+        csqFields,
+        rawHeaderLines: ["##VEP-command-line='vep --cache --minimal --vcf'"]
+      })
       const info = new Map([
         [
           'CSQ',
@@ -245,13 +267,48 @@ describe('vcf-annotation-parser', () => {
         ]
       ])
 
-      const first = parseAnnotation(info, header, 'C', 'CAT', 1, ['C', 'CA'])
-      const second = parseAnnotation(info, header, 'CA', 'CAT', 2, ['C', 'CA'])
+      const first = parseAnnotation(info, minimalHeader, 'C', 'CAT', 1, ['C', 'CA'])
+      const second = parseAnnotation(info, minimalHeader, 'CA', 'CAT', 2, ['C', 'CA'])
 
       expect(first.transcripts).toHaveLength(0)
       expect(second.transcripts).toHaveLength(0)
       expect(first.geneSymbol).toBeNull()
       expect(second.geneSymbol).toBeNull()
+    })
+
+    it.each([
+      ['ATT', ['A', 'AT'], ['-', 'T']],
+      ['G', ['GA', 'GAA'], ['A', 'AA']],
+      ['GA', ['G', 'GAA'], ['-', 'AA']],
+      ['G', ['A', 'GT'], ['A', 'GT']],
+      ['G', ['A', 'C'], ['A', 'C']]
+    ])(
+      'resolves %s>%j by the one allele spelling default VEP writes per ALT (#556)',
+      (ref, alts, spellings) => {
+        const block = (allele: string, gene: string): string =>
+          `${allele}|intron_variant|MODIFIER|${gene}|E|Transcript|T-${gene}|protein_coding||||||||||||||||`
+        const info = new Map([
+          ['CSQ', spellings.map((allele, i) => block(allele, `GENE${i + 1}`)).join(',')]
+        ])
+
+        const results = parseAnnotationsForAlleles(info, header, alts, ref)
+
+        expect(results.map((r) => r.transcripts.map((t) => t.gene_symbol))).toEqual([
+          ['GENE1'],
+          ['GENE2']
+        ])
+      }
+    )
+
+    it("fails closed when an exact ALT collides with another ALT's trimmed spelling", () => {
+      // TA>T,TT: default VEP writes '-','T', but 'T' is also ALT 1 spelled exactly.
+      const block = (allele: string, gene: string): string =>
+        `${allele}|intron_variant|MODIFIER|${gene}|E|Transcript|T-${gene}|protein_coding||||||||||||||||`
+      const info = new Map([['CSQ', `${block('-', 'GENE1')},${block('T', 'GENE2')}`]])
+
+      const results = parseAnnotationsForAlleles(info, header, ['T', 'TT'], 'TA')
+
+      expect(results.map((r) => r.transcripts.map((t) => t.gene_symbol))).toEqual([['GENE1'], []])
     })
 
     it("does not cross-contaminate multi-deletion splits when a block's ALLELE_NUM is declared but empty", () => {

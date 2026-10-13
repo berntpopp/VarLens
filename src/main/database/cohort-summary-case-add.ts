@@ -102,6 +102,11 @@ export interface ImportSummarySession {
    * the summary stale and ends incremental upkeep for the session.
    */
   keepSessionOpen(): void
+  /**
+   * Rows of a published case changed (a multi-file append): flag the summary
+   * stale in the caller's transaction; `finish` rebuilds once.
+   */
+  invalidate(): void
   /** Orderly session end: rebuild if upkeep was abandoned, ANALYZE, clear the marker. */
   finish(): void
 }
@@ -164,6 +169,7 @@ const noSummarySession = (db: DatabaseType): ImportSummarySession => ({
   addCase: (caseId) => void db.prepare(MARK_CASE_READY_SQL).run(caseId),
   discardCase: (deleteCase) => deleteCase(),
   keepSessionOpen: () => undefined,
+  invalidate: () => undefined,
   finish: () => undefined
 })
 
@@ -348,6 +354,11 @@ export function openImportSummarySession(
     },
 
     keepSessionOpen,
+
+    invalidate() {
+      db.exec(MARK_STALE_SQL)
+      abandon()
+    },
 
     finish() {
       try {

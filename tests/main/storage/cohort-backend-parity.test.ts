@@ -392,6 +392,18 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     expect(pgRows).toEqual(sqliteRows)
   }, 120_000)
 
+  // #554: gnomAD AF max 0 (a hand-made preset) is no filter on both backends.
+  it('(a2) gnomad_af_max 0 keeps the same rows as no gnomAD filter', async () => {
+    const rows = async (params: CohortSearchParams): Promise<string[]> => {
+      const lite = sqliteCohortRows(params).map(variantKey).sort()
+      expect((await pgCohortRows(params)).map(variantKey).sort()).toEqual(lite)
+      return lite
+    }
+    const unfiltered = await rows({})
+    expect(unfiltered.length).toBeGreaterThan(0)
+    expect(await rows({ gnomad_af_max: 0 })).toEqual(unfiltered)
+  }, 120_000)
+
   it('(b) per-case getFilterOptions(caseId) OUTPUT equality', async () => {
     // Pass-5 MED #2: SQLite computes live; PG reads from cohort_column_meta.
     // Equality is on the FilterOptions output shape, not storage-row shape.

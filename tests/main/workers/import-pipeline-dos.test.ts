@@ -77,7 +77,6 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
 
     const caseId = svc.cases.createCase('test-giant-line', filePath, 1000)
     const stmts = prepareStatements(svc.database)
-    stmts.beginBulkInsert()
 
     await expect(
       streamInsertVcf(
@@ -115,7 +114,6 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
 
     const caseId = svc.cases.createCase('test-bomb', filePath, 1000)
     const stmts = prepareStatements(svc.database)
-    stmts.beginBulkInsert()
 
     await expect(
       streamInsertVcf(
@@ -145,7 +143,6 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
 
     const caseId = svc.cases.createCase('test-legit', filePath, 1000)
     const stmts = prepareStatements(svc.database)
-    stmts.beginBulkInsert()
 
     const count = await streamInsertVcf(
       filePath,
@@ -177,7 +174,6 @@ describe('streamInsertVcf DoS guards (import-pipeline.ts, live SQLite worker pat
 
     const caseId = svc.cases.createCase('test-invalid-pos', filePath, 1000)
     const stmts = prepareStatements(svc.database)
-    stmts.beginBulkInsert()
     const skips: string[] = []
 
     const count = await streamInsertVcf(

@@ -20,7 +20,6 @@ import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
 import type { BuildReview, BuildReviewChoice } from '../../shared/types/build-review'
 import { contigQueryNames } from '../../shared/utils/contig'
 import { auditActorName } from '../security/request-context'
-import { VariantFrequencyService } from './VariantFrequencyService'
 
 type Db = Database.Database
 
@@ -103,22 +102,12 @@ export function remapGlobalAnnotations(
 }
 
 /**
- * Rename one case's variants and recount its frequencies. Only rows under an
- * old name are written (`WHERE chr = from`): canonical rows are not touched.
+ * Rename one case's variants. Only rows under an old name are written
+ * (`WHERE chr = from`): canonical rows are not touched.
  */
 export function renameCaseVariants(db: Db, caseId: number, pairs: readonly ContigRename[]): void {
-  if (pairs.length === 0) return
-  const status = db.prepare('SELECT import_status FROM cases WHERE id = ?').get(caseId) as
-    { import_status: string | null } | undefined
-  const counted = status !== undefined && (status.import_status ?? 'ready') === 'ready'
-  const frequencies = new VariantFrequencyService(db)
-  if (counted) frequencies.decrementFrequencies(caseId, false)
   const update = db.prepare('UPDATE variants SET chr = ? WHERE case_id = ? AND chr = ?')
   for (const pair of pairs) update.run(pair.to, caseId, pair.from)
-  if (counted) {
-    frequencies.updateFrequencies(caseId)
-    frequencies.pruneZeroCounts()
-  }
 }
 
 /** Remap annotations for every rename, then rename each case (caller's transaction). */

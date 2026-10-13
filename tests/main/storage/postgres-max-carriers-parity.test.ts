@@ -3,8 +3,7 @@
  * with a fresh cohort summary, the case view and the cohort view return the
  * same variants for the same K, including page counts and the cohort export.
  *
- * The two views read different tables (variant_frequency / the summary), so
- * this file makes no claim about a stale summary or a mixed-build database.
+ * This file makes no claim about a stale summary or a mixed-build database.
  *
  * Gated by VARLENS_RUN_POSTGRES_E2E=1. Requires `make pg-up`.
  */
@@ -84,11 +83,6 @@ describe.skipIf(!RUN)('carrier cap (#455): PostgreSQL case view and cohort view'
         client.release()
       }
     }
-    await pool.query(
-      `INSERT INTO "${schema}".variant_frequency (chr, pos, ref, alt, case_count)
-       SELECT chr, pos, ref, alt, COUNT(DISTINCT case_id) FROM "${schema}".variants
-       GROUP BY chr, pos, ref, alt`
-    )
   }, 180_000)
 
   afterAll(async () => {

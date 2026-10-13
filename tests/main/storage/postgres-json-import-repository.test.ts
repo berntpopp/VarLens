@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  PostgresJsonImportRepository,
-  rebuildVariantFrequencyForCase
-} from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
+import { PostgresJsonImportRepository } from '../../../src/main/storage/postgres/PostgresJsonImportRepository'
 import { UniqueConstraintError } from '../../../src/main/database/errors'
 
 // ---------------------------------------------------------------------------
@@ -451,48 +448,5 @@ describe('PostgresJsonImportRepository.writeJsonImport', () => {
     const calls = queryCalls(client)
     expect(calls.some((c) => c.sql === 'BEGIN')).toBe(false)
     expect(calls.some((c) => c.sql === 'COMMIT')).toBe(false)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// rebuildVariantFrequencyForCase — standalone exported helper
-// ---------------------------------------------------------------------------
-
-describe('rebuildVariantFrequencyForCase', () => {
-  it('runs the case-scoped frequency upsert without opening or closing a transaction', async () => {
-    const queries: { text: string; params?: unknown[] }[] = []
-    const client = {
-      query: async (sql: string, params?: unknown[]) => {
-        queries.push({ text: sql, params })
-        return { rows: [] }
-      }
-    }
-
-    await rebuildVariantFrequencyForCase(client as never, 'public', 99)
-
-    expect(queries).toHaveLength(1)
-    expect(queries[0].text).toContain('INSERT INTO "public"."variant_frequency"')
-    expect(queries[0].text).toContain('WHERE case_id = $1')
-    expect(queries[0].text).toContain('GROUP BY chr, pos, ref, alt')
-    expect(queries[0].text).toContain('ON CONFLICT (coord_hash)')
-    expect(queries[0].text).not.toContain('ON CONFLICT (chr, pos, ref, alt)')
-    expect(queries[0].text).toMatch(/DO UPDATE\s+SET case_count/)
-    expect(queries[0].params).toEqual([99])
-  })
-
-  it('uses quoted schema name correctly', async () => {
-    const queries: { text: string }[] = []
-    const client = {
-      query: async (sql: string) => {
-        queries.push({ text: sql })
-        return { rows: [] }
-      }
-    }
-
-    await rebuildVariantFrequencyForCase(client as never, 'myschema', 7)
-
-    expect(queries[0].text).toContain('"myschema"."variant_frequency"')
-    expect(queries[0].text).toContain('"myschema"."variants"')
-    expect(queries[0].text).toContain('"myschema"."variant_frequency".case_count')
   })
 })

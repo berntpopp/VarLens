@@ -513,12 +513,6 @@ describe('import worker cascade cleanup & overwrite file check (F01 & F02)', () 
         { pos: 200 },
         { pos: 300 }
       ])
-      expect(
-        db.prepare('SELECT pos, case_count FROM variant_frequency ORDER BY pos').all()
-      ).toEqual([
-        { pos: 200, case_count: 1 },
-        { pos: 300, case_count: 1 }
-      ])
       expect(summaryMeta(db, 'is_stale')).toBe('0')
       expect(snapshotSummary(db)).toEqual(referenceSummary(db))
     })

@@ -24,15 +24,15 @@ function seed(db: DatabaseService, caseCount: number): void {
     const caseId = Number(insertCase.run(`case-${i}`, `/tmp/case-${i}.json`).lastInsertRowid)
     insertVariant.run(caseId, '1', 100, 'A', 'G') // shared by every case
     insertVariant.run(caseId, '1', 1000 + i, 'C', 'T') // private to this case
-    db.variants.updateFrequencies(caseId)
   }
 }
 
+/** Cases still holding a coordinate (null when none). */
 function frequencyOf(db: DatabaseService, pos: number): number | null {
   const row = db.database
-    .prepare('SELECT case_count FROM variant_frequency WHERE pos = ?')
-    .get(pos) as { case_count: number } | undefined
-  return row?.case_count ?? null
+    .prepare('SELECT COUNT(DISTINCT case_id) AS c FROM variants WHERE pos = ?')
+    .get(pos) as { c: number }
+  return row.c === 0 ? null : row.c
 }
 
 describe('SQLite case delete background job', () => {
@@ -111,7 +111,7 @@ describe('SQLite case delete background job', () => {
     ).toEqual({ c: 0 })
   })
 
-  it('delete-all clears the frequency table', async () => {
+  it('delete-all removes every variant', async () => {
     seed(db, 2)
 
     const result = await startSqliteCaseDeleteJob({ mode: 'all' }, () => db, {}, { workerPath })
@@ -119,9 +119,7 @@ describe('SQLite case delete background job', () => {
 
     expect(result.deleted).toBe(2)
     expect(db.cases.getAllCases()).toEqual([])
-    expect(db.database.prepare('SELECT COUNT(*) AS c FROM variant_frequency').get()).toEqual({
-      c: 0
-    })
+    expect(db.database.prepare('SELECT COUNT(*) AS c FROM variants').get()).toEqual({ c: 0 })
   })
 
   it('is cancellable between cases and ends in the cancelled state', async () => {

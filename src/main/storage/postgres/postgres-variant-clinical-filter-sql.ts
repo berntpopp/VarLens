@@ -7,18 +7,21 @@ import {
 } from '../../../shared/sql/genotype-dosage'
 import {
   autosomalRecessiveSql,
+  candidateCompoundHetSql,
   compoundHetPairIdsSql,
-  variantIdentitySql,
+  QUALIFYING_ROW_COLUMNS,
   xHemizygousSql,
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
-import { TRIO_MODES } from '../../../shared/types/inheritance'
+import { isTrioMode } from '../../../shared/types/inheritance'
 
 export interface PostgresClinicalVariantFilterSqlContext {
   schemaName: string
   addParam: (value: unknown) => string
   addWhere: (sql: string) => void
+  /** FROM and WHERE of the query so far: the rows every other filter keeps. */
+  fromAndWhereSql: () => string
 }
 
 export function addPostgresClinicalVariantFilters(
@@ -137,9 +140,14 @@ function addAnnotationPredicate(
         ))`)
 }
 
+/**
+ * Inheritance modes as one OR group. Added last: the rows every earlier filter
+ * keeps (placeholders reused) feed the candidate compound-het count (#579).
+ * A trio mode without an analysis group matches no row (fail closed, #553).
+ */
 function addInheritanceFilters(
   filter: VariantFilter,
-  { schemaName, addParam, addWhere }: PostgresClinicalVariantFilterSqlContext
+  { schemaName, addParam, addWhere, fromAndWhereSql }: PostgresClinicalVariantFilterSqlContext
 ): void {
   const modes = filter.inheritance_modes
   if (modes === undefined || modes.length === 0) return
@@ -156,25 +164,19 @@ function addInheritanceFilters(
     conditions.push(xHemizygousSql('v', `${schemaName}."case_metadata"`))
   }
   if (modes.includes('candidate_compound_het')) {
-    const caseParam = addParam(filter.case_id)
-    conditions.push(`(v.gene_symbol IN (
-            SELECT v2.gene_symbol
-            FROM ${schemaName}."variants" v2
-            WHERE v2.case_id = ${caseParam}
-              AND v2.gt_num IN ${HET}
-              AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol
-            HAVING COUNT(DISTINCT ${variantIdentitySql('v2')}) >= 2
-          ) AND v.gt_num IN ${HET})`)
+    const columns = QUALIFYING_ROW_COLUMNS.map((column) => `v.${column}`).join(', ')
+    conditions.push(candidateCompoundHetSql('v', `(SELECT ${columns} ${fromAndWhereSql()})`))
   }
 
   // Bound only when a trio mode reads them: PostgreSQL rejects a parameter
   // no placeholder uses (a solo mode with an analysis group selected).
-  const wantsTrio = modes.some((mode) => (TRIO_MODES as readonly string[]).includes(mode))
-  if (filter.analysis_group_id !== undefined && wantsTrio) {
+  const wantsTrio = modes.some(isTrioMode)
+  if (wantsTrio && filter.analysis_group_id != null) {
     const caseParam = addParam(filter.case_id)
     const groupParam = addParam(filter.analysis_group_id)
     addTrioInheritanceFilters(modes, conditions, schemaName, caseParam, groupParam)
+  } else if (wantsTrio) {
+    conditions.push('FALSE')
   }
 
   if (conditions.length === 0) return

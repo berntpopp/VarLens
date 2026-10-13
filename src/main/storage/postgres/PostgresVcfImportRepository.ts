@@ -347,8 +347,7 @@ export class PostgresVcfImportRepository {
    * Write one batch worth of VCF variants into the database.
    *
    * The caller MUST own the transaction (BEGIN/COMMIT/ROLLBACK). This method
-   * issues NO transaction-lifecycle SQL. variant_frequency is also NOT updated
-   * here — the worker handles that after all writeVcfFile calls complete.
+   * issues NO transaction-lifecycle SQL.
    *
    * Per-mode semantics:
    *  - mode: 'single-file'             — duplicate check + case insert + provenance

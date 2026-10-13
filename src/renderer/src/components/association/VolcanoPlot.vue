@@ -4,19 +4,17 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import {
+  buildVolcanoPoints,
+  type AssociationPlotRow,
+  type PlotPoint
+} from '../../utils/association-plot'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Plotly: any = null
 
-interface AssociationResult {
-  gene_symbol: string
-  fisher: { p_value: number | null; odds_ratio: number | null }
-  logistic_burden: { p_value: number | null; beta: number | null }
-  q_value: number | null
-}
-
 const props = defineProps<{
-  results: AssociationResult[]
+  results: AssociationPlotRow[]
   primaryTest: string
   fdrThreshold?: number
 }>()
@@ -28,62 +26,46 @@ async function loadPlotly(): Promise<void> {
   Plotly = await import('plotly.js-basic-dist-min')
 }
 
+function trace(points: PlotPoint[], extra: Record<string, unknown>): Record<string, unknown> {
+  const marker = extra.marker as Record<string, unknown>
+  return {
+    ...extra,
+    x: points.map((d) => d.x),
+    y: points.map((d) => d.y),
+    text: points.map((d) => d.gene),
+    // Capped effects (infinite or zero odds ratio) sit at the axis edge as a triangle.
+    customdata: points.map((d) =>
+      d.capped ? `${d.pLabel}<br>effect beyond axis (${d.x > 0 ? 'OR = ∞' : 'OR = 0'})` : d.pLabel
+    ),
+    type: 'scatter',
+    marker: {
+      ...marker,
+      symbol: points.map((d) =>
+        d.capped ? (d.x > 0 ? 'triangle-right' : 'triangle-left') : 'circle'
+      )
+    },
+    hovertemplate: '%{text}<br>x: %{x:.3f}<br>%{customdata}<extra></extra>'
+  }
+}
+
 function buildPlotData(): Array<Record<string, unknown>> {
   const threshold = props.fdrThreshold ?? 0.05
-  const significant: AssociationResult[] = []
-  const notSignificant: AssociationResult[] = []
-
-  for (const r of props.results) {
-    const p = props.primaryTest === 'fisher' ? r.fisher.p_value : r.logistic_burden.p_value
-    const effect = props.primaryTest === 'fisher' ? r.fisher.odds_ratio : r.logistic_burden.beta
-    if (p === null || effect === null) continue
-
-    if (r.q_value !== null && r.q_value < threshold) {
-      significant.push(r)
-    } else {
-      notSignificant.push(r)
-    }
-  }
-
-  const getX = (r: AssociationResult): number => {
-    const effect = props.primaryTest === 'fisher' ? r.fisher.odds_ratio : r.logistic_burden.beta
-    if (props.primaryTest === 'fisher') {
-      // Guard against non-finite values (0 or negative odds ratio)
-      const val = effect!
-      return val > 0 ? Math.log2(val) : 0
-    }
-    return effect!
-  }
-  const getY = (r: AssociationResult): number => {
-    const p = props.primaryTest === 'fisher' ? r.fisher.p_value : r.logistic_burden.p_value
-    // Guard against 0 p-values which produce Infinity
-    const pVal = p!
-    return pVal > 0 ? -Math.log10(pVal) : 0
-  }
-
+  const points = buildVolcanoPoints(props.results, props.primaryTest, threshold)
   return [
-    {
-      x: notSignificant.map(getX),
-      y: notSignificant.map(getY),
-      text: notSignificant.map((r) => r.gene_symbol),
-      mode: 'markers',
-      type: 'scatter',
-      name: 'Not significant',
-      marker: { color: '#999', size: 6 },
-      hovertemplate: '%{text}<br>x: %{x:.3f}<br>-log10(p): %{y:.2f}<extra></extra>'
-    },
-    {
-      x: significant.map(getX),
-      y: significant.map(getY),
-      text: significant.map((r) => r.gene_symbol),
-      mode: 'markers+text',
-      type: 'scatter',
-      name: `FDR < ${threshold}`,
-      marker: { color: '#e53935', size: 8 },
-      textposition: 'top center',
-      textfont: { size: 10 },
-      hovertemplate: '%{text}<br>x: %{x:.3f}<br>-log10(p): %{y:.2f}<extra></extra>'
-    }
+    trace(
+      points.filter((d) => !d.significant),
+      { mode: 'markers', name: 'Not significant', marker: { color: '#999', size: 6 } }
+    ),
+    trace(
+      points.filter((d) => d.significant),
+      {
+        mode: 'markers+text',
+        name: `FDR < ${threshold}`,
+        marker: { color: '#e53935', size: 8 },
+        textposition: 'top center',
+        textfont: { size: 10 }
+      }
+    )
   ]
 }
 

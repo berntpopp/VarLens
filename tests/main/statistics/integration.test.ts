@@ -192,7 +192,13 @@ describe('AssociationEngine with DbPool (off-thread build)', () => {
       groupB_carriers: g.groupB_carrier_count,
       groupA_total: g.groupA_carrier_count + g.groupA_non_carrier_count,
       groupB_total: g.groupB_carrier_count + g.groupB_non_carrier_count,
-      fisher: { p_value: 0.05, odds_ratio: null, ci_lower: null, ci_upper: null },
+      fisher: {
+        p_value: 0.05,
+        odds_ratio: null,
+        odds_ratio_infinite: false,
+        ci_lower: null,
+        ci_upper: null
+      },
       logistic_burden: {
         p_value: 0.1,
         beta: null,
@@ -395,7 +401,13 @@ describe('AssociationEngine parallel execution', () => {
         groupB_carriers: 0,
         groupA_total: 5,
         groupB_total: 5,
-        fisher: { p_value: 0.05, odds_ratio: null, ci_lower: null, ci_upper: null },
+        fisher: {
+          p_value: 0.05,
+          odds_ratio: null,
+          odds_ratio_infinite: false,
+          ci_lower: null,
+          ci_upper: null
+        },
         logistic_burden: {
           p_value: 0.1,
           beta: null,

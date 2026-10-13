@@ -13,7 +13,6 @@ import {
 } from '../../../shared/types/ipc-schemas'
 import { VariantSearchQuerySchema as SearchQuerySchema } from '../../../shared/api/schemas/variants'
 import { mainLogger } from '../../services/MainLogger'
-import { clearPanelIntervalCache } from './panelIntervalHelper'
 import {
   buildVariantFilter,
   queryVariants,
@@ -24,9 +23,6 @@ import {
   getColumnMetaForKey,
   getVariantTypesPresent
 } from './variants-logic'
-
-// Re-export for consumers that import from this module
-export { clearPanelIntervalCache }
 
 /**
  * Variants IPC handlers

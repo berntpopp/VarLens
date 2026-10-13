@@ -4,8 +4,8 @@
  * leaves a 'provisional' case behind (worker or app died, or its own cleanup
  * failed). Like `recoverInterruptedImports` on PostgreSQL, the next import
  * session discards it before doing anything else: case, variants and child
- * rows go; `variant_frequency` and the cohort summary need no repair, because
- * a provisional case never contributed to either.
+ * rows go; the cohort summary needs no repair, because a provisional case
+ * never contributed to it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
@@ -31,14 +31,12 @@ describe('import worker: interrupted imports', () => {
 
   const cases = (): unknown[] =>
     h.db.prepare('SELECT name, import_status FROM cases ORDER BY name').all()
-  const frequencies = (): unknown[] =>
-    h.db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos, ref, alt').all()
   const countOf = (table: string): number =>
     (h.db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c
 
   /**
    * What a dead import leaves: a committed provisional case whose rows are in
-   * no frequency count and no summary row. Coordinates copy an imported case.
+   * no summary row. Coordinates copy an imported case.
    */
   function leaveInterruptedCase(name: string, likeCase: string): number {
     const id = Number(
@@ -62,7 +60,7 @@ describe('import worker: interrupted imports', () => {
 
   it('discards a provisional case at the start of the next session', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const before = { summary: snapshotSummary(h.db) }
     leaveInterruptedCase('X', 'A')
     expect(countOf('variants')).toBe(4)
 
@@ -70,7 +68,6 @@ describe('import worker: interrupted imports', () => {
 
     expect(cases()).toEqual([{ name: 'A', import_status: 'ready' }])
     expect(countOf('variants')).toBe(2)
-    expect(frequencies()).toEqual(before.frequencies)
     expect(snapshotSummary(h.db)).toEqual(before.summary)
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
     expect(summaryMeta(h.db, 'is_stale')).toBe('0')
@@ -81,14 +78,13 @@ describe('import worker: interrupted imports', () => {
   // first: PostgresCaseLifecycleRepository.hideAbandonedReplacements).
   it('discards the temp-named replacement of an overwrite that died, and keeps the case', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const before = { summary: snapshotSummary(h.db) }
     const { id } = h.db.prepare("SELECT id FROM cases WHERE name = 'A'").get() as { id: number }
     leaveInterruptedCase(replacementCaseName('A', id), 'A')
 
     await h.run([])
 
     expect(cases()).toEqual([{ name: 'A', import_status: 'ready' }])
-    expect(frequencies()).toEqual(before.frequencies)
     expect(snapshotSummary(h.db)).toEqual(before.summary)
   })
 
@@ -96,7 +92,7 @@ describe('import worker: interrupted imports', () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
     leaveInterruptedCase('X', 'A')
 
-    // Not "replaced": that would subtract frequencies it never counted.
+    // Not "replaced": that would subtract a summary contribution it never made.
     const messages = await h.run([h.file('X', [variantAt(100, 'AAA'), variantAt(300, 'XXX')])])
 
     expect(sessionStatuses(messages)).toEqual(['X:success'])
@@ -105,9 +101,6 @@ describe('import worker: interrupted imports', () => {
       { name: 'X', import_status: 'ready' }
     ])
     expect(countOf('variants')).toBe(3)
-    expect(h.db.prepare('SELECT case_count FROM variant_frequency WHERE pos = 100').get()).toEqual({
-      case_count: 2
-    })
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
   })
 
@@ -126,9 +119,9 @@ describe('import worker: interrupted imports', () => {
     expect(countOf('variants')).toBe(2)
   })
 
-  it('removes the frequencies of a published case the main process never heard of', async () => {
+  it('removes a published case the main process never heard of', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA'), variantAt(200, 'AAA')])])
-    const before = { summary: snapshotSummary(h.db), frequencies: frequencies() }
+    const before = { summary: snapshotSummary(h.db) }
     // The worker published B, then died before `file-complete` arrived: the
     // client reports the import failed and hands the case over for discard.
     await h.run([h.file('B', [variantAt(100, 'AAA'), variantAt(300, 'BBB')])])
@@ -137,19 +130,19 @@ describe('import worker: interrupted imports', () => {
     await h.run([], { discardCaseIds: [b.id] })
 
     expect(cases()).toEqual([{ name: 'A', import_status: 'ready' }])
-    expect(frequencies()).toEqual(before.frequencies)
     expect(snapshotSummary(h.db)).toEqual(before.summary)
     expect(snapshotSummary(h.db)).toEqual(referenceSummary(h.db))
   })
 
-  it('keeps the frequencies when the discarded partial case was never published', async () => {
+  it('discards a reported partial case that was never published', async () => {
     await h.run([h.file('A', [variantAt(100, 'AAA')])])
-    const before = frequencies()
+    const before = snapshotSummary(h.db)
     const x = leaveInterruptedCase('X', 'A')
 
     await h.run([], { discardCaseIds: [x] })
 
     expect(cases()).toEqual([{ name: 'A', import_status: 'ready' }])
-    expect(frequencies()).toEqual(before)
+    expect(countOf('variants')).toBe(1)
+    expect(snapshotSummary(h.db)).toEqual(before)
   })
 })
