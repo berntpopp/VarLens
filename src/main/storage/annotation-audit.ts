@@ -1,4 +1,9 @@
-import { parseAcmgEvidence } from '../../shared/acmg/acmg-evidence'
+import {
+  mergedOverrideReasonMissing,
+  OVERRIDE_REASON_REQUIRED,
+  parseAcmgEvidence
+} from '../../shared/acmg/acmg-evidence'
+import { InvalidParametersError } from '../ipc/errors'
 import type { AuditAppendParams } from './audit-log-types'
 
 /** The override reason saved with a class (#567), for its history entry. */
@@ -6,6 +11,19 @@ function overrideReasonOf(evidence: unknown): { override_reason?: string } {
   const reason =
     typeof evidence === 'string' ? (parseAcmgEvidence(evidence)?.overrideReason ?? null) : null
   return reason === null ? {} : { override_reason: reason }
+}
+
+/**
+ * #567 on the row as it will be stored (update over `stored`); refuses the
+ * write before anything changes. Both backends' audited writes call it.
+ */
+export function assertOverrideReason(
+  updates: object,
+  stored: Record<string, unknown> | null
+): void {
+  if (mergedOverrideReasonMissing(updates as Record<string, unknown>, stored)) {
+    throw new InvalidParametersError(OVERRIDE_REASON_REQUIRED, OVERRIDE_REASON_REQUIRED)
+  }
 }
 
 export function globalAnnotationAuditEntries(

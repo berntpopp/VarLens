@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { ACMG_CLASSIFICATIONS } from '../../config/domain.config'
-import { overrideReasonMissing } from '../../acmg/acmg-evidence'
+import { OVERRIDE_REASON_REQUIRED, overrideReasonMissing } from '../../acmg/acmg-evidence'
 import {
   CaseVariantIdSchema,
   GlobalAnnotationUpdatesSchema as GlobalAnnotationFieldsSchema,
@@ -17,7 +17,7 @@ function requireOverrideReason(value: unknown, ctx: z.RefinementCtx): void {
     ctx.addIssue({
       code: 'custom',
       path: ['acmg_evidence'],
-      message: 'An ACMG class that overrides the evidence needs a reason'
+      message: OVERRIDE_REASON_REQUIRED
     })
   }
 }

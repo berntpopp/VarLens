@@ -79,3 +79,25 @@ export function acmgEvidenceFields(json: string | null | undefined): {
     overrideReason: evidence.overrideReason
   }
 }
+
+/**
+ * The rule on the row as it will be stored: the update's class and evidence
+ * over the stored ones. Only an update that sets the class or the evidence
+ * is judged, so a star or comment on a legacy reasonless override saves.
+ * A key present with no value clears that field.
+ */
+export function mergedOverrideReasonMissing(
+  update: Record<string, unknown>,
+  stored: { acmg_classification?: unknown; acmg_evidence?: unknown } | null
+): boolean {
+  const field = (key: 'acmg_classification' | 'acmg_evidence'): unknown =>
+    key in update ? (update[key] ?? null) : (stored?.[key] ?? null)
+  if (!('acmg_classification' in update) && !('acmg_evidence' in update)) return false
+  return overrideReasonMissing({
+    acmg_classification: field('acmg_classification'),
+    acmg_evidence: field('acmg_evidence')
+  })
+}
+
+export const OVERRIDE_REASON_REQUIRED =
+  'An ACMG class that overrides the evidence needs a reason'

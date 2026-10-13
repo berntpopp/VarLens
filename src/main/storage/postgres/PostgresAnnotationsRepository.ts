@@ -6,7 +6,11 @@ import type {
   CaseVariantAnnotation,
   VariantAnnotation
 } from '../../../shared/types/database'
-import { globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../annotation-audit'
+import {
+  assertOverrideReason,
+  globalAnnotationAuditEntries,
+  perCaseAnnotationAuditEntries
+} from '../annotation-audit'
 import {
   applyAnnotationFlagsGlobal,
   applyAnnotationFlagsPerCase,
@@ -223,6 +227,7 @@ export class PostgresAnnotationsRepository {
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const key = { chr, pos, ref, alt, genomeBuild }
       const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt, genomeBuild)
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = await this._upsertGlobalAnnotationOn(client, key, updates)
       for (const entry of globalAnnotationAuditEntries(
         { chr, pos, ref, alt },
@@ -400,6 +405,7 @@ export class PostgresAnnotationsRepository {
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
       for (const entry of perCaseAnnotationAuditEntries(
         caseId,

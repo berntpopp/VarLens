@@ -213,6 +213,7 @@ import {
 } from '../utils/acmg/types'
 import type { VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
 import { useAcmgEvidence } from '../composables/useAcmgEvidence'
+import { OVERRIDE_REASON_REQUIRED } from '../../../shared/acmg/acmg-evidence'
 import AcmgSummaryBar from './acmg/AcmgSummaryBar.vue'
 import AcmgEvidenceGrid from './acmg/AcmgEvidenceGrid.vue'
 import { mdiChevronDown } from '@mdi/js'
@@ -258,7 +259,6 @@ const {
   isCodeSuggested
 } = useAcmgEvidence()
 
-const OVERRIDE_REASON_REQUIRED = 'A class that overrides the evidence needs a reason'
 /** The server refuses such a save too (shared/acmg/acmg-evidence.ts). */
 const overrideReasonMissing = computed(() => isOverride.value && overrideReason.value.trim() === '')
 
