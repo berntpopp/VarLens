@@ -50,10 +50,10 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
   const insertVariantStmt = db.prepare(`
     INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, omim_mim_number,
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
-      hpo_sim_score, transcript, cdna, aa_change, moi,
+      hpo_sim_score, transcript, cdna, aa_change, moi, hpo_match,
       gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format,
       variant_type, end_pos, sv_type, sv_length, caller, impact_rank, clinvar_rank)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
@@ -159,6 +159,7 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
         v.cdna ?? null,
         v.aa_change ?? null,
         v.moi ?? null,
+        v.hpo_match ?? null,
         v.gq ?? null,
         v.dp ?? null,
         v.ad_ref ?? null,

@@ -24,6 +24,7 @@ export interface VariantInsertRow {
   cdna: string | null
   aa_change: string | null
   moi: string | null
+  hpo_match?: string | null
   gq: number | null
   dp: number | null
   ad_ref: number | null
@@ -55,6 +56,7 @@ export const VARIANT_INSERT_COLUMNS = [
   'cdna',
   'aa_change',
   'moi',
+  'hpo_match',
   'gq',
   'dp',
   'ad_ref',

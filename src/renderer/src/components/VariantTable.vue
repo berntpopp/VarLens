@@ -200,8 +200,8 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- MoI (handle null) -->
-      <template #[`item.moi`]="{ value }">
+      <!-- MoI and matched HPO terms (handle null) -->
+      <template v-for="key in ['moi', 'hpo_match']" :key="key" #[`item.${key}`]="{ value }">
         <template v-if="value !== null && value !== undefined">{{ value }}</template>
         <EmptyPlaceholder v-else />
       </template>

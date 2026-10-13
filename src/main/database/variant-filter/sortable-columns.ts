@@ -32,6 +32,7 @@ export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
   hpo_sim_score: 'hpo_sim_score',
   clinvar: 'clinvar',
   moi: 'moi',
+  hpo_match: 'hpo_match',
   // Multi-variant type (SV/CNV/STR) discriminator columns — added in
   // migration v25 as real columns on the variants table. Without these
   // entries, clicking sort headers on the SV/CNV/STR tabs silently no-ops

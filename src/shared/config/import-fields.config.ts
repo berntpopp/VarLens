@@ -183,7 +183,8 @@ export const OBJECT_FORMAT_COLUMNS: Readonly<Record<string, string>> = {
   transcript: 'transcript',
   cdna: 'cdna',
   aa_change: 'aa_change',
-  moi: 'moi'
+  moi: 'moi',
+  hpo_match: 'hpo_match'
 }
 
 /** VEP CSQ subfields the annotation parser turns into columns (`vcf-annotation-parser.ts`). */

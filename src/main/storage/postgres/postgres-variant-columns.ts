@@ -24,6 +24,7 @@ export const POSTGRES_VARIANT_COLUMN_DEFINITIONS: Record<string, PostgresVariant
     hpo_sim_score: { key: 'hpo_sim_score', sql: 'v.hpo_sim_score', kind: 'numeric' },
     clinvar: { key: 'clinvar', sql: 'v.clinvar', kind: 'categorical' },
     moi: { key: 'moi', sql: 'v.moi', kind: 'categorical' },
+    hpo_match: { key: 'hpo_match', sql: 'v.hpo_match', kind: 'categorical' },
     variant_type: { key: 'variant_type', sql: 'v.variant_type', kind: 'categorical' },
     end_pos: { key: 'end_pos', sql: 'v.end_pos', kind: 'numeric' },
     sv_type: { key: 'sv_type', sql: 'v.sv_type', kind: 'categorical' },

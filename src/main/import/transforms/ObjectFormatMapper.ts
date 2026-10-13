@@ -46,6 +46,8 @@ export interface ObjectFormatVariant {
   cdna?: string | null
   aa_change?: string | null
   moi?: MoiItem[] | null
+  /** Patient HPO terms that matched the gene (varvis), same item shape as `moi`. */
+  hpo_match?: MoiItem[] | null
 }
 
 /**
@@ -76,6 +78,17 @@ function normalizeNumber(value: unknown): number | null {
     return isNaN(num) ? null : num
   }
   return null
+}
+
+/** Matched HPO terms as `HP:0004322 Short stature; …` (id = abbreviation); null when none. */
+function hpoMatchText(value: unknown): string | null {
+  if (!Array.isArray(value)) return normalizeString(value)
+  const terms = value
+    .map((item: Partial<MoiItem> | null) =>
+      [item?.abbreviation, item?.name].filter((part) => typeof part === 'string' && part !== '').join(' ')
+    )
+    .filter((term) => term !== '')
+  return terms.length > 0 ? terms.join('; ') : null
 }
 
 /**
@@ -157,6 +170,7 @@ export class ObjectFormatMapper extends Transform {
         cdna: normalizeString(variant.cdna),
         aa_change: normalizeString(variant.aa_change),
         moi: moiString,
+        hpo_match: hpoMatchText(variant.hpo_match),
         gq: null,
         dp: null,
         ad_ref: null,

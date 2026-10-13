@@ -164,6 +164,14 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     caseOnly: true
   },
   {
+    key: 'hpo_match',
+    label: 'HPO Match',
+    aliases: ['hpo_terms', 'phenotype_match'],
+    type: 'text',
+    operators: TEXT_OPERATORS,
+    caseOnly: true
+  },
+  {
     key: 'moi',
     label: 'Mode of Inheritance',
     aliases: ['inheritance', 'mode'],

@@ -66,6 +66,8 @@ export const COLUMN_HELP: Readonly<Record<string, string>> = {
   hpo_sim_score:
     'Phenotype similarity between the case’s HPO terms and the gene, as supplied by the imported file. ' +
     'Higher = better match; the scale depends on the tool that computed it.',
+  hpo_match:
+    'The case’s HPO terms that matched the gene, as supplied by the imported file (varvis JSON).',
   moi: 'Mode(s) of inheritance of the gene’s disorders from the imported file, e.g. AD, AR, XLD, XLR.',
   // Cohort-only columns (src/main/database/cohort-frequency-sql.ts).
   carrier_count:

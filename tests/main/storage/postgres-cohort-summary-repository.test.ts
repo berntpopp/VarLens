@@ -647,8 +647,8 @@ describe.skipIf(!RUN)('refreshColumnMetas + removeColumnMetas — C2', () => {
       [caseA]
     )
 
-    // One row per BASE_SORTABLE_COLUMNS key (21 columns).
-    expect(rows.rows.length).toBe(21)
+    // One row per BASE_SORTABLE_COLUMNS key (22 columns).
+    expect(rows.rows.length).toBe(22)
     const byName = new Map(rows.rows.map((r) => [r.column_name, r]))
 
     // Numeric column: min/max populated, distinct_count = 2.
@@ -727,7 +727,7 @@ describe.skipIf(!RUN)('refreshColumnMetas + removeColumnMetas — C2', () => {
       [caseB]
     )
     expect(Number(aCount.rows[0].count)).toBe(0)
-    expect(Number(bCount.rows[0].count)).toBe(21)
+    expect(Number(bCount.rows[0].count)).toBe(22)
   }, 60_000)
 })
 
