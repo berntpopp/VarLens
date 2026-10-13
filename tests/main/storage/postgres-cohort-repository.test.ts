@@ -831,7 +831,20 @@ describe('PostgresCohortRepository', () => {
     expect(streamArg.cursor?.text).not.toContain('LIMIT')
     expect(streamArg.cursor?.text).not.toContain('OFFSET')
     expect(streamArg.cursor?.values).toEqual(['MYH7'])
-    expect(rows).toEqual([{ chr: '2', pos: '456', ref: 'C', alt: 'T', carrier_count: '1' }])
+    expect(rows).toEqual([
+      {
+        chr: '2',
+        pos: '456',
+        ref: 'C',
+        alt: 'T',
+        carrier_count: '1',
+        // No annotation at this row (#574).
+        acmg_classification: null,
+        acmg_points: null,
+        acmg_override_reason: null,
+        annotation_comment: null
+      }
+    ])
     expect(release).toHaveBeenCalledTimes(1)
   })
 })

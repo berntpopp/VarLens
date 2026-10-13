@@ -3,6 +3,7 @@ import type { Pool } from 'pg'
 import type { VariantFilter } from '../../../shared/types/database'
 import { quoteIdentifier } from './identifiers'
 import { streamLongQuery } from './long-running-client'
+import { caseAnnotationExportColumns, withAnnotationCells } from './postgres-annotation-export'
 import { PostgresPanelIntervalResolver } from './postgres-panel-interval-resolver'
 import { buildPostgresVariantQueryParts } from './PostgresVariantReadRepository'
 
@@ -25,8 +26,10 @@ export class PostgresExportRepository {
   async *streamVariantRows(
     requestedFilter: VariantFilter
   ): AsyncGenerator<Record<string, unknown>> {
-    const { sql, params } = await this.variantRowsQuery(requestedFilter)
-    yield* streamLongQuery(this.pool, sql, params)
+    const { sql, params } = await this.variantRowsQuery(requestedFilter, [
+      caseAnnotationExportColumns(this.schemaName)
+    ])
+    yield* withAnnotationCells(streamLongQuery(this.pool, sql, params), 'case')
   }
 
   /**
@@ -35,7 +38,8 @@ export class PostgresExportRepository {
    * shortlist pages it through a cursor inside one snapshot.
    */
   async variantRowsQuery(
-    requestedFilter: VariantFilter
+    requestedFilter: VariantFilter,
+    extraColumns: readonly string[] = []
   ): Promise<{ sql: string; params: unknown[] }> {
     // Same panel-region resolution as the on-screen query, so an export under
     // an active gene panel contains exactly the rows the table shows.
@@ -45,7 +49,7 @@ export class PostgresExportRepository {
       this.schemaName
     )
     return {
-      sql: `SELECT ${projections.join(', ')}
+      sql: `SELECT ${[...projections, ...extraColumns].join(', ')}
          ${fromAndWhereSql}
          ${orderBySql}`,
       params
