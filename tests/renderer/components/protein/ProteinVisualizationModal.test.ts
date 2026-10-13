@@ -90,4 +90,31 @@ describe('ProteinVisualizationModal', () => {
       '1,000 of 2,345 variants shown (top by carriers)'
     )
   })
+
+  it('cohort: draws an SV/CNV row as its start-end interval on the gene view (#539)', async () => {
+    const cohortDel = {
+      ...selected,
+      ref: 'N',
+      alt: '<DEL>',
+      aa_change: null,
+      variant_type: 'cnv',
+      end_pos: 5000,
+      sv_type: 'DEL',
+      sv_length: 4900
+    }
+    const wrapper = mountModal({
+      mode: 'cohort',
+      variant: cohortDel,
+      initialTab: 'gene-structure',
+      genomeBuild: 'GRCh38'
+    })
+    await flushPromises()
+    const panel = wrapper.findComponent({ name: 'GeneStructurePanel' })
+    expect(panel.props('variant')).toMatchObject({
+      pos: 100,
+      end: 5000,
+      label: 'DEL chr22:100-5000'
+    })
+    expect(panel.props('variantBuild')).toBe('GRCh38')
+  })
 })

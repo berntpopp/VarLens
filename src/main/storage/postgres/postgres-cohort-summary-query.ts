@@ -30,6 +30,7 @@ import {
   type CarrierFrequencyRelations
 } from '../../../shared/sql/carrier-frequency'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
+import { cohortCallColumnsSql } from '../../../shared/sql/cohort-call-sql'
 
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
@@ -173,10 +174,12 @@ export function buildSummaryPageSql(
   totalCases: number,
   limitParamIndex: number,
   offsetParamIndex: number,
-  buildTotalsJoin: string
+  buildTotalsJoin: string,
+  tbl: (table: string) => string
 ): string {
   return `SELECT
       ${summarySelectList(totalCases)},
+      ${cohortCallColumnsSql(tbl)},
       cvs.variant_type AS _keyset_variant_type,
       cvs.genome_build AS _keyset_genome_build
     FROM ${qualifiedTable} cvs

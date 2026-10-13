@@ -63,6 +63,14 @@ export interface CohortVariant extends CohortVariantIdentity {
   transcript: string | null
   /** OMIM ID (nullable) */
   omim_id: string | null
+
+  // SV/CNV call context (#573, #539); null for SNVs or when not reported
+  /** End of the representative carrier's call (summary column) */
+  end_pos?: number | null
+  /** SV type (DEL, DUP, INV, BND, ...) of the carriers' calls */
+  sv_type?: string | null
+  /** Unsigned call length of the carriers at this end position */
+  sv_length?: number | null
 }
 
 /**
@@ -75,6 +83,21 @@ export interface CohortCarrier {
   case_name: string
   /** Genotype (e.g., "0/1", "1/1") */
   gt_num: string
+
+  // This carrier's own call metrics (#539); null when the caller did not report them
+  qual?: number | null
+  gq?: number | null
+  dp?: number | null
+  filter?: string | null
+  caller?: string | null
+  end_pos?: number | null
+  /** Unsigned call length */
+  sv_length?: number | null
+  /** SV supporting reads */
+  sv_support?: number | null
+  /** SV variant allele fraction */
+  sv_vaf?: number | null
+  copy_number?: number | null
 }
 
 /**

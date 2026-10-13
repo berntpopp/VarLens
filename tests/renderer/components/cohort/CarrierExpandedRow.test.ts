@@ -88,6 +88,24 @@ describe('CarrierExpandedRow', () => {
     expect(failed(wrapper)).toBe(false)
   })
 
+  it("shows each SV carrier's own call metrics, missing ones explicitly (#539)", async () => {
+    getCarriers.mockResolvedValue([
+      { ...carrier('A'), end_pos: 5000, sv_length: 4000, sv_support: 12, sv_vaf: 0.4, qual: 50 },
+      { ...carrier('BB'), end_pos: 4500, sv_length: null, sv_support: null, filter: 'LowQual' }
+    ])
+    const wrapper = mountRow({ ...variant(1000), alt: '<DEL>', variant_type: 'sv' })
+    await flushPromises()
+
+    const cells = (key: string): string[] =>
+      wrapper.findAll(`[data-testid="carrier-metric-${key}"]`).map((cell) => cell.text())
+    expect(cells('end_pos')).toEqual(['5,000', '4,500'])
+    expect(cells('sv_length')).toEqual(['4.00 kb', '--'])
+    expect(cells('sv_support')).toEqual(['12', '--'])
+    expect(cells('sv_vaf')).toEqual(['0.400', '--'])
+    expect(cells('filter')).toEqual(['--', 'LowQual'])
+    expect(wrapper.find('[data-testid="carrier-metric-header-copy_number"]').exists()).toBe(false)
+  })
+
   it('labels each carrier by the zygosity of its genotype', async () => {
     getCarriers.mockResolvedValue([
       carrier('A', '1/.'),

@@ -15,12 +15,20 @@
           <tr>
             <th class="text-left">Case</th>
             <th class="text-left">Zygosity</th>
+            <th
+              v-for="metric in metrics"
+              :key="metric.key"
+              class="text-right"
+              :data-testid="`carrier-metric-header-${metric.key}`"
+            >
+              {{ metric.title }}
+            </th>
             <th class="text-left">Action</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="error" data-testid="carrier-load-error">
-            <td colspan="3" class="text-error">
+            <td :colspan="metrics.length + 3" class="text-error">
               Carriers could not be loaded.
               <v-btn
                 size="small"
@@ -39,6 +47,14 @@
               <v-chip size="x-small" :color="zygosityColor(carrier.gt_num)" label>
                 {{ formatZygosity(carrier.gt_num) }}
               </v-chip>
+            </td>
+            <td
+              v-for="metric in metrics"
+              :key="metric.key"
+              class="text-right"
+              :data-testid="`carrier-metric-${metric.key}`"
+            >
+              {{ metric.format(carrier) }}
             </td>
             <td>
               <v-btn
@@ -75,6 +91,7 @@ import {
 } from '../../../../shared/utils/genotype'
 import { mdiOpenInApp } from '@mdi/js'
 import { carriersQuery } from '../../queries/carriers'
+import { carrierMetrics } from '../../config/carrierMetricsConfig'
 
 interface Props {
   variant: CohortVariant
@@ -91,6 +108,7 @@ const emit = defineEmits<Emits>()
 const { data, status, refetch } = useQuery(() => carriersQuery(props.variant))
 const error = computed(() => status.value === 'error')
 const carriers = computed(() => (error.value ? [] : (data.value ?? [])))
+const metrics = computed(() => carrierMetrics(props.variant.variant_type))
 
 const zygosityColor = (gt: string): string | undefined => {
   const zygosity = genotypeZygosity(gt)

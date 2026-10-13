@@ -32,6 +32,7 @@ import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
+import { carrierCallSql, cohortCallColumnsSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
@@ -289,7 +290,8 @@ export class CohortService {
         cvs.gnomad_af,
         cvs.cadd AS cadd_phred,
         cvs.transcript,
-        cvs.omim_mim_number AS omim_id${
+        cvs.omim_mim_number AS omim_id,
+        ${cohortCallColumnsSql()}${
           keyset !== null
             ? `,
         ${SQLITE_KEYSET_EXTRA_COLUMNS}`
@@ -434,9 +436,11 @@ export class CohortService {
       SELECT
         v.case_id,
         c.name as case_name,
-        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num
+        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num,
+        ${carrierCallSql().columns}
       FROM variants v
       JOIN cases c ON v.case_id = c.id
+      ${carrierCallSql().joins}
       WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
         AND v.variant_type = ? AND c.genome_build = ?
       GROUP BY v.case_id, c.name

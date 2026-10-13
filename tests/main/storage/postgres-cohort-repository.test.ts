@@ -106,7 +106,10 @@ describe('PostgresCohortRepository', () => {
           gnomad_af: 0.001,
           cadd_phred: 32.5,
           transcript: 'NM_007294',
-          omim_id: '113705'
+          omim_id: '113705',
+          end_pos: null,
+          sv_type: null,
+          sv_length: null
         }
       ]
     })
@@ -646,9 +649,19 @@ describe('PostgresCohortRepository', () => {
 
     expect(query.mock.calls[0][1]).toEqual(['1', 123, 'A', 'G', 'snv', 'GRCh38'])
     expect(query.mock.calls[0][0]).toContain('v.variant_type = $5 AND c.genome_build = $6')
+    const noCall = {
+      qual: null,
+      filter: null,
+      caller: null,
+      end_pos: null,
+      sv_length: null,
+      sv_support: null,
+      sv_vaf: null,
+      copy_number: null
+    }
     expect(carriers).toEqual([
-      { case_id: 7, case_name: 'Case B', gt_num: '0/1', gq: 99.5, dp: 42 },
-      { case_id: 8, case_name: 'Case C', gt_num: '1/1', gq: null, dp: null }
+      { ...noCall, case_id: 7, case_name: 'Case B', gt_num: '0/1', gq: 99.5, dp: 42 },
+      { ...noCall, case_id: 8, case_name: 'Case C', gt_num: '1/1', gq: null, dp: null }
     ])
   })
 

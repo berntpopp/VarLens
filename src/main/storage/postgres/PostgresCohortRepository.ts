@@ -40,15 +40,11 @@ import {
   COHORT_SUMMARY_FILTER_COLUMNS
 } from '../../../shared/filters/cohort-column-filter-keys'
 import { resolvedGtSql } from '../../../shared/sql/genotype-dosage'
+import { carrierCallSql } from '../../../shared/sql/cohort-call-sql'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 
 type Queryable = Pick<Pool, 'query'>
-
-type CohortCarrierWithDepth = CohortCarrier & {
-  gq?: number | null
-  dp?: number | null
-}
 
 const NUMERIC_COLUMNS = new Set([
   'pos',
@@ -112,6 +108,9 @@ function toNullableNumber(value: unknown): number | null {
   const numberValue = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numberValue) ? numberValue : null
 }
+
+const toNullableString = (value: unknown): string | null =>
+  value === null || value === undefined ? null : String(value)
 
 export class PostgresCohortRepository {
   private readonly schema: string
@@ -277,16 +276,17 @@ export class PostgresCohortRepository {
   }
 
   /** Carriers of one cohort row: one variant type in one genome build (#503). */
-  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrierWithDepth[]> {
+  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrier[]> {
+    const calls = carrierCallSql((table) => this.tbl(table))
     const result = await this.pool.query(
       `SELECT
          v.case_id,
          c.name AS case_name,
          ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num,
-         MAX(v.gq) AS gq,
-         MAX(v.dp) AS dp
+         ${calls.columns}
        FROM ${this.schemaName}."variants" v
        JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
+       ${calls.joins}
        WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
          AND v.variant_type = $5 AND c.genome_build = $6
        GROUP BY v.case_id, c.name
@@ -305,8 +305,16 @@ export class PostgresCohortRepository {
       case_id: toNumber(row.case_id),
       case_name: String(row.case_name ?? ''),
       gt_num: String(row.gt_num ?? ''),
+      qual: toNullableNumber(row.qual),
       gq: toNullableNumber(row.gq),
-      dp: toNullableNumber(row.dp)
+      dp: toNullableNumber(row.dp),
+      filter: toNullableString(row.filter),
+      caller: toNullableString(row.caller),
+      end_pos: toNullableNumber(row.end_pos),
+      sv_length: toNullableNumber(row.sv_length),
+      sv_support: toNullableNumber(row.sv_support),
+      sv_vaf: toNullableNumber(row.sv_vaf),
+      copy_number: toNullableNumber(row.copy_number)
     }))
   }
 
@@ -458,7 +466,10 @@ export class PostgresCohortRepository {
       cadd_phred: toNullableNumber(row.cadd_phred),
       transcript:
         row.transcript === null || row.transcript === undefined ? null : String(row.transcript),
-      omim_id: row.omim_id === null || row.omim_id === undefined ? null : String(row.omim_id)
+      omim_id: row.omim_id === null || row.omim_id === undefined ? null : String(row.omim_id),
+      end_pos: toNullableNumber(row.end_pos),
+      sv_type: toNullableString(row.sv_type),
+      sv_length: toNullableNumber(row.sv_length)
     }
   }
 }
