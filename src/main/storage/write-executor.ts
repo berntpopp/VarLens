@@ -15,7 +15,7 @@ import type {
 import type {
   GlobalAnnotationUpdates,
   PerCaseAnnotationUpdates,
-  VariantCoords
+  GlobalVariantCoords
 } from '../ipc/handlers/annotations-logic'
 import type { AuditAppendParams } from './audit-log-types'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
@@ -57,13 +57,13 @@ export type StorageWriteTask =
   | { type: 'tags:setVariantTags'; params: [caseId: number, variantId: number, tagIds: number[]] }
   | {
       type: 'annotations:upsertGlobal'
-      params: [coords: VariantCoords, updates: GlobalAnnotationUpdates]
+      params: [coords: GlobalVariantCoords, updates: GlobalAnnotationUpdates]
     }
   | {
       type: 'annotations:upsertGlobalWithAudit'
-      params: [coords: VariantCoords, updates: GlobalAnnotationUpdates]
+      params: [coords: GlobalVariantCoords, updates: GlobalAnnotationUpdates]
     }
-  | { type: 'annotations:deleteGlobal'; params: [coords: VariantCoords] }
+  | { type: 'annotations:deleteGlobal'; params: [coords: GlobalVariantCoords] }
   | {
       type: 'annotations:upsertPerCase'
       params: [caseId: number, variantId: number, updates: PerCaseAnnotationUpdates]

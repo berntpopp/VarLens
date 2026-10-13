@@ -12,6 +12,15 @@ export const FILTER_TOOLBAR_COPY = {
   filters: 'Filters'
 } as const
 
+/** Table empty state (case + cohort, #568): names each active filter so it can be removed. */
+export const FILTER_EMPTY_STATE_COPY = {
+  title: 'No variants match your filters',
+  hint: 'These filters are active. Remove one to widen the results:',
+  removeLabel: 'Remove filter',
+  clearAll: 'Clear all filters',
+  noFiltersTitle: 'No variants to show'
+} as const
+
 export const PROTEIN_VIEW_COPY = {
   lengthUnknown: 'Protein length unknown, so the plot is unavailable.'
 } as const
@@ -57,3 +66,26 @@ export const CARRIER_FREQUENCY_PRESETS = [
   { label: '<= 5%', value: 0.05 },
   { label: '<= 10%', value: 0.1 }
 ] as const
+
+/** ClinGen VCEP gene-specific ACMG/AMP specification chip (#201, bundled CSpec snapshot). */
+export const CLINGEN_SPEC_COPY = {
+  chip: (id: string, several: boolean): string => (several ? `ClinGen VCEP ${id}` : 'ClinGen VCEP'),
+  tooltip: (panel: string | null, version: string | null, retrieved: string): string =>
+    `Gene-specific ACMG/AMP specification: ${panel ?? 'ClinGen VCEP'}${version === null ? '' : ` v${version}`}. Opens the ClinGen CSpec registry. Registry snapshot of ${retrieved}.`
+} as const
+
+/** Cohort details of an SV/CNV row: the summary holds no per-call evidence (#539). */
+export const COHORT_CALL_EVIDENCE_NOTE =
+  'Call metrics (support, VAF, copy number, quality) differ per carrier: expand the row to see each carrier’s call.'
+
+/** The "Local IGV" action (#93). */
+export const IGV_COPY = {
+  tooltip: (locus: string, build: string | null): string =>
+    `Jump to ${locus}${build === null ? '' : ` (${build})`} in local IGV (port 60151)`,
+  sent: (locus: string): string => `Sent ${locus} to IGV.`,
+  genome: (genomeId: string): string => `IGV must show ${genomeId}.`,
+  unknownBuild: 'Genome build unknown: check that IGV shows the case’s genome.',
+  unreachable:
+    'IGV did not answer on port 60151. Start IGV desktop with its batch port enabled (View > Preferences > Advanced), then retry.',
+  retry: 'Retry'
+} as const

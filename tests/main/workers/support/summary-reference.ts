@@ -26,7 +26,7 @@ export function snapshotSummary(db: DatabaseType): SummarySnapshot {
       .prepare(
         `SELECT chr, pos, ref, alt, variant_type, genome_build, end_pos, gene_symbol, cdna,
            aa_change, consequence, func, clinvar, gnomad_af, cadd, transcript, omim_mim_number,
-           impact_rank, clinvar_rank, carrier_count, het_count, hom_count, has_star, has_comment, acmg_best, variant_key
+           impact_rank, clinvar_rank, sv_type, sv_length, carrier_count, het_count, hom_count, has_star, has_comment, acmg_best, variant_key
          FROM cohort_variant_summary
          ORDER BY chr, pos, ref, alt, variant_type, genome_build`
       )

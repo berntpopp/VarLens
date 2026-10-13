@@ -92,8 +92,8 @@ describe.skipIf(!RUN)('PostgresAnnotationsRepository.getBatch — call-count gua
       // variants in caseA.
       await seed.query(
         `INSERT INTO "${schema}"."variant_annotations"
-           (chr, pos, ref, alt, global_comment, starred, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+           (chr, pos, ref, alt, genome_build, global_comment, starred, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'GRCh38', $5, $6, $7, $7)`,
         [KEY_A.chr, KEY_A.pos, KEY_A.ref, KEY_A.alt, 'global note', 1, Date.now()]
       )
       const insertPerCase = async (
@@ -131,7 +131,7 @@ describe.skipIf(!RUN)('PostgresAnnotationsRepository.getBatch — call-count gua
   it('runs exactly 1 query when caseId === null', async () => {
     const spy = vi.spyOn(pool, 'query')
     try {
-      const result = await repository.getBatch(null, [KEY_A, KEY_B])
+      const result = await repository.getBatch(null, [KEY_A, KEY_B], 'GRCh38')
       expect(spy).toHaveBeenCalledTimes(1)
       expect(result[`${KEY_A.chr}:${KEY_A.pos}:${KEY_A.ref}:${KEY_A.alt}`].global).toMatchObject({
         global_comment: 'global note',

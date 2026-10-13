@@ -36,7 +36,7 @@ describe('migration v15 - filter_presets', () => {
   it('creates unique index on name', () => {
     expect(() => {
       db.prepare(
-        "INSERT INTO filter_presets (name, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at) VALUES ('Rare Pathogenic', '{}', 0, 1, 99, 0, 0)"
+        "INSERT INTO filter_presets (name, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at) VALUES ('Rare known pathogenic', '{}', 0, 1, 99, 0, 0)"
       ).run()
     }).toThrow(/UNIQUE constraint/)
   })
@@ -60,12 +60,12 @@ describe('FilterPresetRepository', () => {
     it('returns built-in presets sorted by sort_order', () => {
       const presets = repo.listPresets()
       expect(presets.length).toBeGreaterThanOrEqual(8)
-      expect(presets[0].name).toBe('Rare Pathogenic')
+      expect(presets[0].name).toBe('Rare known pathogenic')
       expect(presets[0].isBuiltIn).toBe(true)
     })
 
     it("carries kind='filter' on classic built-in presets", () => {
-      const classic = repo.listPresets().find((p) => p.name === 'Rare Pathogenic')
+      const classic = repo.listPresets().find((p) => p.name === 'Rare known pathogenic')
       expect(classic?.kind).toBe('filter')
     })
 

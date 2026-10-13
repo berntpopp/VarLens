@@ -40,16 +40,19 @@
         size="x-small"
         tooltip-location="top"
         class="ml-2"
-        @click="copyHgvsText(hgvsText)"
+        @click="copyHgvsText(withGenomeBuild(hgvsText, genomeBuild))"
       />
     </div>
 
     <!-- Genomic position + alleles -->
     <div class="d-flex align-center">
+      <span v-if="genomeBuild" data-testid="genome-build" class="text-body-small text-muted mr-1">
+        {{ genomeBuild }}
+      </span>
       <span class="genomic-coordinate">{{ variant.chr }}:{{ formatPosition(variant.pos) }}</span>
       <span class="variant-data-mono ml-1">{{ variant.ref }} &gt; {{ variant.alt }}</span>
       <IconButton
-        :label="variantCopied ? 'Variant copied' : 'Copy chr:pos:ref:alt'"
+        :label="variantCopied ? 'Variant copied' : 'Copy build chr:pos:ref:alt'"
         :icon="variantCopied ? mdiCheck : mdiContentCopy"
         size="x-small"
         tooltip-location="top"
@@ -101,14 +104,18 @@ import { formatHgvs, variantName } from '../utils/formatters'
 import { ClinVarCell } from './table-cells/simple-cells'
 import { CALL_QUALITY_FIELDS, IDENTITY_COPY } from '../config/uiCopyConfig'
 import { INLINE_SEPARATOR } from '../config/displayConfig'
+import { withGenomeBuild } from '../../../shared/config/genome-builds.config'
 
 interface Props {
   variant: Variant | CohortVariant
   colocatedVariants?: VepColocatedVariant[]
+  /** Build of the coordinates and HGVS, shown and copied with them; null while unknown. */
+  genomeBuild?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  colocatedVariants: () => []
+  colocatedVariants: () => [],
+  genomeBuild: null
 })
 
 const emit = defineEmits<{
@@ -178,8 +185,8 @@ function formatPosition(pos: number): string {
  * Copy full variant notation (chr:pos:ref:alt) to clipboard
  */
 async function copyVariant(): Promise<void> {
-  const variantNotation = `${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
-  await copyVariantText(variantNotation)
+  const { chr, pos, ref, alt } = props.variant
+  await copyVariantText(withGenomeBuild(`${chr}:${pos}:${ref}:${alt}`, props.genomeBuild))
 }
 
 /**

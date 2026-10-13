@@ -102,3 +102,52 @@ describe('ObjectFormatMapper transcript output', () => {
     })
   })
 })
+
+describe('ObjectFormatMapper hpo_match (#580)', () => {
+  it('stores the matched HPO terms as "id label" text, out of info_json', async () => {
+    const [mapped] = await runObjectTransform([
+      {
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        hpo_sim_score: 0.4,
+        hpo_match: [
+          { accessionId: 1001, name: 'Short stature', abbreviation: 'HP:0004322' },
+          { accessionId: 1004, name: 'Craniosynostosis', abbreviation: 'HP:0001363' }
+        ]
+      }
+    ])
+    const variant = mapped as Record<string, unknown>
+    expect(variant.hpo_match).toBe('HP:0004322 Short stature; HP:0001363 Craniosynostosis')
+    expect(variant.info_json).toBeNull()
+  })
+
+  it('keeps string items as they are and accepts a single term', async () => {
+    const rows = await runObjectTransform([
+      { chr: '1', pos: 1, ref: 'A', alt: 'G', hpo_match: ['HP:0004322', 'HP:0001363'] },
+      {
+        chr: '1',
+        pos: 2,
+        ref: 'A',
+        alt: 'G',
+        hpo_match: { accessionId: 1, name: 'Short stature', abbreviation: 'HP:0004322' }
+      },
+      { chr: '1', pos: 3, ref: 'A', alt: 'G', hpo_match: 'HP:0004322' }
+    ] as unknown as ObjectFormatVariant[])
+    expect(rows.map((r) => (r as Record<string, unknown>).hpo_match)).toEqual([
+      'HP:0004322; HP:0001363',
+      'HP:0004322 Short stature',
+      'HP:0004322'
+    ])
+  })
+
+  it('keeps an empty or missing list null', async () => {
+    const rows = await runObjectTransform([
+      { chr: '1', pos: 1, ref: 'A', alt: 'G', hpo_match: [] },
+      { chr: '1', pos: 2, ref: 'A', alt: 'G', hpo_match: null },
+      { chr: '1', pos: 3, ref: 'A', alt: 'G' }
+    ])
+    expect(rows.map((r) => (r as Record<string, unknown>).hpo_match)).toEqual([null, null, null])
+  })
+})

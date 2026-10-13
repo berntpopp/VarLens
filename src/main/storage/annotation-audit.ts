@@ -1,7 +1,34 @@
+import {
+  mergedOverrideReasonMissing,
+  OVERRIDE_REASON_REQUIRED,
+  parseAcmgEvidence
+} from '../../shared/acmg/acmg-evidence'
+import { globalAnnotationEntityKey } from '../../shared/audit/annotation-entity-key'
+import { InvalidParametersError } from '../ipc/errors'
 import type { AuditAppendParams } from './audit-log-types'
 
+/** The override reason saved with a class (#567), for its history entry. */
+function overrideReasonOf(evidence: unknown): { override_reason?: string } {
+  const reason =
+    typeof evidence === 'string' ? (parseAcmgEvidence(evidence)?.overrideReason ?? null) : null
+  return reason === null ? {} : { override_reason: reason }
+}
+
+/**
+ * #567 on the row as it will be stored (update over `stored`); refuses the
+ * write before anything changes. Both backends' audited writes call it.
+ */
+export function assertOverrideReason(
+  updates: object,
+  stored: Record<string, unknown> | null
+): void {
+  if (mergedOverrideReasonMissing(updates as Record<string, unknown>, stored)) {
+    throw new InvalidParametersError(OVERRIDE_REASON_REQUIRED, OVERRIDE_REASON_REQUIRED)
+  }
+}
+
 export function globalAnnotationAuditEntries(
-  coords: { chr: string; pos: number; ref: string; alt: string },
+  coords: { chr: string; pos: number; ref: string; alt: string; genome_build?: string },
   updates: {
     user_name?: string | null
     starred?: boolean | number
@@ -10,7 +37,7 @@ export function globalAnnotationAuditEntries(
   },
   oldAnnotation: Record<string, unknown> | null
 ): AuditAppendParams[] {
-  const entityKey = `${coords.chr}:${coords.pos}:${coords.ref}:${coords.alt}`
+  const entityKey = globalAnnotationEntityKey(coords, coords.genome_build)
   const entries: AuditAppendParams[] = []
   if (updates.acmg_classification !== undefined) {
     entries.push({
@@ -21,7 +48,10 @@ export function globalAnnotationAuditEntries(
         oldAnnotation === null
           ? null
           : JSON.stringify({ acmg_classification: oldAnnotation.acmg_classification }),
-      new_value: JSON.stringify({ acmg_classification: updates.acmg_classification }),
+      new_value: JSON.stringify({
+        acmg_classification: updates.acmg_classification,
+        ...overrideReasonOf(updates.acmg_evidence)
+      }),
       user_name: updates.user_name ?? null
     })
   }

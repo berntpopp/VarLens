@@ -6,7 +6,11 @@ import type {
   CaseVariantAnnotation,
   VariantAnnotation
 } from '../../../shared/types/database'
-import { globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../annotation-audit'
+import {
+  assertOverrideReason,
+  globalAnnotationAuditEntries,
+  perCaseAnnotationAuditEntries
+} from '../annotation-audit'
 import {
   applyAnnotationFlagsGlobal,
   applyAnnotationFlagsPerCase,
@@ -36,6 +40,7 @@ type PerCaseAnnotationUpdates = Partial<
 >
 
 type VariantKey = { chr: string; pos: number; ref: string; alt: string }
+type GlobalKey = VariantKey & { genomeBuild: string }
 
 const nowExpression = '(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint'
 
@@ -50,6 +55,7 @@ function toGlobalAnnotation(row: Record<string, unknown>): VariantAnnotation {
     pos: toNumber(row.pos),
     ref: String(row.ref),
     alt: String(row.alt),
+    genome_build: String(row.genome_build),
     global_comment: row.global_comment === null ? null : String(row.global_comment),
     starred: toStarredNumber(row.starred),
     acmg_classification: (row.acmg_classification ?? null) as AcmgClassification | null,
@@ -88,17 +94,18 @@ export class PostgresAnnotationsRepository {
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    genomeBuild: string
   ): Promise<VariantAnnotation | null> {
     const schemaName = quoteIdentifier(this.schema)
     const result = await this.pool.query(
       `
         SELECT *
         FROM ${schemaName}."variant_annotations"
-        WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4
+        WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4 AND genome_build = $5
         LIMIT 1
       `,
-      [chr, pos, ref, alt]
+      [chr, pos, ref, alt, genomeBuild]
     )
 
     const row = result.rows[0]
@@ -110,14 +117,16 @@ export class PostgresAnnotationsRepository {
     pos: number,
     ref: string,
     alt: string,
+    genomeBuild: string,
     updates: GlobalAnnotationUpdates
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
     let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const result = await this._upsertGlobalAnnotationOn(client, chr, pos, ref, alt, updates)
-      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
+      const key = { chr, pos, ref, alt, genomeBuild }
+      const result = await this._upsertGlobalAnnotationOn(client, key, updates)
+      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -133,10 +142,7 @@ export class PostgresAnnotationsRepository {
   // upsert never opens its own transaction (would nest under audit's BEGIN).
   private async _upsertGlobalAnnotationOn(
     client: QueryablePool,
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string,
+    { chr, pos, ref, alt, genomeBuild }: GlobalKey,
     updates: GlobalAnnotationUpdates
   ): Promise<VariantAnnotation> {
     const schemaName = quoteIdentifier(this.schema)
@@ -156,17 +162,19 @@ export class PostgresAnnotationsRepository {
       commentProvided,
       starredProvided,
       acmgClassProvided,
-      acmgEvidenceProvided
+      acmgEvidenceProvided,
+      genomeBuild
     ]
 
     const result = await runNamed(client as Pool, {
-      name: 'annotations:upsert_global:v1',
+      name: 'annotations:upsert_global:v2',
       text: `
         INSERT INTO ${schemaName}."variant_annotations" (
           chr,
           pos,
           ref,
           alt,
+          genome_build,
           global_comment,
           starred,
           acmg_classification,
@@ -174,8 +182,8 @@ export class PostgresAnnotationsRepository {
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ${nowExpression}, ${nowExpression})
-        ON CONFLICT (chr, pos, ref, alt) DO UPDATE SET
+        VALUES ($1, $2, $3, $4, $13, $5, $6, $7, $8, ${nowExpression}, ${nowExpression})
+        ON CONFLICT (chr, pos, ref, alt, genome_build) DO UPDATE SET
           global_comment = CASE
             WHEN $9 THEN EXCLUDED.global_comment
             ELSE variant_annotations.global_comment
@@ -207,6 +215,7 @@ export class PostgresAnnotationsRepository {
     pos: number,
     ref: string,
     alt: string,
+    genomeBuild: string,
     updates: GlobalAnnotationUpdates & { user_name?: string | null }
   ): Promise<VariantAnnotation> {
     const client = await this.connect()
@@ -215,16 +224,18 @@ export class PostgresAnnotationsRepository {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
-      const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt)
-      const result = await this._upsertGlobalAnnotationOn(client, chr, pos, ref, alt, updates)
+      const key = { chr, pos, ref, alt, genomeBuild }
+      const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt, genomeBuild)
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+      const result = await this._upsertGlobalAnnotationOn(client, key, updates)
       for (const entry of globalAnnotationAuditEntries(
-        { chr, pos, ref, alt },
+        { chr, pos, ref, alt, genome_build: genomeBuild },
         updates,
         oldAnnotation as Record<string, unknown> | null
       )) {
         await audit.append(entry)
       }
-      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
+      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
       await client.query('COMMIT')
       return result
     } catch (error) {
@@ -235,13 +246,20 @@ export class PostgresAnnotationsRepository {
     }
   }
 
-  async deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): Promise<void> {
+  async deleteGlobalAnnotation(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    genomeBuild: string
+  ): Promise<void> {
     const client = await this.connect()
     let rollbackFailure: Error | undefined
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      await this._deleteGlobalAnnotationOn(client, chr, pos, ref, alt)
-      await applyAnnotationFlagsGlobal(client, { ...flags, chr, pos, ref, alt })
+      const key = { chr, pos, ref, alt, genomeBuild }
+      await this._deleteGlobalAnnotationOn(client, key)
+      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
       await client.query('COMMIT')
     } catch (error) {
       rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
@@ -254,19 +272,16 @@ export class PostgresAnnotationsRepository {
   // Raw-SQL helper — operates on the passed client/pool, no BEGIN/COMMIT.
   private async _deleteGlobalAnnotationOn(
     client: QueryablePool,
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
+    { chr, pos, ref, alt, genomeBuild }: GlobalKey
   ): Promise<void> {
     const schemaName = quoteIdentifier(this.schema)
     await runNamed(client as Pool, {
-      name: 'annotations:delete_global:v1',
+      name: 'annotations:delete_global:v2',
       text: `
         DELETE FROM ${schemaName}."variant_annotations"
-        WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4
+        WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4 AND genome_build = $5
       `,
-      values: [chr, pos, ref, alt],
+      values: [chr, pos, ref, alt, genomeBuild],
       schema: this.schema
     })
   }
@@ -389,6 +404,7 @@ export class PostgresAnnotationsRepository {
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
       const audit = new PostgresAuditLogRepository(client, this.schema)
       const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
       for (const entry of perCaseAnnotationAuditEntries(
         caseId,
@@ -460,8 +476,14 @@ export class PostgresAnnotationsRepository {
       `,
       [caseId, chr, pos, ref, alt]
     )
+    const caseResult = await this.pool.query(
+      `SELECT genome_build FROM ${schemaName}."cases" WHERE id = $1`,
+      [caseId]
+    )
+    const build = caseResult.rows[0]?.genome_build as string | undefined
 
-    const global = await this.getGlobalAnnotation(chr, pos, ref, alt)
+    const global =
+      build === undefined ? null : await this.getGlobalAnnotation(chr, pos, ref, alt, build)
     const variantId = variantResult.rows[0]?.id
     const perCase =
       variantId === undefined || variantId === null
@@ -479,9 +501,11 @@ export class PostgresAnnotationsRepository {
     return await pool.connect()
   }
 
+  /** Global rows of the case's build; without a case, of `genomeBuild` (#577). */
   async getBatch(
     caseId: number | null,
-    variantKeys: BatchAnnotationKey[]
+    variantKeys: BatchAnnotationKey[],
+    genomeBuild: string | null = null
   ): Promise<
     Record<string, { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null }>
   > {
@@ -507,7 +531,7 @@ export class PostgresAnnotationsRepository {
 
     // Global lookup — always runs (1 named query, fixed text).
     const globalResult = await runNamed(this.pool as Pool, {
-      name: 'annotations:get_batch_global:v1',
+      name: 'annotations:get_batch_global:v2',
       text: `
         SELECT va.*
         FROM UNNEST($1::text[], $2::bigint[], $3::text[], $4::text[]) AS k(chr, pos, ref, alt)
@@ -516,8 +540,10 @@ export class PostgresAnnotationsRepository {
          AND va.pos = k.pos
          AND va.ref = k.ref
          AND va.alt = k.alt
+         AND va.genome_build = CASE WHEN $5::bigint IS NULL THEN $6::text
+           ELSE (SELECT c.genome_build FROM ${schemaName}."cases" c WHERE c.id = $5::bigint) END
       `,
-      values: [chrs, positions, refs, alts],
+      values: [chrs, positions, refs, alts, caseId, genomeBuild],
       schema: this.schema
     })
     for (const row of globalResult.rows) {

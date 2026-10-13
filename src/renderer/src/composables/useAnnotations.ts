@@ -9,7 +9,7 @@
  * `annotation-scoped-ops.ts` and bound here to the per-case / global pairs.
  */
 
-import { hasInjectionContext, inject } from 'vue'
+import { hasInjectionContext, inject, toValue, type InjectionKey, type MaybeRefOrGetter } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useApiService } from './useApiService'
@@ -18,13 +18,14 @@ import {
   annotationCache,
   clearAnnotationCache,
   invalidateAnnotationGeneration,
+  isCacheOfBuild,
   isKeyLoading,
   resetAnnotationState,
   variantKey,
   type AnnotationCache,
   type VariantCoords
 } from './annotation-cache'
-import { createScopedAnnotationOps, GLOBAL_SCOPE } from './annotation-scoped-ops'
+import { createScopedAnnotationOps, globalScope } from './annotation-scoped-ops'
 
 export { MAX_CACHE_SIZE, annotationCache } from './annotation-cache'
 
@@ -43,15 +44,35 @@ function coordsOf(chr: string, pos: number, ref: string, alt: string): VariantCo
   return { chr, pos, ref, alt }
 }
 
+/**
+ * Genome build of the variants a view shows: global annotations are keyed by
+ * it (#577). The case and cohort views provide it; a component outside them
+ * (the details panel) passes `useAnnotations({ genomeBuild })`.
+ */
+export const AnnotationBuildKey: InjectionKey<MaybeRefOrGetter<string | null>> =
+  Symbol('annotationBuild')
+
+export interface UseAnnotationsOptions {
+  genomeBuild?: MaybeRefOrGetter<string | null>
+}
+
+/** The build of this caller: its option, else the view's, else unknown. */
+function buildGetter(options: UseAnnotationsOptions): () => string | null {
+  const source =
+    options.genomeBuild ?? (hasInjectionContext() ? inject(AnnotationBuildKey, null) : null)
+  return () => (source === null ? null : (toValue(source) ?? null))
+}
+
 /** Synchronous cache readers for both scopes. */
-function createAnnotationGetters() {
-  // Get annotations from cache
+function createAnnotationGetters(build: () => string | null) {
+  // Get annotations from cache; never another build's (#577).
   function getAnnotations(
     chr: string,
     pos: number,
     ref: string,
     alt: string
   ): AnnotationCache | undefined {
+    if (!isCacheOfBuild(build())) return undefined
     return annotationCache.value.get(variantKey({ chr, pos, ref, alt }))
   }
 
@@ -97,7 +118,7 @@ type ScopedOps = ReturnType<typeof createScopedAnnotationOps>
 export type CaseBatchVariant = VariantCoords & { id: number }
 
 /** Per-case / global load functions. */
-function bindLoads(ops: ScopedOps) {
+function bindLoads(ops: ScopedOps, build: () => string | null) {
   // Load annotations for a variant (call on row visible or expand)
   function loadAnnotations(
     caseId: number,
@@ -106,13 +127,13 @@ function bindLoads(ops: ScopedOps) {
     ref: string,
     alt: string
   ): Promise<void> {
-    return ops.load({ kind: 'case', caseId }, coordsOf(chr, pos, ref, alt))
+    return ops.load({ kind: 'case', caseId, build: build() }, coordsOf(chr, pos, ref, alt))
   }
 
   // Bulk load annotations for visible variants. Rows must carry their
   // `variants.id` so the per-case lookup is bound to the row, not just its coordinates.
   function loadAnnotationsBatch(caseId: number, variants: CaseBatchVariant[]): Promise<void> {
-    return ops.loadBatch({ kind: 'case', caseId }, variants)
+    return ops.loadBatch({ kind: 'case', caseId, build: build() }, variants)
   }
 
   // Load global annotations only (for cohort mode - no caseId needed)
@@ -122,12 +143,12 @@ function bindLoads(ops: ScopedOps) {
     ref: string,
     alt: string
   ): Promise<void> {
-    return ops.load(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt))
+    return ops.load(globalScope(build()), coordsOf(chr, pos, ref, alt))
   }
 
   // Bulk load global annotations for cohort mode
   function loadGlobalAnnotationsBatch(variants: VariantCoords[]): Promise<void> {
-    return ops.loadBatch(GLOBAL_SCOPE, variants)
+    return ops.loadBatch(globalScope(build()), variants)
   }
 
   return {
@@ -139,7 +160,7 @@ function bindLoads(ops: ScopedOps) {
 }
 
 /** Per-case / global star and comment writes. */
-function bindStarsAndComments(ops: ScopedOps) {
+function bindStarsAndComments(ops: ScopedOps, build: () => string | null) {
   // Toggle star (per-case)
   function toggleStar(
     caseId: number,
@@ -149,12 +170,15 @@ function bindStarsAndComments(ops: ScopedOps) {
     ref: string,
     alt: string
   ): Promise<boolean> {
-    return ops.toggleStar({ kind: 'case', caseId, variantId }, coordsOf(chr, pos, ref, alt))
+    return ops.toggleStar(
+      { kind: 'case', caseId, variantId, build: build() },
+      coordsOf(chr, pos, ref, alt)
+    )
   }
 
   // Toggle global star (for cohort mode)
   function toggleGlobalStar(chr: string, pos: number, ref: string, alt: string): Promise<boolean> {
-    return ops.toggleStar(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt))
+    return ops.toggleStar(globalScope(build()), coordsOf(chr, pos, ref, alt))
   }
 
   // Upsert global comment with optimistic update
@@ -165,7 +189,7 @@ function bindStarsAndComments(ops: ScopedOps) {
     alt: string,
     comment: string | null
   ): Promise<boolean> {
-    return ops.upsertComment(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt), comment)
+    return ops.upsertComment(globalScope(build()), coordsOf(chr, pos, ref, alt), comment)
   }
 
   // Upsert per-case comment with optimistic update
@@ -179,7 +203,7 @@ function bindStarsAndComments(ops: ScopedOps) {
     comment: string | null
   ): Promise<boolean> {
     return ops.upsertComment(
-      { kind: 'case', caseId, variantId },
+      { kind: 'case', caseId, variantId, build: build() },
       coordsOf(chr, pos, ref, alt),
       comment
     )
@@ -218,7 +242,7 @@ function bindStarsAndComments(ops: ScopedOps) {
 }
 
 /** Per-case / global ACMG classification writes. */
-function bindAcmg(ops: ScopedOps) {
+function bindAcmg(ops: ScopedOps, build: () => string | null) {
   // Set ACMG classification with optimistic update (per-case)
   function setAcmgClassification(
     caseId: number,
@@ -230,7 +254,7 @@ function bindAcmg(ops: ScopedOps) {
     classification: AcmgClassification | null
   ): Promise<boolean> {
     return ops.setAcmgClassification(
-      { kind: 'case', caseId, variantId },
+      { kind: 'case', caseId, variantId, build: build() },
       coordsOf(chr, pos, ref, alt),
       classification
     )
@@ -244,7 +268,11 @@ function bindAcmg(ops: ScopedOps) {
     alt: string,
     classification: AcmgClassification | null
   ): Promise<boolean> {
-    return ops.setAcmgClassification(GLOBAL_SCOPE, coordsOf(chr, pos, ref, alt), classification)
+    return ops.setAcmgClassification(
+      globalScope(build()),
+      coordsOf(chr, pos, ref, alt),
+      classification
+    )
   }
 
   // Set ACMG classification and evidence together (per-case)
@@ -259,7 +287,7 @@ function bindAcmg(ops: ScopedOps) {
     evidenceJson: string
   ): Promise<boolean> {
     return ops.setAcmgClassificationWithEvidence(
-      { kind: 'case', caseId, variantId },
+      { kind: 'case', caseId, variantId, build: build() },
       coordsOf(chr, pos, ref, alt),
       classification,
       evidenceJson
@@ -276,7 +304,7 @@ function bindAcmg(ops: ScopedOps) {
     evidenceJson: string
   ): Promise<boolean> {
     return ops.setAcmgClassificationWithEvidence(
-      GLOBAL_SCOPE,
+      globalScope(build()),
       coordsOf(chr, pos, ref, alt),
       classification,
       evidenceJson
@@ -291,17 +319,18 @@ function bindAcmg(ops: ScopedOps) {
   }
 }
 
-export function useAnnotations() {
+export function useAnnotations(options: UseAnnotationsOptions = {}) {
   const { api } = useApiService()
   // A failed write is rolled back; say so, or the user believes it was saved (#486).
   const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
-  const ops = createScopedAnnotationOps(api, getUserName, () =>
-    appState?.showSnack('Annotation not saved. The change was reverted.', 'error')
+  const ops = createScopedAnnotationOps(api, getUserName, (message) =>
+    appState?.showSnack(message ?? 'Annotation not saved. The change was reverted.', 'error')
   )
-  const getters = createAnnotationGetters()
-  const loads = bindLoads(ops)
-  const marks = bindStarsAndComments(ops)
-  const acmg = bindAcmg(ops)
+  const build = buildGetter(options)
+  const getters = createAnnotationGetters(build)
+  const loads = bindLoads(ops, build)
+  const marks = bindStarsAndComments(ops, build)
+  const acmg = bindAcmg(ops, build)
 
   // Key order is part of the pinned public surface — keep it stable.
   return {

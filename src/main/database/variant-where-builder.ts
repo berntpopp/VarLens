@@ -8,6 +8,7 @@ import {
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
 import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
+import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
 import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import {
   assertNoInfoFieldFilters,
@@ -240,7 +241,7 @@ function translateColumnFilter(
   const col =
     scope === 'cohort-listing' && column === COHORT_FREQUENCY_KEY
       ? COHORT_FREQUENCY_SQL
-      : `${baseAlias}.${column}`
+      : comparedColumnSql(column, `${baseAlias}.${column}`)
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false
 

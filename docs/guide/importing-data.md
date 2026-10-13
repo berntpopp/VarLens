@@ -29,6 +29,8 @@ VarLens keeps **every annotation field** of an import by default, not only the c
 
 Common evidence fields get one **canonical key** whatever their source, so the same rule works for varvis exports and for VCFs from the annotation pipeline: `REVEL`, `METARNN`, `BAYESDEL`, `ALPHAMISSENSE`, `SPLICEAI_MAX` (the highest of the four SpliceAI scores), `PANGOLIN`, `GNOMAD_POPMAX_AF`, `GNOMAD_HOM`, `LOEUF`, `LOF_OE`, `MISSENSE_Z` and `CLINVAR_REVSTAT`. Field names that are not valid keys are adjusted (`AltAF-Index` → `AltAF_Index`).
 
+**Finding a case's fields.** Typing `info.` (or the start of a key) in the case view's filter bar lists the case's kept fields with their original source field, e.g. `info.REVEL` from `CSQ:REVEL_score`. The variant details panel shows each stored field under **Annotation fields** with its source, and the case's **Data Info** tab lists all kept fields. A key the open case does not have is flagged while you type: such a filter only matches `is:null`. Cases imported before VarLens recorded field sources show no list. `info.<KEY>` filters work in the case view only.
+
 **Choosing fields per import.** Step 2 of the import wizard lists the fields found in the file — for JSON with type, fill rate and sample values, for VCF including the CSQ/ANN subfields — and lets you keep, skip or rename each one. **Save as default** stores your choices.
 
 **Defaults.** **Settings → Application preferences → Import → Import fields** sets what happens to fields without a choice (*Keep*, *Keep evidence fields only*, *Skip*) and your saved per-field choices. New imports start from these defaults.

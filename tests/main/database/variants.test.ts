@@ -106,8 +106,8 @@ function createAnnotationFixtures(db: DatabaseService, caseId: number): number[]
     .get(variantIds[3]) as { chr: string; pos: number; ref: string; alt: string }
   db.database
     .prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, global_comment, acmg_classification, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, NULL, NULL, ?, ?)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, global_comment, acmg_classification, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'GRCh38', 1, NULL, NULL, ?, ?)`
     )
     .run(v3.chr, v3.pos, v3.ref, v3.alt, now, now)
 
@@ -117,8 +117,8 @@ function createAnnotationFixtures(db: DatabaseService, caseId: number): number[]
     .get(variantIds[4]) as { chr: string; pos: number; ref: string; alt: string }
   db.database
     .prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, global_comment, acmg_classification, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 0, 'global note', NULL, ?, ?)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, global_comment, acmg_classification, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'GRCh38', 0, 'global note', NULL, ?, ?)`
     )
     .run(v4.chr, v4.pos, v4.ref, v4.alt, now, now)
 
@@ -128,8 +128,8 @@ function createAnnotationFixtures(db: DatabaseService, caseId: number): number[]
     .get(variantIds[5]) as { chr: string; pos: number; ref: string; alt: string }
   db.database
     .prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, global_comment, acmg_classification, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 0, NULL, 'Likely pathogenic', ?, ?)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, global_comment, acmg_classification, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'GRCh38', 0, NULL, 'Likely pathogenic', ?, ?)`
     )
     .run(v5.chr, v5.pos, v5.ref, v5.alt, now, now)
 
@@ -1525,9 +1525,10 @@ describe('Variant Operations', () => {
       expect(opts.maxGnomadAf).toBe(0.05)
 
       // columnMeta array should have entries for all SORTABLE_COLUMNS (16 columns)
-      // 21 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
-      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25.
-      expect(opts.columnMeta).toHaveLength(21)
+      // 22 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
+      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25,
+      // + hpo_match (#580).
+      expect(opts.columnMeta).toHaveLength(22)
 
       // Check a specific numeric column
       const caddMeta = opts.columnMeta.find((m) => m.key === 'cadd')
@@ -1567,9 +1568,10 @@ describe('Variant Operations', () => {
       expect(opts.maxCadd).toBeNull()
       expect(opts.minGnomadAf).toBeNull()
       expect(opts.maxGnomadAf).toBeNull()
-      // 21 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
-      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25.
-      expect(opts.columnMeta).toHaveLength(21)
+      // 22 entries: 16 pre-v25 sortable columns + 5 new (variant_type, end_pos,
+      // sv_type, sv_length, caller) added to SORTABLE_COLUMNS in migration v25,
+      // + hpo_match (#580).
+      expect(opts.columnMeta).toHaveLength(22)
       expect(opts.columnMeta.every((m) => m.distinctCount === 0)).toBe(true)
     })
 

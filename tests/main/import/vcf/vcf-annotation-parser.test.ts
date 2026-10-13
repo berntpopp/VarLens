@@ -5,6 +5,10 @@ import {
 } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
+  resetAmbiguousCsqSites,
+  takeAmbiguousCsqSites
+} from '../../../../src/main/import/vcf/vcf-csq-allele'
+import {
   MAX_VCF_ANNOTATION_FIELDS,
   MAX_VCF_ANNOTATIONS,
   VcfResourceLimitError
@@ -276,12 +280,38 @@ describe('vcf-annotation-parser', () => {
       expect(second.geneSymbol).toBeNull()
     })
 
+    it('counts each --minimal site whose annotations are dropped as ambiguous (#556)', () => {
+      const minimalHeader = makeHeader({
+        annotationType: 'csq',
+        csqFields,
+        rawHeaderLines: ["##VEP-command-line='vep --cache --minimal --vcf'"]
+      })
+      const block = (allele: string): string =>
+        `${allele}|intron_variant|MODIFIER|G|E|Transcript|T|protein_coding||||||||||||||||`
+      resetAmbiguousCsqSites()
+      parseAnnotationsForAlleles(new Map([['CSQ', block('-')]]), minimalHeader, ['C', 'CA'], 'CAT')
+      parseAnnotationsForAlleles(new Map([['CSQ', block('T')]]), minimalHeader, ['C', 'CT'], 'CAT')
+      parseAnnotationsForAlleles(new Map([['CSQ', block('G')]]), minimalHeader, ['G'], 'A')
+      expect(takeAmbiguousCsqSites()).toBe(1)
+      expect(takeAmbiguousCsqSites()).toBeUndefined()
+    })
+
+    it('never counts a default-VEP site as --minimal ambiguity (#556)', () => {
+      const block = (allele: string): string =>
+        `${allele}|intron_variant|MODIFIER|G|E|Transcript|T|protein_coding||||||||||||||||`
+      resetAmbiguousCsqSites()
+      // Duplicate ALTs share every spelling, but VEP did not run with --minimal.
+      parseAnnotationsForAlleles(new Map([['CSQ', block('C')]]), header, ['C', 'C'], 'A')
+      expect(takeAmbiguousCsqSites()).toBeUndefined()
+    })
+
     it.each([
       ['ATT', ['A', 'AT'], ['-', 'T']],
       ['G', ['GA', 'GAA'], ['A', 'AA']],
       ['GA', ['G', 'GAA'], ['-', 'AA']],
       ['G', ['A', 'GT'], ['A', 'GT']],
-      ['G', ['A', 'C'], ['A', 'C']]
+      ['G', ['A', 'C'], ['A', 'C']],
+      ['CA', ['C', 'CC'], ['-', 'C']]
     ])(
       'resolves %s>%j by the one allele spelling default VEP writes per ALT (#556)',
       (ref, alts, spellings) => {
@@ -300,15 +330,19 @@ describe('vcf-annotation-parser', () => {
       }
     )
 
-    it("fails closed when an exact ALT collides with another ALT's trimmed spelling", () => {
-      // TA>T,TT: default VEP writes '-','T', but 'T' is also ALT 1 spelled exactly.
+    it("does not read a trimmed spelling as another ALT's untrimmed allele", () => {
+      // TA>T,TT: default VEP trims every allele and writes '-','T'; it never
+      // writes ALT 1 untrimmed as 'T', so 'T' is ALT 2.
       const block = (allele: string, gene: string): string =>
         `${allele}|intron_variant|MODIFIER|${gene}|E|Transcript|T-${gene}|protein_coding||||||||||||||||`
       const info = new Map([['CSQ', `${block('-', 'GENE1')},${block('T', 'GENE2')}`]])
 
       const results = parseAnnotationsForAlleles(info, header, ['T', 'TT'], 'TA')
 
-      expect(results.map((r) => r.transcripts.map((t) => t.gene_symbol))).toEqual([['GENE1'], []])
+      expect(results.map((r) => r.transcripts.map((t) => t.gene_symbol))).toEqual([
+        ['GENE1'],
+        ['GENE2']
+      ])
     })
 
     it("does not cross-contaminate multi-deletion splits when a block's ALLELE_NUM is declared but empty", () => {

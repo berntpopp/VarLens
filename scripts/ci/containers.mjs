@@ -102,7 +102,7 @@ export function createContainerServices(dependencies = {}) {
           '--label',
           'org.varlens.ci=disposable',
           '--memory',
-          '1g',
+          '2g',
           '--cpus',
           '2',
           '--tmpfs',

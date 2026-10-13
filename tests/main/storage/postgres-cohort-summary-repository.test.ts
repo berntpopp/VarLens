@@ -186,8 +186,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.rebuild — Sprint A C2',
     void starred
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('4', 400, 'T', 'C', NULL, 1, NULL, $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('4', 400, 'T', 'C', 'GRCh38', NULL, 1, NULL, $1, $1)`,
       [now]
     )
 
@@ -420,8 +420,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.incrementalAdd/Remove —
     await seedVariant({ caseId: cases[0], chr: '7', pos: 700, ref: 'G', alt: 'T', gtNum: '0/1' })
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('7', 700, 'G', 'A', NULL, 0, 'Likely benign', $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('7', 700, 'G', 'A', 'GRCh38', NULL, 0, 'Likely benign', $1, $1)`,
       [now]
     )
     await probe.query(
@@ -475,8 +475,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.incrementalAdd/Remove —
     // Global star + comment annotation so caseA's add sets the flags true.
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-           (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-           VALUES ('4', 400, 'T', 'C', 'noted', 1, 'Pathogenic', $1, $1)`,
+           (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+           VALUES ('4', 400, 'T', 'C', 'GRCh38', 'noted', 1, 'Pathogenic', $1, $1)`,
       [now]
     )
     await seedVariant({ caseId: caseB, chr: '4', pos: 400, ref: 'T', alt: 'C', gtNum: '0/1' })
@@ -647,8 +647,8 @@ describe.skipIf(!RUN)('refreshColumnMetas + removeColumnMetas — C2', () => {
       [caseA]
     )
 
-    // One row per BASE_SORTABLE_COLUMNS key (21 columns).
-    expect(rows.rows.length).toBe(21)
+    // One row per BASE_SORTABLE_COLUMNS key (22 columns).
+    expect(rows.rows.length).toBe(22)
     const byName = new Map(rows.rows.map((r) => [r.column_name, r]))
 
     // Numeric column: min/max populated, distinct_count = 2.
@@ -727,7 +727,7 @@ describe.skipIf(!RUN)('refreshColumnMetas + removeColumnMetas — C2', () => {
       [caseB]
     )
     expect(Number(aCount.rows[0].count)).toBe(0)
-    expect(Number(bCount.rows[0].count)).toBe(21)
+    expect(Number(bCount.rows[0].count)).toBe(22)
   }, 60_000)
 })
 

@@ -18,6 +18,7 @@ import {
   testZipPasswordOffThread
 } from '../../import/zip-worker-client'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
+import { importDataReport } from '../../import/unranked-clinvar'
 import { API_CONFIG } from '../../../shared/config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -109,6 +110,7 @@ export interface BatchImportResult {
     unrankedClinvar?: string[]
     /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
     afOutOfRange?: number
+    csqAmbiguousSites?: number
   }>
 }
 
@@ -268,8 +270,7 @@ function runBatchWorker(
               caseName: d.caseName,
               variantCount: d.variantCount,
               error: d.error,
-              unrankedClinvar: d.unrankedClinvar,
-              afOutOfRange: d.afOutOfRange
+              ...importDataReport(d)
             }))
           })
         )

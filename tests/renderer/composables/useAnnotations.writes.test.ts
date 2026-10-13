@@ -19,6 +19,7 @@ import {
 } from '@renderer/composables/useAnnotations'
 import { logService } from '@renderer/services/LogService'
 import { AppStateKey, createAppState } from '@renderer/composables/useAppState'
+import { BUILD_COPY } from '../../../src/shared/config/genome-builds.config'
 
 type Annotations = ReturnType<typeof useAnnotations>
 
@@ -82,7 +83,7 @@ describe('failed annotation writes roll back and notify watchers', () => {
     seedEntry()
     const before = structuredClone(annotationCache.value.get(KEY))
 
-    await WRITES[name](useAnnotations())
+    await WRITES[name](useAnnotations({ genomeBuild: 'GRCh38' }))
 
     // The optimistic value is gone ...
     expect(annotationCache.value.get(KEY)).toEqual(before)
@@ -91,7 +92,7 @@ describe('failed annotation writes roll back and notify watchers', () => {
   })
 
   it.each(Object.keys(WRITES))('%s on an uncached entry', async (name) => {
-    await WRITES[name](useAnnotations())
+    await WRITES[name](useAnnotations({ genomeBuild: 'GRCh38' }))
 
     expect(annotationCache.value.has(KEY)).toBe(false)
     expect(triggers).toBe(1)
@@ -107,11 +108,34 @@ describe('failed annotation writes roll back and notify watchers', () => {
     const app = createApp({ render: () => null })
     app.provide(AppStateKey, state)
     app.runWithContext(() => {
-      a = useAnnotations()
+      a = useAnnotations({ genomeBuild: 'GRCh38' })
     })
 
     expect(await WRITES[name](a)).toBe(false)
     expect(snacks).toEqual([[expect.stringContaining('not saved'), 'error']])
+  })
+})
+
+describe('global notes of a case whose build is not known (#577)', () => {
+  it('are not sent, and the user is told to confirm the build', async () => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+    window.api.annotations.upsertGlobal = vi.fn()
+    vi.spyOn(logService, 'error').mockImplementation(() => {})
+    const snacks: string[][] = []
+    const state = createAppState()
+    state.setSnackbarHandler((message, type) => snacks.push([message, type]))
+    const app = createApp({ render: () => null })
+    app.provide(AppStateKey, state)
+    let a!: Annotations
+    app.runWithContext(() => {
+      a = useAnnotations({ genomeBuild: 'my-build' })
+    })
+
+    expect(await a.toggleGlobalStar(...V)).toBe(false)
+    expect(window.api.annotations.upsertGlobal).not.toHaveBeenCalled()
+    expect(snacks).toEqual([[BUILD_COPY.globalNotesNeedBuild, 'error']])
+    vi.restoreAllMocks()
   })
 })
 
@@ -122,7 +146,7 @@ describe('successful annotation writes', () => {
     window.api.annotations.upsertPerCase = vi.fn().mockResolvedValue({})
     window.api.annotations.upsertGlobal = vi.fn().mockResolvedValue({})
 
-    expect(await WRITES[name](useAnnotations())).toBe(true)
+    expect(await WRITES[name](useAnnotations({ genomeBuild: 'GRCh38' }))).toBe(true)
   })
 })
 
@@ -142,7 +166,7 @@ describe('annotation writes that resolve after the scope changed', () => {
     })
     window.api.annotations.upsertPerCase = vi.fn().mockReturnValue(pending)
     window.api.annotations.upsertGlobal = vi.fn().mockReturnValue(pending)
-    a = useAnnotations()
+    a = useAnnotations({ genomeBuild: 'GRCh38' })
   })
 
   afterEach(() => {

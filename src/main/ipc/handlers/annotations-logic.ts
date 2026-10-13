@@ -7,11 +7,7 @@
  */
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
-import type {
-  VariantAnnotation,
-  CaseVariantAnnotation,
-  AcmgClassification
-} from '../../database/types'
+import type { AcmgClassification } from '../../database/types'
 import type { AnnotationChangeEvent } from '../../../shared/types/api'
 import type { StorageSession } from '../../storage/session'
 
@@ -21,6 +17,11 @@ export interface VariantCoords {
   pos: number
   ref: string
   alt: string
+}
+
+/** Coordinates of a global annotation: keyed by genome build too (#577). */
+export interface GlobalVariantCoords extends VariantCoords {
+  genome_build: string
 }
 
 /** Validated global annotation updates (after Zod parsing). */
@@ -53,7 +54,7 @@ export interface VariantKey {
  * Get global annotation for a variant.
  */
 export async function getGlobalAnnotation(
-  coords: VariantCoords,
+  coords: GlobalVariantCoords,
   getDb: () => DatabaseService,
   getDbPool?: () => DbPool | null
 ): Promise<unknown> {
@@ -61,100 +62,18 @@ export async function getGlobalAnnotation(
   if (pool) {
     return await pool.run({
       type: 'annotations:getGlobal',
-      params: [coords.chr, coords.pos, coords.ref, coords.alt]
+      params: [coords.chr, coords.pos, coords.ref, coords.alt, coords.genome_build]
     })
   }
 
   const db = getDb()
-  return db.annotations.getGlobalAnnotation(coords.chr, coords.pos, coords.ref, coords.alt)
-}
-
-/**
- * Upsert global annotation for a variant.
- * Handles state comparison and audit trail creation.
- */
-export function upsertGlobalAnnotation(
-  coords: VariantCoords,
-  updates: GlobalAnnotationUpdates,
-  getDb: () => DatabaseService
-): unknown {
-  const db = getDb()
-  const { chr: vChr, pos: vPos, ref: vRef, alt: vAlt } = coords
-
-  // Extract user_name before building db updates
-  const { user_name, ...annotationUpdates } = updates
-
-  // Read current state before upsert for audit trail
-  const oldAnnotation = db.annotations.getGlobalAnnotation(vChr, vPos, vRef, vAlt)
-
-  // Build dbUpdates only with keys actually provided
-  const dbUpdates: Partial<
-    Pick<VariantAnnotation, 'global_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'>
-  > = {}
-
-  if ('global_comment' in annotationUpdates) {
-    dbUpdates.global_comment = annotationUpdates.global_comment
-  }
-  if ('acmg_classification' in annotationUpdates) {
-    dbUpdates.acmg_classification = annotationUpdates.acmg_classification
-  }
-  if ('acmg_evidence' in annotationUpdates) {
-    dbUpdates.acmg_evidence = annotationUpdates.acmg_evidence
-  }
-  if (annotationUpdates.starred !== undefined) {
-    dbUpdates.starred = annotationUpdates.starred ? 1 : 0
-  }
-
-  const result = db.annotations.upsertGlobalAnnotation(vChr, vPos, vRef, vAlt, dbUpdates)
-
-  // Audit logging
-  const entityKey = `${vChr}:${vPos}:${vRef}:${vAlt}`
-  if (annotationUpdates.acmg_classification !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: 'acmg_classify',
-      entity_type: 'variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation
-        ? JSON.stringify({ acmg_classification: oldAnnotation.acmg_classification })
-        : null,
-      new_value: JSON.stringify({
-        acmg_classification: annotationUpdates.acmg_classification
-      }),
-      user_name: user_name ?? null
-    })
-  }
-  if (annotationUpdates.acmg_evidence !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: 'acmg_evidence_update',
-      entity_type: 'variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation
-        ? JSON.stringify({ acmg_evidence: oldAnnotation.acmg_evidence })
-        : null,
-      new_value: JSON.stringify({ acmg_evidence: annotationUpdates.acmg_evidence }),
-      user_name: user_name ?? null
-    })
-  }
-  if (annotationUpdates.starred !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: annotationUpdates.starred ? 'star' : 'unstar',
-      entity_type: 'variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation ? JSON.stringify({ starred: oldAnnotation.starred }) : null,
-      new_value: JSON.stringify({ starred: annotationUpdates.starred ? 1 : 0 }),
-      user_name: user_name ?? null
-    })
-  }
-
-  return result
-}
-
-/**
- * Delete global annotation for a variant.
- */
-export function deleteGlobalAnnotation(coords: VariantCoords, getDb: () => DatabaseService): void {
-  const db = getDb()
-  db.annotations.deleteGlobalAnnotation(coords.chr, coords.pos, coords.ref, coords.alt)
+  return db.annotations.getGlobalAnnotation(
+    coords.chr,
+    coords.pos,
+    coords.ref,
+    coords.alt,
+    coords.genome_build
+  )
 }
 
 /**
@@ -176,101 +95,6 @@ export async function getPerCaseAnnotation(
 
   const db = getDb()
   return db.annotations.getPerCaseAnnotation(caseId, variantId)
-}
-
-/**
- * Upsert per-case annotation for a variant.
- * Handles state comparison and audit trail creation.
- */
-export function upsertPerCaseAnnotation(
-  caseId: number,
-  variantId: number,
-  updates: PerCaseAnnotationUpdates,
-  getDb: () => DatabaseService
-): unknown {
-  const db = getDb()
-
-  // Extract user_name before building db updates
-  const { user_name, ...annotationUpdates } = updates
-
-  // Read current state before upsert for audit trail
-  const oldAnnotation = db.annotations.getPerCaseAnnotation(caseId, variantId)
-
-  // Build dbUpdates only with keys actually provided
-  const dbUpdates: Partial<
-    Pick<
-      CaseVariantAnnotation,
-      'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
-    >
-  > = {}
-
-  if ('per_case_comment' in annotationUpdates) {
-    dbUpdates.per_case_comment = annotationUpdates.per_case_comment
-  }
-  if ('acmg_classification' in annotationUpdates) {
-    dbUpdates.acmg_classification = annotationUpdates.acmg_classification
-  }
-  if ('acmg_evidence' in annotationUpdates) {
-    dbUpdates.acmg_evidence = annotationUpdates.acmg_evidence
-  }
-  if (annotationUpdates.starred !== undefined) {
-    dbUpdates.starred = annotationUpdates.starred ? 1 : 0
-  }
-
-  const result = db.annotations.upsertPerCaseAnnotation(caseId, variantId, dbUpdates)
-
-  // Audit logging
-  const entityKey = `case:${caseId}:variant:${variantId}`
-  if (annotationUpdates.acmg_classification !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: 'acmg_classify',
-      entity_type: 'case_variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation
-        ? JSON.stringify({ acmg_classification: oldAnnotation.acmg_classification })
-        : null,
-      new_value: JSON.stringify({
-        acmg_classification: annotationUpdates.acmg_classification
-      }),
-      user_name: user_name ?? null
-    })
-  }
-  if (annotationUpdates.acmg_evidence !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: 'acmg_evidence_update',
-      entity_type: 'case_variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation
-        ? JSON.stringify({ acmg_evidence: oldAnnotation.acmg_evidence })
-        : null,
-      new_value: JSON.stringify({ acmg_evidence: annotationUpdates.acmg_evidence }),
-      user_name: user_name ?? null
-    })
-  }
-  if (annotationUpdates.starred !== undefined) {
-    db.auditLog.appendEntry({
-      action_type: annotationUpdates.starred ? 'star' : 'unstar',
-      entity_type: 'case_variant_annotation',
-      entity_key: entityKey,
-      old_value: oldAnnotation ? JSON.stringify({ starred: oldAnnotation.starred }) : null,
-      new_value: JSON.stringify({ starred: annotationUpdates.starred ? 1 : 0 }),
-      user_name: user_name ?? null
-    })
-  }
-
-  return result
-}
-
-/**
- * Delete per-case annotation for a variant.
- */
-export function deletePerCaseAnnotation(
-  caseId: number,
-  variantId: number,
-  getDb: () => DatabaseService
-): void {
-  const db = getDb()
-  db.annotations.deletePerCaseAnnotation(caseId, variantId)
 }
 
 /**
@@ -302,22 +126,24 @@ export async function getAnnotationsForVariant(
 
 /**
  * Batch read annotations -- single round-trip for N variants (pool-dispatched).
+ * Global rows are those of the case's build, or of `genomeBuild` without a case.
  */
 export async function batchGetAnnotations(
   caseId: number | null,
   variantKeys: VariantKey[],
   getDb: () => DatabaseService,
-  getDbPool?: () => DbPool | null
+  getDbPool?: () => DbPool | null,
+  genomeBuild: string | null = null
 ): Promise<unknown> {
   const pool = getDbPool?.()
   if (pool) {
     return await pool.run({
       type: 'annotations:batchGet' as const,
-      params: [caseId, variantKeys]
+      params: [caseId, variantKeys, genomeBuild]
     })
   }
   const db = getDb()
-  return db.annotations.getBatch(caseId, variantKeys)
+  return db.annotations.getBatch(caseId, variantKeys, genomeBuild)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +173,7 @@ export function detectAnnotationChangeKind(updates: {
  * audit-trail creation is handled by the backend (Postgres) or executor.
  */
 export async function upsertGlobalAnnotationViaSession(
-  coords: VariantCoords,
+  coords: GlobalVariantCoords,
   updates: GlobalAnnotationUpdates,
   getSession: () => StorageSession
 ): Promise<unknown> {

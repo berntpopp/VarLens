@@ -40,6 +40,7 @@ describe('PostgresAnnotationsRepository', () => {
           pos: '12345',
           ref: 'A',
           alt: 'G',
+          genome_build: 'GRCh38',
           global_comment: 'reviewed',
           starred: true,
           acmg_classification: 'Pathogenic',
@@ -51,12 +52,15 @@ describe('PostgresAnnotationsRepository', () => {
     })
     const repository = new PostgresAnnotationsRepository(pool, 'tenant"schema')
 
-    await expect(repository.getGlobalAnnotation('1', 12345, 'A', 'G')).resolves.toStrictEqual({
+    await expect(
+      repository.getGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38')
+    ).resolves.toStrictEqual({
       id: 7,
       chr: '1',
       pos: 12345,
       ref: 'A',
       alt: 'G',
+      genome_build: 'GRCh38',
       global_comment: 'reviewed',
       starred: 1,
       acmg_classification: 'Pathogenic',
@@ -66,7 +70,7 @@ describe('PostgresAnnotationsRepository', () => {
     })
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('"tenant""schema"."variant_annotations"'),
-      ['1', 12345, 'A', 'G']
+      ['1', 12345, 'A', 'G', 'GRCh38']
     )
   })
 
@@ -99,7 +103,7 @@ describe('PostgresAnnotationsRepository', () => {
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
-    await repository.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+    await repository.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
       global_comment: null,
       starred: 1,
       acmg_classification: 'Likely benign',
@@ -111,7 +115,7 @@ describe('PostgresAnnotationsRepository', () => {
     const spec = query.mock.calls[1][0] as { text: string; values: unknown[] }
     const sql = spec.text
     const params = spec.values
-    expect(sql).toContain('ON CONFLICT (chr, pos, ref, alt) DO UPDATE')
+    expect(sql).toContain('ON CONFLICT (chr, pos, ref, alt, genome_build) DO UPDATE')
     expect(sql).toContain('"public"."variant_annotations"')
     expect(sql).not.toContain('unsupported_field')
     expect(params).toStrictEqual([
@@ -126,14 +130,15 @@ describe('PostgresAnnotationsRepository', () => {
       true,
       true,
       true,
-      true
+      true,
+      'GRCh38'
     ])
     // The global annotation-flag write-hook runs in the same transaction.
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_global:v1'),
-        values: ['1', 12345, 'A', 'G']
+        name: expect.stringContaining('cohort_summary:annotation_flags_global:v2'),
+        values: ['1', 12345, 'A', 'G', 'GRCh38']
       })
     )
     expect(query).toHaveBeenNthCalledWith(4, 'COMMIT')
@@ -189,7 +194,7 @@ describe('PostgresAnnotationsRepository', () => {
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
     await expect(
-      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', {
+      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', 'GRCh38', {
         starred: 1,
         acmg_classification: 'Pathogenic',
         user_name: 'analyst'
@@ -204,7 +209,7 @@ describe('PostgresAnnotationsRepository', () => {
         'public',
         'acmg_classify',
         'variant_annotation',
-        '1:12345:A:G',
+        '1:12345:A:G@GRCh38',
         JSON.stringify({ acmg_classification: 'VUS' }),
         JSON.stringify({ acmg_classification: 'Pathogenic' }),
         'analyst',
@@ -216,8 +221,8 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       6,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_global:v1'),
-        values: ['1', 12345, 'A', 'G']
+        name: expect.stringContaining('cohort_summary:annotation_flags_global:v2'),
+        values: ['1', 12345, 'A', 'G', 'GRCh38']
       })
     )
     expect(query).toHaveBeenNthCalledWith(7, 'COMMIT')
@@ -256,7 +261,7 @@ describe('PostgresAnnotationsRepository', () => {
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
     await expect(
-      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', {
+      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', 'GRCh38', {
         starred: true,
         user_name: 'analyst'
       })
@@ -299,7 +304,7 @@ describe('PostgresAnnotationsRepository', () => {
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
     await expect(
-      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', {
+      repository.upsertGlobalAnnotationWithAudit('1', 12345, 'A', 'G', 'GRCh38', {
         starred: true,
         user_name: 'analyst'
       })
@@ -310,12 +315,15 @@ describe('PostgresAnnotationsRepository', () => {
   })
 
   it.each([
-    ['upsertGlobalAnnotation', (r) => r.upsertGlobalAnnotation('1', 5, 'A', 'G', { starred: 1 })],
+    [
+      'upsertGlobalAnnotation',
+      (r) => r.upsertGlobalAnnotation('1', 5, 'A', 'G', 'GRCh38', { starred: 1 })
+    ],
     [
       'upsertGlobalAnnotationWithAudit',
-      (r) => r.upsertGlobalAnnotationWithAudit('1', 5, 'A', 'G', { starred: 1 })
+      (r) => r.upsertGlobalAnnotationWithAudit('1', 5, 'A', 'G', 'GRCh38', { starred: 1 })
     ],
-    ['deleteGlobalAnnotation', (r) => r.deleteGlobalAnnotation('1', 5, 'A', 'G')],
+    ['deleteGlobalAnnotation', (r) => r.deleteGlobalAnnotation('1', 5, 'A', 'G', 'GRCh38')],
     ['upsertPerCaseAnnotation', (r) => r.upsertPerCaseAnnotation(1, 2, { starred: 1 })],
     [
       'upsertPerCaseAnnotationWithAudit',
@@ -355,20 +363,20 @@ describe('PostgresAnnotationsRepository', () => {
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
-    await repository.deleteGlobalAnnotation('1', 12345, 'A', 'G')
+    await repository.deleteGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38')
 
     expect(query).toHaveBeenNthCalledWith(1, 'BEGIN')
     expect(query).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         text: expect.stringContaining('DELETE FROM "public"."variant_annotations"'),
-        values: ['1', 12345, 'A', 'G']
+        values: ['1', 12345, 'A', 'G', 'GRCh38']
       })
     )
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_global:v1')
+        name: expect.stringContaining('cohort_summary:annotation_flags_global:v2')
       })
     )
     expect(query).toHaveBeenNthCalledWith(4, 'COMMIT')
@@ -460,7 +468,7 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v2'),
+        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v3'),
         values: [2, 3]
       })
     )
@@ -536,7 +544,7 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       5,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v2'),
+        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v3'),
         values: [2, 3]
       })
     )
@@ -610,7 +618,7 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v2'),
+        name: expect.stringContaining('cohort_summary:annotation_flags_per_case:v3'),
         values: [2, 3]
       })
     )
@@ -622,6 +630,7 @@ describe('PostgresAnnotationsRepository', () => {
     const pool = makePool()
     pool.query
       .mockResolvedValueOnce({ rows: [{ id: '3' }] })
+      .mockResolvedValueOnce({ rows: [{ genome_build: 'GRCh38' }] }) // the case's build
       .mockResolvedValueOnce({
         rows: [
           {
@@ -630,6 +639,7 @@ describe('PostgresAnnotationsRepository', () => {
             pos: '12345',
             ref: 'A',
             alt: 'G',
+            genome_build: 'GRCh38',
             global_comment: 'global',
             starred: '1',
             acmg_classification: null,
@@ -769,7 +779,7 @@ describe('PostgresAnnotationsRepository', () => {
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
     await expect(
-      repository.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+      repository.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', { starred: 1 })
     ).rejects.toThrow('flag write-hook exploded')
 
     // The mutation never COMMITs — the transaction is rolled back instead.
@@ -852,21 +862,23 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
     )
   }
 
-  it('global upsert flips has_star on every matching cohort_variant_summary row', async () => {
-    // Two summary rows at the same coordinate but different genome_build — a
-    // global star annotation has no build scope, so both must flip.
+  it('global upsert flips has_star on the summary row of its own build only (#577)', async () => {
+    // Two summary rows at the same coordinate but different genome_build: a
+    // global annotation is keyed by build, so only the GRCh38 row flips.
     await seedSummaryRow('1', 100, 'A', 'T', 'GRCh38')
     await seedSummaryRow('1', 100, 'A', 'T', 'GRCh37')
 
     const repo = new PostgresAnnotationsRepository(pool, schema)
-    await repo.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: 1 })
+    await repo.upsertGlobalAnnotation('1', 100, 'A', 'T', 'GRCh38', { starred: 1 })
 
     const rows = await probe.query<{ genome_build: string; has_star: boolean }>(
       `SELECT genome_build, has_star FROM "${schema}".cohort_variant_summary
          WHERE chr = '1' AND pos = 100 AND ref = 'A' AND alt = 'T'`
     )
     expect(rows.rows).toHaveLength(2)
-    expect(rows.rows.every((r) => r.has_star === true)).toBe(true)
+    const starOf = (build: string) => rows.rows.find((r) => r.genome_build === build)?.has_star
+    expect(starOf('GRCh38')).toBe(true)
+    expect(starOf('GRCh37')).toBe(false)
   }, 60_000)
 
   it('per-case upsert with mismatched (caseId, variantId) throws InvalidParametersError (Pass-7 LOW #6)', async () => {

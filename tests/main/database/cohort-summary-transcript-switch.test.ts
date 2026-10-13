@@ -202,8 +202,8 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
     addVariant(c37, 100, TX.low)
     const now = Date.now()
     db().exec(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, created_at, updated_at)
-       VALUES ('chr1', 100, 'A', 'G', 'note', 0, ${now}, ${now})`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, global_comment, starred, created_at, updated_at)
+       VALUES ('chr1', 100, 'A', 'G', 'GRCh38', 'note', 0, ${now}, ${now})`
     )
     service.cohortSummary.rebuild()
     service.annotations.upsertPerCaseAnnotation(c2, v2, {
@@ -219,7 +219,8 @@ describe('transcript switch keeps the cohort summary equal to a rebuild (#461)',
       )
       .all()
     expect(rows).toEqual([
-      { genome_build: 'GRCh37', has_star: 1, has_comment: 1, acmg_best: 'Pathogenic' },
+      // The GRCh38 note and call are not the GRCh37 locus's (#577).
+      { genome_build: 'GRCh37', has_star: 0, has_comment: 0, acmg_best: null },
       { genome_build: 'GRCh38', has_star: 1, has_comment: 1, acmg_best: 'Pathogenic' }
     ])
     expectExact()

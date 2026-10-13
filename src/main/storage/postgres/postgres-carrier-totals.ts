@@ -14,7 +14,7 @@ import type { Pool, PoolClient } from 'pg'
 
 import { classTotalsValuesSql } from '../../../shared/sql/carrier-frequency'
 import { quoteIdentifier, toNumber } from './identifiers'
-import { liveCarrierTotalsSql } from './postgres-cohort-summary-query'
+import { liveCarrierTotalsSql } from './postgres-carrier-frequency-sql'
 
 type Queryable = Pick<Pool | PoolClient, 'query'>
 type Tbl = (table: string) => string

@@ -91,6 +91,7 @@ export type ColumnarSlot =
   | 'CLINVAR'
   | 'GNOMAD_AF'
   | 'HPO_SIM_SCORE'
+  | 'HPO_MATCH'
   | 'MOI'
 
 /** varvis columnar header id → slot. Several varvis versions name a column differently. */
@@ -123,6 +124,7 @@ export const COLUMNAR_HEADER_TO_SLOT: Readonly<Record<string, ColumnarSlot>> = {
   GnomPMaxFiltAF: 'GNOMAD_AF',
   GnomTotal: 'GNOMAD_AF',
   HpoSimScore: 'HPO_SIM_SCORE',
+  HpoMatch: 'HPO_MATCH',
   MoI: 'MOI'
 }
 
@@ -146,6 +148,7 @@ export const COLUMNAR_SLOT_COLUMN: Readonly<Record<ColumnarSlot, string>> = {
   CLINVAR: 'clinvar',
   GNOMAD_AF: 'gnomad_af',
   HPO_SIM_SCORE: 'hpo_sim_score',
+  HPO_MATCH: 'hpo_match',
   MOI: 'moi'
 }
 
@@ -183,7 +186,8 @@ export const OBJECT_FORMAT_COLUMNS: Readonly<Record<string, string>> = {
   transcript: 'transcript',
   cdna: 'cdna',
   aa_change: 'aa_change',
-  moi: 'moi'
+  moi: 'moi',
+  hpo_match: 'hpo_match'
 }
 
 /** VEP CSQ subfields the annotation parser turns into columns (`vcf-annotation-parser.ts`). */

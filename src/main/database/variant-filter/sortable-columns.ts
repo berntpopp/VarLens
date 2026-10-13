@@ -3,6 +3,7 @@ import {
   resolveExtensionColumnKey,
   type ExtensionTypeKey
 } from '../variant-extension-registry'
+import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
 
 /**
  * Columns living on the `variants` table that are sortable and eligible for
@@ -32,6 +33,7 @@ export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
   hpo_sim_score: 'hpo_sim_score',
   clinvar: 'clinvar',
   moi: 'moi',
+  hpo_match: 'hpo_match',
   // Multi-variant type (SV/CNV/STR) discriminator columns — added in
   // migration v25 as real columns on the variants table. Without these
   // entries, clicking sort headers on the SV/CNV/STR tabs silently no-ops
@@ -63,7 +65,10 @@ export function resolveSortColumn(
   sortKey: string
 ): { sql: string; isExtension: boolean; extensionType?: ExtensionTypeKey } | null {
   if (BASE_SORTABLE_COLUMNS[sortKey] !== undefined) {
-    return { sql: `variants.${BASE_SORTABLE_COLUMNS[sortKey]}`, isExtension: false }
+    return {
+      sql: comparedColumnSql(sortKey, `variants.${BASE_SORTABLE_COLUMNS[sortKey]}`),
+      isExtension: false
+    }
   }
   if (EXTENSION_SORTABLE_DOTTED_KEYS.has(sortKey)) {
     const resolved = resolveExtensionColumnKey(sortKey)

@@ -105,7 +105,7 @@ describe('annotations preload domain behavior', () => {
     const { createAnnotationsApi } = await import('../../../../src/preload/domains/annotations')
     const api = createAnnotationsApi()
 
-    await expect(api.getGlobal('chr22', 1000, 'A', 'T')).resolves.toMatchObject({
+    await expect(api.getGlobal('chr22', 1000, 'A', 'T', 'GRCh38')).resolves.toMatchObject({
       id: 1,
       chr: 'chr22',
       pos: 1000,
@@ -114,13 +114,13 @@ describe('annotations preload domain behavior', () => {
     })
 
     await expect(
-      api.upsertGlobal('chr22', 1000, 'A', 'T', { global_comment: 'test' })
+      api.upsertGlobal('chr22', 1000, 'A', 'T', { global_comment: 'test' }, 'GRCh38')
     ).resolves.toMatchObject({
       id: 1,
       global_comment: 'test'
     })
 
-    await expect(api.deleteGlobal('chr22', 1000, 'A', 'T')).resolves.toBeUndefined()
+    await expect(api.deleteGlobal('chr22', 1000, 'A', 'T', 'GRCh38')).resolves.toBeUndefined()
 
     await expect(api.getPerCase(1, 1)).resolves.toMatchObject({
       id: 1,
@@ -155,11 +155,34 @@ describe('annotations preload domain behavior', () => {
       }
     })
 
-    expect(invoke).toHaveBeenNthCalledWith(1, 'annotations:getGlobal', 'chr22', 1000, 'A', 'T')
-    expect(invoke).toHaveBeenNthCalledWith(2, 'annotations:upsertGlobal', 'chr22', 1000, 'A', 'T', {
-      global_comment: 'test'
-    })
-    expect(invoke).toHaveBeenNthCalledWith(3, 'annotations:deleteGlobal', 'chr22', 1000, 'A', 'T')
+    expect(invoke).toHaveBeenNthCalledWith(
+      1,
+      'annotations:getGlobal',
+      'chr22',
+      1000,
+      'A',
+      'T',
+      'GRCh38'
+    )
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      'annotations:upsertGlobal',
+      'chr22',
+      1000,
+      'A',
+      'T',
+      { global_comment: 'test' },
+      'GRCh38'
+    )
+    expect(invoke).toHaveBeenNthCalledWith(
+      3,
+      'annotations:deleteGlobal',
+      'chr22',
+      1000,
+      'A',
+      'T',
+      'GRCh38'
+    )
     expect(invoke).toHaveBeenNthCalledWith(4, 'annotations:getPerCase', 1, 1)
     expect(invoke).toHaveBeenNthCalledWith(5, 'annotations:upsertPerCase', 1, 1, {
       per_case_comment: 'test'
@@ -174,9 +197,13 @@ describe('annotations preload domain behavior', () => {
       'A',
       'T'
     )
-    expect(invoke).toHaveBeenNthCalledWith(8, 'annotations:batchGet', 1, [
-      { chr: 'chr22', pos: 1000, ref: 'A', alt: 'T' }
-    ])
+    expect(invoke).toHaveBeenNthCalledWith(
+      8,
+      'annotations:batchGet',
+      1,
+      [{ chr: 'chr22', pos: 1000, ref: 'A', alt: 'T' }],
+      undefined
+    )
   })
 
   it('preload index preserves annotations transport results when exposing window.api', async () => {
@@ -222,24 +249,47 @@ describe('annotations preload domain behavior', () => {
 
     const api = exposeInMainWorld.mock.calls[0]?.[1] as {
       annotations: {
-        getGlobal: (chr: string, pos: number, ref: string, alt: string) => Promise<unknown>
-        deleteGlobal: (chr: string, pos: number, ref: string, alt: string) => Promise<unknown>
+        getGlobal: (
+          chr: string,
+          pos: number,
+          ref: string,
+          alt: string,
+          build: string
+        ) => Promise<unknown>
+        deleteGlobal: (
+          chr: string,
+          pos: number,
+          ref: string,
+          alt: string,
+          build: string
+        ) => Promise<unknown>
         getPerCase: (caseId: number, variantId: number) => Promise<unknown>
       }
     }
 
-    await expect(api.annotations.getGlobal('chr22', 1000, 'A', 'T')).resolves.toMatchObject({
+    await expect(
+      api.annotations.getGlobal('chr22', 1000, 'A', 'T', 'GRCh38')
+    ).resolves.toMatchObject({
       code: ErrorCode.DB_ERROR,
       message: 'annotations:getGlobal failed'
     })
-    await expect(api.annotations.deleteGlobal('chr22', 1000, 'A', 'T')).resolves.toBeUndefined()
+    await expect(
+      api.annotations.deleteGlobal('chr22', 1000, 'A', 'T', 'GRCh38')
+    ).resolves.toBeUndefined()
     await expect(api.annotations.getPerCase(1, 1)).resolves.toMatchObject({
       code: ErrorCode.DB_ERROR,
       message: 'annotations:getPerCase failed'
     })
 
-    expect(invoke).toHaveBeenCalledWith('annotations:getGlobal', 'chr22', 1000, 'A', 'T')
-    expect(invoke).toHaveBeenCalledWith('annotations:deleteGlobal', 'chr22', 1000, 'A', 'T')
+    expect(invoke).toHaveBeenCalledWith('annotations:getGlobal', 'chr22', 1000, 'A', 'T', 'GRCh38')
+    expect(invoke).toHaveBeenCalledWith(
+      'annotations:deleteGlobal',
+      'chr22',
+      1000,
+      'A',
+      'T',
+      'GRCh38'
+    )
     expect(invoke).toHaveBeenCalledWith('annotations:getPerCase', 1, 1)
   })
 })

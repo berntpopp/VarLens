@@ -178,7 +178,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?, ?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?, ?) and "v2"."case_id" = ?)",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?, ?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."acmg_classification" in (?, ?) and "v2"."case_id" = ?)",
 }
 `;
 
@@ -320,7 +320,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?)",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?)",
 }
 `;
 
@@ -468,7 +468,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?)",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?)",
 }
 `;
 
@@ -616,7 +616,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > ann
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?)",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."starred" = ? and "v2"."case_id" = ?)",
 }
 `;
 
@@ -1585,6 +1585,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
     "1",
     "1",
     "1",
+    "1",
     1,
     "1",
     1,
@@ -1624,7 +1625,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."gene_symbol" = ? and "variants"."omim_mim_number" = ? and "variants"."func" = ? and variants.consequence IN (?) and "variants"."transcript" = ? and "variants"."cdna" = ? and "variants"."aa_change" = ? and "variants"."gt_num" = ? and "variants"."gnomad_af" = ? and "variants"."cadd" = ? and "variants"."qual" = ? and "variants"."hpo_sim_score" = ? and (variants.clinvar_rank IN (1) OR variants.clinvar IN (?)) and "variants"."moi" = ? and "variants"."variant_type" = ? and "variants"."end_pos" = ? and "variants"."sv_type" = ? and "variants"."sv_length" = ? and "variants"."caller" = ?",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."gene_symbol" = ? and "variants"."omim_mim_number" = ? and "variants"."func" = ? and variants.consequence IN (?) and "variants"."transcript" = ? and "variants"."cdna" = ? and "variants"."aa_change" = ? and "variants"."gt_num" = ? and "variants"."gnomad_af" = ? and "variants"."cadd" = ? and "variants"."qual" = ? and "variants"."hpo_sim_score" = ? and (variants.clinvar_rank IN (1) OR variants.clinvar IN (?)) and "variants"."moi" = ? and "variants"."hpo_match" = ? and "variants"."variant_type" = ? and "variants"."end_pos" = ? and "variants"."sv_type" = ? and ABS(variants.sv_length) = ? and "variants"."caller" = ?",
 }
 `;
 
@@ -2042,7 +2043,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > com
           GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END left join "variant_sv" as "sv" on "sv"."variant_id" = "variants"."id" left join "variant_cnv" as "cnv" on "cnv"."variant_id" = "variants"."id" where "variants"."case_id" = ? and ("variants"."variant_type" = ? or "variants"."variant_type" = ?) and sv.support >= ? and "gene_symbol" like ? and (variants.impact_rank IN (4) OR variants.consequence IN (?)) and "func" in (?) and (variants.clinvar_rank IN (15, 14) OR variants.clinvar IN (?)) and ("gnomad_af" is null or "gnomad_af" <= ?) and ("cadd" is null or "cadd" >= ?) and COALESCE(CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
     WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
       AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
-      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" in (?, ?) and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL), 0) <= ? and (id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?) OR id IN (SELECT rowid FROM variants_fts WHERE variants_fts MATCH ? UNION SELECT rowid FROM variant_sv_fts WHERE variant_sv_fts MATCH ? UNION SELECT rowid FROM variant_str_fts WHERE variant_str_fts MATCH ?)) and "variants"."chr" in (?, ?) and "variants"."pos" = ? and "variants"."ref" = ? and "variants"."alt" = ? and "id" in (select "variant_id" from "variant_tags" where "case_id" = ? and "tag_id" in (?)) and ((variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?) or (variants.chr = ? AND variants.pos <= ? AND COALESCE(variants.end_pos, variants.pos) >= ?)) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "starred" = ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."starred" = ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "per_case_comment" is not null and "per_case_comment" != ? union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."global_comment" is not null and "va"."global_comment" != ? and "v2"."case_id" = ?) and "id" in (select "variant_id" from "case_variant_annotations" where "case_id" = ? and "acmg_classification" in (?) union select "v2"."id" as "variant_id" from "variants" as "v2" inner join "cases" as "c2" on "c2"."id" = "v2"."case_id" inner join "variant_annotations" as "va" on "va"."chr" = "v2"."chr" and "va"."pos" = "v2"."pos" and "va"."ref" = "v2"."ref" and "va"."alt" = "v2"."alt" and "va"."genome_build" = "c2"."genome_build" where "va"."acmg_classification" in (?) and "v2"."case_id" = ?) and ("variants"."gnomad_af" is null or "variants"."gnomad_af" <= ?) and (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') OR (variants.id IN (SELECT o.id FROM (
       SELECT t.id, t.origin,
         MIN(t.origin) OVER (PARTITION BY t.gene_symbol) AS first_origin,
         MAX(t.origin) OVER (PARTITION BY t.gene_symbol) AS last_origin
@@ -6598,6 +6599,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > pin
   "gene_symbol": "gene_symbol",
   "gnomad_af": "gnomad_af",
   "gt_num": "gt_num",
+  "hpo_match": "hpo_match",
   "hpo_sim_score": "hpo_sim_score",
   "moi": "moi",
   "omim_mim_number": "omim_mim_number",
@@ -7848,6 +7850,94 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
 }
 `;
 
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort hpo_match asc 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
+    WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('snv', 'indel')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'sv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('sv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'cnv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('cnv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'str' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
+          )
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.hpo_match ASC NULLS LAST, id ASC",
+}
+`;
+
+exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort hpo_match desc 1`] = `
+{
+  "parameters": [
+    2,
+    2,
+  ],
+  "prepareError": null,
+  "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
+    WHERE s.chr = variants.chr AND s.pos = variants.pos AND s.ref = variants.ref
+      AND s.alt = variants.alt AND s.variant_type || '' = variants.variant_type
+      AND s.genome_build || '' = bt.build) AS REAL) / NULLIF(bt.total, 0) AS REAL) as "internal_af" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('snv', 'indel')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'sv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('sv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'cnv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('cnv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'str' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
+          )
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.hpo_match DESC NULLS LAST, id ASC",
+}
+`;
+
 exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sort > sort hpo_sim_score asc 1`] = `
 {
   "parameters": [
@@ -8372,7 +8462,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.sv_length ASC NULLS LAST, id ASC",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by ABS(variants.sv_length) ASC NULLS LAST, id ASC",
 }
 `;
 
@@ -8416,7 +8506,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.sv_length DESC NULLS LAST, id ASC",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by ABS(variants.sv_length) DESC NULLS LAST, id ASC",
 }
 `;
 

@@ -65,11 +65,29 @@ describe('migration v47: chromosome names per build', () => {
       alt
     )
   }
+  /** v47 runs before v52 (#577): its global annotations had no build in the key. */
+  function toPreV52Annotations(): void {
+    const columns = db.prepare('PRAGMA table_info(variant_annotations)').all() as Array<{
+      name: string
+    }>
+    if (!columns.some((c) => c.name === 'genome_build')) return
+    db.exec(`
+      DROP TABLE variant_annotations;
+      CREATE TABLE variant_annotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chr TEXT NOT NULL, pos INTEGER NOT NULL, ref TEXT NOT NULL, alt TEXT NOT NULL,
+        global_comment TEXT, starred INTEGER NOT NULL DEFAULT 0,
+        acmg_classification TEXT, acmg_evidence TEXT,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+        UNIQUE(chr, pos, ref, alt)
+      )`)
+  }
   function annotate(
     chr: string,
     pos: number,
     over: { comment?: string; starred?: number; acmg?: string; updated?: number } = {}
   ): void {
+    toPreV52Annotations()
     db.prepare(
       `INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
        VALUES (?, ?, 'A', 'G', ?, ?, ?, 0, ?)`

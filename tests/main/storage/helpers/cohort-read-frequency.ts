@@ -6,7 +6,7 @@
 import {
   SUMMARY_FREQUENCY_SQL,
   summaryBuildTotalsJoin
-} from '../../../../src/main/storage/postgres/postgres-cohort-summary-query'
+} from '../../../../src/main/storage/postgres/postgres-carrier-frequency-sql'
 
 /** `FROM` clause: the summary as `cvs` plus the per-build, per-class case totals. */
 export function summaryWithFrequencyFrom(schema: string): string {

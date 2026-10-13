@@ -15,7 +15,7 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
     // exact columns. Truncated here for plan brevity; the implementer copies
     // the relevant CREATE TABLE statements from src/main/database/migrations.ts.
     db.exec(`
-      CREATE TABLE cases (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE cases (id INTEGER PRIMARY KEY, name TEXT, genome_build TEXT DEFAULT 'GRCh38');
       CREATE TABLE variants (
         id INTEGER PRIMARY KEY,
         case_id INTEGER,
@@ -23,10 +23,10 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
         variant_type TEXT DEFAULT 'snv'
       );
       CREATE TABLE variant_annotations (
-        chr TEXT, pos INTEGER, ref TEXT, alt TEXT,
+        chr TEXT, pos INTEGER, ref TEXT, alt TEXT, genome_build TEXT,
         starred INTEGER DEFAULT 0,
         comment TEXT,
-        PRIMARY KEY (chr, pos, ref, alt)
+        PRIMARY KEY (chr, pos, ref, alt, genome_build)
       );
       CREATE TABLE case_variant_annotations (
         case_id INTEGER, variant_id INTEGER,

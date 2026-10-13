@@ -18,6 +18,7 @@ import {
   jsonValueText
 } from '../../../shared/utils/import-field-profile'
 import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
+import { hpoMatchText } from './hpo-match'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -69,6 +70,7 @@ export class FieldMapper extends Transform {
   private readonly fields: FieldProfileResolver
   private readonly profileColumns: ProfileColumn[]
   private readonly columnCount?: number
+  private readonly hpoMatchLabel: (code: unknown) => unknown
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
@@ -79,6 +81,9 @@ export class FieldMapper extends Transform {
     this.columnCount = options.columnCount
     this.fields = options.fields ?? new FieldProfileResolver()
     this.profileColumns = profileColumnsOf(options.header ?? [], this.cols)
+    this.hpoMatchLabel = dictionaryLabel(
+      options.header?.[this.cols.HPO_MATCH]?.dataDictionary ?? null
+    )
     this.fields.seed(
       'JSON',
       this.profileColumns.filter((c) => !c.deriveOnly).map((c) => c.name)
@@ -157,6 +162,7 @@ export class FieldMapper extends Transform {
           true,
           this.dictionaries.moi
         ) as string | null,
+        hpo_match: this.hpoMatch(row),
         gq: null,
         dp: null,
         ad_ref: null,
@@ -199,6 +205,14 @@ export class FieldMapper extends Transform {
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)))
     }
+  }
+
+  /** The HpoMatch cell (term codes resolved through its dictionary) as `hpo_match` text. */
+  private hpoMatch(row: RawVariantRow): string | null {
+    const value: unknown = row[this.cols.HPO_MATCH]
+    return hpoMatchText(
+      Array.isArray(value) ? value.flat().map(this.hpoMatchLabel) : this.hpoMatchLabel(value)
+    )
   }
 
   /** The row's unmapped columns as `info_json`, per the field profile. */
@@ -371,6 +385,17 @@ function profileColumnsOf(header: ColumnarHeaderItem[], cols: ColumnIndices): Pr
  * (`selectedTranscript` set) the selected transcript's value, otherwise an
  * array is a list; a data-dictionary code is resolved to its label.
  */
+/** A cell code's label from its column's data dictionary; other values as they are. */
+function dictionaryLabel(dictionary: Record<string, unknown> | null): (code: unknown) => unknown {
+  return (code) =>
+    dictionary !== null &&
+    code !== null &&
+    typeof code !== 'object' &&
+    Object.prototype.hasOwnProperty.call(dictionary, String(code))
+      ? dictionary[String(code)]
+      : code
+}
+
 export function columnarCellText(
   value: RawVariantRow[number],
   selectedTranscript: number | null,
@@ -380,13 +405,7 @@ export function columnarCellText(
   if (Array.isArray(value) && selectedTranscript !== null) {
     selected = value[selectedTranscript] ?? value[0]
   }
-  const label = (code: unknown): unknown =>
-    dictionary !== null &&
-    code !== null &&
-    typeof code !== 'object' &&
-    Object.prototype.hasOwnProperty.call(dictionary, String(code))
-      ? dictionary[String(code)]
-      : code
+  const label = dictionaryLabel(dictionary)
   return jsonValueText(Array.isArray(selected) ? selected.map(label) : label(selected))
 }
 

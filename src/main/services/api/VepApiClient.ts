@@ -23,6 +23,7 @@ import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { backoffDelay, retryAfterMs } from './retry-backoff'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { apiFetch } from './http-fetch'
 
 /**
  * Normalize chromosome identifier for consistent cache keys
@@ -284,7 +285,7 @@ export class VepApiClient {
     // Note: REVEL and SpliceAI are NOT available via REST API (require VEP plugins)
     const url = `${this.baseUrl}/vep/human/region/${vepRegionAllele(chr, pos, ref, alt)}?content-type=application/json&CADD=1&sift=b&polyphen=b&merged=1`
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS)]),
       headers: {
         'Content-Type': 'application/json'

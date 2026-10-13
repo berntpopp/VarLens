@@ -9,7 +9,7 @@ import type { TrackFeature } from '../../utils/track-window'
 import {
   anchorMarker,
   axis,
-  diamondTrack,
+  clinvarTrack,
   dotTrack,
   gutterLabel,
   lollipopTrack,
@@ -82,7 +82,7 @@ export function drawProteinView(ctx: TrackDrawContext, model: ProteinViewModel):
   }
 
   lollipopTrack(g, ctx, ['variant', 'cohort'], baseY, baseY - TOP_PX)
-  if (model.hasClinvar) diamondTrack(g, ctx, clinvarY)
+  if (model.hasClinvar) clinvarTrack(g, ctx, clinvarY)
   if (model.showGnomad) dotTrack(g, ctx, gnomadTop, 32)
   // A tall but not page-high stem: unmistakable without dwarfing the other tracks.
   anchorMarker(g, ctx, baseY, Math.max(TOP_PX, baseY - ANCHOR_STEM_PX))

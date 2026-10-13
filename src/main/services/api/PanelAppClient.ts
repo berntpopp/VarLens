@@ -12,6 +12,7 @@
 import { z } from 'zod'
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
+import { apiFetch } from './http-fetch'
 
 // ---------------------------------------------------------------------------
 // Zod schemas for runtime validation of API responses
@@ -252,7 +253,7 @@ export class PanelAppClient {
 
   // The timeout signal stays attached to the response, so it also bounds the caller's body read.
   private fetchWithTimeout(url: string): Promise<Response> {
-    return fetch(url, {
+    return apiFetch(url, {
       signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: { Accept: 'application/json' }
     })

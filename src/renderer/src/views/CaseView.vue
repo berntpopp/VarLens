@@ -21,6 +21,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
 import { usePermissions } from '../composables/usePermissions'
 import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
+import { provideCaseAnnotationBuild } from '../composables/useVariantGenomeBuild'
 import { useCarrierTarget } from '../composables/useCarrierTarget'
 import CarrierTargetBanner from '../components/case/CarrierTargetBanner.vue'
 
@@ -45,7 +46,7 @@ const {
 
 // Import is an analyst action; viewers never get the welcome-screen button.
 const { canWrite } = usePermissions()
-
+provideCaseAnnotationBuild(selectedCaseId)
 const { api } = useApiService()
 const settingsStore = useSettingsStore()
 const hasCases = computed(() => caseCount.value > 0)
@@ -427,12 +428,8 @@ defineExpose({
     <div v-show="selectedVariantType !== 'shortlist'" class="per-type-region">
       <div class="filter-bar-container">
         <CarrierTargetBanner />
-        <!--
-          Pass-9 #3: deferred mount. FilterToolbar is gated on
-          `firstActivated` so its `loadFilterOptions` IPC does not fire
-          until type counts arrive on a per-type tab. The outer region
-          stays on `v-show` (above) so VariantTable state is preserved.
-        -->
+        <!-- Pass-9 #3: deferred mount, so loadFilterOptions waits for type counts.
+             The outer region stays on `v-show` so VariantTable state is preserved. -->
         <FilterToolbar
           v-if="firstActivated"
           ref="filterToolbarRef"
@@ -460,10 +457,12 @@ defineExpose({
         :annotation-scope="annotationScope"
         :column-meta="columnMeta"
         :interactive="selectedVariantType !== 'shortlist'"
+        :active-filters="filterToolbarRef?.activeFilters"
         @update:counts="handleCountsUpdate"
         @update:has-sort="handleSortUpdate"
         @row-click="handleRowClick"
         @deselect="handleDeselect"
+        @clear-filter="filterToolbarRef?.handleClearFilter($event)"
         @clear-filters="filterToolbarRef?.handleClearAll()"
       />
     </div>

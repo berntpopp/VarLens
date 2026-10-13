@@ -31,6 +31,7 @@ export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   het_count: 17,
   omim_mim_number: 18,
   hpo_sim_score: 19,
+  hpo_match: 19,
   qual: 20,
   moi: 21,
   _links: 22

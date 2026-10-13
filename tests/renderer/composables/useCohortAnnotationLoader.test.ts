@@ -33,7 +33,9 @@ describe('useCohortAnnotationLoader', () => {
   })
 
   function setup(): ReturnType<typeof useCohortAnnotationLoader> {
-    const [loader, appInstance] = withSetup(() => useCohortAnnotationLoader())
+    const [loader, appInstance] = withSetup(() =>
+      useCohortAnnotationLoader({ genomeBuild: 'GRCh38' })
+    )
     app = appInstance
     return loader
   }
@@ -46,9 +48,11 @@ describe('useCohortAnnotationLoader', () => {
     await vi.advanceTimersByTimeAsync(150)
 
     expect(window.api.annotations.batchGet).toHaveBeenCalledTimes(1)
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
-      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      null,
+      [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }],
+      'GRCh38'
+    )
     resolvers[0]({ 'chr1:100:A:G': EMPTY })
     await vi.runAllTimersAsync()
     expect(annotationCache.value.has('chr1:100:A:G')).toBe(true)
@@ -63,9 +67,11 @@ describe('useCohortAnnotationLoader', () => {
     await vi.advanceTimersByTimeAsync(150)
 
     expect(window.api.annotations.batchGet).toHaveBeenCalledTimes(1)
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
-      { chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      null,
+      [{ chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }],
+      'GRCh38'
+    )
   })
 
   it('drops a batch that resolves after the table moved to another page', async () => {

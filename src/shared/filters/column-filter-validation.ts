@@ -8,7 +8,7 @@
  * {@link assertValidColumnFilterValues} before it emits SQL, so both backends
  * now reject such a filter with the same error.
  */
-import type { ColumnFiltersParam } from '../types/column-filters'
+import type { ColumnFilterOperator, ColumnFiltersParam } from '../types/column-filters'
 import { isNullCheckOperator } from './column-null-check'
 import { infoFieldFilterProblem, infoFieldKey } from './info-field-filter'
 
@@ -89,8 +89,24 @@ function isNumericFilterValue(value: unknown): boolean {
   return false
 }
 
+/** Every operator a column filter may carry; anything else would be dropped by the SQL builders. */
+const COLUMN_FILTER_OPERATORS: ReadonlySet<string> = new Set<ColumnFilterOperator>([
+  '=',
+  '!=',
+  '<',
+  '>',
+  '<=',
+  '>=',
+  'like',
+  'in',
+  'is_null',
+  'not_null'
+])
+
 /**
- * Reject comparison (`= != < > <= >=`) and `in` filters on numeric columns
+ * Reject an unknown operator (requests are untrusted: the web API takes
+ * `column_filters` as an open record), so a typo such as `eq` fails instead of
+ * silently matching every row. Then reject comparison (`= != < > <= >=`) and `in` filters on numeric columns
  * whose value is not a finite number. `like` filters are textual by design and
  * pass through untouched, null checks have no value, as do filters on text columns and unknown keys
  * (each backend decides separately whether a key is filterable at all).
@@ -101,6 +117,13 @@ export function assertValidColumnFilterValues(filters: ColumnFiltersParam | unde
   if (filters === undefined) return
 
   for (const [column, filter] of Object.entries(filters)) {
+    if (filter !== undefined && !COLUMN_FILTER_OPERATORS.has(filter.operator)) {
+      throw new ColumnFilterValueError(
+        column,
+        filter.value,
+        `Unknown operator for column filter "${column}": ${JSON.stringify(filter.operator)}`
+      )
+    }
     if (filter !== undefined && infoFieldKey(column) !== null) {
       const problem = infoFieldFilterProblem(column, filter)
       if (problem !== null) throw new ColumnFilterValueError(column, filter.value, problem)

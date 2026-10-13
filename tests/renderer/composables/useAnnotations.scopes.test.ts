@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockApi } from '../../utils/mock-api'
 import { useAnnotations, _resetAnnotationsForTesting } from '@renderer/composables/useAnnotations'
+import { logService } from '@renderer/services/LogService'
 
 const V = ['chr1', 100, 'A', 'G'] as const
 const KEY = 'chr1:100:A:G'
@@ -30,7 +31,7 @@ describe('annotation cache shared by the cohort and the case table', () => {
     window.api.annotations.getForVariant = vi
       .fn()
       .mockResolvedValue({ global: GLOBAL_ROW, perCase: CASE_ROW })
-    a = useAnnotations()
+    a = useAnnotations({ genomeBuild: 'GRCh38' })
   })
 
   afterEach(() => {
@@ -43,9 +44,11 @@ describe('annotation cache shared by the cohort and the case table', () => {
 
     await a.loadAnnotationsBatch(CASE_ID, [ROW])
 
-    expect(window.api.annotations.batchGet).toHaveBeenLastCalledWith(CASE_ID, [
-      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenLastCalledWith(
+      CASE_ID,
+      [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 }],
+      null
+    )
     expect(a.isStarred(...V)).toBe(true)
   })
 
@@ -116,5 +119,72 @@ describe('annotation cache shared by the cohort and the case table', () => {
     await cohortLoad
     expect(a.isStarred(...V)).toBe(true)
     expect(a.isGlobalStarred(...V)).toBe(true)
+  })
+})
+
+// Global annotations are keyed by genome build (#577).
+describe('global annotations of one genome build', () => {
+  beforeEach(() => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      [KEY]: { global: GLOBAL_ROW, perCase: null }
+    }) as never
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a global write without a known build is not sent and reports the failure', async () => {
+    const logged = vi.spyOn(logService, 'error').mockImplementation(() => undefined)
+    const a = useAnnotations({ genomeBuild: null })
+    window.api.annotations.upsertGlobal = vi.fn()
+    expect(await a.toggleGlobalStar(...V)).toBe(false)
+    expect(await a.setGlobalAcmgClassification(...V, 'Pathogenic')).toBe(false)
+    expect(window.api.annotations.upsertGlobal).not.toHaveBeenCalled()
+    expect(logged).toHaveBeenCalledTimes(2)
+  })
+
+  it('a global load without a known build sends nothing', async () => {
+    await useAnnotations({ genomeBuild: null }).loadGlobalAnnotationsBatch([ROW])
+    expect(window.api.annotations.batchGet).not.toHaveBeenCalled()
+  })
+
+  it('a view of another build never reads the entries of the first', async () => {
+    const b38 = useAnnotations({ genomeBuild: 'GRCh38' })
+    const b37 = useAnnotations({ genomeBuild: 'GRCh37' })
+    await b38.loadGlobalAnnotationsBatch([ROW])
+    expect(b38.isGlobalStarred(...V)).toBe(true)
+    expect(b37.isGlobalStarred(...V)).toBe(false)
+
+    // The GRCh37 view's own request empties the cache and asks for its build.
+    vi.mocked(window.api.annotations.batchGet).mockResolvedValueOnce({
+      [KEY]: { global: null, perCase: null }
+    } as never)
+    await b37.loadGlobalAnnotationsBatch([ROW])
+    expect(window.api.annotations.batchGet).toHaveBeenLastCalledWith(
+      null,
+      [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }],
+      'GRCh37'
+    )
+    expect(b37.isGlobalStarred(...V)).toBe(false)
+    expect(b38.isGlobalStarred(...V)).toBe(false)
+  })
+
+  it('a case request of unknown build drops another build entries (#577)', async () => {
+    const b38 = useAnnotations({ genomeBuild: 'GRCh38' })
+    await b38.loadGlobalAnnotationsBatch([ROW])
+    expect(b38.isGlobalStarred(...V)).toBe(true)
+    // A case whose build is not known yet: the GRCh38 entries may be another build's.
+    let answer!: (value: unknown) => void
+    vi.mocked(window.api.annotations.batchGet).mockReturnValueOnce(
+      new Promise((resolve) => (answer = resolve)) as never
+    )
+    const unknown = useAnnotations({ genomeBuild: null })
+    const load = unknown.loadAnnotationsBatch(CASE_ID, [ROW])
+    expect(unknown.isGlobalStarred(...V)).toBe(false)
+    answer({ [KEY]: { global: null, perCase: null } })
+    await load
   })
 })

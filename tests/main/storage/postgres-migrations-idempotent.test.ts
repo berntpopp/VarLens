@@ -174,7 +174,10 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       '0031',
       '0032',
       '0033',
-      '0034'
+      '0034',
+      '0035',
+      '0036',
+      '0037'
     ])
 
     // 0033 decodes VEP escapes in rows imported before #547.

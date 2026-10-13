@@ -6,12 +6,13 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import ExtensionDetailsSection from '../../../../src/renderer/src/components/variant-details/ExtensionDetailsSection.vue'
+import { COHORT_CALL_EVIDENCE_NOTE } from '../../../../src/renderer/src/config/uiCopyConfig'
 
 const vuetify = createVuetify({ components, directives })
 
-function render(variant: Record<string, unknown>, genomeBuild: string | null) {
+function render(variant: Record<string, unknown>, genomeBuild: string | null, summaryOnly = false) {
   const wrapper = mount(ExtensionDetailsSection, {
-    props: { variant, genomeBuild },
+    props: { variant, genomeBuild, summaryOnly },
     global: { plugins: [vuetify] }
   })
   const text = (id: string): string => wrapper.find(`[data-testid="${id}"]`).text()
@@ -84,5 +85,34 @@ describe('ExtensionDetailsSection call context', () => {
   it('renders nothing for an SNV', () => {
     const { wrapper } = render({ chr: '1', pos: 5, variant_type: 'snv' }, 'GRCh38')
     expect(wrapper.find('[data-testid="call-context"]').exists()).toBe(false)
+  })
+})
+
+describe('ExtensionDetailsSection on a cohort row (summaryOnly, #539)', () => {
+  const cohortDel = {
+    chr: '7',
+    pos: 1000,
+    alt: '<DEL>',
+    variant_type: 'sv',
+    sv_type: 'DEL',
+    end_pos: 5000,
+    sv_length: 4000
+  }
+
+  it('shows build, interval, type and length and points to the carriers for evidence', () => {
+    const { text, wrapper } = render(cohortDel, 'GRCh38', true)
+    expect(text('call-build')).toBe('GRCh38')
+    expect(text('call-coordinates')).toBe('7:1,000-5,000')
+    expect(text('call-length')).toBe('4.00 kb')
+    expect(text('carrier-evidence-note')).toBe(COHORT_CALL_EVIDENCE_NOTE)
+    // Summary rows carry no per-call evidence: nothing may read as "Imprecise" or "missing".
+    expect(wrapper.find('[data-testid="call-caller"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="missing-evidence"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Imprecise')
+  })
+
+  it('renders nothing for a cohort STR row (no per-row repeat data)', () => {
+    const { wrapper } = render({ chr: '4', pos: 1, variant_type: 'str' }, 'GRCh38', true)
+    expect(wrapper.find('.extension-section').exists()).toBe(false)
   })
 })

@@ -84,6 +84,7 @@ import { useFilterUrlParam } from '../composables/useViewUrlBindings'
 import { useCohortBuildUrlParam } from '../composables/useCohortBuildUrlParam'
 import type { CarrierTarget } from '../composables/useCarrierTarget'
 import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
+import { AnnotationBuildKey } from '../composables/useAnnotations'
 
 // Create and provide filter state for child components (CohortTable, CohortFilterBar)
 const filtersInstance = createFilters()
@@ -96,6 +97,8 @@ const cohortDataInstance = useCohortData()
 provide(CohortDataKey, cohortDataInstance)
 const { genomeBuild, selectedVariantType, availableBuilds, loadAvailableBuilds } =
   cohortDataInstance
+// Global annotations are keyed by build (#577): the table reads the selected one's.
+provide(AnnotationBuildKey, genomeBuild)
 
 // Warn (in the filter bar) when genes of the active panel have no coordinates
 // for the selected genome build — same warning as the case view.

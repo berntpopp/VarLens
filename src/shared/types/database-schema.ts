@@ -89,6 +89,8 @@ export interface VariantAnnotationsTable {
   pos: number
   ref: string
   alt: string
+  /** Part of the key since v52 / PG 0035 (#577). */
+  genome_build: string
   global_comment: string | null
   starred: number
   acmg_classification: string | null

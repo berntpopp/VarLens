@@ -79,7 +79,8 @@ export function variantSummaryInsertSql(variantFilter = ''): string {
     SELECT * FROM key_rows WHERE key_rn = 1
   ) d
   LEFT JOIN variant_annotations va
-    ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt;
+    ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt
+    AND va.genome_build = d.genome_build;
 `
 }
 
@@ -89,8 +90,9 @@ ${variantSummaryInsertSql()}`
 
 /**
  * Folds per-case stars / comments / ACMG calls (case_variant_annotations) into
- * the summary flags, on top of the variant_annotations base the INSERT-SELECT
- * above writes. `variantFilter` is appended after the `JOIN variants v` (e.g.
+ * the summary flags of their case's build, on top of the variant_annotations
+ * base the INSERT-SELECT above writes. `variantFilter` is appended after the
+ * `JOIN variants v ... JOIN cases c` (e.g.
  * a `WHERE v.chr = @chr ...` restriction for one recomputed coordinate); the
  * empty string covers every annotated coordinate.
  */
@@ -105,20 +107,22 @@ export function perCaseAnnotationFlagsSql(variantFilter = ''): string {
       ELSE cohort_variant_summary.acmg_best
     END
   FROM (
-    SELECT v.chr, v.pos, v.ref, v.alt,
+    SELECT v.chr, v.pos, v.ref, v.alt, c.genome_build,
       MAX(cva.starred) AS has_star,
       MAX(CASE WHEN cva.per_case_comment IS NOT NULL AND cva.per_case_comment != ''
         THEN 1 ELSE 0 END) AS has_comment,
       ${acmgLabelCaseSql(`MAX(${acmgRankCaseSql('cva.acmg_classification')})`)} AS acmg_best,
       MAX(${acmgRankCaseSql('cva.acmg_classification')}) AS acmg_rank
     FROM case_variant_annotations cva
-    JOIN variants v ON cva.variant_id = v.id${variantFilter}
-    GROUP BY v.chr, v.pos, v.ref, v.alt
+    JOIN variants v ON cva.variant_id = v.id
+    JOIN cases c ON c.id = v.case_id${variantFilter}
+    GROUP BY v.chr, v.pos, v.ref, v.alt, c.genome_build
   ) pca
   WHERE cohort_variant_summary.chr = pca.chr
     AND cohort_variant_summary.pos = pca.pos
     AND cohort_variant_summary.ref = pca.ref
-    AND cohort_variant_summary.alt = pca.alt;
+    AND cohort_variant_summary.alt = pca.alt
+    AND cohort_variant_summary.genome_build = pca.genome_build;
 `
 }
 

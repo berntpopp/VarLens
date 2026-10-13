@@ -14,6 +14,7 @@ import type { ProteinMappingResult, ProteinApiError } from '../../../shared/type
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { apiFetch } from './http-fetch'
 
 export class UniProtApiClient {
   private cache: ApiCache | null
@@ -151,7 +152,7 @@ export class UniProtApiClient {
     const fields = 'accession,gene_names,protein_name,length'
     const url = `${this.baseUrl}/uniprotkb/search?query=${query}&fields=${fields}&format=json&size=1`
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'User-Agent': 'VarLens/1.0 (Electron desktop app)'

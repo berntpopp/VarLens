@@ -12,6 +12,7 @@
  * order cases are renamed in cannot mix two loci (a GRCh38 `1` and an hg19
  * `chr1` swap keys, each note stays with its own locus).
  */
+import { globalAnnotationEntityKey } from '../audit/annotation-entity-key'
 import { bareContig } from '../utils/contig'
 
 /** The user-authored columns of a `variant_annotations` row. */
@@ -29,6 +30,8 @@ export interface AnnotationRow extends GlobalAnnotationFields {
   pos: number
   ref: string
   alt: string
+  /** Part of the key since SQLite v52 / PG 0035 (#577); absent before. */
+  genome_build?: string
   created_at: number
 }
 
@@ -47,11 +50,12 @@ export interface GroupRemap {
   audits: Array<{ key: string; discarded: string; kept: string | null; from: string }>
 }
 
-/** Group key: one contig (any spelling) at one pos/ref/alt. */
+/** Group key: one contig (any spelling) at one pos/ref/alt, in one build when keyed by build. */
 export function annotationGroupKey(
-  row: Pick<AnnotationRow, 'chr' | 'pos' | 'ref' | 'alt'>
+  row: Pick<AnnotationRow, 'chr' | 'pos' | 'ref' | 'alt' | 'genome_build'>
 ): string {
-  return `${bareContig(row.chr)}:${row.pos}:${row.ref}:${row.alt}`
+  const build = row.genome_build === undefined ? '' : `@${row.genome_build}`
+  return `${bareContig(row.chr)}:${row.pos}:${row.ref}:${row.alt}${build}`
 }
 
 /**
@@ -112,7 +116,7 @@ export function remapAnnotationGroup(
     let merged: AnnotationValues = { ...ordered[0], chr }
     for (const next of ordered.slice(1)) {
       const m = mergeGlobalAnnotations(merged, next)
-      const key = `${chr}:${next.pos}:${next.ref}:${next.alt}`
+      const key = globalAnnotationEntityKey({ ...next, chr }, next.genome_build)
       if (m.discardedAcmg !== null) {
         result.audits.push({
           key,

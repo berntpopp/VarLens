@@ -524,7 +524,7 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     // Star the shared 1:100:A:T coordinate (global), comment+ACMG the 2:200:C:G
     // coordinate per-case on case-a — exercising both annotation tables.
     // SQLite: write annotation, then summary write-hook keeps cvs flags current.
-    sqlite.annotations.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: true })
+    sqlite.annotations.upsertGlobalAnnotation('1', 100, 'A', 'T', 'GRCh38', { starred: true })
     const sqliteTargetId = (
       sqlite.db
         .prepare("SELECT id FROM variants WHERE case_id = ? AND chr = '2' AND pos = 200")
@@ -547,8 +547,8 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     const pgTargetId = pgTarget.rows[0].id
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('1', 100, 'A', 'T', NULL, 1, NULL, $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('1', 100, 'A', 'T', 'GRCh38', NULL, 1, NULL, $1, $1)`,
       [now]
     )
     await probe.query(
@@ -565,7 +565,8 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
         chr: '1',
         pos: 100,
         ref: 'A',
-        alt: 'T'
+        alt: 'T',
+        genomeBuild: 'GRCh38'
       })
       await applyAnnotationFlagsPerCase(client as never, {
         schema,

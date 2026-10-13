@@ -106,7 +106,10 @@ describe('PostgresCohortRepository', () => {
           gnomad_af: 0.001,
           cadd_phred: 32.5,
           transcript: 'NM_007294',
-          omim_id: '113705'
+          omim_id: '113705',
+          end_pos: null,
+          sv_type: null,
+          sv_length: null
         }
       ]
     })
@@ -646,9 +649,19 @@ describe('PostgresCohortRepository', () => {
 
     expect(query.mock.calls[0][1]).toEqual(['1', 123, 'A', 'G', 'snv', 'GRCh38'])
     expect(query.mock.calls[0][0]).toContain('v.variant_type = $5 AND c.genome_build = $6')
+    const noCall = {
+      qual: null,
+      filter: null,
+      caller: null,
+      end_pos: null,
+      sv_length: null,
+      sv_support: null,
+      sv_vaf: null,
+      copy_number: null
+    }
     expect(carriers).toEqual([
-      { case_id: 7, case_name: 'Case B', gt_num: '0/1', gq: 99.5, dp: 42 },
-      { case_id: 8, case_name: 'Case C', gt_num: '1/1', gq: null, dp: null }
+      { ...noCall, case_id: 7, case_name: 'Case B', gt_num: '0/1', gq: 99.5, dp: 42 },
+      { ...noCall, case_id: 8, case_name: 'Case C', gt_num: '1/1', gq: null, dp: null }
     ])
   })
 
@@ -696,7 +709,10 @@ describe('PostgresCohortRepository', () => {
       'clinvar',
       'gnomad_af',
       'cadd_phred',
-      'transcript'
+      'transcript',
+      'end_pos',
+      'sv_type',
+      'sv_length'
     ]
     // The probe proves `pos` and `transcript` high-cardinality; the rest are
     // counted exactly, where `gene_symbol` turns out to be above the limit too.
@@ -711,7 +727,9 @@ describe('PostgresCohortRepository', () => {
         'het_count',
         'hom_count',
         'gnomad_af',
-        'cadd_phred'
+        'cadd_phred',
+        'end_pos',
+        'sv_length'
       ].flatMap((key) => [
         [`min_${key}`, '1'],
         [`max_${key}`, '10']
@@ -831,7 +849,20 @@ describe('PostgresCohortRepository', () => {
     expect(streamArg.cursor?.text).not.toContain('LIMIT')
     expect(streamArg.cursor?.text).not.toContain('OFFSET')
     expect(streamArg.cursor?.values).toEqual(['MYH7'])
-    expect(rows).toEqual([{ chr: '2', pos: '456', ref: 'C', alt: 'T', carrier_count: '1' }])
+    expect(rows).toEqual([
+      {
+        chr: '2',
+        pos: '456',
+        ref: 'C',
+        alt: 'T',
+        carrier_count: '1',
+        // No annotation at this row (#574).
+        acmg_classification: null,
+        acmg_points: null,
+        acmg_override_reason: null,
+        global_comment: null
+      }
+    ])
     expect(release).toHaveBeenCalledTimes(1)
   })
 })

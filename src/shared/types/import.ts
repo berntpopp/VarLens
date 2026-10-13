@@ -34,6 +34,8 @@ export interface ImportDataReport {
   unrankedClinvar?: string[]
   /** Variants whose gnomAD AF lies outside [0, 1]. */
   afOutOfRange?: number
+  /** Multi-allelic sites whose VEP CSQ could not be assigned to an ALT (#556). */
+  csqAmbiguousSites?: number
 }
 
 // Result of import operation

@@ -295,6 +295,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
     unrankedClinvar?: string[]
     /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
     afOutOfRange?: number
+    csqAmbiguousSites?: number
   }> {
     const factory = this.options.workerClientFactory ?? (() => new PostgresImportWorkerClient())
     const client = factory()

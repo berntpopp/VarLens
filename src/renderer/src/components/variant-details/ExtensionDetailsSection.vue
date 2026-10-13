@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { buildStatus, formatBpLength, normalizeBuild } from '../../utils/variant-interval'
 import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
+import { COHORT_CALL_EVIDENCE_NOTE } from '../../config/uiCopyConfig'
 
 /**
  * Conditional detail section showing SV/CNV/STR-specific data based on variant_type.
@@ -59,6 +60,8 @@ interface Props {
   variant: Record<string, unknown> | null
   /** Genome build of the variant's case; null when unknown */
   genomeBuild?: string | null
+  /** A cohort row: call context only, per-call evidence lives with each carrier */
+  summaryOnly?: boolean
 }
 
 const props = defineProps<Props>()
@@ -74,7 +77,10 @@ const variantType = computed(() => variant.value?.variant_type ?? null)
 const isSv = computed(() => variantType.value === 'sv')
 const isCnv = computed(() => variantType.value === 'cnv')
 const isStr = computed(() => variantType.value === 'str')
-const showSection = computed(() => isSv.value || isCnv.value || isStr.value)
+const showSection = computed(() =>
+  props.summaryOnly ? isSv.value || isCnv.value : isSv.value || isCnv.value || isStr.value
+)
+const showEvidence = computed(() => !props.summaryOnly)
 
 const strStatusColor = computed(() => {
   const status = variant.value?._str_status ?? ''
@@ -196,7 +202,7 @@ function formatText(val: string | null | undefined): string {
           isBreakend ? 'Not applicable (breakend)' : formatBpLength(variant?.sv_length)
         }}</span>
       </v-list-item>
-      <v-list-item class="px-2">
+      <v-list-item v-if="showEvidence" class="px-2">
         <template #prepend>
           <span class="text-medium-emphasis text-caption mr-2" style="min-width: 110px"
             >Caller</span
@@ -204,10 +210,15 @@ function formatText(val: string | null | undefined): string {
         </template>
         <span data-testid="call-caller">{{ callerLabel }}</span>
       </v-list-item>
+      <v-list-item v-else class="px-2">
+        <span class="text-medium-emphasis text-caption" data-testid="carrier-evidence-note">{{
+          COHORT_CALL_EVIDENCE_NOTE
+        }}</span>
+      </v-list-item>
     </v-list>
 
     <!-- SV Section -->
-    <v-list v-if="isSv" density="compact" bg-color="transparent" class="pa-0">
+    <v-list v-if="isSv && showEvidence" density="compact" bg-color="transparent" class="pa-0">
       <v-list-item v-if="!hasSvEvidence" class="px-2" data-testid="missing-evidence">
         <span class="text-medium-emphasis">No read-support evidence reported for this call</span>
       </v-list-item>
@@ -269,7 +280,7 @@ function formatText(val: string | null | undefined): string {
     </v-list>
 
     <!-- CNV Section -->
-    <v-list v-if="isCnv" density="compact" bg-color="transparent" class="pa-0">
+    <v-list v-if="isCnv && showEvidence" density="compact" bg-color="transparent" class="pa-0">
       <v-list-item v-if="!hasCnvEvidence" class="px-2" data-testid="missing-evidence">
         <span class="text-medium-emphasis">No copy-number evidence reported for this call</span>
       </v-list-item>
@@ -307,7 +318,7 @@ function formatText(val: string | null | undefined): string {
     </v-list>
 
     <!-- STR Section -->
-    <v-list v-if="isStr" density="compact" bg-color="transparent" class="pa-0">
+    <v-list v-if="isStr && showEvidence" density="compact" bg-color="transparent" class="pa-0">
       <v-list-item v-if="variant?._str_repeat_id" class="px-2">
         <template #prepend>
           <span class="text-medium-emphasis text-caption mr-2" style="min-width: 110px">Locus</span>

@@ -48,11 +48,12 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
     has_star = (EXISTS (
       SELECT 1 FROM ${schemaName}."variant_annotations" va
       WHERE va.chr = cvs.chr AND va.pos = cvs.pos
-        AND va.ref = cvs.ref AND va.alt = cvs.alt
+        AND va.ref = cvs.ref AND va.alt = cvs.alt AND va.genome_build = cvs.genome_build
         AND va.starred = 1
     ) OR EXISTS (
       SELECT 1 FROM ${schemaName}."case_variant_annotations" cva
       JOIN ${schemaName}."variants" v ON cva.variant_id = v.id
+      JOIN ${schemaName}."cases" c ON c.id = v.case_id AND c.genome_build = cvs.genome_build
       WHERE v.chr = cvs.chr AND v.pos = cvs.pos
         AND v.ref = cvs.ref AND v.alt = cvs.alt
         AND v.variant_type = cvs.variant_type
@@ -61,11 +62,12 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
     has_comment = (EXISTS (
       SELECT 1 FROM ${schemaName}."variant_annotations" va
       WHERE va.chr = cvs.chr AND va.pos = cvs.pos
-        AND va.ref = cvs.ref AND va.alt = cvs.alt
+        AND va.ref = cvs.ref AND va.alt = cvs.alt AND va.genome_build = cvs.genome_build
         AND va.global_comment IS NOT NULL AND va.global_comment <> ''
     ) OR EXISTS (
       SELECT 1 FROM ${schemaName}."case_variant_annotations" cva
       JOIN ${schemaName}."variants" v ON cva.variant_id = v.id
+      JOIN ${schemaName}."cases" c ON c.id = v.case_id AND c.genome_build = cvs.genome_build
       WHERE v.chr = cvs.chr AND v.pos = cvs.pos
         AND v.ref = cvs.ref AND v.alt = cvs.alt
         AND v.variant_type = cvs.variant_type
@@ -76,12 +78,13 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
         SELECT ${ACMG_RANK_SQL('va.acmg_classification')} AS rank
         FROM ${schemaName}."variant_annotations" va
         WHERE va.chr = cvs.chr AND va.pos = cvs.pos
-          AND va.ref = cvs.ref AND va.alt = cvs.alt
+          AND va.ref = cvs.ref AND va.alt = cvs.alt AND va.genome_build = cvs.genome_build
           AND va.acmg_classification IS NOT NULL
         UNION ALL
         SELECT ${ACMG_RANK_SQL('cva.acmg_classification')} AS rank
         FROM ${schemaName}."case_variant_annotations" cva
         JOIN ${schemaName}."variants" v ON cva.variant_id = v.id
+        JOIN ${schemaName}."cases" c ON c.id = v.case_id AND c.genome_build = cvs.genome_build
         WHERE v.chr = cvs.chr AND v.pos = cvs.pos
           AND v.ref = cvs.ref AND v.alt = cvs.alt
           AND v.variant_type = cvs.variant_type
@@ -91,15 +94,16 @@ function flagRecomputeSql(schemaName: string, caseFilter: string): string {
 }
 
 /**
- * Global write-hook: recompute flags on EVERY summary row at (chr, pos, ref,
- * alt). A global annotation has no case scope, so it fans out across every
- * variant_type / genome_build bucket at that coordinate.
+ * Global write-hook: recompute flags on every summary row at (chr, pos, ref,
+ * alt) of the annotation's build. A global annotation has no case scope, so it
+ * fans out across every variant_type bucket of that build's coordinate.
  */
 export function annotationFlagsGlobalSql(schemaName: string): string {
   return `
     UPDATE ${schemaName}."cohort_variant_summary" cvs
     SET ${flagRecomputeSql(schemaName, '')}
     WHERE cvs.chr = $1 AND cvs.pos = $2 AND cvs.ref = $3 AND cvs.alt = $4
+      AND cvs.genome_build = $5
   `
 }
 
@@ -121,8 +125,9 @@ export function annotationFlagsGlobalSql(schemaName: string): string {
 export function annotationFlagsPerCaseSql(schemaName: string): string {
   return `
     WITH target AS (
-      SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type
+      SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
       FROM ${schemaName}."variants" v
+      JOIN ${schemaName}."cases" c ON c.id = v.case_id
       WHERE v.id = $2 AND v.case_id = $1
     ),
     updated AS (
@@ -131,7 +136,7 @@ export function annotationFlagsPerCaseSql(schemaName: string): string {
       FROM target t
       WHERE cvs.chr = t.chr AND cvs.pos = t.pos
         AND cvs.ref = t.ref AND cvs.alt = t.alt
-        AND cvs.variant_type = t.variant_type
+        AND cvs.variant_type = t.variant_type AND cvs.genome_build = t.genome_build
       RETURNING 1
     )
     SELECT count(*)::int AS target_resolved FROM target
@@ -230,10 +235,10 @@ export async function refreshAnnotationFlags(
 
 /**
  * Global annotation write-hook (C5a / Pass-4 MED #4). Recomputes the three flag
- * columns on EVERY cohort_variant_summary row matching (chr, pos, ref, alt) — a
- * global annotation has no case scope, so it fans out across every variant_type
- * / genome_build bucket at that coordinate. Runs inside the caller's
- * transaction.
+ * columns on every cohort_variant_summary row matching (chr, pos, ref, alt) of
+ * the annotation's build — a global annotation has no case scope, so it fans
+ * out across every variant_type bucket of that coordinate. Runs inside the
+ * caller's transaction.
  */
 export async function applyAnnotationFlagsGlobal(
   client: RunNamedCapable,
@@ -244,6 +249,7 @@ export async function applyAnnotationFlagsGlobal(
     pos: number
     ref: string
     alt: string
+    genomeBuild: string
   }
 ): Promise<void> {
   const schemaName = quoteIdentifier(args.schema)
@@ -258,9 +264,9 @@ export async function applyAnnotationFlagsGlobal(
     return
   }
   await runNamed(client as Pool, {
-    name: 'cohort_summary:annotation_flags_global:v1',
+    name: 'cohort_summary:annotation_flags_global:v2',
     text: annotationFlagsGlobalSql(schemaName),
-    values: [args.chr, args.pos, args.ref, args.alt],
+    values: [args.chr, args.pos, args.ref, args.alt, args.genomeBuild],
     schema: args.schema
   })
 }
@@ -286,7 +292,7 @@ export async function applyAnnotationFlagsPerCase(
   const schemaName = quoteIdentifier(args.schema)
   const result = args.summaryLocked
     ? await runNamed<{ target_resolved: number }>(client as Pool, {
-        name: 'cohort_summary:annotation_flags_per_case:v2',
+        name: 'cohort_summary:annotation_flags_per_case:v3',
         text: annotationFlagsPerCaseSql(schemaName),
         values: [args.caseId, args.variantId],
         schema: args.schema
@@ -325,7 +331,7 @@ export async function applyAnnotationFlagsOnCaseDelete(
 ): Promise<void> {
   const schemaName = quoteIdentifier(args.schema)
   await runNamed(client as Pool, {
-    name: 'cohort_summary:annotation_flags_on_case_delete:v2',
+    name: 'cohort_summary:annotation_flags_on_case_delete:v3',
     text: annotationFlagsOnCaseDeleteSql(schemaName),
     values: [args.deletedCaseId],
     schema: args.schema

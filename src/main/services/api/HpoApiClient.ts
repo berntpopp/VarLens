@@ -14,6 +14,7 @@ import type { HpoTerm } from './schemas/hpo-response'
 import type { HpoSearchResult } from '../../../shared/types/api-enrichment'
 import { HpoAutocompleteResponseSchema } from './schemas/hpo-response'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { apiFetch } from './http-fetch'
 
 export class HpoApiClient {
   private readonly baseUrl = 'https://clinicaltables.nlm.nih.gov/api/hpo/v3/search'
@@ -85,7 +86,9 @@ export class HpoApiClient {
       const url = `${this.baseUrl}?${params.toString()}`
 
       // NLM can be slow; the signal also bounds the body read below
-      const response = await fetch(url, { signal: AbortSignal.timeout(API_CONFIG.HPO_TIMEOUT_MS) })
+      const response = await apiFetch(url, {
+        signal: AbortSignal.timeout(API_CONFIG.HPO_TIMEOUT_MS)
+      })
 
       if (!response.ok) {
         throw new Error(`HPO API returned status ${response.status}`)

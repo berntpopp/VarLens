@@ -2,7 +2,7 @@
  * The annotation columns of a `cohort_variant_summary` row on PostgreSQL.
  *
  * Transcript-level columns come together from the most severe carrier row;
- * variant-level facts (ClinVar, gnomAD, CADD, end) are aggregated over all
+ * variant-level facts (ClinVar, gnomAD, CADD, end, SV length/type) are aggregated over all
  * carriers (#469). The rule, the column lists and the comparison SQL are
  * shared with SQLite: src/shared/sql/cohort-representative.ts.
  *
@@ -21,7 +21,8 @@
 import type { PoolClient } from 'pg'
 
 import {
-  NUMERIC_FACTS,
+  VALUE_FACTS,
+  factAggregate,
   REPRESENTATIVE_COLUMNS,
   SUMMARY_TRANSCRIPT_COLUMNS,
   TRANSCRIPT_COLUMNS,
@@ -108,9 +109,7 @@ function carrierAggregates(alias: string, ranks: CarrierRanks): string {
     `MAX(${transcriptKeySql(alias, ranks)}) AS transcript_key`,
     `MAX((${rankCharacter(ranks.clinvar)} || ${alias}.clinvar) COLLATE "C") AS clinvar_key`,
     `MAX(${ranks.clinvar}) AS clinvar_rank`,
-    ...NUMERIC_FACTS.map(
-      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
-    )
+    ...VALUE_FACTS.map((fact) => `${factAggregate(alias, fact, 'postgres')} AS ${fact.name}`)
   ].join(',\n           ')
 }
 
@@ -120,9 +119,7 @@ function mergedAggregates(alias: string): string {
     `MAX(${alias}.transcript_key COLLATE "C") AS transcript_key`,
     `MAX(${alias}.clinvar_key COLLATE "C") AS clinvar_key`,
     `MAX(${alias}.clinvar_rank) AS clinvar_rank`,
-    ...NUMERIC_FACTS.map(
-      (fact) => `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) AS ${fact.name}`
-    )
+    ...VALUE_FACTS.map((fact) => `${factAggregate(alias, fact, 'postgres')} AS ${fact.name}`)
   ].join(',\n               ')
 }
 
@@ -137,7 +134,7 @@ function decodedSummaryColumns(alias: string): string {
     `(ascii(${key}[1]) - 64)::smallint AS impact_rank`,
     `substr(${alias}.clinvar_key, 2) AS clinvar`,
     `${alias}.clinvar_rank::smallint AS clinvar_rank`,
-    ...NUMERIC_FACTS.map((fact) => `${alias}.${fact.name}`)
+    ...VALUE_FACTS.map((fact) => `${alias}.${fact.name}`)
   ].join(',\n           ')
 }
 

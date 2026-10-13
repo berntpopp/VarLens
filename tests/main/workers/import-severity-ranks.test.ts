@@ -228,6 +228,36 @@ describe('SQLite import stores severity ranks (#469)', () => {
     }
   })
 
+  it('reports --minimal sites whose CSQ matches no single ALT (#556)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const file = join(dir, 'minimal.vcf')
+      const csq = (allele: string) => `CSQ=${allele}|intron_variant|MODIFIER|GENE1|T1`
+      writeFileSync(
+        file,
+        [
+          '##fileformat=VCFv4.2',
+          '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Feature">',
+          "##VEP-command-line='vep --cache --minimal --vcf'",
+          '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+          '##contig=<ID=chr1,length=248956422>',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tHG005',
+          `chr1\t100\t.\tCAT\tC,CA\t50\tPASS\t${csq('-')}\tGT\t1/2`,
+          `chr1\t200\t.\tA\tG\t50\tPASS\t${csq('G')}\tGT\t0/1`
+        ].join('\n') + '\n'
+      )
+      await importFiles([vcf(file, 'minimal')])
+
+      const done = lastMessages.find((message) => message.type === 'complete')
+      expect(done?.type === 'complete' && done.results.details[0].csqAmbiguousSites).toBe(1)
+      expect(
+        warn.mock.calls.map((call) => String(call[0])).filter((m) => /allele_number/.test(m))
+      ).toEqual([`[import-worker] minimal: ${IMPORT_MESSAGES.csqAmbiguousSites(1)}`])
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('counts gnomAD AF values outside [0, 1] per file and keeps them as imported', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     try {

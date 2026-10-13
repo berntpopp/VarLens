@@ -5,6 +5,7 @@ import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcrip
 import { setRecordBytes } from '../bounded-batcher'
 import { OBJECT_FORMAT_COLUMNS } from '../../../shared/config/import-fields.config'
 import { FieldProfileResolver, jsonValueText } from '../../../shared/utils/import-field-profile'
+import { hpoMatchText } from './hpo-match'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -46,6 +47,8 @@ export interface ObjectFormatVariant {
   cdna?: string | null
   aa_change?: string | null
   moi?: MoiItem[] | null
+  /** Patient HPO terms that matched the gene (varvis): term objects like `moi`, or text. */
+  hpo_match?: MoiItem[] | MoiItem | string[] | string | null
 }
 
 /**
@@ -157,6 +160,7 @@ export class ObjectFormatMapper extends Transform {
         cdna: normalizeString(variant.cdna),
         aa_change: normalizeString(variant.aa_change),
         moi: moiString,
+        hpo_match: hpoMatchText(variant.hpo_match),
         gq: null,
         dp: null,
         ad_ref: null,

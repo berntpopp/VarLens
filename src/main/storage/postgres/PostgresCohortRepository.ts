@@ -19,17 +19,14 @@ import {
   type CohortReadWarnings
 } from './cohort-read-freshness'
 import { quoteIdentifier, toNumber } from './identifiers'
+import { cohortAnnotationExportColumns, withAnnotationCells } from './postgres-annotation-export'
 import { streamLongQuery } from './long-running-client'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
 import { carrierTotalsSql, summaryVersionSql } from './postgres-carrier-totals'
-import {
-  SUMMARY_FREQUENCY_SQL,
-  buildSummaryExportSql,
-  buildSummaryQueryParts,
-  summaryBuildTotalsJoin
-} from './postgres-cohort-summary-query'
+import { buildSummaryExportSql, buildSummaryQueryParts } from './postgres-cohort-summary-query'
+import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-carrier-frequency-sql'
 import {
   PostgresPanelIntervalResolver,
   type PanelIntervalLookup
@@ -39,16 +36,11 @@ import {
   normalizeCohortColumnFilters,
   COHORT_SUMMARY_FILTER_COLUMNS
 } from '../../../shared/filters/cohort-column-filter-keys'
-import { resolvedGtSql } from '../../../shared/sql/genotype-dosage'
+import { cohortCarriersSql } from '../../../shared/sql/cohort-call-sql'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 
 type Queryable = Pick<Pool, 'query'>
-
-type CohortCarrierWithDepth = CohortCarrier & {
-  gq?: number | null
-  dp?: number | null
-}
 
 const NUMERIC_COLUMNS = new Set([
   'pos',
@@ -57,7 +49,9 @@ const NUMERIC_COLUMNS = new Set([
   'het_count',
   'hom_count',
   'gnomad_af',
-  'cadd_phred'
+  'cadd_phred',
+  'end_pos',
+  'sv_length'
 ])
 
 const COLUMN_META_KEYS = [
@@ -73,7 +67,10 @@ const COLUMN_META_KEYS = [
   'clinvar',
   'gnomad_af',
   'cadd_phred',
-  'transcript'
+  'transcript',
+  'end_pos',
+  'sv_type',
+  'sv_length'
 ]
 
 /**
@@ -98,7 +95,10 @@ const COLUMN_META_SUMMARY_COLUMNS: Record<string, string> = {
   clinvar: 'clinvar',
   gnomad_af: 'gnomad_af',
   cadd_phred: 'cadd',
-  transcript: 'transcript'
+  transcript: 'transcript',
+  end_pos: 'end_pos',
+  sv_type: 'sv_type',
+  sv_length: 'sv_length'
 }
 
 /** Column-filter keys the cohort view accepts: summary columns and extension columns. */
@@ -112,6 +112,9 @@ function toNullableNumber(value: unknown): number | null {
   const numberValue = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numberValue) ? numberValue : null
 }
+
+const toNullableString = (value: unknown): string | null =>
+  value === null || value === undefined ? null : String(value)
 
 export class PostgresCohortRepository {
   private readonly schema: string
@@ -222,32 +225,32 @@ export class PostgresCohortRepository {
          (${totals.uniqueVariants}) AS unique_variants,
          (${totals.genesWithVariants}) AS genes_with_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.starred = 1
          ) AS starred_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Pathogenic'
          ) AS pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely pathogenic'
          ) AS likely_pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Uncertain significance'
          ) AS vus,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely benign'
          ) AS likely_benign,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Benign'
          ) AS benign`
@@ -277,20 +280,9 @@ export class PostgresCohortRepository {
   }
 
   /** Carriers of one cohort row: one variant type in one genome build (#503). */
-  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrierWithDepth[]> {
+  async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrier[]> {
     const result = await this.pool.query(
-      `SELECT
-         v.case_id,
-         c.name AS case_name,
-         ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num,
-         MAX(v.gq) AS gq,
-         MAX(v.dp) AS dp
-       FROM ${this.schemaName}."variants" v
-       JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
-       WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
-         AND v.variant_type = $5 AND c.genome_build = $6
-       GROUP BY v.case_id, c.name
-       ORDER BY c.name`,
+      cohortCarriersSql('postgres', (table) => this.tbl(table)),
       [
         variant.chr,
         variant.pos,
@@ -305,8 +297,16 @@ export class PostgresCohortRepository {
       case_id: toNumber(row.case_id),
       case_name: String(row.case_name ?? ''),
       gt_num: String(row.gt_num ?? ''),
+      qual: toNullableNumber(row.qual),
       gq: toNullableNumber(row.gq),
-      dp: toNullableNumber(row.dp)
+      dp: toNullableNumber(row.dp),
+      filter: toNullableString(row.filter),
+      caller: toNullableString(row.caller),
+      end_pos: toNullableNumber(row.end_pos),
+      sv_length: toNullableNumber(row.sv_length),
+      sv_support: toNullableNumber(row.sv_support),
+      sv_vaf: toNullableNumber(row.sv_vaf),
+      copy_number: toNullableNumber(row.copy_number)
     }))
   }
 
@@ -374,7 +374,7 @@ export class PostgresCohortRepository {
       values.push(resolvedParams.offset)
       limitOffset.push(`OFFSET $${values.length}`)
     }
-    yield* streamLongQuery(
+    const rows = streamLongQuery(
       this.pool,
       buildSummaryExportSql(
         this.tbl('cohort_variant_summary'),
@@ -385,10 +385,12 @@ export class PostgresCohortRepository {
           (table) => this.tbl(table),
           await carrierTotalsSql(this.pool, this.schema)
         ),
-        limitOffset.join('\n    ')
+        limitOffset.join('\n    '),
+        cohortAnnotationExportColumns(this.schemaName)
       ),
       values
     )
+    yield* withAnnotationCells(rows, 'cohort')
   }
 
   private async getTotalCases(pool: Queryable, params: CohortSearchParams = {}): Promise<number> {
@@ -458,7 +460,10 @@ export class PostgresCohortRepository {
       cadd_phred: toNullableNumber(row.cadd_phred),
       transcript:
         row.transcript === null || row.transcript === undefined ? null : String(row.transcript),
-      omim_id: row.omim_id === null || row.omim_id === undefined ? null : String(row.omim_id)
+      omim_id: row.omim_id === null || row.omim_id === undefined ? null : String(row.omim_id),
+      end_pos: toNullableNumber(row.end_pos),
+      sv_type: toNullableString(row.sv_type),
+      sv_length: toNullableNumber(row.sv_length)
     }
   }
 }

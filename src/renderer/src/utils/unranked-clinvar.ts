@@ -34,6 +34,9 @@ export function importDataNotices(report: ImportDataReport): string[] {
   if (report.afOutOfRange !== undefined && report.afOutOfRange > 0) {
     notices.push(IMPORT_MESSAGES.afOutOfRange(report.afOutOfRange))
   }
+  if (report.csqAmbiguousSites !== undefined && report.csqAmbiguousSites > 0) {
+    notices.push(IMPORT_MESSAGES.csqAmbiguousSites(report.csqAmbiguousSites))
+  }
   return notices
 }
 

@@ -3,8 +3,10 @@
  *
  * Every load and optimistic mutation is written once and takes the scope it
  * runs in — `{ kind: 'case', … }` for per-case annotations or
- * `GLOBAL_SCOPE` for global ones. `useAnnotations()` binds these to its
- * public per-case / global function pairs.
+ * `globalScope(build)` for global ones. `useAnnotations()` binds these to its
+ * public per-case / global function pairs. Global annotations are keyed by
+ * genome build (#577): a global read or write without a known build is not
+ * sent (fail closed), never sent for some default build.
  *
  * The few places where the two scopes genuinely differ (which cache slot,
  * which IPC call, the case-switch guard, the batch generation guard, log
@@ -12,6 +14,7 @@
  */
 
 import { logService } from '../services/LogService'
+import { BUILD_COPY, GENOME_BUILDS } from '../../../shared/config/genome-builds.config'
 import type { WindowAPI } from '../../../shared/types/api'
 import type {
   BatchAnnotationKey,
@@ -33,6 +36,7 @@ import {
   getAnnotationCacheEpoch,
   getAnnotationGeneration,
   hasDbSwitchedSince,
+  isCacheOfBuild,
   isKeyLoading,
   isTrackedCase,
   markAwaited,
@@ -47,14 +51,27 @@ import {
   type VariantCoords
 } from './annotation-cache'
 
-/** Scope of a load: one case, or global (cohort mode — no case needed). */
-export type AnnotationLoadScope = { kind: 'case'; caseId: number } | { kind: 'global' }
+/**
+ * Scope of a load: one case, or global (cohort mode — no case needed). `build`
+ * is the view's genome build (null while unknown); a case's global rows are
+ * read in the case's build by the server whatever the client sends.
+ */
+export type AnnotationLoadScope =
+  { kind: 'case'; caseId: number; build: string | null } | { kind: 'global'; build: string | null }
 
 /** Scope of a write: per-case writes also identify the variant row. */
 export type AnnotationWriteScope =
-  { kind: 'case'; caseId: number; variantId: number } | { kind: 'global' }
+  | { kind: 'case'; caseId: number; variantId: number; build: string | null }
+  | { kind: 'global'; build: string | null }
 
-export const GLOBAL_SCOPE = { kind: 'global' } as const
+export function globalScope(build: string | null): { kind: 'global'; build: string | null } {
+  return { kind: 'global', build }
+}
+
+/** The build a global request is sent for; null means it must not be sent. */
+function globalBuildOf(scope: AnnotationLoadScope): string | null | undefined {
+  return scope.kind === 'global' ? scope.build : undefined
+}
 
 type SlotValue = VariantAnnotation | CaseVariantAnnotation
 type SlotPatch = Partial<VariantAnnotation> & Partial<CaseVariantAnnotation>
@@ -71,6 +88,9 @@ interface MutationPlan {
   /** Log prefix, e.g. `Failed to toggle star: `. */
   failureMessage: string
 }
+
+/** A global write for a case whose build the user still has to confirm. */
+class UnconfirmedBuildError extends Error {}
 
 function getTransportErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -90,6 +110,7 @@ function scopeQualifier(scope: AnnotationLoadScope): string {
 /** Discard a response when the database (or, per case, the case) switched while awaiting. */
 function isResponseStale(scope: AnnotationLoadScope, requestDbPath: string | null): boolean {
   if (hasDbSwitchedSince(requestDbPath)) return true
+  if (!isCacheOfBuild(scope.build)) return true
   return scope.kind === 'case' && !isTrackedCase(scope.caseId)
 }
 
@@ -227,7 +248,13 @@ function upsert(
   if (scope.kind === 'case') {
     return client.annotations.upsertPerCase(scope.caseId, scope.variantId, updates)
   }
-  return client.annotations.upsertGlobal(coords.chr, coords.pos, coords.ref, coords.alt, updates)
+  if (scope.build === null) throw new Error('genome build unknown; global annotation not saved')
+  // A legacy build value matching no build id: the server refuses it (#577).
+  if (!GENOME_BUILDS.some((b) => b.id === scope.build)) {
+    throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
+  }
+  const { chr, pos, ref, alt } = coords
+  return client.annotations.upsertGlobal(chr, pos, ref, alt, updates, scope.build)
 }
 
 /**
@@ -236,13 +263,13 @@ function upsert(
  */
 async function mutate(
   api: WindowAPI | undefined,
-  onWriteFailed: () => void,
+  onWriteFailed: (message?: string) => void,
   scope: AnnotationWriteScope,
   coords: VariantCoords,
   buildPlan: (current: AnnotationCache | undefined, previous: SlotValue | null) => MutationPlan
 ): Promise<boolean> {
   if (!api) return false
-  const dbPath = beginAnnotationRequest(scopeCaseId(scope))
+  const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
   const current = annotationCache.value.get(key)
@@ -274,7 +301,7 @@ async function mutate(
     return true
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
-    onWriteFailed()
+    onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
     // Every failed write rolls back and notifies, so no view keeps showing the
     // optimistic value of a write that never landed.
@@ -292,7 +319,10 @@ async function fetchEntry(
   if (scope.kind === 'case') {
     return unwrapIpcResult(await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt))
   }
-  const global = unwrapIpcResult(await client.annotations.getGlobal(chr, pos, ref, alt))
+  if (scope.build === null) return { global: null, perCase: null }
+  const global = unwrapIpcResult(
+    await client.annotations.getGlobal(chr, pos, ref, alt, scope.build)
+  )
   return { global, perCase: null }
 }
 
@@ -308,8 +338,9 @@ async function load(
   scope: AnnotationLoadScope,
   coords: VariantCoords
 ): Promise<void> {
-  if (!api) return
-  const dbPath = beginAnnotationRequest(scopeCaseId(scope))
+  // A global row is only known for a build: without one there is nothing to load.
+  if (!api || globalBuildOf(scope) === null) return
+  const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   const key = variantKey(coords)
   if (!needsLoad(key, scope.kind)) return
 
@@ -349,8 +380,8 @@ async function loadBatch(
   scope: AnnotationLoadScope,
   variants: BatchLoadVariant[]
 ): Promise<void> {
-  if (!api) return
-  const dbPath = beginAnnotationRequest(scopeCaseId(scope))
+  if (!api || globalBuildOf(scope) === null) return
+  const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   // Captured at call time — used to detect results from a prior page.
   const generation = getAnnotationGeneration(scope.kind)
 
@@ -369,7 +400,9 @@ async function loadBatch(
   for (const vk of uncached) setLoading(variantKey(vk), true, scope.kind)
 
   try {
-    const results = unwrapIpcResult(await api.annotations.batchGet(scopeCaseId(scope), uncached))
+    const results = unwrapIpcResult(
+      await api.annotations.batchGet(scopeCaseId(scope), uncached, globalBuildOf(scope) ?? null)
+    )
     if (isResponseStale(scope, dbPath)) return
     // When this scope's table paged meanwhile the batch is discarded, except
     // for the rows the current page is still waiting for.
@@ -397,7 +430,8 @@ async function loadBatch(
 export function createScopedAnnotationOps(
   api: WindowAPI | undefined,
   getUserName: () => string | undefined,
-  onWriteFailed: () => void = () => {}
+  /** Told every failed write; `message` says what the user can do about it, when known. */
+  onWriteFailed: (message?: string) => void = () => {}
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),

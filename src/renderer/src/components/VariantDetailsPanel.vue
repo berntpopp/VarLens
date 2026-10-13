@@ -44,16 +44,17 @@
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
+            :genome-build="genomeBuild"
             class="mb-2"
             @open-protein-view="openProteinView"
           />
           <ProteinPreviewStrip :variant="variant" class="mb-4" @open="openProteinView" />
 
-          <!-- Extension details for SV/CNV/STR variants (case mode only: cohort rows lack per-call SV fields like _sv_is_precise) -->
+          <!-- SV/CNV/STR details; a cohort row has no per-call fields, so it shows the call context only -->
           <ExtensionDetailsSection
-            v-if="mode === 'case'"
             :variant="variant as unknown as Record<string, unknown>"
             :genome-build="genomeBuild"
+            :summary-only="mode === 'cohort'"
           />
 
           <TranscriptSection
@@ -85,9 +86,15 @@
             class="mb-4"
           />
 
+          <InfoFieldsSection
+            v-if="mode === 'case'"
+            :info-json="(variant as Variant).info_json"
+            :case-id="caseId"
+          />
+
           <!-- VEP metadata (consequence + cache indicator) -->
           <div v-if="mostSevereConsequence" class="text-body-small mb-2">
-            <v-chip size="x-small" :color="getConsequenceColor(mostSevereConsequence)" label>
+            <v-chip size="x-small" :color="consequenceChipColor(mostSevereConsequence)" label>
               {{ formatConsequence(mostSevereConsequence) }}
             </v-chip>
           </div>
@@ -100,7 +107,10 @@
 
           <!-- Section 3: ACMG Classification -->
           <div class="acmg-section mb-4">
-            <h3 class="text-title-small mb-2">ACMG Classification</h3>
+            <div class="d-flex align-center flex-wrap ga-1 mb-2">
+              <h3 class="text-title-small">ACMG Classification</h3>
+              <ClinGenSpecChips :gene="variant.gene_symbol ?? null" />
+            </div>
 
             <div class="d-flex flex-wrap ga-1 mb-2">
               <v-chip
@@ -183,7 +193,7 @@
                 Activity Log
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <ActivityLogPanel :entity-key="auditEntityKey" />
+                <ActivityLogPanel :entity-keys="auditEntityKeys" />
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
@@ -191,7 +201,7 @@
           <v-divider class="mb-4" />
 
           <!-- Section 7: External Links -->
-          <ExternalLinksSection :variant="variant" />
+          <ExternalLinksSection :variant="variant" :genome-build="genomeBuild" />
         </template>
 
         <div v-else class="text-muted text-center mt-4">Select a variant to view details</div>
@@ -201,17 +211,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent, inject } from 'vue'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  computed,
+  watch,
+  defineAsyncComponent,
+  inject,
+  provide
+} from 'vue'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { formatConsequence, variantHeading } from '../utils/formatters'
-import { useAnnotations } from '../composables/useAnnotations'
+import { AnnotationBuildKey, useAnnotations } from '../composables/useAnnotations'
+import { globalAnnotationEntityKey } from '../../../shared/audit/annotation-entity-key'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import { consequenceChipColor } from '../config/displayConfig'
+import ClinGenSpecChips from './ClinGenSpecChips.vue'
 import ProteinPreviewStrip from './protein/ProteinPreviewStrip.vue'
 import type { ProteinViewTab } from '../config/proteinViewConfig'
 import IconButton from './common/IconButton.vue'
@@ -220,6 +242,7 @@ import { isOverlayOpen, isTextEntryFocused } from '../composables/useTableKeyboa
 import AnnotationScoresSection from './AnnotationScoresSection.vue'
 import TranscriptSection from './TranscriptSection.vue'
 import ExtensionDetailsSection from './variant-details/ExtensionDetailsSection.vue'
+import InfoFieldsSection from './variant-details/InfoFieldsSection.vue'
 
 // Lazy-load non-critical panel sections to speed up initial open
 import SectionSkeleton from './SectionSkeleton.vue'
@@ -322,14 +345,16 @@ const {
   getGlobalAcmgClassification,
   getAcmgEvidence,
   getGlobalAcmgEvidence
-} = useAnnotations()
+} = useAnnotations({ genomeBuild })
+// The panel sits outside the views: its comments section reads this variant's build.
+provide(AnnotationBuildKey, genomeBuild)
 // ACMG writes go through the undo-snackbar wrappers (same signatures)
 const {
   setAcmgClassification,
   setAcmgClassificationWithEvidence,
   setGlobalAcmgClassification,
   setGlobalAcmgClassificationWithEvidence
-} = useAcmgUndo()
+} = useAcmgUndo({ genomeBuild })
 
 // Use VEP enrichment composable (fetches VEP, myvariant.info, and SpliceAI in parallel)
 const {
@@ -361,12 +386,16 @@ const globalAcmgClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-const auditEntityKey = computed(() => {
-  if (!props.variant) return null
+// A global history is keyed by build (#577); entries from before applied to every build.
+const auditEntityKeys = computed<string[]>(() => {
+  if (!props.variant) return []
   if (props.mode === 'case' && props.caseId !== null && 'id' in props.variant) {
-    return `case:${props.caseId}:variant:${(props.variant as Variant).id}`
+    return [`case:${props.caseId}:variant:${(props.variant as Variant).id}`]
   }
-  return `${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
+  const legacy = globalAnnotationEntityKey(props.variant)
+  return genomeBuild.value === null
+    ? [legacy]
+    : [globalAnnotationEntityKey(props.variant, genomeBuild.value), legacy]
 })
 
 const hasGlobalAcmg = computed(() => {
@@ -505,21 +534,6 @@ watch(
   },
   { immediate: true }
 )
-
-function getConsequenceColor(consequence: string): string {
-  if (
-    consequence.includes('frameshift') ||
-    consequence.includes('stop_gained') ||
-    consequence.includes('splice_donor') ||
-    consequence.includes('splice_acceptor')
-  ) {
-    return 'error'
-  }
-  if (consequence.includes('missense') || consequence.includes('inframe')) {
-    return 'warning'
-  }
-  return 'muted'
-}
 
 // Selection changes and closes wait for the evidence editor's unsaved-draft prompt
 const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)

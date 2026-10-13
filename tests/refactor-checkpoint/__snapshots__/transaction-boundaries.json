@@ -3,6 +3,11 @@
   "capturedAt": "2026-05-04",
   "entries": [
     {
+      "file": "src/main/database/annotation-build-key-migration.ts",
+      "callerFunction": "migrateAnnotationBuildKey",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/BaseRepository.ts",
       "callerFunction": "runTransaction",
       "assignedTo": "transactionFn"

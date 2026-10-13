@@ -36,6 +36,7 @@ const toRow = (r: Record<string, unknown>): AnnotationRow => ({
   pos: Number(r.pos),
   ref: String(r.ref),
   alt: String(r.alt),
+  genome_build: String(r.genome_build),
   global_comment: (r.global_comment as string | null) ?? null,
   starred: Number(r.starred),
   acmg_classification: (r.acmg_classification as string | null) ?? null,
@@ -86,8 +87,8 @@ async function applyGroupRemap(
   for (const r of remap.inserts) {
     await client.query(
       `INSERT INTO ${tbl('variant_annotations')} (chr, pos, ref, alt, global_comment, starred,
-         acmg_classification, acmg_evidence, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         acmg_classification, acmg_evidence, created_at, updated_at, genome_build)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         r.chr,
         r.pos,
@@ -98,7 +99,8 @@ async function applyGroupRemap(
         r.acmg_classification,
         r.acmg_evidence,
         r.created_at,
-        r.updated_at
+        r.updated_at,
+        r.genome_build
       ]
     )
   }
@@ -143,7 +145,7 @@ async function renameVariants(
   }
 }
 
-/** The annotation rows at the loci where this case renames, locked, by locus group. */
+/** The annotation rows of the case's build at the loci where it renames, locked, by locus group. */
 async function caseAnnotationGroups(
   client: QueryClient,
   schema: string,
@@ -158,6 +160,7 @@ async function caseAnnotationGroups(
               WHERE case_id = $1 AND chr = ANY($2::text[])) k
          ON va.pos = k.pos AND va.ref = k.ref AND va.alt = k.alt
       WHERE va.chr = ANY($3::text[])
+        AND va.genome_build = (SELECT genome_build FROM ${tbl('cases_all')} WHERE id = $1)
       ORDER BY va.id FOR UPDATE OF va`,
     [caseId, froms, spellings]
   )
@@ -198,11 +201,13 @@ export async function renameCaseWithAnnotations(
   const froms = pairs.map((p) => p.from)
   for (const group of await caseAnnotationGroups(client, schema, caseId, froms)) {
     const names = [...new Set(group.flatMap((r) => [r.chr, ...contigQueryNames(r.chr)]))]
-    const { pos, ref, alt } = group[0]
+    const { pos, ref, alt, genome_build: build } = group[0]
+    // Only the cases of the rows' build use them (#577).
     const found = await client.query<{ case_id: string; chr: string }>(
       `SELECT DISTINCT case_id, chr FROM ${tbl('variants_all')}
-        WHERE chr = ANY($1::text[]) AND pos = $2 AND ref = $3 AND alt = $4`,
-      [names, pos, ref, alt]
+        WHERE chr = ANY($1::text[]) AND pos = $2 AND ref = $3 AND alt = $4
+          AND case_id IN (SELECT id FROM ${tbl('cases_all')} WHERE genome_build = $5)`,
+      [names, pos, ref, alt, build]
     )
     const usages = found.rows.map((u) => ({ caseId: Number(u.case_id), chr: u.chr }))
     const others = [...new Set(usages.map((u) => u.caseId))].filter((id) => id !== caseId)

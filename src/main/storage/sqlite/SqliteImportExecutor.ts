@@ -20,6 +20,7 @@ import { jobRunner } from '../../services/jobs/runner'
 import { withImportJobProgress } from '../import-job-progress'
 import { workerErrorToError } from '../import-worker-errors'
 import { importDataReport } from '../../import/unranked-clinvar'
+import type { ImportDataReport } from '../../../shared/types/import'
 import { UniqueConstraintError } from '../../database/errors'
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { MultiFileImportResult, ImportCallbacks } from '../../ipc/handlers/import-logic'
@@ -145,8 +146,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       let capturedElapsed = 0
       let capturedSkipped = 0
       let capturedSkipReasons: string[] = []
-      let capturedUnrankedClinvar: string[] | undefined
-      let capturedAfOutOfRange: number | undefined
+      let capturedReport: ImportDataReport = {}
 
       try {
         worker.start({
@@ -182,8 +182,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedElapsed = msg.result.elapsed
             capturedSkipped = msg.result.skipped ?? 0
             capturedSkipReasons = msg.result.skipReasons ?? []
-            capturedUnrankedClinvar = msg.result.unrankedClinvar
-            capturedAfOutOfRange = msg.result.afOutOfRange
+            capturedReport = importDataReport(msg.result)
             this.invalidateCohortMetadata()
           },
           onSummaryStale: () => onSummaryStale?.(),
@@ -216,12 +215,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 skipped: capturedSkipped,
                 errors: capturedSkipReasons,
                 elapsed: capturedElapsed,
-                ...(capturedUnrankedClinvar !== undefined
-                  ? { unrankedClinvar: capturedUnrankedClinvar }
-                  : {}),
-                ...(capturedAfOutOfRange !== undefined
-                  ? { afOutOfRange: capturedAfOutOfRange }
-                  : {})
+                ...capturedReport
               })
             } else if (detail?.status === 'skipped') {
               // Cancels returned above, so a skip is the duplicate-name skip; same error as Postgres.

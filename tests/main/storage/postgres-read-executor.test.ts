@@ -248,7 +248,7 @@ describe('PostgresReadExecutor', () => {
       yield { id: 1 }
     })()
     const exportRepository = {
-      streamVariantRows: vi.fn().mockReturnValue(exportedRows)
+      streamVariantExportRows: vi.fn().mockReturnValue(exportedRows)
     }
     const executor = new PostgresReadExecutor({
       casesQuery: {} as never,
@@ -269,7 +269,7 @@ describe('PostgresReadExecutor', () => {
     ).resolves.toBe(exportedRows)
 
     expect(overview.getOverview).toHaveBeenCalledWith()
-    expect(exportRepository.streamVariantRows).toHaveBeenCalledWith({ case_id: 5 })
+    expect(exportRepository.streamVariantExportRows).toHaveBeenCalledWith({ case_id: 5 })
   })
 
   it('dispatches workflow reads to postgres workflow repositories', async () => {

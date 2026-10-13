@@ -39,6 +39,7 @@ export const PER_CASE_META_COLUMNS = [
   'hpo_sim_score',
   'clinvar',
   'moi',
+  'hpo_match',
   'variant_type',
   'end_pos',
   'sv_type',
@@ -51,16 +52,17 @@ export const PER_CASE_META_COLUMNS = [
  * MUST match the write side exactly: PostgresCohortSummaryRepository's
  * META_NUMERIC_COLUMNS (which is what refreshColumnMetas actually populates
  * min_value/max_value for) and the SQLite parity source-of-truth
- * NUMERIC_COLUMNS in src/main/database/VariantRepository.ts. `end_pos` and
- * `sv_length` are categorical on the write side (no min/max materialised), so
- * they must report dataType 'text' here to match SQLite output-shape parity.
+ * NUMERIC_COLUMN_FILTER_KEYS SQLite uses. `sv_length` bounds are unsigned
+ * (#573); migration 0037 fills the bounds of rows written before.
  */
 export const PER_CASE_NUMERIC_COLUMNS = new Set<string>([
   'pos',
   'gnomad_af',
   'cadd',
   'qual',
-  'hpo_sim_score'
+  'hpo_sim_score',
+  'end_pos',
+  'sv_length'
 ])
 
 /** Row shape from cohort_column_meta. JSONB columns are parsed by node-pg. */

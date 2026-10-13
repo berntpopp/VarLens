@@ -28,21 +28,21 @@ describe('useAnnotations', () => {
 
   describe('cache basic behavior', () => {
     it('returns undefined for uncached variant', () => {
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       expect(result.getAnnotations('chr1', 100, 'A', 'G')).toBeUndefined()
     })
 
     it('isStarred returns false for uncached variant', () => {
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       expect(result.isStarred('chr1', 100, 'A', 'G')).toBe(false)
     })
 
     it('isLoading returns false for uncached variant', () => {
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       expect(result.isLoading('chr1', 100, 'A', 'G')).toBe(false)
@@ -51,7 +51,7 @@ describe('useAnnotations', () => {
     it('clearCache clears all entries', async () => {
       window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       await result.loadAnnotations(1, 'chr1', 100, 'A', 'G')
@@ -80,7 +80,7 @@ describe('useAnnotations', () => {
         return Promise.resolve(result)
       }
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       // Insert MAX_CACHE_SIZE entries by directly loading them
@@ -121,7 +121,7 @@ describe('useAnnotations', () => {
         return Promise.resolve(result)
       }
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       // Build MAX_CACHE_SIZE + 1 variants to trigger eviction
@@ -161,7 +161,7 @@ describe('useAnnotations', () => {
       // without growing the cache beyond MAX_CACHE_SIZE.
       window.api.annotations.getForVariant = () => Promise.resolve({ global: null, perCase: null })
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       // Load same key twice (second load is skipped because of cache-hit check)
@@ -180,7 +180,7 @@ describe('useAnnotations', () => {
         return Promise.resolve({ global: null, perCase: null })
       }
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       await result.loadAnnotations(1, 'chr1', 100, 'A', 'G')
@@ -195,7 +195,7 @@ describe('useAnnotations', () => {
       window.api.annotations.getGlobal = () =>
         Promise.resolve({ starred: 1, acmg_classification: null, acmg_evidence: null })
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       await result.loadGlobalAnnotations('chr1', 100, 'A', 'G')
@@ -213,7 +213,7 @@ describe('useAnnotations', () => {
         return Promise.resolve(null)
       }
 
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
 
       await result.loadGlobalAnnotations('chr1', 100, 'A', 'G')
@@ -244,7 +244,7 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
     window.api.annotations.batchGet = vi.fn().mockResolvedValue(batchResult)
     window.api.annotations.getForVariant = vi.fn()
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     await result.loadAnnotationsBatch(1, [
@@ -252,10 +252,14 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
       { chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
     ])
 
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
-      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
-      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      1,
+      [
+        { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' },
+        { chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
+      ],
+      null
+    )
     expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
   })
 
@@ -266,7 +270,7 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
   it('sends each row id as variantId on the per-case path', async () => {
     window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     await result.loadAnnotationsBatch(1, [
@@ -274,10 +278,14 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
       { id: 12, chr: 'chr2', pos: 200, ref: 'T', alt: 'C' }
     ])
 
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(1, [
-      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 },
-      { chr: 'chr2', pos: 200, ref: 'T', alt: 'C', variantId: 12 }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      1,
+      [
+        { chr: 'chr1', pos: 100, ref: 'A', alt: 'G', variantId: 11 },
+        { chr: 'chr2', pos: 200, ref: 'T', alt: 'C', variantId: 12 }
+      ],
+      null
+    )
   })
 
   it('populates cache from batch response', async () => {
@@ -286,7 +294,7 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
     }
     window.api.annotations.batchGet = vi.fn().mockResolvedValue(batchResult)
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     await result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }])
@@ -302,7 +310,7 @@ describe('loadAnnotationsBatch uses batch endpoint', () => {
       .fn()
       .mockResolvedValue({ global: null, perCase: null })
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // Pre-populate cache via individual load
@@ -331,7 +339,7 @@ describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
   it('calls batchGet with null caseId', async () => {
     window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // Cohort rows carry no per-case variant id; an `id` on the row is not one.
@@ -339,9 +347,11 @@ describe('loadGlobalAnnotationsBatch uses batch endpoint', () => {
       { id: 7, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
     ] as never)
 
-    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(null, [
-      { chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
-    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      null,
+      [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }],
+      'GRCh38'
+    )
   })
 })
 
@@ -366,7 +376,7 @@ describe('stale-request guard (annotation generation)', () => {
       })
     )
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // Start a batch — it is now in-flight
@@ -397,7 +407,7 @@ describe('stale-request guard (annotation generation)', () => {
 
   it('invalidateGlobalAnnotationGeneration discards an in-flight global batch', async () => {
     const resolveBatch = deferBatchGet()
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     const batchPromise = result.loadGlobalAnnotationsBatch([
@@ -413,7 +423,7 @@ describe('stale-request guard (annotation generation)', () => {
   })
 
   it('each view only invalidates its own batches', async () => {
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // A case-table page change must not drop the cohort table's batch ...
@@ -443,7 +453,7 @@ describe('stale-request guard (annotation generation)', () => {
     'a discarded %s batch still delivers rows the new page asked for',
     async (scope) => {
       const resolveBatch = deferBatchGet()
-      const [result, appInstance] = withSetup(() => useAnnotations())
+      const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
       app = appInstance
       const rowA = { id: 1, chr: 'chr1', pos: 100, ref: 'A', alt: 'G' }
       const rowB = { id: 2, chr: 'chr2', pos: 200, ref: 'C', alt: 'T' }
@@ -478,7 +488,7 @@ describe('stale-request guard (annotation generation)', () => {
       .fn()
       .mockResolvedValue({ 'chr1:200:T:C': { global: { starred: 1 }, perCase: null } })
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // No invalidation — generation stays the same
@@ -498,7 +508,7 @@ describe('stale-request guard (annotation generation)', () => {
       })
     )
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     const firstBatch = result.loadAnnotationsBatch(1, [
@@ -531,7 +541,7 @@ describe('stale-request guard (annotation generation)', () => {
       .fn()
       .mockResolvedValue({ 'chr1:500:A:G': { global: null, perCase: null } })
 
-    const [result, appInstance] = withSetup(() => useAnnotations())
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     app = appInstance
 
     // Invalidate a few times
@@ -546,7 +556,7 @@ describe('stale-request guard (annotation generation)', () => {
       .fn()
       .mockResolvedValue({ 'chr1:500:A:G': { global: { starred: 1 }, perCase: null } })
 
-    const [result2, appInstance2] = withSetup(() => useAnnotations())
+    const [result2, appInstance2] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
     appInstance.unmount()
     app = appInstance2
 

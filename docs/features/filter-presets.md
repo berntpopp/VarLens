@@ -19,17 +19,17 @@ These presets ship with VarLens and cover common filtering needs:
 
 | Preset | Filter | Use case |
 |--------|--------|----------|
-| **Rare Pathogenic** | gnomAD AF ≤ 1% + ClinVar Pathogenic/LP | Known rare pathogenic variants |
-| **Rare HIGH** | gnomAD AF ≤ 1% + Impact HIGH | Rare loss-of-function variants |
-| **Rare HIGH+MOD** | gnomAD AF ≤ 1% + Impact HIGH or MODERATE | Broader rare impact filter |
-| **Ultra Rare HIGH** | gnomAD AF ≤ 0.01% + Impact HIGH | Near-absent LoF variants |
-| **ClinVar P/LP** | ClinVar = Pathogenic or Likely pathogenic | Known pathogenic variants |
-| **HIGH Impact** | Impact = HIGH | Loss-of-function variants |
-| **Rare (1%)** | gnomAD AF ≤ 1% | Standard rare variant threshold |
-| **CADD >= 20** | CADD Phred ≥ 20 | Strongly predicted deleterious |
+| **Rare known pathogenic** | gnomAD AF ≤ 1% + ClinVar Pathogenic/LP | Known rare pathogenic variants |
+| **Rare loss-of-function** | gnomAD AF ≤ 1% + Impact HIGH | Rare stop, frameshift and splice-site variants |
+| **Rare protein-altering** | gnomAD AF ≤ 1% + Impact HIGH or MODERATE | Broader rare coding filter, missense included |
+| **Ultra-rare loss-of-function** | gnomAD AF ≤ 0.001% + Impact HIGH | Near-absent LoF variants |
+| **Known pathogenic** | ClinVar = Pathogenic or Likely pathogenic | Known pathogenic variants at any frequency |
+| **Loss-of-function** | Impact = HIGH | LoF variants at any frequency |
+| **Rare in population** | gnomAD AF ≤ 1% or not in gnomAD | Standard rare variant threshold |
+| **Predicted deleterious** | CADD Phred ≥ 20 | Strongly predicted deleterious |
 | **Rare, not recurrent** | gnomAD AF ≤ 1% + seen in at most 3 cases | Rare variants that do not recur in your own database. The count includes the open case. |
 
-Built-in presets cannot be deleted, but you can hide them from the preset bar.
+Each preset is named after the clinical question it answers. Built-in presets cannot be deleted, but you can hide them from the preset bar.
 
 ## Saving a Preset
 
@@ -60,7 +60,7 @@ From here you can:
 You can also activate presets from the [DSL search bar](./filtering.md#preset-references) by typing `@` followed by the preset name:
 
 ```
-@rare-pathogenic
+@rare_known_pathogenic
 ```
 
-The autocomplete dropdown shows available presets when you type `@`. Preset names are converted to URL-safe slugs (lowercase, spaces to hyphens, special characters removed).
+The autocomplete dropdown shows available presets when you type `@`. The preset key is the name in lowercase with spaces turned into underscores; hyphens stay (`@ultra-rare_loss-of-function`). A name with any other character, such as the comma in "Rare, not recurrent", cannot be typed as a reference; use its chip in the preset bar instead.

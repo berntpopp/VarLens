@@ -61,6 +61,19 @@ describe('prepareStatements', () => {
     expect(chrs(g37)).toEqual(['1', '2', 'MT', 'chrM'])
   })
 
+  it('insertBatch stores hpo_match (#580)', () => {
+    const stmts = prepareStatements(db)
+    const caseId = Number(stmts.insertCase.run('hpo', '/p', 1, 1, 'GRCh38').lastInsertRowid)
+    stmts.insertBatch(caseId, [
+      { chr: 'chr1', pos: 1, ref: 'A', alt: 'G', hpo_match: 'HP:0004322 Short stature' },
+      { chr: 'chr1', pos: 2, ref: 'A', alt: 'G' }
+    ])
+    const rows = db
+      .prepare('SELECT hpo_match FROM variants WHERE case_id = ? ORDER BY pos')
+      .all(caseId) as Array<{ hpo_match: string | null }>
+    expect(rows.map((r) => r.hpo_match)).toEqual(['HP:0004322 Short stature', null])
+  })
+
   it('getCaseByName finds existing case', () => {
     const stmts = prepareStatements(db)
     stmts.insertCase.run('test-case', '/path', 100, Date.now(), 'GRCh38')

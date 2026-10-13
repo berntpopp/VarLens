@@ -1,6 +1,7 @@
 import {
   CaseVariantIdSchema,
   GlobalAnnotationUpdatesSchema,
+  GlobalVariantCoordsSchema,
   PerCaseAnnotationUpdatesSchema,
   VariantCoordsSchema
 } from '../../../shared/api/schemas/annotations'
@@ -15,8 +16,8 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
   return {
     'annotations:getGlobal': {
       async handle(args, _request, reply, { session }) {
-        const [chr, pos, ref, alt] = args
-        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const [chr, pos, ref, alt, genome_build] = args
+        const validated = GlobalVariantCoordsSchema.safeParse({ chr, pos, ref, alt, genome_build })
         if (!validated.success) {
           reply.code(400)
           return { error: 'invalid-annotation-coordinates' }
@@ -33,8 +34,8 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
     // validate the coordinates like the desktop handler does.
     'annotations:deleteGlobal': {
       async handle(args, _request, reply, { session }) {
-        const [chr, pos, ref, alt] = args
-        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const [chr, pos, ref, alt, genome_build] = args
+        const validated = GlobalVariantCoordsSchema.safeParse({ chr, pos, ref, alt, genome_build })
         if (!validated.success) {
           reply.code(400)
           return { error: 'invalid-annotation-coordinates' }
@@ -49,8 +50,14 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
 
     'annotations:upsertGlobal': {
       async handle(args, _request, reply, { session }) {
-        const [chr, pos, ref, alt, updates] = args
-        const validatedCoords = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const [chr, pos, ref, alt, updates, genome_build] = args
+        const validatedCoords = GlobalVariantCoordsSchema.safeParse({
+          chr,
+          pos,
+          ref,
+          alt,
+          genome_build
+        })
         const validatedUpdates = GlobalAnnotationUpdatesSchema.safeParse(updates)
         if (!validatedCoords.success || !validatedUpdates.success) {
           reply.code(400)

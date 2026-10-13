@@ -392,7 +392,8 @@
               "acmg_classification": "Pathogenic",
               "global_comment": "Global IPC parity annotation",
               "user_name": "ipc-parity"
-            }
+            },
+            "GRCh38"
           ]
         },
         {

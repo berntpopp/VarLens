@@ -31,7 +31,7 @@ import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
-import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
+import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
@@ -48,11 +48,12 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr', pos: 'pos', gene_symbol: 'gene_symbol', cdna: 'cdna', aa_change: 'aa_change',
   carrier_count: 'carrier_count', cohort_frequency: 'cohort_frequency', het_count: 'het_count',
   hom_count: 'hom_count', consequence: 'consequence', func: 'func', clinvar: 'clinvar',
-  gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript'
+  gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript', end_pos: 'end_pos',
+  sv_type: 'sv_type', sv_length: 'sv_length'
 }
 
 // prettier-ignore
-const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred'])
+const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred', 'end_pos', 'sv_length'])
 
 /**
  * Rows of `cvs` overlapping any region of one JSON parameter, i.e.
@@ -77,6 +78,9 @@ export const COHORT_PANEL_INTERVAL_CONDITION = `cvs.rowid IN (
  *
  * Provides cohort-level aggregation queries reading from summary tables.
  */
+/** A coordinate annotated in several builds (v52 copies, #577) counts once. */
+const ANNOTATION_LOCUS = "chr || ':' || pos || ':' || ref || ':' || alt"
+
 export class CohortService {
   private static readonly MAX_STATEMENT_CACHE_SIZE = 50
   private db: Database.Database
@@ -289,7 +293,10 @@ export class CohortService {
         cvs.gnomad_af,
         cvs.cadd AS cadd_phred,
         cvs.transcript,
-        cvs.omim_mim_number AS omim_id${
+        cvs.omim_mim_number AS omim_id,
+        cvs.end_pos,
+        cvs.sv_type,
+        cvs.sv_length${
           keyset !== null
             ? `,
         ${SQLITE_KEYSET_EXTRA_COLUMNS}`
@@ -372,14 +379,16 @@ export class CohortService {
 
     if (annotationTableExists) {
       const starredResult = this.db
-        .prepare('SELECT COUNT(*) as count FROM variant_annotations WHERE starred = 1')
+        .prepare(
+          `SELECT COUNT(DISTINCT ${ANNOTATION_LOCUS}) as count FROM variant_annotations WHERE starred = 1`
+        )
         .get() as { count: number }
       starredVariants = starredResult.count
 
       // ACMG distribution (global annotations)
       acmgRows = this.db
         .prepare(
-          `SELECT acmg_classification, COUNT(*) as count
+          `SELECT acmg_classification, COUNT(DISTINCT ${ANNOTATION_LOCUS}) as count
            FROM variant_annotations
            WHERE acmg_classification IS NOT NULL
            GROUP BY acmg_classification`
@@ -430,21 +439,7 @@ export class CohortService {
    * genome build, so both are part of the lookup (#503).
    */
   getCarriers(variant: CohortVariantIdentity): CohortCarrier[] {
-    const sql = `
-      SELECT
-        v.case_id,
-        c.name as case_name,
-        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num
-      FROM variants v
-      JOIN cases c ON v.case_id = c.id
-      WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
-        AND v.variant_type = ? AND c.genome_build = ?
-      GROUP BY v.case_id, c.name
-      ORDER BY c.name
-    `
-
-    const stmt = this.getStatement(sql)
-    return stmt.all(
+    return this.getStatement(cohortCarriersSql('sqlite')).all(
       variant.chr,
       variant.pos,
       variant.ref,

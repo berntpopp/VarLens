@@ -13,6 +13,7 @@ import type { ProteinStructureResult, ProteinApiError } from '../../../shared/ty
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { apiFetch } from './http-fetch'
 
 export class AlphaFoldApiClient {
   private cache: ApiCache | null
@@ -134,7 +135,7 @@ export class AlphaFoldApiClient {
   ): Promise<{ status: number; data: unknown }> {
     const url = `${this.baseUrl}/api/prediction/${uniprotAccession}`
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'User-Agent': 'VarLens/1.0 (Electron desktop app)'

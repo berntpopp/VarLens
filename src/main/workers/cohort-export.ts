@@ -13,9 +13,11 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../database/cohort'
 import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
 import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary-refreshing'
-import type { CohortSearchParams, CohortVariant } from '../../shared/types/cohort'
+import type { CohortSearchParams } from '../../shared/types/cohort'
 import type { ExportColumn } from './export-pipeline'
 import { formatCellValue } from './export-renderer'
+import { COHORT_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
+import { cohortRowAnnotations } from '../database/annotation-export-lookup'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
 
@@ -38,7 +40,8 @@ export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
   { key: 'cohort_frequency', header: 'Cohort Frequency' },
   { key: 'het_count', header: 'Heterozygous' },
   { key: 'hom_count', header: 'Homozygous' },
-  { key: 'transcript', header: 'Transcript' }
+  { key: 'transcript', header: 'Transcript' },
+  ...COHORT_ANNOTATION_EXPORT_COLUMNS
 ]
 
 const PROGRESS_EVERY_ROWS = 5_000
@@ -112,12 +115,10 @@ export function runCohortExport(
   onProgress(0, total)
 
   const rows: unknown[][] = []
+  const annotationsOf = cohortRowAnnotations(db)
   for (const [index, variant] of variants.entries()) {
-    rows.push(
-      COHORT_EXPORT_COLUMNS.map((col) =>
-        formatCohortCell(col.key, variant[col.key as keyof CohortVariant])
-      )
-    )
+    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
+    rows.push(COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key])))
     if ((index + 1) % PROGRESS_EVERY_ROWS === 0) onProgress(index + 1, total)
   }
 

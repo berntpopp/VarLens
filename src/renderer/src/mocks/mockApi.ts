@@ -714,12 +714,13 @@ export const mockApi: WindowAPI = {
 
   annotations: {
     getGlobal: async () => null,
-    upsertGlobal: async (chr, pos, ref, alt, updates) => ({
+    upsertGlobal: async (chr, pos, ref, alt, updates, genome_build) => ({
       id: 1,
       chr,
       pos,
       ref,
       alt,
+      genome_build,
       global_comment: updates.global_comment ?? null,
       starred: updates.starred === true ? 1 : 0,
       acmg_classification: updates.acmg_classification ?? null,

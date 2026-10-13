@@ -156,7 +156,7 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
       [schema]
     )
     expect(audit.rows).toHaveLength(1)
-    expect(audit.rows[0].entity_key).toBe('chr1:100:A:G')
+    expect(audit.rows[0].entity_key).toBe('chr1:100:A:G@GRCh38') // keyed by build (#577)
     expect(
       (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t('cohort_summary_rebuild_requests')}`))
         .rows[0].n
@@ -333,7 +333,11 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
       `UPDATE ${t('variant_annotations')} SET global_comment = 'edited', updated_at = 9
         WHERE chr = '1' AND pos = 300`
     )
-    await annotate('1', 200, 'added', 0, null, 9)
+    // After 0035 a note is keyed by the build of the case it is written for (#577).
+    await probe.query(
+      `INSERT INTO ${t('variant_annotations')} (chr, pos, ref, alt, genome_build, global_comment,
+         starred, created_at, updated_at) VALUES ('1', 200, 'A', 'G', 'GRCh38', 'added', 0, 0, 9)`
+    )
     await runJob()
 
     expect(await chrsOf(a)).toEqual(['chr1'])

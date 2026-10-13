@@ -1,4 +1,7 @@
-import { BUILT_IN_PRESETS } from '../../../src/main/database/built-in-presets'
+import {
+  BUILT_IN_PRESETS,
+  BUILT_IN_PRESET_RENAMES_V53
+} from '../../../src/shared/config/filter-presets.config'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,7 +12,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(34)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(37)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -44,7 +47,10 @@ describe('Postgres migration definitions', () => {
       '0031',
       '0032',
       '0033',
-      '0034'
+      '0034',
+      '0035',
+      '0036',
+      '0037'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -80,7 +86,10 @@ describe('Postgres migration definitions', () => {
       'case_field_dictionary',
       'evidence_ranking_beta_preset',
       'decode_vep_hgvs_escapes',
-      'import_integrity'
+      'import_integrity',
+      'annotation_genome_build',
+      'clinical_question_presets',
+      'summary_sv_facts'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -168,6 +177,17 @@ describe('Postgres migration definitions', () => {
     expect(migration?.sql).toContain(`'${JSON.stringify(preset!.filterJson)}'`)
     expect(migration?.sql).toContain(`1, 1, ${preset!.sortOrder}, 'filter'`)
     expect(migration?.sql).toContain('ON CONFLICT (name) DO NOTHING')
+    expect(migration?.afterApply).toBeUndefined()
+  })
+
+  // #570: the checksummed SQL and the frozen rename record (also used by SQLite v53) must not drift apart.
+  it('0036 renames each old built-in exactly as BUILT_IN_PRESET_RENAMES_V53 records', () => {
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0036')
+    expect(BUILT_IN_PRESET_RENAMES_V53).toHaveLength(8)
+    for (const [oldName, newName, description] of BUILT_IN_PRESET_RENAMES_V53) {
+      expect(migration?.sql).toContain(`('${oldName}', '${newName}', '${description}')`)
+    }
+    expect(migration?.sql).toContain('AND p.is_built_in = 1')
     expect(migration?.afterApply).toBeUndefined()
   })
 

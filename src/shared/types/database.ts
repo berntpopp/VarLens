@@ -129,6 +129,8 @@ export interface Variant {
   aa_change: string | null
   /** Mode of inheritance, nullable */
   moi: string | null
+  /** Patient HPO terms matching the gene (`HP:… label; …`), JSON imports only */
+  hpo_match?: string | null
   /** Genotype quality (VCF GQ), nullable */
   gq: number | null
   /** Read depth (VCF DP), nullable */
@@ -271,14 +273,13 @@ export interface AcmgEvidence {
 export interface VariantAnnotation {
   /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
-  /** Chromosome */
+  /** Locus: chromosome, position, reference and alternate allele */
   chr: string
-  /** Genomic position */
   pos: number
-  /** Reference allele */
   ref: string
-  /** Alternate allele */
   alt: string
+  /** Genome build: part of the key since SQLite v52 / PG 0035 (#577) */
+  genome_build: string
   /** Global comment for this variant */
   global_comment: string | null
   /** Star flag (0 or 1, SQLite boolean) */

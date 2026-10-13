@@ -35,7 +35,7 @@ export const COLUMN_GROUPS: ColumnGroupConfig[] = [
     id: 'clinical',
     label: 'Clinical',
     icon: mdiMedicalBag,
-    keys: ['clinvar', 'omim_mim_number', 'hpo_sim_score', 'moi']
+    keys: ['clinvar', 'omim_mim_number', 'hpo_sim_score', 'hpo_match', 'moi']
   },
   {
     id: 'links',

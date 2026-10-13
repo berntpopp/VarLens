@@ -50,24 +50,52 @@
               </v-btn>
             </span>
           </template>
-          {{ igvUnavailableReason ?? 'Jump to locus in local IGV (port 60151)' }}
+          {{ igvUnavailableReason ?? IGV_COPY.tooltip(igvTargetLocus, igvBuild) }}
         </v-tooltip>
         <span class="text-body-small text-center text-truncate external-link-label">
           Local IGV
         </span>
       </div>
     </div>
+    <!-- Outcome of the last IGV jump (#93): a failure stays until retried -->
+    <v-alert
+      v-if="igvStatus === 'failed'"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mt-2 text-body-small"
+      data-testid="igv-failed"
+    >
+      {{ IGV_COPY.unreachable }}
+      <template #append>
+        <v-btn size="small" variant="text" data-testid="igv-retry" @click="jumpToLocalIgv">
+          {{ IGV_COPY.retry }}
+        </v-btn>
+      </template>
+    </v-alert>
+    <p
+      v-else-if="igvStatus === 'sent'"
+      class="text-body-small text-medium-emphasis mt-2 mb-0"
+      role="status"
+      data-testid="igv-sent"
+    >
+      {{ IGV_COPY.sent(igvSentLocus) }}
+      {{ igvGenome === null ? IGV_COPY.unknownBuild : IGV_COPY.genome(igvGenome) }}
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useExternalLinksStore } from '../stores/externalLinksStore'
 import { useApiService } from '../composables/useApiService'
 import { useCapabilityStore } from '../stores/capabilityStore'
 import { resolveUrlTemplate } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
+import { igvGenomeId, igvLocus, sendToIgv } from '../utils/igv-desktop'
+import { normalizeBuild } from '../utils/variant-interval'
+import { IGV_COPY } from '../config/uiCopyConfig'
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -87,9 +115,11 @@ import {
 
 interface Props {
   variant: Variant | CohortVariant
+  /** Genome build of the variant (case or cohort row); null when unknown */
+  genomeBuild?: string | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { genomeBuild: null })
 
 const { api } = useApiService()
 const externalLinksStore = useExternalLinksStore()
@@ -183,24 +213,29 @@ async function openLink(linkId: string): Promise<void> {
 }
 
 const igvLoading = ref(false)
+const igvStatus = ref<'sent' | 'failed' | null>(null)
+const igvSentLocus = ref('')
+const igvTargetLocus = computed(() => igvLocus(props.variant))
+const igvBuild = computed(() => normalizeBuild(props.genomeBuild))
+const igvGenome = computed(() => igvGenomeId(props.genomeBuild))
+
+// Another variant: the previous jump's outcome no longer applies.
+watch(
+  () => props.variant,
+  () => (igvStatus.value = null)
+)
 
 async function jumpToLocalIgv(): Promise<void> {
-  const chr = props.variant.chr
-  const pos = props.variant.pos
-  if (!chr || !pos || igvUnavailableReason !== null) return
+  if (!props.variant.chr || !props.variant.pos || igvUnavailableReason !== null) return
 
   igvLoading.value = true
-  const locus = `${chr}:${pos}-${pos}`
-  const igvUrl = `http://localhost:60151/goto?locus=${encodeURIComponent(locus)}`
-
+  const locus = igvTargetLocus.value
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 1500)
-    await fetch(igvUrl, { mode: 'no-cors', signal: controller.signal })
-    clearTimeout(timer)
-    logService.info(`Broadcast locus ${locus} to local IGV on port 60151`, 'links')
-  } catch {
-    logService.warn('Local IGV port 60151 not responding or listening', 'links')
+    const sent = await sendToIgv(locus)
+    igvStatus.value = sent ? 'sent' : 'failed'
+    igvSentLocus.value = locus
+    if (sent) logService.info(`Broadcast locus ${locus} to local IGV`, 'links')
+    else logService.warn('Local IGV port 60151 not responding or listening', 'links')
   } finally {
     igvLoading.value = false
   }

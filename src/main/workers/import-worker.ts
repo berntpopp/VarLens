@@ -1,9 +1,11 @@
 import {
+  importDataReport,
   resetUnrankedClinvar,
   takeUnrankedClinvar,
   unrankedClinvarLogLine
 } from '../import/unranked-clinvar'
 import { resetAfOutOfRange, takeAfOutOfRange } from '../import/af-out-of-range'
+import { resetAmbiguousCsqSites, takeAmbiguousCsqSites } from '../import/vcf/vcf-csq-allele'
 import { parentPort } from 'worker_threads'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
@@ -135,6 +137,7 @@ export async function runImportSession(
       unrankedClinvar?: string[]
       /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
       afOutOfRange?: number
+      csqAmbiguousSites?: number
     }> = []
     let succeeded = 0
     let failed = 0
@@ -160,6 +163,7 @@ export async function runImportSession(
       const file = msg.files[fileIndex]
       resetUnrankedClinvar()
       resetAfOutOfRange()
+      resetAmbiguousCsqSites()
       const fileName = basename(file.filePath)
       const startTime = Date.now()
       const skipTracker = new ImportSkipTracker()
@@ -209,10 +213,13 @@ export async function runImportSession(
             `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
           )
         }
-        const extra = {
-          ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-          ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
+        const csqAmbiguousSites = takeAmbiguousCsqSites()
+        if (csqAmbiguousSites !== undefined) {
+          console.warn(
+            `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.csqAmbiguousSites(csqAmbiguousSites)}`
+          )
         }
+        const extra = importDataReport({ unrankedClinvar, afOutOfRange, csqAmbiguousSites })
         port.postMessage({
           type: 'file-complete',
           fileIndex,

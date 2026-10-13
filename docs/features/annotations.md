@@ -10,7 +10,7 @@ Click the star icon in the annotations column to mark important variants. Starre
 
 Stars exist at two levels:
 - **Per-case stars** — Specific to the current case
-- **Global stars** — Apply to the variant across all cases (indicated by a ring)
+- **Global stars** — Apply to the variant across all cases of the same genome build (indicated by a ring)
 
 ## ACMG Classification
 
@@ -22,6 +22,12 @@ Classify variants using the ACMG/AMP framework:
 2. **Evidence editor** — Open the detailed editor to select specific ACMG evidence codes (PVS1, PS1-PS4, PM1-PM6, PP1-PP5, BA1, BS1-BS4, BP1-BP7) and add notes
 
 Classifications are scored using the Bayesian point-based system and can exist at both per-case and global levels.
+
+**Override** sets a class other than the one the evidence gives. An override is saved only with a reason, which is shown in the editor and in the activity log.
+
+Global classifications, stars and comments belong to one genome build: a GRCh37 and a GRCh38 case at the same coordinates do not share them.
+
+Case and cohort exports (CSV and XLSX) include the ACMG class, its evidence points and the override reason, plus the comments. A case export uses the case's own classification and has a Case Comment and a Global Comment column; a cohort export uses the global classification and comment.
 
 ### Auto-Suggest
 
@@ -36,7 +42,7 @@ The evidence editor can auto-suggest applicable criteria based on:
 
 Add free-text comments to document your reasoning:
 
-- **Global comments** — Visible across all cases containing this variant
+- **Global comments** — Visible across all cases of the same genome build containing this variant
 - **Per-case comments** — Specific to the current case context
 
 ## Tags

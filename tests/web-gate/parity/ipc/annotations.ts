@@ -17,6 +17,9 @@ async function expectRejected(call: () => Promise<unknown>): Promise<{ rejected:
   throw new Error('Expected annotation call to be rejected')
 }
 
+/** The primary case is imported as GRCh38; global annotations are keyed by build (#577). */
+const PRIMARY_BUILD = 'GRCh38'
+
 function expectGlobalClassification(value: unknown, expected: string): unknown {
   const actual = (value as { acmg_classification?: unknown }).acmg_classification
   if (actual !== expected) {
@@ -47,7 +50,8 @@ async function runGlobalAliasCase(
     {
       acmg_classification: input,
       global_comment: `Global ${input} alias parity`
-    }
+    },
+    PRIMARY_BUILD
   ])
   return [
     expectGlobalClassification(
@@ -55,7 +59,8 @@ async function runGlobalAliasCase(
         ctx.primaryVariant.chr,
         ctx.primaryVariant.pos,
         ctx.primaryVariant.ref,
-        ctx.primaryVariant.alt
+        ctx.primaryVariant.alt,
+        PRIMARY_BUILD
       ]),
       expected
     )
@@ -111,7 +116,8 @@ export const annotationsScenario: IpcScenario = {
         starred: true,
         acmg_classification: 'Pathogenic',
         global_comment: 'Global parity annotation'
-      }
+      },
+      PRIMARY_BUILD
     ])
     expectUpsertReturned(upsertGlobalResult, 'upsertGlobal')
 
@@ -132,7 +138,8 @@ export const annotationsScenario: IpcScenario = {
         ctx.primaryVariant.chr,
         ctx.primaryVariant.pos,
         ctx.primaryVariant.ref,
-        ctx.primaryVariant.alt
+        ctx.primaryVariant.alt,
+        PRIMARY_BUILD
       ]),
       'Pathogenic'
     )
@@ -158,7 +165,8 @@ export const annotationsScenario: IpcScenario = {
           ctx.primaryVariant.pos,
           ctx.primaryVariant.ref,
           ctx.primaryVariant.alt,
-          { acmg_classification: 'PATHOGENIC' }
+          { acmg_classification: 'PATHOGENIC' },
+          PRIMARY_BUILD
         ])
       }),
       await expectRejected(async () => {
