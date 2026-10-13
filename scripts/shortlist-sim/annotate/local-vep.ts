@@ -6,7 +6,19 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { finished, pipeline } from 'node:stream/promises'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import {
@@ -237,21 +249,33 @@ export function mergedRegions(alleles: AlleleInput[]): string[] {
   return out.map((r) => `${r.chr}\t${r.beg}\t${r.end}`)
 }
 
-/** Runs a fixed bash script; paths come in as "$1", "$2", … so none is parsed as shell code. */
-function runBash(
-  script: string,
-  args: string[],
-  env: NodeJS.ProcessEnv
-): Promise<{ status: number | null; stderr: string }> {
-  return new Promise((resolve) => {
-    const p = spawn('bash', ['-c', script, 'bash', ...args], {
-      env,
-      stdio: ['ignore', 'ignore', 'pipe']
-    })
-    let stderr = ''
-    p.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
-    p.on('close', (status) => resolve({ status, stderr }))
-  })
+/**
+ * Runs tools without a shell: each step's stdout feeds the next and the last
+ * one's goes to `outFile` (`outFile` absent: output discarded). Rejects with
+ * stderr unless every step exits 0 (like pipefail).
+ */
+async function runTools(
+  steps: Array<[string, string[]]>,
+  env: NodeJS.ProcessEnv,
+  outFile?: string
+): Promise<void> {
+  const procs = steps.map(([cmd, args]) => spawn(cmd, args, { env, stdio: 'pipe' }))
+  let stderr = ''
+  const exits = procs.map(
+    (p) =>
+      new Promise<number | null>((resolve) => {
+        p.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
+        p.on('error', (e) => ((stderr += e.message), resolve(-1)))
+        p.on('close', resolve)
+      })
+  )
+  procs[0].stdin.end()
+  procs.slice(1).forEach((p, i) => procs[i].stdout.pipe(p.stdin))
+  const last = procs[procs.length - 1].stdout
+  const written = outFile ? pipeline(last, createWriteStream(outFile)) : last.resume()
+  const statuses = await Promise.all(exits)
+  await written
+  if (statuses.some((status) => status !== 0)) throw new Error(stderr.slice(-300))
 }
 
 /** Regions grouped into `n` parts at chromosome boundaries (each chromosome stays contiguous). */
@@ -289,21 +313,31 @@ export async function dbnsfpSubset(
       const out = join(outDir, `dbnsfp-${id}.part${i}.gz`)
       if (existsSync(out)) return out // finished by an earlier run
       writeFileSync(regionFile, rows.join('\n') + '\n')
-      const script = `set -o pipefail; tabix ${i === 0 ? '-h ' : ''}"$1" -R "$2" | bgzip -c > "$3.tmp" && mv "$3.tmp" "$3"`
+      const tabix: [string, string[]] = [
+        'tabix',
+        [...(i === 0 ? ['-h'] : []), DBNSFP_FILE, '-R', regionFile]
+      ]
       for (let attempt = 1; attempt <= 3; attempt++) {
-        const p = await runBash(script, [DBNSFP_FILE, regionFile, out], env)
-        if (p.status === 0) return out
-        console.error(`dbNSFP part ${i} failed (${attempt}/3): ${p.stderr.slice(-300)}`)
+        try {
+          await runTools([tabix, ['bgzip', ['-c']]], env, `${out}.tmp`)
+          renameSync(`${out}.tmp`, out)
+          return out
+        } catch (e) {
+          console.error(`dbNSFP part ${i} failed (${attempt}/3): ${(e as Error).message}`)
+        }
       }
       throw new Error(`could not extract dbNSFP part ${i}`)
     })
   )
-  const p = await runBash(
-    'out="$1"; shift; cat "$@" > "$out" && tabix -f -s 1 -b 2 -e 2 "$out" && rm "$@"',
-    [subset, ...partFiles],
-    env
-  )
-  if (p.status !== 0) throw new Error(`dbNSFP subset index failed: ${p.stderr.slice(-300)}`)
+  // bgzip files concatenate into one valid bgzip file.
+  const merged = createWriteStream(subset)
+  for (const f of partFiles) await pipeline(createReadStream(f), merged, { end: false })
+  merged.end()
+  await finished(merged)
+  await runTools([['tabix', ['-f', '-s', '1', '-b', '2', '-e', '2', subset]]], env).catch((e) => {
+    throw new Error(`dbNSFP subset index failed: ${(e as Error).message}`)
+  })
+  for (const f of partFiles) rmSync(f)
   return subset
 }
 

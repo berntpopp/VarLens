@@ -224,4 +224,24 @@ describe('dbnsfpSubset shell safety', () => {
     expect(existsSync(join(root, 'pwned'))).toBe(false)
     expect(readdirSync(process.cwd())).not.toContain('pwned')
   })
+
+  it('rejects when a tool in the pipe fails (pipefail)', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, chmodSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { dbnsfpSubset } = await import('../../../../scripts/shortlist-sim/annotate/local-vep')
+    const root = mkdtempSync(join(tmpdir(), 'dbnsfp-fail-'))
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'tabix'), '#!/bin/sh\necho "tabix: cannot open" >&2\nexit 1\n')
+    writeFileSync(join(bin, 'bgzip'), '#!/bin/sh\ncat\n')
+    for (const tool of ['tabix', 'bgzip']) chmodSync(join(bin, tool), 0o755)
+
+    await expect(
+      dbnsfpSubset([{ key: '1:100:A:G', chr: '1', pos: 100, ref: 'A', alt: 'G' }], root, {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`
+      })
+    ).rejects.toThrow('could not extract dbNSFP part 0')
+  })
 })
