@@ -182,7 +182,8 @@ function parseCsqForAlleles(
       originalAltAlleles,
       spellingsOf
     )
-    if (parsed.some((transcript) => ambiguous.has(transcript.allele))) noteAmbiguousCsqSite()
+    // Only --minimal (per-ALT trimming) is the ambiguity --allele_number resolves.
+    if (minimal && parsed.some((t) => ambiguous.has(t.allele))) noteAmbiguousCsqSite()
     for (const transcript of parsed) {
       for (const targetIndex of targetIndexes.get(transcript.allele) ?? []) {
         totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'CSQ')
