@@ -12,7 +12,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(35)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(37)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -48,6 +48,7 @@ describe('Postgres migration definitions', () => {
       '0032',
       '0033',
       '0034',
+      '0035',
       '0036',
       '0037'
     ])
@@ -86,6 +87,7 @@ describe('Postgres migration definitions', () => {
       'evidence_ranking_beta_preset',
       'decode_vep_hgvs_escapes',
       'import_integrity',
+      'annotation_genome_build',
       'clinical_question_presets',
       'summary_sv_facts'
     ])

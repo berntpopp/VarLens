@@ -21,6 +21,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useCaseTabUrlParam } from '../composables/useViewUrlBindings'
 import { usePermissions } from '../composables/usePermissions'
 import { providePanelResolutionStatus } from '../composables/usePanelResolutionStatus'
+import { provideCaseAnnotationBuild } from '../composables/useVariantGenomeBuild'
 import { useCarrierTarget } from '../composables/useCarrierTarget'
 import CarrierTargetBanner from '../components/case/CarrierTargetBanner.vue'
 
@@ -45,7 +46,7 @@ const {
 
 // Import is an analyst action; viewers never get the welcome-screen button.
 const { canWrite } = usePermissions()
-
+provideCaseAnnotationBuild(selectedCaseId)
 const { api } = useApiService()
 const settingsStore = useSettingsStore()
 const hasCases = computed(() => caseCount.value > 0)

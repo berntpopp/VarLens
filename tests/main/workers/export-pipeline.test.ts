@@ -121,8 +121,8 @@ function createCase(db: DatabaseType, name: string): number {
 }
 
 function buildExportSql(caseId: number): { sql: string; params: readonly unknown[] } {
-  const cols = EXPORT_COLUMNS.map((c) => c.key).join(', ')
-  const sql = `SELECT ${cols} FROM variants WHERE case_id = ? ORDER BY chr, pos`
+  // Like the compiled filter query: whole variant rows; the annotation cells are looked up.
+  const sql = `SELECT * FROM variants WHERE case_id = ? ORDER BY chr, pos`
   return { sql, params: [caseId] }
 }
 
@@ -280,6 +280,37 @@ describe('runExportPipeline — CSV', () => {
     const lines = content.split('\r\n').filter((l) => l.length > 0)
     const expectedHeader = EXPORT_COLUMNS.map((c) => c.header).join(',')
     expect(lines[0]).toBe(expectedHeader)
+  })
+
+  it('exports the case ACMG class, points, override reason and latest comment (#574)', async () => {
+    insertVariant(db, caseId, { chr: '1', pos: 100, ref: 'A', alt: 'G' })
+    insertVariant(db, caseId, { chr: '1', pos: 200, ref: 'A', alt: 'G' })
+    const variantId = (
+      db.prepare('SELECT id FROM variants WHERE pos = 100').get() as { id: number }
+    ).id
+    const evidence = JSON.stringify({
+      pathogenic: [{ code: 'PVS1', strength: 'very_strong', confirmed: true }],
+      benign: [],
+      is_override: true,
+      override_reason: 'Segregation'
+    })
+    db.prepare(
+      `INSERT INTO case_variant_annotations (case_id, variant_id, acmg_classification,
+         acmg_evidence, per_case_comment, created_at, updated_at)
+       VALUES (?, ?, 'Benign', ?, 'case note', 0, 1)`
+    ).run(caseId, variantId, evidence)
+    db.prepare(
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, acmg_classification,
+         global_comment, created_at, updated_at)
+       VALUES ('1', 100, 'A', 'G', 'GRCh38', 'Pathogenic', 'newer global note', 0, 2)`
+    ).run()
+    const params = makeCsvParams()
+    await runExportPipeline(params)
+
+    const lines = readFileSync(params.outputFilePath, 'utf8').split('\r\n')
+    expect(lines[0].endsWith('ACMG Class,ACMG Points,ACMG Override Reason,Comment')).toBe(true)
+    expect(lines[1].endsWith('Benign,8,Segregation,newer global note')).toBe(true)
+    expect(lines[2].endsWith(',,,')).toBe(true)
   })
 
   it('produces one data row per variant', async () => {

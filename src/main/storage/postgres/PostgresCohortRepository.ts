@@ -19,6 +19,7 @@ import {
   type CohortReadWarnings
 } from './cohort-read-freshness'
 import { quoteIdentifier, toNumber } from './identifiers'
+import { cohortAnnotationExportColumns, withAnnotationCells } from './postgres-annotation-export'
 import { streamLongQuery } from './long-running-client'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
@@ -228,32 +229,32 @@ export class PostgresCohortRepository {
          (${totals.uniqueVariants}) AS unique_variants,
          (${totals.genesWithVariants}) AS genes_with_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.starred = 1
          ) AS starred_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Pathogenic'
          ) AS pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely pathogenic'
          ) AS likely_pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Uncertain significance'
          ) AS vus,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely benign'
          ) AS likely_benign,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Benign'
          ) AS benign`
@@ -377,7 +378,7 @@ export class PostgresCohortRepository {
       values.push(resolvedParams.offset)
       limitOffset.push(`OFFSET $${values.length}`)
     }
-    yield* streamLongQuery(
+    const rows = streamLongQuery(
       this.pool,
       buildSummaryExportSql(
         this.tbl('cohort_variant_summary'),
@@ -388,10 +389,12 @@ export class PostgresCohortRepository {
           (table) => this.tbl(table),
           await carrierTotalsSql(this.pool, this.schema)
         ),
-        limitOffset.join('\n    ')
+        limitOffset.join('\n    '),
+        cohortAnnotationExportColumns(this.schemaName)
       ),
       values
     )
+    yield* withAnnotationCells(rows, 'cohort')
   }
 
   private async getTotalCases(pool: Queryable, params: CohortSearchParams = {}): Promise<number> {

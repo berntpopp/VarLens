@@ -136,6 +136,10 @@ function addAnnotationPredicate(
             AND va.pos = v.pos
             AND va.ref = v.ref
             AND va.alt = v.alt
+            AND va.genome_build = (
+              SELECT c.genome_build FROM ${schemaName}."cases" c
+              WHERE c.id = ${addParam(filter.case_id)}
+            )
             AND ${globalPredicate}
         ))`)
 }

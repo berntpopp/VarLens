@@ -5,6 +5,8 @@ import type { HandlerDependencies } from '../types'
 import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
 import {
   VariantCoordsSchema,
+  GlobalVariantCoordsSchema,
+  GenomeBuildArgSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema,
   CaseVariantIdSchema,
@@ -54,10 +56,16 @@ export function registerAnnotationHandlers({
    */
   ipcMain.handle(
     'annotations:getGlobal',
-    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
+    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown, build: unknown) => {
       return wrapHandler(async () => {
         // ANTI-07: Runtime validation at IPC boundary
-        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const validated = GlobalVariantCoordsSchema.safeParse({
+          chr,
+          pos,
+          ref,
+          alt,
+          genome_build: build
+        })
         if (!validated.success) {
           mainLogger.error(
             `Invalid annotations:getGlobal coords: ${validated.error.message}`,
@@ -82,10 +90,24 @@ export function registerAnnotationHandlers({
    */
   ipcMain.handle(
     'annotations:upsertGlobal',
-    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown, updates: unknown) => {
+    async (
+      _event,
+      chr: unknown,
+      pos: unknown,
+      ref: unknown,
+      alt: unknown,
+      updates: unknown,
+      build: unknown
+    ) => {
       return wrapHandler(async () => {
         // ANTI-07: Runtime validation at IPC boundary
-        const validatedCoords = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const validatedCoords = GlobalVariantCoordsSchema.safeParse({
+          chr,
+          pos,
+          ref,
+          alt,
+          genome_build: build
+        })
         if (!validatedCoords.success) {
           mainLogger.error(
             `Invalid annotations:upsertGlobal coords: ${validatedCoords.error.message}`,
@@ -117,10 +139,16 @@ export function registerAnnotationHandlers({
    */
   ipcMain.handle(
     'annotations:deleteGlobal',
-    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown) => {
+    async (_event, chr: unknown, pos: unknown, ref: unknown, alt: unknown, build: unknown) => {
       return wrapHandler(async () => {
         // ANTI-07: Runtime validation at IPC boundary
-        const validated = VariantCoordsSchema.safeParse({ chr, pos, ref, alt })
+        const validated = GlobalVariantCoordsSchema.safeParse({
+          chr,
+          pos,
+          ref,
+          alt,
+          genome_build: build
+        })
         if (!validated.success) {
           mainLogger.error(
             `Invalid annotations:deleteGlobal coords: ${validated.error.message}`,
@@ -276,26 +304,41 @@ export function registerAnnotationHandlers({
   )
 
   // Batch read -- single round-trip for N variants (pool-dispatched)
-  ipcMain.handle('annotations:batchGet', async (_event, caseId: unknown, variantKeys: unknown) => {
-    return wrapHandler(async () => {
-      const validatedCaseId = z.number().int().positive().nullable().safeParse(caseId)
-      if (!validatedCaseId.success) {
-        throw new Error('Invalid caseId parameter')
-      }
+  ipcMain.handle(
+    'annotations:batchGet',
+    async (_event, caseId: unknown, variantKeys: unknown, build: unknown) => {
+      return wrapHandler(async () => {
+        const validatedCaseId = z.number().int().positive().nullable().safeParse(caseId)
+        if (!validatedCaseId.success) {
+          throw new Error('Invalid caseId parameter')
+        }
+        // Without a case the build picks the global rows (cohort view, #577).
+        const validatedBuild = GenomeBuildArgSchema.nullish().safeParse(build)
+        if (!validatedBuild.success) {
+          throw new Error('Invalid genome build parameter')
+        }
+        const genomeBuild = validatedBuild.data ?? null
 
-      const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
-      if (!validatedKeys.success) {
-        throw new Error('Invalid variantKeys parameter')
-      }
+        const validatedKeys = VariantKeysSchema.safeParse(variantKeys)
+        if (!validatedKeys.success) {
+          throw new Error('Invalid variantKeys parameter')
+        }
 
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getReadExecutor().execute({
-          type: 'annotations:batchGet',
-          params: [validatedCaseId.data, validatedKeys.data]
-        })
-      }
-      return batchGetAnnotations(validatedCaseId.data, validatedKeys.data, getDb, getDbPool)
-    })
-  })
+        const session = getDbManager().getCurrentSession()
+        if (session.capabilities.backend === 'postgres') {
+          return await session.getReadExecutor().execute({
+            type: 'annotations:batchGet',
+            params: [validatedCaseId.data, validatedKeys.data, genomeBuild]
+          })
+        }
+        return batchGetAnnotations(
+          validatedCaseId.data,
+          validatedKeys.data,
+          getDb,
+          getDbPool,
+          genomeBuild
+        )
+      })
+    }
+  )
 }

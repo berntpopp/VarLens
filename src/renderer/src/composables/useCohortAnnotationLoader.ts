@@ -7,14 +7,18 @@
  * is debounced so rapid paging does not issue overlapping IPC calls.
  */
 
-import { useAnnotations } from './useAnnotations'
+import { getCurrentInstance, onActivated } from 'vue'
+import { useAnnotations, type UseAnnotationsOptions } from './useAnnotations'
 import { useDebounce } from './useDebounce'
 import type { VariantCoords } from './annotation-cache'
 
 const HYDRATE_DEBOUNCE_MS = 150
 
-export function useCohortAnnotationLoader(): { hydrate: (rows: VariantCoords[]) => void } {
-  const { loadGlobalAnnotationsBatch, invalidateGlobalAnnotationGeneration } = useAnnotations()
+export function useCohortAnnotationLoader(options: UseAnnotationsOptions = {}): {
+  hydrate: (rows: VariantCoords[]) => void
+} {
+  const { loadGlobalAnnotationsBatch, invalidateGlobalAnnotationGeneration } =
+    useAnnotations(options)
 
   const { debouncedFn: debouncedLoad } = useDebounce((rows: VariantCoords[]) => {
     if (rows.length === 0) return
@@ -23,11 +27,16 @@ export function useCohortAnnotationLoader(): { hydrate: (rows: VariantCoords[]) 
     )
   }, HYDRATE_DEBOUNCE_MS)
 
+  let shownRows: VariantCoords[] = []
   /** Call whenever the visible cohort rows change. */
   function hydrate(rows: VariantCoords[]): void {
+    shownRows = rows
     invalidateGlobalAnnotationGeneration()
     debouncedLoad(rows)
   }
+  // Back from the case view (KeepAlive): a case of another build emptied the
+  // cache (#577), so the rows still shown are loaded again (cached keys are skipped).
+  if (getCurrentInstance() !== null) onActivated(() => hydrate(shownRows))
 
   return { hydrate }
 }

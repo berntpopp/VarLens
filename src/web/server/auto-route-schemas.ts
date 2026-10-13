@@ -10,7 +10,7 @@
  */
 import { z } from 'zod'
 
-import { VariantKeysSchema } from '../../shared/api/schemas/annotations'
+import { GenomeBuildArgSchema, VariantKeysSchema } from '../../shared/api/schemas/annotations'
 import { CaseCommentInvokeBodySchemas } from '../../shared/api/schemas/case-comments'
 import {
   CaseSetCohortsSchema,
@@ -111,7 +111,11 @@ export const AUTO_ROUTE_ARG_SCHEMAS: Readonly<Record<string, z.ZodType<unknown[]
 
   'annotations:getPerCase': twoIds,
   'annotations:deletePerCase': twoIds,
-  'annotations:batchGet': z.tuple([id.nullable(), VariantKeysSchema.max(MAX_LIST)]),
+  'annotations:batchGet': z.tuple([
+    id.nullable(),
+    VariantKeysSchema.max(MAX_LIST),
+    GenomeBuildArgSchema.nullish()
+  ]),
 
   'case-comments:list': CaseCommentInvokeBodySchemas.list.shape.args,
   'case-comments:create': CaseCommentInvokeBodySchemas.create.shape.args,

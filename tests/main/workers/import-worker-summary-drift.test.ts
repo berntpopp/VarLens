@@ -213,8 +213,8 @@ describe('import worker: per-file cohort summary upkeep', () => {
     const now = Date.now()
     const annotate = db.prepare(
       `INSERT INTO variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-       VALUES ('chr1', ?, 'A', 'G', ?, ?, ?, ${now}, ${now})`
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+       VALUES ('chr1', ?, 'A', 'G', 'GRCh38', ?, ?, ?, ${now}, ${now})`
     )
     annotate.run(100, 'shared', 1, 'Likely benign')
     annotate.run(400, null, 1, null) // not carried by anyone until S1 arrives

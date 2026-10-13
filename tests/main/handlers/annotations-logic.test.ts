@@ -50,11 +50,12 @@ describe('annotations-logic', () => {
     db.close()
   })
 
-  const coords: annotationsLogic.VariantCoords = {
+  const coords: annotationsLogic.GlobalVariantCoords = {
     chr: '1',
     pos: 12345,
     ref: 'A',
-    alt: 'G'
+    alt: 'G',
+    genome_build: 'GRCh38'
   }
 
   describe('getGlobalAnnotation', () => {

@@ -186,8 +186,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.rebuild — Sprint A C2',
     void starred
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('4', 400, 'T', 'C', NULL, 1, NULL, $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('4', 400, 'T', 'C', 'GRCh38', NULL, 1, NULL, $1, $1)`,
       [now]
     )
 
@@ -420,8 +420,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.incrementalAdd/Remove —
     await seedVariant({ caseId: cases[0], chr: '7', pos: 700, ref: 'G', alt: 'T', gtNum: '0/1' })
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('7', 700, 'G', 'A', NULL, 0, 'Likely benign', $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('7', 700, 'G', 'A', 'GRCh38', NULL, 0, 'Likely benign', $1, $1)`,
       [now]
     )
     await probe.query(
@@ -475,8 +475,8 @@ describe.skipIf(!RUN)('PostgresCohortSummaryRepository.incrementalAdd/Remove —
     // Global star + comment annotation so caseA's add sets the flags true.
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-           (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-           VALUES ('4', 400, 'T', 'C', 'noted', 1, 'Pathogenic', $1, $1)`,
+           (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+           VALUES ('4', 400, 'T', 'C', 'GRCh38', 'noted', 1, 'Pathogenic', $1, $1)`,
       [now]
     )
     await seedVariant({ caseId: caseB, chr: '4', pos: 400, ref: 'T', alt: 'C', gtNum: '0/1' })

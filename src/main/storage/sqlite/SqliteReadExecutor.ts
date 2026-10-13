@@ -261,13 +261,20 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         if (this.dbPool !== null)
           return await this.dbPool.run({
             type: 'annotations:getGlobal',
-            params: [task.params[0].chr, task.params[0].pos, task.params[0].ref, task.params[0].alt]
+            params: [
+              task.params[0].chr,
+              task.params[0].pos,
+              task.params[0].ref,
+              task.params[0].alt,
+              task.params[0].genome_build
+            ]
           })
         return this.databaseService.annotations.getGlobalAnnotation(
           task.params[0].chr,
           task.params[0].pos,
           task.params[0].ref,
-          task.params[0].alt
+          task.params[0].alt,
+          task.params[0].genome_build
         )
 
       case 'annotations:getPerCase':
@@ -285,7 +292,11 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         )
 
       case 'annotations:batchGet':
-        return this.databaseService.annotations.getBatch(task.params[0], task.params[1])
+        return this.databaseService.annotations.getBatch(
+          task.params[0],
+          task.params[1],
+          task.params[2] ?? null
+        )
 
       case 'case-comments:list':
         return this.databaseService.metadata.listCaseComments(task.params[0])

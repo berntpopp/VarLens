@@ -1,19 +1,46 @@
 import { z } from 'zod'
 
 import { ACMG_CLASSIFICATIONS } from '../../config/domain.config'
+import { overrideReasonMissing } from '../../acmg/acmg-evidence'
 import {
   CaseVariantIdSchema,
-  GlobalAnnotationUpdatesSchema,
-  PerCaseAnnotationUpdatesSchema,
+  GlobalAnnotationUpdatesSchema as GlobalAnnotationFieldsSchema,
+  PerCaseAnnotationUpdatesSchema as PerCaseAnnotationFieldsSchema,
   VariantCoordsSchema
 } from '../../types/ipc-schemas'
 
-export {
-  CaseVariantIdSchema,
-  GlobalAnnotationUpdatesSchema,
-  PerCaseAnnotationUpdatesSchema,
-  VariantCoordsSchema
+export { CaseVariantIdSchema, VariantCoordsSchema }
+
+/** #567: an ACMG class saved against its evidence needs a reason, on every backend. */
+function requireOverrideReason(value: unknown, ctx: z.RefinementCtx): void {
+  if (value !== null && typeof value === 'object' && overrideReasonMissing(value)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['acmg_evidence'],
+      message: 'An ACMG class that overrides the evidence needs a reason'
+    })
+  }
 }
+
+/** Global annotation updates (desktop IPC and web dispatcher). */
+export const GlobalAnnotationUpdatesSchema = z
+  .unknown()
+  .superRefine(requireOverrideReason)
+  .pipe(GlobalAnnotationFieldsSchema)
+
+/** Per-case annotation updates (desktop IPC and web dispatcher). */
+export const PerCaseAnnotationUpdatesSchema = z
+  .unknown()
+  .superRefine(requireOverrideReason)
+  .pipe(PerCaseAnnotationFieldsSchema)
+
+/** Genome build of a global annotation: part of its key (#577). */
+export const GenomeBuildArgSchema = z.string().min(1)
+
+/** Coordinates of a global annotation, which is keyed by build too (#577). */
+export const GlobalVariantCoordsSchema = VariantCoordsSchema.extend({
+  genome_build: GenomeBuildArgSchema
+})
 
 /** Variant keys of one `annotations:batchGet` call (desktop IPC and web dispatcher). */
 export const VariantKeysSchema = z.array(
@@ -55,7 +82,8 @@ export const AnnotationCoordsArgsSchema = z
     VariantCoordsSchema.shape.chr,
     VariantCoordsSchema.shape.pos,
     VariantCoordsSchema.shape.ref,
-    VariantCoordsSchema.shape.alt
+    VariantCoordsSchema.shape.alt,
+    GenomeBuildArgSchema
   ])
   .rest(z.unknown())
 
@@ -65,7 +93,8 @@ export const AnnotationGlobalUpsertArgsSchema = z
     VariantCoordsSchema.shape.pos,
     VariantCoordsSchema.shape.ref,
     VariantCoordsSchema.shape.alt,
-    GlobalAnnotationUpdatesInputSchema
+    GlobalAnnotationUpdatesInputSchema,
+    GenomeBuildArgSchema
   ])
   .rest(z.unknown())
 

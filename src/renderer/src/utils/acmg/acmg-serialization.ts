@@ -56,7 +56,8 @@ export function deserializeEvidence(json: string | null): AcmgEvidenceState | nu
       notes: parsed.notes ?? '',
       classification_date: parsed.classification_date ?? Date.now(),
       calculated_classification: parsed.calculated_classification ?? null,
-      is_override: parsed.is_override ?? false
+      is_override: parsed.is_override ?? false,
+      override_reason: typeof parsed.override_reason === 'string' ? parsed.override_reason : ''
     }
   } catch {
     // Return null for corrupt/invalid JSON — caller handles the null case

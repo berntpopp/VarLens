@@ -122,7 +122,7 @@ describe('useAnnotations characterization', () => {
       useDatabaseStore().currentPath = '/data/a.db'
       useSettingsStore().userName = options.userName ?? 'Dr Test'
     }
-    a = useAnnotations()
+    a = useAnnotations({ genomeBuild: 'GRCh38' })
   }
 
   function ipcCalls(): Record<string, unknown[][]> {

@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
 import { formatCellValue, csvEscape } from './export-renderer'
+import { ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
+import { caseRowAnnotations } from '../database/annotation-export-lookup'
 
 /** Column definition for export output. */
 export interface ExportColumn {
@@ -40,7 +42,8 @@ export const EXPORT_COLUMNS: ExportColumn[] = [
   { key: 'qual', header: 'Quality' },
   { key: 'clinvar', header: 'ClinVar' },
   { key: 'hpo_sim_score', header: 'HPO Similarity' },
-  { key: 'moi', header: 'MOI' }
+  { key: 'moi', header: 'MOI' },
+  ...ANNOTATION_EXPORT_COLUMNS
 ]
 
 /** Parameters for running an export pipeline. */
@@ -72,10 +75,12 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
 
   onProgress?.(0, 0)
 
+  const annotationsOf = caseRowAnnotations(db)
   let rowCount = 0
   function* csvLines(): Generator<string> {
     yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
-    for (const row of iterator) {
+    for (const variant of iterator) {
+      const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
       const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
       yield cells.join(',') + '\r\n'
       rowCount++
@@ -150,10 +155,12 @@ function runXlsxPipeline(params: ExportPipelineParams): ExportPipelineResult {
 
   const headers = EXPORT_COLUMNS.map((col) => col.header)
   const rows: (string | number | null)[][] = []
+  const annotationsOf = caseRowAnnotations(db)
 
   let i = 0
   for (const variant of iterator) {
-    rows.push(EXPORT_COLUMNS.map((col) => formatCellValue(col.key, variant[col.key])))
+    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
+    rows.push(EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key])))
     i++
 
     if (i % 1000 === 0) {

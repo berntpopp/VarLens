@@ -175,6 +175,8 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       '0032',
       '0033',
       '0034',
+      '0035',
+      '0036',
       '0037'
     ])
 

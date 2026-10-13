@@ -11,6 +11,21 @@
       @override="handleOverride"
     />
 
+    <!-- A class set against the evidence is saved only with a reason (#567) -->
+    <v-textarea
+      v-if="isOverride"
+      v-model="overrideReason"
+      label="Override reason (required)"
+      variant="outlined"
+      density="compact"
+      rows="1"
+      auto-grow
+      class="text-caption mb-3"
+      data-testid="acmg-override-reason"
+      :error-messages="overrideReasonMissing ? OVERRIDE_REASON_REQUIRED : []"
+      @update:model-value="emitChange"
+    />
+
     <!-- Pathogenic Criteria Section -->
     <AcmgEvidenceGrid
       title="Pathogenic criteria"
@@ -142,6 +157,7 @@
         color="primary"
         variant="flat"
         data-testid="acmg-apply"
+        :disabled="overrideReasonMissing"
         @click="applyPending"
       >
         Apply classification
@@ -228,6 +244,7 @@ const {
   notes,
   isOverride,
   overrideClassification,
+  overrideReason,
   classificationResult,
   effectiveClassification,
   toggleCode,
@@ -240,6 +257,10 @@ const {
   isCodeActive,
   isCodeSuggested
 } = useAcmgEvidence()
+
+const OVERRIDE_REASON_REQUIRED = 'A class that overrides the evidence needs a reason'
+/** The server refuses such a save too (shared/acmg/acmg-evidence.ts). */
+const overrideReasonMissing = computed(() => isOverride.value && overrideReason.value.trim() === '')
 
 /** All confirmed active codes (pathogenic + benign) for the strength adjustment row */
 const activeCodes = computed((): AcmgEvidenceCode[] => [
@@ -365,6 +386,10 @@ function emitChange(): void {
 async function applyPending(): Promise<void> {
   const draft = pending.value
   if (draft === null) return
+  if (overrideReasonMissing.value) {
+    appState?.showSnack(OVERRIDE_REASON_REQUIRED, 'error')
+    return
+  }
   if (props.save) {
     const variantData = props.variantData
     const saved = await props.save(draft)

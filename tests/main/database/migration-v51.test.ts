@@ -94,7 +94,7 @@ describe('migration v51: import integrity', () => {
     db.prepare = realPrepare
     expect(statements).toHaveLength(2)
     const params = [
-      ['chr1', 1, 'A', 'G'],
+      [1, 'chr1', 1, 'A', 'G'],
       [1, 1, 'chr1', 1, 'A', 'G', 1]
     ]
     statements.forEach((sql, i) => {

@@ -21,6 +21,7 @@ import { migrateCohortKeysetIndex } from './cohort-keyset-index'
 import { migrateSeverityRanks } from './severity-rank-migration'
 import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
 import { repairSummaryKeys } from './summary-key-repair'
+import { migrateAnnotationBuildKey } from './annotation-build-key-migration'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
@@ -81,6 +82,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 54
  * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
  * - 50: decode VEP's %3D / %3B escapes in stored cdna / aa_change (#547; mirrors PG 0033)
  * - 51: drop variant_frequency (#595) and idx_variants_coords (#564), recount variant_count (#560)
+ * - 52: variant_annotations keyed by genome build (#577; annotation-build-key-migration.ts)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
  * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
  *
@@ -2075,6 +2077,12 @@ export function runMigrations(db: Database.Database): void {
          WHERE counted.id = cases.id AND cases.variant_count IS NOT counted.n`)
     }
     db.exec('PRAGMA user_version = 51')
+  }
+
+  // v52 (#577, mirrors PG 0035): global annotations keyed by genome build (copy, never move).
+  if (currentVersion < 52) {
+    migrateAnnotationBuildKey(db)
+    db.exec('PRAGMA user_version = 52')
   }
 
   // v53 (#570, mirrors PG 0036): built-in presets named by clinical question. A

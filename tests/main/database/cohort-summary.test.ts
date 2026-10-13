@@ -74,8 +74,8 @@ describe('Annotation Triggers', () => {
 
   it('should set has_star=1 when global annotation is starred', () => {
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, created_at, updated_at)
-       VALUES ('1', 12345, 'A', 'G', 1, 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, created_at, updated_at)
+       VALUES ('1', 12345, 'A', 'G', 'GRCh38', 1, 0, 0)`
     ).run()
 
     const row = getSummaryRow('1', 12345, 'A', 'G')
@@ -84,8 +84,8 @@ describe('Annotation Triggers', () => {
 
   it('should revert has_star=0 when global star is deleted', () => {
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, created_at, updated_at)
-       VALUES ('1', 12345, 'A', 'G', 1, 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, created_at, updated_at)
+       VALUES ('1', 12345, 'A', 'G', 'GRCh38', 1, 0, 0)`
     ).run()
     db.prepare(
       `DELETE FROM variant_annotations WHERE chr = '1' AND pos = 12345 AND ref = 'A' AND alt = 'G'`
@@ -97,8 +97,8 @@ describe('Annotation Triggers', () => {
 
   it('should pick most pathogenic ACMG classification', () => {
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, acmg_classification, created_at, updated_at)
-       VALUES ('1', 12345, 'A', 'G', 'Likely benign', 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, acmg_classification, created_at, updated_at)
+       VALUES ('1', 12345, 'A', 'G', 'GRCh38', 'Likely benign', 0, 0)`
     ).run()
 
     expect(getSummaryRow('1', 12345, 'A', 'G')?.acmg_best).toBe('Likely benign')
@@ -120,8 +120,8 @@ describe('Annotation Triggers', () => {
 
   it('should set has_comment=1 when global comment is added', () => {
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, global_comment, created_at, updated_at)
-       VALUES ('1', 12345, 'A', 'G', 0, 'important finding', 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, global_comment, created_at, updated_at)
+       VALUES ('1', 12345, 'A', 'G', 'GRCh38', 0, 'important finding', 0, 0)`
     ).run()
 
     const row = getSummaryRow('1', 12345, 'A', 'G')
@@ -132,8 +132,8 @@ describe('Annotation Triggers', () => {
   it('should rank ACMG classifications: Pathogenic > LP > VUS > LB > Benign', () => {
     // Start with Benign
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, acmg_classification, created_at, updated_at)
-       VALUES ('1', 12345, 'A', 'G', 'Benign', 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, acmg_classification, created_at, updated_at)
+       VALUES ('1', 12345, 'A', 'G', 'GRCh38', 'Benign', 0, 0)`
     ).run()
     expect(getSummaryRow('1', 12345, 'A', 'G')?.acmg_best).toBe('Benign')
 
@@ -318,8 +318,8 @@ describe('Rebuild with annotation flags', () => {
 
     // Star one variant globally
     db.prepare(
-      `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, global_comment, created_at, updated_at)
-       VALUES ('1', 100, 'A', 'G', 1, 'test comment', 0, 0)`
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, global_comment, created_at, updated_at)
+       VALUES ('1', 100, 'A', 'G', 'GRCh38', 1, 'test comment', 0, 0)`
     ).run()
 
     summaryService.rebuild()

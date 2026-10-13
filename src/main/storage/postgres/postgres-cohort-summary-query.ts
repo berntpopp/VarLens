@@ -200,10 +200,16 @@ export function buildSummaryExportSql(
   orderBy: string,
   totalCases: number,
   buildTotalsJoin: string,
-  limitOffsetSql: string
+  limitOffsetSql: string,
+  extraColumns = ''
 ): string {
   return `SELECT
-      ${summarySelectList(totalCases)}
+      ${summarySelectList(totalCases)}${
+        extraColumns === ''
+          ? ''
+          : `,
+      ${extraColumns}`
+      }
     FROM ${qualifiedTable} cvs
     ${buildTotalsJoin}
     ${summaryWhereClause(whereParts)}

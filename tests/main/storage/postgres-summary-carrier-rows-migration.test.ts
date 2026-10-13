@@ -14,7 +14,6 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCaseLifecycleRepository } from '../../../src/main/storage/postgres/PostgresCaseLifecycleRepository'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
-import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -26,7 +25,6 @@ const BEFORE_0029 = POSTGRES_MIGRATIONS.filter((migration) => migration.version 
 describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebuilt', () => {
   let schema: string
   let pool: Pool
-  const summary = new PostgresCohortSummaryRepository()
 
   async function seedCase(name: string, gt: string): Promise<number> {
     const row = await pool.query<{ id: string }>(
@@ -41,17 +39,6 @@ describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebui
       [id, gt]
     )
     return id
-  }
-
-  async function rebuild(): Promise<void> {
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-      await summary.rebuild({ schema, client: client as never })
-      await client.query('COMMIT')
-    } finally {
-      client.release()
-    }
   }
 
   const rows = async (): Promise<unknown[]> =>
@@ -82,9 +69,13 @@ describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebui
   it('flags the summary stale; deleting the only carrier then removes the row', async () => {
     await seedCase('no-call', './.')
     const carrier = await seedCase('carrier', '0/1')
-    await rebuild()
     // The summary as the previous version wrote it: the no-call counted too.
-    await pool.query(`UPDATE "${schema}".cohort_variant_summary SET carrier_count = 2`)
+    // Written directly: today's rebuild needs the later migrations' columns (0035).
+    await pool.query(
+      `INSERT INTO "${schema}".cohort_variant_summary
+         (chr, pos, end_pos, ref, alt, variant_type, genome_build, carrier_count, het_count)
+       VALUES ('1', 5000, 9000, 'N', '<DEL>', 'sv', 'GRCh38', 2, 1)`
+    )
 
     const result = await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
     expect(result.applied).toEqual(

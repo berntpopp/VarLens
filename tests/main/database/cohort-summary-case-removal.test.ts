@@ -95,8 +95,8 @@ describe('incremental case removal equals a full cohort-summary rebuild', () => 
     }
     const insertAnnotation = db().prepare(
       `INSERT OR IGNORE INTO variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-       VALUES ('1', ?, 'A', 'G', ?, ?, ?, 0, 0)`
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+       VALUES ('1', ?, 'A', 'G', 'GRCh38', ?, ?, ?, 0, 0)`
     )
     for (let i = 0; i < 6; i++) {
       insertAnnotation.run(

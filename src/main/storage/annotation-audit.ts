@@ -1,4 +1,12 @@
+import { parseAcmgEvidence } from '../../shared/acmg/acmg-evidence'
 import type { AuditAppendParams } from './audit-log-types'
+
+/** The override reason saved with a class (#567), for its history entry. */
+function overrideReasonOf(evidence: unknown): { override_reason?: string } {
+  const reason =
+    typeof evidence === 'string' ? (parseAcmgEvidence(evidence)?.overrideReason ?? null) : null
+  return reason === null ? {} : { override_reason: reason }
+}
 
 export function globalAnnotationAuditEntries(
   coords: { chr: string; pos: number; ref: string; alt: string },
@@ -21,7 +29,10 @@ export function globalAnnotationAuditEntries(
         oldAnnotation === null
           ? null
           : JSON.stringify({ acmg_classification: oldAnnotation.acmg_classification }),
-      new_value: JSON.stringify({ acmg_classification: updates.acmg_classification }),
+      new_value: JSON.stringify({
+        acmg_classification: updates.acmg_classification,
+        ...overrideReasonOf(updates.acmg_evidence)
+      }),
       user_name: updates.user_name ?? null
     })
   }
