@@ -1,7 +1,8 @@
 /**
  * Cohort SV/CNV call context (#573, #539) on both backends: cohort rows carry
- * End / type / length, and each carrier its own call metrics. SQLite always
- * runs; PostgreSQL (same fixture, same expectations) with
+ * End / type / unsigned length as summary facts (sortable, filterable, with
+ * column metadata), and each carrier the metrics of ONE of its calls. SQLite
+ * always runs; PostgreSQL (same fixture, same expectations) with
  * VARLENS_RUN_POSTGRES_E2E=1 (`make pg-up`).
  */
 import { randomBytes } from 'node:crypto'
@@ -18,7 +19,13 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
-import type { CohortCarrier, CohortVariant } from '../../../src/shared/types/cohort'
+import type { ColumnFilterMeta } from '../../../src/shared/types/column-filters'
+import type {
+  CohortCarrier,
+  CohortSearchParams,
+  CohortVariant,
+  CohortVariantIdentity
+} from '../../../src/shared/types/cohort'
 
 const RUN_PG = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -42,23 +49,40 @@ interface Call {
   cnv?: { copy_number: number }
 }
 
-const DEL: Omit<Call, 'end_pos' | 'sv_length' | 'qual' | 'sv'> = {
+const DEL = {
   chr: 'chr1',
   pos: 1000,
   alt: '<DEL>',
   variant_type: 'sv',
   sv_type: 'DEL',
   filter: 'PASS',
-  caller: 'manta',
   gq: 30,
   dp: 40
-}
+} as const
 
-const CASES: Array<{ name: string; calls: Call[] }> = [
+const CASES: Array<{ name: string; ready: boolean; calls: Call[] }> = [
   {
     name: 'sv-a',
+    ready: true,
     calls: [
-      { ...DEL, end_pos: 5000, sv_length: -4000, qual: 50, sv: { support: 12, vaf: 0.4 } },
+      // Two calls of one case at one site (two appended SV files): the
+      // carrier shows the one with the highest end, whole.
+      {
+        ...DEL,
+        end_pos: 3000,
+        sv_length: -2000,
+        qual: 99,
+        caller: 'delly',
+        sv: { support: 1, vaf: 0.9 }
+      },
+      {
+        ...DEL,
+        end_pos: 5000,
+        sv_length: -4000,
+        qual: 50,
+        caller: 'manta',
+        sv: { support: 12, vaf: 0.4 }
+      },
       {
         chr: 'chr2',
         pos: 2000,
@@ -73,6 +97,21 @@ const CASES: Array<{ name: string; calls: Call[] }> = [
         gq: null,
         dp: null,
         cnv: { copy_number: 3 }
+      },
+      // An insertion without END (SVTYPE=INS;SVLEN=300): VcfMapper leaves end_pos NULL.
+      {
+        chr: 'chr4',
+        pos: 400,
+        alt: '<INS>',
+        variant_type: 'sv',
+        end_pos: null,
+        sv_type: 'INS',
+        sv_length: 300,
+        qual: 20,
+        filter: 'PASS',
+        caller: 'manta',
+        gq: null,
+        dp: null
       },
       {
         chr: 'chr3',
@@ -92,7 +131,23 @@ const CASES: Array<{ name: string; calls: Call[] }> = [
   },
   {
     name: 'sv-b',
-    calls: [{ ...DEL, end_pos: 4500, sv_length: -3500, qual: 20, sv: { support: 5, vaf: 0.2 } }]
+    ready: true,
+    calls: [
+      {
+        ...DEL,
+        end_pos: 4500,
+        sv_length: -3500,
+        qual: 20,
+        caller: 'manta',
+        sv: { support: 5, vaf: 0.2 }
+      }
+    ]
+  },
+  {
+    // Still importing: neither its call nor its carrier row may show.
+    name: 'sv-importing',
+    ready: false,
+    calls: [{ ...DEL, end_pos: 9000, sv_length: -8000, qual: 1, caller: 'x' }]
   }
 ]
 
@@ -119,55 +174,100 @@ function variantValues(caseId: number, c: Call): unknown[] {
   ]
 }
 
-const pick = (rows: CohortVariant[], pos: number) => {
+const callOf = (rows: CohortVariant[], pos: number) => {
   const row = rows.find((r) => r.pos === pos)
   return { end_pos: row?.end_pos, sv_type: row?.sv_type, sv_length: row?.sv_length }
 }
 
 // Case ids differ per backend; toEqual ignores the undefined key.
-const carrierMetrics = (carriers: CohortCarrier[]) =>
+const withoutIds = (carriers: CohortCarrier[]) =>
   carriers.map((carrier) => ({ ...carrier, case_id: undefined }))
 
-const EXPECTED_DEL_ROW = { end_pos: 5000, sv_type: 'DEL', sv_length: 4000 }
-const EXPECTED_DEL_CARRIERS = [
-  {
-    case_name: 'sv-a',
-    gt_num: '0/1',
-    qual: 50,
-    gq: 30,
-    dp: 40,
-    filter: 'PASS',
-    caller: 'manta',
-    end_pos: 5000,
-    sv_length: 4000,
-    sv_support: 12,
-    sv_vaf: 0.4,
-    copy_number: null
-  },
-  {
-    case_name: 'sv-b',
-    gt_num: '0/1',
-    qual: 20,
-    gq: 30,
-    dp: 40,
-    filter: 'PASS',
-    caller: 'manta',
-    end_pos: 4500,
-    sv_length: 3500,
-    sv_support: 5,
-    sv_vaf: 0.2,
-    copy_number: null
-  }
-]
-const DEL_IDENTITY = {
-  chr: 'chr1',
-  pos: 1000,
+const identity = (chr: string, pos: number, alt: string, type: string): CohortVariantIdentity => ({
+  chr,
+  pos,
   ref: 'N',
-  alt: '<DEL>',
-  variant_type: 'sv',
+  alt,
+  variant_type: type,
   genome_build: 'GRCh38'
+})
+
+/** One backend, as the assertions see it. */
+interface Backend {
+  rows(params: CohortSearchParams): Promise<CohortVariant[]>
+  carriers(variant: CohortVariantIdentity): Promise<CohortCarrier[]>
+  meta(): Promise<ColumnFilterMeta[]>
 }
-const CNV_IDENTITY = { ...DEL_IDENTITY, chr: 'chr2', pos: 2000, alt: '<DUP>', variant_type: 'cnv' }
+
+function cohortCallAssertions(backend: () => Backend): void {
+  const positions = async (params: CohortSearchParams): Promise<number[]> =>
+    (await backend().rows({ variant_type: 'sv', ...params })).map((r) => r.pos)
+
+  it('rows carry End, SV type and the unsigned length of the longest ready call', async () => {
+    const sv = await backend().rows({ variant_type: 'sv' })
+    // sv-importing's 9000 / 8000 must not count.
+    expect(callOf(sv, 1000)).toEqual({ end_pos: 5000, sv_type: 'DEL', sv_length: 4000 })
+    expect(callOf(sv, 400)).toEqual({ end_pos: null, sv_type: 'INS', sv_length: 300 })
+    const cnv = await backend().rows({ variant_type: 'cnv' })
+    expect(callOf(cnv, 2000)).toEqual({ end_pos: 9000, sv_type: 'DUP', sv_length: 7000 })
+    const snv = await backend().rows({ variant_type: 'snv' })
+    expect(callOf(snv, 300)).toEqual({ end_pos: null, sv_type: null, sv_length: null })
+  })
+
+  it('sorts and filters the cohort by End, type and length', async () => {
+    expect(await positions({ sort_by: 'sv_length', sort_order: 'asc' })).toEqual([400, 1000])
+    expect(await positions({ sort_by: 'sv_length', sort_order: 'desc' })).toEqual([1000, 400])
+    expect(await positions({ sort_by: 'sv_type', sort_order: 'desc' })).toEqual([400, 1000])
+    // NULL ends sort last in both directions.
+    expect(await positions({ sort_by: 'end_pos', sort_order: 'asc' })).toEqual([1000, 400])
+    const longCalls = { sv_length: { operator: '>=' as const, value: 1000 } }
+    expect(await positions({ column_filters: longCalls })).toEqual([1000])
+    const insertions = { sv_type: { operator: '=' as const, value: 'INS' } }
+    expect(await positions({ column_filters: insertions })).toEqual([400])
+  })
+
+  it('reports column metadata for End, type and length', async () => {
+    const meta = new Map((await backend().meta()).map((m) => [m.key, m]))
+    expect(meta.get('sv_length')).toMatchObject({ dataType: 'numeric', min: 300, max: 7000 })
+    expect(meta.get('end_pos')).toMatchObject({ dataType: 'numeric', min: 5000, max: 9000 })
+    expect(meta.get('sv_type')).toMatchObject({ dataType: 'text', distinctCount: 3 })
+    expect([...(meta.get('sv_type')?.distinctValues ?? [])].sort()).toEqual(['DEL', 'DUP', 'INS'])
+  })
+
+  it("each ready carrier shows one call's metrics, the call with the highest end", async () => {
+    const carriers = await backend().carriers(identity('chr1', 1000, '<DEL>', 'sv'))
+    const common = { gt_num: '0/1', gq: 30, dp: 40, filter: 'PASS', copy_number: null }
+    expect(withoutIds(carriers)).toEqual([
+      {
+        ...common,
+        case_name: 'sv-a',
+        qual: 50,
+        caller: 'manta',
+        end_pos: 5000,
+        sv_length: 4000,
+        sv_support: 12,
+        sv_vaf: 0.4
+      },
+      {
+        ...common,
+        case_name: 'sv-b',
+        qual: 20,
+        caller: 'manta',
+        end_pos: 4500,
+        sv_length: 3500,
+        sv_support: 5,
+        sv_vaf: 0.2
+      }
+    ])
+  })
+
+  it('reports a call without END and a CNV call', async () => {
+    const [insertion] = await backend().carriers(identity('chr4', 400, '<INS>', 'sv'))
+    expect(insertion).toMatchObject({ end_pos: null, sv_length: 300, sv_support: null })
+    const [cnv] = await backend().carriers(identity('chr2', 2000, '<DUP>', 'cnv'))
+    expect(cnv).toMatchObject({ copy_number: 3, sv_support: null, end_pos: 9000 })
+  })
+}
 
 describe('cohort SV/CNV call context — SQLite', () => {
   let db: Database.Database
@@ -184,9 +284,10 @@ describe('cohort SV/CNV call context — SQLite', () => {
       const caseId = Number(
         db
           .prepare(
-            "INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build) VALUES (?, '/t', 0, ?, 0, 'GRCh38')"
+            "INSERT INTO cases (name, file_path, file_size, variant_count, created_at, genome_build, import_status) VALUES (?, '/t', 0, ?, 0, 'GRCh38', ?)"
           )
-          .run(fixture.name, fixture.calls.length).lastInsertRowid
+          .run(fixture.name, fixture.calls.length, fixture.ready ? 'ready' : 'importing')
+          .lastInsertRowid
       )
       for (const call of fixture.calls) {
         const id = db
@@ -216,22 +317,11 @@ describe('cohort SV/CNV call context — SQLite', () => {
     db.close()
   })
 
-  it('cohort rows carry End, SV type and unsigned length of the call at that End', () => {
-    const sv = cohort.getCohortVariants({ variant_type: 'sv' }).data
-    expect(pick(sv, 1000)).toEqual(EXPECTED_DEL_ROW)
-    const cnv = cohort.getCohortVariants({ variant_type: 'cnv' }).data
-    expect(pick(cnv, 2000)).toEqual({ end_pos: 9000, sv_type: 'DUP', sv_length: 7000 })
-  })
-
-  it('SNV rows have no call context', () => {
-    const snv = cohort.getCohortVariants({ variant_type: 'snv' }).data
-    expect(pick(snv, 300)).toEqual({ end_pos: null, sv_type: null, sv_length: null })
-  })
-
-  it('each carrier reports its own call metrics', () => {
-    expect(carrierMetrics(cohort.getCarriers(DEL_IDENTITY))).toEqual(EXPECTED_DEL_CARRIERS)
-    expect(cohort.getCarriers(CNV_IDENTITY)[0]).toMatchObject({ copy_number: 3, sv_support: null })
-  })
+  cohortCallAssertions(() => ({
+    rows: async (params) => cohort.getCohortVariants({ limit: 50, offset: 0, ...params }).data,
+    carriers: async (variant) => cohort.getCarriers(variant),
+    meta: async () => cohort.getColumnMeta()
+  }))
 })
 
 describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () => {
@@ -251,15 +341,15 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
     for (const fixture of CASES) {
       const caseId = (
         await pool.query<{ id: number }>(
-          `INSERT INTO "${schema}".cases (name, file_path, file_size, created_at, genome_build)
-             VALUES ($1, '/t', 0, 0, 'GRCh38') RETURNING id`,
-          [fixture.name]
+          `INSERT INTO "${schema}".cases_all (name, file_path, file_size, created_at, genome_build, import_status)
+             VALUES ($1, '/t', 0, 0, 'GRCh38', $2) RETURNING id`,
+          [fixture.name, fixture.ready ? 'ready' : 'importing']
         )
       ).rows[0].id
       for (const call of fixture.calls) {
         const id = (
           await pool.query<{ id: number }>(
-            `INSERT INTO "${schema}".variants (${INSERT_VARIANT_COLUMNS}) VALUES (${placeholders}) RETURNING id`,
+            `INSERT INTO "${schema}".variants_all (${INSERT_VARIANT_COLUMNS}) VALUES (${placeholders}) RETURNING id`,
             variantValues(caseId, call)
           )
         ).rows[0].id
@@ -276,6 +366,7 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
           )
         }
       }
+      if (!fixture.ready) continue
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -294,20 +385,9 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
     await pool.end()
   }, 120_000)
 
-  it('cohort rows carry the same End, SV type and length as SQLite', async () => {
-    const sv = (await repo.queryVariants({ variant_type: 'sv', limit: 50, offset: 0 })).data
-    expect(pick(sv, 1000)).toEqual(EXPECTED_DEL_ROW)
-    const cnv = (await repo.queryVariants({ variant_type: 'cnv', limit: 50, offset: 0 })).data
-    expect(pick(cnv, 2000)).toEqual({ end_pos: 9000, sv_type: 'DUP', sv_length: 7000 })
-    const snv = (await repo.queryVariants({ variant_type: 'snv', limit: 50, offset: 0 })).data
-    expect(pick(snv, 300)).toEqual({ end_pos: null, sv_type: null, sv_length: null })
-  }, 60_000)
-
-  it('carriers report the same call metrics as SQLite', async () => {
-    expect(carrierMetrics(await repo.getCarriers(DEL_IDENTITY))).toEqual(EXPECTED_DEL_CARRIERS)
-    expect((await repo.getCarriers(CNV_IDENTITY))[0]).toMatchObject({
-      copy_number: 3,
-      sv_support: null
-    })
-  }, 60_000)
+  cohortCallAssertions(() => ({
+    rows: async (params) => (await repo.queryVariants({ limit: 50, offset: 0, ...params })).data,
+    carriers: (variant) => repo.getCarriers(variant),
+    meta: () => repo.getColumnMeta()
+  }))
 })

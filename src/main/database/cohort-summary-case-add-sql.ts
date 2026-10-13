@@ -62,6 +62,8 @@ const REPRESENTATIVE_COLUMN_TYPES: Record<string, string> = {
   transcript: 'TEXT',
   omim_mim_number: 'TEXT',
   end_pos: 'INTEGER',
+  sv_length: 'INTEGER',
+  sv_type: 'TEXT',
   impact_rank: 'INTEGER NOT NULL',
   clinvar_rank: 'INTEGER NOT NULL'
 }

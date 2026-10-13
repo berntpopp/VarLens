@@ -149,6 +149,7 @@ export class PostgresCohortSummaryRepository {
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
          gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
+         sv_length, sv_type,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
       ${summaryRowsCte(tbl, 'v.chr = $1 AND v.pos >= $2 AND v.pos < $3')},
@@ -157,6 +158,7 @@ export class PostgresCohortSummaryRepository {
         a.chr, a.pos, a.end_pos, a.ref, a.alt, a.variant_type, a.genome_build,
         a.gene_symbol, a.cdna, a.aa_change, a.consequence, a.func, a.clinvar,
         a.gnomad_af, a.cadd, a.transcript, a.omim_mim_number, a.impact_rank, a.clinvar_rank,
+        a.sv_length, a.sv_type,
         a.carrier_count, a.het_count, a.hom_count,
         a.chr || ':' || a.pos || ':' || a.ref || ':' || a.alt AS variant_key,
         -- Pass-9 #8: derive flag columns from current annotation tables.
@@ -257,6 +259,7 @@ export class PostgresCohortSummaryRepository {
         (chr, pos, end_pos, ref, alt, variant_type, genome_build,
          gene_symbol, cdna, aa_change, consequence, func, clinvar,
          gnomad_af, cadd, transcript, omim_mim_number, impact_rank, clinvar_rank,
+         sv_length, sv_type,
          carrier_count, het_count, hom_count, variant_key,
          has_star, has_comment, acmg_best, cohort_frequency)
       WITH ${annotationFlagCtes(tbl)}
@@ -265,6 +268,7 @@ export class PostgresCohortSummaryRepository {
         pc.gene_symbol, pc.cdna, pc.aa_change, pc.consequence, pc.func, pc.clinvar,
         pc.gnomad_af, pc.cadd, pc.transcript, pc.omim_mim_number,
         pc.impact_rank, pc.clinvar_rank,
+        pc.sv_length, pc.sv_type,
         pc.carrier_delta, pc.het_delta, pc.hom_delta,
         pc.chr || ':' || pc.pos || ':' || pc.ref || ':' || pc.alt AS variant_key,
         -- Pass-9 #8: brand-new rows derive flags from current annotation tables.

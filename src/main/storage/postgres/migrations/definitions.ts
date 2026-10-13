@@ -174,6 +174,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0034',
     name: 'import_integrity',
     fileName: '0034_import_integrity.sql'
+  },
+  {
+    version: '0037',
+    name: 'summary_sv_facts',
+    fileName: '0037_summary_sv_facts.sql'
   }
 ]
 

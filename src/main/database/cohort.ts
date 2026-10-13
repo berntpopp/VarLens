@@ -31,8 +31,7 @@ import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
-import { resolvedGtSql } from '../../shared/sql/genotype-dosage'
-import { carrierCallSql, cohortCallColumnsSql } from '../../shared/sql/cohort-call-sql'
+import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
@@ -49,11 +48,12 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr', pos: 'pos', gene_symbol: 'gene_symbol', cdna: 'cdna', aa_change: 'aa_change',
   carrier_count: 'carrier_count', cohort_frequency: 'cohort_frequency', het_count: 'het_count',
   hom_count: 'hom_count', consequence: 'consequence', func: 'func', clinvar: 'clinvar',
-  gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript'
+  gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript', end_pos: 'end_pos',
+  sv_type: 'sv_type', sv_length: 'sv_length'
 }
 
 // prettier-ignore
-const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred'])
+const NUMERIC_COLUMNS = new Set(['pos', 'carrier_count', 'cohort_frequency', 'het_count', 'hom_count', 'gnomad_af', 'cadd_phred', 'end_pos', 'sv_length'])
 
 /**
  * Rows of `cvs` overlapping any region of one JSON parameter, i.e.
@@ -291,7 +291,9 @@ export class CohortService {
         cvs.cadd AS cadd_phred,
         cvs.transcript,
         cvs.omim_mim_number AS omim_id,
-        ${cohortCallColumnsSql()}${
+        cvs.end_pos,
+        cvs.sv_type,
+        cvs.sv_length${
           keyset !== null
             ? `,
         ${SQLITE_KEYSET_EXTRA_COLUMNS}`
@@ -432,23 +434,7 @@ export class CohortService {
    * genome build, so both are part of the lookup (#503).
    */
   getCarriers(variant: CohortVariantIdentity): CohortCarrier[] {
-    const sql = `
-      SELECT
-        v.case_id,
-        c.name as case_name,
-        ${resolvedGtSql('v.gt_num', 'sqlite')} as gt_num,
-        ${carrierCallSql().columns}
-      FROM variants v
-      JOIN cases c ON v.case_id = c.id
-      ${carrierCallSql().joins}
-      WHERE c.import_status = 'ready' AND v.chr = ? AND v.pos = ? AND v.ref = ? AND v.alt = ?
-        AND v.variant_type = ? AND c.genome_build = ?
-      GROUP BY v.case_id, c.name
-      ORDER BY c.name
-    `
-
-    const stmt = this.getStatement(sql)
-    return stmt.all(
+    return this.getStatement(cohortCarriersSql('sqlite')).all(
       variant.chr,
       variant.pos,
       variant.ref,

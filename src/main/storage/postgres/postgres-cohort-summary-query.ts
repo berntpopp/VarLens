@@ -30,7 +30,6 @@ import {
   type CarrierFrequencyRelations
 } from '../../../shared/sql/carrier-frequency'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
-import { cohortCallColumnsSql } from '../../../shared/sql/cohort-call-sql'
 
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
@@ -163,7 +162,10 @@ function summarySelectList(totalCases: number): string {
       cvs.gnomad_af,
       cvs.cadd AS cadd_phred,
       cvs.transcript,
-      cvs.omim_mim_number AS omim_id`
+      cvs.omim_mim_number AS omim_id,
+      cvs.end_pos,
+      cvs.sv_type,
+      cvs.sv_length`
 }
 
 /** Page SQL for the materialised cohort_variant_summary read. */
@@ -174,12 +176,10 @@ export function buildSummaryPageSql(
   totalCases: number,
   limitParamIndex: number,
   offsetParamIndex: number,
-  buildTotalsJoin: string,
-  tbl: (table: string) => string
+  buildTotalsJoin: string
 ): string {
   return `SELECT
       ${summarySelectList(totalCases)},
-      ${cohortCallColumnsSql(tbl)},
       cvs.variant_type AS _keyset_variant_type,
       cvs.genome_build AS _keyset_genome_build
     FROM ${qualifiedTable} cvs
@@ -239,7 +239,10 @@ const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   clinvar: 'cvs.clinvar',
   gnomad_af: 'cvs.gnomad_af',
   cadd_phred: 'cvs.cadd',
-  transcript: 'cvs.transcript'
+  transcript: 'cvs.transcript',
+  end_pos: 'cvs.end_pos',
+  sv_type: 'cvs.sv_type',
+  sv_length: 'cvs.sv_length'
 }
 
 /**
@@ -262,7 +265,9 @@ const NUMERIC_COLUMN_FILTERS = new Set<string>([
   'carrier_count',
   'cohort_frequency',
   'het_count',
-  'hom_count'
+  'hom_count',
+  'end_pos',
+  'sv_length'
 ])
 
 /** Extension-table column keys (sv.*, cnv.*, str.*) from the variant registry. */

@@ -709,7 +709,10 @@ describe('PostgresCohortRepository', () => {
       'clinvar',
       'gnomad_af',
       'cadd_phred',
-      'transcript'
+      'transcript',
+      'end_pos',
+      'sv_type',
+      'sv_length'
     ]
     // The probe proves `pos` and `transcript` high-cardinality; the rest are
     // counted exactly, where `gene_symbol` turns out to be above the limit too.
@@ -724,7 +727,9 @@ describe('PostgresCohortRepository', () => {
         'het_count',
         'hom_count',
         'gnomad_af',
-        'cadd_phred'
+        'cadd_phred',
+        'end_pos',
+        'sv_length'
       ].flatMap((key) => [
         [`min_${key}`, '1'],
         [`max_${key}`, '10']

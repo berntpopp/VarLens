@@ -52,8 +52,8 @@ describe('useCohortColumns SV/CNV call columns (#573)', () => {
     for (const key of ['end_pos', 'sv_type', 'sv_length']) {
       const cohort = columns.find((c) => c.key === key)!
       const caseColumn = caseHeaders.find((c) => c.key === key)!
-      expect(cohort.title).toBe(caseColumn.title)
-      expect(cohort.value).toBe(caseColumn.value)
+      expect(cohort).toBe(caseColumn)
+      expect(cohort.sortable).toBe(true)
     }
     const length = columns.find((c) => c.key === 'sv_length')!
     expect((length.value as (item: unknown) => string)({ sv_length: -12_345 })).toBe('12.35 kb')
