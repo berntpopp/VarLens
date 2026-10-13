@@ -348,7 +348,16 @@ describe('summary SQL with read-time cohort frequency', () => {
   const JOIN = summaryBuildTotalsJoin((table) => `"s"."${table}"`)
 
   it('never reads the stored cohort_frequency column', () => {
-    const page = buildSummaryPageSql(TABLE, [], 'ORDER BY cvs.pos', TOTAL_CASES, 1, 2, JOIN)
+    const page = buildSummaryPageSql(
+      TABLE,
+      [],
+      'ORDER BY cvs.pos',
+      TOTAL_CASES,
+      1,
+      2,
+      JOIN,
+      (t) => `"s"."${t}"`
+    )
     expect(page).toContain(`${FREQUENCY} AS cohort_frequency`)
     expect(page).not.toContain('cvs.cohort_frequency')
   })

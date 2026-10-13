@@ -5,6 +5,8 @@ import {
   SNV_ONLY_COHORT_COLUMNS,
   useCohortColumns
 } from '../../../../src/renderer/src/components/cohort/useCohortColumns'
+import { svHeaders } from '../../../../src/renderer/src/components/variant-table/sv-columns'
+import { cnvHeaders } from '../../../../src/renderer/src/components/variant-table/cnv-columns'
 
 vi.mock('../../../../src/renderer/src/composables/useResponsiveLayout', () => ({
   useAutoHiddenColumns: () => ({ isVisible: () => true })
@@ -26,5 +28,39 @@ describe('useCohortColumns per variant type', () => {
     const { orderedColumns } = useCohortColumns(prefs, () => 'snv')
     const keys = orderedColumns.value.map((c) => c.key)
     for (const key of SNV_ONLY_COHORT_COLUMNS) expect(keys).toContain(key)
+  })
+})
+
+describe('useCohortColumns SV/CNV call columns (#573)', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  const prefs = ref({ order: [] as string[], visibility: {} as Record<string, boolean> })
+  const keysOf = (type: string): string[] =>
+    useCohortColumns(prefs, () => type).orderedColumns.value.map((c) => c.key)
+
+  it.each([
+    ['sv', svHeaders],
+    ['cnv', cnvHeaders]
+  ])('shows the case %s End/Type/Length columns right after Position', (type, caseHeaders) => {
+    const columns = useCohortColumns(prefs, () => type).orderedColumns.value
+    const keys = columns.map((c) => c.key)
+    expect(keys.slice(keys.indexOf('pos') + 1, keys.indexOf('pos') + 4)).toEqual([
+      'end_pos',
+      'sv_type',
+      'sv_length'
+    ])
+    for (const key of ['end_pos', 'sv_type', 'sv_length']) {
+      const cohort = columns.find((c) => c.key === key)!
+      const caseColumn = caseHeaders.find((c) => c.key === key)!
+      expect(cohort.title).toBe(caseColumn.title)
+      expect(cohort.value).toBe(caseColumn.value)
+    }
+    const length = columns.find((c) => c.key === 'sv_length')!
+    expect((length.value as (item: unknown) => string)({ sv_length: -12_345 })).toBe('12.35 kb')
+  })
+
+  it.each(['snv', 'str'])('has no call columns on the %s tab', (type) => {
+    const keys = keysOf(type)
+    for (const key of ['end_pos', 'sv_type', 'sv_length']) expect(keys).not.toContain(key)
   })
 })

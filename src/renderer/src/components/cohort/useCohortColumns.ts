@@ -5,6 +5,8 @@ import { withFixedWidth } from '../variant-table/column-widths'
 import { useAutoHiddenColumns } from '../../composables/useResponsiveLayout'
 import { useExternalLinksStore } from '../../stores/externalLinksStore'
 import { CARRIER_FREQUENCY_COPY } from '../../config/uiCopyConfig'
+import { svHeaders } from '../variant-table/sv-columns'
+import { cnvHeaders } from '../variant-table/cnv-columns'
 
 /**
  * Static base column definitions for the cohort table. Same clinical-first
@@ -40,6 +42,30 @@ export const SNV_ONLY_COHORT_COLUMNS: readonly string[] = [
   'aa_change'
 ]
 
+const CALL_COLUMN_KEYS: readonly string[] = ['end_pos', 'sv_type', 'sv_length']
+const CALL_COLUMN_SOURCES: Readonly<Record<string, ColumnDef[]>> = {
+  sv: svHeaders,
+  cnv: cnvHeaders
+}
+
+/**
+ * The case SV/CNV table's End/Type/Length columns (same titles and formatters,
+ * #573). Not sortable: the cohort summary sorts and filters on stored columns.
+ */
+function callColumns(variantType: string): ColumnDef[] {
+  return (CALL_COLUMN_SOURCES[variantType] ?? [])
+    .filter((h) => CALL_COLUMN_KEYS.includes(h.key))
+    .map((h) => ({ ...h, sortable: false }))
+}
+
+/** Base columns for a variant-type tab, with the call columns after Position. */
+function typeHeaders(variantType: string): ColumnDef[] {
+  if (variantType === 'snv') return baseHeaders
+  const base = baseHeaders.filter((h) => !SNV_ONLY_COHORT_COLUMNS.includes(h.key))
+  const afterPos = base.findIndex((h) => h.key === 'pos') + 1
+  return [...base.slice(0, afterPos), ...callColumns(variantType), ...base.slice(afterPos)]
+}
+
 /**
  * Composable that computes dynamic, ordered, and visible column sets for the cohort table.
  * Columns without an explicit visibility preference follow the responsive
@@ -53,9 +79,7 @@ export function useCohortColumns(
 
   /** Base columns plus the merged Links column (parity with the case table). */
   const headers = computed<ColumnDef[]>(() => [
-    ...(toValue(variantType) === 'snv'
-      ? baseHeaders
-      : baseHeaders.filter((h) => !SNV_ONLY_COHORT_COLUMNS.includes(h.key))),
+    ...typeHeaders(toValue(variantType)),
     ...linksColumn(linksStore.virtualLinks.length)
   ])
 
