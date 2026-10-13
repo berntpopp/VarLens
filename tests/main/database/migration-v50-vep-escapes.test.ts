@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 
 describe('migration v50: decode VEP HGVS escapes', () => {
@@ -48,6 +48,6 @@ describe('migration v50: decode VEP HGVS escapes', () => {
       cdna: 'c.1;2del',
       aa_change: 'p.Pro814='
     })
-    expect(db.pragma('user_version', { simple: true })).toBe(50)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })

@@ -30,7 +30,6 @@ export interface BatchFingerprint {
   /** sha256 over key + the read-time cohort frequency (what cohort readers select). */
   cohortFrequencyHash: string
   geneBurdenHash: string
-  variantFrequencyHash: string
 }
 
 const fileSize = (path: string): number => (existsSync(path) ? statSync(path).size : 0)
@@ -60,7 +59,6 @@ export function fingerprintDatabase(dbPath: string): BatchFingerprint {
       'variants',
       'cohort_variant_summary',
       'gene_burden_summary',
-      'variant_frequency',
       'variants_fts'
     ]
     const stale = db
@@ -89,10 +87,6 @@ export function fingerprintDatabase(dbPath: string): BatchFingerprint {
         db,
         `SELECT gene_symbol, genome_build, variant_count, unique_variant_count, affected_case_count
          FROM gene_burden_summary ORDER BY gene_symbol, genome_build`
-      ),
-      variantFrequencyHash: hashRows(
-        db,
-        'SELECT chr, pos, ref, alt, case_count FROM variant_frequency ORDER BY chr, pos, ref, alt'
       )
     }
   } finally {
@@ -265,7 +259,6 @@ export function renderMarkdown(report: BatchReport): string {
     `- carrier/het/hom sha256: ${fingerprint.carrierHash}`,
     `- cohort_frequency sha256: ${fingerprint.cohortFrequencyHash}`,
     `- gene_burden_summary sha256: ${fingerprint.geneBurdenHash}`,
-    `- variant_frequency sha256: ${fingerprint.variantFrequencyHash}`,
     '',
     '## Statement diagnostics (replayed on a copy of the final database)',
     '',

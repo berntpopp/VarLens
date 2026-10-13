@@ -36,7 +36,6 @@ describe('cohort carrier frequency — case and cohort agree', () => {
     service.variants.insertVariantsBatch(svOnly38, [v({ ...SV, gt_num: '0/1' })])
     // Same coordinate on the other build: a different locus.
     service.variants.insertVariantsBatch(c37, [v({ ...SNV, gt_num: '0/1' })])
-    for (const id of [a38, b38, svOnly38, c37]) service.variants.updateFrequencies(id)
     service.cohortSummary.rebuild()
     service.cohort.invalidateColumnMetaCache()
   })

@@ -4,6 +4,10 @@
  * The import worker drops these indexes before streaming inserts and
  * recreates them once at the end (see import-worker.ts). Re-exported from
  * import-pipeline.ts for existing callers.
+ *
+ * idx_variants_chr_pos_ref_alt, the one coordinate index (v51 dropped its
+ * twin idx_variants_coords, #564), stays: annotation and cohort-summary
+ * lookups use it while a session runs.
  */
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 
@@ -13,7 +17,6 @@ export const DROP_INDEXES = `
   DROP INDEX IF EXISTS idx_variants_gene;
   DROP INDEX IF EXISTS idx_variants_pos;
   DROP INDEX IF EXISTS idx_variants_filters;
-  DROP INDEX IF EXISTS idx_variants_chr_pos_ref_alt;
   DROP INDEX IF EXISTS idx_vt_selected;
   DROP INDEX IF EXISTS idx_vt_transcript;
   DROP INDEX IF EXISTS idx_variants_filter_covering;
@@ -26,7 +29,6 @@ export const RECREATE_INDEXES = `
   CREATE INDEX IF NOT EXISTS idx_variants_gene ON variants(gene_symbol);
   CREATE INDEX IF NOT EXISTS idx_variants_pos ON variants(chr, pos);
   CREATE INDEX IF NOT EXISTS idx_variants_filters ON variants(gnomad_af, cadd);
-  CREATE INDEX IF NOT EXISTS idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
   CREATE INDEX IF NOT EXISTS idx_vt_selected ON variant_transcripts(variant_id, is_selected);
   CREATE INDEX IF NOT EXISTS idx_vt_transcript ON variant_transcripts(transcript_id);
   CREATE INDEX IF NOT EXISTS idx_variants_filter_covering ON variants(case_id, consequence, func, clinvar);

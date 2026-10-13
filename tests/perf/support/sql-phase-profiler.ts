@@ -38,8 +38,6 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^INSERT INTO variants \(/i, 'insert_variants'],
   [/^INSERT INTO variant_(sv|cnv|str) /i, 'insert_extension'],
   [/^INSERT INTO variant_transcripts/i, 'insert_transcripts'],
-  [/^INSERT INTO variant_frequency/i, 'variant_frequency_upsert'],
-  [/^UPDATE variant_frequency/i, 'variant_frequency_decrement'],
   [/^COMMIT$/i, 'commit'],
   [/^(BEGIN|SAVEPOINT|RELEASE|ROLLBACK)/i, 'txn_control'],
   [/VALUES\s*\('rebuild'\)/i, 'fts_rebuild'],

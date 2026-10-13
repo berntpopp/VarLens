@@ -1,15 +1,19 @@
 // @vitest-environment node
 /**
  * Unrecognised ClinVar values on the paths that had no direct test (#469):
- * the multi-file VCF import (main-thread append and the PostgreSQL executor
+ * the multi-file VCF import (the worker append and the PostgreSQL executor
  * hand-over), the main-thread ImportService and the session batch loop.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseService } from '../../../../src/main/database/DatabaseService'
-import { importAdditionalFileToCase } from '../../../../src/main/ipc/handlers/import-logic-append'
+import type { WorkerMessage } from '../../../../src/shared/types/import-worker'
+import {
+  openSummarySessionHarness,
+  variantAt,
+  type SummarySessionHarness
+} from '../../workers/support/summary-session-harness'
 import { startMultiFileImport } from '../../../../src/main/ipc/handlers/import-logic'
 import { mergeUnrankedClinvar } from '../../../../src/main/import/unranked-clinvar'
 import { runSessionBatchImport } from '../../../../src/main/ipc/handlers/batch-import-session'
@@ -24,53 +28,53 @@ const vcf = (clnsig: string[]): string =>
     ...clnsig.map((value, i) => `chr1\t${100 + i}\t.\tA\tG\t99\tPASS\tCLNSIG=${value}\tGT\t0/1`)
   ].join('\n') + '\n'
 
-describe('unrecognised ClinVar values: SQLite main-thread paths', () => {
-  let tmpDir: string
-  let svc: DatabaseService
+describe('unrecognised ClinVar values: SQLite multi-file append (import worker)', () => {
+  let h: SummarySessionHarness
+  let dir: string
 
-  beforeEach(async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'varlens-unranked-clinvar-'))
-    svc = new DatabaseService(join(tmpDir, 'varlens.db'))
-    await new Promise<void>((resolve) => setImmediate(resolve))
+  beforeEach(() => {
+    h = openSummarySessionHarness()
+    dir = mkdtempSync(join(tmpdir(), 'varlens-unranked-clinvar-'))
   })
 
   afterEach(() => {
-    svc.close()
-    rmSync(tmpDir, { recursive: true, force: true })
+    h.close()
+    rmSync(dir, { recursive: true, force: true })
   })
 
+  async function append(clnsig: string[]): Promise<WorkerMessage[]> {
+    await h.run([h.file('case', [variantAt(1, 'G')])])
+    const { id } = h.db.prepare("SELECT id FROM cases WHERE name = 'case'").get() as { id: number }
+    const filePath = join(dir, 'append.vcf')
+    writeFileSync(filePath, vcf(clnsig))
+    return h.run([
+      {
+        filePath,
+        caseName: 'case',
+        isDuplicate: false,
+        duplicateStrategy: 'skip',
+        vcfSelectedSamples: ['HG005'],
+        appendToCaseId: id
+      }
+    ])
+  }
+
+  const fileResult = (messages: WorkerMessage[]) => {
+    const done = messages.find((m) => m.type === 'file-complete')
+    if (done?.type !== 'file-complete') throw new Error('file not appended')
+    return done.result
+  }
+
   it('the appended file of a multi-file import reports its unrecognised values', async () => {
-    const filePath = join(tmpDir, 'append.vcf')
-    writeFileSync(filePath, vcf(['Pathogenic', 'totally_made_up_term', 'totally_made_up_term']))
-    const caseId = svc.cases.createCase('append-case', filePath, 1000)
-    svc.variants.beginBulkInsert()
-
-    const result = await importAdditionalFileToCase(
-      caseId,
-      filePath,
-      { selectedSample: 'HG005' },
-      () => svc,
-      {}
+    const result = fileResult(
+      await append(['Pathogenic', 'totally_made_up_term', 'totally_made_up_term'])
     )
-
     expect(result.variantCount).toBe(3)
     expect(result.unrankedClinvar).toEqual(['totally_made_up_term'])
   })
 
   it('an appended file with only known values reports none', async () => {
-    const filePath = join(tmpDir, 'known.vcf')
-    writeFileSync(filePath, vcf(['Pathogenic', 'Likely_benign']))
-    const caseId = svc.cases.createCase('known-case', filePath, 1000)
-    svc.variants.beginBulkInsert()
-
-    const result = await importAdditionalFileToCase(
-      caseId,
-      filePath,
-      { selectedSample: 'HG005' },
-      () => svc,
-      {}
-    )
-
+    const result = fileResult(await append(['Pathogenic', 'Likely_benign']))
     expect(result.variantCount).toBe(2)
     expect(result.unrankedClinvar).toBeUndefined()
   })

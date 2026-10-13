@@ -3,9 +3,8 @@
  *
  * Imports the synthetic 9.7 KB ALT allele fixture into a PostgreSQL backend
  * and verifies that:
- *   (1) the variant row is stored with a 32-byte coord_hash,
- *   (2) the coord_hash matches the JS reference encoding byte-for-byte, and
- *   (3) variant_frequency was rebuilt correctly via the hash unique constraint.
+ *   (1) the variant row is stored with a 32-byte coord_hash, and
+ *   (2) the coord_hash matches the JS reference encoding byte-for-byte.
  *
  * Requires:
  *   VARLENS_RUN_POSTGRES_E2E=1
@@ -113,20 +112,6 @@ test('postgres dev mode imports a 9.7 KB allele and stores its coord_hash', asyn
       )
       expect(snv.rows).toHaveLength(1)
       expect(snv.rows[0].coord_hash.equals(hashCoord('chr6', 31000000, 'G', 'A'))).toBe(true)
-
-      // variant_frequency rebuild has run; the row should be there with case_count = 1.
-      const freq = await client.query<{ case_count: string; coord_hash: Buffer }>(
-        `SELECT case_count, coord_hash
-         FROM ${pgSchema}.variant_frequency
-         WHERE coord_hash = $1`,
-        [expected]
-      )
-      expect(freq.rows).toHaveLength(1)
-      // The frequency row's case_count counts how many distinct cases hold this
-      // coord_hash. Re-running the test without pg-reset accumulates additional
-      // cases, so we assert the lower bound (≥ 1) — the freshly-imported case
-      // is guaranteed to be counted.
-      expect(Number(freq.rows[0].case_count)).toBeGreaterThanOrEqual(1)
     } finally {
       await client.end()
     }

@@ -96,7 +96,8 @@ describe.skipIf(!RUN)('cohort_summary migration — Sprint A C1', () => {
         (row.reloptions ?? []).find((option) => option.startsWith('fillfactor='))
       ])
     )
-    expect(fillfactor.get('variant_frequency')).toBe('fillfactor=85')
+    // 0034 drops variant_frequency (#595).
+    expect(fillfactor.has('variant_frequency')).toBe(false)
     expect(fillfactor.get('cohort_gene_variant_summary')).toBe('fillfactor=85')
     expect(fillfactor.get('cohort_gene_summary')).toBe('fillfactor=50')
 

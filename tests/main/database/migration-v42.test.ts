@@ -37,8 +37,10 @@ describe('migrations v42 / v43 — genotype classes of the cohort summary', () =
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(50)
-    expect(service.database.pragma('user_version', { simple: true })).toBe(50)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(51)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(
+      LATEST_SQLITE_SCHEMA_VERSION
+    )
   })
 
   it('flags a populated summary stale, so the app start rebuilds it', () => {
@@ -47,7 +49,9 @@ describe('migrations v42 / v43 — genotype classes of the cohort summary', () =
 
     runMigrations(service.database)
 
-    expect(service.database.pragma('user_version', { simple: true })).toBe(50)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(
+      LATEST_SQLITE_SCHEMA_VERSION
+    )
     expect(isCohortSummaryStale(service.database)).toBe(true)
     expect(service.needsStartupRebuild()).toBe(true)
 
@@ -59,7 +63,9 @@ describe('migrations v42 / v43 — genotype classes of the cohort summary', () =
   it('flags the summary of a v42 database too', () => {
     seedV41(42)
     runMigrations(service.database)
-    expect(service.database.pragma('user_version', { simple: true })).toBe(50)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(
+      LATEST_SQLITE_SCHEMA_VERSION
+    )
     expect(isCohortSummaryStale(service.database)).toBe(true)
   })
 

@@ -97,7 +97,7 @@ describe('SqliteImportExecutor', () => {
         ({
           getPath: () => '/tmp/test.varlens',
           getEncryptionKey: () => 'secret',
-          variants: { updateFrequencies: vi.fn() },
+
           cohort: { invalidateColumnMetaCache }
         }) as never,
       createWorkerClient: () => worker as never
@@ -173,8 +173,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -238,8 +237,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -284,8 +282,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -323,8 +320,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -382,8 +378,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -470,8 +465,7 @@ describe('SqliteImportExecutor', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never
     })
@@ -613,12 +607,14 @@ describe('SqliteImportExecutor.importMultiFile', () => {
     })
   })
 
-  it('translates StorageImportFileFilters into ImportFilters-compatible shape (no bedFile)', async () => {
+  it('hands the storage filters to the delegate untouched: the import worker loads the BED file', async () => {
     let capturedFilters: unknown
-    const delegate = vi.fn(async (input: { filters?: unknown }): Promise<MultiFileImportResult> => {
-      capturedFilters = input.filters
-      return makeFakeResult()
-    })
+    const delegate = vi.fn(
+      async (input: { storageFilters?: unknown }): Promise<MultiFileImportResult> => {
+        capturedFilters = input.storageFilters
+        return makeFakeResult()
+      }
+    )
 
     const executor = new SqliteImportExecutor({
       getDatabaseService: () =>
@@ -630,7 +626,7 @@ describe('SqliteImportExecutor.importMultiFile', () => {
     })
 
     const filters: StorageImportFileFilters = {
-      bedFilePath: null,
+      bedFilePath: '/tmp/varlens-missing-filter.bed',
       bedPadding: 75,
       passOnly: true,
       minQual: 20,
@@ -646,46 +642,17 @@ describe('SqliteImportExecutor.importMultiFile', () => {
       filters
     })
 
-    expect(capturedFilters).toMatchObject({
-      bedPadding: 75,
-      passOnly: true,
-      minQual: 20,
-      minGq: 10,
-      minDp: 5
-    })
-    // No bedFilter instance when bedFilePath is null
-    expect((capturedFilters as { bedFilter?: unknown }).bedFilter).toBeUndefined()
-  })
-
-  it('fails closed when an explicitly requested BED filter cannot be loaded', async () => {
-    const delegate = vi.fn(async (): Promise<MultiFileImportResult> => makeFakeResult())
-    const executor = new SqliteImportExecutor({
-      getDatabaseService: () =>
-        ({
-          getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined
-        }) as never,
-      multiFileImportDelegate: delegate
-    })
-
-    await expect(
-      executor.importMultiFile({
-        caseName: 'Filtered',
-        files: [
-          { filePath: '/tmp/a.vcf', variantType: 'snv', caller: null, annotationFormat: null }
-        ],
-        filters: { bedFilePath: '/tmp/varlens-missing-filter.bed' }
-      })
-    ).rejects.toThrow(/ENOENT|no such file/i)
-    expect(delegate).not.toHaveBeenCalled()
+    expect(capturedFilters).toEqual(filters)
   })
 
   it('passes undefined filters when no filters param is provided', async () => {
     let capturedFilters: unknown = 'sentinel'
-    const delegate = vi.fn(async (input: { filters?: unknown }): Promise<MultiFileImportResult> => {
-      capturedFilters = input.filters
-      return makeFakeResult()
-    })
+    const delegate = vi.fn(
+      async (input: { storageFilters?: unknown }): Promise<MultiFileImportResult> => {
+        capturedFilters = input.storageFilters
+        return makeFakeResult()
+      }
+    )
 
     const executor = new SqliteImportExecutor({
       getDatabaseService: () =>
@@ -770,8 +737,7 @@ describe('SqliteImportExecutor.importMultiFile', () => {
       getDatabaseService: () =>
         ({
           getPath: () => '/tmp/test.varlens',
-          getEncryptionKey: () => undefined,
-          variants: { updateFrequencies: vi.fn() }
+          getEncryptionKey: () => undefined
         }) as never,
       createWorkerClient: () => worker as never,
       multiFileImportDelegate: delegate

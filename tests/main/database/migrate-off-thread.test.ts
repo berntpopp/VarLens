@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
+import { LATEST_SQLITE_SCHEMA_VERSION } from '../../../src/main/database/migrations'
 import {
   migrateSqliteOffThread,
   setMigrationWorkerPathForTesting
@@ -65,11 +66,17 @@ describe('migrateSqliteOffThread', () => {
 
     const result = await migrateSqliteOffThread(path)
 
-    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 50 })
+    expect(result).toMatchObject({
+      ran: true,
+      fromVersion: 36,
+      toVersion: LATEST_SQLITE_SCHEMA_VERSION
+    })
     expect(indexExists(path)).toBe(true)
     // The main-thread open now finds a current schema.
     const service = new DatabaseService(path)
-    expect(service.database.pragma('user_version', { simple: true })).toBe(50)
+    expect(service.database.pragma('user_version', { simple: true })).toBe(
+      LATEST_SQLITE_SCHEMA_VERSION
+    )
     service.close()
   })
 
@@ -79,7 +86,11 @@ describe('migrateSqliteOffThread', () => {
 
     const result = await migrateSqliteOffThread(path, KEY)
 
-    expect(result).toMatchObject({ ran: true, fromVersion: 36, toVersion: 50 })
+    expect(result).toMatchObject({
+      ran: true,
+      fromVersion: 36,
+      toVersion: LATEST_SQLITE_SCHEMA_VERSION
+    })
     expect(indexExists(path, KEY)).toBe(true)
   })
 
@@ -97,7 +108,11 @@ describe('migrateSqliteOffThread', () => {
   it('creates a new database file with the standard page size', async () => {
     const path = join(dir, 'fresh.db')
     const result = await migrateSqliteOffThread(path)
-    expect(result).toMatchObject({ ran: true, fromVersion: 0, toVersion: 50 })
+    expect(result).toMatchObject({
+      ran: true,
+      fromVersion: 0,
+      toVersion: LATEST_SQLITE_SCHEMA_VERSION
+    })
     const db = new Database(path, { readonly: true })
     expect(db.pragma('page_size', { simple: true })).toBe(8192)
     db.close()

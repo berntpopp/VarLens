@@ -9,7 +9,7 @@
  *     npx vitest run --project perf tests/perf/case-delete-incremental.perf.test.ts
  *
  * "before" replays the pre-change delete worker inline (drop FTS triggers,
- * per-case delete + frequency decrement, global FTS 'rebuild' + ANALYZE,
+ * per-case delete, global FTS 'rebuild' + ANALYZE,
  * full cohort-summary rebuild). "after" runs the real delete job through the
  * bundled delete worker. Both delete a same-sized case from the same database.
  * Results: .planning/code-review/ui-ux-audit-2026-10-06/followups/leftovers-l2/
@@ -20,7 +20,6 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { DatabaseService } from '../../src/main/database/DatabaseService'
-import { VariantFrequencyService } from '../../src/main/database/VariantFrequencyService'
 import { startSqliteCaseDeleteJob } from '../../src/main/ipc/handlers/cases-logic'
 import { deleteCasesIncrementally } from '../../src/main/workers/delete-operations'
 import { MARK_STALE_SQL } from '../../src/shared/sql/cohort-summary-rebuild'
@@ -104,9 +103,7 @@ describe.skipIf(!SHOULD_RUN)('case delete: full rebuild vs incremental', () => {
     workerPath = await bundleWorker('src/main/workers/delete-worker.ts')
     dir = mkdtempSync(join(tmpdir(), 'varlens-delete-perf-'))
     db = new DatabaseService(join(dir, 'perf.db'))
-    const ids = seedCases(db, 1, CASES)
-    const frequencies = new VariantFrequencyService(db.database)
-    for (const id of ids) frequencies.updateFrequencies(id)
+    seedCases(db, 1, CASES)
     db.cohortSummary.rebuild()
   }, 3_600_000)
 
@@ -141,7 +138,6 @@ describe.skipIf(!SHOULD_RUN)('case delete: full rebuild vs incremental', () => {
 
   it('deletes one case', async () => {
     const [beforeId] = seedCases(db, 10_000, 1)
-    new VariantFrequencyService(db.database).updateFrequencies(beforeId)
     db.cohortSummary.rebuild()
     let started = performance.now()
     await deleteWithFullRebuild(db, beforeId)
@@ -152,7 +148,6 @@ describe.skipIf(!SHOULD_RUN)('case delete: full rebuild vs incremental', () => {
     })
 
     const [afterId] = seedCases(db, 20_000, 1)
-    new VariantFrequencyService(db.database).updateFrequencies(afterId)
     db.cohortSummary.rebuild()
     const phases = new Set<string>()
     started = performance.now()

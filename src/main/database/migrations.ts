@@ -21,7 +21,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 50
+export const LATEST_SQLITE_SCHEMA_VERSION = 51
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -76,6 +76,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 50
  * - 46: no-call rows are not carriers in the cohort summary (mirrors PG 0029)
  * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
  * - 50: decode VEP's %3D / %3B escapes in stored cdna / aa_change (#547; mirrors PG 0033)
+ * - 51: drop variant_frequency (#595) and idx_variants_coords (#564), recount variant_count (#560)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2040,6 +2041,34 @@ export function runMigrations(db: Database.Database): void {
       }
     }
     db.exec('PRAGMA user_version = 50')
+  }
+
+  // v51: import integrity (PG 0034 drops variant_frequency too).
+  //  - variant_frequency has had no reader since the carrier frequency moved
+  //    to the cohort summary (#555, #595);
+  //  - idx_variants_coords (v29) duplicates idx_variants_chr_pos_ref_alt and
+  //    cost a second index write per imported row (#564);
+  //  - cases.variant_count is recounted once: the cohort total sums it now
+  //    (#560), and multi-file appends set it only after their rows (#551).
+  if (currentVersion < 51) {
+    db.exec('DROP TABLE IF EXISTS variant_frequency')
+    db.exec('DROP INDEX IF EXISTS idx_variants_coords')
+    const hasCasesAndVariants =
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN ('cases', 'variants')"
+          )
+          .get() as { c: number }
+      ).c === 2
+    if (hasCasesAndVariants) {
+      db.exec(`
+        UPDATE cases SET variant_count = counted.n
+          FROM (SELECT c.id, (SELECT COUNT(*) FROM variants v WHERE v.case_id = c.id) AS n
+                  FROM cases c) counted
+         WHERE counted.id = cases.id AND cases.variant_count IS NOT counted.n`)
+    }
+    db.exec('PRAGMA user_version = 51')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

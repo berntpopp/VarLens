@@ -18,9 +18,8 @@ import {
   renameCases,
   resolveBuildReviews
 } from '../../../src/main/database/contig-rename-sqlite'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { runMigrations, LATEST_SQLITE_SCHEMA_VERSION } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
-import { VariantFrequencyService } from '../../../src/main/database/VariantFrequencyService'
 
 type Db = InstanceType<typeof Database>
 
@@ -93,7 +92,6 @@ describe('migration v47: chromosome names per build', () => {
   const snapshot = () => ({
     variants: db.prepare('SELECT id, chr FROM variants ORDER BY id').all(),
     annotations: db.prepare('SELECT * FROM variant_annotations ORDER BY id').all(),
-    frequency: db.prepare('SELECT * FROM variant_frequency ORDER BY chr, pos').all(),
     reviews: db.prepare('SELECT case_id, reason FROM contig_build_review ORDER BY case_id').all()
   })
 
@@ -112,7 +110,6 @@ describe('migration v47: chromosome names per build', () => {
     addVariant(c, '1', 100)
     addVariant(d, 'chr1', 100)
     addVariant(e, '1', 200)
-    for (const id of [a, b, c, d, e]) new VariantFrequencyService(db).updateFrequencies(id)
     // Collision at chr1:100 (A renames 1 → chr1, D holds chr1); C still uses 1:100.
     annotate('1', 100, { comment: 'a', starred: 1, acmg: 'Benign', updated: 1 })
     annotate('chr1', 100, { comment: 'b', acmg: 'Pathogenic', updated: 2 })
@@ -153,14 +150,7 @@ describe('migration v47: chromosome names per build', () => {
     expect(annotation('chr1', 300)).toMatchObject({ global_comment: 'only A' })
     expect(annotation('1', 300)).toBeUndefined() // moved
 
-    // Frequencies equal a recount from scratch, and the summary is rebuilt.
-    const after = db
-      .prepare('SELECT chr, pos, case_count FROM variant_frequency ORDER BY chr, pos')
-      .all()
-    new VariantFrequencyService(db).recomputeAllFrequencies()
-    expect(after).toEqual(
-      db.prepare('SELECT chr, pos, case_count FROM variant_frequency ORDER BY chr, pos').all()
-    )
+    // The summary is rebuilt.
     expect(
       db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()
     ).toEqual({ value: '1' })
@@ -203,12 +193,12 @@ describe('migration v47: chromosome names per build', () => {
   })
 
   it('a fresh database ends at the latest version; a v45 one runs v46 then v47 in order', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(50)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     const a = addCase('A', 'GRCh38', GRCH38_HEADER)
     addVariant(a, '1', 100)
     db.exec('PRAGMA user_version = 45')
     runMigrations(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(50)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     expect(chrsOf(a)).toEqual(['chr1'])
     expect(
       db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()
@@ -403,7 +393,7 @@ describe('migration v47: chromosome names per build', () => {
     seed()
     db.exec('PRAGMA user_version = 45')
     runMigrations(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(50)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     expect(chrsOf(1)).toEqual(['chr1', 'chrM', 'chrUn_KI270742v1'])
     expect(existsSync(`${path}.pre-v46.bak`)).toBe(true)
     expect(existsSync(`${path}.pre-v47.bak`)).toBe(false)

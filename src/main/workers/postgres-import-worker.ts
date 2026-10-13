@@ -154,8 +154,7 @@ function recordParseSkip(args: { reason: string; errors: string[]; prefix?: stri
  * Lift per-statement and idle-in-transaction limits for the import session.
  *
  * Phase 16.1 finding: a 5.3M-variant WGS import's post-loop bookkeeping
- * (`rebuildVariantFrequencyForCase` GROUP BY scan over the full case)
- * routinely takes longer than the renderer-default `statement_timeout`
+ * (GROUP BY scans over the full case) routinely takes longer than the renderer-default `statement_timeout`
  * of 30 s. Imports run in their own short-lived worker connection, so
  * relaxing the timeouts here doesn't affect read paths.
  */
@@ -252,7 +251,7 @@ export async function runImport(
     profileStart(`${start.mode}:${start.caseName}`)
     // Phase 16.1: lift the per-statement / idle-in-transaction / lock
     // timeouts for the import session. Long post-loop bookkeeping
-    // (rebuildVariantFrequencyForCase) on a WGS-sized case can exceed the
+    // on a WGS-sized case can exceed the
     // renderer-default 30 s statement_timeout. Auto-commit (no BEGIN
     // required) and per-session, so it does not leak to other connections.
     await profilePhase('relax-session-limits', () => relaxImportSessionLimits(client))
@@ -404,7 +403,6 @@ export async function runImport(
               client,
               schema: start.schema,
               caseId,
-              frequencyIncludesProvisional: true,
               lockSummary
             })
           }
@@ -550,7 +548,6 @@ export async function runImport(
         client,
         schema: start.schema,
         caseId,
-        frequencyIncludesProvisional: false,
         lockSummary
       })
       await client.query('COMMIT')
@@ -822,7 +819,6 @@ export async function runImport(
               client,
               schema: start.schema,
               caseId,
-              frequencyIncludesProvisional: true,
               lockSummary
             })
             throwIfCancelled()

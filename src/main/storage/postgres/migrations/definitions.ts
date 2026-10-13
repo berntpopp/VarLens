@@ -169,6 +169,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0033',
     name: 'decode_vep_hgvs_escapes',
     fileName: '0033_decode_vep_hgvs_escapes.sql'
+  },
+  {
+    version: '0034',
+    name: 'import_integrity',
+    fileName: '0034_import_integrity.sql'
   }
 ]
 

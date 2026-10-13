@@ -36,7 +36,6 @@ import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { VariantSearchService } from './VariantSearchService'
-import { VariantFrequencyService } from './VariantFrequencyService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
@@ -48,7 +47,6 @@ export class VariantRepository extends BaseRepository {
   private cases: CaseRepository
   private readonly filterBuilder: VariantFilterBuilder
   private readonly searchService: VariantSearchService
-  private readonly frequencyService: VariantFrequencyService
   private ftsSnapshot: TriggerSnapshot = {}
 
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
@@ -56,7 +54,6 @@ export class VariantRepository extends BaseRepository {
     this.cases = cases
     this.searchService = new VariantSearchService(db, kysely)
     this.filterBuilder = new VariantFilterBuilder(db, kysely, this.searchService)
-    this.frequencyService = new VariantFrequencyService(db)
   }
 
   /**
@@ -176,9 +173,7 @@ export class VariantRepository extends BaseRepository {
   /**
    * Rebuild FTS, recreate triggers, run ANALYZE and optimize. Does NOT update
    * the case's variant_count — callers that need it updated should use
-   * `finishBulkInsert()` (for single-file imports) or call
-   * `recalculateCaseVariantCount()` afterwards (for multi-file sessions where
-   * the final count is the sum across all appended files).
+   * `finishBulkInsert()`.
    */
   finishBulkInsertNoCount(): void {
     // Always rebuild FTS and restore triggers, even if a step fails
@@ -217,22 +212,6 @@ export class VariantRepository extends BaseRepository {
   finishBulkInsert(caseId: number, totalInserted: number): void {
     this.cases.updateCaseVariantCount(caseId, totalInserted)
     this.finishBulkInsertNoCount()
-  }
-
-  /**
-   * Recompute a case's variant_count from the variants table and write it back
-   * in a single atomic UPDATE. Used after multi-file import sessions where the
-   * final count should reflect all appended files, and is resilient to any
-   * ordering between per-file inserts and a final variant_count refresh.
-   */
-  recalculateCaseVariantCount(caseId: number): void {
-    this.db
-      .prepare(
-        `UPDATE cases SET variant_count = (
-          SELECT COUNT(*) FROM variants WHERE case_id = ?
-        ) WHERE id = ?`
-      )
-      .run(caseId, caseId)
   }
 
   /**
@@ -635,13 +614,18 @@ export class VariantRepository extends BaseRepository {
       }
     }
     const placeholders = caseIds.map(() => '?').join(', ')
+    // Driven from the small extension table (CROSS JOIN fixes the loop order),
+    // each row's case looked up by primary key: never every variant id of the
+    // scope materialised (#560).
+    const scoped = `FROM ${def.table} e CROSS JOIN variants v ON v.id = e.variant_id
+           WHERE v.case_id IN (${placeholders})`
 
     if (columnDef.kind === 'number') {
       const row = this.db
         .prepare(
-          `SELECT MIN("${column}") AS min, MAX("${column}") AS max, COUNT(DISTINCT "${column}") AS distinctCount
-           FROM ${def.table}
-           WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))`
+          `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max,
+                  COUNT(DISTINCT e."${column}") AS distinctCount
+           ${scoped}`
         )
         .get(...caseIds) as { min: number | null; max: number | null; distinctCount: number }
       return {
@@ -654,11 +638,7 @@ export class VariantRepository extends BaseRepository {
     }
 
     const countRow = this.db
-      .prepare(
-        `SELECT COUNT(DISTINCT "${column}") AS distinctCount
-         FROM ${def.table}
-         WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))`
-      )
+      .prepare(`SELECT COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`)
       .get(...caseIds) as { distinctCount: number }
 
     const entry: ColumnFilterMeta = {
@@ -670,11 +650,9 @@ export class VariantRepository extends BaseRepository {
     if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
       const valRows = this.db
         .prepare(
-          `SELECT DISTINCT "${column}" AS v
-           FROM ${def.table}
-           WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))
-             AND "${column}" IS NOT NULL
-           ORDER BY "${column}"`
+          `SELECT DISTINCT e."${column}" AS v ${scoped}
+             AND e."${column}" IS NOT NULL
+           ORDER BY e."${column}"`
         )
         .all(...caseIds) as { v: string | number | null }[]
       entry.distinctValues = valRows.map((r) => String(r.v))
@@ -698,20 +676,6 @@ export class VariantRepository extends BaseRepository {
       )
       .all(...caseIds) as { variant_type: string }[]
     return new Set(rows.map((r) => r.variant_type))
-  }
-
-  // ── Frequency delegators ────────────────────────────────────
-
-  updateFrequencies(caseId: number): void {
-    this.frequencyService.updateFrequencies(caseId)
-  }
-
-  decrementFrequencies(caseId: number): void {
-    this.frequencyService.decrementFrequencies(caseId)
-  }
-
-  recomputeAllFrequencies(): void {
-    this.frequencyService.recomputeAllFrequencies()
   }
 
   getFilterOptions(caseId: number): FilterOptions {
