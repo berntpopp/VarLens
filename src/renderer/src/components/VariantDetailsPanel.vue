@@ -44,6 +44,7 @@
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
+            :genome-build="genomeBuild"
             class="mb-2"
             @open-protein-view="openProteinView"
           />
