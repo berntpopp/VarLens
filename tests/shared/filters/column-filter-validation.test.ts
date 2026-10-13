@@ -107,3 +107,24 @@ describe('assertValidColumnFilterValues', () => {
     }
   })
 })
+
+describe('column filter operators', () => {
+  it('rejects an unknown operator instead of silently ignoring the filter', () => {
+    const filters = { sv_type: { operator: 'eq', value: 'INS' } } as never
+    expect(() => assertValidColumnFilterValues(filters)).toThrow(ColumnFilterValueError)
+    expect(() => assertValidColumnFilterValues(filters)).toThrow(
+      'Unknown operator for column filter "sv_type": "eq"'
+    )
+  })
+
+  it('accepts every known operator', () => {
+    for (const operator of ['=', '!=', '<', '>', '<=', '>=', 'like', 'is_null', 'not_null']) {
+      expect(() =>
+        assertValidColumnFilterValues({ gene_symbol: { operator, value: 'A' } } as never)
+      ).not.toThrow()
+    }
+    expect(() =>
+      assertValidColumnFilterValues({ gene_symbol: { operator: 'in', value: ['A'] } })
+    ).not.toThrow()
+  })
+})

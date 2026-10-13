@@ -1624,7 +1624,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."gene_symbol" = ? and "variants"."omim_mim_number" = ? and "variants"."func" = ? and variants.consequence IN (?) and "variants"."transcript" = ? and "variants"."cdna" = ? and "variants"."aa_change" = ? and "variants"."gt_num" = ? and "variants"."gnomad_af" = ? and "variants"."cadd" = ? and "variants"."qual" = ? and "variants"."hpo_sim_score" = ? and (variants.clinvar_rank IN (1) OR variants.clinvar IN (?)) and "variants"."moi" = ? and "variants"."variant_type" = ? and "variants"."end_pos" = ? and "variants"."sv_type" = ? and "variants"."sv_length" = ? and "variants"."caller" = ?",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and "variants"."chr" = ? and "variants"."pos" = ? and "variants"."gene_symbol" = ? and "variants"."omim_mim_number" = ? and "variants"."func" = ? and variants.consequence IN (?) and "variants"."transcript" = ? and "variants"."cdna" = ? and "variants"."aa_change" = ? and "variants"."gt_num" = ? and "variants"."gnomad_af" = ? and "variants"."cadd" = ? and "variants"."qual" = ? and "variants"."hpo_sim_score" = ? and (variants.clinvar_rank IN (1) OR variants.clinvar IN (?)) and "variants"."moi" = ? and "variants"."variant_type" = ? and "variants"."end_pos" = ? and "variants"."sv_type" = ? and ABS(variants.sv_length) = ? and "variants"."caller" = ?",
 }
 `;
 
@@ -8372,7 +8372,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.sv_length ASC NULLS LAST, id ASC",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by ABS(variants.sv_length) ASC NULLS LAST, id ASC",
 }
 `;
 
@@ -8416,7 +8416,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > sor
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by variants.sv_length DESC NULLS LAST, id ASC",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? order by ABS(variants.sv_length) DESC NULLS LAST, id ASC",
 }
 `;
 

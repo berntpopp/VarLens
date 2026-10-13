@@ -35,6 +35,7 @@ interface VariantExtensionFields {
 import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../../shared/config'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
+import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
 import { VariantSearchService } from './VariantSearchService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
@@ -424,8 +425,8 @@ export class VariantRepository extends BaseRepository {
     for (const [key, sqlCol] of columns) {
       selectParts.push(`COUNT(DISTINCT "${sqlCol}") AS "cnt_${key}"`)
       if (NUMERIC_COLUMN_FILTER_KEYS.has(key)) {
-        selectParts.push(`MIN("${sqlCol}") AS "min_${key}"`)
-        selectParts.push(`MAX("${sqlCol}") AS "max_${key}"`)
+        selectParts.push(`MIN(${comparedColumnSql(key, `"${sqlCol}"`)}) AS "min_${key}"`)
+        selectParts.push(`MAX(${comparedColumnSql(key, `"${sqlCol}"`)}) AS "max_${key}"`)
       }
     }
     const aggSql = `SELECT ${selectParts.join(', ')} FROM variants WHERE case_id = ?`
@@ -548,7 +549,8 @@ export class VariantRepository extends BaseRepository {
 
     const aggParts = [`COUNT(DISTINCT "${sqlCol}") AS distinctCount`]
     if (isNumeric) {
-      aggParts.push(`MIN("${sqlCol}") AS min`, `MAX("${sqlCol}") AS max`)
+      const compared = comparedColumnSql(columnKey, `"${sqlCol}"`)
+      aggParts.push(`MIN(${compared}) AS min`, `MAX(${compared}) AS max`)
     }
     const aggSql = `SELECT ${aggParts.join(', ')} FROM variants WHERE case_id IN (${placeholders})`
     const aggRow = this.db.prepare(aggSql).get(...caseIds) as {

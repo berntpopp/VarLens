@@ -121,13 +121,11 @@ describe('PostgresVariantReadRepository filter metadata', () => {
       dataType: 'text',
       distinctCount: 0
     })
-    // SQLite output-shape parity: end_pos and sv_length are categorical on the
-    // write side (PostgresCohortSummaryRepository.META_NUMERIC_COLUMNS /
-    // VariantRepository.NUMERIC_COLUMNS define only 5 numeric columns), so the
-    // per-case reshape MUST report dataType 'text' for them — never 'numeric'.
+    // end_pos is categorical on the write side (no min/max materialised);
+    // sv_length carries its unsigned bounds (#573), numeric like on SQLite.
     const metaByKey = new Map(options.columnMeta.map((meta) => [meta.key, meta]))
     expect(metaByKey.get('end_pos')?.dataType).toBe('text')
-    expect(metaByKey.get('sv_length')?.dataType).toBe('text')
+    expect(metaByKey.get('sv_length')?.dataType).toBe('numeric')
   })
 
   it('reads single-case numeric column metadata from cohort_column_meta', async () => {

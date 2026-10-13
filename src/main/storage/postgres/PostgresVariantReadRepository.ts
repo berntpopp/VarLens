@@ -53,8 +53,9 @@ import {
 } from './postgres-variant-order'
 import type { VariantPageRequest, VariantPageResult } from '../../../shared/types/variant-paging'
 
-const POSTGRES_BASE_SORT_COLUMNS = Object.fromEntries(
-  Object.entries(BASE_SORTABLE_COLUMNS).map(([key, column]) => [key, `v.${column}`])
+// The column definitions' SQL: `sv_length` sorts unsigned, as displayed.
+const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
+  Object.keys(BASE_SORTABLE_COLUMNS).map((k) => [k, POSTGRES_VARIANT_COLUMN_DEFINITIONS[k].sql])
 )
 POSTGRES_BASE_SORT_COLUMNS.id = 'v.id'
 
