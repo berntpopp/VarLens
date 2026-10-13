@@ -203,12 +203,12 @@
     }
   },
   "dependencies": {
-    "@fastify/rate-limit": "^11.2.0",
-    "@fastify/secure-session": "^8.4.0",
-    "@fastify/static": "^10.1.5",
-    "@fastify/swagger": "^9.9.1",
-    "@fastify/swagger-ui": "^6.1.1",
-    "@node-rs/argon2": "^2.2.1",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/secure-session": "^8.4.1",
+    "@fastify/static": "^10.1.6",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
+    "@node-rs/argon2": "^2.2.2",
     "adm-zip": "^0.6.1",
     "better-sqlite3-multiple-ciphers": "^12.11.1",
     "bottleneck": "^2.19.5",
