@@ -129,11 +129,6 @@
     },
     {
       "file": "src/main/workers/import-worker.ts",
-      "callerFunction": "<anonymous>",
-      "assignedTo": null
-    },
-    {
-      "file": "src/main/workers/import-worker.ts",
       "callerFunction": "publishCase",
       "assignedTo": null
     },
