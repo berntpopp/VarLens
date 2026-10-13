@@ -207,6 +207,9 @@ export function useTableScroll(): UseTableScrollReturn {
     const resizeObserver = new ResizeObserver(() => {
       updateScrollbarWidth()
       const dockedPx = main ? parseFloat(getComputedStyle(main).paddingRight) || 0 : 0
+      // A keep-alive-deactivated table reports 0 from its detached container; it must not
+      // overwrite the width the active table just published.
+      if (!tableWrapper.isConnected || tableWrapper.clientWidth === 0) return
       tableViewportWidthPx.value = tableWrapper.clientWidth + dockedPx
     })
     resizeObserver.observe(tableWrapper)

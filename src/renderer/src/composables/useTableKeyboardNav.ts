@@ -112,8 +112,10 @@ export function useTableKeyboardNav<T>(
 
   // ↑ / ↓ hand the keyboard back to the table: a button the mouse left focused
   // must not take the next Enter (isControlFocused) from the selected row.
+  // Keyboard (focus-visible) focus stays put so Tab users keep their place.
   function releaseControlFocus(): void {
-    if (isControlFocused()) (document.activeElement as HTMLElement).blur()
+    const el = document.activeElement as HTMLElement | null
+    if (isControlFocused() && el && !el.matches(':focus-visible')) el.blur()
   }
 
   function moveDown(): void {

@@ -411,7 +411,13 @@ describe('arrow navigation and a focused control', () => {
     '%s releases a focused button so Enter opens the row again',
     (move) => {
       document.body.innerHTML = '<button>star</button>'
-      document.querySelector('button')!.focus()
+      const button = document.querySelector('button')!
+      button.focus()
+      // focus left behind by a mouse click is not :focus-visible
+      const matches = button.matches.bind(button)
+      vi.spyOn(button, 'matches').mockImplementation(
+        (sel) => sel !== ':focus-visible' && matches(sel)
+      )
       const [nav, app] = withSetup(() =>
         useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
       )
@@ -421,4 +427,20 @@ describe('arrow navigation and a focused control', () => {
       app.unmount()
     }
   )
+
+  it('keeps keyboard (focus-visible) focus so Tab users keep their place', () => {
+    document.body.innerHTML = '<button>copy</button>'
+    const button = document.querySelector('button')!
+    button.focus()
+    const matches = button.matches.bind(button)
+    vi.spyOn(button, 'matches').mockImplementation(
+      (sel) => sel === ':focus-visible' || matches(sel)
+    )
+    const [nav, app] = withSetup(() =>
+      useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
+    )
+    nav.moveDown()
+    expect(document.activeElement).toBe(button)
+    app.unmount()
+  })
 })

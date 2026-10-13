@@ -1,6 +1,7 @@
 import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { columnWidthRem } from '../components/variant-table/column-widths'
+import { LINKS_COLUMN_KEY } from '../utils/link-outs'
 import { readRootFontPx } from './useRootFontSize'
 import {
   computeAutoHiddenColumns,
@@ -69,19 +70,26 @@ export const tableViewportWidthPx = ref<number | null>(null)
  * effective visibility (explicit choice first, then the default).
  */
 export function useAutoHiddenColumns(
-  keys: MaybeRefOrGetter<readonly string[]>,
+  columns: MaybeRefOrGetter<readonly { key: string; width?: string | number }[]>,
   prefs: Readonly<Ref<{ visibility: Readonly<Record<string, boolean>> }>>
 ) {
   const { width } = useDisplay()
   // ponytail: rem size read on resize only; a text-size change alone refits on the next resize
-  const autoHidden = computed(() =>
-    computeAutoHiddenColumns(
-      toValue(keys),
+  const autoHidden = computed(() => {
+    const cols = toValue(columns)
+    // The Links column's width depends on how many link-outs exist; its header carries it.
+    const linksWidth = cols.find((c) => c.key === LINKS_COLUMN_KEY)?.width
+    const widthRem = (key: string): number =>
+      key === LINKS_COLUMN_KEY && typeof linksWidth === 'string' && linksWidth.endsWith('rem')
+        ? parseFloat(linksWidth)
+        : columnWidthRem(key)
+    return computeAutoHiddenColumns(
+      cols.map((c) => c.key),
       (tableViewportWidthPx.value ?? width.value) / readRootFontPx(),
-      columnWidthRem,
+      widthRem,
       prefs.value.visibility
     )
-  )
+  })
   const isVisible = (key: string): boolean =>
     isColumnVisible(key, prefs.value.visibility, autoHidden.value)
   return { autoHidden, isVisible }

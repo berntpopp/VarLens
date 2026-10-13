@@ -605,10 +605,7 @@ const orderedColumns = computed(() => {
 })
 
 // Same responsive default as VariantTable's useVariantColumns (same keys → same result)
-const { isVisible: isColumnShown } = useAutoHiddenColumns(
-  () => (props.columns ?? []).map((c) => c.key),
-  columnPrefs
-)
+const { isVisible: isColumnShown } = useAutoHiddenColumns(() => props.columns ?? [], columnPrefs)
 const visibleColumnKeys = computed(() =>
   orderedColumns.value.filter((h) => isColumnShown(h.key)).map((h) => h.key)
 )

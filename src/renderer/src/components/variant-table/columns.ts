@@ -136,7 +136,7 @@ export function useVariantColumns(
     return base
   })
 
-  const { isVisible } = useAutoHiddenColumns(() => headers.value.map((h) => h.key), prefs)
+  const { isVisible } = useAutoHiddenColumns(headers, prefs)
 
   /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
   const visibleHeaders = computed(() =>

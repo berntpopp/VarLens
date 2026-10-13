@@ -44,11 +44,11 @@
           :color="hasActiveFilters || hasClearableState ? 'error' : undefined"
           :variant="hasActiveFilters || hasClearableState ? 'tonal' : 'text'"
           :icon="compactActions"
-          :aria-label="compactActions ? 'Clear' : undefined"
+          :aria-label="compactActions ? FILTER_TOOLBAR_COPY.clear : undefined"
           @click="clearAll"
         >
           <v-icon :start="!compactActions" size="small" :icon="mdiFilterOff" />
-          <template v-if="!compactActions">Clear</template>
+          <template v-if="!compactActions">{{ FILTER_TOOLBAR_COPY.clear }}</template>
           <v-tooltip activator="parent" location="bottom">{{
             withShortcut('Clear all filters', 'clearFilters')
           }}</v-tooltip>
@@ -58,11 +58,11 @@
         <v-btn
           variant="tonal"
           :icon="compactActions"
-          :aria-label="compactActions ? 'Filters' : undefined"
+          :aria-label="compactActions ? FILTER_TOOLBAR_COPY.filters : undefined"
           @click="emit('open-filter-drawer')"
         >
           <v-icon :start="!compactActions" size="small" :icon="mdiFilterVariant" />
-          <template v-if="!compactActions">Filters</template>
+          <template v-if="!compactActions">{{ FILTER_TOOLBAR_COPY.filters }}</template>
           <v-badge
             v-if="activeFilterCount > 0"
             :content="activeFilterCount"
@@ -231,6 +231,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
+import { FILTER_TOOLBAR_COPY } from '../config/uiCopyConfig'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {

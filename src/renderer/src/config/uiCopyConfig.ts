@@ -6,6 +6,12 @@ export const COLUMNS_DRAWER_COPY = {
   group: (label: string): string => `Show all ${label} columns`
 } as const
 
+/** Filter toolbar action labels (visible text, or the accessible name when icon-only). */
+export const FILTER_TOOLBAR_COPY = {
+  clear: 'Clear',
+  filters: 'Filters'
+} as const
+
 export const PROTEIN_VIEW_COPY = {
   lengthUnknown: 'Protein length unknown, so the plot is unavailable.'
 } as const
