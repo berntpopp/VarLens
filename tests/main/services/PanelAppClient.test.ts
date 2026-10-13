@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PanelAppClient } from '../../../src/main/services/api/PanelAppClient'
+import { stalledBody } from './api/stalled-fetch'
 
 // Mock MainLogger
 vi.mock('../../../src/main/services/MainLogger', () => ({
@@ -10,6 +11,12 @@ vi.mock('../../../src/main/services/MainLogger', () => ({
     error: vi.fn()
   }
 }))
+
+// A short lookup timeout so the stalled-body test finishes quickly
+vi.mock('../../../src/shared/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/shared/config')>()
+  return { ...actual, API_CONFIG: { ...actual.API_CONFIG, LOOKUP_TIMEOUT_MS: 50 } }
+})
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,6 +120,18 @@ describe('PanelAppClient', () => {
       expect(calledUrl).toContain('name=epilepsy')
     })
 
+    it('keeps the other region when one region stalls mid-body', async () => {
+      fetchSpy.mockImplementation(async (url, init) =>
+        String(url).includes('genomicsengland')
+          ? stalledBody(init)
+          : new Response(JSON.stringify(makePanelListResponse([makeRawPanel({ id: 2 })])))
+      )
+
+      const results = await client.searchPanels('epilepsy', 'both')
+
+      expect(results.map((r) => r.region)).toEqual(['aus'])
+    })
+
     it('searches AUS region', async () => {
       fetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify(makePanelListResponse([makeRawPanel({ id: 2 })])), {
@@ -208,5 +227,12 @@ describe('PanelAppClient', () => {
       expect(panel.genes).toEqual([])
       expect(panel.region).toBe('aus')
     })
+  })
+
+  it('times out a response whose body stalls after the headers', async () => {
+    // Headers arrive, the body never does: the lookup must still end at the timeout.
+    fetchSpy.mockImplementationOnce(async (_url, init) => stalledBody(init))
+
+    await expect(client.getPanel(1, 'uk')).rejects.toThrow(/timeout|abort/i)
   })
 })

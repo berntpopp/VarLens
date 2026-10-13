@@ -8,6 +8,9 @@
  */
 import { createWriteStream } from 'node:fs'
 import { writeFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
@@ -69,39 +72,29 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
 
   onProgress?.(0, 0)
 
-  const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
-
-  // Attach error handler immediately to prevent unhandled 'error' event crash
-  // if createWriteStream fails to open. The error is re-thrown in the finish promise below.
-  stream.on('error', () => {})
-
-  // Write header row
-  const headerRow = EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',')
-  const headerOk = stream.write(headerRow + '\r\n')
-  if (!headerOk) {
-    await new Promise<void>((resolve) => stream.once('drain', resolve))
-  }
-
   let rowCount = 0
-  for (const row of iterator) {
-    const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
-    const ok = stream.write(cells.join(',') + '\r\n')
-    if (!ok) {
-      await new Promise<void>((resolve) => stream.once('drain', resolve))
-    }
-    rowCount++
-
-    if (rowCount % 1000 === 0) {
-      onProgress?.(rowCount, 0)
+  function* csvLines(): Generator<string> {
+    yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
+    for (const row of iterator) {
+      const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
+      yield cells.join(',') + '\r\n'
+      rowCount++
+      if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
     }
   }
 
-  // Wait for the write stream to flush to disk before reporting completion
-  await new Promise<void>((resolve, reject) => {
-    stream.on('finish', resolve)
-    stream.on('error', reject)
-    stream.end()
-  })
+  const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
+  let opened = false
+  stream.once('open', () => (opened = true))
+  try {
+    // pipeline() handles backpressure and rejects on an open, write or source error.
+    await pipeline(Readable.from(csvLines()), stream)
+  } catch (error) {
+    // Opening truncated the file, so a partial export is removed. A file that
+    // could not be opened (e.g. an existing read-only one) is left untouched.
+    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+    throw error
+  }
 
   return { rowCount, filePath: outputFilePath }
 }

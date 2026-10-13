@@ -9,6 +9,7 @@
 
 import type { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
+import { API_CONFIG } from '../../../shared/config'
 import type { HpoTerm } from './schemas/hpo-response'
 import type { HpoSearchResult } from '../../../shared/types/api-enrichment'
 import { HpoAutocompleteResponseSchema } from './schemas/hpo-response'
@@ -83,15 +84,8 @@ export class HpoApiClient {
 
       const url = `${this.baseUrl}?${params.toString()}`
 
-      // Fetch with timeout (NLM can be slow)
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
-
-      const response = await fetch(url, {
-        signal: controller.signal
-      })
-
-      clearTimeout(timeoutId)
+      // NLM can be slow; the signal also bounds the body read below
+      const response = await fetch(url, { signal: AbortSignal.timeout(API_CONFIG.HPO_TIMEOUT_MS) })
 
       if (!response.ok) {
         throw new Error(`HPO API returned status ${response.status}`)

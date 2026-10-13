@@ -184,7 +184,8 @@ describe('GnomadApiClient', () => {
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error).toContain('Network error')
+        // Real fetch (undici, as mocked by nock 15) wraps the cause: TypeError('fetch failed')
+        expect(result.error).toContain('fetch failed')
       }
     })
 

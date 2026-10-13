@@ -189,16 +189,16 @@ async function openTabular(
   }
 
   const result: XlsxStreamResult = { rowCount: 0, truncated: false }
-  const info =
-    request.kind === 'variants'
-      ? {
-          name: 'Export Info',
-          rows: (r: XlsxStreamResult) => [
-            ...buildMetadataSheet(request.caseName, r.rowCount, filterSummary(request.filters)),
-            ...(r.truncated ? [['Truncated', 'Excel row limit reached; use CSV for all rows']] : [])
-          ]
-        }
-      : undefined
+  // Both kinds say when the Excel row cap cut the export; cohort requests carry no case metadata.
+  const info = {
+    name: 'Export Info',
+    rows: (r: XlsxStreamResult) => [
+      ...(request.kind === 'variants'
+        ? buildMetadataSheet(request.caseName, r.rowCount, filterSummary(request.filters))
+        : []),
+      ...truncationNote(r)
+    ]
+  }
   const body = xlsxStream(
     {
       name: request.kind === 'variants' ? 'Variants' : 'Cohort Variants',
@@ -209,6 +209,11 @@ async function openTabular(
     info
   )
   return { fileName, contentType: XLSX_TYPE, auditKey, body, release }
+}
+
+/** Info-sheet row for an XLSX export cut at the Excel row cap. */
+export function truncationNote(r: XlsxStreamResult): (string | number)[][] {
+  return r.truncated ? [['Truncated', 'Excel row limit reached; use CSV for all rows']] : []
 }
 
 async function openPanelBed(

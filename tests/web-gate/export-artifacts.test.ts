@@ -22,6 +22,7 @@ vi.mock('../../src/web/server/web-gene-reference', () => ({
 }))
 
 import { zipStream } from '../../src/web/server/downloads/zip-stream'
+import { truncationNote } from '../../src/web/server/downloads/export-artifacts'
 import { MAX_XLSX_DATA_ROWS, xlsxStream } from '../../src/web/server/downloads/xlsx-stream'
 import { DownloadGrantRegistry } from '../../src/web/server/downloads/download-grants'
 import { buildDispatcher, registerDispatcher } from '../../src/web/server/dispatcher'
@@ -177,5 +178,14 @@ describe('panel BED artifact', () => {
       })
     )
     await app.close()
+  })
+})
+
+describe('XLSX truncation note (#558)', () => {
+  test('is one row when the Excel row cap cut the export, else none', () => {
+    expect(truncationNote({ rowCount: 5, truncated: false })).toEqual([])
+    expect(truncationNote({ rowCount: 5, truncated: true })).toEqual([
+      ['Truncated', 'Excel row limit reached; use CSV for all rows']
+    ])
   })
 })

@@ -7,6 +7,7 @@ import nock from 'nock'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { HpoApiClient } from '../../../../src/main/services/api/HpoApiClient'
 import { ApiCache } from '../../../../src/main/services/api/ApiCache'
+import { stalledBody } from './stalled-fetch'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { mkdtempSync, rmSync } from 'fs'
@@ -41,6 +42,7 @@ describe('HpoApiClient', () => {
 
   afterEach(() => {
     nock.cleanAll()
+    vi.restoreAllMocks()
     db.close()
     rmSync(tempDir, { recursive: true, force: true })
   })
@@ -122,19 +124,14 @@ describe('HpoApiClient', () => {
     expect(elapsed).toBeGreaterThanOrEqual(190) // Allow 10ms tolerance
   })
 
-  it('handles API timeout', async () => {
-    // Mock slow API response
-    nock('https://clinicaltables.nlm.nih.gov')
-      .get('/api/hpo/v3/search')
-      .query({ terms: 'slow', count: '20', df: 'id,name' })
-      .delay(11000) // Delay longer than 10s timeout
-      .reply(200, [0, [], null, []])
+  it('handles API timeout, including a body that stalls after the headers', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) => stalledBody(init))
 
     const result = await client.search('slow')
 
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error).toContain('abort')
+      expect(result.error).toMatch(/abort|timeout/i)
     }
   })
 

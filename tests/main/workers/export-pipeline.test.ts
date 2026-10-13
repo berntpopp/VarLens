@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync, existsSync, rmSync, mkdtempSync } from 'node:fs'
+import { readFileSync, existsSync, rmSync, mkdtempSync, writeFileSync, chmodSync } from 'node:fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import * as XLSX from 'xlsx'
@@ -352,6 +352,47 @@ describe('runExportPipeline — CSV', () => {
 
     // At minimum, the initial progress(0, 0) is called
     expect(onProgress).toHaveBeenCalledWith(0, 0)
+  })
+
+  describe('failures (#558): reject promptly, never leave a partial file', () => {
+    // Root ignores file modes; /dev/full is Linux-only.
+    const linuxUser = process.platform === 'linux' && process.getuid?.() !== 0
+
+    it('rejects when the output path cannot be opened', async () => {
+      const params = makeCsvParams({ outputFilePath: join(tmpDir, 'missing-dir', 'out.csv') })
+      await expect(runExportPipeline(params)).rejects.toThrow(/ENOENT/)
+      expect(existsSync(params.outputFilePath)).toBe(false)
+    })
+
+    it.runIf(linuxUser)('leaves an existing file it cannot open untouched', async () => {
+      const existing = join(tmpDir, 'readonly.csv')
+      writeFileSync(existing, 'keep me')
+      chmodSync(existing, 0o444)
+      await expect(runExportPipeline(makeCsvParams({ outputFilePath: existing }))).rejects.toThrow(
+        /EACCES/
+      )
+      expect(readFileSync(existing, 'utf8')).toBe('keep me')
+    })
+
+    it.runIf(linuxUser)('rejects when writes fail under backpressure', async () => {
+      for (let i = 0; i < 20000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      // /dev/full opens but every write fails with ENOSPC.
+      await expect(
+        runExportPipeline(makeCsvParams({ outputFilePath: '/dev/full' }))
+      ).rejects.toThrow(/ENOSPC/)
+    })
+
+    it('rejects and removes the partial file when the export fails mid-stream', async () => {
+      // Enough rows to fill the stream buffer, so the file is open and partly written at the failure.
+      for (let i = 0; i < 5000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      const params = makeCsvParams({
+        onProgress: (rows) => {
+          if (rows === 4000) throw new Error('source failed')
+        }
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow('source failed')
+      expect(existsSync(params.outputFilePath)).toBe(false)
+    })
   })
 })
 
