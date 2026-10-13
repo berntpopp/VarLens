@@ -23,13 +23,13 @@
          shown as they are, but ranked as unknown (#469). Tonal alert: its
          background derives from the theme's warning colour in light and dark. -->
     <v-alert
-      v-for="notice in unrankedNotices"
+      v-for="notice in dataNotices"
       :key="notice.caseName + notice.summary"
       type="warning"
       variant="tonal"
       density="compact"
       class="mb-2 text-body-small"
-      data-testid="unranked-clinvar"
+      data-testid="import-data-warnings"
     >
       <strong>{{ notice.caseName }}:</strong> {{ notice.summary }}
     </v-alert>
@@ -83,7 +83,7 @@ const props = defineProps<{
 }>()
 
 /** One compact warning per data warning of a file (unranked ClinVar values, gnomAD AF range). */
-const unrankedNotices = computed(() =>
+const dataNotices = computed(() =>
   props.summary.details.flatMap((detail) =>
     importDataNotices(detail).map((summary) => ({ caseName: detail.caseName, summary }))
   )

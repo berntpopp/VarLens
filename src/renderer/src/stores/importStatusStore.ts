@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { ImportDataReport } from '../../../shared/types/import'
-import { importDataNotices, logUnrankedClinvar } from '../utils/unranked-clinvar'
+import { importDataNotices, logImportDataWarnings } from '../utils/unranked-clinvar'
 
 export type ImportPhase =
   'idle' | 'uploading' | 'importing' | 'finalizing' | 'complete' | 'error' | 'cancelled'
@@ -142,7 +142,7 @@ export const useImportStatusStore = defineStore('importStatus', () => {
     const affected = finished.some((detail) => importDataNotices(detail).length > 0)
     if (unrankedLogged || !affected) return
     unrankedLogged = true
-    logUnrankedClinvar(finished)
+    logImportDataWarnings(finished)
   }
 
   function importComplete(result: {

@@ -41,7 +41,7 @@ export function importDataNotices(report: ImportDataReport): string[] {
  * Put the data warnings of finished imports ({@link importDataNotices}) into
  * the in-app log: the server-side log line never reaches the user.
  */
-export function logUnrankedClinvar(
+export function logImportDataWarnings(
   details: ReadonlyArray<ImportDataReport & { caseName?: string }>
 ): void {
   for (const detail of details) {

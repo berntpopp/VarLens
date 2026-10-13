@@ -246,7 +246,7 @@ export async function uploadImportFiles(
   }
   if (skipped.length > 0) {
     const message = skippedUploadsSummary(skipped)
-    if (uploaded.length === 0) throw new Error(message)
+    // Sent even when every file was refused: it ends the upload status for every picker.
     dispatchUploadEvent({
       status: 'skipped',
       fileName: '',
@@ -257,6 +257,7 @@ export async function uploadImportFiles(
       percent: null,
       message
     })
+    if (uploaded.length === 0) throw new Error(message)
   }
   return uploaded
 }

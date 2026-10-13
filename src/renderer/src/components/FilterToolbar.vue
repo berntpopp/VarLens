@@ -192,6 +192,7 @@ import {
 interface ColumnDef {
   key: string
   title: string
+  width?: string | number
 }
 
 interface Props {
@@ -604,7 +605,7 @@ const orderedColumns = computed(() => {
   return props.columns
 })
 
-// Same responsive default as VariantTable's useVariantColumns (same keys → same result)
+// Same responsive default as VariantTable's useVariantColumns (same columns and widths → same result)
 const { isVisible: isColumnShown } = useAutoHiddenColumns(() => props.columns ?? [], columnPrefs)
 const visibleColumnKeys = computed(() =>
   orderedColumns.value.filter((h) => isColumnShown(h.key)).map((h) => h.key)

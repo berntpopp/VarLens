@@ -30,7 +30,7 @@
       variant="tonal"
       density="compact"
       class="mb-4 text-body-small"
-      data-testid="unranked-clinvar"
+      data-testid="import-data-warnings"
     >
       <strong>{{ caseName }}:</strong> {{ notice }}
     </v-alert>

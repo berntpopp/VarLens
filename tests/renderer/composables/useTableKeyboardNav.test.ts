@@ -412,12 +412,9 @@ describe('arrow navigation and a focused control', () => {
     (move) => {
       document.body.innerHTML = '<button>star</button>'
       const button = document.querySelector('button')!
+      // focus left behind by a mouse click
+      button.dispatchEvent(new Event('pointerdown', { bubbles: true }))
       button.focus()
-      // focus left behind by a mouse click is not :focus-visible
-      const matches = button.matches.bind(button)
-      vi.spyOn(button, 'matches').mockImplementation(
-        (sel) => sel !== ':focus-visible' && matches(sel)
-      )
       const [nav, app] = withSetup(() =>
         useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
       )
@@ -428,14 +425,11 @@ describe('arrow navigation and a focused control', () => {
     }
   )
 
-  it('keeps keyboard (focus-visible) focus so Tab users keep their place', () => {
+  it('keeps focus reached by keyboard so Tab users keep their place', () => {
     document.body.innerHTML = '<button>copy</button>'
     const button = document.querySelector('button')!
-    button.focus()
-    const matches = button.matches.bind(button)
-    vi.spyOn(button, 'matches').mockImplementation(
-      (sel) => sel === ':focus-visible' || matches(sel)
-    )
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    button.focus() // reached by Tab: the last pointer press was elsewhere
     const [nav, app] = withSetup(() =>
       useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
     )

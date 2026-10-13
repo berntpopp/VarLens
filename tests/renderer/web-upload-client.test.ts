@@ -98,9 +98,12 @@ describe('uploadImportFiles', () => {
 
   test('rejects with the server message, not the JSON envelope, when every file is refused', async () => {
     stubXhr([refused])
+    const events = captureEvents()
     await expect(uploadImportFiles(files('bad.txt'))).rejects.toThrow(
       /^1 file skipped: bad\.txt: Only VCF, JSON, BED, GZIP, and ZIP files are supported$/
     )
+    // The skipped event still ends the upload status (otherwise the app-bar chip sticks).
+    expect(events.map((e) => e.status)).toContain('skipped')
   })
 
   test('a quota refusal still aborts the whole batch', async () => {

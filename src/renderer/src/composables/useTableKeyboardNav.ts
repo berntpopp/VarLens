@@ -58,7 +58,23 @@ export function isOverlayOpen(): boolean {
  * (open the panel) must not take the key and cancel its click.
  */
 export function isControlFocused(): boolean {
-  return document.activeElement?.closest('button, a[href], [role="button"]') != null
+  return document.activeElement?.closest(CONTROL_SELECTOR) != null
+}
+
+const CONTROL_SELECTOR = 'button, a[href], [role="button"]'
+
+// The control the last pointer press landed on. Chromium makes a mouse-focused
+// button match :focus-visible once any key is pressed, so the focus source has
+// to be recorded at the press, not read during the keydown.
+let pointerFocusedControl: Element | null = null
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      pointerFocusedControl = (e.target as Element | null)?.closest?.(CONTROL_SELECTOR) ?? null
+    },
+    true
+  )
 }
 
 /**
@@ -112,10 +128,10 @@ export function useTableKeyboardNav<T>(
 
   // ↑ / ↓ hand the keyboard back to the table: a button the mouse left focused
   // must not take the next Enter (isControlFocused) from the selected row.
-  // Keyboard (focus-visible) focus stays put so Tab users keep their place.
+  // Focus reached by keyboard (Tab) stays put so Tab users keep their place.
   function releaseControlFocus(): void {
     const el = document.activeElement as HTMLElement | null
-    if (isControlFocused() && el && !el.matches(':focus-visible')) el.blur()
+    if (el && isControlFocused() && el === pointerFocusedControl) el.blur()
   }
 
   function moveDown(): void {

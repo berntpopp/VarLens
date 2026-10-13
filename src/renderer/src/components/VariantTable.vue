@@ -673,7 +673,9 @@ defineExpose({
   resetSort,
   refresh: loadVariants,
   buildQueryFilters,
-  columns: computed(() => headers.value.map((h) => ({ key: h.key, title: h.title }))),
+  columns: computed(() =>
+    headers.value.map((h) => ({ key: h.key, title: h.title, width: h.width }))
+  ),
   hasColumnFilters,
   columnFilterCount,
   clearAllColumnFilters,
