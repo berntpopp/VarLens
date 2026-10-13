@@ -12,6 +12,9 @@ import { BUILD_COPY } from '../../../../src/shared/config/genome-builds.config'
 import { installCapabilities } from '../../helpers/capabilities'
 import type { BuildReview } from '../../../../src/shared/types/build-review'
 
+const invalidateServerData = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('../../../../src/renderer/src/queries/invalidation', () => ({ invalidateServerData }))
+
 const vuetify = createVuetify({ components, directives })
 const REVIEW: BuildReview = {
   caseId: 7,
@@ -48,6 +51,7 @@ afterEach(() => {
   inProgress = false
   failed = false
   resolveBuildReviews.mockClear()
+  invalidateServerData.mockClear()
   document.body.innerHTML = ''
 })
 
@@ -121,5 +125,12 @@ describe('BuildReviewBanner', () => {
     expect(wrapper.get('[data-testid="rename-failed"]').text()).toContain(BUILD_COPY.renameFailed)
     expect(wrapper.find('[data-testid="rename-in-progress"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('a confirmed build refreshes the cached case builds (#577)', async () => {
+    const { apply } = useBuildReviews()
+    await apply([{ caseId: 7, build: 'GRCh37' }])
+    // Global annotation writes read the case build from that cache.
+    expect(invalidateServerData).toHaveBeenCalledWith('data-changed')
   })
 })

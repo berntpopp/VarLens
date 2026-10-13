@@ -6,6 +6,7 @@ import { ref } from 'vue'
 
 import type { BuildReview, BuildReviewChoice } from '../../../shared/types/build-review'
 import { unwrapIpcResult } from '../../../shared/types/errors'
+import { invalidateServerData } from '../queries/invalidation'
 import { logService } from '../services/LogService'
 import { useApiService } from './useApiService'
 
@@ -35,7 +36,10 @@ export function useBuildReviews() {
     if (api === undefined || choices.length === 0) return 0
     applying.value = true
     try {
-      return unwrapIpcResult(await api.cases.resolveBuildReviews(choices))
+      const applied = unwrapIpcResult(await api.cases.resolveBuildReviews(choices))
+      // Cases changed build: the cached case builds (which key global annotation writes) are stale.
+      void invalidateServerData('data-changed')
+      return applied
     } finally {
       applying.value = false
       await load()
