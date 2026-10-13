@@ -59,7 +59,10 @@ describe('SQLite cohort export number cells', () => {
     runCohortExport(service.database, {}, file, () => undefined)
     const wb = XLSX.read(readFileSync(file))
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]])
-    expect(rows[0]).toMatchObject({ 'ACMG Class': 'Likely pathogenic', 'Global Comment': 'reviewed' })
+    expect(rows[0]).toMatchObject({
+      'ACMG Class': 'Likely pathogenic',
+      'Global Comment': 'reviewed'
+    })
     expect(rows[0]).not.toHaveProperty('Case Comment')
   })
 })

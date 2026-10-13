@@ -62,7 +62,9 @@ function overrideCases(
 
       it('a class agreeing with the stored evidence saves', async () => {
         await seed('Benign', VUS_EVIDENCE)
-        await expect(write()({ acmg_classification: 'Uncertain significance' })).resolves.toBeDefined()
+        await expect(
+          write()({ acmg_classification: 'Uncertain significance' })
+        ).resolves.toBeDefined()
       })
     })
   }

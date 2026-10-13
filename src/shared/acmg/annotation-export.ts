@@ -31,7 +31,11 @@ export function caseExportCells(
   own: ExportedAnnotation | null,
   global: ExportedAnnotation | null
 ): AcmgCells & { case_comment: string | null; global_comment: string | null } {
-  return { ...acmgCells(own), case_comment: own?.comment ?? null, global_comment: global?.comment ?? null }
+  return {
+    ...acmgCells(own),
+    case_comment: own?.comment ?? null,
+    global_comment: global?.comment ?? null
+  }
 }
 
 /** Cohort export: the global call and comment of the row's build. */

@@ -19,7 +19,9 @@ const GLOBAL_AT = `SELECT acmg_classification, acmg_evidence, global_comment AS 
   WHERE chr = ? AND pos = ? AND ref = ? AND alt = ? AND genome_build =`
 
 /** Case export: the case's own call and comment, and the global comment of its build. */
-export function caseRowAnnotations(db: DatabaseType): (row: Row) => ReturnType<typeof caseExportCells> {
+export function caseRowAnnotations(
+  db: DatabaseType
+): (row: Row) => ReturnType<typeof caseExportCells> {
   const perCase = db.prepare(
     `SELECT acmg_classification, acmg_evidence, per_case_comment AS comment
        FROM case_variant_annotations WHERE case_id = ? AND variant_id = ?`

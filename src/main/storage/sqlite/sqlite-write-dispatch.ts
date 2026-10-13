@@ -6,7 +6,10 @@
 import type { Repositories } from '../../database/createRepositories'
 import type { StorageWriteTask } from '../write-executor'
 import {
-  assertOverrideReason, globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../annotation-audit'
+  assertOverrideReason,
+  globalAnnotationAuditEntries,
+  perCaseAnnotationAuditEntries
+} from '../annotation-audit'
 
 function normalizeAnnotationUpdates<T extends { starred?: boolean }>(
   updates: T

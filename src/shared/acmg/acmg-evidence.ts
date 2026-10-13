@@ -99,5 +99,4 @@ export function mergedOverrideReasonMissing(
   })
 }
 
-export const OVERRIDE_REASON_REQUIRED =
-  'An ACMG class that overrides the evidence needs a reason'
+export const OVERRIDE_REASON_REQUIRED = 'An ACMG class that overrides the evidence needs a reason'
