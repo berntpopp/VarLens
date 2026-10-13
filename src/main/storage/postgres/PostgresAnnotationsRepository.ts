@@ -90,7 +90,6 @@ export class PostgresAnnotationsRepository {
     private readonly summaryLockWaitMs?: number
   ) {}
 
-  /** Global annotations are keyed by genome build as well (0035, #577). */
   async getGlobalAnnotation(
     chr: string,
     pos: number,
