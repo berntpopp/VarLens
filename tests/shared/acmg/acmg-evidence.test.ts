@@ -6,6 +6,7 @@ import {
   parseAcmgEvidence
 } from '../../../src/shared/acmg/acmg-evidence'
 import {
+  GenomeBuildArgSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema
 } from '../../../src/shared/api/schemas/annotations'
@@ -92,5 +93,16 @@ describe('ACMG export fields (#574)', () => {
     expect(acmgEvidenceFields(null)).toEqual(none)
     expect(acmgEvidenceFields('{')).toEqual(none)
     expect(acmgEvidenceFields(JSON.stringify({ pathogenic: [], benign: [] }))).toEqual(none)
+  })
+})
+
+describe('genome build of a global annotation (#577)', () => {
+  it('is one of the configured build ids, spelled as stored', () => {
+    for (const id of ['GRCh37', 'GRCh38', 'T2T-CHM13']) {
+      expect(GenomeBuildArgSchema.safeParse(id).success).toBe(true)
+    }
+    for (const id of ['grch38', 'hg38', '', 'GRCh38 ']) {
+      expect(GenomeBuildArgSchema.safeParse(id).success).toBe(false)
+    }
   })
 })

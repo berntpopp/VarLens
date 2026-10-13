@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { ACMG_CLASSIFICATIONS } from '../../config/domain.config'
+import { GENOME_BUILDS } from '../../config/genome-builds.config'
 import { OVERRIDE_REASON_REQUIRED, overrideReasonMissing } from '../../acmg/acmg-evidence'
 import {
   CaseVariantIdSchema,
@@ -34,8 +35,15 @@ export const PerCaseAnnotationUpdatesSchema = z
   .superRefine(requireOverrideReason)
   .pipe(PerCaseAnnotationFieldsSchema)
 
-/** Genome build of a global annotation: part of its key (#577). */
-export const GenomeBuildArgSchema = z.string().min(1)
+/**
+ * Genome build of a global annotation: part of its key (#577), so only a
+ * configured build id as cases store it ("grch38" would store a row no case
+ * reads). Imports store only these ids; a legacy case with any other value
+ * cannot write global notes until its build is corrected.
+ */
+export const GenomeBuildArgSchema = z
+  .string()
+  .refine((id) => GENOME_BUILDS.some((b) => b.id === id), 'Unknown genome build')
 
 /** Coordinates of a global annotation, which is keyed by build too (#577). */
 export const GlobalVariantCoordsSchema = VariantCoordsSchema.extend({
