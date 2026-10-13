@@ -28,6 +28,8 @@ import type { StorageSession } from '../storage/session'
 export class DatabaseManager {
   private currentSession: StorageSession | null = null
   private recentDatabases: RecentDatabasesService
+  /** Tail of the lifecycle queue: open/switch/create/close run one at a time (#561). */
+  private lifecycleTail: Promise<unknown> = Promise.resolve()
 
   /**
    * Create a DatabaseManager
@@ -49,9 +51,13 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be opened
    */
   async open(dbPath: string, key?: string): Promise<void> {
+    return this.serialize(() => this.openUnlocked(dbPath, key))
+  }
+
+  private async openUnlocked(dbPath: string, key?: string): Promise<void> {
     assertNoActiveDatabaseWork('open a database')
     try {
-      await this.close()
+      await this.closeUnlocked()
 
       const newSession = await this.createSqliteSession(dbPath, key)
       this.currentSession = newSession
@@ -117,9 +123,13 @@ export class DatabaseManager {
    * @throws DatabaseError if database cannot be created
    */
   async createDatabase(dbPath: string, key?: string): Promise<void> {
+    return this.serialize(() => this.createDatabaseUnlocked(dbPath, key))
+  }
+
+  private async createDatabaseUnlocked(dbPath: string, key?: string): Promise<void> {
     assertNoActiveDatabaseWork('create a database')
     try {
-      await this.switchDatabase(dbPath, key)
+      await this.switchDatabaseUnlocked(dbPath, key)
     } catch (error) {
       throw new DatabaseError(
         `Failed to create database at ${dbPath}`,
@@ -144,6 +154,10 @@ export class DatabaseManager {
    * @throws DatabaseError if switch fails and rollback succeeds
    */
   async switchDatabase(newPath: string, key?: string): Promise<void> {
+    return this.serialize(() => this.switchDatabaseUnlocked(newPath, key))
+  }
+
+  private async switchDatabaseUnlocked(newPath: string, key?: string): Promise<void> {
     assertNoActiveDatabaseWork('switch database')
     const previousSession = this.currentSession
     let newSession: StorageSession | null = null
@@ -202,9 +216,11 @@ export class DatabaseManager {
       throw new DatabaseError('openPostgresSession requires a postgres-backed session')
     }
 
-    assertNoActiveDatabaseWork('switch database')
-    await this.close()
-    this.currentSession = session
+    return this.serialize(async () => {
+      assertNoActiveDatabaseWork('switch database')
+      await this.closeUnlocked()
+      this.currentSession = session
+    })
   }
 
   /**
@@ -214,6 +230,10 @@ export class DatabaseManager {
    * Safe to call even if no database is open.
    */
   async close(): Promise<void> {
+    return this.serialize(() => this.closeUnlocked())
+  }
+
+  private async closeUnlocked(): Promise<void> {
     if (this.currentSession !== null) {
       const session = this.currentSession
       this.currentSession = null
@@ -328,6 +348,17 @@ export class DatabaseManager {
    */
   removeRecentDatabase(dbPath: string): void {
     this.recentDatabases.removeRecent(dbPath)
+  }
+
+  /**
+   * Run a lifecycle step after every earlier one settled. Steps read the previous
+   * session inside the lock, so overlapping calls cannot leak or resurrect one.
+   * Public methods take the lock; the `*Unlocked` helpers never do (no re-entry deadlock).
+   */
+  private serialize<T>(step: () => Promise<T>): Promise<T> {
+    const run = this.lifecycleTail.then(step)
+    this.lifecycleTail = run.catch(() => undefined)
+    return run
   }
 
   private async createSqliteSession(dbPath: string, key?: string): Promise<StorageSession> {

@@ -313,16 +313,18 @@ export function buildPostgresVariantQueryParts(
     )
   }
 
-  addPostgresClinicalVariantFilters(filter, { schemaName, addParam, addWhere })
   addPostgresColumnFilters(filter, addParam, addWhere, ranks)
+  const fromAndWhereSql = (): string => `FROM ${schemaName}."variants" v
+      ${joins.join('\n')}
+      WHERE ${whereParts.join('\n        AND ')}`
+  // Last: candidate compound het counts the rows every other filter keeps (#579).
+  addPostgresClinicalVariantFilters(filter, { schemaName, addParam, addWhere, fromAndWhereSql })
 
   // Impact and ClinVar sort by severity rank; a row the 0025 backfill has not
   // reached yet gets its rank computed on the fly (carrierRanks).
   const orderTerms = buildPostgresVariantOrderTerms(sortBy, POSTGRES_BASE_SORT_COLUMNS, ranks)
   return {
-    fromAndWhereSql: `FROM ${schemaName}."variants" v
-      ${joins.join('\n')}
-      WHERE ${whereParts.join('\n        AND ')}`,
+    fromAndWhereSql: fromAndWhereSql(),
     orderBySql: orderTermsToSql(orderTerms),
     orderTerms,
     params,

@@ -18,7 +18,13 @@ const result = {
   groupB_carriers: 1,
   groupA_total: 5,
   groupB_total: 5,
-  fisher: { p_value: 0.04, odds_ratio: 6, ci_lower: null, ci_upper: null },
+  fisher: {
+    p_value: 0.04,
+    odds_ratio: 6,
+    odds_ratio_infinite: false,
+    ci_lower: null,
+    ci_upper: null
+  },
   logistic_burden: {
     p_value: 0.03,
     beta: 1.2,

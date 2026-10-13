@@ -22,7 +22,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
 import { detectFormat } from '../../../src/main/import/format-detection'
-import { loadImportFilters } from '../../../src/main/import/vcf/import-filters'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresImportExecutor } from '../../../src/main/storage/postgres/PostgresImportExecutor'
@@ -343,10 +342,6 @@ describe('VCF import filters: every file, both backends', () => {
         () => session as never,
         () => svc,
         {},
-        // What the IPC handler builds for the append path from the same payload.
-        await loadImportFilters(
-          payload === undefined ? undefined : { ...payload, bedFilePath: payload.bedFile as string }
-        ),
         payload as never
       )
       const db = new Database(dbPath, { readonly: true })
@@ -510,7 +505,6 @@ describe('VCF import filters: every file, both backends', () => {
           throw new Error('no SQLite database on the PostgreSQL path')
         },
         {},
-        undefined,
         payloadOf(c) as never
       )
       const rows = await probe.query(

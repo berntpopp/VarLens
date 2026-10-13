@@ -134,6 +134,15 @@ describe('SQLite import stores severity ranks (#469)', () => {
       // Real annotation: more than one impact level was ranked.
       expect(distinct(rows, 'impact_rank').filter((rank) => rank > 0).length).toBeGreaterThan(1)
     }
+    // #547: VEP's %3D escape is decoded on import (single-sample.vep has 14 of them).
+    const hgvsp = db
+      .prepare(
+        `SELECT v.aa_change FROM variants v JOIN cases c ON c.id = v.case_id
+          WHERE c.name = 'vep' AND v.aa_change IS NOT NULL`
+      )
+      .all() as Array<{ aa_change: string }>
+    expect(hgvsp.some((row) => row.aa_change.endsWith('='))).toBe(true)
+    expect(hgvsp.filter((row) => row.aa_change.includes('%'))).toEqual([])
     // ClinVar from the CSQ field and from the standalone INFO field.
     expect(distinct(rowsOf(db, 'synthetic'), 'clinvar_rank')).toContain(
       clinvarRank('Likely_pathogenic')

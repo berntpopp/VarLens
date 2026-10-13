@@ -13,20 +13,6 @@ import type { DatabaseService } from '../../database/DatabaseService'
 import { DEFAULT_PANEL_GENOME_BUILD } from '../../../shared/filters/panel-intervals'
 
 /**
- * In-memory cache for computed panel intervals.
- * Keyed on JSON.stringify({ panelIds, assembly, paddingBp }).
- * Invalidated via clearPanelIntervalCache() when panel/gene data changes.
- */
-const panelIntervalCache = new Map<string, GenomicInterval[]>()
-
-/**
- * Clear the panel interval cache. Call this when panels or their genes change.
- */
-export function clearPanelIntervalCache(): void {
-  panelIntervalCache.clear()
-}
-
-/**
  * Parameters for panel interval computation
  */
 export interface PanelIntervalParams {
@@ -68,27 +54,10 @@ export function computePanelIntervals(
   const paddingBp = params.panel_padding_bp ?? 5000
   const genomeBuild = params.genome_build ?? 'GRCh38'
 
-  const cacheKey = JSON.stringify({
-    panelIds: params.active_panel_ids,
-    assembly: genomeBuild,
-    paddingBp
-  })
-
-  const cached = panelIntervalCache.get(cacheKey)
-  if (cached) {
-    return cached
-  }
-
+  // Deliberately uncached: panel ids restart at 1 in every database (#546).
   try {
     const geneRefDb = getGeneReferenceDb()
-    const intervals = db.panels.computeIntervals(
-      params.active_panel_ids,
-      genomeBuild,
-      paddingBp,
-      geneRefDb
-    )
-    panelIntervalCache.set(cacheKey, intervals)
-    return intervals
+    return db.panels.computeIntervals(params.active_panel_ids, genomeBuild, paddingBp, geneRefDb)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     // Do NOT swallow this into "no panel filter" — a panel IS configured here

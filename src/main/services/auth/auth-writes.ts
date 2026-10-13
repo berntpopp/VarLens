@@ -13,7 +13,15 @@ import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { ROLE_ADMIN, type UserRole } from '../../../shared/auth/auth-constants'
 
 export type AuthWriteOp =
-  | { op: 'recordFailedLogin'; userId: number; count: number; lockedUntil: string | null }
+  | {
+      op: 'recordFailedLogin'
+      userId: number
+      /** ISO time of the caller's lock check; an older lock counts as expired. */
+      now: string
+      /** Lock end applied when the new count reaches `maxAttempts`. */
+      lockUntil: string
+      maxAttempts: number
+    }
   | { op: 'clearFailedLogins'; userId: number }
   | {
       op: 'createFirstUser'
@@ -108,16 +116,35 @@ function setRole(db: DatabaseType, op: Extract<AuthWriteOp, { op: 'setRole' }>):
   })()
 }
 
+/**
+ * Atomic increment + conditional lockout. An expired lock restarts the count
+ * at 1 and is cleared, so one wrong password after expiry cannot relock the
+ * account (#563). julianday() reads both the ISO and datetime() formats.
+ */
+function recordFailedLogin(
+  db: DatabaseType,
+  op: Extract<AuthWriteOp, { op: 'recordFailedLogin' }>
+): AuthWriteResult {
+  const expired =
+    "locked_until IS NOT NULL AND locked_until <> '' AND julianday(locked_until) <= julianday(@now)"
+  const newCount = `CASE WHEN ${expired} THEN 1 ELSE failed_login_count + 1 END`
+  return {
+    changes: db
+      .prepare(
+        `UPDATE users SET failed_login_count = ${newCount},
+         locked_until = CASE WHEN ${newCount} >= @maxAttempts THEN @lockUntil
+                             WHEN ${expired} THEN NULL ELSE locked_until END
+         WHERE id = @userId`
+      )
+      .run({ now: op.now, lockUntil: op.lockUntil, maxAttempts: op.maxAttempts, userId: op.userId })
+      .changes
+  }
+}
+
 export function applyAuthWrite(db: DatabaseType, op: AuthWriteOp): AuthWriteResult {
   switch (op.op) {
     case 'recordFailedLogin':
-      return changes(
-        db,
-        'UPDATE users SET failed_login_count = ?, locked_until = COALESCE(?, locked_until) WHERE id = ?',
-        op.count,
-        op.lockedUntil,
-        op.userId
-      )
+      return recordFailedLogin(db, op)
     case 'clearFailedLogins':
       return changes(
         db,

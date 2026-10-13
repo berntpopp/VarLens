@@ -4,9 +4,6 @@ vi.mock('electron', () => ({ dialog: { showSaveDialog: vi.fn() } }))
 vi.mock('../../../../src/main/database/geneReferenceLoader', () => ({
   getGeneReferenceDb: vi.fn()
 }))
-vi.mock('../../../../src/main/ipc/handlers/variants', () => ({
-  clearPanelIntervalCache: vi.fn()
-}))
 
 import { registerPanelHandlers } from '../../../../src/main/ipc/handlers/panels'
 import { isIpcError } from '../../../../src/shared/types/errors'

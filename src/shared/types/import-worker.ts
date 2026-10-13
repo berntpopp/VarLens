@@ -93,6 +93,11 @@ export interface FileImportRequest {
   fieldProfile?: ImportFieldProfile
   /** Batch: build for files whose header decides none (always JSON). */
   fallbackGenomeBuild?: string
+  /**
+   * Multi-file case: append this file to the published case instead of
+   * creating one (#551). Name and duplicate fields are then unused.
+   */
+  appendToCaseId?: number
   /** VCF-specific: import filters; the worker loads the BED file itself. */
   vcfFilters?: {
     bedFilePath?: string | null

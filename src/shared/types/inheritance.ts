@@ -33,6 +33,11 @@ export const TRIO_MODES: readonly TrioInheritanceMode[] = [
   'compound_het'
 ] as const
 
+/** A mode that needs an analysis group (family) to be evaluated. */
+export function isTrioMode(mode: string): boolean {
+  return (TRIO_MODES as readonly string[]).includes(mode)
+}
+
 export interface InheritanceModeMeta {
   mode: InheritanceMode
   abbr: string

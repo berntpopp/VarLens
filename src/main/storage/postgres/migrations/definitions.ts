@@ -164,6 +164,16 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0032',
     name: 'evidence_ranking_beta_preset',
     fileName: '0032_evidence_ranking_beta_preset.sql'
+  },
+  {
+    version: '0033',
+    name: 'decode_vep_hgvs_escapes',
+    fileName: '0033_decode_vep_hgvs_escapes.sql'
+  },
+  {
+    version: '0034',
+    name: 'import_integrity',
+    fileName: '0034_import_integrity.sql'
   }
 ]
 

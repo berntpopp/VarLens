@@ -185,6 +185,27 @@ describe('DatabasePicker', () => {
     expect(wrapper.emitted('error')).toEqual([[DATABASE_CONFIG.MESSAGES.NOT_A_DATABASE]])
   })
 
+  it('disables open, switch and connect actions while a database is loading (#561)', async () => {
+    const store = useDatabaseStore()
+    store.recentDatabases = [{ path: '/tmp/case.sqlite', name: 'case.sqlite', lastOpened: 1 }]
+    store.postgresProfiles = [POSTGRES_PROFILE]
+    mockApi.database.postgresProfilesList.mockResolvedValue([POSTGRES_PROFILE])
+    store.isLoading = true
+
+    mountPicker()
+    await openPickerMenu()
+
+    const items = [...document.body.querySelectorAll('.v-list-item')]
+    for (const label of ['case.sqlite', 'Open...', 'New...']) {
+      const item = items.find((el) => el.textContent?.includes(label)) as HTMLElement
+      expect(item.classList.contains('v-list-item--disabled')).toBe(true)
+    }
+    const connect = document.body.querySelector(
+      'button[aria-label="Connect PostgreSQL workspace Lab PostgreSQL"]'
+    ) as HTMLButtonElement
+    expect(connect.disabled).toBe(true)
+  })
+
   it('hides desktop database actions in web mode', async () => {
     window.__VARLENS_WEB__ = true
     installCapabilities({ runtime: 'web', role: 'user', storage: null })

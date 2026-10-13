@@ -18,6 +18,25 @@ export function variantIdentitySql(alias: string): string {
   return `${alias}.chr || ':' || CAST(${alias}.pos AS TEXT) || ':' || ${alias}.ref || ':' || ${alias}.alt`
 }
 
+/** Columns a qualifying-rows subquery must expose to {@link candidateCompoundHetSql}. */
+export const QUALIFYING_ROW_COLUMNS = ['gene_symbol', 'gt_num', 'chr', 'pos', 'ref', 'alt'] as const
+
+/**
+ * Row `row` is het and its gene has at least two distinct het variants among
+ * `qualifyingRows`: a derived table (QUALIFYING_ROW_COLUMNS) of the case rows
+ * that pass every other active filter (issue #579). Counting the whole case
+ * instead let two common SNPs qualify any gene. Same idea as the evidence
+ * shortlist, which counts het alleles among the gated candidates only.
+ */
+export function candidateCompoundHetSql(row: string, qualifyingRows: string): string {
+  return `(${row}.gt_num IN ${HET_GT_SQL} AND ${row}.gene_symbol IN (
+            SELECT qv.gene_symbol FROM ${qualifyingRows} qv
+            WHERE qv.gt_num IN ${HET_GT_SQL} AND qv.gene_symbol IS NOT NULL
+            GROUP BY qv.gene_symbol
+            HAVING COUNT(DISTINCT ${variantIdentitySql('qv')}) >= 2
+          ))`
+}
+
 export interface TrioSqlContext {
   /** The variants and analysis_group_members tables, quoted as the backend needs. */
   variants: string

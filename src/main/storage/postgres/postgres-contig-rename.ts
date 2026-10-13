@@ -121,8 +121,8 @@ async function applyGroupRemap(
 }
 
 /**
- * Rename a case's variants (all of them, or one locus) and recount their
- * frequencies. Only rows under an old name are written.
+ * Rename a case's variants (all of them, or one locus). Only rows under an
+ * old name are written.
  */
 async function renameVariants(
   client: QueryClient,
@@ -132,35 +132,14 @@ async function renameVariants(
   locus?: Locus
 ): Promise<void> {
   const tbl = tblOf(schema)
-  const visible =
-    (await client.query(`SELECT 1 FROM ${tbl('cases')} WHERE id = $1`, [caseId])).rows.length > 0
   const at = locus === undefined ? '' : ' AND pos = $2 AND ref = $3 AND alt = $4'
   const atParams = locus === undefined ? [] : [locus.pos, locus.ref, locus.alt]
-  // variant_frequency counts visible cases once per coordinate, like a delete/publish.
-  if (visible) {
-    await client.query(
-      `UPDATE ${tbl('variant_frequency')} vf SET case_count = vf.case_count - 1
-         FROM (SELECT DISTINCT coord_hash FROM ${tbl('variants_all')} WHERE case_id = $1${at}) c
-        WHERE vf.coord_hash = c.coord_hash`,
-      [caseId, ...atParams]
-    )
-  }
   for (const pair of pairs) {
     await client.query(
       `UPDATE ${tbl('variants_all')} SET chr = $${atParams.length + 2}
         WHERE case_id = $1${at} AND chr = $${atParams.length + 3}`,
       [caseId, ...atParams, pair.to, pair.from]
     )
-  }
-  if (visible) {
-    await client.query(
-      `INSERT INTO ${tbl('variant_frequency')} (chr, pos, ref, alt, case_count)
-       SELECT chr, pos, ref, alt, 1 FROM ${tbl('variants_all')} WHERE case_id = $1${at}
-        GROUP BY chr, pos, ref, alt
-       ON CONFLICT (coord_hash) DO UPDATE SET case_count = ${tbl('variant_frequency')}.case_count + 1`,
-      [caseId, ...atParams]
-    )
-    await client.query(`DELETE FROM ${tbl('variant_frequency')} WHERE case_count <= 0`)
   }
 }
 

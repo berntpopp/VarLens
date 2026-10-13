@@ -184,8 +184,9 @@ describe('parity (auth): repeated bad passwords trigger lockout consistently', (
     // This regex is intentionally tight to that fix — a refactor
     // that replaces the SQL with an equivalent (CTE, stored proc) is
     // welcome to update or remove this assertion.
-    expect(pgSrc).toMatch(/failed_login_count\s*=\s*failed_login_count\s*\+\s*1/)
-    expect(pgSrc).toMatch(/CASE\s+WHEN[\s\S]+failed_login_count\s*\+\s*1\s*>=/i)
+    // #563: an expired lock restarts the count at 1 instead of incrementing it.
+    expect(pgSrc).toMatch(/THEN 1 ELSE failed_login_count \+ 1 END/)
+    expect(pgSrc).toMatch(/WHEN \$\{newCount\} >= \$1 THEN \$3/)
   })
 })
 

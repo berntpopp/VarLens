@@ -41,7 +41,6 @@ describe('carrier cap (#455), SQLite', () => {
       id,
       variants.map((v) => makeVariant(v))
     )
-    service.variants.updateFrequencies(id)
     service.cohortSummary.rebuild()
     return id
   }

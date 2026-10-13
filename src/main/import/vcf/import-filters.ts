@@ -72,9 +72,9 @@ export const DEFAULT_IMPORT_FILTERS: ImportFilters = {
  * Returns `true` if the record should be kept, `false` if it should be
  * skipped. Safe to call with `filters === undefined` — returns true.
  *
- * Exported for reuse between the worker import path (`VcfStrategy.ts`)
- * and the main-thread append path (`import-logic-append.ts`). Keeping the
- * two paths in sync through a single helper avoids semantic drift.
+ * Exported for reuse between the import paths (`VcfStrategy.ts`, the import
+ * worker's pipeline). Keeping them in sync through a single helper avoids
+ * semantic drift.
  */
 export function passesPreMappingFilters(
   record: VcfRawRecord,

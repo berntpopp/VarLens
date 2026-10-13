@@ -12,20 +12,17 @@
  * sessions continue through the existing append pipeline
  * (`startMultiFileImportSqlite`).
  */
+import { statSync } from 'node:fs'
 import { mainLogger } from '../../services/MainLogger'
 import { importDataReport, mergeUnrankedClinvar } from '../../import/unranked-clinvar'
 import { ConflictError } from '../errors'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { DatabaseService } from '../../database/DatabaseService'
-import { VariantFrequencyService } from '../../database/VariantFrequencyService'
 import {
   createCohortStaleAnnouncer,
-  markCohortSummaryStaleBeforeAppend,
-  rebuildCohortSummaryAfterAppend,
   settleAfterWorkerImport,
   type EmitCohortStale
 } from './cohort-summary-settle'
-import type { ImportFilters } from '../../import/vcf/import-filters'
 import { assertGenomeBuildMatches, resolveCaseSample } from '../../import/vcf/vcf-header-parser'
 import type {
   StorageImportFileFilters,
@@ -33,6 +30,7 @@ import type {
 } from '../../storage/import-executor'
 import type { ImportDataReport } from '../../../shared/types/import'
 import type { StorageSession } from '../../storage/session'
+import { SqliteImportExecutor } from '../../storage/sqlite/SqliteImportExecutor'
 
 /**
  * Serializable filter payload as sent from the renderer over IPC.
@@ -214,21 +212,15 @@ export interface MultiFileImportResult extends ImportDataReport {
 /**
  * SQLite-specific implementation of multi-file import.
  *
- * The first file is imported via startImport (which creates the case via
- * the worker with its own bulk-insert session). Remaining files are appended
- * on the main thread via importAdditionalFileToCase.
- *
- * End-of-session housekeeping (executed once after all files):
- *   1. Rebuild FTS index + restore FTS triggers (single pass across all appends)
- *   2. Recompute case variant_count from the variants table atomically
- *   3. Update variant_frequency table
- *   4. Rebuild the cohort summary (only when files were appended: the worker
- *      keeps it exact for the first file, the appends are not merged into it)
+ * The first file is imported via the executor's worker, which creates the
+ * case. The remaining files are appended by the import worker in one session
+ * (appendFilesInWorker): each file is one transaction with its variant_count,
+ * and the worker rebuilds FTS (bulk session) and the cohort summary itself.
  *
  * A case-level genome-build lock is enforced: every subsequent file must
  * match the build detected from the first file's header (or match the
- * wizard-selected build). Mismatches abort the whole session before any
- * inserts for the offending file are performed.
+ * wizard-selected build). A mismatching file is refused before any of its
+ * rows are inserted.
  *
  * Do NOT call this directly — use `startMultiFileImport` which dispatches
  * to this function for SQLite sessions and to the executor for PostgreSQL.
@@ -240,7 +232,6 @@ async function startMultiFileImportSqlite(
   getSession: () => StorageSession,
   getDb: () => DatabaseService,
   callbacks: ImportCallbacks,
-  importFilters?: ImportFilters,
   signal?: AbortSignal,
   filtersPayload?: ImportFiltersPayload
 ): Promise<MultiFileImportResult> {
@@ -252,9 +243,7 @@ async function startMultiFileImportSqlite(
   }
 
   const db = getDb()
-  const { statSync } = await import('node:fs')
-  const { importAdditionalFileToCase, detectGenomeBuildFromFile } =
-    await import('./import-logic-append')
+  const { appendFilesInWorker, detectGenomeBuildFromFile } = await import('./import-logic-append')
 
   const totalFiles = files.length
 
@@ -283,8 +272,8 @@ async function startMultiFileImportSqlite(
   const firstFile = files[0]
   const firstCallbacks = wrapCallbacksForFile(firstFile, 0)
   const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
-  const firstResult = await getSession()
-    .getImportExecutor()
+  const executor = getSession().getImportExecutor()
+  const firstResult = await executor
     .importSingleFile({
       filePath: firstFile.filePath,
       caseName,
@@ -312,26 +301,7 @@ async function startMultiFileImportSqlite(
   const caseId = firstResult.caseId
   const fileResults: MultiFileImportFileResult[] = []
 
-  // Record first file provenance
-  try {
-    const firstFileSize = statSync(firstFile.filePath).size
-    db.cases.insertImportFile({
-      case_id: caseId,
-      file_path: firstFile.filePath,
-      file_size: firstFileSize,
-      variant_type: firstFile.variantType,
-      caller: firstFile.caller,
-      variant_count: firstResult.variantCount,
-      annotation_format: firstFile.annotationFormat
-    })
-  } catch (e) {
-    mainLogger.warn(
-      `Failed to record import file provenance for ${firstFile.filePath}: ${
-        e instanceof Error ? e.message : String(e)
-      }`,
-      'import'
-    )
-  }
+  recordImportFile(db, caseId, firstFile, firstResult.variantCount)
 
   fileResults.push({
     filePath: firstFile.filePath,
@@ -363,137 +333,77 @@ async function startMultiFileImportSqlite(
     }
   }
 
-  // The worker counted the case once per coordinate of the first file. Record
-  // the case's last variant id so the end-of-session upkeep can count only
-  // coordinates the appended files add (see updateFrequenciesForAppend).
-  const frequencies = files.length > 1 ? new VariantFrequencyService(db.database) : null
-  const frequencyWatermark = frequencies?.caseVariantWatermark(caseId) ?? 0
-
-  // Wrap all main-thread appends in a single bulk-insert session so FTS
-  // triggers are only torn down and rebuilt ONCE across all appended files.
-  // Without this bracket, the FTS `ai` trigger fires per row and the append
-  // loop becomes O(n²) for large files (e.g. a Sniffles2 300k-SV VCF).
-  if (files.length > 1) {
-    // Before the first appended row, not after the last (see the function).
-    markCohortSummaryStaleBeforeAppend(db)
-    db.variants.beginBulkInsert()
+  // Files 2..N: each is checked against the case's build here (a header
+  // read), then the import worker appends them in one session (#551).
+  const appended: Array<{ spec: MultiFileImportSpec; index: number }> = []
+  const outcomes = new Map<number, MultiFileImportFileResult>()
+  for (let i = 1; i < files.length && !isCancelled(); i++) {
+    const spec = files[i]
+    try {
+      assertGenomeBuildMatches(
+        lockedGenomeBuild,
+        await detectGenomeBuildFromFile(spec.filePath),
+        spec.filePath
+      )
+      appended.push({ spec, index: i })
+    } catch (error) {
+      outcomes.set(i, appendFailure(spec, error))
+    }
   }
-  try {
-    // Append remaining files into the same case
-    for (let i = 1; i < files.length; i++) {
-      if (isCancelled()) break
-      const spec = files[i]
-      try {
-        // ── Genome build lock enforcement ───────────────────────────
-        // Parse the header of the appended file and compare its detected
-        // build against the case's locked build. Mismatches abort the
-        // import of this file BEFORE any variants are inserted.
-        const fileBuild = await detectGenomeBuildFromFile(spec.filePath)
-        assertGenomeBuildMatches(lockedGenomeBuild, fileBuild, spec.filePath)
 
-        const fileSize = statSync(spec.filePath).size
-
-        const result = await importAdditionalFileToCase(
-          caseId,
-          spec.filePath,
-          vcfOptions,
-          getDb,
-          wrapCallbacksForFile(spec, i),
-          importFilters,
-          signal
-        )
-
-        db.cases.insertImportFile({
-          case_id: caseId,
-          file_path: spec.filePath,
-          file_size: fileSize,
-          variant_type: spec.variantType,
-          caller: spec.caller,
-          variant_count: result.variantCount,
-          annotation_format: spec.annotationFormat
-        })
-
+  if (appended.length > 0 && !isCancelled()) {
+    try {
+      const results = await appendFilesInWorker({
+        db,
+        caseId,
+        filePaths: appended.map((a) => a.spec.filePath),
+        vcfOptions,
+        filters: filtersPayload && translateFiltersPayloadToStorage(filtersPayload),
+        onProgress: (n, count, skipped) => {
+          const { spec, index } = appended[n]
+          wrapCallbacksForFile(spec, index).onProgress?.({
+            phase: 'inserting',
+            count,
+            elapsed: Date.now() - startTime,
+            skipped
+          })
+        },
+        onSummaryStale: () => stale.announce(),
+        signal,
+        createWorkerClient:
+          executor instanceof SqliteImportExecutor ? executor.createWorkerClient : undefined
+      })
+      results.forEach((result, n) => {
+        const { spec, index } = appended[n]
+        if (result.error !== undefined) {
+          outcomes.set(index, appendFailure(spec, result.error))
+          return
+        }
+        recordImportFile(db, caseId, spec, result.variantCount)
         totalVariants += result.variantCount
         totalSkipped += result.skipped
         unrankedLists.push(result.unrankedClinvar)
         afOutOfRange += result.afOutOfRange ?? 0
-
-        fileResults.push({
+        outcomes.set(index, {
           filePath: spec.filePath,
           variantType: spec.variantType,
           variantCount: result.variantCount
         })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        mainLogger.error(`Failed to import file ${spec.filePath}: ${message}`, 'import')
-        fileResults.push({
-          filePath: spec.filePath,
-          variantType: spec.variantType,
-          variantCount: 0,
-          error: message
-        })
-        if (isCancelled()) break
-      }
-    }
-  } finally {
-    if (files.length > 1) {
-      // Rebuild FTS + restore triggers + ANALYZE + optimize, regardless of
-      // how the append loop exited (success, per-file error, or thrown).
-      try {
-        db.variants.finishBulkInsertNoCount()
-      } catch (e) {
-        mainLogger.error(
-          `Failed to finalize bulk insert after multi-file append: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
-          'import'
-        )
+      })
+    } catch (error) {
+      for (const { spec, index } of appended) {
+        if (!outcomes.has(index)) outcomes.set(index, appendFailure(spec, error))
       }
     }
   }
-
-  // ── End-of-session housekeeping ────────────────────────────────
-  // Order matters: refresh variant_count first (it's the authoritative total
-  // of the variants table for this case), then update cross-case frequency
-  // counts, then bring the cohort summary up to date. We do this ONCE per
-  // session, not per file.
-  try {
-    db.variants.recalculateCaseVariantCount(caseId)
-  } catch (e) {
-    mainLogger.warn(
-      `Failed to recalculate variant_count for case ${caseId}: ${
-        e instanceof Error ? e.message : String(e)
-      }`,
-      'import'
-    )
+  for (let i = 1; i < files.length; i++) {
+    const outcome = outcomes.get(i)
+    if (outcome !== undefined) fileResults.push(outcome)
   }
 
-  if (frequencies !== null) {
-    // Incremental, not "decrement the merged case then re-add": the merged
-    // case holds coordinates the worker never counted, and decrementing those
-    // would steal a count from other cases that carry them.
-    try {
-      frequencies.updateFrequenciesForAppend(caseId, frequencyWatermark)
-    } catch (e) {
-      mainLogger.warn(
-        `Failed to refresh variant frequencies after multi-file import: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-        'import'
-      )
-    }
-  }
-
-  // The worker merged the first file into the cohort summary; the appended
-  // files went in behind its back, so the summary is out of date for this
-  // case (flagged stale since before the first append). Rebuild before the
-  // import is reported done.
-  if (files.length > 1) {
-    await rebuildCohortSummaryAfterAppend(db, callbacks.onCohortStale)
-  } else {
-    // One file is a single-file import: only the worker touched the summary.
-    await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
-  }
+  // The worker rebuilt the summary it flagged stale with the appends; repair
+  // it here only if that failed, and tell the renderer it is current.
+  await settleAfterWorkerImport(getDb, callbacks.onCohortStale, stale)
 
   const unrankedClinvar = mergeUnrankedClinvar(unrankedLists)
   return {
@@ -507,14 +417,48 @@ async function startMultiFileImportSqlite(
   }
 }
 
+/** A file of a multi-file case that was not appended, logged. */
+function appendFailure(spec: MultiFileImportSpec, error: unknown): MultiFileImportFileResult {
+  const message = error instanceof Error ? error.message : String(error)
+  mainLogger.error(`Failed to import file ${spec.filePath}: ${message}`, 'import')
+  return { filePath: spec.filePath, variantType: spec.variantType, variantCount: 0, error: message }
+}
+
+/** Per-file provenance of a multi-file case (best effort). */
+function recordImportFile(
+  db: DatabaseService,
+  caseId: number,
+  spec: MultiFileImportSpec,
+  variantCount: number
+): void {
+  try {
+    db.cases.insertImportFile({
+      case_id: caseId,
+      file_path: spec.filePath,
+      file_size: statSync(spec.filePath).size,
+      variant_type: spec.variantType,
+      caller: spec.caller,
+      variant_count: variantCount,
+      annotation_format: spec.annotationFormat
+    })
+  } catch (e) {
+    mainLogger.warn(
+      `Failed to record import file provenance for ${spec.filePath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+      'import'
+    )
+  }
+}
+
 /**
  * Backend-aware entry point for multi-file import; the IPC handler and the web
  * route call this, never `startMultiFileImportSqlite`.
  *
  * - PostgreSQL: `session.getImportExecutor().importMultiFile()`. The worker
  *   loads the BED file itself, so it gets `filtersPayload` with the path.
- * - SQLite: `startMultiFileImportSqlite`, with the built `importFilters` for
- *   the appended files and `filtersPayload` for the worker's first file.
+ * - SQLite: `startMultiFileImportSqlite`; its import worker loads the BED
+ *   file from `filtersPayload` too.
  *
  * Every file is read for one sample: the selected one, else file 1's first
  * (a single-sample file appended to the case is read as that sample).
@@ -526,7 +470,6 @@ export async function startMultiFileImport(
   getSession: () => StorageSession,
   getDb: () => DatabaseService,
   callbacks: ImportCallbacks,
-  importFilters?: ImportFilters,
   filtersPayload?: ImportFiltersPayload
 ): Promise<MultiFileImportResult> {
   const session = getSession()
@@ -570,7 +513,6 @@ export async function startMultiFileImport(
         getSession,
         getDb,
         callbacks,
-        importFilters,
         controller.signal,
         filtersPayload
       )

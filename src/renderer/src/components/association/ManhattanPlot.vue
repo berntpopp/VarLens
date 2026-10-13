@@ -4,19 +4,13 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { buildManhattanPoints, type AssociationPlotRow } from '../../utils/association-plot'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let Plotly: any = null
 
-interface AssociationResult {
-  gene_symbol: string
-  fisher: { p_value: number | null }
-  logistic_burden: { p_value: number | null }
-  q_value: number | null
-}
-
 const props = defineProps<{
-  results: AssociationResult[]
+  results: AssociationPlotRow[]
   primaryTest: string
   genePositions?: Map<string, { chr: string; pos: number }>
 }>()
@@ -35,28 +29,11 @@ async function render(): Promise<void> {
   await loadPlotly()
   if (Plotly === null) return
 
-  // Sort genes by index (alphabetical by gene if no position data)
-  const genesWithP: Array<{
-    gene: string
-    p: number
-    qval: number | null
-    idx: number
-  }> = []
-  for (const [i, r] of props.results.entries()) {
-    const p = props.primaryTest === 'fisher' ? r.fisher.p_value : r.logistic_burden.p_value
-    if (p === null) continue
-    genesWithP.push({ gene: r.gene_symbol, p, qval: r.q_value, idx: i })
-  }
-
-  // Simple ordering: by gene index
-  genesWithP.sort((a, b) => a.idx - b.idx)
-
-  const x = genesWithP.map((_, i) => i)
-  const y = genesWithP.map((g) => (g.p > 0 ? -Math.log10(g.p) : 0))
+  const genesWithP = buildManhattanPoints(props.results, props.primaryTest)
+  const x = genesWithP.map((g) => g.x)
+  const y = genesWithP.map((g) => g.y)
   const text = genesWithP.map((g) => g.gene)
-  const colors = genesWithP.map((g, i) =>
-    g.qval !== null && g.qval < 0.05 ? '#e53935' : CHR_COLORS[i % 2]
-  )
+  const colors = genesWithP.map((g, i) => (g.significant ? '#e53935' : CHR_COLORS[i % 2]))
 
   const bonferroniLine = genesWithP.length > 0 ? -Math.log10(0.05 / genesWithP.length) : 5
 
@@ -65,10 +42,11 @@ async function render(): Promise<void> {
       x,
       y,
       text,
+      customdata: genesWithP.map((g) => g.pLabel),
       mode: 'markers',
       type: 'scatter',
       marker: { color: colors, size: 6 },
-      hovertemplate: '%{text}<br>-log10(p): %{y:.2f}<extra></extra>'
+      hovertemplate: '%{text}<br>-log10(p): %{y:.2f}<br>%{customdata}<extra></extra>'
     }
   ]
 

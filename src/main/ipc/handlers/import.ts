@@ -31,54 +31,15 @@ import {
   startMultiFileImport
 } from './import-logic'
 import type { ImportCallbacks, MultiFileImportSpec } from './import-logic'
-import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { StorageSession } from '../../storage/session'
-import { BedFilter } from '../../import/vcf/bed-filter'
 import type { VcfMultiPreviewResult } from '../../../shared/types/import'
 import { getJsonFieldPreview } from '../../import/json-preview'
 
 /**
- * Serializable filter payload sent from the renderer over IPC.
- *
- * The renderer can't construct a `BedFilter` instance directly (it's a
- * class living in the main process), so it sends a BED file path + padding
- * and the main process builds the filter here.
+ * Serializable filter payload sent from the renderer over IPC: a BED file
+ * path + padding; the import worker loads the BED file itself.
  */
 type ImportFiltersIpcPayload = z.infer<typeof ImportFiltersIpcPayloadSchema>
-
-/**
- * Convert a serialized IPC filter payload into the in-process `ImportFilters`
- * shape expected by `startMultiFileImport` / `VcfStrategy`. Returns undefined
- * when the payload has no meaningful filter content (so the append path can
- * skip the entire filter code path cheaply).
- */
-async function buildImportFiltersFromIpc(
-  payload: ImportFiltersIpcPayload | undefined
-): Promise<ImportFilters | undefined> {
-  if (payload === undefined) return undefined
-
-  const hasAny =
-    (payload.bedFile !== undefined && payload.bedFile !== null && payload.bedFile !== '') ||
-    payload.passOnly === true ||
-    (payload.minQual !== undefined && payload.minQual !== null) ||
-    (payload.minGq !== undefined && payload.minGq !== null) ||
-    (payload.minDp !== undefined && payload.minDp !== null)
-  if (!hasAny) return undefined
-
-  let bedFilter: BedFilter | undefined
-  if (payload.bedFile !== undefined && payload.bedFile !== null && payload.bedFile !== '') {
-    bedFilter = await BedFilter.fromFile(payload.bedFile, payload.bedPadding ?? 0)
-  }
-
-  return {
-    bedFilter,
-    bedPadding: payload.bedPadding ?? 0,
-    passOnly: payload.passOnly ?? false,
-    minQual: payload.minQual ?? null,
-    minGq: payload.minGq ?? null,
-    minDp: payload.minDp ?? null
-  }
-}
 
 function throwUnallowedImportPath(channel: string, filePath: string, label = 'filePath'): never {
   throw new InvalidParametersError(
@@ -235,10 +196,6 @@ export function registerImportHandlers({
           throwUnallowedImportPath('import:startMultiFile', bedFile, 'filtersPayload.bedFile')
         }
 
-        // Build the SQLite-path ImportFilters (loads BedFilter into memory).
-        // The PG path receives filtersPayload directly so it can extract the
-        // BED file path without going through the BedFilter constructor.
-        const importFilters = await buildImportFiltersFromIpc(validatedFiltersPayload)
         return startMultiFileImport(
           validatedCaseName,
           validatedFiles,
@@ -246,7 +203,6 @@ export function registerImportHandlers({
           getSession,
           getDb,
           importCallbacks,
-          importFilters,
           validatedFiltersPayload
         )
       })

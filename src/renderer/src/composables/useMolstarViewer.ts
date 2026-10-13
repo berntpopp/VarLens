@@ -26,16 +26,24 @@ import { formatError } from '../utils/ipc-result'
 /**
  * Check if WebGL is available in the current environment.
  * Returns the context type ('webgl2' | 'webgl') or null if unavailable.
+ * Probes once per session and releases the probe context, since Chromium caps live WebGL contexts.
  */
+let webglSupport: string | null | undefined
 function checkWebGLSupport(): string | null {
+  if (webglSupport !== undefined) return webglSupport
+  webglSupport = null
   try {
     const canvas = document.createElement('canvas')
-    if (canvas.getContext('webgl2')) return 'webgl2'
-    if (canvas.getContext('webgl')) return 'webgl'
-    return null
+    const gl2 = canvas.getContext('webgl2')
+    const gl = gl2 ?? canvas.getContext('webgl')
+    if (gl) {
+      webglSupport = gl2 ? 'webgl2' : 'webgl'
+      gl.getExtension('WEBGL_lose_context')?.loseContext()
+    }
   } catch {
-    return null
+    // Treated as unavailable.
   }
+  return webglSupport
 }
 
 type MolstarViewerModule = typeof import('pdbe-molstar/lib/viewer')
@@ -196,7 +204,7 @@ export function useMolstarViewer(
     }
   }
 
-  async function teardownViewer(invalidatePendingInit = true): Promise<void> {
+  function teardownViewer(invalidatePendingInit = true): void {
     if (invalidatePendingInit) {
       activeInitToken++
     }
@@ -206,12 +214,17 @@ export function useMolstarViewer(
     const instance = viewerInstance
     viewerInstance = null
 
+    disposeViewer(instance)
+  }
+
+  /** Release the WebGL context, render loop and React root; `clear()` only empties state. */
+  function disposeViewer(instance: MolstarViewerInstance | null): void {
     if (instance) {
       try {
-        await instance.clear()
+        instance.plugin?.dispose()
       } catch (err) {
         logService.warn(
-          `Failed to clear pdbe-molstar instance: ${formatError(err)}`,
+          `Failed to dispose pdbe-molstar instance: ${formatError(err)}`,
           'MolstarViewer'
         )
       }
@@ -247,7 +260,7 @@ export function useMolstarViewer(
     structureLoaded.value = false
 
     try {
-      await teardownViewer(false)
+      teardownViewer(false)
       container.replaceChildren()
       const { PDBeMolstarPlugin } = await ensureMolstarRuntime()
       if (initToken !== activeInitToken || container !== molstarRef.value) return
@@ -255,7 +268,11 @@ export function useMolstarViewer(
       const nextViewer = new PDBeMolstarPlugin()
       attachViewer(nextViewer)
       await nextViewer.render(container, initParams)
-      if (initToken !== activeInitToken || container !== molstarRef.value) return
+      if (initToken !== activeInitToken || container !== molstarRef.value) {
+        // Teardown may have run before render() created the plugin; dispose() is idempotent.
+        disposeViewer(nextViewer)
+        return
+      }
 
       restoreBgColor()
       logService.info(
@@ -394,13 +411,11 @@ export function useMolstarViewer(
    * A fresh plugin mount consistently restores the expected background/theme.
    */
   function setRepresentation(type: RepresentationType): void {
+    // Same type keeps the :key, so no remount would ever clear `loading`.
+    if (type === activeRepresentation.value) return
     activeRepresentation.value = type
-    // The element will be recreated by Vue's :key mechanism.
-    // The loadComplete handler will re-apply variant highlighting.
-    // Reset viewer instance since the old element will be destroyed.
-    viewerInstance = null
-    loadSubscription?.unsubscribe()
-    loadSubscription = null
+    // The element will be recreated by Vue's :key mechanism; startViewer on the new
+    // element disposes the old viewer, and loadComplete re-applies variant highlighting.
     loading.value = true
     structureLoaded.value = false
     logService.info(`Representation changed to ${type} (element recreated)`, 'MolstarViewer')
@@ -438,7 +453,7 @@ export function useMolstarViewer(
       if (newEl) {
         void startViewer()
       } else {
-        void teardownViewer()
+        teardownViewer()
       }
     },
     { immediate: true }
@@ -461,7 +476,7 @@ export function useMolstarViewer(
   }
 
   onBeforeUnmount(() => {
-    void teardownViewer()
+    teardownViewer()
   })
 
   return {

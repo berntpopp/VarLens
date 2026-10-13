@@ -20,7 +20,6 @@ import {
   prepareCohortExportParams,
   prepareVariantExport
 } from '../../../src/main/ipc/handlers/export-logic'
-import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
 import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
 import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { fromTransportableWorkerError } from '../../../src/main/database/worker-error-codec'
@@ -65,7 +64,6 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
   let panelId: number
 
   beforeEach(() => {
-    clearPanelIntervalCache()
     geneRef.getCoordinatesForGenes.mockReset()
     geneRef.getCoordinatesForGenes.mockImplementation((_ids: string[], assembly: string) =>
       assembly === 'GRCh38'
@@ -421,8 +419,8 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
         .data.map((row) => row.pos)
         .sort((a, b) => a - b)
 
-    // `variant_frequency` is joined into every case query and also has `chr`
-    // and `pos`, so an unqualified column reference is ambiguous in SQLite.
+    // A table joined into the case query that also has `chr` and `pos` makes
+    // an unqualified column reference ambiguous in SQLite.
     it('SQLite case view accepts them (columns are qualified with the variants table)', () => {
       expect(positions({ chr: { operator: '=', value: 'chr7' } })).toEqual([
         90_000, 150_000, 202_000, 300_000

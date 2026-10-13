@@ -35,7 +35,7 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
         acmg_class TEXT,
         UNIQUE(case_id, variant_id)
       );
-      CREATE INDEX idx_variants_coords ON variants(chr, pos, ref, alt);
+      CREATE INDEX idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
     `)
 
     // Build the Kysely instance BEFORE wrapping db.prepare so its construction

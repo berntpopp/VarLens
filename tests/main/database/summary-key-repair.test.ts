@@ -12,7 +12,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
-import { runMigrations } from '../../../src/main/database/migrations'
+import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { repairSummaryKeys } from '../../../src/main/database/summary-key-repair'
 
@@ -82,7 +82,7 @@ describe('cohort summary keys on a drifted v32 database', () => {
     const service = new DatabaseService(path)
     try {
       const db = service.database
-      expect(db.pragma('user_version', { simple: true })).toBe(49)
+      expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
       expect(pk(db, 'cohort_variant_summary')).toEqual([
         'chr',
         'pos',

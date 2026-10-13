@@ -33,7 +33,6 @@ const EXEMPT_TABLES = new Set([
   // Reference / cache (shared across users)
   'cohort_variant_summary',
   'gene_burden_summary',
-  'variant_frequency',
   'gene_list_items',
   'panel_genes',
   'region_file_entries',

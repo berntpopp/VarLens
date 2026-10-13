@@ -1,11 +1,12 @@
 /**
- * Cohort summary after a SQLite multi-file import.
+ * SQLite multi-file import, main-process side (#551).
  *
- * The import worker merges the first file into `cohort_variant_summary`
- * exactly; the remaining files are appended on the main thread and are not
- * merged. The import must therefore end with a rebuild — and tell the
- * renderer while it runs — instead of leaving the summary flagged stale with
- * nothing to rebuild it.
+ * The first file goes through the executor's worker; files 2..N are checked
+ * against the case's build here and handed to the import worker in ONE
+ * session (appendFilesInWorker), which appends each file in its own
+ * transaction and rebuilds the cohort summary itself. The main process only
+ * records provenance, aggregates the outcome and repairs a summary the worker
+ * could not.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -13,24 +14,20 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DatabaseService } from '../../../src/main/database/DatabaseService'
+import type { AppendFilesParams } from '../../../src/main/ipc/handlers/import-logic-append'
 import { makeVariant } from '../../utils/make-variant'
 
 type Coord = [string, number, string, string]
 
 const appendPlan = new Map<string, Coord[]>()
-/** `is_stale` as each append found it, before it wrote anything. */
-const staleWhenAppending: boolean[] = []
+const builds = new Map<string, string | null>()
+/** What the stand-in worker does to the summary at its session end. */
+let workerLeavesSummaryStale = false
 
+const appendFilesInWorker = vi.hoisted(() => vi.fn())
 vi.mock('../../../src/main/ipc/handlers/import-logic-append', () => ({
-  detectGenomeBuildFromFile: vi.fn(async () => null),
-  importAdditionalFileToCase: vi.fn(
-    async (caseId: number, filePath: string, _o: unknown, getDb: () => DatabaseService) => {
-      const coords = appendPlan.get(filePath) ?? []
-      staleWhenAppending.push(getDb().cohortSummary.getStatus().is_stale)
-      getDb().variants.insertVariantsBatch(caseId, coords.map(toVariant))
-      return { caseId, variantCount: coords.length, skipped: 0, errors: [], elapsed: 0 }
-    }
-  )
+  detectGenomeBuildFromFile: vi.fn(async (path: string) => builds.get(path) ?? null),
+  appendFilesInWorker
 }))
 
 // Stand-in for the rebuild worker thread: each test decides what it does.
@@ -53,7 +50,7 @@ function summaryRows(db: DatabaseService): string[] {
   ).map((r) => `${r.chr}:${r.pos}:${r.ref}>${r.alt}=${r.carrier_count}`)
 }
 
-describe('SQLite multi-file import cohort summary', () => {
+describe('SQLite multi-file import (main process)', () => {
   let dir: string
   let db: DatabaseService
 
@@ -61,8 +58,22 @@ describe('SQLite multi-file import cohort summary', () => {
     dir = mkdtempSync(join(tmpdir(), 'varlens-mf-summary-'))
     db = new DatabaseService(join(dir, 'test.db'))
     appendPlan.clear()
-    staleWhenAppending.length = 0
+    builds.clear()
+    workerLeavesSummaryStale = false
     spawnRebuildWorker.mockReset()
+    appendFilesInWorker.mockReset()
+    // Stand-in for the worker session: rows, counts, stale flag, rebuild.
+    appendFilesInWorker.mockImplementation(async (p: AppendFilesParams) => {
+      p.onSummaryStale?.()
+      const outcomes = p.filePaths.map((path) => {
+        const coords = appendPlan.get(path) ?? []
+        db.variants.insertVariantsBatch(p.caseId, coords.map(toVariant))
+        return { variantCount: coords.length, skipped: 0 }
+      })
+      db.cohortSummary.markStale()
+      if (!workerLeavesSummaryStale) db.cohortSummary.rebuild()
+      return outcomes
+    })
   })
 
   afterEach(() => {
@@ -76,7 +87,6 @@ describe('SQLite multi-file import cohort summary', () => {
       importSingleFile: vi.fn(async ({ caseName }: { caseName: string }) => {
         const caseId = db.cases.createCase(caseName, '/x/first.vcf', 1)
         db.variants.insertVariantsBatch(caseId, firstFileCoords.map(toVariant))
-        db.variants.updateFrequencies(caseId)
         db.cohortSummary.rebuild()
         return { caseId, variantCount: firstFileCoords.length, skipped: 0, errors: [], elapsed: 0 }
       }),
@@ -85,10 +95,11 @@ describe('SQLite multi-file import cohort summary', () => {
     }
   }
 
-  function file(name: string, coords: Coord[]): string {
+  function file(name: string, coords: Coord[], build: string | null = null): string {
     const path = join(dir, name)
     writeFileSync(path, '##fileformat=VCFv4.2\n')
     appendPlan.set(path, coords)
+    builds.set(path, build)
     return path
   }
 
@@ -99,7 +110,7 @@ describe('SQLite multi-file import cohort summary', () => {
     annotationFormat: null
   })
 
-  function runImport(files: string[], events: string[]) {
+  function runImport(files: string[], events: string[] = [], filtersPayload?: object) {
     const executor = workerExecutor([['1', 100, 'A', 'G']])
     const session = { capabilities: { backend: 'sqlite' }, getImportExecutor: () => executor }
     return startMultiFileImport(
@@ -108,77 +119,88 @@ describe('SQLite multi-file import cohort summary', () => {
       undefined,
       () => session as never,
       () => db,
-      { onCohortStale: (d) => events.push(d.phase ? `stale:${d.phase}` : `stale:${d.is_stale}`) }
+      { onCohortStale: (d) => events.push(d.phase ? `stale:${d.phase}` : `stale:${d.is_stale}`) },
+      filtersPayload as never
     )
   }
 
-  it('rebuilds the summary the appended files left behind and reports it', async () => {
+  it('hands files 2..N to one worker session and reports the summary current', async () => {
     const events: string[] = []
-    let staleDuringRebuild: boolean | null = null
-    let rowsBeforeRebuild: string[] = []
-    spawnRebuildWorker.mockImplementation(
-      async (dbPath: string, _key: unknown, onProgress: (p: unknown) => void) => {
-        expect(dbPath).toBe(db.getPath())
-        staleDuringRebuild = db.cohortSummary.getStatus().is_stale
-        rowsBeforeRebuild = summaryRows(db)
-        onProgress({ phase: 'variants', phase_index: 1, phase_total: 2, label: 'Variants' })
-        db.cohortSummary.rebuild()
-      }
-    )
+    const first = file('first.vcf', [])
+    const sv = file('sv.vcf', [['1', 200, 'C', 'T']])
+    const cnv = file('cnv.vcf', [['1', 300, 'G', 'A']])
 
-    const result = await runImport(
-      [file('first.vcf', []), file('sv.vcf', [['1', 200, 'C', 'T']])],
-      events
-    )
+    const result = await runImport([first, sv, cnv], events, {
+      bedFile: '/x/r.bed',
+      passOnly: true
+    })
 
-    expect(result.files.every((f) => f.error === undefined)).toBe(true)
-    // The appended coordinate really was missing: the summary was out of date.
-    expect(rowsBeforeRebuild).toEqual(['1:100:A>G=1'])
-    expect(staleDuringRebuild).toBe(true)
-    expect(summaryRows(db)).toEqual(['1:100:A>G=1', '1:200:C>T=1'])
-    expect(db.cohortSummary.getStatus().is_stale).toBe(false)
-    expect(events).toEqual(['stale:true', 'stale:variants', 'stale:false'])
+    expect(appendFilesInWorker).toHaveBeenCalledTimes(1)
+    const params = appendFilesInWorker.mock.calls[0][0] as AppendFilesParams
+    expect(params.filePaths).toEqual([sv, cnv])
+    expect(params.caseId).toBe(result.caseId)
+    expect(params.filters).toEqual(
+      expect.objectContaining({ bedFilePath: '/x/r.bed', passOnly: true })
+    )
+    expect(result.files.map((f) => [f.filePath, f.variantCount, f.error])).toEqual([
+      [first, 1, undefined],
+      [sv, 1, undefined],
+      [cnv, 1, undefined]
+    ])
+    expect(result.totalVariants).toBe(3)
+    expect(db.cases.getImportFiles(result.caseId).map((f) => f.file_path)).toEqual([first, sv, cnv])
+    // The worker rebuilt it: the main process does not.
+    expect(spawnRebuildWorker).not.toHaveBeenCalled()
+    expect(summaryRows(db)).toEqual(['1:100:A>G=1', '1:200:C>T=1', '1:300:G>A=1'])
+    expect(events).toEqual(['stale:true', 'stale:false'])
   })
 
-  it('flags the summary stale before the first append, not after the last', async () => {
+  it('repairs a summary the worker left stale', async () => {
+    workerLeavesSummaryStale = true
     spawnRebuildWorker.mockImplementation(async () => db.cohortSummary.rebuild())
 
-    await runImport(
-      [
-        file('first.vcf', []),
-        file('sv.vcf', [['1', 200, 'C', 'T']]),
-        file('cnv.vcf', [['1', 300, 'G', 'A']])
-      ],
-      []
-    )
+    await runImport([file('first.vcf', []), file('sv.vcf', [['1', 200, 'C', 'T']])])
 
-    // A crash during or between the appends must not leave appended variants
-    // outside a summary that claims to be current.
-    expect(staleWhenAppending).toEqual([true, true])
+    expect(spawnRebuildWorker).toHaveBeenCalledTimes(1)
     expect(db.cohortSummary.getStatus().is_stale).toBe(false)
   })
 
-  it('leaves the summary flagged stale, and says so, when the rebuild fails', async () => {
-    const events: string[] = []
-    spawnRebuildWorker.mockRejectedValue(new Error('rebuild boom'))
+  it('refuses a file of another build before the worker sees it', async () => {
+    const first = file('first.vcf', [], 'GRCh38')
+    const other = file('other.vcf', [['1', 200, 'C', 'T']], 'GRCh37')
+    const same = file('same.vcf', [['1', 300, 'G', 'A']], 'GRCh38')
 
-    const result = await runImport(
-      [file('first.vcf', []), file('sv.vcf', [['1', 200, 'C', 'T']])],
-      events
-    )
+    const result = await runImport([first, other, same])
 
-    expect(result.totalVariants).toBe(2)
-    expect(db.cohortSummary.getStatus().is_stale).toBe(true)
-    expect(events).toEqual(['stale:true'])
+    expect((appendFilesInWorker.mock.calls[0][0] as AppendFilesParams).filePaths).toEqual([same])
+    expect(result.files.map((f) => [f.filePath, f.error !== undefined])).toEqual([
+      [first, false],
+      [other, true],
+      [same, false]
+    ])
   })
 
-  it('does not touch the summary for a single file: the worker kept it exact', async () => {
+  it('reports a file the worker could not append, keeping the others', async () => {
+    appendFilesInWorker.mockImplementation(async (p: AppendFilesParams) =>
+      p.filePaths.map((_, i) =>
+        i === 0 ? { variantCount: 0, skipped: 0, error: 'boom' } : { variantCount: 4, skipped: 1 }
+      )
+    )
+
+    const result = await runImport([file('a.vcf', []), file('b.vcf', []), file('c.vcf', [])])
+
+    expect(result.files.map((f) => f.error)).toEqual([undefined, 'boom', undefined])
+    expect(result.totalVariants).toBe(5)
+    expect(result.totalSkipped).toBe(1)
+  })
+
+  it('does not start a worker session for a single file', async () => {
     const events: string[] = []
 
     await runImport([file('first.vcf', [])], events)
 
+    expect(appendFilesInWorker).not.toHaveBeenCalled()
     expect(spawnRebuildWorker).not.toHaveBeenCalled()
-    expect(db.cohortSummary.getStatus().is_stale).toBe(false)
     expect(events).toEqual([])
   })
 
@@ -193,7 +215,6 @@ describe('SQLite multi-file import cohort summary', () => {
       () => session as never,
       () => db,
       {},
-      undefined,
       { bedFile: '/x/regions.bed', bedPadding: 20, passOnly: true, minQual: 30 }
     )
 

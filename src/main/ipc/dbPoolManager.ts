@@ -1,15 +1,11 @@
 /**
- * DbPool lifecycle manager — separated from index.ts to avoid circular imports
- * (database handler imports initDbPool, index.ts imports database handler).
+ * DbPool resolution and worker-thread setting — separated from index.ts to avoid
+ * circular imports. The pool itself is owned by the active SqliteStorageSession.
  */
 
-import { DbPool } from '../database/DbPool'
-import { mainLogger } from '../services/MainLogger'
-import { resolveGeneRefDbPath } from '../database/geneReferenceLoader'
+import type { DbPool } from '../database/DbPool'
 import type { StorageSession } from '../storage/session'
 
-/** Singleton DbPool instance — created lazily when a database is opened */
-let dbPool: DbPool | null = null
 type DbPoolSource = {
   capabilities: Pick<StorageSession['capabilities'], 'backend'>
   // Concrete-class method on SqliteStorageSession; no longer on the
@@ -25,27 +21,21 @@ function hasDbPoolSource(session: StorageSession): session is StorageSession & D
 /**
  * User-configured worker thread count.
  * 0 = auto (cpus - 1). Set via system:setWorkerThreads IPC.
- * Applied on the next initDbPool() call.
+ * Applied when the next SQLite session creates its pool.
  */
 let configuredWorkerThreads = 0
 
 /**
- * Get the current DbPool instance (or null if not yet initialised).
+ * The active SQLite session's DbPool, or null (no session, PostgreSQL, or no pool).
  */
 export function getDbPool(): DbPool | null {
   const activeSession = getActiveSession?.() ?? null
 
-  if (activeSession?.capabilities.backend === 'postgres') {
+  if (activeSession === null || activeSession.capabilities.backend === 'postgres') {
     return null
   }
 
-  const sessionPool =
-    activeSession !== null && hasDbPoolSource(activeSession) ? activeSession.getDbPool() : null
-  if (sessionPool !== null) {
-    return sessionPool
-  }
-
-  return dbPool
+  return hasDbPoolSource(activeSession) ? activeSession.getDbPool() : null
 }
 
 export function setActiveSessionResolver(resolver: () => StorageSession | null): void {
@@ -54,7 +44,7 @@ export function setActiveSessionResolver(resolver: () => StorageSession | null):
 
 /**
  * Set the desired worker thread count (0 = auto).
- * Takes effect on the next initDbPool() call.
+ * Takes effect when the next SQLite session is opened.
  */
 export function setWorkerThreads(count: number): void {
   configuredWorkerThreads = Math.max(0, Math.floor(count))
@@ -65,51 +55,4 @@ export function setWorkerThreads(count: number): void {
  */
 export function getWorkerThreads(): number {
   return configuredWorkerThreads
-}
-
-/**
- * Initialise (or re-initialise) the Piscina worker pool for the current database.
- *
- * Called from database:open / database:create handlers after a DatabaseService
- * is available. Destroys any previous pool before creating a new one.
- */
-export async function initDbPool(dbPath: string, encryptionKey?: string): Promise<void> {
-  await destroyDbPool()
-  dbPool = new DbPool()
-  const maxThreads = configuredWorkerThreads > 0 ? configuredWorkerThreads : undefined
-
-  // Resolve gene reference DB path once on the main thread and pass it to
-  // the worker via workerData — Electron's `app` module is not available
-  // in worker threads so the worker cannot call resolveGeneRefDbPath() itself.
-  let geneRefDbPath: string | undefined
-  try {
-    geneRefDbPath = resolveGeneRefDbPath()
-  } catch (e) {
-    // Gene ref DB not available (dev without resources, fresh install before
-    // first launch). Panel interval computation in workers will be skipped.
-    mainLogger.warn(
-      'Gene reference DB not found — panel interval computation will be skipped in worker threads: ' +
-        (e instanceof Error ? e.message : String(e)),
-      'ipc'
-    )
-  }
-
-  dbPool.init(dbPath, encryptionKey, {
-    ...(maxThreads !== undefined ? { maxThreads } : {}),
-    geneRefDbPath
-  })
-  mainLogger.info(
-    `DbPool initialized for worker-thread reads (threads: ${maxThreads ?? 'auto'})`,
-    'ipc'
-  )
-}
-
-/**
- * Destroy the current DbPool (if any). Called on database close/switch.
- */
-export async function destroyDbPool(): Promise<void> {
-  if (dbPool) {
-    await dbPool.destroy()
-    dbPool = null
-  }
 }
