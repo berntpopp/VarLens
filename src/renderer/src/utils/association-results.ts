@@ -29,6 +29,8 @@ export interface AssociationResultRow {
   fisher: {
     p_value: number | null
     odds_ratio: number | null
+    /** Set when the odds ratio is infinite (JSON turns Infinity into null). */
+    odds_ratio_infinite: boolean
     ci_lower: number | null
     ci_upper: number | null
   }
@@ -99,7 +101,7 @@ export function buildAssociationTsv(
       r.n_variants,
       r.groupA_carriers,
       r.groupB_carriers,
-      r.fisher.odds_ratio ?? '',
+      r.fisher.odds_ratio_infinite ? 'Inf' : (r.fisher.odds_ratio ?? ''),
       r.fisher.ci_lower ?? '',
       r.fisher.ci_upper ?? '',
       r.fisher.p_value ?? '',

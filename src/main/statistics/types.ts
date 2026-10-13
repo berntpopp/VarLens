@@ -69,6 +69,8 @@ export interface SampleBurdenData {
 export interface FisherResult {
   p_value: number | null
   odds_ratio: number | null
+  /** True when odds_ratio is Infinity, which JSON serialises as null. */
+  odds_ratio_infinite: boolean
   ci_lower: number | null
   ci_upper: number | null
 }

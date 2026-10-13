@@ -25,7 +25,13 @@ function geneWithWarning(warning: string): GeneAssociationResult {
     groupB_carriers: 0,
     groupA_total: 1,
     groupB_total: 1,
-    fisher: { p_value: null, odds_ratio: null, ci_lower: null, ci_upper: null },
+    fisher: {
+      p_value: null,
+      odds_ratio: null,
+      odds_ratio_infinite: false,
+      ci_lower: null,
+      ci_upper: null
+    },
     logistic_burden: {
       p_value: null,
       beta: null,
