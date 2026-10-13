@@ -26,7 +26,7 @@
  */
 
 import { computed, toRef } from 'vue'
-import { mdiInformationOutline, mdiRefresh } from '@mdi/js'
+import { mdiInformationOutline, mdiRefresh, mdiTuneVariant } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
@@ -37,6 +37,10 @@ import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import { usePermissions } from '../../composables/usePermissions'
+import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
+import { SHORTLIST_RANKING_EDITOR } from '../../config/shortlistRankingEditor'
+
+const { open: openRankingDialog } = useShortlistRankingDialog()
 
 const { canWrite } = usePermissions()
 
@@ -146,6 +150,15 @@ function dismissError(): void {
         </template>
       </div>
       <v-spacer />
+      <v-btn
+        variant="text"
+        size="small"
+        :prepend-icon="mdiTuneVariant"
+        data-testid="shortlist-edit-ranking"
+        @click="openRankingDialog(selectedPresetId)"
+      >
+        {{ SHORTLIST_RANKING_EDITOR.actions.editRanking }}
+      </v-btn>
       <v-btn
         variant="text"
         size="small"

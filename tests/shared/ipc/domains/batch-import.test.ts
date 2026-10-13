@@ -121,6 +121,7 @@ describe('batch-import preload domain behavior', () => {
       'skip',
       undefined,
       'desktop-run-1',
+      undefined,
       undefined
     )
     expect(invoke).toHaveBeenNthCalledWith(5, 'batch-import:cancel')

@@ -10,6 +10,7 @@ import { CLINICAL_METRICS } from './clinical-metrics'
 import { caseDependents } from './case-dependents'
 import { BUILT_IN_PRESETS, RARE_NOT_RECURRENT_PRESET_NAME } from './built-in-presets'
 import { BUILT_IN_SHORTLIST_PRESETS } from './built-in-shortlist-presets'
+import { EVIDENCE_BETA_PRESET, evidenceBetaFilterJson } from './evidence-ranking-preset'
 import { createChrRankIndexes } from './chr-rank-indexes'
 import { migrateUserRoles } from './user-roles-migration'
 import { migrateCohortKeysetIndex } from './cohort-keyset-index'
@@ -20,7 +21,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 47
+export const LATEST_SQLITE_SCHEMA_VERSION = 49
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -1982,6 +1983,48 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 47) {
     migrateContigNaming(db)
     db.exec('PRAGMA user_version = 47')
+  }
+
+  // v48: per-case import field dictionary (stored info key → original source
+  // field, spec §16; mirrors PG 0031).
+  if (currentVersion < 48) {
+    const hasDataInfo =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_data_info'")
+        .get() !== undefined
+    const columns = hasDataInfo
+      ? (db.prepare('PRAGMA table_info(case_data_info)').all() as { name: string }[])
+      : []
+    if (hasDataInfo && !columns.some((col) => col.name === 'field_dictionary')) {
+      db.exec('ALTER TABLE case_data_info ADD COLUMN field_dictionary TEXT')
+    }
+    db.exec('PRAGMA user_version = 48')
+  }
+
+  // v49: built-in "Evidence ranking (beta)" shortlist preset (spec §5.5,
+  // §11.6; mirrors PG 0032). INSERT OR IGNORE keeps a user preset of the same
+  // name and makes a replay a no-op.
+  if (currentVersion < 49) {
+    const hasPresetTable =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'filter_presets'")
+        .get() !== undefined
+    if (hasPresetTable) {
+      const now = Date.now()
+      db.prepare(
+        `INSERT OR IGNORE INTO filter_presets
+           (name, description, filter_json, is_built_in, is_visible, sort_order, kind, created_at, updated_at)
+         VALUES (?, ?, ?, 1, 1, ?, 'shortlist', ?, ?)`
+      ).run(
+        EVIDENCE_BETA_PRESET.name,
+        EVIDENCE_BETA_PRESET.description,
+        evidenceBetaFilterJson(),
+        EVIDENCE_BETA_PRESET.sortOrder,
+        now,
+        now
+      )
+    }
+    db.exec('PRAGMA user_version = 49')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

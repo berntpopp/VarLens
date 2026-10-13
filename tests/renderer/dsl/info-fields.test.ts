@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseDsl } from '../../../src/renderer/src/dsl/parser'
+import { parseDsl } from '../../../src/shared/dsl/parser'
 import { serializeColumnFilters, translateAst } from '../../../src/renderer/src/dsl/translator'
 
 /** Column filters for a DSL string, or its first error message. */

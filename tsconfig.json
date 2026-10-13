@@ -14,6 +14,10 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true
   },
+  // Renderer scope only (mirrors tsconfig.renderer.json). typescript-eslint's projectService
+  // lints renderer files against this config; the implicit "**/*" pulled every test and script
+  // into that program, ~420 MB of extra heap that pushed `make lint-check` past V8's default limit.
+  "include": ["src/renderer/**/*", "src/web/bootstrap.ts", "src/web/client/**/*"],
   "references": [
     {
       "path": "./tsconfig.node.json"

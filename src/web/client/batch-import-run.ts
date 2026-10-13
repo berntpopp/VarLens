@@ -16,6 +16,7 @@
  * up in the jobs list, can be cancelled there, and its result stays readable
  * through the status call.
  */
+import type { ImportFieldProfile } from '../../shared/config/import-fields.config'
 import { EVENTS_RESYNC_DOM_EVENT } from '../../shared/ipc/domains/jobs'
 import type { BatchResult, DuplicateChoice } from '../../shared/types/api'
 import {
@@ -79,7 +80,14 @@ function authErrorFromTransport(error: unknown): SerializableError | null {
 }
 
 export async function startBatchImportRun(
-  args: [string[], DuplicateChoice, string | undefined, string, (string | undefined)?],
+  args: [
+    string[],
+    DuplicateChoice,
+    string | undefined,
+    string,
+    (string | undefined)?,
+    { fieldProfile?: ImportFieldProfile }?
+  ],
   deps: { invoke: Invoke; subscribe: Subscribe; pollMs?: number }
 ): Promise<IpcResult<BatchResult>> {
   const runId = args[3]

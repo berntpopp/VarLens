@@ -13,7 +13,10 @@ import {
   type SessionBatchCallbacks
 } from '../../../main/ipc/handlers/batch-import-session'
 import { ImportServerPathArgSchema } from '../../../shared/api/schemas/import'
-import { BatchImportRunIdSchema } from '../../../shared/ipc/domains/batch-import-schemas'
+import {
+  BatchImportOptionsSchema,
+  BatchImportRunIdSchema
+} from '../../../shared/ipc/domains/batch-import-schemas'
 import { GenomeBuildIdSchema } from '../../../shared/ipc/domains/import-schemas'
 import { addDetectedBuilds } from '../../../main/import/batch-utils'
 import { batchImportRuns, type BatchImportAccepted } from '../batch-import-runs'
@@ -86,10 +89,15 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
 
     'batch-import:start': {
       async handle(args, request, reply, { session, events }) {
-        const [filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild] = args
+        const [filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild, options] = args
         if (!Array.isArray(filePaths)) {
           reply.code(400)
           return { error: 'invalid-files', message: 'filePaths must be an array' }
+        }
+        const parsedOptions = BatchImportOptionsSchema.safeParse(options ?? undefined)
+        if (!parsedOptions.success) {
+          reply.code(400)
+          return { error: 'invalid-options', message: 'options are invalid' }
         }
         if (duplicateStrategy !== 'skip' && duplicateStrategy !== 'overwrite') {
           reply.code(400)
@@ -129,6 +137,7 @@ export function buildBatchImportOverrides(): Record<string, OverrideHandler> {
           stripText: typeof stripText === 'string' ? stripText : undefined,
           fallbackGenomeBuild: parsedFallback.data,
           runId: validRunId,
+          fieldProfile: parsedOptions.data?.fieldProfile,
           session,
           callbacks: webBatchCallbacks(events, userId, validRunId)
         })

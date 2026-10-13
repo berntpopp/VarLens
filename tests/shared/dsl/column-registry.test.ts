@@ -4,7 +4,7 @@ import {
   findColumn,
   getOperatorsForColumn,
   getCommonValues
-} from '../../../src/renderer/src/dsl/column-registry'
+} from '../../../src/shared/dsl/column-registry'
 
 describe('column-registry', () => {
   describe('FILTER_COLUMNS', () => {

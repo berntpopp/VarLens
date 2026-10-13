@@ -9,7 +9,8 @@ import {
   passesPreMappingFilters,
   type ImportFilters
 } from '../import/vcf/import-filters'
-import { mapVcfRecord } from '../import/vcf/VcfMapper'
+import { mapVcfRecord, seedVcfFields } from '../import/vcf/VcfMapper'
+import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
 import { assertGenomeBuildMatches, parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
 import {
@@ -18,7 +19,7 @@ import {
   type VcfSelectedSampleColumn
 } from '../import/vcf/vcf-line-parser'
 import type { VcfHeader, VcfMappedVariant } from '../import/vcf/types'
-import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
+import { isFatalImportRowError } from '../import/vcf/vcf-resource-limits'
 
 /** Stream mapped VCF variants for the PostgreSQL COPY import path. */
 export async function* streamMappedVcfRows(
@@ -27,7 +28,8 @@ export async function* streamMappedVcfRows(
   filters?: ImportFilters,
   onSkip?: (reason: string) => void,
   /** Set for a file appended to an existing case (files 2..N of a multi-file import). */
-  appendedTo?: { genomeBuild: string }
+  appendedTo?: { genomeBuild: string },
+  fields: FieldProfileResolver = new FieldProfileResolver()
 ): AsyncGenerator<VcfMappedVariant, void, void> {
   // createReadStream reports open failures asynchronously; fail before the
   // worker's per-file error boundary can lose ownership of that event.
@@ -68,6 +70,7 @@ export async function* streamMappedVcfRows(
           appendedTo !== undefined
         )
         activeSample = activeSampleColumn.name
+        seedVcfFields(fields, header, DEFAULT_INFO_FIELD_MAPPINGS)
         const callerInfo = detectCaller(headerLines)
         callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
       }
@@ -80,7 +83,8 @@ export async function* streamMappedVcfRows(
           header,
           activeSample,
           DEFAULT_INFO_FIELD_MAPPINGS,
-          callerName
+          callerName,
+          fields
         )
         for (const variant of mapped) {
           if (!passesPostMappingFilters(variant, filters)) continue
@@ -90,7 +94,7 @@ export async function* streamMappedVcfRows(
           yield variant
         }
       } catch (error) {
-        if (error instanceof VcfResourceLimitError) throw error
+        if (isFatalImportRowError(error)) throw error
         const reason = error instanceof Error ? error.message : String(error)
         console.warn('[postgres-import-worker] Skipping unparseable VCF line:', reason)
         onSkip?.(reason)

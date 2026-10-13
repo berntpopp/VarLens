@@ -164,6 +164,12 @@
           @click="externalLookupsOpen = true"
         />
         <v-list-item
+          :prepend-icon="mdiSortVariant"
+          :title="SHORTLIST_RANKING_EDITOR.title"
+          data-testid="settings-shortlist-ranking"
+          @click="openShortlistRanking()"
+        />
+        <v-list-item
           :prepend-icon="mdiTune"
           title="Application Preferences"
           @click="$emit('show-preferences')"
@@ -224,6 +230,8 @@ import { remToPx, useRootFontSize } from '../composables/useRootFontSize'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { getCurrentUnsupportedReasonSync } from '../utils/backend-capabilities'
 import { usePermissions } from '../composables/usePermissions'
+import { useShortlistRankingDialog } from '../composables/useShortlistRankingDialog'
+import { SHORTLIST_RANKING_EDITOR } from '../config/shortlistRankingEditor'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
 import {
   mdiAccount,
@@ -243,6 +251,7 @@ import {
   mdiPlaylistEdit,
   mdiTagMultiple,
   mdiTune,
+  mdiSortVariant,
   mdiCloudLockOutline
 } from '@mdi/js'
 
@@ -272,6 +281,7 @@ watchEffect(() => {
 const { getMetadata, loadMetadata } = useCaseMetadata()
 const multiFileImportAvailable = useCapabilityStore().canUse('multiFileImport')
 const { role, canWrite, canAdmin, writeBlockedReason, adminBlockedReason } = usePermissions()
+const { open: openShortlistRanking } = useShortlistRankingDialog()
 // Role- and capability-gated: disabled with the reason instead of failing after a click.
 const deleteAllReason = computed(
   () => adminBlockedReason.value ?? getCurrentUnsupportedReasonSync('cases.deleteAll')

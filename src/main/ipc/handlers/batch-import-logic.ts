@@ -5,6 +5,7 @@
  * and never touch IPC/Electron APIs directly. This makes them testable
  * without mocking Electron internals.
  */
+import type { ImportFieldProfile } from '../../../shared/config/import-fields.config'
 import { basename } from 'path'
 import { randomUUID } from 'node:crypto'
 import { mainLogger } from '../../services/MainLogger'
@@ -131,7 +132,8 @@ export async function startBatchImport(
   duplicateStrategy: DuplicateChoice,
   stripText: string | undefined,
   callbacks: BatchImportCallbacks,
-  fallbackGenomeBuild?: string
+  fallbackGenomeBuild?: string,
+  fieldProfile?: ImportFieldProfile
 ): Promise<BatchImportResult> {
   let db: DatabaseService | undefined
   const stale = createCohortStaleAnnouncer(callbacks.onCohortStale)
@@ -146,7 +148,8 @@ export async function startBatchImport(
       caseName: f.caseName,
       isDuplicate: f.isDuplicate,
       duplicateStrategy,
-      fallbackGenomeBuild
+      fallbackGenomeBuild,
+      fieldProfile
     }))
 
     const database = db

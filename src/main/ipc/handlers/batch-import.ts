@@ -180,7 +180,8 @@ export function registerBatchImportHandlers({
       duplicateStrategy: unknown,
       stripText: unknown,
       runId: unknown,
-      fallbackGenomeBuild?: unknown
+      fallbackGenomeBuild?: unknown,
+      options?: unknown
     ) => {
       return wrapHandler(async () => {
         const parsed = BatchImportStartParamsSchema.safeParse([
@@ -188,7 +189,8 @@ export function registerBatchImportHandlers({
           duplicateStrategy,
           stripText,
           runId,
-          fallbackGenomeBuild
+          fallbackGenomeBuild,
+          options
         ])
         if (!parsed.success) {
           throw new InvalidParametersError(
@@ -200,8 +202,10 @@ export function registerBatchImportHandlers({
           validatedStrategy,
           validatedStripText,
           validatedRunId,
-          validatedFallbackBuild
+          validatedFallbackBuild,
+          validatedOptions
         ] = parsed.data
+        const fieldProfile = validatedOptions?.fieldProfile
         validatedFilePaths.forEach((filePath, index) => {
           if (!isStrictlyEnrolledPath(filePath)) {
             throwUnallowedBatchPath('batch-import:start', filePath, `filePaths[${index}]`)
@@ -221,6 +225,7 @@ export function registerBatchImportHandlers({
             stripText: validatedStripText,
             fallbackGenomeBuild: validatedFallbackBuild,
             runId: validatedRunId,
+            fieldProfile,
             session,
             callbacks: createBatchImportCallbacks(validatedRunId)
           })
@@ -231,7 +236,8 @@ export function registerBatchImportHandlers({
           validatedStrategy,
           validatedStripText,
           createBatchImportCallbacks(validatedRunId),
-          validatedFallbackBuild
+          validatedFallbackBuild,
+          fieldProfile
         )
       })
     }

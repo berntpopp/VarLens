@@ -53,7 +53,7 @@ const selected = ref<DisplayItem | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 onUnmounted(() => {
-  if (debounceTimer) clearTimeout(debounceTimer)
+  if (debounceTimer !== null) clearTimeout(debounceTimer)
 })
 
 interface DisplayItem extends AutocompleteResult {
@@ -70,7 +70,7 @@ const items = computed<DisplayItem[]>(() =>
 )
 
 function onSearch(query: string | null): void {
-  if (debounceTimer) clearTimeout(debounceTimer)
+  if (debounceTimer !== null) clearTimeout(debounceTimer)
   if (query === null || query === '' || query.length < 2) {
     suggestions.value = []
     return

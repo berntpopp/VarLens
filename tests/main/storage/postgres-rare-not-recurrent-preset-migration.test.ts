@@ -20,6 +20,8 @@ const PG_URL =
   'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
 
 const BEFORE_0028 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0028')
+// Stop at 0028: later migrations (e.g. 0032) seed presets of their own.
+const THROUGH_0028 = POSTGRES_MIGRATIONS.filter((migration) => migration.version <= '0028')
 
 describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#455)', () => {
   let schema: string
@@ -72,7 +74,7 @@ describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#4
     ).rows
 
   const migrate = (): Promise<{ applied: string[] }> =>
-    new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    new PostgresMigrationRunner(pool, schema, THROUGH_0028).migrate()
 
   it('adds the preset and leaves every other row unchanged', async () => {
     await probe.query(
@@ -87,9 +89,7 @@ describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#4
 
     const result = await migrate()
 
-    expect(result.applied).toEqual(
-      POSTGRES_MIGRATIONS.filter((m) => m.version >= '0028').map((m) => m.version)
-    )
+    expect(result.applied).toEqual(['0028'])
     expect(await preset()).toEqual([
       {
         name: 'Rare, not recurrent',

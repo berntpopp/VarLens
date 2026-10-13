@@ -15,8 +15,10 @@ import {
   hasInvalidImportGenomeBuild,
   normalizeImportFiltersPayload,
   normalizeImportMultiFileSpec,
+  normalizeImportFieldProfile,
   normalizeImportVcfOptions
 } from '../../../shared/api/schemas/import'
+import { getJsonFieldPreview } from '../../../main/import/json-preview'
 import type { MultiFileImportSpec } from '../../../shared/types/api'
 import { WEB_EVENT_COHORT_SUMMARY_REBUILT, WEB_EVENT_IMPORT_PROGRESS } from '../web-event-types'
 import { serverPathImportDisabled, serverPathImportDisabledResponse } from './server-path-import'
@@ -32,6 +34,24 @@ import {
 
 export function buildImportOverrides(): Record<string, OverrideHandler> {
   return {
+    'import:jsonPreview': {
+      async handle(args, request, reply) {
+        const validatedFilePath = ImportServerPathArgSchema.safeParse(args[0])
+        if (!validatedFilePath.success) {
+          reply.code(400)
+          return { error: 'invalid-file-path', message: 'filePath must be a non-empty string' }
+        }
+        const resolved = resolveImportPath(validatedFilePath.data, request.session.user?.id)
+        if (resolved === null) {
+          reply.code(isWebUploadRef(validatedFilePath.data) ? 404 : 403)
+          return isWebUploadRef(validatedFilePath.data)
+            ? { error: 'upload-not-found', message: 'Uploaded file is no longer available' }
+            : serverPathImportDisabledResponse()
+        }
+        return await getJsonFieldPreview(resolved.path)
+      }
+    },
+
     'import:vcfPreview': {
       async handle(args, request, reply) {
         const [filePath] = args
@@ -96,6 +116,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
     'import:start': {
       async handle(args, request, reply, { session, events }) {
         const [filePath, caseName, vcfOptions] = args
+        if (invalidFieldProfile(vcfOptions)) {
+          reply.code(400)
+          return { error: 'invalid-field-profile', message: 'vcfOptions.fieldProfile is invalid' }
+        }
         const validatedFilePath = ImportServerPathArgSchema.safeParse(filePath)
         if (!validatedFilePath.success) {
           reply.code(400)
@@ -152,6 +176,10 @@ export function buildImportOverrides(): Record<string, OverrideHandler> {
     'import:startMultiFile': {
       async handle(args, request, reply, { session, events }) {
         const [caseName, files, vcfOptions, filters] = args
+        if (invalidFieldProfile(vcfOptions)) {
+          reply.code(400)
+          return { error: 'invalid-field-profile', message: 'vcfOptions.fieldProfile is invalid' }
+        }
         const validatedCaseName = ImportCaseNameArgSchema.safeParse(caseName)
         if (!validatedCaseName.success) {
           reply.code(400)
@@ -311,4 +339,10 @@ function hasRawBedFilterPath(filters: unknown): boolean {
   if (filters === null || typeof filters !== 'object') return false
   const bedFile = (filters as Record<string, unknown>).bedFile
   return typeof bedFile === 'string' && !isWebUploadRef(bedFile)
+}
+
+/** A field profile was sent but does not parse: refuse rather than import with the default. */
+function invalidFieldProfile(vcfOptions: unknown): boolean {
+  const profile = (vcfOptions as { fieldProfile?: unknown } | null | undefined)?.fieldProfile
+  return profile !== undefined && normalizeImportFieldProfile(profile) === undefined
 }

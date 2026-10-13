@@ -20,7 +20,8 @@ import {
   resolveVcfSelectedSampleColumn,
   type VcfSelectedSampleColumn
 } from '../import/vcf/vcf-line-parser'
-import { mapVcfRecord } from '../import/vcf/VcfMapper'
+import { mapVcfRecord, seedVcfFields } from '../import/vcf/VcfMapper'
+import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { detectCaller } from '../import/vcf/caller-detector'
 import {
   passesPostMappingFilters,
@@ -30,7 +31,7 @@ import {
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
 import type { VcfHeader } from '../import/vcf/types'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
-import { VcfResourceLimitError } from '../import/vcf/vcf-resource-limits'
+import { isFatalImportRowError } from '../import/vcf/vcf-resource-limits'
 
 import { DROP_FTS_TRIGGERS } from './worker-db'
 export { DROP_FTS_TRIGGERS }
@@ -101,11 +102,16 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
   try {
     insertDataInfoStmt = db.prepare<unknown[]>(`
       INSERT INTO case_data_info
-        (case_id, import_file_name, import_file_type, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+        (case_id, import_file_name, import_file_type, field_dictionary, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(case_id) DO UPDATE SET
         import_file_name = excluded.import_file_name,
         import_file_type = excluded.import_file_type,
+        field_dictionary = CASE
+          WHEN case_data_info.field_dictionary IS NULL THEN excluded.field_dictionary
+          WHEN excluded.field_dictionary IS NULL THEN case_data_info.field_dictionary
+          ELSE json_patch(case_data_info.field_dictionary, excluded.field_dictionary)
+        END,
         updated_at = excluded.updated_at
     `)
   } catch (e) {
@@ -272,10 +278,16 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
     getCaseByName: getCaseByNameStmt,
     updateVariantCount: updateVariantCountStmt,
     insertDataInfo: {
-      run: (caseId: number, fileName: string, format: string) => {
+      run: (
+        caseId: number,
+        fileName: string,
+        format: string,
+        fieldDictionary: Record<string, string> | null = null
+      ) => {
         if (insertDataInfoStmt) {
           const now = Date.now()
-          insertDataInfoStmt.run(caseId, fileName, format, now, now)
+          const dictionary = fieldDictionary === null ? null : JSON.stringify(fieldDictionary)
+          insertDataInfoStmt.run(caseId, fileName, format, dictionary, now, now)
         }
       }
     },
@@ -332,10 +344,11 @@ export async function streamInsertJson(
   isCancelled: () => boolean,
   onProgress: (count: number) => void,
   limits?: ImportBatchLimits,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  fields?: FieldProfileResolver
 ): Promise<number> {
   const isCancelledFn = typeof isCancelled === 'function' ? isCancelled : () => false
-  const mapperStream = await createMapperPipeline(filePath, formatInfo, onSkip)
+  const mapperStream = await createMapperPipeline(filePath, formatInfo, onSkip, fields)
   const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {
@@ -375,7 +388,8 @@ export async function streamInsertVcf(
   onProgress: (count: number) => void,
   onSkip?: (reason: string) => void,
   limits?: ImportBatchLimits,
-  filters?: ImportFilters
+  filters?: ImportFilters,
+  fields: FieldProfileResolver = new FieldProfileResolver()
 ): Promise<number> {
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
@@ -423,6 +437,7 @@ export async function streamInsertVcf(
         header = parseVcfHeaderFromLines(headerLines)
         activeSampleColumn = resolveVcfSelectedSampleColumn(header.samples, vcfSelectedSamples?.[0])
         activeSample = activeSampleColumn.name
+        seedVcfFields(fields, header, DEFAULT_INFO_FIELD_MAPPINGS)
 
         // Detect caller from header lines for variant type routing
         const callerInfo = detectCaller(headerLines)
@@ -441,7 +456,8 @@ export async function streamInsertVcf(
           header,
           activeSample,
           DEFAULT_INFO_FIELD_MAPPINGS,
-          callerName
+          callerName,
+          fields
         )
 
         // Every variant split from one line is charged the whole line: each
@@ -451,7 +467,7 @@ export async function streamInsertVcf(
           full = batch.add(variant as unknown as MappedRow, line.length) || full
         }
       } catch (e) {
-        if (e instanceof VcfResourceLimitError) throw e
+        if (isFatalImportRowError(e)) throw e
         const reason = e instanceof Error ? e.message : String(e)
         // The worker's onSkip counts and logs the row; log here only without one.
         if (onSkip !== undefined) onSkip(reason)

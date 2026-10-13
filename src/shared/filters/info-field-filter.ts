@@ -20,6 +20,8 @@
  * The key is validated against the VCF INFO ID grammar and bound as a
  * parameter like every value. Lists (Number != 1) cannot be compared
  * element-wise yet, so a list-shaped filter value is rejected.
+ *
+ * Row-side twin (the shortlist rule evaluator): `info-value.ts`.
  */
 import type { ColumnFilter } from '../types/column-filters'
 

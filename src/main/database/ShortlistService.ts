@@ -49,6 +49,8 @@ import {
   type ShortlistQuerySource
 } from './shortlist-query'
 import type { CaseRepository } from './CaseRepository'
+import type { MetadataRepository } from './MetadataRepository'
+import { compileEvidenceConfig, rankEvidenceSqlite, toCaseInfo } from './shortlist-evidence'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import {
   resolvePanelIntervalsInPlace,
@@ -168,6 +170,8 @@ export function normalizeTieBreakerKey(key: string): string {
 export interface ShortlistStage1Dependencies extends PanelResolutionRepositories {
   filterBuilder: VariantFilterBuilder
   cases: Pick<CaseRepository, 'getCase'>
+  /** Case sex for the evidence ranking's hemizygosity rule. */
+  metadata: Pick<MetadataRepository, 'getCaseMetadata'>
 }
 
 /**
@@ -195,6 +199,19 @@ export class ShortlistService {
     params: GetShortlistParams,
     getGeneReference: GeneReferenceProvider
   ): ShortlistResult {
+    return this.rankCase(params, getGeneReference)
+  }
+
+  /**
+   * Rank a case and keep the best `limit` rows (default: the config's
+   * `topN`). The simulation harness passes `Infinity` to rank every eligible
+   * row with exactly the production pipeline.
+   */
+  rankCase(
+    params: GetShortlistParams,
+    getGeneReference: GeneReferenceProvider,
+    limit?: number
+  ): ShortlistResult {
     const started = Date.now()
     const { config: resolvedConfig, presetUsed } = this.resolveConfig(params)
 
@@ -216,38 +233,15 @@ export class ShortlistService {
             }))
           }
         : resolvedConfig
+    const keep = limit ?? config.topN
 
-    const scope = config.variantTypeScope ?? this.detectPresentTypes(params.caseId)
-
-    // ── Stage 1 + 2: page every eligible candidate, keep the best topN ──
-    // `scoreRow` catches per-row scorer failures (ZERO_COMPONENTS), so a
-    // malformed row sorts to the bottom instead of crashing the pass.
-    let topN: ScoredCandidate[] = []
-    let totalCandidates = 0
-    const queryErrors: Array<{ type: VariantTypeKey; error: Error }> = []
-
-    for (const type of scope) {
-      try {
-        const mergedFilters: Partial<FilterState> = {
-          ...config.baseFilters,
-          ...(config.perTypeOverrides?.[type] ?? {})
-        }
-        const filter = toShortlistVariantFilter(params.caseId, type, mergedFilters)
-        this.resolvePanel(filter, getGeneReference)
-        forEachCandidatePage(this.stage1Source, filter, SHORTLIST_PAGE_SIZE, (page) => {
-          totalCandidates += page.length
-          const scored = page.map((row) => ({ ...row, ...scoreRow(row, config.rankConfig) }))
-          topN = mergeTopScored(topN, scored, config.topN, config.tieBreakers)
-        })
-      } catch (e) {
-        queryErrors.push({ type, error: toError(e) })
-      }
-    }
-
-    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'shortlist')
+    const { kept, totalCandidates } =
+      config.rankConfig.ruleset != null
+        ? this.rankEvidence(params.caseId, config, presetUsed?.name ?? null, getGeneReference, keep)
+        : this.rankLegacy(params.caseId, config, getGeneReference, keep)
 
     // ── Stage 3: 1-based rank assignment ─────────────────────────
-    const rows: ShortlistRow[] = topN.map((row, i) => ({ ...row, rank: i + 1 }))
+    const rows: ShortlistRow[] = kept.map((row, i) => ({ ...row, rank: i + 1 }))
 
     const elapsedMs = Date.now() - started
     const presetLabel = 'presetId' in params ? `presetId=${params.presetId}` : 'adHoc'
@@ -258,6 +252,91 @@ export class ShortlistService {
     )
 
     return { rows, totalCandidates, presetUsed, elapsedMs }
+  }
+
+  private rankLegacy(
+    caseId: number,
+    config: ShortlistConfig,
+    getGeneReference: GeneReferenceProvider,
+    limit: number
+  ): { kept: ScoredCandidate[]; totalCandidates: number } {
+    const scope = config.variantTypeScope ?? this.detectPresentTypes(caseId)
+
+    // ── Stage 1 + 2: page every eligible candidate, keep the best topN ──
+    // `scoreRow` catches per-row scorer failures (ZERO_COMPONENTS), so a
+    // malformed row sorts to the bottom instead of crashing the pass.
+    let kept: ScoredCandidate[] = []
+    let totalCandidates = 0
+    const queryErrors: Array<{ type: VariantTypeKey; error: Error }> = []
+
+    for (const type of scope) {
+      try {
+        const filter = this.stage1Filter(caseId, type, config, getGeneReference)
+        forEachCandidatePage(this.stage1Source, filter, SHORTLIST_PAGE_SIZE, (page) => {
+          totalCandidates += page.length
+          const scored = page.map((row) => ({ ...row, ...scoreRow(row, config.rankConfig) }))
+          kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
+        })
+      } catch (e) {
+        queryErrors.push({ type, error: toError(e) })
+      }
+    }
+
+    if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'shortlist')
+    return { kept, totalCandidates }
+  }
+
+  /** Two-pass evidence ranking (spec §3.3); see `shortlist-evidence.ts`. */
+  private rankEvidence(
+    caseId: number,
+    config: ShortlistConfig,
+    presetName: string | null,
+    getGeneReference: GeneReferenceProvider,
+    limit: number
+  ): { kept: ScoredCandidate[]; totalCandidates: number } {
+    const compiled = compileEvidenceConfig(config, presetName)
+    const filters: Array<{ type: VariantTypeKey; filter: VariantFilter }> = []
+    const filterErrors: Array<{ type: VariantTypeKey; error: Error }> = []
+    // validateEvidenceConfig guarantees a non-empty snv/indel scope.
+    for (const type of config.variantTypeScope ?? []) {
+      try {
+        filters.push({ type, filter: this.stage1Filter(caseId, type, config, getGeneReference) })
+      } catch (e) {
+        filterErrors.push({ type, error: toError(e) })
+      }
+    }
+    if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
+
+    const info = toCaseInfo(
+      this.stage1.cases.getCase(caseId)?.genome_build,
+      this.stage1.metadata.getCaseMetadata(caseId)?.sex
+    )
+    const result = rankEvidenceSqlite({
+      source: this.stage1Source,
+      filters,
+      info,
+      compiled,
+      config,
+      limit
+    })
+    if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
+    return result
+  }
+
+  /** The type's merged Stage-1 filter with its gene panel resolved. */
+  private stage1Filter(
+    caseId: number,
+    type: VariantTypeKey,
+    config: ShortlistConfig,
+    getGeneReference: GeneReferenceProvider
+  ): VariantFilter {
+    const mergedFilters: Partial<FilterState> = {
+      ...config.baseFilters,
+      ...(config.perTypeOverrides?.[type] ?? {})
+    }
+    const filter = toShortlistVariantFilter(caseId, type, mergedFilters)
+    this.resolvePanel(filter, getGeneReference)
+    return filter
   }
 
   /**

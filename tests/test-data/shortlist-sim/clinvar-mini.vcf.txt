@@ -1,0 +1,30 @@
+##fileformat=VCFv4.1
+##fileDate=2026-04-26
+##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
+##INFO=<ID=CLNDISDB,Number=.,Type=String,Description="Tag-value pairs of disease database name and identifier submitted for germline classifications, e.g. OMIM:NNNNNN">
+##INFO=<ID=CLNREVSTAT,Number=.,Type=String,Description="ClinVar review status of germline classification for the Variation ID">
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="Aggregate germline classification for this single variant; multiple values are separated by a vertical bar">
+##INFO=<ID=CLNVC,Number=1,Type=String,Description="Variant type">
+##INFO=<ID=GENEINFO,Number=1,Type=String,Description="Gene(s) for the variant reported as gene symbol:gene id. The gene symbol and id are delimited by a colon (:) and each pair is delimited by a vertical bar (|)">
+##INFO=<ID=ORIGIN,Number=.,Type=String,Description="Allele origin. One or more of the following values may be added: 0 - unknown; 1 - germline; 2 - somatic; 4 - inherited; 8 - paternal; 16 - maternal; 32 - de-novo; 64 - biparental; 128 - uniparental; 256 - not-tested; 512 - tested-inconclusive; 1073741824 - other">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	1000	1	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	2000	2	C	T	.	.	CLNDISDB=OMIM:100002;CLNDN=Disease_B;CLNREVSTAT=reviewed_by_expert_panel;CLNSIG=Likely_pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEB:2;ORIGIN=16
+1	3000	3	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_single_submitter;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	3100	4	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=2
+1	3200	5	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=0
+1	3300	6	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=3
+1	3400	7	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic|risk_factor;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	3500	8	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Conflicting_classifications_of_pathogenicity;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	3600	9	A	G	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1|GENEZ:9;ORIGIN=1
+1	3700	10	ACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC	A	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=Deletion;GENEINFO=GENEA:1;ORIGIN=1
+1	3800	11	A	G	.	.	CLNDISDB=MedGen:CN517202;CLNDN=not_provided;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	3900	12	A	G	.	.	CLNDISDB=OMIM:100003;CLNDN=Disease_C;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+1	4000	13	G	A	.	.	CLNDISDB=MedGen:CN169374;CLNDN=not_specified;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Benign;CLNVC=single_nucleotide_variant;GENEINFO=GENED:4;ORIGIN=1
+X	5000	14	T	C	.	.	CLNDISDB=OMIM:100004;CLNDN=Disease_X;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEX:5;ORIGIN=1
+X	6000	15	TA	T	.	.	CLNDISDB=Orphanet:300;CLNDN=Disease_Y;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=Deletion;GENEINFO=GENEY:6;ORIGIN=1
+1	7000	16	A	G	.	.	CLNDISDB=OMIM:100009;CLNDN=Disease_Q;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEA:1;ORIGIN=1
+2	8000	17	A	C	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEC:3;ORIGIN=1
+2	8001	18	A	C	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEC:3;ORIGIN=1
+2	8002	19	A	C	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEC:3;ORIGIN=1
+2	8003	20	A	C	.	.	CLNDISDB=MedGen:C1,OMIM:100001;CLNDN=Disease_A;CLNREVSTAT=criteria_provided,_multiple_submitters,_no_conflicts;CLNSIG=Pathogenic;CLNVC=single_nucleotide_variant;GENEINFO=GENEC:3;ORIGIN=1

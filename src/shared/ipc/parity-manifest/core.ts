@@ -50,6 +50,7 @@ export const importManifest = {
   start: sharedWrite(),
   startMultiFile: sharedWrite({ capability: 'multiFileImport' }),
   vcfPreview: sharedRead({ authz: 'analyst' }),
+  jsonPreview: sharedRead({ authz: 'analyst' }),
   vcfMultiPreview: sharedRead({
     authz: 'analyst',
     degraded: { tracking: 'P-B (PR-W9a)', note: 'sibling BED discovery is empty for uploads' }

@@ -9,11 +9,12 @@ import { pick } from 'stream-json/filters/pick.js'
 import { streamArray } from 'stream-json/streamers/stream-array.js'
 
 import type { DataDictionaries, FormatInfo } from '../import/types'
-import { createFieldMapper } from '../import/transforms/FieldMapper'
+import { createFieldMapper, type ColumnarHeaderItem } from '../import/transforms/FieldMapper'
 import { createObjectFormatMapper } from '../import/transforms/ObjectFormatMapper'
 import { resolveColumnIndices } from '../import/config/fieldMapping'
 import { createDecompressedStream } from '../import/stream-utils'
 import { createJsonRecordBudget } from '../import/json-resource-budget'
+import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 
 /**
  * Create a readable stream that outputs mapped variant objects.
@@ -23,11 +24,13 @@ import { createJsonRecordBudget } from '../import/json-resource-budget'
  * because the mapper transforms consume the streamArray wrapper.
  *
  * @param onSkip told about every record dropped for a missing required field
+ * @param fields the file's field profile; read its dictionary after the stream ends
  */
 export async function createMapperPipeline(
   filePath: string,
   formatInfo: FormatInfo,
-  onSkip?: (reason: string) => void
+  onSkip?: (reason: string) => void,
+  fields: FieldProfileResolver = new FieldProfileResolver()
 ): Promise<Readable> {
   // The budget already counts each record's bytes; the mapper tags its output
   // with that count so batches can be bounded by size without re-measuring.
@@ -38,12 +41,12 @@ export async function createMapperPipeline(
   switch (formatInfo.format) {
     case 'simple':
       filter = 'variants'
-      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip)
+      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip, fields)
       break
 
     case 'object':
       filter = `samples.${formatInfo.caseKey}.variants`
-      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip)
+      mapper = createObjectFormatMapper(budget.takeRecordBytes, onSkip, fields)
       break
 
     case 'columnar': {
@@ -51,13 +54,17 @@ export async function createMapperPipeline(
       const headerPath = wrapped ? `${formatInfo.caseKey}.header` : 'header'
       filter = wrapped ? `${formatInfo.caseKey}.data` : 'data'
 
-      const { dictionaries, columnIndices, columnCount } = await parseHeader(filePath, headerPath)
+      const { dictionaries, columnIndices, columnCount, headerItems } = await parseHeader(
+        filePath,
+        headerPath
+      )
       mapper = createFieldMapper(
         dictionaries,
         columnIndices,
         budget.takeRecordBytes,
         onSkip,
-        columnCount
+        columnCount,
+        { header: headerItems, fields }
       )
       break
     }
@@ -86,6 +93,7 @@ export async function parseHeader(
   dictionaries: DataDictionaries
   columnIndices: ReturnType<typeof resolveColumnIndices>
   columnCount: number | undefined
+  headerItems: ColumnarHeaderItem[]
 }> {
   return new Promise((resolve, reject) => {
     const dictionaries: DataDictionaries = {
@@ -96,7 +104,7 @@ export async function parseHeader(
       moi: {}
     }
 
-    const headerItems: { id: string }[] = []
+    const headerItems: ColumnarHeaderItem[] = []
     const fieldsToExtract = new Set(['Gene', 'Transcript', 'HpoSimScore', 'MoI'])
     let resolved = false
 
@@ -116,9 +124,18 @@ export async function parseHeader(
       if (resolved) return
 
       const headerItem = data.value
-      const fieldId = headerItem.id as string
+      const fieldId = String(headerItem.id ?? '')
 
-      headerItems[data.key] = { id: fieldId }
+      const dataDictionary = headerItem.dataDictionary
+      headerItems[data.key] = {
+        id: fieldId,
+        type: typeof headerItem.type === 'string' ? headerItem.type : undefined,
+        label: typeof headerItem.label === 'string' ? headerItem.label : undefined,
+        dataDictionary:
+          dataDictionary !== null && typeof dataDictionary === 'object'
+            ? (dataDictionary as Record<string, unknown>)
+            : null
+      }
 
       const hasField: boolean = fieldsToExtract.has(fieldId)
       if (
@@ -163,7 +180,8 @@ export async function parseHeader(
         dictionaries,
         columnIndices: resolveColumnIndices(headerItems),
         // No header means the legacy positional layout, which has no declared width
-        columnCount: headerItems.length > 0 ? headerItems.length : undefined
+        columnCount: headerItems.length > 0 ? headerItems.length : undefined,
+        headerItems
       })
     })
 

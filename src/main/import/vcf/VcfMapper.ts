@@ -20,6 +20,12 @@ import { applyInfoFieldRegistry } from './info-field-registry'
 import { detectVariantType } from './variant-type-detector'
 import { extractSvFields, extractCnvFields, extractStrFields } from './extension-parsers'
 import { splitGenotypeAlleles, VcfResourceLimitError } from './vcf-resource-limits'
+import {
+  ANN_COLUMN_FIELDS,
+  ANN_FIELD_NAMES,
+  CSQ_COLUMN_FIELDS
+} from '../../../shared/config/import-fields.config'
+import { FieldProfileResolver } from '../../../shared/utils/import-field-profile'
 
 const MAX_VCF_EXPANDED_RECORD_BYTES = 64 * 1024 * 1024
 const MAX_VCF_ALLELE_EXPANSION_WORK = 1_000_000
@@ -43,6 +49,7 @@ function parseIntOrNull(val: string | undefined): number | null {
  * @param sampleName - Which sample to extract genotype for
  * @param registry - INFO field mappings
  * @param callerName - Detected caller name (null if unknown)
+ * @param fields - The file's field profile, seeded with {@link seedVcfFields}
  * @returns Array of mapped variants (may be empty)
  */
 export function mapVcfRecord(
@@ -50,7 +57,8 @@ export function mapVcfRecord(
   header: VcfHeader,
   sampleName: string,
   registry: InfoFieldMapping[],
-  callerName: string | null = null
+  callerName: string | null = null,
+  fields: FieldProfileResolver = seedVcfFields(new FieldProfileResolver(), header, registry)
 ): VcfMappedVariant[] {
   const results: VcfMappedVariant[] = []
   const selectedValues = record.samples.get(sampleName)
@@ -184,7 +192,7 @@ export function mapVcfRecord(
       ad_alt: genotype.adAlt,
       ab: genotype.ab,
       filter: rec.filter,
-      info_json: infoResult.infoJson ? JSON.stringify(infoResult.infoJson) : null,
+      info_json: vcfInfoJson(fields, header, infoResult.infoJson, annotation),
       source_format: 'vcf',
       _transcripts: annotation.transcripts.length > 0 ? annotation.transcripts : undefined,
       variant_type: detectVariantType(rec.ref, altAllele, rec.info, callerName),
@@ -208,6 +216,51 @@ export function mapVcfRecord(
   }
 
   return results
+}
+
+/** Whether an annotation subfield maps to a column (then the profile never sees it). */
+function isAnnotationColumn(header: VcfHeader, name: string): boolean {
+  const columns = header.annotationType === 'ann' ? ANN_COLUMN_FIELDS : CSQ_COLUMN_FIELDS
+  return Object.prototype.hasOwnProperty.call(columns, name)
+}
+
+/**
+ * Resolve a VCF's fields in header order — INFO before the CSQ/ANN subfields —
+ * so an INFO key keeps its name and a colliding subfield is the one suffixed.
+ */
+export function seedVcfFields(
+  fields: FieldProfileResolver,
+  header: VcfHeader,
+  registry: InfoFieldMapping[]
+): FieldProfileResolver {
+  const mapped = new Set(registry.flatMap((mapping) => mapping.infoIds))
+  fields.seed(
+    'INFO',
+    [...header.infoDefs.keys()].filter((id) => id !== 'CSQ' && id !== 'ANN' && !mapped.has(id))
+  )
+  const unmapped = (name: string): boolean => !isAnnotationColumn(header, name)
+  if (header.annotationType === 'csq' && header.csqFields !== null) {
+    fields.seed('CSQ', header.csqFields.filter(unmapped))
+  } else if (header.annotationType === 'ann') {
+    fields.seed('ANN', ANN_FIELD_NAMES.filter(unmapped))
+  }
+  return fields
+}
+
+/** Unmapped INFO plus the selected transcript's unmapped subfields, per the field profile. */
+function vcfInfoJson(
+  fields: FieldProfileResolver,
+  header: VcfHeader,
+  unmappedInfo: Record<string, string> | null,
+  annotation: AnnotationResult
+): string | null {
+  const record = fields.record()
+  for (const [key, value] of Object.entries(unmappedInfo ?? {})) record.set('INFO', key, value)
+  const origin = header.annotationType === 'ann' ? 'ANN' : 'CSQ'
+  for (const [name, value] of annotation.selectedFields ?? []) {
+    if (!isAnnotationColumn(header, name)) record.set(origin, name, value)
+  }
+  return record.toJson()
 }
 
 function assertBoundedExpandedRecord(record: VcfRawRecord, mappedAltCount: number): void {

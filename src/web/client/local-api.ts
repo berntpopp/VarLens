@@ -61,11 +61,14 @@ const importApi: Partial<WindowAPI['import']> = {
 
 const batchImportApi: Partial<WindowAPI['batchImport']> = {
   // Accepted at once with a job id; the result arrives by event (or status poll).
-  start: (filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild) =>
-    startBatchImportRun([filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild], {
-      invoke: httpInvoke,
-      subscribe: subscribeWebEvent
-    }),
+  start: (filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild, options) =>
+    startBatchImportRun(
+      [filePaths, duplicateStrategy, stripText, runId, fallbackGenomeBuild, options],
+      {
+        invoke: httpInvoke,
+        subscribe: subscribeWebEvent
+      }
+    ),
   onProgress: (callback) => subscribeWebEvent('batch-import:progress', callback),
   onComplete: (callback) => subscribeWebEvent('batch-import:complete', callback),
   onFileComplete: (callback) => subscribeWebEvent('batch-import:fileComplete', callback),

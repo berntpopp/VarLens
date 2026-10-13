@@ -1,11 +1,15 @@
 import { BUILT_IN_PRESETS } from '../../../src/main/database/built-in-presets'
 import { describe, expect, it } from 'vitest'
 
+import {
+  EVIDENCE_BETA_PRESET,
+  evidenceBetaFilterJson
+} from '../../../src/main/database/evidence-ranking-preset'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(30)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(32)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -36,7 +40,9 @@ describe('Postgres migration definitions', () => {
       '0027',
       '0028',
       '0029',
-      '0030'
+      '0030',
+      '0031',
+      '0032'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -68,7 +74,9 @@ describe('Postgres migration definitions', () => {
       'summary_conflicting_calls',
       'rare_not_recurrent_preset',
       'summary_carrier_rows',
-      'contig_naming'
+      'contig_naming',
+      'case_field_dictionary',
+      'evidence_ranking_beta_preset'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -155,6 +163,19 @@ describe('Postgres migration definitions', () => {
     expect(migration?.sql).toContain(`'${preset!.description}'`)
     expect(migration?.sql).toContain(`'${JSON.stringify(preset!.filterJson)}'`)
     expect(migration?.sql).toContain(`1, 1, ${preset!.sortOrder}, 'filter'`)
+    expect(migration?.sql).toContain('ON CONFLICT (name) DO NOTHING')
+    expect(migration?.afterApply).toBeUndefined()
+  })
+
+  // The SQL literal and the TypeScript preset (also seeded by SQLite v49) must
+  // not drift apart; the ruleset inside is the frozen, content-addressed file.
+  it('0032 seeds "Evidence ranking (beta)" exactly as evidence-ranking-preset.ts defines it', () => {
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0032')
+    const literal = (text: string): string => `'${text.replace(/'/g, "''")}'`
+    expect(migration?.sql).toContain(literal(EVIDENCE_BETA_PRESET.name))
+    expect(migration?.sql).toContain(literal(EVIDENCE_BETA_PRESET.description))
+    expect(migration?.sql).toContain(literal(evidenceBetaFilterJson()))
+    expect(migration?.sql).toContain(`1, 1, ${EVIDENCE_BETA_PRESET.sortOrder}, 'shortlist'`)
     expect(migration?.sql).toContain('ON CONFLICT (name) DO NOTHING')
     expect(migration?.afterApply).toBeUndefined()
   })

@@ -1,3 +1,4 @@
+import type { ImportFieldProfile } from '../config/import-fields.config'
 import type { ClientConfig } from 'pg'
 import type { MultiFileImportSpec } from './api'
 
@@ -49,7 +50,13 @@ export interface PostgresImportWorkerStartMessage {
   schema: string
   mode: 'single-file' | 'multi-file'
   caseName: string
-  vcfOptions?: { selectedSample?: string; genomeBuild?: string; fallbackGenomeBuild?: string }
+  vcfOptions?: {
+    selectedSample?: string
+    genomeBuild?: string
+    fallbackGenomeBuild?: string
+    /** Applies to JSON as well as VCF: where fields without a column go. */
+    fieldProfile?: ImportFieldProfile
+  }
   // Single-file:
   filePath?: string
   /**

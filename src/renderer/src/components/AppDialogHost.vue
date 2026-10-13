@@ -19,6 +19,11 @@
   <DatabaseOverviewDialog v-if="dbOverviewMounted" ref="databaseOverviewDialogRef" />
   <DeleteAllCasesDialog v-if="deleteAllMounted" ref="deleteAllCasesDialogRef" />
   <PanelManagerDialog v-if="panelManagerMounted" v-model="panelManagerOpen" />
+  <ShortlistRankingDialog
+    v-if="shortlistRankingMounted"
+    v-model:open="shortlistRanking.state.open"
+    :preset-id="shortlistRanking.state.presetId"
+  />
   <CaseMetadataModal
     v-if="selectedCaseId && caseMetadataMounted"
     ref="caseMetadataModalRef"
@@ -44,6 +49,9 @@ const TagManagementDialog = defineAsyncComponent(() => import('./TagManagementDi
 const DatabaseOverviewDialog = defineAsyncComponent(() => import('./DatabaseOverviewDialog.vue'))
 const DeleteAllCasesDialog = defineAsyncComponent(() => import('./DeleteAllCasesDialog.vue'))
 const PanelManagerDialog = defineAsyncComponent(() => import('./panels/PanelManagerDialog.vue'))
+const ShortlistRankingDialog = defineAsyncComponent(
+  () => import('./shortlist-ranking/ShortlistRankingDialog.vue')
+)
 const VcfImportDialog = defineAsyncComponent(() => import('./import/VcfImportDialog.vue'))
 // Not needed for first paint (the disclaimer is): keep them out of this chunk
 // so the disclaimer renders sooner. LogViewer also polls memory every 5 s
@@ -52,6 +60,7 @@ const LogViewer = defineAsyncComponent(() => import('./LogViewer.vue'))
 const CaseMetadataModal = defineAsyncComponent(() => import('./CaseMetadataModal.vue'))
 import { useAppState } from '../composables/useAppState'
 import { useMountOnFirstOpen } from '../composables/useMountOnFirstOpen'
+import { useShortlistRankingDialog } from '../composables/useShortlistRankingDialog'
 import { useVersionGating } from '../composables/useVersionGating'
 import { logService } from '../services/LogService'
 
@@ -97,6 +106,8 @@ const vcfImportMounted = ref(false)
 const vcfImportOpen = ref(false)
 const logViewerMounted = useMountOnFirstOpen(() => logViewerOpen.value)
 const caseMetadataMounted = ref(false)
+const shortlistRanking = useShortlistRankingDialog()
+const shortlistRankingMounted = useMountOnFirstOpen(() => shortlistRanking.state.open)
 
 /**
  * Wait for a lazy-loaded dialog ref to become available after setting its mount flag.

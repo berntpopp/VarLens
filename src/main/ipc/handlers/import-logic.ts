@@ -27,7 +27,10 @@ import {
 } from './cohort-summary-settle'
 import type { ImportFilters } from '../../import/vcf/import-filters'
 import { assertGenomeBuildMatches, resolveCaseSample } from '../../import/vcf/vcf-header-parser'
-import type { StorageImportFileFilters } from '../../storage/import-executor'
+import type {
+  StorageImportFileFilters,
+  StorageImportVcfOptions
+} from '../../storage/import-executor'
 import type { StorageSession } from '../../storage/session'
 
 /**
@@ -96,13 +99,8 @@ export interface ImportResult {
   unrankedClinvar?: string[]
 }
 
-/** Options for VCF import. */
-export interface VcfImportOptions {
-  selectedSample?: string
-  genomeBuild?: string
-  /** Batch only: build for files whose header decides none. */
-  fallbackGenomeBuild?: string
-}
+/** Options for VCF import; `fieldProfile` applies to JSON imports too. */
+export type VcfImportOptions = StorageImportVcfOptions
 
 interface ActiveImportOperation {
   cancel: () => void

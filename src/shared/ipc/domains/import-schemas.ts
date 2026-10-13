@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { isImportableGenomeBuild } from '../../config/genome-builds.config'
 
+import {
+  IMPORT_FIELD_PROFILE_LIMITS,
+  type ImportFieldProfile
+} from '../../config/import-fields.config'
+
 /**
  * Import IPC payload schemas. Used by src/main/ipc/handlers/import.ts via
  * safeParse before any business logic runs.
@@ -28,11 +33,26 @@ const DroppedFileEnrollmentTokenSchema = z
 export const GenomeBuildIdSchema = z.string().max(64).refine(isImportableGenomeBuild, {
   message: 'Unknown or unsupported genome build'
 })
+/** An import field profile (src/shared/config/import-fields.config.ts); keys are normalised on use. */
+export const ImportFieldProfileSchema: z.ZodType<ImportFieldProfile> = z
+  .object({
+    keepUnknown: z.enum(['all', 'selected', 'none']),
+    fields: z
+      .record(
+        z.string().min(1).max(IMPORT_FIELD_PROFILE_LIMITS.maxNameChars),
+        z.object({ keep: z.boolean(), key: z.string().min(1).max(64).optional() }).strict()
+      )
+      .refine((fields) => Object.keys(fields).length <= IMPORT_FIELD_PROFILE_LIMITS.maxFields, {
+        message: `At most ${IMPORT_FIELD_PROFILE_LIMITS.maxFields} field choices`
+      })
+  })
+  .strict()
 
 export const ImportVcfOptionsSchema = z
   .object({
     selectedSample: NonBlankImportStringSchema.optional(),
-    genomeBuild: GenomeBuildIdSchema.optional()
+    genomeBuild: GenomeBuildIdSchema.optional(),
+    fieldProfile: ImportFieldProfileSchema.optional()
   })
   .strict()
   .optional()
@@ -76,6 +96,8 @@ export const ImportStartMultiFileParamsSchema = z.tuple([
 ])
 
 export const ImportVcfPreviewParamsSchema = z.tuple([NonBlankFilePathSchema])
+
+export const ImportJsonPreviewParamsSchema = z.tuple([NonBlankFilePathSchema])
 
 export const ImportVcfMultiPreviewParamsSchema = z.tuple([
   z.array(NonBlankFilePathSchema).min(1).max(1000)

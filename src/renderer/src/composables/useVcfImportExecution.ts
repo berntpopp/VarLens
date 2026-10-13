@@ -1,4 +1,6 @@
 import type { Ref } from 'vue'
+import { stripVueProxies } from '../utils/stripVueProxies'
+import type { ImportFieldProfile } from '../../../shared/config/import-fields.config'
 import type { BatchResult, WindowAPI } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
@@ -31,6 +33,8 @@ interface VcfImportExecutionState {
   /** Confirmed in the preview step (GenomeBuildField.validate) before import starts. */
   genomeBuild: Ref<string | null>
   caseNames: Ref<Map<string, string>>
+  /** Where annotation fields without a column go. */
+  fieldProfile: Ref<ImportFieldProfile>
   step: Ref<number>
   totalFiles: Ref<number>
   currentIndex: Ref<number>
@@ -109,7 +113,8 @@ export function useVcfImportExecution({
           const result = unwrapIpcResult(
             await api.import.start(state.filePath.value, caseName, {
               selectedSample: sample,
-              genomeBuild: state.genomeBuild.value ?? undefined
+              genomeBuild: state.genomeBuild.value ?? undefined,
+              fieldProfile: stripVueProxies(state.fieldProfile.value)
             })
           )
           if (finishCancellation(generation)) return

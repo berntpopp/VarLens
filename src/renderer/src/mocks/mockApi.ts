@@ -231,12 +231,7 @@ export const mockApi: WindowAPI = {
     },
     // Wave 4 — unified shortlist: minimal stub so browser dev mode has a
     // placeholder. Real data flows through the main-process handler.
-    shortlist: async () => ({
-      rows: [],
-      totalCandidates: 0,
-      presetUsed: null,
-      elapsedMs: 0
-    }),
+    shortlist: async () => ({ rows: [], totalCandidates: 0, presetUsed: null, elapsedMs: 0 }),
     onAnnotationChanged: () => () => {}
   },
 
@@ -272,12 +267,14 @@ export const mockApi: WindowAPI = {
         excluded: []
       },
       infoFields: [],
+      annotationFields: [],
       callerName: null,
       callerVersion: null,
       defaultVariantType: 'snv',
       filePath: '/mock/file.vcf.gz',
       fileSize: 1000
     }),
+    jsonPreview: async () => ({ format: 'columnar' as const, variantsScanned: 0, fields: [] }),
     vcfMultiPreview: async () => ({
       files: [],
       siblingBedFiles: [],

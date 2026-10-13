@@ -1,0 +1,180 @@
+{
+  "run": "2026-10-12-full-v2",
+  "seeds": {
+    "cases": 20261012,
+    "folds": 20261013,
+    "bootstrap": 20261014,
+    "scenario": 20261015,
+    "quick": 20261016
+  },
+  "inputHashes": {
+    "pool": "7c837f71fb90ae222088b14406c24d4d54575f82ef5f4a581f264b5e3f21b85e",
+    "annotations": "27b74823b69b385c028ca8c638e7d75b0c46e89dbf42f8aedc802535c930cd27",
+    "concordance": "9da45fdaa41105e9b0b81ba37dbe885372dcd2e44cbb9fa769905ec18ef0d1dc",
+    "caddApiValues": "36b86b9ec66a2b85006df84e20e986aacabf3d429ae0e00cf2e91271a91a8924",
+    "template": "c27e4af2ff7ab2cd8e0361fcd3253390b8415edc34a8274c5549c69621d8f38c",
+    "background:bg1": "d13ef4a8c0115613f8fbb1ae4ca79178d6bc9f366060bf552396a26c2c4eb4a4",
+    "background:bg2": "afdd197f77286b8b7f45743f8014385b5a10620beb865b11c4a5854e142d716b",
+    "background:bg3": "521c6b22688090313874481307ef5d36bad7a69aa2efe7f60cc00045c93871b5"
+  },
+  "scenarios": [
+    "primary",
+    "clinvar_visible",
+    "pheno_free",
+    "pheno_shuffled",
+    "missingness",
+    "pheno_enriched"
+  ],
+  "caddImpute": true,
+  "acceptance": {
+    "afField": "exome_popmax",
+    "disabledGroups": [],
+    "checks": [
+      {
+        "field": "gnomad_af (exome_popmax), backgrounds",
+        "metric": "median |Δlog10|",
+        "value": 0.023474693370288624,
+        "threshold": "≤ 0.1",
+        "accepted": true
+      },
+      {
+        "field": "gnomad_af (exome_popmax), pool",
+        "metric": "median |Δlog10|",
+        "value": 0.000022102452001071526,
+        "threshold": "≤ 0.1",
+        "accepted": true
+      },
+      {
+        "field": "cadd, backgrounds",
+        "metric": "median |Δ|",
+        "value": 0,
+        "threshold": "≤ 0.5",
+        "accepted": true
+      },
+      {
+        "field": "cadd, backgrounds",
+        "metric": "Pearson",
+        "value": 1,
+        "threshold": "≥ 0.98",
+        "accepted": true
+      },
+      {
+        "field": "cadd, pool",
+        "metric": "median |Δ|",
+        "value": 0,
+        "threshold": "≤ 0.5",
+        "accepted": true
+      },
+      {
+        "field": "cadd, pool",
+        "metric": "Pearson",
+        "value": 1,
+        "threshold": "≥ 0.98",
+        "accepted": true
+      }
+    ],
+    "provisional": false
+  },
+  "folds": 5,
+  "scorers": {
+    "reference": "tier1",
+    "candidate": "evidence_tuned",
+    "ablations": [
+      "abl_group_freq",
+      "abl_group_effect",
+      "abl_group_cadd",
+      "abl_group_clinvar",
+      "abl_group_phenotype",
+      "abl_group_gene",
+      "abl_group_ad_freq",
+      "abl_mode_ar_hom",
+      "abl_mode_ar_comphet",
+      "abl_mode_xl",
+      "abl_mode_ad",
+      "abl_modes_all"
+    ],
+    "all": [
+      {
+        "id": "tier1",
+        "label": "Tier 1 candidates"
+      },
+      {
+        "id": "all_rare_damaging",
+        "label": "All rare damaging"
+      },
+      {
+        "id": "cadd_desc",
+        "label": "CADD descending"
+      },
+      {
+        "id": "af_asc",
+        "label": "AF ascending"
+      },
+      {
+        "id": "evidence_hand",
+        "label": "Evidence, hand-set points"
+      },
+      {
+        "id": "evidence_tuned",
+        "label": "Evidence, tuned points"
+      },
+      {
+        "id": "tier1_evgate",
+        "label": "Tier 1 scoring, evidence gate"
+      },
+      {
+        "id": "tuned_t1gate",
+        "label": "Tuned evidence, Tier 1 gate"
+      },
+      {
+        "id": "abl_group_freq",
+        "label": "Tuned without Population frequency"
+      },
+      {
+        "id": "abl_group_effect",
+        "label": "Tuned without Variant effect"
+      },
+      {
+        "id": "abl_group_cadd",
+        "label": "Tuned without CADD"
+      },
+      {
+        "id": "abl_group_clinvar",
+        "label": "Tuned without ClinVar"
+      },
+      {
+        "id": "abl_group_phenotype",
+        "label": "Tuned without Phenotype match"
+      },
+      {
+        "id": "abl_group_gene",
+        "label": "Tuned without Disease gene"
+      },
+      {
+        "id": "abl_group_ad_freq",
+        "label": "Tuned without Frequency for dominant"
+      },
+      {
+        "id": "abl_mode_ar_hom",
+        "label": "Tuned without mode ar_hom"
+      },
+      {
+        "id": "abl_mode_ar_comphet",
+        "label": "Tuned without mode ar_comphet"
+      },
+      {
+        "id": "abl_mode_xl",
+        "label": "Tuned without mode xl"
+      },
+      {
+        "id": "abl_mode_ad",
+        "label": "Tuned without mode ad"
+      },
+      {
+        "id": "abl_modes_all",
+        "label": "Tuned without inheritance modes"
+      }
+    ]
+  },
+  "rulesetSha256": "3d4ebc0049c3c80f4942ff7f8da4a7e8179ece746c0caabfabb17d915b8dc096"
+}

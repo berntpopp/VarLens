@@ -38,4 +38,6 @@ export interface VcfPreviewResult {
   /** Suggested build with evidence; the user confirms it in the import UI. */
   buildDetection: BuildDetection
   infoFields: VcfPreviewInfoField[]
+  /** CSQ / ANN subfield names in header order. */
+  annotationFields: string[]
 }

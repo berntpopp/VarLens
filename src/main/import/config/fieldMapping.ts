@@ -1,10 +1,13 @@
-import type { FieldMapping } from '../types'
+import {
+  COLUMNAR_HEADER_TO_SLOT,
+  type ColumnarSlot
+} from '../../../shared/config/import-fields.config'
 
 /** Column name keys used internally by FieldMapper */
-export type ColumnName = keyof typeof COLUMN_INDICES
+export type ColumnName = ColumnarSlot
 
 // Default column indices — only used as fallback when header is unavailable
-export const COLUMN_INDICES = {
+export const COLUMN_INDICES: Readonly<Record<ColumnName, number>> = {
   SELECTED_TRANSCRIPT: 1,
   CHR: 9,
   POS: 10,
@@ -24,70 +27,27 @@ export const COLUMN_INDICES = {
   GNOMAD_AF: 108,
   HPO_SIM_SCORE: 156,
   MOI: 162
-} as const
-
-/**
- * Map of header field IDs to internal column names.
- * Multiple aliases are supported for different VarVis versions.
- */
-const HEADER_ID_TO_COLUMN: Record<string, ColumnName> = {
-  selectedTranscript: 'SELECTED_TRANSCRIPT',
-  Chr: 'CHR',
-  Pos: 'POS',
-  Ref: 'REF',
-  Alt: 'ALT',
-  // Qual variants
-  Qual: 'QUAL',
-  'Qual-Index': 'QUAL',
-  // Genotype variants
-  Genotype: 'GT_NUM',
-  'GTNum-Index': 'GT_NUM',
-  // Function/consequence variants
-  VarType: 'FUNC',
-  Func: 'FUNC',
-  Consequence: 'IMPACT',
-  Impact: 'IMPACT',
-  // Gene
-  Gene: 'GENE',
-  // OMIM variants
-  Omim: 'OMIM',
-  OMIM: 'OMIM',
-  // Transcript
-  Transcript: 'TRANSCRIPT',
-  // cDNA variants
-  HGVS_C: 'CDNA',
-  cDNA: 'CDNA',
-  // AA change variants
-  HGVS_P: 'AA_CHANGE',
-  AAChange: 'AA_CHANGE',
-  // CADD
-  CADDPhredScore: 'CADD',
-  // ClinVar variants
-  ClinVar: 'CLINVAR',
-  ClinVSig: 'CLINVAR',
-  // gnomAD AF variants
-  GnomadAF: 'GNOMAD_AF',
-  GnomPMaxFiltAF: 'GNOMAD_AF',
-  GnomTotal: 'GNOMAD_AF',
-  // HPO
-  HpoSimScore: 'HPO_SIM_SCORE',
-  // MOI
-  MoI: 'MOI'
 }
 
 /** Type for dynamic column indices resolved from header */
 export type ColumnIndices = Record<ColumnName, number>
 
+/** Index of a slot the header does not carry: `row[-1]` reads as missing. */
+export const ABSENT_COLUMN = -1
+
 /**
- * Build column index map dynamically from header field IDs.
- * Falls back to COLUMN_INDICES defaults for any fields not found in header.
+ * Build the column index map from the header field IDs. A slot the header
+ * lacks is absent, never read from its default position (#590); only a file
+ * without a header falls back to the COLUMN_INDICES defaults.
  */
 export function resolveColumnIndices(header: { id: string }[]): ColumnIndices {
-  // Start with defaults
-  const indices = { ...COLUMN_INDICES } as Record<ColumnName, number>
+  if (header.length === 0) return { ...COLUMN_INDICES }
+  const indices = Object.fromEntries(
+    Object.keys(COLUMN_INDICES).map((slot) => [slot, ABSENT_COLUMN])
+  ) as ColumnIndices
 
   for (let i = 0; i < header.length; i++) {
-    const columnName = HEADER_ID_TO_COLUMN[header[i].id]
+    const columnName = COLUMNAR_HEADER_TO_SLOT[header[i].id]
     if (columnName !== undefined) {
       indices[columnName] = i
     }
@@ -112,56 +72,6 @@ export const IMPACT_DICTIONARY: Record<string, string> = {
   '3': 'LOW',
   '4': 'MODIFIER'
 }
-
-// Field mappings array
-export const FIELD_MAPPINGS: FieldMapping[] = [
-  { source: 'Chr', sourceIndex: 9, target: 'chr', isMultiValue: true, hasDictionary: false },
-  { source: 'Pos', sourceIndex: 10, target: 'pos', isMultiValue: true, hasDictionary: false },
-  { source: 'Ref', sourceIndex: 11, target: 'ref', isMultiValue: false, hasDictionary: false },
-  { source: 'Alt', sourceIndex: 12, target: 'alt', isMultiValue: false, hasDictionary: false },
-  {
-    source: 'Gene',
-    sourceIndex: 24,
-    target: 'gene_symbol',
-    isMultiValue: true,
-    hasDictionary: true
-  },
-  {
-    source: 'OMIM',
-    sourceIndex: 25,
-    target: 'omim_mim_number',
-    isMultiValue: true,
-    hasDictionary: false
-  },
-  {
-    source: 'Impact',
-    sourceIndex: 21,
-    target: 'consequence',
-    isMultiValue: true,
-    hasDictionary: true
-  },
-  {
-    source: 'GnomPMaxFiltAF',
-    sourceIndex: 108,
-    target: 'gnomad_af',
-    isMultiValue: false,
-    hasDictionary: false
-  },
-  {
-    source: 'CADDPhredScore',
-    sourceIndex: 46,
-    target: 'cadd',
-    isMultiValue: false,
-    hasDictionary: false
-  },
-  {
-    source: 'ClinVSig',
-    sourceIndex: 72,
-    target: 'clinvar',
-    isMultiValue: false,
-    hasDictionary: false
-  }
-]
 
 // Helper function to resolve dictionary value
 export function resolveDictionaryValue(

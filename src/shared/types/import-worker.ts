@@ -1,3 +1,4 @@
+import type { ImportFieldProfile } from '../config/import-fields.config'
 import type { TranscriptInsertRow } from './transcript'
 
 /**
@@ -88,6 +89,8 @@ export interface FileImportRequest {
   vcfSelectedSamples?: string[]
   /** Genome build the user confirmed for this file; wins over the header. */
   vcfGenomeBuild?: string
+  /** Where annotation fields without a column go (default: keep all). */
+  fieldProfile?: ImportFieldProfile
   /** Batch: build for files whose header decides none (always JSON). */
   fallbackGenomeBuild?: string
   /** VCF-specific: import filters; the worker loads the BED file itself. */

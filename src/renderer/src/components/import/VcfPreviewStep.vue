@@ -67,42 +67,19 @@
         </div>
       </div>
 
-      <!-- INFO field mappings (collapsible) -->
+      <!-- Annotation fields: where each INFO / CSQ / ANN field goes (spec §16) -->
       <v-expansion-panels variant="accordion" class="mb-4">
         <v-expansion-panel>
           <v-expansion-panel-title class="text-body-2">
-            INFO Fields ({{ preview.infoFields.length }})
+            Annotation fields ({{ previewFields.length }})
           </v-expansion-panel-title>
           <v-expansion-panel-text>
-            <v-table density="compact">
-              <thead>
-                <tr>
-                  <th class="text-left">Field</th>
-                  <th class="text-left">Type</th>
-                  <th class="text-left">Maps To</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="field in preview.infoFields" :key="field.id">
-                  <td class="text-body-2">{{ field.id }}</td>
-                  <td class="text-body-2">{{ field.type }}({{ field.number }})</td>
-                  <td>
-                    <v-chip
-                      v-if="field.mapsToColumn"
-                      size="x-small"
-                      color="success"
-                      variant="tonal"
-                      label
-                    >
-                      {{ field.mapsToColumn }}
-                    </v-chip>
-                    <v-chip v-else size="x-small" color="grey" variant="tonal" label>
-                      info_json
-                    </v-chip>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
+            <ImportFieldProfileTable
+              v-model="fieldProfile"
+              :fields="previewFields"
+              :readonly="!canWrite"
+              can-save-default
+            />
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
@@ -116,6 +93,10 @@ import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import type { VcfPreviewResult, VcfSampleSelection } from '../../../../shared/types/vcf'
+import type { ImportFieldProfile } from '../../../../shared/config/import-fields.config'
+import { usePermissions } from '../../composables/usePermissions'
+import { vcfPreviewFields } from '../../utils/import-field-rows'
+import ImportFieldProfileTable from './ImportFieldProfileTable.vue'
 import { CASE_NAME_MESSAGES } from '../../config/importConfig'
 import GenomeBuildField from './GenomeBuildField.vue'
 
@@ -128,7 +109,10 @@ const emit = defineEmits<{
   'selection-changed': [options: VcfSampleSelection]
 }>()
 
+const fieldProfile = defineModel<ImportFieldProfile>('fieldProfile', { required: true })
+
 const { api } = useApiService()
+const { canWrite } = usePermissions()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -141,6 +125,8 @@ const caseNames = ref(new Map<string, string>())
 /** Names of the cases already in the database, to flag a clash before import. */
 const existingCaseNames = ref(new Set<string>())
 const buildField = ref<InstanceType<typeof GenomeBuildField> | null>(null)
+
+const previewFields = computed(() => (preview.value ? vcfPreviewFields(preview.value) : []))
 
 /** False (with the field's inline error) until the user has confirmed a build. */
 function validate(): boolean {

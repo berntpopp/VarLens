@@ -242,6 +242,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { stripVueProxies } from '../../utils/stripVueProxies'
 import type {
   MultiFileImportResult,
   MultiFileImportSpec,
@@ -253,6 +254,7 @@ import { formatErrorMessage } from '../../../../shared/errors/format-error-messa
 import { useApiService } from '../../composables/useApiService'
 import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { logService } from '../../services/LogService'
 import { logUnrankedClinvar } from '../../utils/unranked-clinvar'
 import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
@@ -301,6 +303,7 @@ const { selectCase } = useAppState()
 // the persistent status bar, and the user can expand the dialog again to
 // return to the full per-file view.
 const importStore = useImportStatusStore()
+const settingsStore = useSettingsStore()
 
 // ---------------------------------------------------------------------------
 // Phase state
@@ -592,12 +595,7 @@ async function startImport(): Promise<void> {
     const override = overrides.value.get(file.filePath)
     const variantType = override?.variantType ?? file.defaultVariantType
     const annotationFormat = file.annotationType === 'none' ? null : file.annotationType
-    return {
-      filePath: file.filePath,
-      variantType,
-      caller: file.callerName,
-      annotationFormat
-    }
+    return { filePath: file.filePath, variantType, caller: file.callerName, annotationFormat }
   })
 
   // Initialize per-file statuses
@@ -639,7 +637,10 @@ async function startImport(): Promise<void> {
       await api.import.startMultiFile(
         caseName.value.trim(),
         specs,
-        { genomeBuild: genomeBuild.value ?? undefined },
+        {
+          genomeBuild: genomeBuild.value ?? undefined,
+          fieldProfile: stripVueProxies(settingsStore.importFieldProfile)
+        },
         filtersPayload
       )
     )
@@ -678,10 +679,7 @@ async function startImport(): Promise<void> {
     logService.error(`Multi-file VCF import failed: ${message}`, 'VcfImportDialog')
     // Mark current file as errored
     if (currentFile.value !== null) {
-      markFileStatus(currentFile.value, {
-        status: 'error',
-        error: message
-      })
+      markFileStatus(currentFile.value, { status: 'error', error: message })
     }
     errorMessage.value = message
     // Clear the background pill — the import stopped.

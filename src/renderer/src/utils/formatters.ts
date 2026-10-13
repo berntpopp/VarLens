@@ -61,3 +61,13 @@ export function variantHeading(variant: NamedVariant | null): string {
     ? variantName(variant)
     : `${variantName(variant)}${INLINE_SEPARATOR}${change}`
 }
+
+/** Evidence ranking points, signed with one decimal: `+12.5`, `-0.5`, `0.0`. */
+export function formatPoints(points: number): string {
+  return `${points > 0 ? '+' : ''}${points.toFixed(1)}`
+}
+
+/** A shortlist score: evidence rows in signed points, legacy rows unchanged. */
+export function formatRankScore(row: { rank_score: number; rank_evidence?: unknown }): string {
+  return row.rank_evidence != null ? formatPoints(row.rank_score) : row.rank_score.toFixed(2)
+}

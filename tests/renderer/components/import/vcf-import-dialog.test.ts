@@ -253,7 +253,7 @@ describe('VcfImportDialog — startImport error surfacing', () => {
     await flushPromises()
     clickButtonByText('Import 1 file')
     await flushPromises()
-    expect(startMultiFile().mock.calls[0][2]).toEqual({ genomeBuild: 'GRCh37' })
+    expect(startMultiFile().mock.calls[0][2]).toMatchObject({ genomeBuild: 'GRCh37' })
   })
 
   it('blocks one case whose files are of different builds', async () => {

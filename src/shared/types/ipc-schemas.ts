@@ -22,6 +22,7 @@ import { z } from 'zod'
 import { DOMAIN_CONFIG } from '../config'
 import { ACMG_CLASSIFICATIONS } from '../config/domain.config'
 import { normalizeAcmgClassification } from '../utils/acmg'
+import { EvidenceRulesetSchema } from './evidence-ruleset-schemas'
 export {
   UsernameSchema,
   PasswordSchema,
@@ -829,7 +830,8 @@ export const RankWeightsSchema = z.object({
 export const RankConfigSchema = z.object({
   weights: RankWeightsSchema,
   clinvarPinTop: z.boolean().optional(),
-  pinStarredTop: z.boolean().optional()
+  pinStarredTop: z.boolean().optional(),
+  ruleset: EvidenceRulesetSchema.optional()
 })
 
 /**

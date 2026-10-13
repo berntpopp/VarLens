@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 import VcfPreviewStep from '../../../../src/renderer/src/components/import/VcfPreviewStep.vue'
 import { CASE_NAME_MESSAGES } from '../../../../src/renderer/src/config/importConfig'
+import { DEFAULT_IMPORT_FIELD_PROFILE } from '../../../../src/shared/config/import-fields.config'
 import { createMockApi } from '../../../utils/mock-api'
 
 const vuetify = createVuetify({ components, directives })
@@ -24,7 +26,7 @@ async function mountStep(samples: string[], existing: string[]) {
   api.cases.list = vi.fn().mockResolvedValue(existing.map((name, id) => ({ id, name })))
   window.api = api as unknown as typeof window.api
   const wrapper = mount(VcfPreviewStep, {
-    props: { filePath: '/x.vcf' },
+    props: { filePath: '/x.vcf', fieldProfile: DEFAULT_IMPORT_FIELD_PROFILE },
     global: { plugins: [vuetify] }
   })
   await flushPromises()
@@ -35,7 +37,10 @@ const lastValid = (wrapper: Awaited<ReturnType<typeof mountStep>>) =>
   (wrapper.emitted('selection-changed')!.at(-1)![0] as { valid: boolean }).valid
 
 describe('VcfPreviewStep case names', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    setActivePinia(createPinia())
+  })
 
   it('accepts new, distinct names', async () => {
     const wrapper = await mountStep(['S1', 'S2'], ['OTHER'])

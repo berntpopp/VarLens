@@ -51,6 +51,7 @@ import { createBoundedBatcher, getRecordBytes, resolveBatchSize } from '../impor
 import { detectFormat as defaultDetectFormat } from '../import/format-detection'
 import type { FormatInfo } from '../import/types'
 import { createMapperPipeline as defaultCreateMapperPipeline } from './import-pipeline'
+import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
 import { resolveImportGenomeBuild } from '../import/vcf/resolve-genome-build'
@@ -102,7 +103,8 @@ export interface RunImportDeps {
   createMapperPipeline: (
     filePath: string,
     formatInfo: FormatInfo,
-    onSkip?: (reason: string) => void
+    onSkip?: (reason: string) => void,
+    fields?: FieldProfileResolver
   ) => Promise<Readable>
   statFile: (filePath: string) => { size: number }
   isCancellationRequested?: () => boolean
@@ -118,6 +120,8 @@ export interface RunImportDeps {
       onSkip?: (reason: string) => void
       /** Set for files 2..N of a multi-file import: the case they are appended to. */
       appendedTo?: { genomeBuild: string }
+      /** The file's field profile; read its dictionary after the stream ends. */
+      fields?: FieldProfileResolver
     }
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
@@ -133,7 +137,8 @@ const defaultDeps: RunImportDeps = {
       options.selectedSample,
       options.filters,
       options.onSkip,
-      options.appendedTo
+      options.appendedTo,
+      options.fields
     )
 }
 
@@ -295,10 +300,12 @@ export async function runImport(
           // undefined defensively to keep the contract consistent.
           let totalSkipped = 0
           const errors: string[] = []
+          const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
           const stream = await deps.createVcfMappedStream(filePath, {
             selectedSample,
             genomeBuild,
             filters: undefined,
+            fields,
             onSkip: (reason) => {
               totalSkipped += 1
               recordParseSkip({ reason, errors })
@@ -389,7 +396,8 @@ export async function runImport(
             caseId,
             vcfFileName,
             'vcf',
-            fence
+            fence,
+            fields.dictionary()
           )
           throwIfCancelled()
           publicationCommitAttempted = true
@@ -445,12 +453,18 @@ export async function runImport(
       let totalInserted = 0
       let totalSkipped = 0
       const errors: string[] = []
+      const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
       const writeVariants = async (session: PostgresJsonImportSession): Promise<void> => {
         if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
-        const stream = await deps.createMapperPipeline(filePath, formatInfo, (reason) => {
-          totalSkipped += 1
-          recordParseSkip({ reason, errors })
-        })
+        const stream = await deps.createMapperPipeline(
+          filePath,
+          formatInfo,
+          (reason) => {
+            totalSkipped += 1
+            recordParseSkip({ reason, errors })
+          },
+          fields
+        )
         const batch = createBoundedBatcher<Record<string, unknown>, Promise<void>>({
           maxRows: batchSize,
           maxBytes: maxBatchBytes,
@@ -508,7 +522,8 @@ export async function runImport(
           caseName: start.caseName,
           fileSize,
           genomeBuild: jsonGenomeBuild,
-          importFileType
+          importFileType,
+          fieldDictionary: () => fields.dictionary()
         },
         writeVariants
       )
@@ -556,6 +571,9 @@ export async function runImport(
         let totalSkipped = 0
         let lastSuccessfulFileName = ''
         const parseErrors: string[] = []
+        // One resolver for every file: one key names one source field across the case.
+        // ponytail: a file that fails mid-way may leave its keys in the dictionary.
+        const fields = new FieldProfileResolver(start.vcfOptions?.fieldProfile)
         const repo = new PostgresVcfImportRepository(start.schema)
         const selectedSample = start.vcfOptions?.selectedSample ?? ''
         // The case's build: the user's choice, else what the first file decides.
@@ -640,6 +658,7 @@ export async function runImport(
               // Every file, the first included: same records as SQLite (#484).
               filters: importFilters,
               appendedTo: i > 0 ? { genomeBuild: lockBuild } : undefined,
+              fields,
               onSkip: (reason) => {
                 totalSkipped += 1
                 recordParseSkip({
@@ -794,7 +813,8 @@ export async function runImport(
               caseId,
               lastSuccessfulFileName,
               'vcf',
-              fence
+              fence,
+              fields.dictionary()
             )
             throwIfCancelled()
             publicationCommitAttempted = true

@@ -86,19 +86,24 @@ describe('compareScoredRows()', () => {
     expect(compareScoredRows(a, b, [{ key: 'gene_symbol', order: 'asc' }])).toBeGreaterThan(0)
   })
 
-  it('null tie-breaker values sort to end under ascending order', () => {
-    // compareByKey returns +1 when `a` is null, so under ASC order null rows
-    // sort AFTER non-null rows. (Under DESC the sign flips and nulls float
-    // to the top — an intentional quirk tested in the next case.)
+  // Nulls sort last in both directions, like the tables' `NULLS LAST`
+  // (shared/sql/chromosome-order.ts): a variant without CADD must not jump
+  // above tied variants that have one under a `cadd desc` tie-breaker.
+  it.each(['asc', 'desc'] as const)('null tie-breaker values sort last under %s', (order) => {
     const a = scored(1, 0.5, { cadd: null } as Partial<ScoredCandidate>)
     const b = scored(2, 0.5, { cadd: 20 } as Partial<ScoredCandidate>)
-    expect(compareScoredRows(a, b, [{ key: 'cadd', order: 'asc' }])).toBeGreaterThan(0)
+    expect(compareScoredRows(a, b, [{ key: 'cadd', order }])).toBeGreaterThan(0)
+    expect(compareScoredRows(b, a, [{ key: 'cadd', order }])).toBeLessThan(0)
   })
 
-  it('null tie-breaker values float to top under descending order', () => {
-    const a = scored(1, 0.5, { cadd: null } as Partial<ScoredCandidate>)
-    const b = scored(2, 0.5, { cadd: 20 } as Partial<ScoredCandidate>)
-    expect(compareScoredRows(a, b, [{ key: 'cadd', order: 'desc' }])).toBeLessThan(0)
+  it('falls through to the next tie-breaker when both values are null', () => {
+    const a = scored(1, 0.5, { cadd: null, pos: 200 } as Partial<ScoredCandidate>)
+    const b = scored(2, 0.5, { cadd: null, pos: 100 } as Partial<ScoredCandidate>)
+    const tbs = [
+      { key: 'cadd', order: 'desc' as const },
+      { key: 'pos', order: 'asc' as const }
+    ]
+    expect(compareScoredRows(a, b, tbs)).toBeGreaterThan(0)
   })
 
   it('starred beats clinvar pin', () => {

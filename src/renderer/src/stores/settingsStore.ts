@@ -13,6 +13,11 @@ import {
   isThemePreference,
   type ThemePreference
 } from '../utils/theme-preference'
+import {
+  DEFAULT_IMPORT_FIELD_PROFILE,
+  type ImportFieldProfile
+} from '../../../shared/config/import-fields.config'
+import { ImportFieldProfileSchema } from '../../../shared/ipc/domains/import-schemas'
 
 const STORAGE_KEY = SETTINGS_STORAGE_KEY
 
@@ -45,6 +50,14 @@ interface PersistedSettings {
   defaultCaseTab: DefaultCaseTab
   /** 'system' follows prefers-color-scheme (see utils/theme-preference.ts). */
   themePreference: ThemePreference
+  /**
+   * Shortlist preset the Shortlist tab preselects; null = the first in the list.
+   * ponytail: one id for every database; after switching databases it may name
+   * another preset with the same id. Key it by database if that bites.
+   */
+  defaultShortlistPresetId: number | null
+  /** Default import field profile (spec §16): which annotation fields imports keep. */
+  importFieldProfile: ImportFieldProfile
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -54,7 +67,9 @@ const DEFAULTS: PersistedSettings = {
   workerThreads: 0,
   prefetchEnabled: true,
   defaultCaseTab: 'shortlist',
-  themePreference: DEFAULT_THEME_PREFERENCE
+  themePreference: DEFAULT_THEME_PREFERENCE,
+  defaultShortlistPresetId: null,
+  importFieldProfile: DEFAULT_IMPORT_FIELD_PROFILE
 }
 
 function load(): PersistedSettings {
@@ -65,6 +80,9 @@ function load(): PersistedSettings {
       const merged = { ...DEFAULTS, ...parsed }
       if (!isThemePreference(merged.themePreference)) {
         merged.themePreference = DEFAULT_THEME_PREFERENCE
+      }
+      if (!ImportFieldProfileSchema.safeParse(merged.importFieldProfile).success) {
+        merged.importFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE
       }
       return merged
     }
@@ -88,6 +106,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const prefetchEnabled = ref(persisted.prefetchEnabled)
   const defaultCaseTab = ref<DefaultCaseTab>(persisted.defaultCaseTab)
   const themePreference = ref<ThemePreference>(persisted.themePreference)
+  const defaultShortlistPresetId = ref<number | null>(persisted.defaultShortlistPresetId)
+  const importFieldProfile = ref<ImportFieldProfile>(persisted.importFieldProfile)
 
   // Auto-persist on change
   watch(
@@ -98,7 +118,9 @@ export const useSettingsStore = defineStore('settings', () => {
       workerThreads,
       prefetchEnabled,
       defaultCaseTab,
-      themePreference
+      themePreference,
+      defaultShortlistPresetId,
+      importFieldProfile
     ],
     () => {
       save({
@@ -108,7 +130,9 @@ export const useSettingsStore = defineStore('settings', () => {
         workerThreads: workerThreads.value,
         prefetchEnabled: prefetchEnabled.value,
         defaultCaseTab: defaultCaseTab.value,
-        themePreference: themePreference.value
+        themePreference: themePreference.value,
+        defaultShortlistPresetId: defaultShortlistPresetId.value,
+        importFieldProfile: importFieldProfile.value
       })
     }
   )
@@ -120,6 +144,8 @@ export const useSettingsStore = defineStore('settings', () => {
     workerThreads,
     prefetchEnabled,
     defaultCaseTab,
-    themePreference
+    themePreference,
+    defaultShortlistPresetId,
+    importFieldProfile
   }
 })

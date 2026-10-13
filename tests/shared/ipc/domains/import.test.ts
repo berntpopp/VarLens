@@ -121,6 +121,15 @@ describe('import preload domain behavior', () => {
     expect(invoke).toHaveBeenNthCalledWith(8, 'import:cancel')
   })
 
+  it('forwards import:jsonPreview with the file path', async () => {
+    const preview = { format: 'columnar', variantsScanned: 1, fields: [] }
+    const invoke = vi.fn().mockResolvedValue(preview)
+    vi.doMock('electron', () => ({ ipcRenderer: { invoke }, webUtils: {} }))
+    const { createImportApi } = await import('../../../../src/preload/domains/import')
+    await expect(createImportApi().jsonPreview('/path/to/export.json')).resolves.toBe(preview)
+    expect(invoke).toHaveBeenCalledWith('import:jsonPreview', '/path/to/export.json')
+  })
+
   it('preload index preserves import transport results when exposing window.api', async () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'import:selectFile' || channel === 'import:selectFiles') {

@@ -21,6 +21,7 @@ import { computed } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
+import { formatRankScore } from '../../utils/formatters'
 import { useRowHoverTarget } from './useRowHoverTarget'
 import { CellChip, CellIcon } from '../table-cells/cell-components'
 import { ClinVarCell, LinkOutsCell } from '../table-cells/simple-cells'
@@ -287,7 +288,7 @@ onKeyStroke(
   >
     <!-- Score breakdown: one shared tooltip (below), not a v-tooltip per row -->
     <template #[`item.rank_score`]="{ item }">
-      <span :data-rank-tip="item.id">{{ item.rank_score.toFixed(2) }}</span>
+      <span :data-rank-tip="item.id">{{ formatRankScore(item) }}</span>
     </template>
 
     <template #[`item.variant_type`]="{ item }">
@@ -392,6 +393,8 @@ onKeyStroke(
       :score="rankTipRow.rank_score"
       :components="rankTipRow.rank_components"
       :pinned="pinFor(rankTipRow)"
+      :evidence="rankTipRow.rank_evidence"
+      :partners="rankTipRow.rank_partners"
     />
   </v-tooltip>
 </template>

@@ -202,13 +202,13 @@ describe('migration v47: chromosome names per build', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM audit_log').get()).toEqual({ n: 0 })
   })
 
-  it('a fresh database ends at v47; a v45 one runs v46 then v47 in order', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(47)
+  it('a fresh database ends at the latest version; a v45 one runs v46 then v47 in order', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(49)
     const a = addCase('A', 'GRCh38', GRCH38_HEADER)
     addVariant(a, '1', 100)
     db.exec('PRAGMA user_version = 45')
     runMigrations(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(47)
+    expect(db.pragma('user_version', { simple: true })).toBe(49)
     expect(chrsOf(a)).toEqual(['chr1'])
     expect(
       db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()
@@ -403,7 +403,7 @@ describe('migration v47: chromosome names per build', () => {
     seed()
     db.exec('PRAGMA user_version = 45')
     runMigrations(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(47)
+    expect(db.pragma('user_version', { simple: true })).toBe(49)
     expect(chrsOf(1)).toEqual(['chr1', 'chrM', 'chrUn_KI270742v1'])
     expect(existsSync(`${path}.pre-v46.bak`)).toBe(true)
     expect(existsSync(`${path}.pre-v47.bak`)).toBe(false)

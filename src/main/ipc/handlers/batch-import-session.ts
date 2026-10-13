@@ -13,6 +13,7 @@
  * batch, several files load at once on a bounded pool (batch-import-pool.ts);
  * otherwise each file is a nested `import_single` job through `startImport`.
  */
+import type { ImportFieldProfile } from '../../../shared/config/import-fields.config'
 import { buildDuplicateReport, type DuplicateCheckItem } from '../../import/batch-utils'
 import { jobRunner } from '../../services/jobs/runner'
 import type { StorageSession } from '../../storage/session'
@@ -69,6 +70,8 @@ export interface SessionBatchParams {
   fallbackGenomeBuild?: string
   /** Client correlation id, echoed in the job params. */
   runId?: string
+  /** Where fields without a column go, for every file (default: keep all). */
+  fieldProfile?: ImportFieldProfile
   session: StorageSession
   callbacks: SessionBatchCallbacks
 }
@@ -121,6 +124,7 @@ export async function runSessionBatchImport(params: {
   files: SessionBatchFile[]
   duplicateStrategy: DuplicateChoice
   stripText?: string
+  fieldProfile?: ImportFieldProfile
   fallbackGenomeBuild?: string
   session: StorageSession
   callbacks: SessionBatchCallbacks
@@ -131,9 +135,9 @@ export async function runSessionBatchImport(params: {
 }): Promise<BatchResult> {
   const { files, session, callbacks, signal } = params
   const vcfOptions =
-    params.fallbackGenomeBuild === undefined
+    params.fallbackGenomeBuild === undefined && params.fieldProfile === undefined
       ? undefined
-      : { fallbackGenomeBuild: params.fallbackGenomeBuild }
+      : { fallbackGenomeBuild: params.fallbackGenomeBuild, fieldProfile: params.fieldProfile }
 
   const existingIds = new Map((await session.listCases()).map((item) => [item.name, item.id]))
   // A case imported before `.vcf` was stripped resolves to its existing name.
@@ -283,7 +287,7 @@ async function runFilesInParallel(args: {
   concurrency: number
   processFile: (index: number, importOne: ImportOneFile) => Promise<void>
   shouldStop: () => boolean
-  vcfOptions?: { fallbackGenomeBuild: string }
+  vcfOptions?: { fallbackGenomeBuild?: string; fieldProfile?: ImportFieldProfile }
 }): Promise<void> {
   let batch: StorageImportBatch | null = null
   await withActiveImportOperation(

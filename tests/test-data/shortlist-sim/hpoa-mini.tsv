@@ -1,0 +1,10 @@
+#description: "mini"
+#version: 2026-09-02
+database_id	disease_name	qualifier	hpo_id	reference	evidence	onset	frequency	sex	modifier	aspect	biocuration
+OMIM:100001	Disease A		HP:0000006	PMID:1	PCS					I	x
+OMIM:100001	Disease A		HP:0001250	PMID:1	PCS					P	x
+OMIM:100002	Disease B		HP:0000007	PMID:1	PCS					I	x
+OMIM:100003	Disease C		HP:0000006	PMID:1	PCS					I	x
+OMIM:100003	Disease C		HP:0000007	PMID:1	PCS					I	x
+OMIM:100004	Disease X		HP:0001419	PMID:1	PCS					I	x
+ORPHA:300	Disease Y		HP:0001423	ORPHA:300	TAS					I	x
