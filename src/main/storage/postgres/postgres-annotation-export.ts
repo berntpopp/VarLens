@@ -5,17 +5,16 @@
  * lookups, which keep its order) instead of from a second query.
  */
 import {
-  annotationExportCells,
-  type ExportedClassification,
-  type ExportedComment
+  caseExportCells,
+  cohortExportCells,
+  type ExportedAnnotation
 } from '../../../shared/acmg/annotation-export'
 
 type Row = Record<string, unknown>
-type Annotation = ExportedClassification & ExportedComment
 
 const CALL = (alias: string, comment: string): string => `jsonb_build_object(
     'acmg_classification', ${alias}.acmg_classification, 'acmg_evidence', ${alias}.acmg_evidence,
-    'comment', ${alias}.${comment}, 'updated_at', ${alias}.updated_at)`
+    'comment', ${alias}.${comment})`
 
 /** Select-list entries of a case export (variants aliased `v`). */
 export function caseAnnotationExportColumns(schemaName: string): string {
@@ -37,25 +36,18 @@ export function cohortAnnotationExportColumns(schemaName: string): string {
         AND va.genome_build = cvs.genome_build) AS __global_annotation`
 }
 
-/**
- * Replace the looked-up annotations by the export cells. A case export
- * classifies with the case's own call; a cohort export with the global one.
- */
+/** Replace the looked-up annotations by the export cells of the scope. */
 export async function* withAnnotationCells(
   rows: AsyncIterable<Row>,
   scope: 'case' | 'cohort'
 ): AsyncGenerator<Row> {
   for await (const row of rows) {
     const { __own_annotation, __global_annotation, ...rest } = row
-    const own = (__own_annotation ?? null) as Annotation | null
-    const global = (__global_annotation ?? null) as Annotation | null
-    const call = scope === 'case' ? own : global
+    const own = (__own_annotation ?? null) as ExportedAnnotation | null
+    const global = (__global_annotation ?? null) as ExportedAnnotation | null
     yield {
       ...rest,
-      ...annotationExportCells(
-        call,
-        [own, global].filter((a) => a !== null)
-      )
+      ...(scope === 'case' ? caseExportCells(own, global) : cohortExportCells(global))
     }
   }
 }

@@ -15,7 +15,7 @@ import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
 import { formatCellValue, csvEscape } from './export-renderer'
-import { ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
+import { CASE_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
 import { caseRowAnnotations } from '../database/annotation-export-lookup'
 
 /** Column definition for export output. */
@@ -43,7 +43,7 @@ export const EXPORT_COLUMNS: ExportColumn[] = [
   { key: 'clinvar', header: 'ClinVar' },
   { key: 'hpo_sim_score', header: 'HPO Similarity' },
   { key: 'moi', header: 'MOI' },
-  ...ANNOTATION_EXPORT_COLUMNS
+  ...CASE_ANNOTATION_EXPORT_COLUMNS
 ]
 
 /** Parameters for running an export pipeline. */

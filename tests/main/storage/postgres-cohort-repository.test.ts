@@ -842,7 +842,7 @@ describe('PostgresCohortRepository', () => {
         acmg_classification: null,
         acmg_points: null,
         acmg_override_reason: null,
-        annotation_comment: null
+        global_comment: null
       }
     ])
     expect(release).toHaveBeenCalledTimes(1)

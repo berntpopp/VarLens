@@ -282,7 +282,7 @@ describe('runExportPipeline — CSV', () => {
     expect(lines[0]).toBe(expectedHeader)
   })
 
-  it('exports the case ACMG class, points, override reason and latest comment (#574)', async () => {
+  it('exports the case ACMG class, points, override reason and both comments (#574)', async () => {
     insertVariant(db, caseId, { chr: '1', pos: 100, ref: 'A', alt: 'G' })
     insertVariant(db, caseId, { chr: '1', pos: 200, ref: 'A', alt: 'G' })
     const variantId = (
@@ -308,9 +308,11 @@ describe('runExportPipeline — CSV', () => {
     await runExportPipeline(params)
 
     const lines = readFileSync(params.outputFilePath, 'utf8').split('\r\n')
-    expect(lines[0].endsWith('ACMG Class,ACMG Points,ACMG Override Reason,Comment')).toBe(true)
-    expect(lines[1].endsWith('Benign,8,Segregation,newer global note')).toBe(true)
-    expect(lines[2].endsWith(',,,')).toBe(true)
+    expect(
+      lines[0].endsWith('ACMG Class,ACMG Points,ACMG Override Reason,Case Comment,Global Comment')
+    ).toBe(true)
+    expect(lines[1].endsWith('Benign,8,Segregation,case note,newer global note')).toBe(true)
+    expect(lines[2].endsWith(',,,,')).toBe(true)
   })
 
   it('produces one data row per variant', async () => {

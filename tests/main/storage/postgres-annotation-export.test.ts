@@ -83,7 +83,7 @@ describe.skipIf(!RUN)('annotation columns of PostgreSQL exports (#574)', () => {
     await pool.end()
   }, 60_000)
 
-  it('a case export carries the case call and the latest comment of its build', async () => {
+  it('a case export carries the case call, its comment and the global one of its build', async () => {
     const rows: Array<Record<string, unknown>> = []
     for await (const row of new PostgresExportRepository(pool, schema).streamVariantExportRows({
       case_id: caseId
@@ -95,9 +95,10 @@ describe.skipIf(!RUN)('annotation columns of PostgreSQL exports (#574)', () => {
       acmg_classification: 'Benign',
       acmg_points: 8,
       acmg_override_reason: 'Segregation',
-      annotation_comment: 'newer global note'
+      case_comment: 'case note',
+      global_comment: 'newer global note'
     })
-    expect(at(200)).toMatchObject({ acmg_classification: null, annotation_comment: null })
+    expect(at(200)).toMatchObject({ acmg_classification: null, case_comment: null })
     expect(at(100)).not.toHaveProperty('__own_annotation')
   }, 60_000)
 
@@ -122,14 +123,14 @@ describe.skipIf(!RUN)('annotation columns of PostgreSQL exports (#574)', () => {
         acmg_classification: 'Benign',
         acmg_points: null,
         acmg_override_reason: null,
-        annotation_comment: 'GRCh37 note'
+        global_comment: 'GRCh37 note'
       },
       {
         genome_build: 'GRCh38',
         acmg_classification: 'Pathogenic',
         acmg_points: null,
         acmg_override_reason: null,
-        annotation_comment: 'newer global note'
+        global_comment: 'newer global note'
       }
     ])
   }, 60_000)
