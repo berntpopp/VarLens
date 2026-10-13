@@ -2,13 +2,14 @@
  * Tests for VepApiClient
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import nock from 'nock'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { unlinkSync } from 'fs'
 import { ApiCache } from '../../../../src/main/services/api/ApiCache'
+import { stalledRequest } from './stalled-fetch'
 import { VepApiClient, normalizeChromosome } from '../../../../src/main/services/api/VepApiClient'
 
 describe('VepApiClient', () => {
@@ -76,6 +77,7 @@ describe('VepApiClient', () => {
       // Ignore if file doesn't exist
     }
     nock.cleanAll()
+    vi.restoreAllMocks()
     nock.enableNetConnect()
   })
 
@@ -231,7 +233,8 @@ describe('VepApiClient', () => {
 
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error).toContain('Network error')
+        // Real fetch (undici, as mocked by nock 15) wraps the cause: TypeError('fetch failed')
+        expect(result.error).toContain('fetch failed')
         expect(result.offline).toBe(false)
       }
     })
@@ -261,8 +264,9 @@ describe('VepApiClient', () => {
 
   describe('cancelPendingRequest', () => {
     it('should abort in-flight request', async () => {
-      // Mock slow response
-      nock('https://rest.ensembl.org').get(vepPath).delay(1000).reply(200, mockVepResponse)
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) =>
+        stalledRequest(init)
+      )
 
       // Start request
       const promise = client.fetchVariantAnnotation('1', 100, 'A', 'T')
