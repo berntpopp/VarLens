@@ -85,7 +85,9 @@ function hpoMatchText(value: unknown): string | null {
   if (!Array.isArray(value)) return normalizeString(value)
   const terms = value
     .map((item: Partial<MoiItem> | null) =>
-      [item?.abbreviation, item?.name].filter((part) => typeof part === 'string' && part !== '').join(' ')
+      [item?.abbreviation, item?.name]
+        .filter((part) => typeof part === 'string' && part !== '')
+        .join(' ')
     )
     .filter((term) => term !== '')
   return terms.length > 0 ? terms.join('; ') : null
