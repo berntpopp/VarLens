@@ -174,6 +174,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0034',
     name: 'import_integrity',
     fileName: '0034_import_integrity.sql'
+  },
+  {
+    version: '0035',
+    name: 'annotation_genome_build',
+    fileName: '0035_annotation_genome_build.sql'
   }
 ]
 

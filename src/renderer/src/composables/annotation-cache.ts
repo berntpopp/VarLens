@@ -2,8 +2,10 @@
  * Module-level annotation cache shared by every `useAnnotations()` caller.
  *
  * Owns the LRU cache, the per-variant loading flags, the stale-request
- * generation counter and the db/case scope tracking that clears stale data
- * when the user switches database or case.
+ * generation counter and the db/case/build scope tracking that clears stale
+ * data when the user switches database, case or genome build. Global
+ * annotations are keyed by build (#577): entries of one build are never
+ * served to a view of another.
  */
 
 import { shallowRef, triggerRef } from 'vue'
@@ -52,6 +54,7 @@ const annotationGenerations: Record<AnnotationBatchKind, number> = { case: 0, gl
 // Scope tracking — detect db/case switches and auto-clear stale cache
 let lastDbPath: string | null = null
 let lastCaseId: number | null = null
+let lastBuild: string | null = null
 
 /** Build variant key for cache lookup. */
 export function variantKey({ chr, pos, ref, alt }: VariantCoords): string {
@@ -216,24 +219,38 @@ function getCurrentDbPath(): string | null {
  * Called before cache reads/writes to ensure stale data from a previous
  * database or case is never served.
  */
-function ensureScopeOrClear(dbPath: string | null, caseId: number | null): void {
+function ensureScopeOrClear(
+  dbPath: string | null,
+  caseId: number | null,
+  build: string | null = null
+): void {
   const dbChanged = dbPath !== null && lastDbPath !== null && dbPath !== lastDbPath
   const caseChanged = caseId !== null && lastCaseId !== null && caseId !== lastCaseId
+  const buildChanged = build !== null && lastBuild !== null && build !== lastBuild
 
-  if (dbChanged || caseChanged) clearEntries()
+  if (dbChanged || caseChanged || buildChanged) clearEntries()
 
   if (dbPath !== null) lastDbPath = dbPath
   if (caseId !== null) lastCaseId = caseId
+  if (build !== null) lastBuild = build
 }
 
 /**
  * Start a request for the given case (null = global scope): clears the cache
  * if the db/case changed and returns the database path the request belongs to.
  */
-export function beginAnnotationRequest(caseId: number | null): string | null {
+export function beginAnnotationRequest(
+  caseId: number | null,
+  build: string | null = null
+): string | null {
   const dbPath = getCurrentDbPath()
-  ensureScopeOrClear(dbPath, caseId)
+  ensureScopeOrClear(dbPath, caseId, build)
   return dbPath
+}
+
+/** False while the cache holds another build's entries (a view of `build` must not read them). */
+export function isCacheOfBuild(build: string | null): boolean {
+  return build === null || lastBuild === null || lastBuild === build
 }
 
 /**
@@ -262,6 +279,7 @@ export function clearAnnotationCache(): void {
   clearEntries()
   lastDbPath = null
   lastCaseId = null
+  lastBuild = null
 }
 
 /** Full reset including the generation counters — test isolation only. */

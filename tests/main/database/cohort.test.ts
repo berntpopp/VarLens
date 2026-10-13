@@ -960,8 +960,8 @@ describe('CohortService', () => {
       summaryService.rebuild()
 
       db.prepare(
-        `INSERT INTO variant_annotations (chr, pos, ref, alt, starred, created_at, updated_at)
-         VALUES ('1', 100, 'A', 'G', 1, 0, 0)`
+        `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, created_at, updated_at)
+         VALUES ('1', 100, 'A', 'G', 'GRCh38', 1, 0, 0)`
       ).run()
 
       const result = cohortService.getCohortVariants({ starred_only: true })

@@ -32,13 +32,14 @@ export const hasTable = (db: Db, table: string): boolean =>
 function applyGroupRemap(db: Db, remap: GroupRemap, now: number): void {
   const del = db.prepare('DELETE FROM variant_annotations WHERE id = ?')
   for (const id of remap.deleteIds) del.run(id)
-  const ins = db.prepare(
-    `INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred,
-       acmg_classification, acmg_evidence, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
   for (const r of remap.inserts) {
-    ins.run(
+    // A database keyed by build (v52+) carries the row's build; at v47 there is none.
+    const keyed = r.genome_build !== undefined
+    db.prepare(
+      `INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred,
+         acmg_classification, acmg_evidence, created_at, updated_at${keyed ? ', genome_build' : ''})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?${keyed ? ', ?' : ''})`
+    ).run(
       r.chr,
       r.pos,
       r.ref,
@@ -48,7 +49,8 @@ function applyGroupRemap(db: Db, remap: GroupRemap, now: number): void {
       r.acmg_classification,
       r.acmg_evidence,
       r.created_at,
-      r.updated_at
+      r.updated_at,
+      ...(keyed ? [r.genome_build] : [])
     )
   }
   const audit = db.prepare(
@@ -89,13 +91,19 @@ export function remapGlobalAnnotations(
   for (const group of groups.values()) {
     if (!group.some((r) => froms.has(r.chr))) continue
     const names = [...new Set(group.flatMap((r) => [r.chr, ...contigQueryNames(r.chr)]))]
-    const { pos, ref, alt } = group[0]
+    const { pos, ref, alt, genome_build: build } = group[0]
+    // Keyed by build (v52+): only the cases of the group's build use its rows.
+    const ofBuild =
+      build === undefined ? '' : ' AND case_id IN (SELECT id FROM cases WHERE genome_build = ?)'
     const usages = db
       .prepare(
         `SELECT DISTINCT case_id AS caseId, chr FROM variants
-          WHERE chr IN (${names.map(() => '?').join(', ')}) AND pos = ? AND ref = ? AND alt = ?`
+          WHERE chr IN (${names.map(() => '?').join(', ')}) AND pos = ? AND ref = ? AND alt = ?${ofBuild}`
       )
-      .all(...names, pos, ref, alt) as Array<{ caseId: number; chr: string }>
+      .all(...names, pos, ref, alt, ...(build === undefined ? [] : [build])) as Array<{
+      caseId: number
+      chr: string
+    }>
     const remap = remapAnnotationGroup(group, usages, newName)
     if (remap !== null) applyGroupRemap(db, remap, now)
   }
@@ -115,6 +123,24 @@ export function renameCases(db: Db, renames: ReadonlyMap<number, readonly Contig
   remapGlobalAnnotations(db, renames)
   for (const [caseId, pairs] of renames) renameCaseVariants(db, caseId, pairs)
   if (renames.size > 0 && hasTable(db, 'cohort_summary_meta')) db.exec(MARK_STALE_SQL)
+}
+
+/**
+ * A case confirmed in another build takes its global annotations along (#577):
+ * the rows of its coordinates in the old build are COPIED to the new one (the
+ * old build's other cases keep theirs); a note the new build already has wins.
+ * The rename that follows moves the copies to the new build's contig names.
+ */
+function copyCaseAnnotationsToBuild(db: Db, caseId: number, from: string, to: string): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO variant_annotations (chr, pos, ref, alt, genome_build, global_comment,
+       starred, acmg_classification, acmg_evidence, created_at, updated_at)
+     SELECT va.chr, va.pos, va.ref, va.alt, ?, va.global_comment, va.starred,
+       va.acmg_classification, va.acmg_evidence, va.created_at, va.updated_at
+     FROM variant_annotations va
+     WHERE va.genome_build = ? AND EXISTS (SELECT 1 FROM variants v WHERE v.case_id = ?
+       AND v.chr = va.chr AND v.pos = va.pos AND v.ref = va.ref AND v.alt = va.alt)`
+  ).run(to, from, caseId)
 }
 
 /** Cases waiting for the user to confirm their build (cases:buildReviews). */
@@ -154,6 +180,9 @@ export function resolveBuildReviews(db: Db, choices: readonly BuildReviewChoice[
       if (review === undefined) throw new Error(`Case ${caseId} has no genome build to confirm`)
       const old = db.prepare('SELECT genome_build FROM cases WHERE id = ?').get(caseId) as {
         genome_build: string | null
+      }
+      if (old.genome_build !== null && old.genome_build !== build) {
+        copyCaseAnnotationsToBuild(db, caseId, old.genome_build, build)
       }
       db.prepare('UPDATE cases SET genome_build = ? WHERE id = ?').run(build, caseId)
       audit.run(

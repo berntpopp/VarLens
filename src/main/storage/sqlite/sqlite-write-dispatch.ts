@@ -121,6 +121,7 @@ export async function executeSqliteWriteTask(
         task.params[0].pos,
         task.params[0].ref,
         task.params[0].alt,
+        task.params[0].genome_build,
         normalizeAnnotationUpdates(task.params[1])
       )
 
@@ -131,13 +132,15 @@ export async function executeSqliteWriteTask(
         coords.chr,
         coords.pos,
         coords.ref,
-        coords.alt
+        coords.alt,
+        coords.genome_build
       )
       const result = repos.annotations.upsertGlobalAnnotation(
         coords.chr,
         coords.pos,
         coords.ref,
         coords.alt,
+        coords.genome_build,
         normalizeAnnotationUpdates(updates)
       )
       for (const entry of globalAnnotationAuditEntries(
@@ -160,7 +163,8 @@ export async function executeSqliteWriteTask(
         task.params[0].chr,
         task.params[0].pos,
         task.params[0].ref,
-        task.params[0].alt
+        task.params[0].alt,
+        task.params[0].genome_build
       )
       return undefined
 

@@ -29,6 +29,8 @@ export interface AnnotationRow extends GlobalAnnotationFields {
   pos: number
   ref: string
   alt: string
+  /** Part of the key since SQLite v52 / PG 0035 (#577); absent before. */
+  genome_build?: string
   created_at: number
 }
 
@@ -47,11 +49,12 @@ export interface GroupRemap {
   audits: Array<{ key: string; discarded: string; kept: string | null; from: string }>
 }
 
-/** Group key: one contig (any spelling) at one pos/ref/alt. */
+/** Group key: one contig (any spelling) at one pos/ref/alt, in one build when keyed by build. */
 export function annotationGroupKey(
-  row: Pick<AnnotationRow, 'chr' | 'pos' | 'ref' | 'alt'>
+  row: Pick<AnnotationRow, 'chr' | 'pos' | 'ref' | 'alt' | 'genome_build'>
 ): string {
-  return `${bareContig(row.chr)}:${row.pos}:${row.ref}:${row.alt}`
+  const build = row.genome_build === undefined ? '' : `@${row.genome_build}`
+  return `${bareContig(row.chr)}:${row.pos}:${row.ref}:${row.alt}${build}`
 }
 
 /**

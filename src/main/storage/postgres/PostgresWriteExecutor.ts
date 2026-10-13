@@ -195,6 +195,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
           task.params[0].pos,
           task.params[0].ref,
           task.params[0].alt,
+          task.params[0].genome_build,
           normalizeAnnotationUpdates(task.params[1])
         )
 
@@ -204,6 +205,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
           task.params[0].pos,
           task.params[0].ref,
           task.params[0].alt,
+          task.params[0].genome_build,
           normalizeAnnotationUpdates(task.params[1])
         )
 
@@ -212,7 +214,8 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
           task.params[0].chr,
           task.params[0].pos,
           task.params[0].ref,
-          task.params[0].alt
+          task.params[0].alt,
+          task.params[0].genome_build
         )
 
       case 'annotations:upsertPerCase':

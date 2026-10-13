@@ -3,12 +3,12 @@ import type { AnnotationsDomainContract } from '../../shared/ipc/domains/annotat
 
 export function createAnnotationsApi(): AnnotationsDomainContract {
   return {
-    getGlobal: (chr, pos, ref, alt) =>
-      ipcRenderer.invoke('annotations:getGlobal', chr, pos, ref, alt),
-    upsertGlobal: (chr, pos, ref, alt, updates) =>
-      ipcRenderer.invoke('annotations:upsertGlobal', chr, pos, ref, alt, updates),
-    deleteGlobal: (chr, pos, ref, alt) =>
-      ipcRenderer.invoke('annotations:deleteGlobal', chr, pos, ref, alt),
+    getGlobal: (chr, pos, ref, alt, genomeBuild) =>
+      ipcRenderer.invoke('annotations:getGlobal', chr, pos, ref, alt, genomeBuild),
+    upsertGlobal: (chr, pos, ref, alt, updates, genomeBuild) =>
+      ipcRenderer.invoke('annotations:upsertGlobal', chr, pos, ref, alt, updates, genomeBuild),
+    deleteGlobal: (chr, pos, ref, alt, genomeBuild) =>
+      ipcRenderer.invoke('annotations:deleteGlobal', chr, pos, ref, alt, genomeBuild),
     getPerCase: (caseId, variantId) =>
       ipcRenderer.invoke('annotations:getPerCase', caseId, variantId),
     upsertPerCase: (caseId, variantId, updates) =>
@@ -17,7 +17,7 @@ export function createAnnotationsApi(): AnnotationsDomainContract {
       ipcRenderer.invoke('annotations:deletePerCase', caseId, variantId),
     getForVariant: (caseId, chr, pos, ref, alt) =>
       ipcRenderer.invoke('annotations:getForVariant', caseId, chr, pos, ref, alt),
-    batchGet: (caseId, variantKeys) =>
-      ipcRenderer.invoke('annotations:batchGet', caseId, variantKeys)
+    batchGet: (caseId, variantKeys, genomeBuild) =>
+      ipcRenderer.invoke('annotations:batchGet', caseId, variantKeys, genomeBuild)
   }
 }

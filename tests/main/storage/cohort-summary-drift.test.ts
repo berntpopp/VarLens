@@ -1004,8 +1004,8 @@ describe.skipIf(!RUN)('cohort-summary drift detection — Sprint A C8 / Gate 10'
     // Global annotation so has_star / has_comment / acmg_best are non-default.
     await probe.query(
       `INSERT INTO "${schema}".variant_annotations
-         (chr, pos, ref, alt, global_comment, starred, acmg_classification, created_at, updated_at)
-         VALUES ('1', 100, 'A', 'T', 'noted', 1, 'Pathogenic', $1, $1)`,
+         (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, created_at, updated_at)
+         VALUES ('1', 100, 'A', 'T', 'GRCh38', 'noted', 1, 'Pathogenic', $1, $1)`,
       [now]
     )
 

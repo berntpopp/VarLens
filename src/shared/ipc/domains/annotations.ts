@@ -8,20 +8,29 @@ import type { VariantAnnotation, CaseVariantAnnotation } from '../../types/datab
 import type { IpcResult } from '../../types/errors'
 
 export interface AnnotationsDomainContract {
+  /** Global annotations are keyed by genome build as well (#577). */
   getGlobal: (
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    genomeBuild: string
   ) => Promise<IpcResult<VariantAnnotation | null>>
   upsertGlobal: (
     chr: string,
     pos: number,
     ref: string,
     alt: string,
-    updates: GlobalAnnotationUpdates
+    updates: GlobalAnnotationUpdates,
+    genomeBuild: string
   ) => Promise<IpcResult<VariantAnnotation>>
-  deleteGlobal: (chr: string, pos: number, ref: string, alt: string) => Promise<IpcResult<void>>
+  deleteGlobal: (
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    genomeBuild: string
+  ) => Promise<IpcResult<void>>
   getPerCase: (
     caseId: number,
     variantId: number
@@ -39,8 +48,10 @@ export interface AnnotationsDomainContract {
     ref: string,
     alt: string
   ) => Promise<IpcResult<VariantAnnotationsResult>>
+  /** Global rows of the case's build; without a case, of `genomeBuild`. */
   batchGet: (
     caseId: number | null,
-    variantKeys: BatchAnnotationKey[]
+    variantKeys: BatchAnnotationKey[],
+    genomeBuild?: string | null
   ) => Promise<IpcResult<Record<string, VariantAnnotationsResult>>>
 }

@@ -13,19 +13,21 @@ function perCaseAnnotatedIds(kysely: Kysely<VarlensDatabase>, caseId: number) {
 
 /**
  * Variant ids whose coordinates carry a global annotation
- * (`variant_annotations`, keyed by chr/pos/ref/alt). The caller appends the
+ * (`variant_annotations`, keyed by chr/pos/ref/alt and the case's build). The caller appends the
  * annotation predicate and then the `v2.case_id` restriction, in that order.
  */
 function globalAnnotatedIds(kysely: Kysely<VarlensDatabase>) {
   return kysely
     .selectFrom('variants as v2')
     .select('v2.id as variant_id')
+    .innerJoin('cases as c2', 'c2.id', 'v2.case_id')
     .innerJoin('variant_annotations as va', (join) =>
       join
         .onRef('va.chr', '=', 'v2.chr')
         .onRef('va.pos', '=', 'v2.pos')
         .onRef('va.ref', '=', 'v2.ref')
         .onRef('va.alt', '=', 'v2.alt')
+        .onRef('va.genome_build', '=', 'c2.genome_build')
     )
 }
 

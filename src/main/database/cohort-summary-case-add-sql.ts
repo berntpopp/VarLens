@@ -237,6 +237,7 @@ export const INSERT_NEW_VARIANT_SUMMARY_SQL = `
   FROM temp.added_case_coords d
   LEFT JOIN variant_annotations va
     ON va.chr = d.chr AND va.pos = d.pos AND va.ref = d.ref AND va.alt = d.alt
+    AND va.genome_build = @build
   WHERE d.summary_rowid IS NULL`
 
 /** Coordinates the case about to be replaced has per-case annotations on. */
@@ -256,14 +257,17 @@ export const RESET_REPLACED_FLAGS_SQL = `
   UPDATE cohort_variant_summary SET
     has_star = COALESCE((SELECT va.starred = 1 FROM variant_annotations va
       WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
-        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt), 0),
+        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
+        AND va.genome_build = cohort_variant_summary.genome_build), 0),
     has_comment = COALESCE((SELECT va.global_comment IS NOT NULL AND va.global_comment != ''
       FROM variant_annotations va
       WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
-        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt), 0),
+        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
+        AND va.genome_build = cohort_variant_summary.genome_build), 0),
     acmg_best = (SELECT va.acmg_classification FROM variant_annotations va
       WHERE va.chr = cohort_variant_summary.chr AND va.pos = cohort_variant_summary.pos
-        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt)
+        AND va.ref = cohort_variant_summary.ref AND va.alt = cohort_variant_summary.alt
+        AND va.genome_build = cohort_variant_summary.genome_build)
   WHERE (chr, pos, ref, alt) IN
     (SELECT chr, pos, ref, alt FROM temp.replaced_case_flag_coords)`
 

@@ -109,6 +109,7 @@ import type {
 } from './protein'
 import type { PerfSnapshot } from './perf'
 import type { CasesDomainContract } from '../ipc/domains/cases'
+import type { AnnotationsDomainContract } from '../ipc/domains/annotations'
 import type { DatabaseDomainContract } from '../ipc/domains/database'
 import type { DebugApi } from '../ipc/domains/debug'
 import type { PanelsDomainContract } from '../ipc/domains/panels'
@@ -518,43 +519,7 @@ export interface VariantAnnotationsResult {
   perCase: CaseVariantAnnotation | null
 }
 
-export interface AnnotationsAPI {
-  getGlobal: (
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ) => Promise<IpcResult<VariantAnnotation | null>>
-  upsertGlobal: (
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string,
-    updates: GlobalAnnotationUpdates
-  ) => Promise<IpcResult<VariantAnnotation>>
-  deleteGlobal: (chr: string, pos: number, ref: string, alt: string) => Promise<IpcResult<void>>
-  getPerCase: (
-    caseId: number,
-    variantId: number
-  ) => Promise<IpcResult<CaseVariantAnnotation | null>>
-  upsertPerCase: (
-    caseId: number,
-    variantId: number,
-    updates: PerCaseAnnotationUpdates
-  ) => Promise<IpcResult<CaseVariantAnnotation>>
-  deletePerCase: (caseId: number, variantId: number) => Promise<IpcResult<void>>
-  getForVariant: (
-    caseId: number,
-    chr: string,
-    pos: number,
-    ref: string,
-    alt: string
-  ) => Promise<IpcResult<VariantAnnotationsResult>>
-  batchGet: (
-    caseId: number | null,
-    variantKeys: VariantKey[]
-  ) => Promise<IpcResult<Record<string, VariantAnnotationsResult>>>
-}
+export type AnnotationsAPI = AnnotationsDomainContract
 
 export interface VepAPI {
   fetch: (chr: string, pos: number, ref: string, alt: string) => Promise<IpcResult<VepFetchResult>>

@@ -271,14 +271,13 @@ export interface AcmgEvidence {
 export interface VariantAnnotation {
   /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
-  /** Chromosome */
+  /** Locus: chromosome, position, reference and alternate allele */
   chr: string
-  /** Genomic position */
   pos: number
-  /** Reference allele */
   ref: string
-  /** Alternate allele */
   alt: string
+  /** Genome build: part of the key since SQLite v52 / PG 0035 (#577) */
+  genome_build: string
   /** Global comment for this variant */
   global_comment: string | null
   /** Star flag (0 or 1, SQLite boolean) */

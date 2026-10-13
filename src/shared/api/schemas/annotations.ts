@@ -15,6 +15,14 @@ export {
   VariantCoordsSchema
 }
 
+/** Genome build of a global annotation: part of its key (#577). */
+export const GenomeBuildArgSchema = z.string().min(1)
+
+/** Coordinates of a global annotation, which is keyed by build too (#577). */
+export const GlobalVariantCoordsSchema = VariantCoordsSchema.extend({
+  genome_build: GenomeBuildArgSchema
+})
+
 /** Variant keys of one `annotations:batchGet` call (desktop IPC and web dispatcher). */
 export const VariantKeysSchema = z.array(
   VariantCoordsSchema.extend({ variantId: z.number().int().positive().optional() })
@@ -55,7 +63,8 @@ export const AnnotationCoordsArgsSchema = z
     VariantCoordsSchema.shape.chr,
     VariantCoordsSchema.shape.pos,
     VariantCoordsSchema.shape.ref,
-    VariantCoordsSchema.shape.alt
+    VariantCoordsSchema.shape.alt,
+    GenomeBuildArgSchema
   ])
   .rest(z.unknown())
 
@@ -65,7 +74,8 @@ export const AnnotationGlobalUpsertArgsSchema = z
     VariantCoordsSchema.shape.pos,
     VariantCoordsSchema.shape.ref,
     VariantCoordsSchema.shape.alt,
-    GlobalAnnotationUpdatesInputSchema
+    GlobalAnnotationUpdatesInputSchema,
+    GenomeBuildArgSchema
   ])
   .rest(z.unknown())
 

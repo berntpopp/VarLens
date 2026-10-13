@@ -94,7 +94,7 @@ describe('annotation IPC handlers', () => {
 
     it('returns global and per-case annotations for a variant', () => {
       // Create global annotation
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
         global_comment: 'Global note',
         starred: 1,
         acmg_classification: 'Pathogenic'
@@ -123,7 +123,7 @@ describe('annotation IPC handlers', () => {
 
   describe('upsertGlobalAnnotation (annotations:upsertGlobal)', () => {
     it('creates a new global annotation', () => {
-      const result = db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+      const result = db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
         global_comment: 'Test comment',
         acmg_classification: 'Pathogenic'
       })
@@ -140,12 +140,12 @@ describe('annotation IPC handlers', () => {
 
     it('updates an existing global annotation', () => {
       // Create initial
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
         global_comment: 'Initial comment'
       })
 
       // Update
-      const result = db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+      const result = db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
         global_comment: 'Updated comment',
         starred: 1
       })
@@ -157,7 +157,7 @@ describe('annotation IPC handlers', () => {
     it('handles updating annotation for nonexistent variant coordinates gracefully', () => {
       // Upserting for coordinates that have no variant row should still work
       // because global annotations are keyed by chr/pos/ref/alt, not variant id
-      const result = db.annotations.upsertGlobalAnnotation('99', 99999, 'C', 'T', {
+      const result = db.annotations.upsertGlobalAnnotation('99', 99999, 'C', 'T', 'GRCh38', {
         global_comment: 'Annotation for unknown variant'
       })
 
@@ -199,13 +199,13 @@ describe('annotation IPC handlers', () => {
 
   describe('deleteGlobalAnnotation (annotations:deleteGlobal)', () => {
     it('deletes an existing global annotation', () => {
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', {
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', {
         global_comment: 'To be deleted'
       })
 
-      db.annotations.deleteGlobalAnnotation('1', 12345, 'A', 'G')
+      db.annotations.deleteGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38')
 
-      const result = db.annotations.getGlobalAnnotation('1', 12345, 'A', 'G')
+      const result = db.annotations.getGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38')
       expect(result).toBeNull()
     })
   })
@@ -230,7 +230,7 @@ describe('annotation IPC handlers', () => {
     })
 
     it('returns annotations keyed by chr:pos:ref:alt for case mode', () => {
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', { starred: 1 })
 
       const result = db.annotations.getBatch(caseId, [{ chr: '1', pos: 12345, ref: 'A', alt: 'G' }])
 
@@ -241,9 +241,13 @@ describe('annotation IPC handlers', () => {
     })
 
     it('returns global-only annotations when caseId is null', () => {
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', { starred: 1 })
 
-      const result = db.annotations.getBatch(null, [{ chr: '1', pos: 12345, ref: 'A', alt: 'G' }])
+      const result = db.annotations.getBatch(
+        null,
+        [{ chr: '1', pos: 12345, ref: 'A', alt: 'G' }],
+        'GRCh38'
+      )
 
       expect(result['1:12345:A:G'].global).not.toBeNull()
       expect(result['1:12345:A:G'].perCase).toBeNull()
@@ -256,7 +260,7 @@ describe('annotation IPC handlers', () => {
     })
 
     it('handles multiple variants in a single batch', () => {
-      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', { starred: 1 })
+      db.annotations.upsertGlobalAnnotation('1', 12345, 'A', 'G', 'GRCh38', { starred: 1 })
 
       const result = db.annotations.getBatch(caseId, [
         { chr: '1', pos: 12345, ref: 'A', alt: 'G' },
@@ -537,17 +541,22 @@ describe('annotation PostgreSQL audit routing', () => {
     })
 
     await expect(
-      handlers.get('annotations:upsertGlobal')!(undefined, '1', 123, 'A', 'G', {
-        starred: true,
-        user_name: 'analyst'
-      })
+      handlers.get('annotations:upsertGlobal')!(
+        undefined,
+        '1',
+        123,
+        'A',
+        'G',
+        { starred: true, user_name: 'analyst' },
+        'GRCh38'
+      )
     ).resolves.toEqual({ starred: 1 })
 
     expect(readExecute).not.toHaveBeenCalled()
     expect(writeExecute).toHaveBeenCalledWith({
       type: 'annotations:upsertGlobalWithAudit',
       params: [
-        { chr: '1', pos: 123, ref: 'A', alt: 'G' },
+        { chr: '1', pos: 123, ref: 'A', alt: 'G', genome_build: 'GRCh38' },
         { starred: true, user_name: 'analyst' }
       ]
     })

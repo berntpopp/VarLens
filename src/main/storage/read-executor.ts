@@ -3,7 +3,11 @@ import type { VariantPageRequest } from '../../shared/types/variant-paging'
 import type { CohortSearchParams, CohortVariantIdentity } from '../../shared/types/cohort'
 import type { PanelResolutionRequest } from '../../shared/types/panels'
 import type { ValidatedCaseSearchParams } from '../../shared/types/ipc-schemas'
-import type { VariantCoords, VariantKey } from '../ipc/handlers/annotations-logic'
+import type {
+  GlobalVariantCoords,
+  VariantCoords,
+  VariantKey
+} from '../ipc/handlers/annotations-logic'
 import type { AuditQueryParams } from './audit-log-types'
 import type { GetShortlistParams } from '../database/ShortlistService'
 
@@ -68,7 +72,7 @@ export type StorageReadTask =
   | { type: 'tags:list'; params: [] }
   | { type: 'tags:getUsageCount'; params: [tagId: number] }
   | { type: 'tags:getVariantTags'; params: [caseId: number, variantId: number] }
-  | { type: 'annotations:getGlobal'; params: [coords: VariantCoords] }
+  | { type: 'annotations:getGlobal'; params: [coords: GlobalVariantCoords] }
   | { type: 'annotations:getPerCase'; params: [caseId: number, variantId: number] }
   | {
       type: 'annotations:getForVariant'
@@ -76,7 +80,7 @@ export type StorageReadTask =
     }
   | {
       type: 'annotations:batchGet'
-      params: [caseId: number | null, variantKeys: VariantKey[]]
+      params: [caseId: number | null, variantKeys: VariantKey[], genomeBuild?: string | null]
     }
   | { type: 'case-comments:list'; params: [caseId: number] }
   | { type: 'case-metrics:listDefinitions'; params: [] }

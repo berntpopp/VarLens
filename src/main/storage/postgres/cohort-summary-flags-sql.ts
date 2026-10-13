@@ -1,7 +1,8 @@
 /**
  * Annotation flags of a cohort summary row (has_star, has_comment, acmg_best),
- * derived from `variant_annotations` (global, per coordinate) and
- * `case_variant_annotations` (per case, per variant row).
+ * derived from `variant_annotations` (global, per coordinate and build) and
+ * `case_variant_annotations` (per case, per variant row, in its case's build).
+ * A summary row is one build's locus: neither counts for another build (#577).
  *
  * The flags used to be five correlated subqueries evaluated for every summary
  * row being written, three of which looked up every carrier of the row's
@@ -23,21 +24,22 @@ const ACMG_RANK_SQL = acmgRankCaseSql
 /** `va_flags` and `cva_flags` CTEs (without the leading WITH or comma). */
 export function annotationFlagCtes(tbl: (table: string) => string): string {
   return `va_flags AS (
-    SELECT va.chr, va.pos, va.ref, va.alt,
+    SELECT va.chr, va.pos, va.ref, va.alt, va.genome_build,
            bool_or(va.starred = 1) AS star,
            bool_or(va.global_comment IS NOT NULL AND va.global_comment <> '') AS has_comment,
            MAX(${ACMG_RANK_SQL('va.acmg_classification')}) AS acmg_rank
     FROM ${tbl('variant_annotations')} va
-    GROUP BY va.chr, va.pos, va.ref, va.alt
+    GROUP BY va.chr, va.pos, va.ref, va.alt, va.genome_build
   ),
   cva_flags AS (
-    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type,
+    SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build,
            bool_or(cva.starred = 1) AS star,
            bool_or(cva.per_case_comment IS NOT NULL AND cva.per_case_comment <> '') AS has_comment,
            MAX(${ACMG_RANK_SQL('cva.acmg_classification')}) AS acmg_rank
     FROM ${tbl('case_variant_annotations')} cva
     JOIN ${tbl('variants')} v ON v.id = cva.variant_id
-    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type
+    JOIN ${tbl('cases')} c ON c.id = v.case_id
+    GROUP BY v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build
   )`
 }
 
@@ -46,10 +48,12 @@ export function annotationFlagJoins(alias: string): string {
   return `LEFT JOIN va_flags vaf
          ON vaf.chr = ${alias}.chr AND vaf.pos = ${alias}.pos
         AND vaf.ref = ${alias}.ref AND vaf.alt = ${alias}.alt
+        AND vaf.genome_build = ${alias}.genome_build
        LEFT JOIN cva_flags cvf
          ON cvf.chr = ${alias}.chr AND cvf.pos = ${alias}.pos
         AND cvf.ref = ${alias}.ref AND cvf.alt = ${alias}.alt
-        AND cvf.variant_type = ${alias}.variant_type`
+        AND cvf.variant_type = ${alias}.variant_type
+        AND cvf.genome_build = ${alias}.genome_build`
 }
 
 /** has_star, has_comment, acmg_best in that order, for a select list. */

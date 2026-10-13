@@ -150,7 +150,8 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
           params[0] as string,
           params[1] as number,
           params[2] as string,
-          params[3] as string
+          params[3] as string,
+          params[4] as string
         )
 
       case 'annotations:getPerCase':
@@ -168,7 +169,8 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
       case 'annotations:batchGet':
         return repos.annotations.getBatch(
           params[0] as number | null,
-          params[1] as Array<{ chr: string; pos: number; ref: string; alt: string }>
+          params[1] as Array<{ chr: string; pos: number; ref: string; alt: string }>,
+          (params[2] as string | null | undefined) ?? null
         )
 
       // ── Case Metadata ────────────────────────────────────

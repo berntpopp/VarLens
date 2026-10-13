@@ -77,6 +77,22 @@ export class PostgresBuildReviewRepository {
         )
         if (review.rows.length === 0)
           throw new Error(`Case ${caseId} has no genome build to confirm`)
+        // The case's global annotations follow it to the confirmed build (#577):
+        // copied (the old build's other cases keep theirs); the new build's own win.
+        // The queued rename then moves the copies to the build's contig names.
+        await client.query(
+          `INSERT INTO ${this.schemaName}."variant_annotations"
+             (chr, pos, ref, alt, genome_build, global_comment, starred,
+              acmg_classification, acmg_evidence, created_at, updated_at)
+           SELECT va.chr, va.pos, va.ref, va.alt, $1, va.global_comment, va.starred,
+                  va.acmg_classification, va.acmg_evidence, va.created_at, va.updated_at
+           FROM ${this.schemaName}."variant_annotations" va
+           WHERE va.genome_build = $2 AND $1 <> $2
+             AND EXISTS (SELECT 1 FROM ${this.schemaName}."variants_all" v WHERE v.case_id = $3
+               AND v.chr = va.chr AND v.pos = va.pos AND v.ref = va.ref AND v.alt = va.alt)
+           ON CONFLICT (chr, pos, ref, alt, genome_build) DO NOTHING`,
+          [build, review.rows[0].genome_build, caseId]
+        )
         await client.query(
           `UPDATE ${this.schemaName}."cases_all" SET genome_build = $1 WHERE id = $2`,
           [build, caseId]

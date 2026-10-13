@@ -209,7 +209,8 @@ export class PostgresReadExecutor implements StorageReadExecutor {
           task.params[0].chr,
           task.params[0].pos,
           task.params[0].ref,
-          task.params[0].alt
+          task.params[0].alt,
+          task.params[0].genome_build
         )
 
       case 'annotations:getPerCase':
@@ -228,7 +229,11 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         )
 
       case 'annotations:batchGet':
-        return await this.repositories.annotations.getBatch(task.params[0], task.params[1])
+        return await this.repositories.annotations.getBatch(
+          task.params[0],
+          task.params[1],
+          task.params[2] ?? null
+        )
 
       case 'case-comments:list':
         return await this.repositories.commentsMetrics.listCaseComments(task.params[0])

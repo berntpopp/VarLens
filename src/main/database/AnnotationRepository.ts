@@ -4,11 +4,13 @@ import type { VariantAnnotation, CaseVariantAnnotation } from './types'
 import type { BatchAnnotationKey } from '../../shared/types/api'
 
 export class AnnotationRepository extends BaseRepository {
+  /** Global annotations are keyed by genome build as well (v52, #577). */
   getGlobalAnnotation(
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    genomeBuild: string
   ): VariantAnnotation | null {
     const result = this.execFirst<VariantAnnotation>(
       this.kysely
@@ -18,8 +20,17 @@ export class AnnotationRepository extends BaseRepository {
         .where('pos', '=', pos)
         .where('ref', '=', ref)
         .where('alt', '=', alt)
+        .where('genome_build', '=', genomeBuild)
     )
     return result ?? null
+  }
+
+  /** The build of a case, or null when there is no such case. */
+  caseGenomeBuild(caseId: number): string | null {
+    const row = this.execFirst<{ genome_build: string }>(
+      this.kysely.selectFrom('cases').select('genome_build').where('id', '=', caseId)
+    )
+    return row?.genome_build ?? null
   }
 
   upsertGlobalAnnotation(
@@ -27,6 +38,7 @@ export class AnnotationRepository extends BaseRepository {
     pos: number,
     ref: string,
     alt: string,
+    genomeBuild: string,
     updates: Partial<
       Pick<
         VariantAnnotation,
@@ -59,9 +71,9 @@ export class AnnotationRepository extends BaseRepository {
         : sql`IFNULL(${acmgEvidenceVal}, acmg_evidence)`
 
       const compiled = sql<VariantAnnotation>`
-          INSERT INTO variant_annotations (chr, pos, ref, alt, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
-          VALUES (${chr}, ${pos}, ${ref}, ${alt}, ${commentVal}, IFNULL(${starredVal}, 0), ${acmgClassVal}, ${acmgEvidenceVal}, ${now}, ${now})
-          ON CONFLICT(chr, pos, ref, alt) DO UPDATE SET
+          INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+          VALUES (${chr}, ${pos}, ${ref}, ${alt}, ${genomeBuild}, ${commentVal}, IFNULL(${starredVal}, 0), ${acmgClassVal}, ${acmgEvidenceVal}, ${now}, ${now})
+          ON CONFLICT(chr, pos, ref, alt, genome_build) DO UPDATE SET
             global_comment = ${commentUpdate},
             starred = IFNULL(${starredVal}, starred),
             acmg_classification = ${acmgClassUpdate},
@@ -74,7 +86,13 @@ export class AnnotationRepository extends BaseRepository {
     })
   }
 
-  deleteGlobalAnnotation(chr: string, pos: number, ref: string, alt: string): void {
+  deleteGlobalAnnotation(
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    genomeBuild: string
+  ): void {
     this.execRun(
       this.kysely
         .deleteFrom('variant_annotations')
@@ -82,6 +100,7 @@ export class AnnotationRepository extends BaseRepository {
         .where('pos', '=', pos)
         .where('ref', '=', ref)
         .where('alt', '=', alt)
+        .where('genome_build', '=', genomeBuild)
     )
   }
 
@@ -174,7 +193,8 @@ export class AnnotationRepository extends BaseRepository {
     )
 
     const variantId = variant?.id
-    const global = this.getGlobalAnnotation(chr, pos, ref, alt)
+    const build = this.caseGenomeBuild(caseId)
+    const global = build === null ? null : this.getGlobalAnnotation(chr, pos, ref, alt, build)
     const perCase = variantId !== undefined ? this.getPerCaseAnnotation(caseId, variantId) : null
     return { global, perCase }
   }
@@ -184,6 +204,8 @@ export class AnnotationRepository extends BaseRepository {
    *
    * Returns a coordinate-keyed map `${chr}:${pos}:${ref}:${alt}` →
    * `{ global, perCase }` per the IPC contract (VariantAnnotationsResult).
+   * The global rows are those of the case's build, or of `genomeBuild` when
+   * there is no case (cohort); without either there is no global row.
    *
    * Call-count invariant (Gate 4):
    *   - caseId === null  → 1 prepared statement (global SELECT only)
@@ -196,7 +218,8 @@ export class AnnotationRepository extends BaseRepository {
    */
   getBatch(
     caseId: number | null,
-    keys: BatchAnnotationKey[]
+    keys: BatchAnnotationKey[],
+    genomeBuild: string | null = null
   ): Record<string, { global: VariantAnnotation | null; perCase: CaseVariantAnnotation | null }> {
     const result: Record<
       string,
@@ -214,13 +237,15 @@ export class AnnotationRepository extends BaseRepository {
     const coordParams: (string | number)[] = []
     for (const k of keys) coordParams.push(k.chr, k.pos, k.ref, k.alt)
 
-    // Global lookup — always runs (1 prepared statement).
+    // Global lookup — always runs (1 prepared statement). The case's build
+    // wins over the caller's: a case's rows are never read in another build.
+    const build = caseId !== null ? '(SELECT genome_build FROM cases WHERE id = ?)' : '?'
     const globalRows = this.db
       .prepare(
         `SELECT * FROM variant_annotations
-         WHERE (chr, pos, ref, alt) IN (${coordPlaceholders})`
+         WHERE genome_build = ${build} AND (chr, pos, ref, alt) IN (${coordPlaceholders})`
       )
-      .all(...coordParams) as VariantAnnotation[]
+      .all(caseId ?? genomeBuild, ...coordParams) as VariantAnnotation[]
     for (const row of globalRows) {
       const key = `${row.chr}:${row.pos}:${row.ref}:${row.alt}`
       if (key in result) result[key].global = row

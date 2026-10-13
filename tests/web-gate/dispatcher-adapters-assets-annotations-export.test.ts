@@ -25,7 +25,8 @@ describe('web dispatcher adapters: annotations, assets, and exports', () => {
           acmg_classification: 'VUS',
           starred: true,
           user_name: 'admin'
-        }
+        },
+        'GRCh38'
       ],
       {} as never,
       reply as never,
@@ -37,7 +38,7 @@ describe('web dispatcher adapters: annotations, assets, and exports', () => {
       task: {
         type: 'annotations:upsertGlobalWithAudit',
         params: [
-          { chr: 'chr22', pos: 12345, ref: 'A', alt: 'T' },
+          { chr: 'chr22', pos: 12345, ref: 'A', alt: 'T', genome_build: 'GRCh38' },
           { acmg_classification: 'Uncertain significance', starred: true, user_name: 'admin' }
         ]
       }

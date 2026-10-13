@@ -178,17 +178,20 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
     } as WindowAPI['cohort'],
 
     annotations: {
-      getGlobal: (chr, pos, ref, alt) => annotationsDomain.getGlobal(chr, pos, ref, alt),
-      upsertGlobal: (chr, pos, ref, alt, updates) =>
-        annotationsDomain.upsertGlobal(chr, pos, ref, alt, updates),
-      deleteGlobal: (chr, pos, ref, alt) => annotationsDomain.deleteGlobal(chr, pos, ref, alt),
+      getGlobal: (chr, pos, ref, alt, build) =>
+        annotationsDomain.getGlobal(chr, pos, ref, alt, build),
+      upsertGlobal: (chr, pos, ref, alt, updates, build) =>
+        annotationsDomain.upsertGlobal(chr, pos, ref, alt, updates, build),
+      deleteGlobal: (chr, pos, ref, alt, build) =>
+        annotationsDomain.deleteGlobal(chr, pos, ref, alt, build),
       getPerCase: (caseId, variantId) => annotationsDomain.getPerCase(caseId, variantId),
       upsertPerCase: (caseId, variantId, updates) =>
         annotationsDomain.upsertPerCase(caseId, variantId, updates),
       deletePerCase: (caseId, variantId) => annotationsDomain.deletePerCase(caseId, variantId),
       getForVariant: (caseId, chr, pos, ref, alt) =>
         annotationsDomain.getForVariant(caseId, chr, pos, ref, alt),
-      batchGet: (caseId, variantKeys) => annotationsDomain.batchGet(caseId, variantKeys)
+      batchGet: (caseId, variantKeys, build) =>
+        annotationsDomain.batchGet(caseId, variantKeys, build)
     },
 
     vep: {

@@ -222,32 +222,32 @@ export class PostgresCohortRepository {
          (${totals.uniqueVariants}) AS unique_variants,
          (${totals.genesWithVariants}) AS genes_with_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.starred = 1
          ) AS starred_variants,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Pathogenic'
          ) AS pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely pathogenic'
          ) AS likely_pathogenic,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Uncertain significance'
          ) AS vus,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Likely benign'
          ) AS likely_benign,
          (
-           SELECT COUNT(*)::bigint
+           SELECT COUNT(DISTINCT (va.chr, va.pos, va.ref, va.alt))::bigint
            FROM ${this.schemaName}."variant_annotations" va
            WHERE va.acmg_classification = 'Benign'
          ) AS benign`

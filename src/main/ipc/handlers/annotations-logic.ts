@@ -23,6 +23,11 @@ export interface VariantCoords {
   alt: string
 }
 
+/** Coordinates of a global annotation: keyed by genome build too (#577). */
+export interface GlobalVariantCoords extends VariantCoords {
+  genome_build: string
+}
+
 /** Validated global annotation updates (after Zod parsing). */
 export interface GlobalAnnotationUpdates {
   user_name?: string | null
@@ -53,7 +58,7 @@ export interface VariantKey {
  * Get global annotation for a variant.
  */
 export async function getGlobalAnnotation(
-  coords: VariantCoords,
+  coords: GlobalVariantCoords,
   getDb: () => DatabaseService,
   getDbPool?: () => DbPool | null
 ): Promise<unknown> {
@@ -61,12 +66,18 @@ export async function getGlobalAnnotation(
   if (pool) {
     return await pool.run({
       type: 'annotations:getGlobal',
-      params: [coords.chr, coords.pos, coords.ref, coords.alt]
+      params: [coords.chr, coords.pos, coords.ref, coords.alt, coords.genome_build]
     })
   }
 
   const db = getDb()
-  return db.annotations.getGlobalAnnotation(coords.chr, coords.pos, coords.ref, coords.alt)
+  return db.annotations.getGlobalAnnotation(
+    coords.chr,
+    coords.pos,
+    coords.ref,
+    coords.alt,
+    coords.genome_build
+  )
 }
 
 /**
@@ -74,18 +85,18 @@ export async function getGlobalAnnotation(
  * Handles state comparison and audit trail creation.
  */
 export function upsertGlobalAnnotation(
-  coords: VariantCoords,
+  coords: GlobalVariantCoords,
   updates: GlobalAnnotationUpdates,
   getDb: () => DatabaseService
 ): unknown {
   const db = getDb()
-  const { chr: vChr, pos: vPos, ref: vRef, alt: vAlt } = coords
+  const { chr: vChr, pos: vPos, ref: vRef, alt: vAlt, genome_build: build } = coords
 
   // Extract user_name before building db updates
   const { user_name, ...annotationUpdates } = updates
 
   // Read current state before upsert for audit trail
-  const oldAnnotation = db.annotations.getGlobalAnnotation(vChr, vPos, vRef, vAlt)
+  const oldAnnotation = db.annotations.getGlobalAnnotation(vChr, vPos, vRef, vAlt, build)
 
   // Build dbUpdates only with keys actually provided
   const dbUpdates: Partial<
@@ -105,7 +116,7 @@ export function upsertGlobalAnnotation(
     dbUpdates.starred = annotationUpdates.starred ? 1 : 0
   }
 
-  const result = db.annotations.upsertGlobalAnnotation(vChr, vPos, vRef, vAlt, dbUpdates)
+  const result = db.annotations.upsertGlobalAnnotation(vChr, vPos, vRef, vAlt, build, dbUpdates)
 
   // Audit logging
   const entityKey = `${vChr}:${vPos}:${vRef}:${vAlt}`
@@ -152,9 +163,18 @@ export function upsertGlobalAnnotation(
 /**
  * Delete global annotation for a variant.
  */
-export function deleteGlobalAnnotation(coords: VariantCoords, getDb: () => DatabaseService): void {
+export function deleteGlobalAnnotation(
+  coords: GlobalVariantCoords,
+  getDb: () => DatabaseService
+): void {
   const db = getDb()
-  db.annotations.deleteGlobalAnnotation(coords.chr, coords.pos, coords.ref, coords.alt)
+  db.annotations.deleteGlobalAnnotation(
+    coords.chr,
+    coords.pos,
+    coords.ref,
+    coords.alt,
+    coords.genome_build
+  )
 }
 
 /**
@@ -302,22 +322,24 @@ export async function getAnnotationsForVariant(
 
 /**
  * Batch read annotations -- single round-trip for N variants (pool-dispatched).
+ * Global rows are those of the case's build, or of `genomeBuild` without a case.
  */
 export async function batchGetAnnotations(
   caseId: number | null,
   variantKeys: VariantKey[],
   getDb: () => DatabaseService,
-  getDbPool?: () => DbPool | null
+  getDbPool?: () => DbPool | null,
+  genomeBuild: string | null = null
 ): Promise<unknown> {
   const pool = getDbPool?.()
   if (pool) {
     return await pool.run({
       type: 'annotations:batchGet' as const,
-      params: [caseId, variantKeys]
+      params: [caseId, variantKeys, genomeBuild]
     })
   }
   const db = getDb()
-  return db.annotations.getBatch(caseId, variantKeys)
+  return db.annotations.getBatch(caseId, variantKeys, genomeBuild)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +369,7 @@ export function detectAnnotationChangeKind(updates: {
  * audit-trail creation is handled by the backend (Postgres) or executor.
  */
 export async function upsertGlobalAnnotationViaSession(
-  coords: VariantCoords,
+  coords: GlobalVariantCoords,
   updates: GlobalAnnotationUpdates,
   getSession: () => StorageSession
 ): Promise<unknown> {

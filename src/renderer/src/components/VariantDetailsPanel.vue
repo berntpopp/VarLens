@@ -201,13 +201,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent, inject } from 'vue'
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  computed,
+  watch,
+  defineAsyncComponent,
+  inject,
+  provide
+} from 'vue'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { formatConsequence, variantHeading } from '../utils/formatters'
-import { useAnnotations } from '../composables/useAnnotations'
+import { AnnotationBuildKey, useAnnotations } from '../composables/useAnnotations'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
@@ -322,14 +331,16 @@ const {
   getGlobalAcmgClassification,
   getAcmgEvidence,
   getGlobalAcmgEvidence
-} = useAnnotations()
+} = useAnnotations({ genomeBuild })
+// The panel sits outside the views: its comments section reads this variant's build.
+provide(AnnotationBuildKey, genomeBuild)
 // ACMG writes go through the undo-snackbar wrappers (same signatures)
 const {
   setAcmgClassification,
   setAcmgClassificationWithEvidence,
   setGlobalAcmgClassification,
   setGlobalAcmgClassificationWithEvidence
-} = useAcmgUndo()
+} = useAcmgUndo({ genomeBuild })
 
 // Use VEP enrichment composable (fetches VEP, myvariant.info, and SpliceAI in parallel)
 const {

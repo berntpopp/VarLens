@@ -23,6 +23,7 @@ const ROOT = resolve(__dirname, '..', '..', '..')
 
 const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   CasesDomainContract: 'src/shared/ipc/domains/cases.ts',
+  AnnotationsDomainContract: 'src/shared/ipc/domains/annotations.ts',
   DatabaseDomainContract: 'src/shared/ipc/domains/database.ts',
   FilterPresetsDomainContract: 'src/shared/ipc/domains/filter-presets.ts',
   DebugApi: 'src/shared/ipc/domains/debug.ts',

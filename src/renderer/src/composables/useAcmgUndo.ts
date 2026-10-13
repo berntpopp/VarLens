@@ -10,7 +10,7 @@
  */
 import { inject } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
-import { useAnnotations } from './useAnnotations'
+import { useAnnotations, type UseAnnotationsOptions } from './useAnnotations'
 import { AppStateKey } from './useAppState'
 import { planAcmgUndo, type AcmgState } from '../utils/acmg/acmg-undo'
 import { logService } from '../services/LogService'
@@ -20,8 +20,8 @@ const UNDO_SNACKBAR_MS = 8000
 
 type Locus = [chr: string, pos: number, ref: string, alt: string]
 
-export function useAcmgUndo() {
-  const annotations = useAnnotations()
+export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
+  const annotations = useAnnotations(options)
   const appState = inject(AppStateKey, null)
 
   function offerUndo(previous: AcmgState, next: AcmgState, restore: () => Promise<boolean>): void {

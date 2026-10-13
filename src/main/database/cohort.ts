@@ -77,6 +77,9 @@ export const COHORT_PANEL_INTERVAL_CONDITION = `cvs.rowid IN (
  *
  * Provides cohort-level aggregation queries reading from summary tables.
  */
+/** A coordinate annotated in several builds (v52 copies, #577) counts once. */
+const ANNOTATION_LOCUS = "chr || ':' || pos || ':' || ref || ':' || alt"
+
 export class CohortService {
   private static readonly MAX_STATEMENT_CACHE_SIZE = 50
   private db: Database.Database
@@ -372,14 +375,16 @@ export class CohortService {
 
     if (annotationTableExists) {
       const starredResult = this.db
-        .prepare('SELECT COUNT(*) as count FROM variant_annotations WHERE starred = 1')
+        .prepare(
+          `SELECT COUNT(DISTINCT ${ANNOTATION_LOCUS}) as count FROM variant_annotations WHERE starred = 1`
+        )
         .get() as { count: number }
       starredVariants = starredResult.count
 
       // ACMG distribution (global annotations)
       acmgRows = this.db
         .prepare(
-          `SELECT acmg_classification, COUNT(*) as count
+          `SELECT acmg_classification, COUNT(DISTINCT ${ANNOTATION_LOCUS}) as count
            FROM variant_annotations
            WHERE acmg_classification IS NOT NULL
            GROUP BY acmg_classification`

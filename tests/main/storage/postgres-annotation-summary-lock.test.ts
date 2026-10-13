@@ -80,6 +80,7 @@ describe.skipIf(!RUN)('annotation writes take the summary write lock (#503)', ()
       100,
       'A',
       'T',
+      'GRCh38',
       { starred: 1 }
     )
     await new Promise((resolve) => setTimeout(resolve, 300))
@@ -129,7 +130,7 @@ describe.skipIf(!RUN)('annotation writes take the summary write lock (#503)', ()
     const rebuilding = {
       query: async (text: string, values?: unknown[]) => {
         if (text.includes('last_rebuilt_at = now()')) {
-          await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: 1 })
+          await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', 'GRCh38', { starred: 1 })
         }
         return holder.query(text, values)
       }
@@ -147,7 +148,7 @@ describe.skipIf(!RUN)('annotation writes take the summary write lock (#503)', ()
     const repository = new PostgresAnnotationsRepository(pool, schema, 100)
     await new PostgresCohortSummaryRepository().rebuild({ schema, client: holder as never })
 
-    await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', { starred: 1 })
+    await repository.upsertGlobalAnnotation('1', 100, 'A', 'T', 'GRCh38', { starred: 1 })
     await holder.query('COMMIT')
     const rebuiltAt = await lastRebuiltAt()
 
