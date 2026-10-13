@@ -62,6 +62,7 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
   }, 60_000)
 
   let lastUnranked: string[] | undefined
+  let lastAfOutOfRange: number | undefined
 
   async function importFile(
     caseName: string,
@@ -98,6 +99,7 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
     const last = messages.at(-1)
     if (last?.type !== 'complete') throw new Error(`import failed: ${JSON.stringify(last)}`)
     lastUnranked = last.result.unrankedClinvar
+    lastAfOutOfRange = last.result.afOutOfRange
     const rows = await probe.query<RankedRow>(
       `SELECT consequence, clinvar, impact_rank, clinvar_rank
          FROM "${schema}".variants WHERE case_id = $1 ORDER BY id`,
@@ -216,5 +218,40 @@ describe.skipIf(!RUN)('PostgreSQL import stores severity ranks (#469)', () => {
     )
     await importFile('ranks recognised', file)
     expect(lastUnranked).toBeUndefined()
+  }, 120_000)
+
+  it('returns the count of gnomAD AF values outside [0, 1] and keeps them as imported', async () => {
+    const file = join(dir, 'af.json')
+    writeFileSync(
+      file,
+      JSON.stringify({
+        variants: [0.01, 40, -0.1, null].map((gnomad_af, index) => ({
+          chr: 'chr3',
+          pos: 100 + index,
+          ref: 'A',
+          alt: 'G',
+          gt_num: '0/1',
+          gnomad_af
+        }))
+      })
+    )
+    await importFile('af range', file)
+    expect(lastAfOutOfRange).toBe(2)
+    const stored = await probe.query<{ gnomad_af: number | null }>(
+      `SELECT gnomad_af FROM "${schema}".variants v JOIN "${schema}".cases c ON c.id = v.case_id
+        WHERE c.name = 'af range' ORDER BY v.id`
+    )
+    expect(
+      stored.rows.map((row) => (row.gnomad_af === null ? null : Number(row.gnomad_af)))
+    ).toEqual([0.01, 40, -0.1, null])
+
+    writeFileSync(
+      file,
+      JSON.stringify({
+        variants: [{ chr: 'chr3', pos: 1, ref: 'A', alt: 'G', gt_num: '0/1', gnomad_af: 0.5 }]
+      })
+    )
+    await importFile('af clean', file)
+    expect(lastAfOutOfRange).toBeUndefined()
   }, 120_000)
 })

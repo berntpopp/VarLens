@@ -24,6 +24,7 @@ import type {
   PostgresClientConfig
 } from '../../../shared/types/postgres-import-worker'
 import { workerErrorToError } from '../import-worker-errors'
+import { importDataReport } from '../../import/unranked-clinvar'
 import { ConflictError } from '../../ipc/errors'
 import {
   openImportLease,
@@ -206,7 +207,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
       skipped: result.skipped,
       errors: result.errors,
       elapsed: result.elapsed,
-      ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
+      ...importDataReport(result)
     }
   }
 
@@ -269,7 +270,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
         skipped: result.skipped,
         errors: result.errors,
         elapsed: result.elapsed,
-        ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
+        ...importDataReport(result)
       }
     } finally {
       this.currentClient = null
@@ -292,6 +293,8 @@ export class PostgresImportExecutor implements StorageImportExecutor {
     errors: string[]
     elapsed: number
     unrankedClinvar?: string[]
+    /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+    afOutOfRange?: number
   }> {
     const factory = this.options.workerClientFactory ?? (() => new PostgresImportWorkerClient())
     const client = factory()
@@ -323,9 +326,7 @@ export class PostgresImportExecutor implements StorageImportExecutor {
             skipped: msg.result.skipped,
             errors: msg.result.errors,
             elapsed,
-            ...(msg.result.unrankedClinvar !== undefined
-              ? { unrankedClinvar: msg.result.unrankedClinvar }
-              : {})
+            ...importDataReport(msg.result)
           })
         },
         onError: (msg) => {

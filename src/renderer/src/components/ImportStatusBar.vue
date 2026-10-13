@@ -13,6 +13,7 @@
       rounded
       class="mr-3 flex-grow-1"
       style="max-width: 200px"
+      :aria-label="IMPORT_A11Y_COPY.statusProgress"
     />
 
     <span class="text-caption text-truncate mr-2" style="max-width: 200px">
@@ -38,6 +39,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useImportStatusStore } from '../stores/importStatusStore'
+import { IMPORT_A11Y_COPY } from '../config/importConfig'
 
 const importStore = useImportStatusStore()
 

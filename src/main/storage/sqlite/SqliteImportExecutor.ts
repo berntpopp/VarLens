@@ -19,6 +19,7 @@ import { ImportWorkerClient } from '../../workers/import-worker-client'
 import { jobRunner } from '../../services/jobs/runner'
 import { withImportJobProgress } from '../import-job-progress'
 import { workerErrorToError } from '../import-worker-errors'
+import { importDataReport } from '../../import/unranked-clinvar'
 import { UniqueConstraintError } from '../../database/errors'
 import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
@@ -148,6 +149,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       let capturedSkipped = 0
       let capturedSkipReasons: string[] = []
       let capturedUnrankedClinvar: string[] | undefined
+      let capturedAfOutOfRange: number | undefined
 
       try {
         worker.start({
@@ -184,6 +186,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedSkipped = msg.result.skipped ?? 0
             capturedSkipReasons = msg.result.skipReasons ?? []
             capturedUnrankedClinvar = msg.result.unrankedClinvar
+            capturedAfOutOfRange = msg.result.afOutOfRange
             this.invalidateCohortMetadata()
           },
           onSummaryStale: () => onSummaryStale?.(),
@@ -221,6 +224,9 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                 elapsed: capturedElapsed,
                 ...(capturedUnrankedClinvar !== undefined
                   ? { unrankedClinvar: capturedUnrankedClinvar }
+                  : {}),
+                ...(capturedAfOutOfRange !== undefined
+                  ? { afOutOfRange: capturedAfOutOfRange }
                   : {})
               })
             } else if (detail?.status === 'skipped') {
@@ -340,7 +346,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       // not at the top level. The PG path (Task 11) follows the same convention.
       errors: [],
       elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt,
-      ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {})
+      ...importDataReport(result)
     }
   }
 

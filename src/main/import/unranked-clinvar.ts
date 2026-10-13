@@ -8,6 +8,7 @@
  * be added to src/shared/config/severity.config.ts.
  */
 import { takeUnrankedClinvarStrings } from '../../shared/config/severity.config'
+import type { ImportDataReport } from '../../shared/types/import'
 
 const SHOWN = 20
 
@@ -49,4 +50,12 @@ export function mergeUnrankedClinvar(
 ): string[] | undefined {
   const merged = [...new Set(lists.flatMap((list) => list ?? []))]
   return merged.length === 0 ? undefined : merged
+}
+
+/** The data report of an import result, without the fields it does not have. */
+export function importDataReport(result: ImportDataReport): ImportDataReport {
+  return {
+    ...(result.unrankedClinvar !== undefined ? { unrankedClinvar: result.unrankedClinvar } : {}),
+    ...(result.afOutOfRange !== undefined ? { afOutOfRange: result.afOutOfRange } : {})
+  }
 }

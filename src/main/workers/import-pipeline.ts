@@ -10,6 +10,7 @@ import { createInterface } from 'node:readline'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { deleteCaseSqls } from '../database/case-dependents'
 import { clinvarRankForImport, impactRank } from '../../shared/config/severity.config'
+import { noteGnomadAf } from '../import/af-out-of-range'
 import { canonicalContig } from '../../shared/utils/contig'
 import { createBoundedBatcher, getRecordBytes } from '../import/bounded-batcher'
 import type { FormatInfo } from '../import/types'
@@ -137,6 +138,7 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
   const insertBatch = db.transaction((caseId: number, variants: Array<Record<string, unknown>>) => {
     const build = caseBuild(caseId)
     for (const v of variants) {
+      noteGnomadAf(v.gnomad_af)
       const result = insertVariantStmt.run(
         caseId,
         typeof v.chr === 'string' ? canonicalContig(v.chr, build) : v.chr,

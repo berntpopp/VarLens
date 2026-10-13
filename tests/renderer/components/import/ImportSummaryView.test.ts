@@ -4,11 +4,12 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
+import { IMPORT_MESSAGES } from '../../../../src/shared/config/import.config'
 import ImportSummaryView from '../../../../src/renderer/src/components/import/ImportSummaryView.vue'
 
 const vuetify = createVuetify({ components, directives })
 
-const mountSummary = (unrankedClinvar?: string[]) =>
+const mountSummary = (unrankedClinvar?: string[], afOutOfRange?: number) =>
   mount(ImportSummaryView, {
     props: {
       caseName: 'trio',
@@ -19,7 +20,8 @@ const mountSummary = (unrankedClinvar?: string[]) =>
         totalSkipped: 0,
         elapsed: 5,
         files: [{ filePath: '/x/trio.vcf', variantType: 'snv', variantCount: 10 }],
-        ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
+        ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+        ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
       }
     },
     global: { plugins: [vuetify] }
@@ -38,5 +40,13 @@ describe('ImportSummaryView: unrecognised ClinVar values (#469)', () => {
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain('2 ClinVar values not recognised')
     expect(notice.text()).toContain('totally made up term, odd one')
+  })
+
+  it('warns about gnomAD AF values outside [0, 1] next to the ClinVar notice', () => {
+    const notices = mountSummary(['odd_one'], 3).findAll('[data-testid="unranked-clinvar"]')
+    expect(notices.map((notice) => notice.text())).toEqual([
+      expect.stringContaining('1 ClinVar value not recognised'),
+      `trio: ${IMPORT_MESSAGES.afOutOfRange(3)}`
+    ])
   })
 })

@@ -335,6 +335,11 @@ function handleWebUploadEvent(event: Event): void {
       percent: detail.percent
     })
   }
+  // The selection is uploaded (from any picker: import, VCF dialog, BED); the next step owns the status.
+  const lastFile = detail.fileIndex === detail.totalFiles - 1
+  if ((detail.status === 'complete' && lastFile) || detail.status === 'skipped') {
+    importStore.endUpload()
+  }
   if (detail.status === 'aborted') {
     importStore.importComplete({ ...emptySummary(), cancelled: true, details: [] })
   }
@@ -453,9 +458,7 @@ async function selectSource(mode: ImportMode): Promise<void> {
     importStore.importError(message)
   } finally {
     sourceSelectionPending.value = false
-    if (importStore.phase === 'uploading') {
-      importStore.reset()
-    }
+    importStore.endUpload()
   }
 }
 

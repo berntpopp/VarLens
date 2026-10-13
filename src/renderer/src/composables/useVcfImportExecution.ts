@@ -126,7 +126,10 @@ export function useVcfImportExecution({
             fileName: caseName,
             caseName,
             status: 'success',
-            variantCount: result.variantCount
+            variantCount: result.variantCount,
+            // Data warnings (unranked ClinVar, gnomAD AF range) for the summary.
+            unrankedClinvar: result.unrankedClinvar,
+            afOutOfRange: result.afOutOfRange
           })
         } catch (error) {
           if (finishCancellation(generation)) return

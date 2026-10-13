@@ -132,6 +132,8 @@ export interface PostgresImportWorkerCompleteMessage {
     elapsed: number
     /** ClinVar values the severity configuration does not know (ranked as unknown). */
     unrankedClinvar?: string[]
+    /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+    afOutOfRange?: number
   }
 }
 

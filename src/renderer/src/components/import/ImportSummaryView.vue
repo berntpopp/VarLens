@@ -20,17 +20,19 @@
       </div>
     </v-alert>
 
-    <!-- ClinVar values the severity configuration does not know (#469); the
-         same tonal warning as the batch import summary. -->
+    <!-- Data warnings: ClinVar values the severity configuration does not know
+         (#469), gnomAD AF outside [0, 1]; the same tonal warning as the batch
+         import summary. -->
     <v-alert
-      v-if="unrankedNotice !== null"
+      v-for="notice in notices"
+      :key="notice"
       type="warning"
       variant="tonal"
       density="compact"
       class="mb-4 text-body-small"
       data-testid="unranked-clinvar"
     >
-      <strong>{{ caseName }}:</strong> {{ unrankedNotice }}
+      <strong>{{ caseName }}:</strong> {{ notice }}
     </v-alert>
 
     <!-- Variant type breakdown -->
@@ -179,7 +181,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MultiFileImportResult } from '../../../../shared/types/api'
-import { unrankedClinvarSummary } from '../../utils/unranked-clinvar'
+import { importDataNotices } from '../../utils/unranked-clinvar'
+import { VARIANT_TYPE_COLORS } from '../../config/importConfig'
 import type { VcfPreviewResult } from '../../../../shared/types/import'
 import {
   mdiAlertCircle,
@@ -204,11 +207,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const unrankedNotice = computed(() =>
-  props.result.unrankedClinvar !== undefined && props.result.unrankedClinvar.length > 0
-    ? unrankedClinvarSummary(props.result.unrankedClinvar)
-    : null
-)
+const notices = computed(() => importDataNotices(props.result))
 
 const hasErrors = computed(() => props.result.files.some((f) => f.error !== undefined))
 
@@ -258,20 +257,7 @@ function percentage(count: number): string {
 }
 
 function variantTypeColor(type: string): string {
-  switch (type) {
-    case 'snv':
-      return 'primary'
-    case 'indel':
-      return 'deep-purple'
-    case 'sv':
-      return 'orange'
-    case 'cnv':
-      return 'teal'
-    case 'str':
-      return 'pink'
-    default:
-      return 'grey'
-  }
+  return VARIANT_TYPE_COLORS[type] ?? 'grey'
 }
 
 function fileName(filePath: string): string {
