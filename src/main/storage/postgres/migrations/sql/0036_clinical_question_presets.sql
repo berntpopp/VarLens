@@ -1,9 +1,9 @@
 -- Built-in filter presets named by the clinical question they answer, each
--- with a one-line description (#570; mirrors SQLite v54).
+-- with a one-line description (#570; mirrors SQLite v53).
 --
 -- A schema created by this version already has the new names from the 0005
 -- seed (seedWorkflowDefaults reads BUILT_IN_PRESETS); an existing one is
--- renamed here. The values repeat BUILT_IN_PRESET_RENAMES_V54 and the
+-- renamed here. The values repeat BUILT_IN_PRESET_RENAMES_V53 and the
 -- descriptions on purpose: a migration is a fixed record.
 -- tests/main/storage/postgres-migration-definitions.test.ts fails if they differ.
 --

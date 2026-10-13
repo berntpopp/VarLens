@@ -176,9 +176,9 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     fileName: '0034_import_integrity.sql'
   },
   {
-    version: '0037',
+    version: '0036',
     name: 'clinical_question_presets',
-    fileName: '0037_clinical_question_presets.sql'
+    fileName: '0036_clinical_question_presets.sql'
   }
 ]
 

@@ -60,7 +60,7 @@ From here you can:
 You can also activate presets from the [DSL search bar](./filtering.md#preset-references) by typing `@` followed by the preset name:
 
 ```
-@rare-pathogenic
+@rare_known_pathogenic
 ```
 
-The autocomplete dropdown shows available presets when you type `@`. Preset names are converted to URL-safe slugs (lowercase, spaces to hyphens, special characters removed).
+The autocomplete dropdown shows available presets when you type `@`. The preset key is the name in lowercase with spaces turned into underscores; hyphens stay (`@ultra-rare_loss-of-function`). A name with any other character, such as the comma in "Rare, not recurrent", cannot be typed as a reference; use its chip in the preset bar instead.

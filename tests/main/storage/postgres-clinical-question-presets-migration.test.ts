@@ -1,6 +1,6 @@
 /**
- * Migration 0037 (#570) against a real PostgreSQL: built-in presets are
- * renamed after the clinical question they answer (mirrors SQLite v54).
+ * Migration 0036 (#570) against a real PostgreSQL: built-in presets are
+ * renamed after the clinical question they answer (mirrors SQLite v53).
  *
  * Gated by VARLENS_RUN_POSTGRES_E2E=1. Requires `make pg-up`.
  */
@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   BUILT_IN_PRESETS,
-  BUILT_IN_PRESET_RENAMES_V54
+  BUILT_IN_PRESET_RENAMES_V53
 } from '../../../src/shared/config/filter-presets.config'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
@@ -21,10 +21,10 @@ const PG_URL =
   process.env.VARLENS_PG_URL ??
   'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
 
-const BEFORE_0037 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0037')
-const THROUGH_0037 = POSTGRES_MIGRATIONS.filter((migration) => migration.version <= '0037')
+const BEFORE_0036 = POSTGRES_MIGRATIONS.filter((migration) => migration.version < '0036')
+const THROUGH_0036 = POSTGRES_MIGRATIONS.filter((migration) => migration.version <= '0036')
 
-describe.skipIf(!RUN)('migration 0037: built-in presets named by clinical question (#570)', () => {
+describe.skipIf(!RUN)('migration 0036: built-in presets named by clinical question (#570)', () => {
   let schema: string
   let pool: Pool
   let probe: Client
@@ -57,10 +57,10 @@ describe.skipIf(!RUN)('migration 0037: built-in presets named by clinical questi
       )
     ).rows
 
-  /** An existing schema, migrated before 0037 by a version with the old names. */
+  /** An existing schema, migrated before 0036 by a version with the old names. */
   async function oldSchema(): Promise<void> {
-    await new PostgresMigrationRunner(pool, schema, BEFORE_0037).migrate()
-    for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V54) {
+    await new PostgresMigrationRunner(pool, schema, BEFORE_0036).migrate()
+    for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V53) {
       await probe.query(
         `UPDATE "${schema}".filter_presets SET name = $1, description = 'old' WHERE name = $2`,
         [oldName, newName]
@@ -69,7 +69,7 @@ describe.skipIf(!RUN)('migration 0037: built-in presets named by clinical questi
   }
 
   it('a new schema has every built-in preset with its config name and description', async () => {
-    await new PostgresMigrationRunner(pool, schema, THROUGH_0037).migrate()
+    await new PostgresMigrationRunner(pool, schema, THROUGH_0036).migrate()
     expect(await builtIns()).toEqual(
       BUILT_IN_PRESETS.map((p) => ({ name: p.name, description: p.description, is_visible: 1 }))
     )
@@ -86,9 +86,9 @@ describe.skipIf(!RUN)('migration 0037: built-in presets named by clinical questi
        VALUES ('Known pathogenic', 'mine', '{}', 0, 1, 20, 'filter', 1, 1)`
     )
 
-    const result = await new PostgresMigrationRunner(pool, schema, THROUGH_0037).migrate()
+    const result = await new PostgresMigrationRunner(pool, schema, THROUGH_0036).migrate()
 
-    expect(result.applied).toEqual(['0037'])
+    expect(result.applied).toEqual(['0036'])
     expect(await builtIns()).toEqual(
       BUILT_IN_PRESETS.map((p) =>
         p.name === 'Known pathogenic'

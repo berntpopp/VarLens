@@ -3,7 +3,7 @@
  * they answer (#570). The description is the preset chip's tooltip.
  *
  * These are seeded into the filter_presets table on migration v15 (v45 adds "Rare, not recurrent" to existing databases;
- * v54 / PG 0037 rename the older built-ins, see BUILT_IN_PRESET_RENAMES_V54).
+ * v53 / PG 0036 rename the older built-ins, see BUILT_IN_PRESET_RENAMES_V53).
  * Users can hide them but not delete them. The filter_json stores
  * a Partial<FilterState> object matching the shared FilterState type.
  *
@@ -87,18 +87,40 @@ export const BUILT_IN_PRESETS: readonly BuiltInPresetDef[] = [
 ] as const
 
 /**
- * Fixed record of the v54 / PG 0037 rename (#570): built-in name before, name
- * after. Both migrations also set the description current at the
- * time of writing (SQLite reads them from BUILT_IN_PRESETS, the PG SQL repeats
- * them); tests fail if either side drifts.
+ * Fixed record of the v53 / PG 0036 rename (#570): built-in name before, name
+ * after, description set. Frozen on purpose: later wording changes go in
+ * BUILT_IN_PRESETS (and a new migration), never here, because PG 0036 repeats
+ * these values in checksummed SQL.
  */
-export const BUILT_IN_PRESET_RENAMES_V54: ReadonlyArray<readonly [string, string]> = [
-  ['Rare Pathogenic', 'Rare known pathogenic'],
-  ['Rare HIGH', 'Rare loss-of-function'],
-  ['Rare HIGH+MOD', 'Rare protein-altering'],
-  ['Ultra Rare HIGH', 'Ultra-rare loss-of-function'],
-  ['ClinVar P/LP', 'Known pathogenic'],
-  ['HIGH Impact', 'Loss-of-function'],
-  ['Rare (1%)', 'Rare in population'],
-  ['CADD >= 20', 'Predicted deleterious']
+export const BUILT_IN_PRESET_RENAMES_V53: ReadonlyArray<
+  readonly [oldName: string, newName: string, description: string]
+> = [
+  [
+    'Rare Pathogenic',
+    'Rare known pathogenic',
+    'Rare (gnomAD AF <= 1%) and ClinVar pathogenic or likely pathogenic'
+  ],
+  [
+    'Rare HIGH',
+    'Rare loss-of-function',
+    'Rare (gnomAD AF <= 1%) and HIGH impact: stop, frameshift, splice site'
+  ],
+  [
+    'Rare HIGH+MOD',
+    'Rare protein-altering',
+    'Rare (gnomAD AF <= 1%) and HIGH or MODERATE impact, missense included'
+  ],
+  [
+    'Ultra Rare HIGH',
+    'Ultra-rare loss-of-function',
+    'Almost absent from gnomAD (AF <= 0.001%) and HIGH impact'
+  ],
+  ['ClinVar P/LP', 'Known pathogenic', 'ClinVar pathogenic or likely pathogenic, at any frequency'],
+  [
+    'HIGH Impact',
+    'Loss-of-function',
+    'HIGH impact (stop, frameshift, splice site), at any frequency'
+  ],
+  ['Rare (1%)', 'Rare in population', 'gnomAD AF <= 1%, or not in gnomAD'],
+  ['CADD >= 20', 'Predicted deleterious', 'CADD Phred score at least 20 (top 1% most deleterious)']
 ]
