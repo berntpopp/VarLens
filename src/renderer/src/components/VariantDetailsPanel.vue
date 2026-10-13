@@ -49,11 +49,11 @@
           />
           <ProteinPreviewStrip :variant="variant" class="mb-4" @open="openProteinView" />
 
-          <!-- Extension details for SV/CNV/STR variants (case mode only: cohort rows lack per-call SV fields like _sv_is_precise) -->
+          <!-- SV/CNV/STR details; a cohort row has no per-call fields, so it shows the call context only -->
           <ExtensionDetailsSection
-            v-if="mode === 'case'"
             :variant="variant as unknown as Record<string, unknown>"
             :genome-build="genomeBuild"
+            :summary-only="mode === 'cohort'"
           />
 
           <TranscriptSection

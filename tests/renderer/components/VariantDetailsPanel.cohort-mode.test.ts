@@ -25,7 +25,7 @@ const ASYNC_STUBS = Object.fromEntries(
 )
 
 describe('VariantDetailsPanel cohort mode (#503)', () => {
-  it('does not render ExtensionDetailsSection for cohort rows of type sv', () => {
+  it('renders the call context only for cohort rows of type sv (#539)', () => {
     setActivePinia(createPinia())
     installCapabilities({ runtime: 'desktop', role: 'user' })
     const cohortVariant = {
@@ -49,7 +49,9 @@ describe('VariantDetailsPanel cohort mode (#503)', () => {
         stubs: ASYNC_STUBS
       }
     })
-    expect(wrapper.findComponent(ExtensionDetailsSection).exists()).toBe(false)
+    const section = wrapper.findComponent(ExtensionDetailsSection)
+    expect(section.exists()).toBe(true)
+    expect(section.attributes('summary-only')).toBe('true')
   })
 
   it('renders ExtensionDetailsSection for case mode sv variants', () => {

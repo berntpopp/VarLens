@@ -57,3 +57,6 @@ export const CARRIER_FREQUENCY_PRESETS = [
   { label: '<= 5%', value: 0.05 },
   { label: '<= 10%', value: 0.1 }
 ] as const
+
+/** Cohort details of an SV/CNV row: the summary holds no per-call evidence (#539). */
+export const COHORT_CALL_EVIDENCE_NOTE =
