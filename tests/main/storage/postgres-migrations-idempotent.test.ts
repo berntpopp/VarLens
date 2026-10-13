@@ -139,15 +139,16 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
     )
     const variantResult = await probeClient.query<{ id: string }>(
       `INSERT INTO "${schema}".variants
-        (case_id, chr, pos, ref, alt, consequence, func, transcript)
-       VALUES ($1, '1', 101, 'C', 'T', 'LOW', 'synonymous_variant', 'NM_JSON.1')
+        (case_id, chr, pos, ref, alt, consequence, func, transcript, cdna, aa_change)
+       VALUES ($1, '1', 101, 'C', 'T', 'LOW', 'synonymous_variant', 'NM_JSON.1',
+         'c.1%3B2del', 'p.Pro814%3D')
        RETURNING id`,
       [caseResult.rows[0].id]
     )
     await probeClient.query(
       `INSERT INTO "${schema}".variant_transcripts
-        (variant_id, transcript_id, consequence, is_selected)
-       VALUES ($1, 'NM_JSON.1', 'LOW', 1)`,
+        (variant_id, transcript_id, consequence, is_selected, aa_change)
+       VALUES ($1, 'NM_JSON.1', 'LOW', 1, 'p.Pro814%3D')`,
       [variantResult.rows[0].id]
     )
 
@@ -171,8 +172,21 @@ describe.skipIf(!RUN)('Postgres migrations: real-instance idempotency', () => {
       '0029',
       '0030',
       '0031',
-      '0032'
+      '0032',
+      '0033'
     ])
+
+    // 0033 decodes VEP escapes in rows imported before #547.
+    const decodedVariant = await probeClient.query<{ cdna: string; aa_change: string }>(
+      `SELECT cdna, aa_change FROM "${schema}".variants WHERE id = $1`,
+      [variantResult.rows[0].id]
+    )
+    expect(decodedVariant.rows).toEqual([{ cdna: 'c.1;2del', aa_change: 'p.Pro814=' }])
+    const decodedTranscript = await probeClient.query<{ aa_change: string }>(
+      `SELECT aa_change FROM "${schema}".variant_transcripts WHERE variant_id = $1`,
+      [variantResult.rows[0].id]
+    )
+    expect(decodedTranscript.rows).toEqual([{ aa_change: 'p.Pro814=' }])
 
     const migratedTranscript = await probeClient.query<{ consequence: string; func: string }>(
       `SELECT consequence, func

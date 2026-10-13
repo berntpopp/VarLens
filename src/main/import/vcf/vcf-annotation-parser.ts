@@ -7,7 +7,7 @@
 
 import type { VcfHeader, AnnotationResult } from './types'
 import { IMPACT_RANK_BY_LEVEL } from '../../../shared/config/severity.config'
-import { decodeVepHgvs } from '../../../shared/utils/hgvs'
+import { VEP_CSQ_VALUE_ESCAPES } from '../../../shared/config/vep.config'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptInsertRow
@@ -145,7 +145,7 @@ function parseCsqForAlleles(
     const fields = new Map<string, string>()
 
     for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
-      if (parts[i] !== '') fields.set(csqFieldNames[i], parts[i])
+      if (parts[i] !== '') fields.set(csqFieldNames[i], decodeCsqValue(parts[i]))
     }
 
     parsed.push({ fields, allele: fields.get('Allele') ?? '' })
@@ -187,6 +187,14 @@ function parseCsqForAlleles(
   return grouped.map(buildCsqResult)
 }
 
+const CSQ_ESCAPE_PATTERN = /%(?:3B|3D|2C|7C|20|25)/gi
+
+/** Undo VEP's CSQ escapes after splitting on `,` and `|`; unknown `%xx` and `&` stay as written. */
+function decodeCsqValue(value: string): string {
+  if (!value.includes('%')) return value
+  return value.replace(CSQ_ESCAPE_PATTERN, (escape) => VEP_CSQ_VALUE_ESCAPES[escape.toUpperCase()])
+}
+
 function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
@@ -209,8 +217,8 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
       // Canonical model: consequence = IMPACT level, func = SO term.
       consequence: semantics.consequence,
       func: semantics.func,
-      cdna: decodeVepHgvs(t.fields.get('HGVSc') ?? null),
-      aa_change: decodeVepHgvs(t.fields.get('HGVSp') ?? null),
+      cdna: t.fields.get('HGVSc') ?? null,
+      aa_change: t.fields.get('HGVSp') ?? null,
       hpo_sim_score: null,
       moi: null,
       is_selected: 0
@@ -237,8 +245,8 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
     consequence: best?.fields.get('Consequence') ?? null,
     impact: bestSemantics.consequence,
     transcript: best?.fields.get('Feature') ?? null,
-    cdna: decodeVepHgvs(best?.fields.get('HGVSc') ?? null),
-    aaChange: decodeVepHgvs(best?.fields.get('HGVSp') ?? null),
+    cdna: best?.fields.get('HGVSc') ?? null,
+    aaChange: best?.fields.get('HGVSp') ?? null,
     gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
     cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
     clinvar: clinvarStr ?? null,

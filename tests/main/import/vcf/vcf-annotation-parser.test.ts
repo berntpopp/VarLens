@@ -97,6 +97,23 @@ describe('vcf-annotation-parser', () => {
       expect(result.transcripts[0].aa_change).toBe('ENSP00000354346.4:p.Ala62=')
     })
 
+    it('decodes VEP percent-escapes in every CSQ value once, leaving unknown escapes and & alone', () => {
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant&intron_variant|LOW|COMT|E1|Transcript|T1|protein_coding|||c.1%3B2del|p.Pro814%253D||||||||||%2C%7C%20%3b%ZZ|'
+        ]
+      ])
+
+      const result = parseAnnotation(info, header, 'T')
+
+      expect(result.consequence).toBe('synonymous_variant&intron_variant')
+      expect(result.cdna).toBe('c.1;2del')
+      // %25 decodes to a literal %, never a second pass that would turn it into '='.
+      expect(result.aaChange).toBe('p.Pro814%3D')
+      expect(result.clinvar).toBe(',| ;%ZZ')
+    })
+
     it('rejects a non-enum IMPACT while preserving its SO consequence', () => {
       const info = new Map([
         [
