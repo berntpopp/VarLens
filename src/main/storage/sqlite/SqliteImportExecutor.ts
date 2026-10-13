@@ -147,6 +147,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       let capturedSkipReasons: string[] = []
       let capturedUnrankedClinvar: string[] | undefined
       let capturedAfOutOfRange: number | undefined
+      let capturedCsqAmbiguousSites: number | undefined
 
       try {
         worker.start({
@@ -184,6 +185,7 @@ export class SqliteImportExecutor implements StorageImportExecutor {
             capturedSkipReasons = msg.result.skipReasons ?? []
             capturedUnrankedClinvar = msg.result.unrankedClinvar
             capturedAfOutOfRange = msg.result.afOutOfRange
+            capturedCsqAmbiguousSites = msg.result.csqAmbiguousSites
             this.invalidateCohortMetadata()
           },
           onSummaryStale: () => onSummaryStale?.(),
@@ -221,6 +223,9 @@ export class SqliteImportExecutor implements StorageImportExecutor {
                   : {}),
                 ...(capturedAfOutOfRange !== undefined
                   ? { afOutOfRange: capturedAfOutOfRange }
+                  : {}),
+                ...(capturedCsqAmbiguousSites !== undefined
+                  ? { csqAmbiguousSites: capturedCsqAmbiguousSites }
                   : {})
               })
             } else if (detail?.status === 'skipped') {

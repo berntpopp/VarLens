@@ -312,6 +312,7 @@ async function startMultiFileImportSqlite(
   let totalVariants = firstResult.variantCount
   const unrankedLists: Array<string[] | undefined> = [firstResult.unrankedClinvar]
   let afOutOfRange = firstResult.afOutOfRange ?? 0
+  let csqAmbiguousSites = firstResult.csqAmbiguousSites ?? 0
   let totalSkipped = firstResult.skipped
 
   // The files of one case are checked against each other: the first file's own
@@ -384,6 +385,7 @@ async function startMultiFileImportSqlite(
         totalSkipped += result.skipped
         unrankedLists.push(result.unrankedClinvar)
         afOutOfRange += result.afOutOfRange ?? 0
+        csqAmbiguousSites += result.csqAmbiguousSites ?? 0
         outcomes.set(index, {
           filePath: spec.filePath,
           variantType: spec.variantType,
@@ -413,7 +415,8 @@ async function startMultiFileImportSqlite(
     files: fileResults,
     elapsed: Date.now() - startTime,
     ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-    ...(afOutOfRange > 0 ? { afOutOfRange } : {})
+    ...(afOutOfRange > 0 ? { afOutOfRange } : {}),
+    ...(csqAmbiguousSites > 0 ? { csqAmbiguousSites } : {})
   }
 }
 

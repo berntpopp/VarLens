@@ -134,6 +134,7 @@ export interface PostgresImportWorkerCompleteMessage {
     unrankedClinvar?: string[]
     /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
     afOutOfRange?: number
+    csqAmbiguousSites?: number
   }
 }
 

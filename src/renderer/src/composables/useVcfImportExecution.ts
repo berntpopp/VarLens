@@ -129,7 +129,8 @@ export function useVcfImportExecution({
             variantCount: result.variantCount,
             // Data warnings (unranked ClinVar, gnomAD AF range) for the summary.
             unrankedClinvar: result.unrankedClinvar,
-            afOutOfRange: result.afOutOfRange
+            afOutOfRange: result.afOutOfRange,
+            csqAmbiguousSites: result.csqAmbiguousSites
           })
         } catch (error) {
           if (finishCancellation(generation)) return
