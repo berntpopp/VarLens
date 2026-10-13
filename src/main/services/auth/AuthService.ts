@@ -77,6 +77,16 @@ export class AuthService {
     }
   }
 
+  private async recordFailedAttempt(userId: number, now: Date): Promise<void> {
+    await this.writer({
+      op: 'recordFailedLogin',
+      userId,
+      now: now.toISOString(),
+      lockUntil: new Date(now.getTime() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString(),
+      maxAttempts: MAX_FAILED_ATTEMPTS
+    })
+  }
+
   async authenticate(username: string, password: string): Promise<AuthResult> {
     const user = this.db
       .prepare('SELECT * FROM users WHERE username = ? AND is_active = 1')
@@ -84,11 +94,12 @@ export class AuthService {
 
     if (!user) return { success: false, user: null }
 
-    // Check lockout
+    // One clock reading for both the lock check and the failed-attempt write.
+    const now = new Date()
     if (
       user.locked_until !== null &&
       user.locked_until !== '' &&
-      new Date(user.locked_until) > new Date()
+      new Date(user.locked_until) > now
     ) {
       return { success: false, user: null, locked: true }
     }
@@ -96,12 +107,7 @@ export class AuthService {
     const valid = await this.passwordProvider.verifyPassword(user.password_hash, password)
 
     if (!valid) {
-      const newCount = user.failed_login_count + 1
-      const lockedUntil =
-        newCount >= MAX_FAILED_ATTEMPTS
-          ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString()
-          : null
-      await this.writer({ op: 'recordFailedLogin', userId: user.id, count: newCount, lockedUntil })
+      await this.recordFailedAttempt(user.id, now)
       return { success: false, user: null }
     }
 
@@ -188,7 +194,11 @@ export class AuthService {
     if (!user) return false
 
     const valid = await this.passwordProvider.verifyPassword(user.password_hash, oldPassword)
-    if (!valid) return false
+    if (!valid) {
+      // A wrong current password is a failed attempt like a wrong login (#563).
+      await this.recordFailedAttempt(user.id, new Date())
+      return false
+    }
 
     const passwordHash = await this.passwordProvider.hashPassword(newPassword)
     await this.writer({ op: 'changePassword', username, passwordHash })
