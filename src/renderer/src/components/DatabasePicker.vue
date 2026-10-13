@@ -36,6 +36,7 @@
         <v-list-item
           v-for="db in databaseStore.recentDatabases"
           :key="db.path"
+          :disabled="databaseStore.isLoading"
           @click="handleOpenRecent(db.path)"
         >
           <template #prepend>
@@ -112,6 +113,7 @@
                 variant="text"
                 density="compact"
                 :aria-label="`Connect PostgreSQL workspace ${profile.name}`"
+                :disabled="databaseStore.isLoading"
                 @click.stop="handleOpenPostgresProfile(profile.id)"
               >
                 <v-icon :icon="mdiConnection" size="x-small" />
@@ -153,14 +155,14 @@
       <v-divider />
 
       <!-- Actions -->
-      <v-list-item @click="handleOpen">
+      <v-list-item :disabled="databaseStore.isLoading" @click="handleOpen">
         <template #prepend>
           <v-icon :icon="mdiFolderOpen" />
         </template>
         <v-list-item-title>Open...</v-list-item-title>
       </v-list-item>
 
-      <v-list-item @click="handleCreate">
+      <v-list-item :disabled="databaseStore.isLoading" @click="handleCreate">
         <template #prepend>
           <v-icon :icon="mdiDatabasePlus" />
         </template>
