@@ -227,12 +227,14 @@ function ensureScopeOrClear(
   const dbChanged = dbPath !== null && lastDbPath !== null && dbPath !== lastDbPath
   const caseChanged = caseId !== null && lastCaseId !== null && caseId !== lastCaseId
   const buildChanged = build !== null && lastBuild !== null && build !== lastBuild
+  // A case whose build is not known yet must not read entries of a known build.
+  const buildUnknown = caseId !== null && build === null && lastBuild !== null
 
-  if (dbChanged || caseChanged || buildChanged) clearEntries()
+  if (dbChanged || caseChanged || buildChanged || buildUnknown) clearEntries()
 
   if (dbPath !== null) lastDbPath = dbPath
   if (caseId !== null) lastCaseId = caseId
-  if (build !== null) lastBuild = build
+  if (build !== null || buildUnknown) lastBuild = build
 }
 
 /**

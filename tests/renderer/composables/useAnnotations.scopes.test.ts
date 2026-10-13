@@ -171,4 +171,20 @@ describe('global annotations of one genome build', () => {
     expect(b37.isGlobalStarred(...V)).toBe(false)
     expect(b38.isGlobalStarred(...V)).toBe(false)
   })
+
+  it('a case request of unknown build drops another build entries (#577)', async () => {
+    const b38 = useAnnotations({ genomeBuild: 'GRCh38' })
+    await b38.loadGlobalAnnotationsBatch([ROW])
+    expect(b38.isGlobalStarred(...V)).toBe(true)
+    // A case whose build is not known yet: the GRCh38 entries may be another build's.
+    let answer!: (value: unknown) => void
+    vi.mocked(window.api.annotations.batchGet).mockReturnValueOnce(
+      new Promise((resolve) => (answer = resolve)) as never
+    )
+    const unknown = useAnnotations({ genomeBuild: null })
+    const load = unknown.loadAnnotationsBatch(CASE_ID, [ROW])
+    expect(unknown.isGlobalStarred(...V)).toBe(false)
+    answer({ [KEY]: { global: null, perCase: null } })
+    await load
+  })
 })
