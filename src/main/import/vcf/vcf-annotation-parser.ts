@@ -21,6 +21,7 @@ import {
   splitBounded,
   VcfResourceLimitError
 } from './vcf-resource-limits'
+import { csqAlleleSpellings, isVepMinimal } from './vcf-csq-allele'
 
 const MAX_VCF_TOTAL_ANNOTATION_MATCHES = 100_000
 
@@ -89,7 +90,8 @@ export function parseAnnotationsForAlleles(
       altAlleles,
       ref,
       originalAltIndexes,
-      originalAltAlleles
+      originalAltAlleles,
+      isVepMinimal(header)
     )
   }
 
@@ -113,7 +115,8 @@ function parseCsqForAlleles(
   altAlleles: string[],
   ref: string,
   originalAltIndexes: number[],
-  originalAltAlleles: string[]
+  originalAltAlleles: string[],
+  minimal: boolean
 ): AnnotationResult[] {
   const csqRaw = info.get('CSQ')
   if (csqRaw == null || csqRaw === '') return altAlleles.map(() => emptyResult())
@@ -170,12 +173,14 @@ function parseCsqForAlleles(
       totalMatches = pushBounded(grouped, targetIndex, transcript, totalMatches, 'CSQ')
     }
   } else {
-    assertCsqPotentialMatchBudget(parsed, altAlleles, ref)
+    const spellingsOf = (alt: string): Set<string> =>
+      csqAlleleSpellings(alt, ref, originalAltAlleles, minimal)
+    assertCsqPotentialMatchBudget(parsed, altAlleles, spellingsOf)
     const targetIndexes = buildCsqAlleleTargetIndex(
       altAlleles,
       originalAltIndexes,
       originalAltAlleles,
-      ref
+      spellingsOf
     )
     for (const transcript of parsed) {
       for (const targetIndex of targetIndexes.get(transcript.allele) ?? []) {
@@ -408,14 +413,9 @@ function buildCsqAlleleTargetIndex(
   altAlleles: string[],
   originalAltIndexes: number[],
   originalAltAlleles: string[],
-  ref: string
+  spellingsOf: (alt: string) => Set<string>
 ): Map<string, number[]> {
-  // A derived spelling ('-', first base trimmed) never claims an allele that
-  // another ALT spells exactly: G>A,GA keeps `A` for the SNV.
-  const exactAlts = new Set(originalAltAlleles)
-  const spellingsOf = (alt: string): string[] =>
-    [...csqAlleleSpellings(alt, ref)].filter((s) => s === alt || !exactAlts.has(s))
-
+  // A spelling two ALTs share is ambiguous: neither gets it (fail closed).
   const spellingCounts = new Map<string, number>()
   for (const originalAlt of originalAltAlleles) {
     for (const spelling of spellingsOf(originalAlt)) {
@@ -437,11 +437,11 @@ function buildCsqAlleleTargetIndex(
 function assertCsqPotentialMatchBudget(
   transcripts: CsqTranscript[],
   altAlleles: string[],
-  ref: string
+  spellingsOf: (alt: string) => Set<string>
 ): void {
   const potentialTargets = new Map<string, number>()
   for (const alt of altAlleles) {
-    for (const spelling of csqAlleleSpellings(alt, ref)) {
+    for (const spelling of spellingsOf(alt)) {
       potentialTargets.set(spelling, (potentialTargets.get(spelling) ?? 0) + 1)
     }
   }
@@ -455,13 +455,6 @@ function assertCsqPotentialMatchBudget(
       )
     }
   }
-}
-
-function csqAlleleSpellings(altAllele: string, ref: string): Set<string> {
-  const spellings = new Set<string>([altAllele])
-  if (altAllele.length < ref.length) spellings.add('-')
-  if (altAllele.length > 1) spellings.add(altAllele.substring(1))
-  return spellings
 }
 
 function buildAnnAlleleTargetIndex(
