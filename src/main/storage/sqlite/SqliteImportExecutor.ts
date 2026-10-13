@@ -21,9 +21,7 @@ import { withImportJobProgress } from '../import-job-progress'
 import { workerErrorToError } from '../import-worker-errors'
 import { importDataReport } from '../../import/unranked-clinvar'
 import { UniqueConstraintError } from '../../database/errors'
-import { BedFilter } from '../../import/vcf/bed-filter'
 import type { DatabaseService } from '../../database/DatabaseService'
-import type { ImportFilters } from '../../import/vcf/import-filters'
 import type { MultiFileImportResult, ImportCallbacks } from '../../ipc/handlers/import-logic'
 import type { StorageSession } from '../session'
 import type {
@@ -44,8 +42,7 @@ export interface MultiFileImportDelegateInput {
   caseName: string
   files: StorageImportMultiFileParams['files']
   vcfOptions?: StorageImportMultiFileParams['vcfOptions']
-  filters?: ImportFilters
-  /** The same filters before translation: the first file's worker loads the BED file itself. */
+  /** The import worker loads the BED file itself. */
   storageFilters?: StorageImportFileFilters
   callbacks: ImportCallbacks
 }
@@ -74,7 +71,8 @@ export interface SqliteImportExecutorOptions {
 
 export class SqliteImportExecutor implements StorageImportExecutor {
   private readonly getDatabaseService: () => DatabaseService
-  private readonly createWorkerClient: () => ImportWorkerClient
+  /** Also starts the multi-file append session (import-logic-append.ts). */
+  readonly createWorkerClient: () => ImportWorkerClient
   private readonly multiFileImportDelegate: MultiFileImportDelegate
   private readonly getSession: (() => StorageSession) | undefined
   private workerClient: ImportWorkerClient | null = null
@@ -108,7 +106,6 @@ export class SqliteImportExecutor implements StorageImportExecutor {
         getSession,
         this.getDatabaseService,
         input.callbacks,
-        input.filters,
         input.storageFilters && {
           ...input.storageFilters,
           bedFile: input.storageFilters.bedFilePath
@@ -302,7 +299,6 @@ export class SqliteImportExecutor implements StorageImportExecutor {
     params: StorageImportMultiFileParams
   ): Promise<StorageImportMultiFileResult> {
     const startedAt = Date.now()
-    const filters = await this.translateFilters(params.filters)
 
     // NOTE: params.onFileComplete is intentionally NOT plumbed through here.
     // The existing startMultiFileImport / ImportCallbacks shape in
@@ -328,7 +324,6 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       caseName: params.caseName,
       files: params.files,
       vcfOptions: params.vcfOptions,
-      filters,
       storageFilters: params.filters,
       callbacks
     })
@@ -344,48 +339,6 @@ export class SqliteImportExecutor implements StorageImportExecutor {
       errors: [],
       elapsed: result.elapsed > 0 ? result.elapsed : Date.now() - startedAt,
       ...importDataReport(result)
-    }
-  }
-
-  /**
-   * Translate `StorageImportFileFilters` (the storage-layer shape with
-   * `bedFilePath`) into `ImportFilters` (the import-logic shape with a
-   * `BedFilter` instance). Returns `undefined` when `filters` is absent or
-   * contains no active constraints, mirroring the behaviour of
-   * `buildImportFiltersFromIpc` in `import.ts`.
-   */
-  private async translateFilters(
-    filters?: StorageImportFileFilters
-  ): Promise<ImportFilters | undefined> {
-    if (filters === undefined) return undefined
-
-    const hasAny =
-      (filters.bedFilePath !== undefined &&
-        filters.bedFilePath !== null &&
-        filters.bedFilePath !== '') ||
-      filters.passOnly === true ||
-      (filters.minQual !== undefined && filters.minQual !== null) ||
-      (filters.minGq !== undefined && filters.minGq !== null) ||
-      (filters.minDp !== undefined && filters.minDp !== null)
-
-    if (!hasAny) return undefined
-
-    let bedFilter: BedFilter | undefined
-    if (
-      filters.bedFilePath !== undefined &&
-      filters.bedFilePath !== null &&
-      filters.bedFilePath !== ''
-    ) {
-      bedFilter = await BedFilter.fromFile(filters.bedFilePath, filters.bedPadding ?? 0)
-    }
-
-    return {
-      bedFilter,
-      bedPadding: filters.bedPadding ?? 0,
-      passOnly: filters.passOnly ?? false,
-      minQual: filters.minQual ?? null,
-      minGq: filters.minGq ?? null,
-      minDp: filters.minDp ?? null
     }
   }
 

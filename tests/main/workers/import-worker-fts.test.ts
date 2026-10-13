@@ -1,8 +1,9 @@
 // @vitest-environment node
 /**
- * #559: a small import into a populated database keeps the FTS row triggers
- * live and rebuilds nothing; a bulk session (or one that finds the triggers
- * gone) still rebuilds the whole index once at the end.
+ * #559: a small import into a populated database indexes only the rows it
+ * added (above the session's watermark) and rebuilds nothing; a bulk session,
+ * an overwrite, or one that finds the triggers gone still rebuilds the whole
+ * index once at the end. The triggers are back after every session.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -65,7 +66,7 @@ describe('import worker: FTS upkeep per session (#559)', () => {
       .run(id, gene)
   }
 
-  it('a small import keeps the triggers, rebuilds nothing, and search stays exact', async () => {
+  it('a small import indexes only its own rows, rebuilds nothing, and search stays exact', async () => {
     await populate()
     leaveInterruptedCase('GONEGENE')
     expect(hits('GONEGENE')).toEqual({ indexed: 1, stored: 1 })

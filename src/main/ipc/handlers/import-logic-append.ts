@@ -1,270 +1,109 @@
 /**
- * Append an additional VCF file to an existing case.
- *
- * Unlike startImport (which creates a new case via a worker thread), this
- * variant reuses an existing caseId and streams variants into the same
- * case_id through an isolated SQLite connection. Parsing remains coordinated
- * by the main process, but unrelated main-connection writes cannot enter this
- * transaction. Used by the multi-file import session for
- * the 2nd..Nth files where we want a single case with per-file provenance.
- *
- * This runs on the main thread (not in a worker) because the worker
- * pipeline always creates a new case. That is slower for very large files
- * but simpler and sufficient for the initial multi-file import session.
- *
- * Contract:
- *   - The caller MUST have already called `db.variants.beginBulkInsert()`
- *     so FTS triggers are dropped for the duration of the append loop.
- *   - The caller MUST call `db.variants.finishBulkInsertNoCount()` and
- *     `db.variants.recalculateCaseVariantCount(caseId)` once all appends
- *     are complete (so FTS is rebuilt exactly once and variant_count
- *     reflects the sum across all appended files atomically).
- *   - The caller MUST ensure any genome build lock is enforced before
- *     calling this function (see checkGenomeBuildOrThrow below).
+ * Multi-file SQLite case: files 2..N are appended by the import worker in one
+ * session (#551), not on the Electron main thread. The worker appends each
+ * file in its own transaction (rows, variant_count, summary flag) and rebuilds
+ * the cohort summary once at the session end (workers/import-append.ts).
  */
-import { createInterface } from 'node:readline'
-import { DATABASE_CONFIG, IMPORT_MESSAGES } from '../../../shared/config'
-import { createBoundedBatcher } from '../../import/bounded-batcher'
-
-import { createCappedLineStream } from '../../import/stream-utils'
-import { parseVcfHeader, parseVcfHeaderFromLines } from '../../import/vcf/vcf-header-parser'
-import {
-  parseVcfLine,
-  resolveVcfSelectedSampleColumn,
-  type VcfSelectedSampleColumn
-} from '../../import/vcf/vcf-line-parser'
-import { mapVcfRecord, seedVcfFields } from '../../import/vcf/VcfMapper'
-import { FieldProfileResolver } from '../../../shared/utils/import-field-profile'
-import { detectCaller } from '../../import/vcf/caller-detector'
-import { DEFAULT_INFO_FIELD_MAPPINGS } from '../../import/vcf/info-field-registry'
-import type { VcfHeader } from '../../import/vcf/types'
-import type { ImportFilters } from '../../import/vcf/import-filters'
-import { passesPreMappingFilters, passesPostMappingFilters } from '../../import/vcf/import-filters'
-import { VcfHeaderBudget } from '../../import/vcf/vcf-header-limits'
-import { isFatalImportRowError } from '../../import/vcf/vcf-resource-limits'
 import type { DatabaseService } from '../../database/DatabaseService'
-import { mainLogger } from '../../services/MainLogger'
-import {
-  resetUnrankedClinvar,
-  takeUnrankedClinvar,
-  unrankedClinvarLogLine
-} from '../../import/unranked-clinvar'
-import { resetAfOutOfRange, takeAfOutOfRange } from '../../import/af-out-of-range'
-import { openWorkerDatabase } from '../../workers/worker-db'
-import { prepareStatements } from '../../workers/import-pipeline'
-import type { ImportCallbacks, ImportResult, VcfImportOptions } from './import-logic'
+import { parseVcfHeader } from '../../import/vcf/vcf-header-parser'
+import { ImportWorkerClient } from '../../workers/import-worker-client'
+import { API_CONFIG } from '../../../shared/config/api.config'
+import type { FileImportRequest } from '../../../shared/types/import-worker'
+import type { VcfImportOptions } from './import-logic'
 
-const APPEND_BATCH_SIZE = 5000
+/** Outcome of one appended file; `error` set when it was not appended. */
+export interface AppendedFile {
+  variantCount: number
+  skipped: number
+  error?: string
+  unrankedClinvar?: string[]
+  afOutOfRange?: number
+}
+
+export interface AppendFilesParams {
+  db: DatabaseService
+  caseId: number
+  filePaths: string[]
+  vcfOptions?: VcfImportOptions
+  /** Filters as the worker takes them (it loads the BED file itself). */
+  filters?: FileImportRequest['vcfFilters']
+  /** Rows inserted so far into `filePaths[index]`. */
+  onProgress?: (index: number, count: number, skipped: number) => void
+  /** The worker flagged the cohort summary stale (it rebuilds before it ends). */
+  onSummaryStale?: () => void
+  signal?: AbortSignal
+  createWorkerClient?: () => ImportWorkerClient
+}
+
+const NOT_IMPORTED = 'Not imported'
 
 /**
- * Append a VCF file to an existing case through an isolated write connection.
- *
- * Does NOT touch FTS triggers, does NOT update variant_count, and does NOT
- * rebuild the cohort summary — the caller (startMultiFileImport) manages all
- * end-of-session housekeeping across every appended file.
- *
- * Applies the same import filters (PASS-only, minQual, BED, minGq, minDp) as
- * the worker-backed single-file path (VcfStrategy).
+ * Append every file to the published case in one worker session. Resolves
+ * with one outcome per file, in order; each file is committed or rolled back
+ * as a whole, also when the worker dies.
  */
-export async function importAdditionalFileToCase(
-  caseId: number,
-  filePath: string,
-  vcfOptions: VcfImportOptions | undefined,
-  getDb: () => DatabaseService,
-  callbacks: ImportCallbacks,
-  importFilters?: ImportFilters,
-  signal?: AbortSignal
-): Promise<ImportResult> {
-  const db = getDb()
-  const appendDb = openWorkerDatabase(db.getPath(), db.getEncryptionKey())
-  const statements = prepareStatements(appendDb)
-  const startTime = Date.now()
+export function appendFilesInWorker(p: AppendFilesParams): Promise<AppendedFile[]> {
+  const outcomes: AppendedFile[] = p.filePaths.map(() => ({
+    variantCount: 0,
+    skipped: 0,
+    error: NOT_IMPORTED
+  }))
+  const files: FileImportRequest[] = p.filePaths.map((filePath) => ({
+    filePath,
+    caseName: '',
+    isDuplicate: false,
+    duplicateStrategy: 'skip',
+    appendToCaseId: p.caseId,
+    vcfSelectedSamples:
+      p.vcfOptions?.selectedSample != null && p.vcfOptions.selectedSample !== ''
+        ? [p.vcfOptions.selectedSample]
+        : undefined,
+    fieldProfile: p.vcfOptions?.fieldProfile,
+    vcfFilters: p.filters
+  }))
+  const client = (p.createWorkerClient ?? (() => new ImportWorkerClient()))()
 
-  // Shared capped reader guards against a giant single line and a
-  // decompression bomb -- see stream-utils.ts for the cap rationale.
-  const { stream } = createCappedLineStream(filePath)
-  stream.on('error', () => undefined)
-  const rl = createInterface({ input: stream, crlfDelay: Infinity })
-  rl.on('error', () => undefined)
-
-  const headerLines: string[] = []
-  const headerBudget = new VcfHeaderBudget()
-  let header: VcfHeader | null = null
-  let activeSample = ''
-  let activeSampleColumn: VcfSelectedSampleColumn | null = null
-  let callerName: string | null = null
-  const fields = new FieldProfileResolver(vcfOptions?.fieldProfile)
-  // The keys the case's earlier files assigned keep their meaning in this one.
-  const stored = appendDb
-    .prepare('SELECT field_dictionary FROM case_data_info WHERE case_id = ?')
-    .get(caseId) as { field_dictionary: string | null } | undefined
-  if (stored?.field_dictionary != null) fields.adopt(JSON.parse(stored.field_dictionary))
-
-  let totalInserted = 0
-  let totalSkipped = 0
-  const batch = createBoundedBatcher<Record<string, unknown>, void>({
-    maxRows: APPEND_BATCH_SIZE,
-    maxBytes: DATABASE_CONFIG.BATCH_INSERT_MAX_BYTES,
-    flush: (rows) => {
-      statements.insertBatch(caseId, rows)
-      totalInserted += rows.length
-    }
+  return new Promise<AppendedFile[]>((resolve) => {
+    const cancel = (): void => client.cancel()
+    p.signal?.addEventListener('abort', cancel, { once: true })
+    const settle = (): void => p.signal?.removeEventListener('abort', cancel)
+    client.start({
+      files,
+      dbPath: p.db.getPath(),
+      encryptionKey: p.db.getEncryptionKey(),
+      throttleMs: API_CONFIG.PROGRESS_THROTTLE_MS,
+      onProgress: (msg) => p.onProgress?.(msg.fileIndex, msg.variantCount, msg.skipped),
+      onSummaryStale: () => p.onSummaryStale?.(),
+      onFileComplete: (msg) => {
+        const { variantCount, skipped, unrankedClinvar, afOutOfRange } = msg.result
+        outcomes[msg.fileIndex] = {
+          variantCount,
+          skipped: skipped ?? 0,
+          unrankedClinvar,
+          afOutOfRange
+        }
+      },
+      onError: (msg) => {
+        if (msg.fileIndex >= 0) {
+          outcomes[msg.fileIndex] = { variantCount: 0, skipped: 0, error: msg.error }
+          return
+        }
+        // The worker died or failed as a whole: the files it reported are
+        // committed, the one in flight was rolled back with the rest.
+        settle()
+        for (const outcome of outcomes)
+          if (outcome.error === NOT_IMPORTED) outcome.error = msg.error
+        resolve(outcomes)
+      },
+      onComplete: (msg) => {
+        settle()
+        msg.results.details.forEach((detail, index) => {
+          if (detail.status === 'skipped') outcomes[index].error = detail.error ?? 'Skipped'
+        })
+        resolve(outcomes)
+      }
+    })
   })
-  const errors: string[] = []
-  const isCancelled = (): boolean => signal?.aborted === true
-
-  resetUnrankedClinvar()
-  resetAfOutOfRange()
-  try {
-    appendDb.exec('BEGIN IMMEDIATE')
-    try {
-      for await (const line of rl) {
-        if (isCancelled()) throw new Error('Import cancelled by user')
-        // Collect header lines
-        if (line.startsWith('#')) {
-          headerBudget.add(line)
-          headerLines.push(line)
-          continue
-        }
-
-        // Parse header once, on the first data line
-        if (header === null) {
-          header = parseVcfHeaderFromLines(headerLines)
-          activeSampleColumn = resolveVcfSelectedSampleColumn(
-            header.samples,
-            vcfOptions?.selectedSample,
-            true
-          )
-          activeSample = activeSampleColumn.name
-          seedVcfFields(fields, header, DEFAULT_INFO_FIELD_MAPPINGS)
-
-          const callerInfo = detectCaller(headerLines)
-          callerName = callerInfo.name !== 'unknown' ? callerInfo.name : null
-        }
-
-        // Set while parsing, acted on after: a failed insert must fail the
-        // import, not be reported as an unparseable line.
-        let full = false
-        try {
-          const record = parseVcfLine(
-            line,
-            header.samples,
-            (reason) => {
-              if (errors.length < 10) {
-                errors.push(`Line skipped at ${line.substring(0, 50)}: ${reason}`)
-              }
-            },
-            activeSampleColumn ?? undefined
-          )
-          if (record === null) {
-            totalSkipped++
-            continue
-          }
-
-          // Pre-mapping filter gate — shared with `VcfStrategy` via
-          // `import-filters.ts` so the worker path (first file) and the
-          // main-thread append path (2nd..Nth files) stay semantically
-          // identical.
-          // Filtered records are not "skipped": on every import path that
-          // count is the rows that could not be read.
-          if (!passesPreMappingFilters(record, importFilters)) continue
-
-          let mapped = mapVcfRecord(
-            record,
-            header,
-            activeSample,
-            DEFAULT_INFO_FIELD_MAPPINGS,
-            callerName,
-            fields
-          )
-
-          // Post-mapping filter gate — FORMAT/GQ and FORMAT/DP.
-          if (importFilters !== undefined) {
-            mapped = mapped.filter((v) => passesPostMappingFilters(v, importFilters))
-          }
-
-          for (const variant of mapped) {
-            full = batch.add(variant as unknown as Record<string, unknown>, line.length) || full
-          }
-        } catch (lineError) {
-          if (isCancelled()) {
-            throw Object.assign(new Error('Import cancelled by user'), { cause: lineError })
-          }
-          if (isFatalImportRowError(lineError)) throw lineError
-          totalSkipped++
-          if (errors.length < 10) {
-            errors.push(
-              `Line parse error at ${line.substring(0, 50)}: ${
-                lineError instanceof Error ? lineError.message : String(lineError)
-              }`
-            )
-          }
-        }
-
-        if (full) {
-          batch.flush()
-          callbacks.onProgress?.({
-            phase: 'inserting',
-            count: totalInserted,
-            elapsed: Date.now() - startTime,
-            skipped: totalSkipped
-          })
-          if (isCancelled()) throw new Error('Import cancelled by user')
-        }
-      }
-
-      // A file without rows never reached the header check above.
-      if (header === null)
-        resolveVcfSelectedSampleColumn(
-          parseVcfHeaderFromLines(headerLines).samples,
-          vcfOptions?.selectedSample,
-          true
-        )
-
-      // Flush remaining batch
-      if (batch.rows > 0) {
-        if (isCancelled()) throw new Error('Import cancelled by user')
-        batch.flush()
-      }
-      if (isCancelled()) throw new Error('Import cancelled by user')
-      const dictionary = fields.dictionary()
-      if (dictionary !== null) {
-        appendDb
-          .prepare(
-            `UPDATE case_data_info SET field_dictionary = json_patch(COALESCE(field_dictionary, '{}'), ?)
-             WHERE case_id = ?`
-          )
-          .run(JSON.stringify(dictionary), caseId)
-      }
-      appendDb.exec('COMMIT')
-    } catch (error) {
-      if (appendDb.inTransaction) appendDb.exec('ROLLBACK')
-      throw error
-    }
-  } finally {
-    // Ensure the file descriptor is released even on error
-    stream.destroy()
-    appendDb.close()
-  }
-
-  const unrankedClinvar = takeUnrankedClinvar()
-  if (unrankedClinvar !== undefined) {
-    mainLogger.warn(unrankedClinvarLogLine(filePath, unrankedClinvar), 'import')
-  }
-  const afOutOfRange = takeAfOutOfRange()
-  if (afOutOfRange !== undefined) {
-    mainLogger.warn(`${filePath}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`, 'import')
-  }
-
-  return {
-    caseId,
-    variantCount: totalInserted,
-    skipped: totalSkipped,
-    errors,
-    elapsed: Date.now() - startTime,
-    ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-    ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
-  }
 }
 
 /**
@@ -273,7 +112,7 @@ export async function importAdditionalFileToCase(
  *
  * Used by the multi-file session to enforce a per-case genome build lock:
  * if a subsequent file declares a different build than the case was created
- * with, the session aborts before any variants are inserted.
+ * with, the file is refused before any variants are inserted.
  *
  * Delegates to the shared `parseVcfHeader`, which is already routed through
  * the capped reader (giant-line + decompression-bomb guards) -- see

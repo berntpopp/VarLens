@@ -25,7 +25,7 @@ import {
 import {
   checkpointBetweenFiles,
   openWorkerDatabase,
-  rebuildFts,
+  restoreFts,
   rebuildCohortSummary
 } from './worker-db'
 import {
@@ -34,16 +34,14 @@ import {
   type ImportFtsFinalizationState
 } from './import-finalization'
 import {
-  DROP_FTS_TRIGGERS,
   DROP_INDEXES,
   RECREATE_INDEXES,
   keepsIndexesForSession,
-  prepareStatements,
-  streamInsertJson,
-  streamInsertVcf
+  prepareStatements
 } from './import-pipeline'
+import { appendFileToCase, streamFileIntoCase } from './import-append'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
-import { ftsTriggersComplete } from '../database/fts-trigger-management'
+import { ftsTriggersComplete, tearDownFtsTriggers } from '../database/fts-trigger-management'
 import { discardInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
@@ -78,7 +76,7 @@ export async function runImportSession(
     // Recovery, before anything is counted or dropped: what interrupted
     // imports left behind goes (import-recovery.ts) — the case a dead worker
     // was filling, named by the main process, and every case that was never
-    // published. Live FTS triggers take its rows out of the index.
+    // published. The FTS triggers, still up, take its rows out of the index.
     const ftsTriggersLive = ftsTriggersComplete(db)
     discardInterruptedImports(
       db,
@@ -86,17 +84,18 @@ export async function runImportSession(
       (caseId) => void stmts.deleteCase.run(caseId)
     )
 
-    // A bulk load relative to what is stored (import-index-sql.ts) drops the
-    // non-essential indexes and the FTS triggers, and rebuilds both at the
-    // end. A small session keeps both: row triggers index its rows and no
-    // whole-database FTS rebuild runs (#559). Missing triggers (a session
-    // that died) force the rebuild.
+    // FTS row triggers are down for every session: per-row FTS upkeep costs
+    // about 25x a bulk index (#551: 300k SVs into 1.2M rows, 349 s against
+    // 14 s). A bulk load relative to what is stored (import-index-sql.ts)
+    // also drops the non-essential indexes and rebuilds both at the end. A
+    // small session keeps the indexes and indexes only its own rows, above
+    // the watermark, instead of rebuilding the whole index (#559). Missing
+    // triggers (a session that died) force the rebuild.
     const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
     const keepIndexes = keepsIndexesForSession(storedCases, msg.files.length)
-    if (!keepIndexes || !ftsTriggersLive) {
-      db.exec(DROP_FTS_TRIGGERS)
-      ftsFinalizationState.ftsTriggersDropped = true
-    }
+    let ftsWatermark = keepIndexes && ftsTriggersLive ? maxVariantId(db) : null
+    tearDownFtsTriggers(db)
+    ftsFinalizationState.ftsTriggersDropped = true
     if (!keepIndexes) db.exec(DROP_INDEXES)
 
     // The cohort summary stays exact after every file instead of going stale
@@ -162,8 +161,100 @@ export async function runImportSession(
       resetUnrankedClinvar()
       resetAfOutOfRange()
       const fileName = basename(file.filePath)
+      const startTime = Date.now()
+      const skipTracker = new ImportSkipTracker()
+      const onProgress = (count: number): void => {
+        const now = Date.now()
+        if (now - lastProgressTime >= msg.throttleMs) {
+          lastProgressTime = now
+          const progressMsg: WorkerMessage = {
+            type: 'progress',
+            fileIndex,
+            totalFiles,
+            fileName,
+            overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
+            phase: 'inserting',
+            variantCount: count,
+            skipped: skipTracker.count
+          }
+          port.postMessage(progressMsg)
+        }
+      }
+      const onSkip = (reason: string): void => {
+        if (skipTracker.record(reason)) {
+          console.warn(`[import-worker] Record skipped in ${fileName}:`, reason)
+        }
+      }
+      const skipCancelled = (): void => {
+        results.push({
+          filePath: file.filePath,
+          fileName,
+          caseName: file.caseName,
+          status: 'skipped',
+          error: 'Cancelled by user'
+        })
+        skipped++
+      }
+      /** Tell the main process the file is in: only then does it count as imported. */
+      const reportImported = (caseId: number, variantCount: number): void => {
+        checkpointBetweenFiles(workerDb)
+        // Worker thread: no structured logger (documented console exception).
+        const unrankedClinvar = takeUnrankedClinvar()
+        if (unrankedClinvar !== undefined) {
+          console.warn(`[import-worker] ${unrankedClinvarLogLine(file.caseName, unrankedClinvar)}`)
+        }
+        const afOutOfRange = takeAfOutOfRange()
+        if (afOutOfRange !== undefined) {
+          console.warn(
+            `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
+          )
+        }
+        const extra = {
+          ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+          ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
+        }
+        port.postMessage({
+          type: 'file-complete',
+          fileIndex,
+          result: {
+            caseId,
+            caseName: file.caseName,
+            variantCount,
+            skipped: skipTracker.count,
+            skipReasons: skipTracker.reasons,
+            ...extra,
+            elapsed: Date.now() - startTime
+          }
+        })
+        results.push({
+          filePath: file.filePath,
+          fileName,
+          caseName: file.caseName,
+          status: 'success',
+          variantCount,
+          ...extra
+        })
+        succeeded++
+      }
 
       try {
+        if (file.appendToCaseId !== undefined) {
+          // Multi-file case: rows go into the published case (import-append.ts).
+          const added = await appendFileToCase({
+            db: workerDb,
+            summary,
+            file,
+            caseId: file.appendToCaseId,
+            batchSize,
+            stmts,
+            isCancelled,
+            onProgress,
+            onSkip
+          })
+          if (added === null) skipCancelled()
+          else reportImported(file.appendToCaseId, added)
+          continue
+        }
         // Validate file existence and accessibility before touching database or deleting existing case (F02)
         const fileStat = statSync(file.filePath)
         if (!fileStat.isFile()) {
@@ -223,9 +314,7 @@ export async function runImportSession(
           ...(existing ? { replacement: true } : {})
         })
 
-        const startTime = Date.now()
         let variantCount = 0
-        const skipTracker = new ImportSkipTracker()
         // What the case has contributed outside its own rows so far: nothing
         // until it is published, then its part of the cohort summary.
         let published = false
@@ -243,61 +332,20 @@ export async function runImportSession(
             0
           )
 
-          const onProgress = (count: number): void => {
-            const now = Date.now()
-            if (now - lastProgressTime >= msg.throttleMs) {
-              lastProgressTime = now
-              const progressMsg: WorkerMessage = {
-                type: 'progress',
-                fileIndex,
-                totalFiles,
-                fileName,
-                overallPercent: Math.round(((fileIndex + 0.5) / totalFiles) * 100),
-                phase: 'inserting',
-                variantCount: count,
-                skipped: skipTracker.count
-              }
-              port.postMessage(progressMsg)
-            }
-          }
-
-          const onSkip = (reason: string): void => {
-            if (skipTracker.record(reason)) {
-              console.warn(`[import-worker] Record skipped in ${fileName}:`, reason)
-            }
-          }
-
           const fields = new FieldProfileResolver(file.fieldProfile)
           try {
-            if (formatInfo.format === 'vcf') {
-              variantCount = await streamInsertVcf(
-                file.filePath,
-                formatInfo,
-                caseId,
-                batchSize,
-                stmts,
-                isCancelled,
-                file.vcfSelectedSamples,
-                onProgress,
-                onSkip,
-                undefined,
-                vcfFilters,
-                fields
-              )
-            } else {
-              variantCount = await streamInsertJson(
-                file.filePath,
-                formatInfo,
-                caseId,
-                batchSize,
-                stmts,
-                isCancelled,
-                onProgress,
-                undefined,
-                onSkip,
-                fields
-              )
-            }
+            variantCount = await streamFileIntoCase({
+              file,
+              formatInfo,
+              caseId,
+              batchSize,
+              stmts,
+              isCancelled,
+              onProgress,
+              onSkip,
+              vcfFilters,
+              fields
+            })
           } finally {
             stmts.finishBulkInsert(caseId, variantCount)
           }
@@ -306,14 +354,7 @@ export async function runImportSession(
             // Cancelled mid-file: the case holds only part of its file. Remove
             // it rather than reporting a truncated case as a successful import.
             summary.discardCase(() => stmts.deleteCase.run(caseId))
-            results.push({
-              filePath: file.filePath,
-              fileName,
-              caseName: file.caseName,
-              status: 'skipped',
-              error: 'Cancelled by user'
-            })
-            skipped++
+            skipCancelled()
             continue
           }
 
@@ -333,56 +374,15 @@ export async function runImportSession(
             if (existing) {
               // In the publishing transaction: the old case goes, with its
               // summary contribution, only if the new one arrives.
+              // Indexed rows go without their triggers: rebuild at the end.
+              ftsWatermark = null
               summary.replaceCase(existing.id, () => stmts.deleteCase.run(existing.id))
               workerDb.prepare('UPDATE cases SET name = ? WHERE id = ?').run(file.caseName, caseId)
             }
             summary.addCase(caseId, totalFiles - fileIndex - 1)
           })
           published = true
-          checkpointBetweenFiles(db)
-          // Worker thread: no structured logger (documented console exception).
-          const unrankedClinvar = takeUnrankedClinvar()
-          if (unrankedClinvar !== undefined) {
-            console.warn(
-              `[import-worker] ${unrankedClinvarLogLine(file.caseName, unrankedClinvar)}`
-            )
-          }
-          const afOutOfRange = takeAfOutOfRange()
-          if (afOutOfRange !== undefined) {
-            console.warn(
-              `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
-            )
-          }
-
-          const elapsed = Date.now() - startTime
-
-          const fileCompleteMsg: WorkerMessage = {
-            type: 'file-complete',
-            fileIndex,
-            result: {
-              caseId,
-              caseName: file.caseName,
-              variantCount,
-              skipped: skipTracker.count,
-              skipReasons: skipTracker.reasons,
-              ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-              ...(afOutOfRange !== undefined ? { afOutOfRange } : {}),
-              elapsed
-            }
-          }
-          port.postMessage(fileCompleteMsg)
-
-          // Only a file the main process was told about counts as imported.
-          results.push({
-            filePath: file.filePath,
-            fileName,
-            caseName: file.caseName,
-            status: 'success',
-            variantCount,
-            ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-            ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
-          })
-          succeeded++
+          reportImported(caseId, variantCount)
           importedInBatch.add(file.caseName)
         } catch (importError) {
           // The published replacement of an overwritten case stays, though its
@@ -424,12 +424,8 @@ export async function runImportSession(
     // gets rows for indexes that exist at that moment.
     sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
     recreateSessionIndexes(db)
-    if (ftsFinalizationState.ftsTriggersDropped) {
-      rebuildFts(db)
-      ftsFinalizationState.ftsRebuilt = true
-    } else {
-      db.pragma('optimize')
-    }
+    restoreFts(db, ftsWatermark)
+    ftsFinalizationState.ftsRebuilt = true
     summary.finish()
 
     const completeMsg: WorkerMessage = {
@@ -514,6 +510,10 @@ if (parentPort) {
  */
 function publishCase(db: DatabaseType, publishInSummary: () => void): void {
   db.transaction(publishInSummary).immediate()
+}
+
+function maxVariantId(db: DatabaseType): number {
+  return (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM variants').get() as { id: number }).id
 }
 
 /** Recreate the indexes dropped for the bulk insert (idempotent, best-effort). */

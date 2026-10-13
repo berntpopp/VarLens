@@ -9,7 +9,11 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { createFTSTriggers } from '../database/schema'
-import { rebuildAllFtsIndexes } from '../database/fts-trigger-management'
+import {
+  ensureExtensionFtsTriggers,
+  indexFtsRowsAbove,
+  rebuildAllFtsIndexes
+} from '../database/fts-trigger-management'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import {
   REBUILD_VARIANT_SUMMARY_SQL,
@@ -111,8 +115,23 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
 export function rebuildFts(db: DatabaseType): void {
   rebuildAllFtsIndexes(db)
   db.exec(createFTSTriggers)
+  ensureExtensionFtsTriggers(db)
   db.exec('ANALYZE')
   db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
+}
+
+/**
+ * End of an import session whose FTS triggers were down: index only the rows
+ * above `watermark` (null: rebuild the whole index) and restore the triggers.
+ * A small session ends with a bounded PRAGMA optimize, not a full ANALYZE.
+ * Throws like {@link rebuildFts}.
+ */
+export function restoreFts(db: DatabaseType, watermark: number | null): void {
+  if (watermark === null) return rebuildFts(db)
+  indexFtsRowsAbove(db, watermark)
+  db.exec(createFTSTriggers)
+  ensureExtensionFtsTriggers(db)
+  db.pragma('optimize')
 }
 
 /**

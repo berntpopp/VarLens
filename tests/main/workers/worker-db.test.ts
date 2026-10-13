@@ -166,6 +166,31 @@ describe('openWorkerDatabaseReadOnly', () => {
 })
 
 describe('rebuildFts', () => {
+  it('restores extension FTS triggers a torn-down bracket lost (#551)', () => {
+    const db = trackDb(new Database(':memory:'))
+    initializeSchema(db)
+    runMigrations(db)
+    db.exec('DROP TRIGGER variant_sv_fts_ai; DROP TRIGGER variant_str_fts_ad')
+    rebuildFts(db)
+    db.exec(
+      "INSERT INTO cases (id, name, file_path, file_size, created_at) VALUES (1, 'c', '/c', 1, 0)"
+    )
+    db.exec(
+      "INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (1, 1, 'chr1', 1, 'N', '<DEL>')"
+    )
+    db.exec("INSERT INTO variant_sv (variant_id, event_id) VALUES (1, 'evtx')")
+    expect(
+      db.prepare("SELECT COUNT(*) AS c FROM variant_sv_fts WHERE variant_sv_fts MATCH 'evtx'").get()
+    ).toEqual({ c: 1 })
+    expect(
+      db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'variant_str_fts_ad'"
+        )
+        .get()
+    ).toBeDefined()
+  })
+
   it('lets a failure propagate so the caller keeps its recovery state (#559)', () => {
     const db = trackDb(new Database(':memory:'))
     initializeSchema(db)

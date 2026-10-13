@@ -264,7 +264,6 @@ describe('import-logic VCF + multi-file routing', () => {
       () => session as never,
       (() => ({})) as never,
       {},
-      undefined,
       { bedFile: '/abs/regions.bed', bedPadding: 50, passOnly: true }
     )
     const args = importMultiFile.mock.calls[0][0]
