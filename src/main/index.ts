@@ -34,7 +34,7 @@ import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
 import { installQuitCleanup } from './quit-cleanup'
 import { sweepStaleZipTempDirs } from './import/TempDirectoryManager'
 import { cleanupAllZipExtractions } from './ipc/handlers/batch-import-logic'
-import { setApiFetch } from './services/api/http-fetch'
+import { desktopApiFetch, setApiFetch } from './services/api/http-fetch'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -179,7 +179,7 @@ if (gotTheLock !== true) {
 
     // Reference API clients go through Chromium's network stack so the system
     // proxy and PAC apply (#126); net.fetch is only usable after app-ready.
-    setApiFetch(net.fetch)
+    setApiFetch(desktopApiFetch(net.fetch))
 
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')
