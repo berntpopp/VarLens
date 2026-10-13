@@ -237,12 +237,17 @@ export function mergedRegions(alleles: AlleleInput[]): string[] {
   return out.map((r) => `${r.chr}\t${r.beg}\t${r.end}`)
 }
 
+/** Runs a fixed bash script; paths come in as "$1", "$2", … so none is parsed as shell code. */
 function runBash(
-  cmd: string,
+  script: string,
+  args: string[],
   env: NodeJS.ProcessEnv
 ): Promise<{ status: number | null; stderr: string }> {
   return new Promise((resolve) => {
-    const p = spawn('bash', ['-c', cmd], { env, stdio: ['ignore', 'ignore', 'pipe'] })
+    const p = spawn('bash', ['-c', script, 'bash', ...args], {
+      env,
+      stdio: ['ignore', 'ignore', 'pipe']
+    })
     let stderr = ''
     p.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
     p.on('close', (status) => resolve({ status, stderr }))
@@ -284,19 +289,18 @@ export async function dbnsfpSubset(
       const out = join(outDir, `dbnsfp-${id}.part${i}.gz`)
       if (existsSync(out)) return out // finished by an earlier run
       writeFileSync(regionFile, rows.join('\n') + '\n')
-      const header = i === 0 ? '-h ' : ''
-      const cmd = `set -o pipefail; tabix ${header}'${DBNSFP_FILE}' -R '${regionFile}' | bgzip -c > '${out}.tmp' && mv '${out}.tmp' '${out}'`
+      const script = `set -o pipefail; tabix ${i === 0 ? '-h ' : ''}"$1" -R "$2" | bgzip -c > "$3.tmp" && mv "$3.tmp" "$3"`
       for (let attempt = 1; attempt <= 3; attempt++) {
-        const p = await runBash(cmd, env)
+        const p = await runBash(script, [DBNSFP_FILE, regionFile, out], env)
         if (p.status === 0) return out
         console.error(`dbNSFP part ${i} failed (${attempt}/3): ${p.stderr.slice(-300)}`)
       }
       throw new Error(`could not extract dbNSFP part ${i}`)
     })
   )
-  const quoted = partFiles.map((f) => `'${f}'`).join(' ')
   const p = await runBash(
-    `cat ${quoted} > '${subset}' && tabix -f -s 1 -b 2 -e 2 '${subset}' && rm ${quoted}`,
+    'out="$1"; shift; cat "$@" > "$out" && tabix -f -s 1 -b 2 -e 2 "$out" && rm "$@"',
+    [subset, ...partFiles],
     env
   )
   if (p.status !== 0) throw new Error(`dbNSFP subset index failed: ${p.stderr.slice(-300)}`)

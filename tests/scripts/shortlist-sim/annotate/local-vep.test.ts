@@ -191,3 +191,37 @@ describe('gene-restricted transcript selection (overlapping genes)', () => {
     })
   })
 })
+
+describe('dbnsfpSubset shell safety', () => {
+  it('passes paths as arguments, so a quote in the output directory is data, not shell code', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, chmodSync, existsSync, readdirSync } =
+      await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { dbnsfpSubset } = await import('../../../../scripts/shortlist-sim/annotate/local-vep')
+    const root = mkdtempSync(join(tmpdir(), 'dbnsfp-'))
+    const bin = join(root, 'bin')
+    const outDir = join(root, "it's; touch pwned")
+    for (const dir of [bin, outDir]) mkdirSync(dir, { recursive: true })
+    // Stub tools: tabix prints one row (or indexes with -f), bgzip -c copies stdin.
+    writeFileSync(
+      join(bin, 'tabix'),
+      '#!/bin/sh\nfor a; do last="$a"; done\ncase "$1" in -f) : > "$last.tbi";; *) printf "1\\t100\\n";; esac\n'
+    )
+    writeFileSync(join(bin, 'bgzip'), '#!/bin/sh\ncat\n')
+    for (const tool of ['tabix', 'bgzip']) chmodSync(join(bin, tool), 0o755)
+
+    const subset = await dbnsfpSubset(
+      [{ key: '1:100:A:G', chr: '1', pos: 100, ref: 'A', alt: 'G' }],
+      outDir,
+      {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`
+      }
+    )
+
+    expect(existsSync(`${subset}.tbi`)).toBe(true)
+    expect(existsSync(join(root, 'pwned'))).toBe(false)
+    expect(readdirSync(process.cwd())).not.toContain('pwned')
+  })
+})
