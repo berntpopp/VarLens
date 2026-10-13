@@ -30,6 +30,7 @@ import { quoteIdentifier } from '../storage/postgres/identifiers'
 import { classifyWorkerError } from '../storage/import-worker-errors'
 import { lockSummaryForWrite } from '../storage/postgres/cohort-summary-lock'
 import {
+  importDataReport,
   resetUnrankedClinvar,
   takeUnrankedClinvar,
   unrankedClinvarLogLine
@@ -221,9 +222,7 @@ export async function runImport(
       ...msg,
       result: {
         ...msg.result,
-        ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-        ...(afOutOfRange !== undefined ? { afOutOfRange } : {}),
-        ...(csqAmbiguousSites !== undefined ? { csqAmbiguousSites } : {})
+        ...importDataReport({ unrankedClinvar, afOutOfRange, csqAmbiguousSites })
       }
     })
   }

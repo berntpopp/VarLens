@@ -7,6 +7,7 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import { parseVcfHeader } from '../../import/vcf/vcf-header-parser'
 import { ImportWorkerClient } from '../../workers/import-worker-client'
+import { importDataReport } from '../../import/unranked-clinvar'
 import { API_CONFIG } from '../../../shared/config/api.config'
 import type { FileImportRequest } from '../../../shared/types/import-worker'
 import type { VcfImportOptions } from './import-logic'
@@ -76,14 +77,11 @@ export function appendFilesInWorker(p: AppendFilesParams): Promise<AppendedFile[
       onProgress: (msg) => p.onProgress?.(msg.fileIndex, msg.variantCount, msg.skipped),
       onSummaryStale: () => p.onSummaryStale?.(),
       onFileComplete: (msg) => {
-        const { variantCount, skipped, unrankedClinvar, afOutOfRange, csqAmbiguousSites } =
-          msg.result
+        const { variantCount, skipped } = msg.result
         outcomes[msg.fileIndex] = {
           variantCount,
           skipped: skipped ?? 0,
-          unrankedClinvar,
-          afOutOfRange,
-          csqAmbiguousSites
+          ...importDataReport(msg.result)
         }
       },
       onError: (msg) => {

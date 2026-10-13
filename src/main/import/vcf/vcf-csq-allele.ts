@@ -8,7 +8,8 @@ import type { VcfHeader } from './types'
  * The CSQ `Allele` spellings that may stand for one ALT, plus the ALT itself.
  * Default VEP (Parser/VCF.pm) trims the first base from REF and every ALT only
  * when the site has an indel and all alleles share that base, so each ALT has
- * one spelling (ATT>A,AT → '-','T'). `--minimal` trims each ALT on its own,
+ * one spelling (ATT>A,AT → '-','T'; CA>C,CC → '-','C'), never the untrimmed ALT
+ * then. `--minimal` trims each ALT on its own,
  * which can give two ALTs the same spelling; the uniqueness check then fails
  * closed (VEP's --allele_number resolves it).
  */
@@ -18,8 +19,8 @@ export function csqAlleleSpellings(
   allAlts: string[],
   minimal: boolean
 ): Set<string> {
-  const spellings = new Set<string>([altAllele])
   if (minimal) {
+    const spellings = new Set<string>([altAllele])
     if (altAllele.length < ref.length) spellings.add('-')
     if (altAllele.length > 1) spellings.add(altAllele.substring(1))
     return spellings
@@ -29,8 +30,7 @@ export function csqAlleleSpellings(
     first !== '' &&
     allAlts.some((alt) => alt.length !== ref.length) &&
     allAlts.every((alt) => alt.charAt(0) === first)
-  if (trimmed) spellings.add(altAllele.substring(1) || '-')
-  return spellings
+  return new Set([trimmed ? altAllele.substring(1) || '-' : altAllele])
 }
 
 const VEP_COMMAND_LINE_PREFIX = '##VEP-command-line='

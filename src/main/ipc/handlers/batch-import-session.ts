@@ -19,6 +19,7 @@ import { jobRunner } from '../../services/jobs/runner'
 import type { StorageSession } from '../../storage/session'
 import type { StorageWriteTask } from '../../storage/write-executor'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
+import { importDataReport } from '../../import/unranked-clinvar'
 import { resolveImportConcurrency } from '../../storage/import-concurrency'
 import type { StorageImportBatch } from '../../storage/import-executor'
 import { API_CONFIG } from '../../../shared/config/api.config'
@@ -238,15 +239,7 @@ export async function runSessionBatchImport(params: {
       if (existingId !== undefined) await swapIn(existingId, imported.caseId, caseName)
       result.succeeded++
       existingIds.set(caseName, imported.caseId)
-      const unranked = {
-        ...(imported.unrankedClinvar !== undefined
-          ? { unrankedClinvar: imported.unrankedClinvar }
-          : {}),
-        ...(imported.afOutOfRange !== undefined ? { afOutOfRange: imported.afOutOfRange } : {}),
-        ...(imported.csqAmbiguousSites !== undefined
-          ? { csqAmbiguousSites: imported.csqAmbiguousSites }
-          : {})
-      }
+      const unranked = importDataReport(imported)
       finish(
         { ...base, status: 'success', variantCount: imported.variantCount, ...unranked },
         { caseId: imported.caseId, variantCount: imported.variantCount, ...unranked }

@@ -26,6 +26,8 @@ export const COLUMN_INDICES: Readonly<Record<ColumnName, number>> = {
   CLINVAR: 72,
   GNOMAD_AF: 108,
   HPO_SIM_SCORE: 156,
+  // Not at a known position in header-less files.
+  HPO_MATCH: -1,
   MOI: 162
 }
 

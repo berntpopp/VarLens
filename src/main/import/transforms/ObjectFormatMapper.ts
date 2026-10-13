@@ -5,6 +5,7 @@ import { canonicalizeTranscriptSemantics } from '../../../shared/types/transcrip
 import { setRecordBytes } from '../bounded-batcher'
 import { OBJECT_FORMAT_COLUMNS } from '../../../shared/config/import-fields.config'
 import { FieldProfileResolver, jsonValueText } from '../../../shared/utils/import-field-profile'
+import { hpoMatchText } from './hpo-match'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -46,8 +47,8 @@ export interface ObjectFormatVariant {
   cdna?: string | null
   aa_change?: string | null
   moi?: MoiItem[] | null
-  /** Patient HPO terms that matched the gene (varvis), same item shape as `moi`. */
-  hpo_match?: MoiItem[] | null
+  /** Patient HPO terms that matched the gene (varvis): term objects like `moi`, or text. */
+  hpo_match?: MoiItem[] | MoiItem | string[] | string | null
 }
 
 /**
@@ -78,19 +79,6 @@ function normalizeNumber(value: unknown): number | null {
     return isNaN(num) ? null : num
   }
   return null
-}
-
-/** Matched HPO terms as `HP:0004322 Short stature; …` (id = abbreviation); null when none. */
-function hpoMatchText(value: unknown): string | null {
-  if (!Array.isArray(value)) return normalizeString(value)
-  const terms = value
-    .map((item: Partial<MoiItem> | null) =>
-      [item?.abbreviation, item?.name]
-        .filter((part) => typeof part === 'string' && part !== '')
-        .join(' ')
-    )
-    .filter((term) => term !== '')
-  return terms.length > 0 ? terms.join('; ') : null
 }
 
 /**

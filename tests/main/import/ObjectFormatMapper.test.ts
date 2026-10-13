@@ -123,6 +123,25 @@ describe('ObjectFormatMapper hpo_match (#580)', () => {
     expect(variant.info_json).toBeNull()
   })
 
+  it('keeps string items as they are and accepts a single term', async () => {
+    const rows = await runObjectTransform([
+      { chr: '1', pos: 1, ref: 'A', alt: 'G', hpo_match: ['HP:0004322', 'HP:0001363'] },
+      {
+        chr: '1',
+        pos: 2,
+        ref: 'A',
+        alt: 'G',
+        hpo_match: { accessionId: 1, name: 'Short stature', abbreviation: 'HP:0004322' }
+      },
+      { chr: '1', pos: 3, ref: 'A', alt: 'G', hpo_match: 'HP:0004322' }
+    ] as unknown as ObjectFormatVariant[])
+    expect(rows.map((r) => (r as Record<string, unknown>).hpo_match)).toEqual([
+      'HP:0004322; HP:0001363',
+      'HP:0004322 Short stature',
+      'HP:0004322'
+    ])
+  })
+
   it('keeps an empty or missing list null', async () => {
     const rows = await runObjectTransform([
       { chr: '1', pos: 1, ref: 'A', alt: 'G', hpo_match: [] },

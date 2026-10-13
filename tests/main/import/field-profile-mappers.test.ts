@@ -54,6 +54,35 @@ const HEADER = [
 ]
 
 describe('columnar mapper', () => {
+  it('stores HpoMatch in hpo_match like the object format, not in info_json (#580)', async () => {
+    const header = [
+      { id: 'Chr' },
+      { id: 'Pos' },
+      { id: 'Ref' },
+      { id: 'Alt' },
+      { id: 'HpoMatch', dataDictionary: { '7': 'HP:0004322 Short stature' } }
+    ]
+    const mapper = createFieldMapper(
+      dictionaries,
+      resolveColumnIndices(header),
+      undefined,
+      undefined,
+      header.length,
+      { header, fields: new FieldProfileResolver() }
+    )
+    const rows = await run(mapper, [
+      ['1', 10, 'A', 'G', [7, 'HP:0001363 Craniosynostosis']],
+      ['1', 11, 'A', 'G', []],
+      ['1', 12, 'A', 'G', null]
+    ])
+    expect(rows.map((r) => r.hpo_match)).toEqual([
+      'HP:0004322 Short stature; HP:0001363 Craniosynostosis',
+      null,
+      null
+    ])
+    expect(rows.map((r) => r.info_json)).toEqual([null, null, null])
+  })
+
   it('reads a slot the header lacks as absent, never from its default position', () => {
     const cols = resolveColumnIndices(HEADER)
     expect(cols.CHR).toBe(0)
