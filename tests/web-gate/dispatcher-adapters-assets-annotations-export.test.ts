@@ -71,6 +71,41 @@ describe('web dispatcher adapters: annotations, assets, and exports', () => {
     expect(writeExecute).not.toHaveBeenCalled()
   })
 
+  test('annotations refuse an ACMG override without a reason on the web too (#567)', async () => {
+    const { deps, writeExecute, reply } = makeDeps()
+    const { overrides } = buildDispatcher(deps)
+    const override = JSON.stringify({
+      pathogenic: [{ code: 'PVS1', strength: 'very_strong', confirmed: true }],
+      benign: [],
+      is_override: true
+    })
+
+    const perCase = await overrides['annotations:upsertPerCase'].handle(
+      [3, 9, { acmg_classification: 'Benign', acmg_evidence: override }],
+      {} as never,
+      reply as never,
+      deps
+    )
+    const global = await overrides['annotations:upsertGlobal'].handle(
+      [
+        'chr22',
+        12345,
+        'A',
+        'T',
+        { acmg_classification: 'Benign', acmg_evidence: override },
+        'GRCh38'
+      ],
+      {} as never,
+      reply as never,
+      deps
+    )
+
+    expect(reply.code).toHaveBeenCalledWith(400)
+    expect(perCase).toEqual({ error: 'invalid-per-case-annotation-upsert' })
+    expect(global).toEqual({ error: 'invalid-annotation-upsert' })
+    expect(writeExecute).not.toHaveBeenCalled()
+  })
+
   test('annotations.upsertPerCase normalizes ACMG shorthand before audited storage write', async () => {
     const { deps, execute, reply } = makeDeps()
     const { overrides } = buildDispatcher(deps)

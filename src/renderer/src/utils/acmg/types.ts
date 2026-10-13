@@ -1,7 +1,11 @@
-/**
- * ACMG/AMP evidence strength levels
- */
-export type EvidenceStrength = 'very_strong' | 'strong' | 'moderate' | 'supporting' | 'stand_alone'
+import type { EvidenceStrength } from '../../../../shared/acmg/acmg-calculator'
+export {
+  type EvidenceStrength,
+  DEFAULT_STRENGTHS,
+  CODE_STRENGTH_OVERRIDES,
+  getDefaultStrength,
+  EVIDENCE_POINTS
+} from '../../../../shared/acmg/acmg-calculator'
 
 /**
  * ACMG evidence direction
@@ -51,42 +55,6 @@ export const BENIGN_CODES = [
 export type PathogenicCode = (typeof PATHOGENIC_CODES)[number]
 export type BenignCode = (typeof BENIGN_CODES)[number]
 export type AcmgCode = PathogenicCode | BenignCode
-
-/**
- * Default strength for each evidence code prefix
- */
-export const DEFAULT_STRENGTHS: Record<string, EvidenceStrength> = {
-  PVS: 'very_strong',
-  PS: 'strong',
-  PM: 'moderate',
-  PP: 'supporting',
-  BA: 'stand_alone',
-  BS: 'strong',
-  BP: 'supporting'
-}
-
-/**
- * Per-code strength overrides based on ClinGen SVI recommendations.
- * These take precedence over prefix-based defaults.
- *
- * PM2: ClinGen SVI recommends using at supporting level only (PM2_Supporting).
- *       See: https://clinicalgenome.org/docs/pm2-recommendation-for-absence-rarity/
- */
-export const CODE_STRENGTH_OVERRIDES: Partial<Record<AcmgCode, EvidenceStrength>> = {
-  PM2: 'supporting'
-}
-
-/**
- * Get the recommended default strength for a given ACMG code,
- * considering ClinGen SVI per-code overrides.
- */
-export function getDefaultStrength(code: AcmgCode): EvidenceStrength {
-  if (code in CODE_STRENGTH_OVERRIDES) {
-    return CODE_STRENGTH_OVERRIDES[code as keyof typeof CODE_STRENGTH_OVERRIDES]!
-  }
-  const prefix = code.replace(/\d+$/, '')
-  return DEFAULT_STRENGTHS[prefix] ?? 'supporting'
-}
 
 /**
  * Human-readable descriptions for each ACMG evidence code (shown in tooltips)
@@ -160,17 +128,6 @@ export interface AcmgEvidenceCode {
 }
 
 /**
- * Points assigned per evidence strength level (ClinGen Bayesian framework)
- */
-export const EVIDENCE_POINTS: Record<EvidenceStrength, number> = {
-  very_strong: 8,
-  strong: 4,
-  moderate: 2,
-  supporting: 1,
-  stand_alone: 8 // BA1 = -8, equivalent magnitude to PVS
-}
-
-/**
  * Classification thresholds based on net point total
  */
 export const CLASSIFICATION_THRESHOLDS = {
@@ -196,6 +153,8 @@ export interface AcmgEvidenceState {
   calculated_classification: AcmgClassification | null
   /** Whether the user has overridden the calculated result */
   is_override: boolean
+  /** Why the class overrides the evidence; required with an override (#567) */
+  override_reason: string
 }
 
 /**

@@ -449,6 +449,29 @@ describe('annotations:upsertPerCase — variants:annotationChanged broadcast', (
     expect(sentMessages).toHaveLength(0)
   })
 
+  it('refuses an ACMG override without a reason and stores nothing (#567)', async () => {
+    const evidence = (extra: Record<string, unknown>) =>
+      JSON.stringify({
+        pathogenic: [{ code: 'PVS1', strength: 'very_strong', confirmed: true }],
+        benign: [],
+        is_override: true,
+        ...extra
+      })
+    const refused = await invoke('annotations:upsertPerCase', caseId, variantId, {
+      acmg_classification: 'Benign',
+      acmg_evidence: evidence({})
+    })
+    expect(refused).toHaveProperty('code')
+    expect(sentMessages).toHaveLength(0) // nothing was written
+
+    const saved = await invoke('annotations:upsertPerCase', caseId, variantId, {
+      acmg_classification: 'Benign',
+      acmg_evidence: evidence({ override_reason: 'Segregates with the disease' })
+    })
+    expect(saved).not.toHaveProperty('code')
+    expect(sentMessages).toHaveLength(1)
+  })
+
   it('does NOT broadcast on validation failure (invalid caseId)', async () => {
     const result = await invoke('annotations:upsertPerCase', 'not-a-number', variantId, {
       starred: true

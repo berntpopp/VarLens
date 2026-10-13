@@ -5,6 +5,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import AcmgClassificationPanel from '../../../src/renderer/src/components/AcmgClassificationPanel.vue'
 import AcmgEvidenceGrid from '../../../src/renderer/src/components/acmg/AcmgEvidenceGrid.vue'
+import AcmgSummaryBar from '../../../src/renderer/src/components/acmg/AcmgSummaryBar.vue'
 import { isInputFocused } from '../../../src/renderer/src/composables/useTableKeyboardNav'
 
 const vuetify = createVuetify({ components, directives })
@@ -32,6 +33,32 @@ describe('AcmgClassificationPanel confirm step', () => {
     const change = wrapper.emitted('change')?.[0]?.[0] as { evidenceJson: string }
     expect(JSON.parse(change.evidenceJson).pathogenic[0].code).toBe('PVS1')
     expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
+  })
+
+  it('an override is applied only with a reason, which is saved with it (#567)', async () => {
+    const wrapper = mountPanel()
+    wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+    await wrapper.vm.$nextTick()
+    wrapper.findComponent(AcmgSummaryBar).vm.$emit('override', 'Benign')
+    await wrapper.vm.$nextTick()
+
+    const apply = wrapper.find('[data-testid="acmg-apply"]')
+    expect(apply.attributes('disabled')).toBeDefined()
+    await apply.trigger('click')
+    expect(wrapper.emitted('change')).toBeUndefined()
+
+    await wrapper.find('[data-testid="acmg-override-reason"] textarea').setValue('Segregation')
+    expect(wrapper.find('[data-testid="acmg-apply"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('[data-testid="acmg-apply"]').trigger('click')
+    const change = wrapper.emitted('change')?.[0]?.[0] as {
+      classification: string
+      evidenceJson: string
+    }
+    expect(change.classification).toBe('Benign')
+    expect(JSON.parse(change.evidenceJson)).toMatchObject({
+      is_override: true,
+      override_reason: 'Segregation'
+    })
   })
 
   it('Discard reverts the draft without writing', async () => {

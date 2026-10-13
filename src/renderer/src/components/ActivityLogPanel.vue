@@ -141,7 +141,8 @@ function getChangeDescription(entry: AuditLogEntry): string | null {
       const newVal = entry.new_value !== null ? JSON.parse(entry.new_value) : null
       const from = oldVal?.acmg_classification ?? 'none'
       const to = newVal?.acmg_classification ?? 'none'
-      return `${from} \u2192 ${to}`
+      const reason = newVal?.override_reason
+      return `${from} \u2192 ${to}${typeof reason === 'string' ? ` (override: ${reason})` : ''}`
     } catch {
       return null
     }

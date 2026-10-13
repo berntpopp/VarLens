@@ -17,6 +17,8 @@ export function useAcmgEvidence() {
   const notes = ref('')
   const isOverride = ref(false)
   const overrideClassification = ref<AcmgClassification | null>(null)
+  /** Required while the class overrides the evidence (#567). */
+  const overrideReason = ref('')
 
   const classificationResult = computed(() =>
     calculateClassification(pathogenicCodes.value, benignCodes.value)
@@ -80,6 +82,7 @@ export function useAcmgEvidence() {
     if (classification === null) {
       isOverride.value = false
       overrideClassification.value = null
+      overrideReason.value = ''
     } else {
       isOverride.value = true
       overrideClassification.value = classification
@@ -93,6 +96,7 @@ export function useAcmgEvidence() {
       benignCodes.value = state.benign
       notes.value = state.notes
       isOverride.value = state.is_override
+      overrideReason.value = state.is_override ? state.override_reason : ''
       if (state.is_override && state.calculated_classification) {
         overrideClassification.value = state.calculated_classification
       } else {
@@ -110,7 +114,8 @@ export function useAcmgEvidence() {
       notes: notes.value,
       classification_date: Date.now(),
       calculated_classification: effectiveClassification.value,
-      is_override: isOverride.value
+      is_override: isOverride.value,
+      override_reason: isOverride.value ? overrideReason.value.trim() : ''
     }
   }
 
@@ -136,6 +141,7 @@ export function useAcmgEvidence() {
     notes.value = ''
     isOverride.value = false
     overrideClassification.value = null
+    overrideReason.value = ''
   }
 
   return {
@@ -144,6 +150,7 @@ export function useAcmgEvidence() {
     notes,
     isOverride,
     overrideClassification,
+    overrideReason,
     classificationResult,
     effectiveClassification,
     toggleCode,
