@@ -25,7 +25,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 53
+export const LATEST_SQLITE_SCHEMA_VERSION = 54
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -82,6 +82,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 53
  * - 50: decode VEP's %3D / %3B escapes in stored cdna / aa_change (#547; mirrors PG 0033)
  * - 51: drop variant_frequency (#595) and idx_variants_coords (#564), recount variant_count (#560)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
+ * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2095,6 +2096,27 @@ export function runMigrations(db: Database.Database): void {
       }
     }
     db.exec('PRAGMA user_version = 53')
+  }
+
+  // v54 (#573, mirrors PG 0037): SV type and unsigned length as summary facts
+  // next to end_pos (cohort-representative.ts), so the cohort sorts and
+  // filters them. A populated summary is flagged stale and rebuilt to fill them.
+  if (currentVersion < 54) {
+    const summaryColumns = new Set(
+      (db.prepare('PRAGMA table_info(cohort_variant_summary)').all() as { name: string }[]).map(
+        (c) => c.name
+      )
+    )
+    if (summaryColumns.size > 0) {
+      if (!summaryColumns.has('sv_type')) {
+        db.exec('ALTER TABLE cohort_variant_summary ADD COLUMN sv_type TEXT')
+      }
+      if (!summaryColumns.has('sv_length')) {
+        db.exec('ALTER TABLE cohort_variant_summary ADD COLUMN sv_length INTEGER')
+      }
+      markPopulatedSummaryStale(db)
+    }
+    db.exec('PRAGMA user_version = 54')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

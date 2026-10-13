@@ -34,7 +34,10 @@ export const COHORT_SUMMARY_FILTER_COLUMNS: Readonly<Record<string, string>> = {
   carrier_count: 'carrier_count',
   cohort_frequency: 'cohort_frequency',
   het_count: 'het_count',
-  hom_count: 'hom_count'
+  hom_count: 'hom_count',
+  end_pos: 'end_pos',
+  sv_type: 'sv_type',
+  sv_length: 'sv_length'
 }
 
 /** Accepted alternative spellings → canonical cohort key. */

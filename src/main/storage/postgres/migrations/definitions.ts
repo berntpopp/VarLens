@@ -179,6 +179,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0036',
     name: 'clinical_question_presets',
     fileName: '0036_clinical_question_presets.sql'
+  },
+  {
+    version: '0037',
+    name: 'summary_sv_facts',
+    fileName: '0037_summary_sv_facts.sql'
   }
 ]
 

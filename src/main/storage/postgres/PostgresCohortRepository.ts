@@ -39,8 +39,7 @@ import {
   normalizeCohortColumnFilters,
   COHORT_SUMMARY_FILTER_COLUMNS
 } from '../../../shared/filters/cohort-column-filter-keys'
-import { resolvedGtSql } from '../../../shared/sql/genotype-dosage'
-import { carrierCallSql } from '../../../shared/sql/cohort-call-sql'
+import { cohortCarriersSql } from '../../../shared/sql/cohort-call-sql'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 
@@ -53,7 +52,9 @@ const NUMERIC_COLUMNS = new Set([
   'het_count',
   'hom_count',
   'gnomad_af',
-  'cadd_phred'
+  'cadd_phred',
+  'end_pos',
+  'sv_length'
 ])
 
 const COLUMN_META_KEYS = [
@@ -69,7 +70,10 @@ const COLUMN_META_KEYS = [
   'clinvar',
   'gnomad_af',
   'cadd_phred',
-  'transcript'
+  'transcript',
+  'end_pos',
+  'sv_type',
+  'sv_length'
 ]
 
 /**
@@ -94,7 +98,10 @@ const COLUMN_META_SUMMARY_COLUMNS: Record<string, string> = {
   clinvar: 'clinvar',
   gnomad_af: 'gnomad_af',
   cadd_phred: 'cadd',
-  transcript: 'transcript'
+  transcript: 'transcript',
+  end_pos: 'end_pos',
+  sv_type: 'sv_type',
+  sv_length: 'sv_length'
 }
 
 /** Column-filter keys the cohort view accepts: summary columns and extension columns. */
@@ -277,20 +284,8 @@ export class PostgresCohortRepository {
 
   /** Carriers of one cohort row: one variant type in one genome build (#503). */
   async getCarriers(variant: CohortVariantIdentity): Promise<CohortCarrier[]> {
-    const calls = carrierCallSql((table) => this.tbl(table))
     const result = await this.pool.query(
-      `SELECT
-         v.case_id,
-         c.name AS case_name,
-         ${resolvedGtSql('v.gt_num', 'postgres')} AS gt_num,
-         ${calls.columns}
-       FROM ${this.schemaName}."variants" v
-       JOIN ${this.schemaName}."cases" c ON c.id = v.case_id
-       ${calls.joins}
-       WHERE v.chr = $1 AND v.pos = $2 AND v.ref = $3 AND v.alt = $4
-         AND v.variant_type = $5 AND c.genome_build = $6
-       GROUP BY v.case_id, c.name
-       ORDER BY c.name`,
+      cohortCarriersSql('postgres', (table) => this.tbl(table)),
       [
         variant.chr,
         variant.pos,

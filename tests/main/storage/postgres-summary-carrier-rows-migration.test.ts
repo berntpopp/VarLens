@@ -65,6 +65,10 @@ describe.skipIf(!RUN)('migration 0029: summaries counted with no-calls are rebui
     await provisioner.end()
     pool = new Pool({ connectionString: PG_URL, max: 3 })
     await new PostgresMigrationRunner(pool, schema, BEFORE_0029).migrate()
+    // The test rebuilds with today's code, which also writes the columns of
+    // later summary migrations (0037 adds them IF NOT EXISTS).
+    await pool.query(`ALTER TABLE "${schema}".cohort_variant_summary
+      ADD COLUMN IF NOT EXISTS sv_type TEXT, ADD COLUMN IF NOT EXISTS sv_length BIGINT`)
   }, 120_000)
 
   afterEach(async () => {

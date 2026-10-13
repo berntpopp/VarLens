@@ -49,13 +49,11 @@ const CALL_COLUMN_SOURCES: Readonly<Record<string, ColumnDef[]>> = {
 }
 
 /**
- * The case SV/CNV table's End/Type/Length columns (same titles and formatters,
- * #573). Not sortable: the cohort summary sorts and filters on stored columns.
+ * The case SV/CNV table's End/Type/Length columns, the same definitions (titles,
+ * formatters, sortable): summary facts on both backends (#573).
  */
 function callColumns(variantType: string): ColumnDef[] {
-  return (CALL_COLUMN_SOURCES[variantType] ?? [])
-    .filter((h) => CALL_COLUMN_KEYS.includes(h.key))
-    .map((h) => ({ ...h, sortable: false }))
+  return (CALL_COLUMN_SOURCES[variantType] ?? []).filter((h) => CALL_COLUMN_KEYS.includes(h.key))
 }
 
 /** Base columns for a variant-type tab, with the call columns after Position. */

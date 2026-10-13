@@ -48,7 +48,8 @@ describe('Postgres migration definitions', () => {
       '0032',
       '0033',
       '0034',
-      '0036'
+      '0036',
+      '0037'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -85,7 +86,8 @@ describe('Postgres migration definitions', () => {
       'evidence_ranking_beta_preset',
       'decode_vep_hgvs_escapes',
       'import_integrity',
-      'clinical_question_presets'
+      'clinical_question_presets',
+      'summary_sv_facts'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {

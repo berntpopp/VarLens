@@ -88,8 +88,7 @@ export async function querySummaryPage(
       totalCases,
       dataValues.length - 1,
       dataValues.length,
-      buildTotalsJoin,
-      ctx.tbl
+      buildTotalsJoin
     ),
     values: dataValues,
     schema: ctx.schema

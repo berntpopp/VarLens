@@ -21,6 +21,8 @@
  *   gnomad_af    the lowest frequency   (NULL only when no carrier has one)
  *   cadd         the highest score
  *   end_pos      the highest end
+ *   sv_length    the longest call, unsigned (SVLEN's sign only encodes DEL vs DUP)
+ *   sv_type      the SV type, bytewise highest (carriers of one ALT agree)
  *
  * Carriers of one annotation release agree on these; they differ only across
  * releases, and then the value that is least likely to hide the variant from
@@ -48,12 +50,37 @@ export const TRANSCRIPT_COLUMNS = [
   'omim_mim_number'
 ] as const
 
-/** Variant-level numeric facts and the direction that is kept. */
-export const NUMERIC_FACTS = [
+/**
+ * Variant-level facts and the direction that is kept. `abs`: compared and
+ * stored unsigned (ABS() of a stored value is itself, so every path may apply
+ * it); `text`: compared bytewise.
+ */
+export const VALUE_FACTS: readonly ValueFact[] = [
   { name: 'gnomad_af', keep: 'min' },
   { name: 'cadd', keep: 'max' },
-  { name: 'end_pos', keep: 'max' }
-] as const
+  { name: 'end_pos', keep: 'max' },
+  { name: 'sv_length', keep: 'max', abs: true },
+  { name: 'sv_type', keep: 'max', text: true }
+]
+
+export interface ValueFact {
+  name: string
+  keep: 'min' | 'max'
+  abs?: boolean
+  text?: boolean
+}
+
+/** The comparable value of fact `fact` in row `alias`. */
+export function factValue(alias: string, fact: ValueFact, dialect: SqlDialect): string {
+  const reference = `${alias}.${fact.name}`
+  if (fact.abs === true) return `ABS(${reference})`
+  return fact.text === true && dialect === 'postgres' ? `${reference} COLLATE "C"` : reference
+}
+
+/** `MIN(value)` / `MAX(value)` of fact `fact` over rows `alias`. */
+export function factAggregate(alias: string, fact: ValueFact, dialect: SqlDialect): string {
+  return `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${factValue(alias, fact, dialect)})`
+}
 
 /** Summary columns copied together from the chosen carrier row. */
 export const SUMMARY_TRANSCRIPT_COLUMNS: readonly string[] = [...TRANSCRIPT_COLUMNS, 'impact_rank']
@@ -62,7 +89,7 @@ export const SUMMARY_TRANSCRIPT_COLUMNS: readonly string[] = [...TRANSCRIPT_COLU
 export const SUMMARY_FACT_COLUMNS: readonly string[] = [
   'clinvar',
   'clinvar_rank',
-  ...NUMERIC_FACTS.map((fact) => fact.name)
+  ...VALUE_FACTS.map((fact) => fact.name)
 ]
 
 /** Every annotation column of a summary row. */
@@ -148,9 +175,8 @@ export function summaryColumnsOverWindow(
     `${ranks.impact} AS impact_rank`,
     `${clinvarOverWindow(alias, window, dialect, ranks.clinvar)} AS clinvar`,
     `MAX(${ranks.clinvar}) OVER ${window} AS clinvar_rank`,
-    ...NUMERIC_FACTS.map(
-      (fact) =>
-        `${fact.keep === 'min' ? 'MIN' : 'MAX'}(${alias}.${fact.name}) OVER ${window} AS ${fact.name}`
+    ...VALUE_FACTS.map(
+      (fact) => `${factAggregate(alias, fact, dialect)} OVER ${window} AS ${fact.name}`
     )
   ].join(',\n        ')
 }
@@ -205,6 +231,8 @@ export interface SummaryFact {
   heldBy(removed: string, stored: string): string
   /** Boolean: carrier row `remaining` still supplies what `removed` held. */
   suppliedBy(remaining: string, removed: string): string
+  /** The stored form of the fact's value in row `alias` (single-column facts). */
+  value?(alias: string): string
 }
 
 const CLINVAR_FACT: SummaryFact = {
@@ -219,21 +247,24 @@ const CLINVAR_FACT: SummaryFact = {
   suppliedBy: (remaining, removed) => `${remaining}.clinvar = ${removed}.clinvar`
 }
 
-const numericFact = ({ name, keep }: (typeof NUMERIC_FACTS)[number]): SummaryFact => ({
-  columns: [name],
-  raises: (candidate, current) =>
-    `(${candidate}.${name} IS NOT NULL AND (${current}.${name} IS NULL
-        OR ${candidate}.${name} ${keep === 'min' ? '<' : '>'} ${current}.${name}))`,
-  heldBy: (removed, stored) =>
-    `(${removed}.${name} IS NOT NULL AND ${removed}.${name} = ${stored}.${name})`,
-  suppliedBy: (remaining, removed) => `${remaining}.${name} = ${removed}.${name}`
-})
+const valueFact = (fact: ValueFact): SummaryFact => {
+  const { name, keep } = fact
+  // Equality ignores collation; ABS() makes a signed carrier value comparable to the stored one.
+  const same = (alias: string): string => factValue(alias, fact, 'sqlite')
+  return {
+    columns: [name],
+    raises: (candidate, current, dialect) =>
+      `(${candidate}.${name} IS NOT NULL AND (${current}.${name} IS NULL
+        OR ${factValue(candidate, fact, dialect)} ${keep === 'min' ? '<' : '>'} ${factValue(current, fact, dialect)}))`,
+    heldBy: (removed, stored) =>
+      `(${removed}.${name} IS NOT NULL AND ${same(removed)} = ${same(stored)})`,
+    suppliedBy: (remaining, removed) => `${same(remaining)} = ${same(removed)}`,
+    value: (alias) => same(alias)
+  }
+}
 
 /** The variant-level facts, each maintained on its own. */
-export const SUMMARY_FACTS: readonly SummaryFact[] = [
-  CLINVAR_FACT,
-  ...NUMERIC_FACTS.map(numericFact)
-]
+export const SUMMARY_FACTS: readonly SummaryFact[] = [CLINVAR_FACT, ...VALUE_FACTS.map(valueFact)]
 
 /**
  * Boolean: adding case contribution `candidate` changes an annotation column
@@ -296,7 +327,7 @@ export function mergeFactAssignments(
   return SUMMARY_FACTS.flatMap((fact) =>
     fact.columns.map(
       (column) =>
-        `${column} = CASE WHEN ${fact.raises(candidate, current, dialect)} THEN ${candidate}.${column} ELSE ${current}.${column} END`
+        `${column} = CASE WHEN ${fact.raises(candidate, current, dialect)} THEN ${fact.value?.(candidate) ?? `${candidate}.${column}`} ELSE ${current}.${column} END`
     )
   )
 }
