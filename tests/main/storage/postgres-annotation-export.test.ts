@@ -85,7 +85,7 @@ describe.skipIf(!RUN)('annotation columns of PostgreSQL exports (#574)', () => {
 
   it('a case export carries the case call and the latest comment of its build', async () => {
     const rows: Array<Record<string, unknown>> = []
-    for await (const row of new PostgresExportRepository(pool, schema).streamVariantRows({
+    for await (const row of new PostgresExportRepository(pool, schema).streamVariantExportRows({
       case_id: caseId
     })) {
       rows.push(row)

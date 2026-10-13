@@ -26,6 +26,14 @@ export class PostgresExportRepository {
   async *streamVariantRows(
     requestedFilter: VariantFilter
   ): AsyncGenerator<Record<string, unknown>> {
+    const { sql, params } = await this.variantRowsQuery(requestedFilter)
+    yield* streamLongQuery(this.pool, sql, params)
+  }
+
+  /** The case export's rows: the variant rows plus their annotation cells (#574). */
+  async *streamVariantExportRows(
+    requestedFilter: VariantFilter
+  ): AsyncGenerator<Record<string, unknown>> {
     const { sql, params } = await this.variantRowsQuery(requestedFilter, [
       caseAnnotationExportColumns(this.schemaName)
     ])
