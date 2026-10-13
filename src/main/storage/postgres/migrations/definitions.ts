@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
 import type { PostgresMigration } from './types'
-import { BUILT_IN_PRESETS } from '../../../database/built-in-presets'
+import { BUILT_IN_PRESETS } from '../../../../shared/config/filter-presets.config'
 import { BUILT_IN_SHORTLIST_PRESETS } from '../../../database/built-in-shortlist-presets'
 import { CLINICAL_METRICS } from '../../../database/clinical-metrics'
 import { quoteIdentifier } from '../identifiers'
@@ -174,6 +174,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0034',
     name: 'import_integrity',
     fileName: '0034_import_integrity.sql'
+  },
+  {
+    version: '0037',
+    name: 'clinical_question_presets',
+    fileName: '0037_clinical_question_presets.sql'
   }
 ]
 

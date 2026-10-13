@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto'
 import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { RARE_NOT_RECURRENT_PRESET_NAME } from '../../../src/main/database/built-in-presets'
+import { RARE_NOT_RECURRENT_PRESET_NAME } from '../../../src/shared/config/filter-presets.config'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 
@@ -83,7 +83,7 @@ describe.skipIf(!RUN)('migration 0028: built-in preset "Rare, not recurrent" (#4
        VALUES ('My rare set', 'mine', '{"maxGnomadAf":0.001,"maxCarriers":2}', 0, 1, 20, 'filter', 1, 1)`
     )
     await probe.query(
-      `UPDATE "${schema}".filter_presets SET is_visible = 0 WHERE name = 'Rare (1%)'`
+      `UPDATE "${schema}".filter_presets SET is_visible = 0 WHERE name = 'Rare in population'`
     )
     const before = await otherRows()
 

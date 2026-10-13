@@ -78,6 +78,8 @@
       :get-global-acmg-classification="getGlobalAcmgClassification"
       :get-global-comment="getGlobalComment"
       :has-acmg-evidence="hasAcmgEvidence"
+      :active-filters="cohortFilterBarRef?.activeFilters"
+      :load-failed="error !== null"
       @update:options="loadPage"
       @row-click="handleRowClick"
       @star-toggle="handleStarToggle"
@@ -87,6 +89,8 @@
       @navigate-to-case="handleNavigateToCase"
       @column-filters-change="handleColumnFiltersChange"
       @deselect="emit('deselect')"
+      @clear-filter="cohortFilterBarRef?.handleClearFilter($event)"
+      @clear-filters="cohortFilterBarRef?.handleClearAll()"
     />
 
     <!-- Annotation Dialogs (Comment, ACMG Evidence) -->

@@ -44,8 +44,8 @@ describe('migration v51: import integrity', () => {
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(51)
-    expect(db.pragma('user_version', { simple: true })).toBe(51)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(54)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
   /** Indexes on variants over exactly (chr, pos, ref, alt). */
@@ -114,6 +114,6 @@ describe('migration v51: import integrity', () => {
     backToV49()
     runMigrations(db)
     expect(hasObject('table', 'variant_frequency')).toBe(false)
-    expect(db.pragma('user_version', { simple: true })).toBe(51)
+    expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 })

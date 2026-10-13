@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   BUILT_IN_PRESETS,
   RARE_NOT_RECURRENT_PRESET_NAME
-} from '../../../src/main/database/built-in-presets'
+} from '../../../src/shared/config/filter-presets.config'
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 
@@ -53,7 +53,7 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(51)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(54)
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
@@ -86,7 +86,7 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
          (name, description, filter_json, is_built_in, is_visible, sort_order, created_at, updated_at)
        VALUES ('My rare set', 'mine', '{"maxGnomadAf":0.001,"maxCarriers":2}', 0, 1, 20, ?, ?)`
     ).run(now, now)
-    db.exec("UPDATE filter_presets SET is_visible = 0 WHERE name = 'Rare (1%)'")
+    db.exec("UPDATE filter_presets SET is_visible = 0 WHERE name = 'Rare in population'")
     const before = otherRows()
     expect(preset()).toEqual([])
 

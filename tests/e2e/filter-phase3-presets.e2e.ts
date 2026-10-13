@@ -4,6 +4,7 @@
  * and preset persistence across navigation.
  */
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { BUILT_IN_PRESETS } from '../../src/shared/config/filter-presets.config'
 
 function launchApp(): Promise<ElectronApplication> {
   return electron.launch({
@@ -56,23 +57,14 @@ test('preset bar appears with built-in presets', async ({}, testInfo) => {
 
     await window.screenshot({ path: testInfo.outputPath('preset-bar.png') })
 
-    // Check all 8 built-in presets
-    const expectedPresets = [
-      'Rare (1%)',
-      'Very Rare (0.1%)',
-      'Ultra Rare',
-      'HIGH Impact',
-      'HIGH+MOD',
-      'CADD >= 15',
-      'CADD >= 20',
-      'ClinVar Path.'
-    ]
+    // Check every built-in preset (named by clinical question, #570)
+    const expectedPresets = BUILT_IN_PRESETS.map((p) => p.name)
 
     for (const name of expectedPresets) {
-      const chip = presetBar.locator(`.v-chip:has-text("${name}")`)
+      const chip = presetBar.getByRole('button', { name: `Filter preset: ${name}`, exact: true })
       await expect(chip).toBeVisible({ timeout: 3000 })
     }
-    console.log('✓ All 8 built-in preset chips visible')
+    console.log('✓ All built-in preset chips visible')
 
     // Verify chips are outlined (not active)
     const firstChip = presetBar.locator('.v-chip').first()
@@ -113,8 +105,8 @@ test('toggling a preset changes chip style and applies filters', async ({}, test
     const initialText = await resultChip.textContent()
     console.log(`  Initial: ${initialText?.trim()}`)
 
-    // Click "Rare (1%)" — toggle ON
-    const rareChip = presetBar.locator('.v-chip:has-text("Rare (1%)")')
+    // Click "Rare in population" — toggle ON
+    const rareChip = presetBar.locator('.v-chip:has-text("Rare in population")')
     await rareChip.click()
     await window.waitForTimeout(1000)
 
@@ -128,7 +120,7 @@ test('toggling a preset changes chip style and applies filters', async ({}, test
 
     // Count may have changed (filter applied)
     const filteredText = await resultChip.textContent()
-    console.log(`  After Rare (1%): ${filteredText?.trim()}`)
+    console.log(`  After Rare in population: ${filteredText?.trim()}`)
 
     // Click again — toggle OFF
     await rareChip.click()
@@ -173,14 +165,14 @@ test('clear all deactivates presets', async ({}, testInfo) => {
     await expect(presetBar).toBeVisible({ timeout: 10000 })
 
     // Activate two presets
-    await presetBar.locator('.v-chip:has-text("Rare (1%)")').click()
+    await presetBar.locator('.v-chip:has-text("Rare in population")').click()
     await window.waitForTimeout(500)
-    await presetBar.locator('.v-chip:has-text("HIGH Impact")').click()
+    await presetBar.locator('.v-chip', { hasText: /^\s*Loss-of-function\s*$/ }).click()
     await window.waitForTimeout(500)
 
     // Both should be active
     const rareClasses = await presetBar
-      .locator('.v-chip:has-text("Rare (1%)")')
+      .locator('.v-chip:has-text("Rare in population")')
       .getAttribute('class')
     expect(rareClasses).toContain('v-chip--variant-flat')
 
@@ -193,13 +185,13 @@ test('clear all deactivates presets', async ({}, testInfo) => {
 
     // Both presets should be inactive again
     const rareAfterClear = await presetBar
-      .locator('.v-chip:has-text("Rare (1%)")')
+      .locator('.v-chip:has-text("Rare in population")')
       .getAttribute('class')
     expect(rareAfterClear).toContain('v-chip--variant-outlined')
     console.log('✓ Presets deactivated after Clear All')
 
     const highAfterClear = await presetBar
-      .locator('.v-chip:has-text("HIGH Impact")')
+      .locator('.v-chip', { hasText: /^\s*Loss-of-function\s*$/ })
       .getAttribute('class')
     expect(highAfterClear).toContain('v-chip--variant-outlined')
     console.log('✓ Both presets back to outlined after Clear')
@@ -310,7 +302,7 @@ test('save and delete user preset', async ({}, testInfo) => {
     await expect(presetBar).toBeVisible({ timeout: 10000 })
 
     // Activate a preset to make Save button appear
-    await presetBar.locator('.v-chip:has-text("Rare (1%)")').click()
+    await presetBar.locator('.v-chip:has-text("Rare in population")').click()
     await window.waitForTimeout(500)
 
     // Click Save button
@@ -456,7 +448,7 @@ test('preset bar works in cohort view', async ({}, testInfo) => {
     console.log(`✓ ${chipCount} preset chips in cohort view`)
 
     // Toggle a preset
-    const rareChip = presetBar.locator('.v-chip:has-text("Rare (1%)")')
+    const rareChip = presetBar.locator('.v-chip:has-text("Rare in population")')
     await rareChip.click()
     await window.waitForTimeout(1000)
 
