@@ -1,6 +1,6 @@
 import {
   BUILT_IN_PRESETS,
-  BUILT_IN_PRESET_RENAMES_V54
+  BUILT_IN_PRESET_RENAMES_V53
 } from '../../../src/shared/config/filter-presets.config'
 import { describe, expect, it } from 'vitest'
 
@@ -48,7 +48,7 @@ describe('Postgres migration definitions', () => {
       '0032',
       '0033',
       '0034',
-      '0037'
+      '0036'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -176,15 +176,12 @@ describe('Postgres migration definitions', () => {
     expect(migration?.afterApply).toBeUndefined()
   })
 
-  // #570: the SQL rename record and the shared preset config must not drift apart.
-  it('0037 renames each old built-in to its config name and description', () => {
-    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0037')
-    expect(BUILT_IN_PRESET_RENAMES_V54.map(([, name]) => name)).toEqual(
-      BUILT_IN_PRESETS.slice(0, 8).map((p) => p.name)
-    )
-    for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V54) {
-      const preset = BUILT_IN_PRESETS.find((p) => p.name === newName)
-      expect(migration?.sql).toContain(`('${oldName}', '${newName}', '${preset!.description}')`)
+  // #570: the checksummed SQL and the frozen rename record (also used by SQLite v53) must not drift apart.
+  it('0036 renames each old built-in exactly as BUILT_IN_PRESET_RENAMES_V53 records', () => {
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0036')
+    expect(BUILT_IN_PRESET_RENAMES_V53).toHaveLength(8)
+    for (const [oldName, newName, description] of BUILT_IN_PRESET_RENAMES_V53) {
+      expect(migration?.sql).toContain(`('${oldName}', '${newName}', '${description}')`)
     }
     expect(migration?.sql).toContain('AND p.is_built_in = 1')
     expect(migration?.afterApply).toBeUndefined()

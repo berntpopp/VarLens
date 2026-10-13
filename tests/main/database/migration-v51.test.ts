@@ -44,7 +44,7 @@ describe('migration v51: import integrity', () => {
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(54)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(53)
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 

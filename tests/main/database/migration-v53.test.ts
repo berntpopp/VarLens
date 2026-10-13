@@ -1,13 +1,13 @@
 /**
- * Migration v54 (#570): built-in presets are renamed after the clinical
- * question they answer and get a one-line description (mirrors PG 0037).
+ * Migration v53 (#570): built-in presets are renamed after the clinical
+ * question they answer and get a one-line description (mirrors PG 0036).
  */
 import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   BUILT_IN_PRESETS,
-  BUILT_IN_PRESET_RENAMES_V54
+  BUILT_IN_PRESET_RENAMES_V53
 } from '../../../src/shared/config/filter-presets.config'
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
@@ -19,7 +19,7 @@ interface Row {
   is_visible: number
 }
 
-describe('migration v54: built-in presets named by clinical question', () => {
+describe('migration v53: built-in presets named by clinical question', () => {
   let db: InstanceType<typeof Database>
 
   beforeEach(() => {
@@ -38,13 +38,13 @@ describe('migration v54: built-in presets named by clinical question', () => {
       )
       .all() as Row[]
 
-  /** Put the database back to v53 with the pre-#570 names. */
-  function backToV53(): void {
+  /** Put the database back to v52 with the pre-#570 names. */
+  function backToV52(): void {
     const rename = db.prepare('UPDATE filter_presets SET name = ?, description = ? WHERE name = ?')
-    for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V54) {
+    for (const [oldName, newName] of BUILT_IN_PRESET_RENAMES_V53) {
       rename.run(oldName, 'old description', newName)
     }
-    db.exec('PRAGMA user_version = 53')
+    db.exec('PRAGMA user_version = 52')
   }
 
   it('every built-in preset has a description, on a new database', () => {
@@ -55,7 +55,7 @@ describe('migration v54: built-in presets named by clinical question', () => {
   })
 
   it('renames the old built-ins, keeps visibility, leaves user presets alone', () => {
-    backToV53()
+    backToV52()
     db.exec("UPDATE filter_presets SET is_visible = 0 WHERE name = 'Rare HIGH'")
     const now = Date.now()
     db.prepare(
@@ -80,7 +80,7 @@ describe('migration v54: built-in presets named by clinical question', () => {
   })
 
   it('keeps the old built-in name when a user preset already has the new one', () => {
-    backToV53()
+    backToV52()
     const now = Date.now()
     db.prepare(
       `INSERT INTO filter_presets
@@ -96,7 +96,7 @@ describe('migration v54: built-in presets named by clinical question', () => {
 
   it('does not fail on a database without a filter_presets table', () => {
     db.exec('DROP TABLE filter_presets')
-    db.exec('PRAGMA user_version = 53')
+    db.exec('PRAGMA user_version = 52')
     expect(() => runMigrations(db)).not.toThrow()
   })
 })
