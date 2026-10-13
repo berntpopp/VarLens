@@ -1,4 +1,5 @@
 import {
+  importDataReport,
   resetUnrankedClinvar,
   takeUnrankedClinvar,
   unrankedClinvarLogLine
@@ -218,11 +219,7 @@ export async function runImportSession(
             `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.csqAmbiguousSites(csqAmbiguousSites)}`
           )
         }
-        const extra = {
-          ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
-          ...(afOutOfRange !== undefined ? { afOutOfRange } : {}),
-          ...(csqAmbiguousSites !== undefined ? { csqAmbiguousSites } : {})
-        }
+        const extra = importDataReport({ unrankedClinvar, afOutOfRange, csqAmbiguousSites })
         port.postMessage({
           type: 'file-complete',
           fileIndex,
