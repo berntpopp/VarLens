@@ -17,7 +17,10 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresAnnotationsRepository } from '../../../src/main/storage/postgres/PostgresAnnotationsRepository'
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
-import { runContigNamingStep } from '../../../src/main/storage/postgres/postgres-contig-naming'
+import {
+  awaitContigNaming,
+  runContigNamingStep
+} from '../../../src/main/storage/postgres/postgres-contig-naming'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -44,6 +47,7 @@ describe.skipIf(!RUN)('migration 0035: global annotations keyed by genome build'
   }, 120_000)
 
   afterEach(async () => {
+    await awaitContigNaming(schema)
     await probe.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
     await probe.end()
     await pool.end()
