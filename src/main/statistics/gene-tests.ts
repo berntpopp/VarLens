@@ -10,6 +10,7 @@ import type {
 const NOT_TESTED: FisherResult = {
   p_value: null,
   odds_ratio: null,
+  odds_ratio_infinite: false,
   ci_lower: null,
   ci_upper: null
 }

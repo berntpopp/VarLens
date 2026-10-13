@@ -69,7 +69,7 @@
 
       <!-- Fisher OR -->
       <template #[`item.fisher_or`]="{ item }">
-        {{ formatNumber(item.fisher?.odds_ratio) }}
+        {{ item.fisher?.odds_ratio_infinite ? '∞' : formatNumber(item.fisher?.odds_ratio) }}
       </template>
 
       <!-- Fisher CI -->

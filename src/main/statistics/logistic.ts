@@ -127,7 +127,7 @@ export function logisticRegression(
   const burdenBeta = beta[1]
   const burdenSe = ses[1]
   const z = burdenBeta / burdenSe
-  const pValue = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1))
+  const pValue = twoSidedNormalP(z)
 
   return {
     beta: burdenBeta,
@@ -272,7 +272,7 @@ export function firthLogisticRegression(
   const burdenBeta = beta[1]
   const burdenSe = ses[1]
   const z = burdenBeta / burdenSe
-  const pValue = 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1))
+  const pValue = twoSidedNormalP(z)
 
   return {
     beta: burdenBeta,
@@ -353,4 +353,17 @@ function invertMatrix(mat: number[][], p: number): number[][] | null {
   }
 
   return aug.map((row) => row.slice(p))
+}
+
+/**
+ * Two-sided normal p-value 2*Q(|z|). `1 - cdf` cancels to 0 beyond |z| ~ 8.3, so the
+ * upper tail uses Laplace's continued fraction for the Mills ratio (relative error ~1e-15).
+ */
+export function twoSidedNormalP(z: number): number {
+  const x = Math.abs(z)
+  if (Number.isNaN(x)) return NaN
+  if (x < 3) return 2 * (1 - jStat.normal.cdf(x, 0, 1))
+  let t = x
+  for (let k = 200; k >= 1; k--) t = x + k / t
+  return (2 * Math.exp((-x * x) / 2)) / (Math.sqrt(2 * Math.PI) * t)
 }

@@ -10,6 +10,7 @@ describe('fisherExactTest', () => {
 
       if (ref.p_value !== null) {
         expect(result.p_value).toBeCloseTo(ref.p_value, 8)
+        expect(Math.abs(Math.log(result.p_value! / ref.p_value))).toBeLessThan(1e-6)
       }
       if (ref.odds_ratio !== null) {
         expect(result.odds_ratio).toBeCloseTo(ref.odds_ratio, 8)
@@ -28,5 +29,18 @@ describe('fisherExactTest', () => {
     expect(result.p_value).toBeDefined()
     expect(result.ci_lower).toBeDefined()
     expect(result.ci_upper).toBeDefined()
+  })
+
+  it('keeps relative accuracy for extreme tables', () => {
+    // mpmath: 2 * C(100,100)C(100,0) / C(200,100)
+    const result = fisherExactTest(100, 0, 0, 100)
+    expect(Math.abs(Math.log(result.p_value! / 2.2087606931995e-59))).toBeLessThan(1e-9)
+  })
+
+  it('flags an infinite odds ratio so it survives JSON serialisation', () => {
+    const result = JSON.parse(JSON.stringify(fisherExactTest(10, 0, 5, 5)))
+    expect(result.odds_ratio).toBeNull()
+    expect(result.odds_ratio_infinite).toBe(true)
+    expect(fisherExactTest(5, 2, 3, 4).odds_ratio_infinite).toBe(false)
   })
 })
