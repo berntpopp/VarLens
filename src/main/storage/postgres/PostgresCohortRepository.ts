@@ -25,12 +25,8 @@ import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import { readCohortColumnMeta } from './postgres-cohort-column-meta'
 import { querySummaryPage } from './postgres-cohort-summary-page'
 import { carrierTotalsSql, summaryVersionSql } from './postgres-carrier-totals'
-import {
-  SUMMARY_FREQUENCY_SQL,
-  buildSummaryExportSql,
-  buildSummaryQueryParts,
-  summaryBuildTotalsJoin
-} from './postgres-cohort-summary-query'
+import { buildSummaryExportSql, buildSummaryQueryParts } from './postgres-cohort-summary-query'
+import { SUMMARY_FREQUENCY_SQL, summaryBuildTotalsJoin } from './postgres-carrier-frequency-sql'
 import {
   PostgresPanelIntervalResolver,
   type PanelIntervalLookup

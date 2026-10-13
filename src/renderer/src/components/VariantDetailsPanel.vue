@@ -94,7 +94,7 @@
 
           <!-- VEP metadata (consequence + cache indicator) -->
           <div v-if="mostSevereConsequence" class="text-body-small mb-2">
-            <v-chip size="x-small" :color="getConsequenceColor(mostSevereConsequence)" label>
+            <v-chip size="x-small" :color="consequenceChipColor(mostSevereConsequence)" label>
               {{ formatConsequence(mostSevereConsequence) }}
             </v-chip>
           </div>
@@ -232,6 +232,7 @@ import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import { consequenceChipColor } from '../config/displayConfig'
 import ClinGenSpecChips from './ClinGenSpecChips.vue'
 import ProteinPreviewStrip from './protein/ProteinPreviewStrip.vue'
 import type { ProteinViewTab } from '../config/proteinViewConfig'
@@ -533,21 +534,6 @@ watch(
   },
   { immediate: true }
 )
-
-function getConsequenceColor(consequence: string): string {
-  if (
-    consequence.includes('frameshift') ||
-    consequence.includes('stop_gained') ||
-    consequence.includes('splice_donor') ||
-    consequence.includes('splice_acceptor')
-  ) {
-    return 'error'
-  }
-  if (consequence.includes('missense') || consequence.includes('inframe')) {
-    return 'warning'
-  }
-  return 'muted'
-}
 
 // Selection changes and closes wait for the evidence editor's unsaved-draft prompt
 const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)

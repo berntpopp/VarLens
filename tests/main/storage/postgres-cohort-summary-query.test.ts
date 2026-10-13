@@ -4,9 +4,9 @@ import type { CohortSearchParams } from '../../../src/shared/types/cohort'
 import {
   buildSummaryCountSql,
   buildSummaryPageSql,
-  buildSummaryQueryParts,
-  summaryBuildTotalsJoin
+  buildSummaryQueryParts
 } from '../../../src/main/storage/postgres/postgres-cohort-summary-query'
+import { summaryBuildTotalsJoin } from '../../../src/main/storage/postgres/postgres-carrier-frequency-sql'
 
 const TOTAL_CASES = 10
 /** Frequency is derived at read time: carriers over the cases of the row's genome build. */

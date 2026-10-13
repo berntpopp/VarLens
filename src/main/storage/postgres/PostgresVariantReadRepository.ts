@@ -3,7 +3,7 @@ import {
   type SeverityFilterTarget
 } from '../../../shared/filters/severity-filter'
 import { carrierRanks } from './cohort-summary-representative-sql'
-import { caseCarrierFrequencySql } from './postgres-cohort-summary-query'
+import { caseCarrierFrequencySql } from './postgres-carrier-frequency-sql'
 import { carrierTotalsSql } from './postgres-carrier-totals'
 import { contigQueryNames } from '../../../shared/utils/contig'
 import {

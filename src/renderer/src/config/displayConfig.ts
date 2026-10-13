@@ -69,3 +69,10 @@ export const CONSEQUENCE_LABELS: Readonly<Record<string, string>> = {
   direct_tandem_duplication: 'Tandem Dup',
   mnv: 'MNV'
 }
+
+/** Chip colour of a variant's most severe SO consequence: truncating/splice → error, missense/inframe → warning. */
+export function consequenceChipColor(consequence: string): string {
+  if (/frameshift|stop_gained|splice_donor|splice_acceptor/.test(consequence)) return 'error'
+  if (/missense|inframe/.test(consequence)) return 'warning'
+  return 'muted'
+}

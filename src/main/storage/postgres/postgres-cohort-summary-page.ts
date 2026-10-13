@@ -21,9 +21,9 @@ import { runNamedDynamic } from './named-query'
 import {
   buildSummaryCountSql,
   buildSummaryPageSql,
-  buildSummaryQueryParts,
-  summaryBuildTotalsJoin
+  buildSummaryQueryParts
 } from './postgres-cohort-summary-query'
+import { summaryBuildTotalsJoin } from './postgres-carrier-frequency-sql'
 
 export interface SummaryPageContext {
   pool: Pool
