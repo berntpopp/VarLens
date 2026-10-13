@@ -12,7 +12,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { registerIpcHandlers, destroyDbPool } from './ipc'
+import { registerIpcHandlers } from './ipc'
 import {
   initDatabaseManager,
   initDatabaseManagerSafe,
@@ -327,14 +327,8 @@ if (gotTheLock !== true) {
     })
   })
 
-  // Clean up database and worker pool on quit
+  // Clean up database on quit (the session owns its worker pool)
   app.on('before-quit', () => {
-    destroyDbPool().catch((e) => {
-      mainLogger.warn(
-        `DbPool destruction failed during quit: ${e instanceof Error ? e.message : String(e)}`,
-        'app'
-      )
-    })
     closeDatabaseManager().catch((e) => {
       mainLogger.warn(
         `DatabaseManager close failed during quit: ${e instanceof Error ? e.message : String(e)}`,

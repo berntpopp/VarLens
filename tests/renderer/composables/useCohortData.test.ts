@@ -11,7 +11,6 @@ import { createMockApi } from '../../utils/mock-api'
 import { useCohortData } from '@renderer/composables/useCohortData'
 import { SUMMARY_STALE_POLL_MS } from '@renderer/composables/useSummaryFreshness'
 import type { CohortVariant } from '../../../../../src/shared/types/cohort'
-import { logService } from '../../../src/renderer/src/services/LogService'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -34,17 +33,7 @@ describe('useCohortData', () => {
     if (app) app.unmount()
   })
 
-  it('initializes with empty state', () => {
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    expect(result.variants.value).toEqual([])
-    expect(result.totalCount.value).toBe(0)
-    expect(result.isLoading.value).toBe(false)
-    expect(result.error.value).toBeNull()
-  })
-
-  it('fetches variants and updates state', async () => {
+  it('queryPage returns the page from the IPC call', async () => {
     const mockVariants: CohortVariant[] = [
       {
         chr: 'chr1',
@@ -67,12 +56,10 @@ describe('useCohortData', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({ limit: 50, sort_order: 'desc' })
-
-    expect(result.variants.value).toEqual(mockVariants)
-    expect(result.totalCount.value).toBe(1)
-    expect(result.isLoading.value).toBe(false)
-    expect(result.error.value).toBeNull()
+    await expect(result.queryPage({ limit: 50, sort_order: 'desc' })).resolves.toEqual({
+      data: mockVariants,
+      total_count: 1
+    })
     expect(window.api.cohort.getVariants).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 50, sort_order: 'desc' })
     )
@@ -86,10 +73,10 @@ describe('useCohortData', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({ limit: 10, sort_order: 'desc' })
-    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc' })
-    await result.fetchVariants({ limit: 10, offset: 20, sort_order: 'desc' })
-    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc', gene_symbol: 'X' })
+    await result.queryPage({ limit: 10, sort_order: 'desc' })
+    await result.queryPage({ limit: 10, offset: 10, sort_order: 'desc' })
+    await result.queryPage({ limit: 10, offset: 20, sort_order: 'desc' })
+    await result.queryPage({ limit: 10, offset: 10, sort_order: 'desc', gene_symbol: 'X' })
 
     const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
     expect(calls[0]).not.toHaveProperty('cursor')
@@ -107,8 +94,8 @@ describe('useCohortData', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({ limit: 10, sort_order: 'desc', _count_needed: true })
-    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc', _count_needed: false })
+    await result.queryPage({ limit: 10, sort_order: 'desc', _count_needed: true })
+    await result.queryPage({ limit: 10, offset: 10, sort_order: 'desc', _count_needed: false })
 
     const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
     expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1', _count_needed: false })
@@ -135,25 +122,6 @@ describe('useCohortData', () => {
     expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1', _count_needed: false })
     expect(first).toEqual({ data: [{ variant_key: 'a' }], total_count: 100 })
     expect(second).toEqual({ data: [{ variant_key: 'b' }], total_count: 100 })
-    // The table's pager owns rows, total and loading state.
-    expect(result.variants.value).toEqual([])
-    expect(result.totalCount.value).toBe(0)
-    expect(result.isLoading.value).toBe(false)
-  })
-
-  it('queryPage and fetchVariants share one cursor chain', async () => {
-    window.api.cohort.getVariants = vi
-      .fn()
-      .mockResolvedValueOnce({ data: [], total_count: 100, next_cursor: 'c1' })
-      .mockResolvedValue({ data: [], total_count: 100 })
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.queryPage({ limit: 10, sort_order: 'desc' })
-    await result.fetchVariants({ limit: 10, offset: 10, sort_order: 'desc' })
-
-    const calls = vi.mocked(window.api.cohort.getVariants).mock.calls.map((c) => c[0])
-    expect(calls[1]).toMatchObject({ offset: 10, cursor: 'c1' })
   })
 
   it('reset forgets the cursors of the previous database', async () => {
@@ -171,95 +139,15 @@ describe('useCohortData', () => {
     expect(calls[1]).not.toHaveProperty('cursor')
   })
 
-  it('sets isLoading during fetch', async () => {
-    // Use a promise we can control to verify loading state
-    let resolvePromise: (value: unknown) => void
-    const promise = new Promise((resolve) => {
-      resolvePromise = resolve
-    })
-    window.api.cohort.getVariants = vi.fn().mockReturnValue(promise)
+  it('queryPage rejects with the IPC error for the caller to show', async () => {
+    window.api.cohort.getVariants = vi.fn().mockRejectedValue(new Error('Network error'))
 
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    const fetchPromise = result.fetchVariants({ limit: 50, sort_order: 'desc' })
-
-    // Should be loading before promise resolves
-    expect(result.isLoading.value).toBe(true)
-
-    // Resolve the promise
-    resolvePromise!({ data: [], total_count: 0 })
-    await fetchPromise
-
-    // Should no longer be loading
-    expect(result.isLoading.value).toBe(false)
-  })
-
-  it('handles fetch errors', async () => {
-    const mockError = new Error('Network error')
-    window.api.cohort.getVariants = vi.fn().mockRejectedValue(mockError)
-
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.fetchVariants({ limit: 50, sort_order: 'desc' })
-
-    expect(result.error.value).toBeTruthy()
-    expect(result.error.value?.message).toBe('Network error')
-    expect(result.variants.value).toEqual([])
-    expect(result.totalCount.value).toBe(0)
-    expect(result.isLoading.value).toBe(false)
-  })
-
-  it('clears error on successful fetch after error', async () => {
-    // First call fails
-    window.api.cohort.getVariants = vi.fn().mockRejectedValue(new Error('Error'))
-
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    await result.fetchVariants({ limit: 50, sort_order: 'desc' })
-    expect(result.error.value).toBeTruthy()
-
-    // Second call succeeds
-    window.api.cohort.getVariants = vi.fn().mockResolvedValue({
-      data: [],
-      total_count: 0
-    })
-
-    await result.fetchVariants({ limit: 50, sort_order: 'desc' })
-    expect(result.error.value).toBeNull()
-  })
-
-  it('reset clears all state', () => {
-    const [result, appInstance] = withSetup(() => useCohortData())
-    app = appInstance
-
-    // Set some state
-    result.variants.value = [
-      {
-        chr: 'chr1',
-        pos: 12345,
-        ref: 'A',
-        alt: 'G',
-        variant_key: 'chr1-12345-A-G',
-        gene_symbol: 'BRCA1',
-        consequence: 'missense_variant',
-        impact: 'MODERATE',
-        carrier_count: 1,
-        total_cases: 10
-      }
-    ]
-    result.totalCount.value = 1
-    result.error.value = new Error('Test error')
-
-    // Reset
-    result.reset()
-
-    // Verify all state cleared
-    expect(result.variants.value).toEqual([])
-    expect(result.totalCount.value).toBe(0)
-    expect(result.error.value).toBeNull()
+    await expect(result.queryPage({ limit: 50, sort_order: 'desc' })).rejects.toThrow(
+      'Network error'
+    )
   })
 
   it('passes filter params to IPC call', async () => {
@@ -271,7 +159,7 @@ describe('useCohortData', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({
+    await result.queryPage({
       limit: 50,
       sort_order: 'desc',
       sort_by: 'pos',
@@ -319,21 +207,17 @@ describe('useCohortData', () => {
     expect(ipcParams._count_needed).toBe(false)
   })
 
-  it('handles window.api unavailable gracefully', async () => {
+  it('queryPage returns an empty page when window.api is unavailable', async () => {
     // @ts-expect-error - Testing undefined case
     delete window.api
 
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({ limit: 50, sort_order: 'desc' })
-
-    expect(logService.warn).toHaveBeenCalledWith(
-      'API not available - running outside Electron',
-      'cohort'
-    )
-    expect(result.variants.value).toEqual([])
-    expect(result.totalCount.value).toBe(0)
+    await expect(result.queryPage({ limit: 50, sort_order: 'desc' })).resolves.toEqual({
+      data: [],
+      total_count: 0
+    })
   })
 })
 
@@ -358,7 +242,7 @@ describe('IPC safety — buildIpcParams strips reactive proxies', () => {
     const [result, appInstance] = withSetup(() => useCohortData())
     app = appInstance
 
-    await result.fetchVariants({
+    await result.queryPage({
       offset: 0,
       limit: 10,
       sort_order: 'asc',

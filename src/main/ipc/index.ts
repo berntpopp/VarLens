@@ -45,9 +45,6 @@ import { registerShortlistHandlers } from './handlers/shortlist'
 import { registerSystemHandlers } from './handlers/system'
 import { registerUpdaterHandlers } from './handlers/updater'
 
-// Re-export pool lifecycle for external callers (e.g. app shutdown)
-export { initDbPool, destroyDbPool } from './dbPoolManager'
-
 /**
  * Register all IPC handlers.
  * Called once during app initialization.
