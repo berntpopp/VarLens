@@ -1,11 +1,12 @@
 /**
  * Drawing pieces shared by the lollipop and gene-structure views: track
- * labels in the left gutter, lollipop / diamond / dot tracks, the variant of
+ * labels in the left gutter, lollipop / ClinVar marker / dot tracks, the variant of
  * interest (a labelled star, always on top) and the axis.
  */
 import * as d3 from 'd3'
 import { TRACK_GUTTER_PX } from '../../config/proteinPlotConfig'
 import { worstClinvar, type TrackKind, type TrackMarker } from '../../utils/track-window'
+import { clinvarMarkPath } from '../../utils/clinvar-mark'
 import type { TrackDrawContext } from './useTrackPlot'
 
 export type Group = d3.Selection<SVGGElement, unknown, null, undefined>
@@ -100,7 +101,7 @@ export function lollipopTrack(
 /** Several markers at one position, shown as one: a bin of them (the tooltip says how many). */
 function mergeGroup(group: TrackMarker[]): TrackMarker {
   if (group.length === 1) return group[0]
-  // ClinVar: the worst class there colours the diamond (Pathogenic over Benign).
+  // ClinVar: the worst class there picks the marker (Pathogenic over Benign).
   const lead = group[0].track === 'clinvar' ? worstClinvar(group) : group[0]
   return {
     ...lead,
@@ -114,15 +115,16 @@ function mergeGroup(group: TrackMarker[]): TrackMarker {
 const countOf = (group: TrackMarker[]): number =>
   group.reduce((s, m) => s + (m.binnedKeys?.length ?? 1), 0)
 
-/** Diamonds on a row (ClinVar), coloured by class. */
-export function diamondTrack(g: Group, ctx: TrackDrawContext, y: number): void {
+/** ClinVar markers on a row: shape and colour by class (CLINVAR_SHAPES, CLINVAR_COLORS). */
+export function clinvarTrack(g: Group, ctx: TrackDrawContext, y: number): void {
   for (const group of byPosition(ctx.markers.filter((m) => m.track === 'clinvar'))) {
     const size = Math.min(110, 40 + 14 * (countOf(group) - 1))
+    const worst = worstClinvar(group)
     const el = g.append('g')
     el.append('path')
       .attr('transform', `translate(${ctx.x(group[0].position)},${y})`)
-      .attr('d', d3.symbol(d3.symbolDiamond, size)() ?? '')
-      .attr('fill', worstClinvar(group).color)
+      .attr('d', clinvarMarkPath(worst.clinvarClass ?? 'other', size))
+      .attr('fill', worst.color)
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.6)
     emphasis(el, ctx, group)

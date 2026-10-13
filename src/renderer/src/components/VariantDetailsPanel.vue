@@ -44,6 +44,7 @@
           <VariantIdentitySection
             :variant="variant"
             :colocated-variants="colocatedVariants"
+            :genome-build="genomeBuild"
             class="mb-2"
             @open-protein-view="openProteinView"
           />
@@ -100,7 +101,10 @@
 
           <!-- Section 3: ACMG Classification -->
           <div class="acmg-section mb-4">
-            <h3 class="text-title-small mb-2">ACMG Classification</h3>
+            <div class="d-flex align-center flex-wrap ga-1 mb-2">
+              <h3 class="text-title-small">ACMG Classification</h3>
+              <ClinGenSpecChips :gene="variant.gene_symbol ?? null" />
+            </div>
 
             <div class="d-flex flex-wrap ga-1 mb-2">
               <v-chip
@@ -212,6 +216,7 @@ import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
 import VariantIdentitySection from './VariantIdentitySection.vue'
+import ClinGenSpecChips from './ClinGenSpecChips.vue'
 import ProteinPreviewStrip from './protein/ProteinPreviewStrip.vue'
 import type { ProteinViewTab } from '../config/proteinViewConfig'
 import IconButton from './common/IconButton.vue'

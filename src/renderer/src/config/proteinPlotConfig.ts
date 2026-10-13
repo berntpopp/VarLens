@@ -109,11 +109,11 @@ export const VARIANT_LIST_HEADERS = {
 
 export function proteinCaption(gene: string, length: number, cohort: boolean): string {
   const size = cohort ? 'height = carriers' : 'height = number of variants'
-  return `Each lollipop is a variant on the ${gene} protein (${length} aa); ${size}, colour = consequence; ★ variant of interest; ◆ ClinVar, colour = class.`
+  return `Each lollipop is a variant on the ${gene} protein (${length} aa); ${size}, colour = consequence; ★ variant of interest; ClinVar row: shape and colour = class (see legend).`
 }
 
 export function geneCaption(gene: string, exons: number, transcript: string): string {
-  return `${gene} (${transcript}, ${exons} exons): boxes are exons, the line is introns (arrows = strand); ★ variant of interest; ◆ ClinVar, colour = class.`
+  return `${gene} (${transcript}, ${exons} exons): boxes are exons, the line is introns (arrows = strand); ★ variant of interest; ClinVar row: shape and colour = class (see legend).`
 }
 
 /** "±25 aa: 3 Pathogenic, 1 VUS · 4 cohort variants, 9 carriers" header unit. */

@@ -322,6 +322,13 @@ export function genomeBuildLinks(id: string): NonNullable<GenomeBuildDef['links'
   return (builds.find((b) => b.id === id) ?? builds[0]).links ?? builds[0].links!
 }
 
+/**
+ * A coordinate or HGVS string as shown and copied, with the build it refers to
+ * (#576): "GRCh38 chr22:29539391:T:C". Unchanged while the build is unknown.
+ */
+export const withGenomeBuild = (text: string, build: string | null): string =>
+  build === null ? text : `${build} ${text}`
+
 export function isImportableGenomeBuild(id: string): boolean {
   return IMPORTABLE_GENOME_BUILDS.some((b) => b.id === id)
 }

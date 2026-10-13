@@ -63,6 +63,22 @@ export const CLINVAR_COLORS: Record<ClinVarSignificance, string> = {
   other: CLINVAR_OTHER_MARK
 }
 
+export type ClinVarShape = 'triangle' | 'diamond' | 'circle' | 'square' | 'cross' | 'wye'
+
+/**
+ * Marker shape per class, the cue next to colour (#572, WCAG 1.4.1): classes
+ * stay apart in greyscale and for colour-blind readers. Plots and legends both
+ * read it (src/renderer/src/utils/clinvar-mark.ts).
+ */
+export const CLINVAR_SHAPES: Record<ClinVarSignificance, ClinVarShape> = {
+  pathogenic: 'triangle',
+  likely_pathogenic: 'diamond',
+  uncertain: 'circle',
+  likely_benign: 'square',
+  benign: 'cross',
+  other: 'wye'
+}
+
 /**
  * Map a ClinVar clinical significance string to a display category
  */

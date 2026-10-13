@@ -19,6 +19,7 @@ import {
   CLINVAR_COLORS
 } from '../../../../shared/utils/protein-utils'
 import MolstarViewer from './MolstarViewer.vue'
+import ClinVarMark from './ClinVarMark.vue'
 import StructureControls from './StructureControls.vue'
 import type { RepresentationType, VariantStyle } from '../../composables/useMolstarViewer'
 
@@ -203,6 +204,7 @@ function onClinvarClick(cv: ClinVarVariant): void {
                   "
                   @click="toggleClinvar(chip.key)"
                 >
+                  <ClinVarMark :cls="chip.key" class="mr-1" />
                   {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
                 </v-chip>
                 <v-btn
@@ -273,11 +275,10 @@ function onClinvarClick(cv: ClinVarVariant): void {
               @click="onClinvarClick(cv)"
             >
               <template #prepend>
-                <div
-                  class="variant-color-dot mr-2"
-                  :style="{
-                    backgroundColor: CLINVAR_COLORS[getClinVarCategory(cv.clinicalSignificance)]
-                  }"
+                <ClinVarMark
+                  :cls="getClinVarCategory(cv.clinicalSignificance)"
+                  :color="CLINVAR_COLORS[getClinVarCategory(cv.clinicalSignificance)]"
+                  class="mr-2"
                 />
               </template>
               <v-list-item-title class="text-body-2 font-weight-medium">

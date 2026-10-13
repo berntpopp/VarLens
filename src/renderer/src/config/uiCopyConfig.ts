@@ -57,3 +57,10 @@ export const CARRIER_FREQUENCY_PRESETS = [
   { label: '<= 5%', value: 0.05 },
   { label: '<= 10%', value: 0.1 }
 ] as const
+
+/** ClinGen VCEP gene-specific ACMG/AMP specification chip (#201, bundled CSpec snapshot). */
+export const CLINGEN_SPEC_COPY = {
+  chip: (id: string, several: boolean): string => (several ? `ClinGen VCEP ${id}` : 'ClinGen VCEP'),
+  tooltip: (panel: string | null, version: string | null, retrieved: string): string =>
+    `Gene-specific ACMG/AMP specification: ${panel ?? 'ClinGen VCEP'}${version === null ? '' : ` v${version}`}. Opens the ClinGen CSpec registry. Registry snapshot of ${retrieved}.`
+} as const
