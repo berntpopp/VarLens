@@ -452,6 +452,40 @@ describe('useFilterState', () => {
   // isFilterGroupActive
   // -------------------------------------------------------------------------
 
+  // Issue #553: the drawer disables trio chips without a family, so clearing it must drop them.
+  describe('clearing the family', () => {
+    it('removes de novo and its chip', async () => {
+      const { result } = createState()
+      result.filters.value.analysisGroupId = 7
+      result.filters.value.inheritanceModes = ['de_novo']
+      await nextTick()
+      expect(result.activeFiltersList.value.map((f) => f.id)).toContain('inheritance')
+
+      result.filters.value.analysisGroupId = null
+      await nextTick()
+      expect(result.filters.value.inheritanceModes).toEqual([])
+      expect(result.activeFiltersList.value.map((f) => f.id)).not.toContain('inheritance')
+    })
+
+    it('keeps the solo modes', async () => {
+      const { result } = createState()
+      result.filters.value.analysisGroupId = 7
+      result.filters.value.inheritanceModes = [
+        'homozygous',
+        'compound_het',
+        'candidate_compound_het'
+      ]
+      await nextTick()
+
+      result.filters.value.analysisGroupId = null
+      await nextTick()
+      expect(result.filters.value.inheritanceModes).toEqual([
+        'homozygous',
+        'candidate_compound_het'
+      ])
+    })
+  })
+
   describe('isFilterGroupActive', () => {
     it('returns true for search when searchQuery is set', () => {
       const { result } = createState()

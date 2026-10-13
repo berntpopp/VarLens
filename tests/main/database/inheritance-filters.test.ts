@@ -136,6 +136,40 @@ describe('Solo inheritance filters', () => {
     expect(result.data.every((v) => v.gene_symbol === 'BRCA1')).toBe(true)
   })
 
+  // Issue #579: only rows that pass the other active filters count towards the pair.
+  describe('candidate_compound_het counts the qualifying rows only', () => {
+    const rare = { gnomad_af: 0.0001, consequence: 'HIGH', func: 'stop_gained' }
+    const common = { gnomad_af: 0.3, consequence: 'LOW', func: 'synonymous_variant' }
+    const candidates = (caseId: number): number[] =>
+      service.variants
+        .getVariants(
+          { case_id: caseId, inheritance_modes: ['candidate_compound_het'], gnomad_af_max: 0.01 },
+          50,
+          0
+        )
+        .data.map((v) => v.pos)
+        .sort()
+
+    it('a rare LoF het with only a common het in its gene does not qualify', () => {
+      const caseId = service.cases.createCase('test', '/a.json', 100)
+      service.variants.insertVariantsBatch(caseId, [
+        makeVariant({ pos: 100, ...rare }),
+        makeVariant({ pos: 200, ...common })
+      ])
+      expect(candidates(caseId)).toEqual([])
+    })
+
+    it('two rare qualifying hets in one gene do', () => {
+      const caseId = service.cases.createCase('test', '/a.json', 100)
+      service.variants.insertVariantsBatch(caseId, [
+        makeVariant({ pos: 100, ...rare }),
+        makeVariant({ pos: 200, ...rare }),
+        makeVariant({ pos: 300, ...common })
+      ])
+      expect(candidates(caseId)).toEqual([100, 200])
+    })
+  })
+
   it('multiple modes combine with OR logic', () => {
     const caseId = service.cases.createCase('test', '/a.json', 100)
     service.variants.insertVariantsBatch(caseId, [
