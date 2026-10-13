@@ -191,7 +191,7 @@
           <v-divider class="mb-4" />
 
           <!-- Section 7: External Links -->
-          <ExternalLinksSection :variant="variant" />
+          <ExternalLinksSection :variant="variant" :genome-build="genomeBuild" />
         </template>
 
         <div v-else class="text-muted text-center mt-4">Select a variant to view details</div>

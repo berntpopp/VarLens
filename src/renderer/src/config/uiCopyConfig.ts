@@ -60,3 +60,16 @@ export const CARRIER_FREQUENCY_PRESETS = [
 
 /** Cohort details of an SV/CNV row: the summary holds no per-call evidence (#539). */
 export const COHORT_CALL_EVIDENCE_NOTE =
+  'Call metrics (support, VAF, copy number, quality) differ per carrier: expand the row to see each carrier’s call.'
+
+/** The "Local IGV" action (#93). */
+export const IGV_COPY = {
+  tooltip: (locus: string, build: string | null): string =>
+    `Jump to ${locus}${build === null ? '' : ` (${build})`} in local IGV (port 60151)`,
+  sent: (locus: string): string => `Sent ${locus} to IGV.`,
+  genome: (genomeId: string): string => `IGV must show ${genomeId}.`,
+  unknownBuild: 'Genome build unknown: check that IGV shows the case’s genome.',
+  unreachable:
+    'IGV did not answer on port 60151. Start IGV desktop with its batch port enabled (View > Preferences > Advanced), then retry.',
+  retry: 'Retry'
+} as const
