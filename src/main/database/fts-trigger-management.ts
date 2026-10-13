@@ -41,8 +41,8 @@ export function tearDownFtsTriggers(db: DatabaseType): TriggerSnapshot {
   return snapshot
 }
 
-/** True when every present FTS table has its insert/update/delete triggers. */
-export function ftsTriggersComplete(db: DatabaseType): boolean {
+/** How many of the present FTS tables' insert/update/delete triggers exist. */
+function countFtsTriggers(db: DatabaseType): { found: number; expected: number } {
   const names = detectPresentFtsTables(db).flatMap((t) => [`${t}_ai`, `${t}_au`, `${t}_ad`])
   const found = db
     .prepare(
@@ -50,7 +50,22 @@ export function ftsTriggersComplete(db: DatabaseType): boolean {
         WHERE type = 'trigger' AND name IN (${names.map(() => '?').join(', ')})`
     )
     .get(...names) as { c: number }
-  return found.c === names.length
+  return { found: found.c, expected: names.length }
+}
+
+/** True when every present FTS table has its insert/update/delete triggers. */
+export function ftsTriggersComplete(db: DatabaseType): boolean {
+  const { found, expected } = countFtsTriggers(db)
+  return found === expected
+}
+
+/**
+ * True when any FTS trigger exists. A session that tore them down finds one
+ * again when a delete or rebuild job restored them meanwhile: rows were then
+ * indexed (or unindexed) by trigger, and only a full rebuild is exact.
+ */
+export function anyFtsTrigger(db: DatabaseType): boolean {
+  return countFtsTriggers(db).found > 0
 }
 
 /** Recreate triggers from a snapshot produced by tearDownFtsTriggers. */
