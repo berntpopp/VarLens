@@ -43,6 +43,7 @@ import {
   streamInsertVcf
 } from './import-pipeline'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
+import { ftsTriggersComplete } from '../database/fts-trigger-management'
 import { discardInterruptedImports } from './import-recovery'
 import { ImportSkipTracker } from './import-skip-tracker'
 import { classifyWorkerError } from '../storage/import-worker-errors'
@@ -74,23 +75,29 @@ export async function runImportSession(
     const summaryRef: { session?: ImportSummarySession } = {}
     const stmts = prepareStatements(db, () => summaryRef.session?.keepSessionOpen())
 
-    // Drop FTS triggers at start, and the non-essential indexes when the
-    // session is a bulk load relative to what is stored (import-index-sql.ts).
-    db.exec(DROP_FTS_TRIGGERS)
-    ftsFinalizationState.ftsTriggersDropped = true
-
     // Recovery, before anything is counted or dropped: what interrupted
     // imports left behind goes (import-recovery.ts) — the case a dead worker
     // was filling, named by the main process, and every case that was never
-    // published. The session end rebuilds FTS and indexes.
+    // published. Live FTS triggers take its rows out of the index.
+    const ftsTriggersLive = ftsTriggersComplete(db)
     discardInterruptedImports(
       db,
       msg.discardCaseIds ?? [],
       (caseId) => void stmts.deleteCase.run(caseId)
     )
 
+    // A bulk load relative to what is stored (import-index-sql.ts) drops the
+    // non-essential indexes and the FTS triggers, and rebuilds both at the
+    // end. A small session keeps both: row triggers index its rows and no
+    // whole-database FTS rebuild runs (#559). Missing triggers (a session
+    // that died) force the rebuild.
     const storedCases = (db.prepare('SELECT COUNT(*) AS c FROM cases').get() as { c: number }).c
-    if (!keepsIndexesForSession(storedCases, msg.files.length)) db.exec(DROP_INDEXES)
+    const keepIndexes = keepsIndexesForSession(storedCases, msg.files.length)
+    if (!keepIndexes || !ftsTriggersLive) {
+      db.exec(DROP_FTS_TRIGGERS)
+      ftsFinalizationState.ftsTriggersDropped = true
+    }
+    if (!keepIndexes) db.exec(DROP_INDEXES)
 
     // The cohort summary stays exact after every file instead of going stale
     // for the session (cohort-summary-case-add.ts). A crashed worker may have
@@ -261,7 +268,6 @@ export async function runImportSession(
           }
 
           const fields = new FieldProfileResolver(file.fieldProfile)
-          stmts.beginBulkInsert()
           try {
             if (formatInfo.format === 'vcf') {
               variantCount = await streamInsertVcf(
@@ -418,8 +424,12 @@ export async function runImportSession(
     // gets rows for indexes that exist at that moment.
     sendProgress(port, totalFiles, totalFiles, '', 99, 'finalizing', 0, 0)
     recreateSessionIndexes(db)
-    rebuildFts(db)
-    ftsFinalizationState.ftsRebuilt = true
+    if (ftsFinalizationState.ftsTriggersDropped) {
+      rebuildFts(db)
+      ftsFinalizationState.ftsRebuilt = true
+    } else {
+      db.pragma('optimize')
+    }
     summary.finish()
 
     const completeMsg: WorkerMessage = {

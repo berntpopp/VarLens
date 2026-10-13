@@ -52,6 +52,8 @@ export function openWorkerDatabase(dbPath: string, encryptionKey?: string): Data
   db.pragma('temp_store = MEMORY')
   db.pragma(`mmap_size = ${DATABASE_CONFIG.MMAP_SIZE_BYTES}`)
   db.pragma('wal_autocheckpoint = 0')
+  // Bounds the ANALYZE / PRAGMA optimize at session end, as on the main connection.
+  db.pragma(`analysis_limit = ${DATABASE_CONFIG.ANALYSIS_LIMIT}`)
 
   return db
 }
@@ -95,7 +97,8 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
 
 /**
  * Rebuild the FTS index, recreate triggers, run ANALYZE, and optimize the index.
- * All steps are best-effort — failures are silently ignored.
+ * Throws on failure: the caller must keep its recovery state (an import leaves
+ * its session marker, so the next start repairs the index).
  *
  * The rebuild step delegates to `rebuildAllFtsIndexes` from the shared
  * `fts-trigger-management` module so every present FTS table (variants_fts
@@ -106,35 +109,10 @@ export function openWorkerDatabaseReadOnly(dbPath: string, encryptionKey?: strin
  * "ensure triggers exist" semantics.
  */
 export function rebuildFts(db: DatabaseType): void {
-  try {
-    rebuildAllFtsIndexes(db)
-  } catch (e) {
-    console.warn(
-      '[worker-db] Failed to rebuild FTS index:',
-      e instanceof Error ? e.message : String(e)
-    )
-  }
-  try {
-    db.exec(createFTSTriggers)
-  } catch (e) {
-    console.warn(
-      '[worker-db] Failed to recreate FTS triggers:',
-      e instanceof Error ? e.message : String(e)
-    )
-  }
-  try {
-    db.exec('ANALYZE')
-  } catch (e) {
-    console.warn('[worker-db] Failed to run ANALYZE:', e instanceof Error ? e.message : String(e))
-  }
-  try {
-    db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
-  } catch (e) {
-    console.warn(
-      '[worker-db] Failed to optimize FTS index:',
-      e instanceof Error ? e.message : String(e)
-    )
-  }
+  rebuildAllFtsIndexes(db)
+  db.exec(createFTSTriggers)
+  db.exec('ANALYZE')
+  db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
 }
 
 /**

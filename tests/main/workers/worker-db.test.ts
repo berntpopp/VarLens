@@ -8,6 +8,7 @@ import { unlinkSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
+import { DATABASE_CONFIG } from '../../../src/shared/config'
 import {
   openWorkerDatabase,
   openWorkerDatabaseReadOnly,
@@ -105,6 +106,11 @@ describe('openWorkerDatabase', () => {
     const result = db.pragma('synchronous') as { synchronous: number }[]
     expect(result[0].synchronous).toBe(0)
   })
+
+  it('bounds ANALYZE with the configured analysis limit (#559)', () => {
+    const db = trackDb(openWorkerDatabase(':memory:'))
+    expect(db.pragma('analysis_limit', { simple: true })).toBe(DATABASE_CONFIG.ANALYSIS_LIMIT)
+  })
 })
 
 describe('openWorkerDatabaseReadOnly', () => {
@@ -160,6 +166,15 @@ describe('openWorkerDatabaseReadOnly', () => {
 })
 
 describe('rebuildFts', () => {
+  it('lets a failure propagate so the caller keeps its recovery state (#559)', () => {
+    const db = trackDb(new Database(':memory:'))
+    initializeSchema(db)
+    runMigrations(db)
+    db.exec('DROP TABLE variants_fts')
+    db.exec('CREATE TABLE variants_fts (x)')
+    expect(() => rebuildFts(db)).toThrow()
+  })
+
   it('does not throw on a schema-initialized DB', () => {
     const db = trackDb(new Database(':memory:'))
     initializeSchema(db)

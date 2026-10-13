@@ -32,7 +32,6 @@ describe('prepareStatements', () => {
     expect(stmts.deleteCase).toBeDefined()
     expect(stmts.getCaseByName).toBeDefined()
     expect(stmts.insertBatch).toBeDefined()
-    expect(stmts.beginBulkInsert).toBeDefined()
     expect(stmts.finishBulkInsert).toBeDefined()
     expect(stmts.insertDataInfo).toBeDefined()
     expect(stmts.updateVariantCount).toBeDefined()

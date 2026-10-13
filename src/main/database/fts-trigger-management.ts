@@ -41,6 +41,18 @@ export function tearDownFtsTriggers(db: DatabaseType): TriggerSnapshot {
   return snapshot
 }
 
+/** True when every present FTS table has its insert/update/delete triggers. */
+export function ftsTriggersComplete(db: DatabaseType): boolean {
+  const names = detectPresentFtsTables(db).flatMap((t) => [`${t}_ai`, `${t}_au`, `${t}_ad`])
+  const found = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM sqlite_master
+        WHERE type = 'trigger' AND name IN (${names.map(() => '?').join(', ')})`
+    )
+    .get(...names) as { c: number }
+  return found.c === names.length
+}
+
 /** Recreate triggers from a snapshot produced by tearDownFtsTriggers. */
 export function restoreFtsTriggers(db: DatabaseType, snapshot: TriggerSnapshot): void {
   for (const sql of Object.values(snapshot)) {
