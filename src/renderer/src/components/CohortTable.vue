@@ -244,6 +244,10 @@ const buildCohortQueryParams = (): Omit<
   gnomad_af_max: filters.value.maxGnomadAf ?? undefined,
   cadd_min: filters.value.minCadd ?? undefined,
   max_internal_af: filters.value.maxInternalAf ?? undefined,
+  carrier_count_min:
+    filters.value.minCarriers !== null && filters.value.minCarriers > 0
+      ? filters.value.minCarriers
+      : undefined,
   carrier_count_max: activeMaxCarriers(filters.value.maxCarriers) ?? undefined,
   starred_only: filters.value.starredOnly || undefined,
   has_comment: filters.value.hasCommentOnly || undefined,

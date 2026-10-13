@@ -496,7 +496,8 @@ export function buildSummaryQueryParts(
     )
   }
 
-  if (params.gnomad_af_max !== undefined) {
+  // 0 means no filter, as on SQLite (cohort.ts).
+  if (params.gnomad_af_max !== undefined && params.gnomad_af_max > 0) {
     whereParts.push(`(cvs.gnomad_af IS NULL OR cvs.gnomad_af <= ${addParam(params.gnomad_af_max)})`)
   }
 
