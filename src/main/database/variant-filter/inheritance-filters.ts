@@ -9,8 +9,9 @@ import {
 } from '../../../shared/sql/genotype-dosage'
 import {
   autosomalRecessiveSql,
+  candidateCompoundHetSql,
   compoundHetPairIdsSql,
-  variantIdentitySql,
+  QUALIFYING_ROW_COLUMNS,
   xHemizygousSql,
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
@@ -25,6 +26,7 @@ const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 const CASE_MARK = '@case@'
 const GROUP_MARK = '@group@'
+const QUALIFYING_MARK = '@qualifying@'
 const TRIO_CONTEXT: TrioSqlContext = {
   variants: 'variants',
   members: 'analysis_group_members',
@@ -55,20 +57,22 @@ function bound(text: string, caseId: number, groupId: number): SqlCondition {
 
 type SqlCondition = RawBuilder<unknown>
 
-/** Het in the proband with at least two different het variants in the same gene. */
-function candidateCompoundHetCondition(cid: number): SqlCondition {
-  return sql`(variants.gene_symbol IN (
-            SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ${cid}
-              AND v2.gt_num IN ${HET}
-              AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol
-            HAVING COUNT(DISTINCT ${sql.raw(variantIdentitySql('v2'))}) >= 2
-          ) AND variants.gt_num IN ${HET})`
+/**
+ * Het, with a second distinct het variant in the gene among the rows that pass
+ * every other active filter: `qualifying` is the query before this step (#579).
+ */
+function candidateCompoundHetCondition(qualifying: VariantQueryBuilder): SqlCondition {
+  const rows = qualifying
+    .clearSelect()
+    .select(QUALIFYING_ROW_COLUMNS.map((column) => `variants.${column}` as const))
+  const [before, after] = candidateCompoundHetSql('variants', QUALIFYING_MARK).split(
+    QUALIFYING_MARK
+  )
+  return sql`${sql.raw(before)}(${rows})${sql.raw(after)}`
 }
 
 /** Solo modes — always available, no family data required. */
-function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
+function buildSoloConditions(modes: string[], qualifying: VariantQueryBuilder): SqlCondition[] {
   const conditions: SqlCondition[] = []
   if (modes.includes('homozygous')) {
     conditions.push(sql`variants.gt_num IN ${HOM}`)
@@ -80,7 +84,7 @@ function buildSoloConditions(modes: string[], caseId: number): SqlCondition[] {
     conditions.push(sql.raw(xHemizygousSql('variants', 'case_metadata')))
   }
   if (modes.includes('candidate_compound_het')) {
-    conditions.push(candidateCompoundHetCondition(caseId))
+    conditions.push(candidateCompoundHetCondition(qualifying))
   }
   return conditions
 }
@@ -162,7 +166,7 @@ export function applyInheritanceFilters(
   if (!filter.inheritance_modes || filter.inheritance_modes.length === 0) return query
   const modes = filter.inheritance_modes
   const groupId = filter.analysis_group_id ?? null
-  const conditions = buildSoloConditions(modes, filter.case_id)
+  const conditions = buildSoloConditions(modes, query)
   if (groupId !== null) {
     conditions.push(...buildTrioConditions(modes, filter.case_id, groupId))
   } else if (modes.some(isTrioMode)) {

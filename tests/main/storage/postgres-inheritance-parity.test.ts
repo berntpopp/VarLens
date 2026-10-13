@@ -1,6 +1,7 @@
 /**
  * Inheritance filters that must select the same proband rows on SQLite and
- * PostgreSQL: trio modes without a family fail closed (#553).
+ * PostgreSQL: trio modes without a family fail closed (#553), and candidate
+ * compound het counts only the rows the other filters keep (#579).
  *
  * Gated by VARLENS_RUN_POSTGRES_E2E=1 against a real PostgreSQL.
  */
@@ -108,4 +109,9 @@ describe.skipIf(!RUN)('inheritance filters select the same rows on both backends
     expect(await matching({ inheritance_modes: ['homozygous', 'de_novo'] })).toEqual([500])
   })
 
+  it('candidate compound het counts only rows that pass the other filters (#579)', async () => {
+    const mode = { inheritance_modes: ['candidate_compound_het'] }
+    expect(await matching(mode)).toEqual([100, 200, 300, 400])
+    expect(await matching({ ...mode, gnomad_af_max: 0.01 })).toEqual([300, 400])
+  })
 })

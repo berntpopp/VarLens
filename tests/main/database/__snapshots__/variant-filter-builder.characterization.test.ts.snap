@@ -4266,6 +4266,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
     2,
     2,
+    2,
     7,
     2,
     7,
@@ -4318,14 +4319,42 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM case_metadata cm
             WHERE cm.case_id = variants.case_id AND cm.sex = 'female'
           ))
-        )) OR (variants.gene_symbol IN (
-            SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
-              AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol
-            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
-          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')) OR (
+        )) OR (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND variants.gene_symbol IN (
+            SELECT qv.gene_symbol FROM ((select "variants"."gene_symbol", "variants"."gt_num", "variants"."chr", "variants"."pos", "variants"."ref", "variants"."alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('snv', 'indel')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'sv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('sv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'cnv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('cnv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'str' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
+          )
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?)) qv
+            WHERE qv.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND qv.gene_symbol IS NOT NULL
+            GROUP BY qv.gene_symbol
+            HAVING COUNT(DISTINCT qv.chr || ':' || CAST(qv.pos AS TEXT) || ':' || qv.ref || ':' || qv.alt) >= 2
+          )) OR (
             (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1','1') OR (variants.chr IN ('X', 'chrX') AND (
           variants.gt_num IN ('1')
           OR (variants.gt_num IN ('1/1','1|1') AND EXISTS (
@@ -4423,6 +4452,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
     2,
     2,
+    2,
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
@@ -4464,14 +4494,42 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM case_metadata cm
             WHERE cm.case_id = variants.case_id AND cm.sex = 'female'
           ))
-        )) OR (variants.gene_symbol IN (
-            SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
-              AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol
-            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
-          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
+        )) OR (variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND variants.gene_symbol IN (
+            SELECT qv.gene_symbol FROM ((select "variants"."gene_symbol", "variants"."gt_num", "variants"."chr", "variants"."pos", "variants"."ref", "variants"."alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('snv', 'indel')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'sv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('sv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'cnv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('cnv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'str' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
+          )
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?)) qv
+            WHERE qv.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND qv.gene_symbol IS NOT NULL
+            GROUP BY qv.gene_symbol
+            HAVING COUNT(DISTINCT qv.chr || ':' || CAST(qv.pos AS TEXT) || ':' || qv.ref || ':' || qv.alt) >= 2
+          )))",
 }
 `;
 
@@ -4712,6 +4770,7 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
     2,
     2,
     2,
+    2,
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
@@ -4747,14 +4806,42 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > inh
             SELECT 1 FROM variants cv
             WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
           )
-          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and ((variants.gene_symbol IN (
-            SELECT v2.gene_symbol FROM variants v2
-            WHERE v2.case_id = ?
-              AND v2.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')
-              AND v2.gene_symbol IS NOT NULL
-            GROUP BY v2.gene_symbol
-            HAVING COUNT(DISTINCT v2.chr || ':' || CAST(v2.pos AS TEXT) || ':' || v2.ref || ':' || v2.alt) >= 2
-          ) AND variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1')))",
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ? and ((variants.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND variants.gene_symbol IN (
+            SELECT qv.gene_symbol FROM ((select "variants"."gene_symbol", "variants"."gt_num", "variants"."chr", "variants"."pos", "variants"."ref", "variants"."alt" from "variants" left join (SELECT c.genome_build AS build, 'small' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('snv', 'indel')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'sv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('sv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'cnv' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('cnv')
+          )
+          GROUP BY c.genome_build
+        UNION ALL
+        SELECT c.genome_build AS build, 'str' AS vclass, COUNT(*) AS total
+          FROM cases c
+          WHERE c.import_status = 'ready' AND EXISTS (
+            SELECT 1 FROM variants cv
+            WHERE cv.case_id = c.id AND cv.variant_type IN ('str')
+          )
+          GROUP BY c.genome_build) as "bt" on bt.build = (SELECT genome_build FROM cases WHERE id = ?) AND bt.vclass = CASE WHEN variants.variant_type IN ('snv', 'indel') THEN 'small' WHEN variants.variant_type IN ('sv') THEN 'sv' WHEN variants.variant_type IN ('cnv') THEN 'cnv' WHEN variants.variant_type IN ('str') THEN 'str' ELSE variants.variant_type END where "variants"."case_id" = ?)) qv
+            WHERE qv.gt_num IN ('0/1','1/0','0|1','1|0','1/.','./1','1|.','.|1') AND qv.gene_symbol IS NOT NULL
+            GROUP BY qv.gene_symbol
+            HAVING COUNT(DISTINCT qv.chr || ':' || CAST(qv.pos AS TEXT) || ':' || qv.ref || ':' || qv.alt) >= 2
+          )))",
 }
 `;
 

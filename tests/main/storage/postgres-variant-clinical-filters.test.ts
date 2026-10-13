@@ -302,6 +302,19 @@ describe('PostgreSQL clinical variant filters', () => {
     paramsByCall[0].forEach((_, i) => expect(calls[0]).toMatch(new RegExp(`\\$${i + 1}(?!\\d)`)))
   })
 
+  // Issue #579: the gene count reads the rows the other filters keep, reusing their placeholders.
+  it('candidate compound het counts only rows that pass the other filters', async () => {
+    const { repo, calls, paramsByCall } = repoWithQueryCapture()
+    await repo.queryVariants(
+      { case_id: 1, inheritance_modes: ['candidate_compound_het'], gnomad_af_max: 0.01 },
+      25
+    )
+
+    const subquery = calls[0].slice(calls[0].indexOf('SELECT qv.gene_symbol'))
+    expect(subquery).toContain('v.gnomad_af <= $')
+    expect(paramsByCall[0].filter((p) => p === 0.01)).toHaveLength(1)
+  })
+
   it('accepts consider_phasing as an inheritance no-op', async () => {
     const { repo, calls } = repoWithQueryCapture()
 
