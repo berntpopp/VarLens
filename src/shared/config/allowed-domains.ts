@@ -14,6 +14,7 @@ export const ALLOWED_DOMAINS = [
   'franklin.genoox.com',
   'deciphergenomics.org', // DECIPHER
   'clinicalgenome.org', // ClinGen
+  'cspec.genome.network', // ClinGen Criteria Specification Registry (VCEP specs, #201)
   'ensembl.org', // Ensembl
   'grch37.ensembl.org' // Ensembl GRCh37 subdomain
 ] as const

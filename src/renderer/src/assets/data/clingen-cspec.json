@@ -1,0 +1,1103 @@
+{
+  "source": "https://cspec.genome.network/cspec/api/svis?detail=high",
+  "attribution": "ClinGen Criteria Specification Registry (cspec.genome.network), CC0 1.0",
+  "retrieved": "2026-10-13",
+  "genes": {
+    "ABCA4": [
+      {
+        "id": "GN164",
+        "version": "1.0",
+        "panel": "ABCA4 Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN164"
+      }
+    ],
+    "ABCD1": [
+      {
+        "id": "GN105",
+        "version": "1.0",
+        "panel": "Peroxisomal Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN105"
+      }
+    ],
+    "ACADVL": [
+      {
+        "id": "GN021",
+        "version": "2.2",
+        "panel": "ACADVL Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN021"
+      }
+    ],
+    "ACTA1": [
+      {
+        "id": "GN147",
+        "version": "2.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN147"
+      },
+      {
+        "id": "GN169",
+        "version": "1.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN169"
+      }
+    ],
+    "ACTC1": [
+      {
+        "id": "GN101",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN101"
+      }
+    ],
+    "ACVRL1": [
+      {
+        "id": "GN135",
+        "version": "1.1",
+        "panel": "Hereditary Hemorrhagic Telangiectasia Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN135"
+      }
+    ],
+    "ADA": [
+      {
+        "id": "GN114",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN114"
+      }
+    ],
+    "AIPL1": [
+      {
+        "id": "GN208",
+        "version": "1.0",
+        "panel": "Leber Congenital Amaurosis/early onset Retinal Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN208"
+      }
+    ],
+    "AKT3": [
+      {
+        "id": "GN018",
+        "version": "1.1",
+        "panel": "Brain Malformations Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN018"
+      }
+    ],
+    "ANO5": [
+      {
+        "id": "GN188",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN188"
+      }
+    ],
+    "APC": [
+      {
+        "id": "GN089",
+        "version": "2.1",
+        "panel": "InSiGHT Hereditary Colorectal Cancer/Polyposis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN089"
+      }
+    ],
+    "ATM": [
+      {
+        "id": "GN020",
+        "version": "1.6",
+        "panel": "Hereditary Breast, Ovarian and Pancreatic Cancer Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN020"
+      }
+    ],
+    "BMPR2": [
+      {
+        "id": "GN125",
+        "version": "2.0",
+        "panel": "Pulmonary Hypertension Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN125"
+      }
+    ],
+    "BRAF": [
+      {
+        "id": "GN049",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN049"
+      }
+    ],
+    "BRCA1": [
+      {
+        "id": "GN092",
+        "version": "1.2",
+        "panel": "ENIGMA BRCA1 and BRCA2 Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN092"
+      }
+    ],
+    "BRCA2": [
+      {
+        "id": "GN097",
+        "version": "1.2",
+        "panel": "ENIGMA BRCA1 and BRCA2 Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN097"
+      }
+    ],
+    "CAPN3": [
+      {
+        "id": "GN187",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN187"
+      }
+    ],
+    "CDH1": [
+      {
+        "id": "GN007",
+        "version": "3.1",
+        "panel": "Gastric Cancer Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN007"
+      }
+    ],
+    "CDH23": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "CDKL5": [
+      {
+        "id": "GN034",
+        "version": "6.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN034"
+      }
+    ],
+    "CEP290": [
+      {
+        "id": "GN226",
+        "version": "1.0",
+        "panel": "Leber Congenital Amaurosis/early onset Retinal Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN226"
+      }
+    ],
+    "COCH": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "CTLA4": [
+      {
+        "id": "GN122",
+        "version": "2.0",
+        "panel": "Antibody Deficiencies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN122"
+      }
+    ],
+    "CYP1B1": [
+      {
+        "id": "GN104",
+        "version": "2.0",
+        "panel": "Glaucoma Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN104"
+      }
+    ],
+    "DCLRE1C": [
+      {
+        "id": "GN116",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN116"
+      }
+    ],
+    "DICER1": [
+      {
+        "id": "GN024",
+        "version": "1.4",
+        "panel": "DICER1 and miRNA-Processing Gene Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN024"
+      }
+    ],
+    "DNM2": [
+      {
+        "id": "GN148",
+        "version": "1.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN148"
+      }
+    ],
+    "DYSF": [
+      {
+        "id": "GN180",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN180"
+      }
+    ],
+    "ENG": [
+      {
+        "id": "GN136",
+        "version": "1.1",
+        "panel": "Hereditary Hemorrhagic Telangiectasia Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN136"
+      }
+    ],
+    "ETHE1": [
+      {
+        "id": "GN014",
+        "version": "1.0",
+        "panel": "Mitochondrial Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN014"
+      }
+    ],
+    "F8": [
+      {
+        "id": "GN071",
+        "version": "2.0",
+        "panel": "Coagulation Factor Deficiency Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN071"
+      }
+    ],
+    "F9": [
+      {
+        "id": "GN080",
+        "version": "2.1",
+        "panel": "Coagulation Factor Deficiency Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN080"
+      }
+    ],
+    "FBN1": [
+      {
+        "id": "GN022",
+        "version": "1.0",
+        "panel": "FBN1 Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN022"
+      }
+    ],
+    "FOXG1": [
+      {
+        "id": "GN035",
+        "version": "6.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN035"
+      }
+    ],
+    "FOXN1": [
+      {
+        "id": "GN113",
+        "version": "2.3",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN113"
+      }
+    ],
+    "GAA": [
+      {
+        "id": "GN010",
+        "version": "2.0",
+        "panel": "Lysosomal Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN010"
+      }
+    ],
+    "GALT": [
+      {
+        "id": "GN158",
+        "version": "1.1",
+        "panel": "Galactosemia Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN158"
+      }
+    ],
+    "GAMT": [
+      {
+        "id": "GN026",
+        "version": "2.0",
+        "panel": "Cerebral Creatine Deficiency Syndromes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN026"
+      }
+    ],
+    "GATM": [
+      {
+        "id": "GN025",
+        "version": "2.0",
+        "panel": "Cerebral Creatine Deficiency Syndromes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN025"
+      }
+    ],
+    "GCK": [
+      {
+        "id": "GN086",
+        "version": "3.1",
+        "panel": "Monogenic Diabetes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN086"
+      }
+    ],
+    "GFAP": [
+      {
+        "id": "GN157",
+        "version": "1.0",
+        "panel": "Leukodystrophy and Leukoencephalopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN157"
+      }
+    ],
+    "GJB2": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "GP1BA": [
+      {
+        "id": "GN079",
+        "version": "1.1",
+        "panel": "Platelet Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN079"
+      }
+    ],
+    "GP1BB": [
+      {
+        "id": "GN082",
+        "version": "1.1",
+        "panel": "Platelet Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN082"
+      }
+    ],
+    "GP9": [
+      {
+        "id": "GN083",
+        "version": "1.1",
+        "panel": "Platelet Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN083"
+      }
+    ],
+    "GUCY2D": [
+      {
+        "id": "GN167",
+        "version": "1.0",
+        "panel": "Leber Congenital Amaurosis/early onset Retinal Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN167"
+      }
+    ],
+    "HBA2": [
+      {
+        "id": "GN173",
+        "version": "1.0",
+        "panel": "Hemoglobinopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN173"
+      }
+    ],
+    "HBB": [
+      {
+        "id": "GN170",
+        "version": "1.0",
+        "panel": "Hemoglobinopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN170"
+      }
+    ],
+    "HNF1A": [
+      {
+        "id": "GN017",
+        "version": "3.1",
+        "panel": "Monogenic Diabetes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN017"
+      }
+    ],
+    "HNF4A": [
+      {
+        "id": "GN085",
+        "version": "4.0",
+        "panel": "Monogenic Diabetes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN085"
+      }
+    ],
+    "HRAS": [
+      {
+        "id": "GN046",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN046"
+      }
+    ],
+    "IDUA": [
+      {
+        "id": "GN091",
+        "version": "1.2",
+        "panel": "Lysosomal Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN091"
+      }
+    ],
+    "IL2RG": [
+      {
+        "id": "GN129",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN129"
+      }
+    ],
+    "IL7R": [
+      {
+        "id": "GN119",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN119"
+      }
+    ],
+    "ITGA2B": [
+      {
+        "id": "GN011",
+        "version": "2.1",
+        "panel": "Platelet Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN011"
+      }
+    ],
+    "ITGB3": [
+      {
+        "id": "GN011",
+        "version": "2.1",
+        "panel": "Platelet Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN011"
+      }
+    ],
+    "JAK3": [
+      {
+        "id": "GN121",
+        "version": "2.3",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN121"
+      }
+    ],
+    "KCNQ1": [
+      {
+        "id": "GN112",
+        "version": "1.0",
+        "panel": "Potassium Channel Arrhythmia Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN112"
+      }
+    ],
+    "KCNQ4": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "KRAS": [
+      {
+        "id": "GN044",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN044"
+      }
+    ],
+    "LDLR": [
+      {
+        "id": "GN013",
+        "version": "1.2",
+        "panel": "Familial Hypercholesterolemia Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN013"
+      }
+    ],
+    "LZTR1": [
+      {
+        "id": "GN094",
+        "version": "1.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN094"
+      }
+    ],
+    "MAP2K1": [
+      {
+        "id": "GN045",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN045"
+      }
+    ],
+    "MAP2K2": [
+      {
+        "id": "GN048",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN048"
+      }
+    ],
+    "MECP2": [
+      {
+        "id": "GN036",
+        "version": "6.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN036"
+      }
+    ],
+    "MLH1": [
+      {
+        "id": "GN115",
+        "version": "2.0",
+        "panel": "InSiGHT Hereditary Colorectal Cancer/Polyposis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN115"
+      }
+    ],
+    "MRAS": [
+      {
+        "id": "GN087",
+        "version": "1.4",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN087"
+      }
+    ],
+    "MSH2": [
+      {
+        "id": "GN137",
+        "version": "2.0",
+        "panel": "InSiGHT Hereditary Colorectal Cancer/Polyposis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN137"
+      }
+    ],
+    "MSH6": [
+      {
+        "id": "GN138",
+        "version": "2.0",
+        "panel": "InSiGHT Hereditary Colorectal Cancer/Polyposis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN138"
+      }
+    ],
+    "MTM1": [
+      {
+        "id": "GN149",
+        "version": "1.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN149"
+      }
+    ],
+    "MTOR": [
+      {
+        "id": "GN018",
+        "version": "1.1",
+        "panel": "Brain Malformations Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN018"
+      }
+    ],
+    "MYBPC3": [
+      {
+        "id": "GN095",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN095"
+      }
+    ],
+    "MYH7": [
+      {
+        "id": "GN002",
+        "version": "2.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN002"
+      }
+    ],
+    "MYL2": [
+      {
+        "id": "GN102",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN102"
+      }
+    ],
+    "MYL3": [
+      {
+        "id": "GN103",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN103"
+      }
+    ],
+    "MYO15A": [
+      {
+        "id": "GN023",
+        "version": "1.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN023"
+      }
+    ],
+    "MYO6": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "MYO7A": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "MYOC": [
+      {
+        "id": "GN019",
+        "version": "2.1",
+        "panel": "Glaucoma Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN019"
+      }
+    ],
+    "NEB": [
+      {
+        "id": "GN146",
+        "version": "1.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN146"
+      }
+    ],
+    "NRAS": [
+      {
+        "id": "GN039",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN039"
+      }
+    ],
+    "OTC": [
+      {
+        "id": "GN156",
+        "version": "1.0",
+        "panel": "Urea Cycle Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN156"
+      }
+    ],
+    "OTOF": [
+      {
+        "id": "GN023",
+        "version": "1.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN023"
+      }
+    ],
+    "PAH": [
+      {
+        "id": "GN006",
+        "version": "2.0",
+        "panel": "Phenylketonuria Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN006"
+      }
+    ],
+    "PALB2": [
+      {
+        "id": "GN077",
+        "version": "1.3",
+        "panel": "Hereditary Breast, Ovarian and Pancreatic Cancer Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN077"
+      }
+    ],
+    "PAX6": [
+      {
+        "id": "GN162",
+        "version": "1.0",
+        "panel": "Ocular Anterior Segment Disorder Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN162"
+      }
+    ],
+    "PDHA1": [
+      {
+        "id": "GN014",
+        "version": "1.0",
+        "panel": "Mitochondrial Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN014"
+      }
+    ],
+    "PIK3CA": [
+      {
+        "id": "GN018",
+        "version": "1.1",
+        "panel": "Brain Malformations Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN018"
+      }
+    ],
+    "PIK3CD": [
+      {
+        "id": "GN141",
+        "version": "1.0",
+        "panel": "Antibody Deficiencies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN141"
+      }
+    ],
+    "PIK3R1": [
+      {
+        "id": "GN160",
+        "version": "1.0",
+        "panel": "Antibody Deficiencies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN160"
+      }
+    ],
+    "PIK3R2": [
+      {
+        "id": "GN018",
+        "version": "1.1",
+        "panel": "Brain Malformations Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN018"
+      }
+    ],
+    "PMS2": [
+      {
+        "id": "GN139",
+        "version": "2.0",
+        "panel": "InSiGHT Hereditary Colorectal Cancer/Polyposis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN139"
+      }
+    ],
+    "POLG": [
+      {
+        "id": "GN014",
+        "version": "1.0",
+        "panel": "Mitochondrial Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN014"
+      }
+    ],
+    "PPP1CB": [
+      {
+        "id": "GN128",
+        "version": "1.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN128"
+      }
+    ],
+    "PTEN": [
+      {
+        "id": "GN003",
+        "version": "3.2",
+        "panel": "PTEN Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN003"
+      }
+    ],
+    "PTPN11": [
+      {
+        "id": "GN043",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN043"
+      }
+    ],
+    "RAF1": [
+      {
+        "id": "GN040",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN040"
+      }
+    ],
+    "RAG1": [
+      {
+        "id": "GN123",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN123"
+      }
+    ],
+    "RAG2": [
+      {
+        "id": "GN124",
+        "version": "2.2",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN124"
+      }
+    ],
+    "RIT1": [
+      {
+        "id": "GN047",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN047"
+      }
+    ],
+    "RMRP": [
+      {
+        "id": "GN088",
+        "version": "1.3",
+        "panel": "Severe Combined Immunodeficiency Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN088"
+      }
+    ],
+    "RPE65": [
+      {
+        "id": "GN120",
+        "version": "1.0",
+        "panel": "Leber Congenital Amaurosis/early onset Retinal Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN120"
+      }
+    ],
+    "RPGR": [
+      {
+        "id": "GN106",
+        "version": "1.0",
+        "panel": "X-linked Inherited Retinal Disease Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN106"
+      }
+    ],
+    "RRAS2": [
+      {
+        "id": "GN127",
+        "version": "1.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN127"
+      }
+    ],
+    "RS1": [
+      {
+        "id": "GN126",
+        "version": "1.0",
+        "panel": "X-linked Inherited Retinal Disease Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN126"
+      }
+    ],
+    "RUNX1": [
+      {
+        "id": "GN008",
+        "version": "3.1",
+        "panel": "Myeloid Malignancy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN008"
+      }
+    ],
+    "RYR1": [
+      {
+        "id": "GN012",
+        "version": "2.0",
+        "panel": "Malignant Hyperthermia Susceptibility Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN012"
+      },
+      {
+        "id": "GN150",
+        "version": "2.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN150"
+      },
+      {
+        "id": "GN179",
+        "version": "2.0",
+        "panel": "Congenital Myopathies Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN179"
+      }
+    ],
+    "SCN1A": [
+      {
+        "id": "GN067",
+        "version": "2.0",
+        "panel": "Epilepsy Sodium Channel Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN067"
+      }
+    ],
+    "SCN1B": [
+      {
+        "id": "GN076",
+        "version": "2.0",
+        "panel": "Epilepsy Sodium Channel Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN076"
+      }
+    ],
+    "SCN2A": [
+      {
+        "id": "GN068",
+        "version": "2.0",
+        "panel": "Epilepsy Sodium Channel Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN068"
+      }
+    ],
+    "SCN3A": [
+      {
+        "id": "GN069",
+        "version": "2.1",
+        "panel": "Epilepsy Sodium Channel Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN069"
+      }
+    ],
+    "SCN8A": [
+      {
+        "id": "GN070",
+        "version": "2.0",
+        "panel": "Epilepsy Sodium Channel Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN070"
+      }
+    ],
+    "SERPINC1": [
+      {
+        "id": "GN084",
+        "version": "1.1",
+        "panel": "Thrombosis Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN084"
+      }
+    ],
+    "SGCA": [
+      {
+        "id": "GN189",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN189"
+      }
+    ],
+    "SGCB": [
+      {
+        "id": "GN184",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN184"
+      }
+    ],
+    "SGCD": [
+      {
+        "id": "GN186",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN186"
+      }
+    ],
+    "SGCG": [
+      {
+        "id": "GN185",
+        "version": "2.0",
+        "panel": "Limb Girdle Muscular Dystrophy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN185"
+      }
+    ],
+    "SHOC2": [
+      {
+        "id": "GN038",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN038"
+      }
+    ],
+    "SLC19A3": [
+      {
+        "id": "GN014",
+        "version": "1.0",
+        "panel": "Mitochondrial Diseases Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN014"
+      }
+    ],
+    "SLC26A4": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "SLC6A8": [
+      {
+        "id": "GN027",
+        "version": "2.1",
+        "panel": "Cerebral Creatine Deficiency Syndromes Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN027"
+      }
+    ],
+    "SLC9A6": [
+      {
+        "id": "GN033",
+        "version": "6.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN033"
+      }
+    ],
+    "SOS1": [
+      {
+        "id": "GN041",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN041"
+      }
+    ],
+    "SOS2": [
+      {
+        "id": "GN042",
+        "version": "2.3",
+        "panel": "RASopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN042"
+      }
+    ],
+    "TCF4": [
+      {
+        "id": "GN032",
+        "version": "6.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN032"
+      }
+    ],
+    "TECTA": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "TNNI3": [
+      {
+        "id": "GN098",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN098"
+      }
+    ],
+    "TNNT2": [
+      {
+        "id": "GN099",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN099"
+      }
+    ],
+    "TP53": [
+      {
+        "id": "GN009",
+        "version": "2.4",
+        "panel": "TP53 Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN009"
+      }
+    ],
+    "TPM1": [
+      {
+        "id": "GN100",
+        "version": "1.0",
+        "panel": "Cardiomyopathy Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN100"
+      }
+    ],
+    "UBE3A": [
+      {
+        "id": "GN037",
+        "version": "7.0",
+        "panel": "Rett and Angelman-like Disorders Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN037"
+      }
+    ],
+    "USH2A": [
+      {
+        "id": "GN005",
+        "version": "2.0",
+        "panel": "Hearing Loss Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN005"
+      }
+    ],
+    "VHL": [
+      {
+        "id": "GN078",
+        "version": "1.1",
+        "panel": "VHL Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN078"
+      }
+    ],
+    "VWF": [
+      {
+        "id": "GN081",
+        "version": "1.0",
+        "panel": "von Willebrand Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN081"
+      },
+      {
+        "id": "GN090",
+        "version": "1.0",
+        "panel": "von Willebrand Disease  Variant Curation Expert Panel",
+        "url": "https://cspec.genome.network/cspec/ui/svi/doc/GN090"
+      }
+    ]
+  }
+}
