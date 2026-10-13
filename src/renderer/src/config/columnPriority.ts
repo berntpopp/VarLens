@@ -1,11 +1,12 @@
 /**
  * Column priority for auto-hide (lower = more important, kept first). Shared by
  * the case and cohort tables; cohort-only keys sit next to their case-table
- * equivalents. At the phone budget (5 columns) the locus stays readable:
- * Gene, Chr, Pos, Impact, ClinVar; Ref/Alt/AF/CADD return at 10. The merged
- * Links column ranks after every data column, and unknown keys (extension
- * columns) get the lowest priority, so link-outs and extensions are the first
- * to be auto-hidden.
+ * equivalents. Columns are shown in this order while they fit the table width
+ * (see `computeAutoHiddenColumns`); the first `MIN_AUTO_VISIBLE_COLUMNS` are
+ * kept even on a phone, so a row always reads Gene, Chr, Pos, Impact, ClinVar,
+ * Ref, Alt. The merged Links column ranks after every data column, and unknown
+ * keys (extension columns) get the lowest priority, so link-outs and
+ * extensions are the first to be auto-hidden.
  */
 export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   gene_symbol: 1,
@@ -15,21 +16,25 @@ export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   clinvar: 5,
   ref: 6,
   alt: 7,
-  gnomad_af: 8,
-  cadd: 9,
-  cadd_phred: 9,
-  annotations: 10,
-  func: 11,
-  gt_num: 12,
-  carrier_count: 12,
-  aa_change: 13,
-  cdna: 14,
-  cohort_frequency: 14,
-  transcript: 15,
-  het_count: 15,
-  omim_mim_number: 16,
-  hpo_sim_score: 17,
-  qual: 18,
-  moi: 19,
-  _links: 20
+  // Cohort-only: carriers and cohort frequency outrank gnomAD AF (product decision 2026-10-12)
+  carrier_count: 8,
+  cohort_frequency: 9,
+  gnomad_af: 10,
+  cadd: 11,
+  cadd_phred: 11,
+  annotations: 12,
+  func: 13,
+  gt_num: 14,
+  aa_change: 15,
+  cdna: 16,
+  transcript: 17,
+  het_count: 17,
+  omim_mim_number: 18,
+  hpo_sim_score: 19,
+  qual: 20,
+  moi: 21,
+  _links: 22
 }
+
+/** Highest-priority data columns shown by default even when they overflow (phones, 200 % zoom). */
+export const MIN_AUTO_VISIBLE_COLUMNS = 7

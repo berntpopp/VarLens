@@ -3,10 +3,17 @@ import {
   clampDetailPanelWidth,
   computeAutoHiddenColumns,
   filterDrawerWidth,
-  getMaxAutoVisibleColumns,
   isColumnVisible,
   isDetailPanelDocked
 } from '../../../src/renderer/src/utils/responsive-layout'
+import { columnWidthRem } from '../../../src/renderer/src/components/variant-table/column-widths'
+import {
+  COLUMN_PRIORITY,
+  MIN_AUTO_VISIBLE_COLUMNS
+} from '../../../src/renderer/src/config/columnPriority'
+
+/** Every column 1 rem wide, so a width budget reads as a column count. */
+const oneRem = (): number => 1
 
 describe('isDetailPanelDocked', () => {
   it('docks at 1440 px and wider, overlays below', () => {
@@ -55,15 +62,6 @@ describe('filterDrawerWidth', () => {
   })
 })
 
-describe('getMaxAutoVisibleColumns', () => {
-  it('scales the default column budget with the viewport', () => {
-    expect(getMaxAutoVisibleColumns(390)).toBe(5)
-    expect(getMaxAutoVisibleColumns(1024)).toBe(10)
-    expect(getMaxAutoVisibleColumns(1366)).toBe(14)
-    expect(getMaxAutoVisibleColumns(1920)).toBe(Infinity)
-  })
-})
-
 describe('computeAutoHiddenColumns', () => {
   const caseKeys = [
     'annotations',
@@ -90,11 +88,11 @@ describe('computeAutoHiddenColumns', () => {
   ]
 
   it('hides nothing when the budget is unlimited', () => {
-    expect(computeAutoHiddenColumns(caseKeys, Infinity).size).toBe(0)
+    expect(computeAutoHiddenColumns(caseKeys, Infinity, oneRem).size).toBe(0)
   })
 
   it('keeps clinically critical columns and hides link-outs first', () => {
-    const hidden = computeAutoHiddenColumns(caseKeys, 14)
+    const hidden = computeAutoHiddenColumns(caseKeys, 15, oneRem)
     expect(hidden.has('_links')).toBe(true)
     expect(hidden.has('sv.support')).toBe(true)
     expect(hidden.has('moi')).toBe(true)
@@ -104,53 +102,108 @@ describe('computeAutoHiddenColumns', () => {
     }
   })
 
-  it('keeps the locus at the phone budget: Gene, Chr, Pos, Impact, ClinVar', () => {
-    const hidden = computeAutoHiddenColumns(caseKeys, getMaxAutoVisibleColumns(390))
+  it('keeps the top-priority locus and triage columns even on a phone', () => {
+    const hidden = computeAutoHiddenColumns(caseKeys, 390 / 16, columnWidthRem)
     const shown = caseKeys.filter((key) => key !== 'annotations' && !hidden.has(key))
-    expect(shown.sort()).toEqual(['chr', 'clinvar', 'consequence', 'gene_symbol', 'pos'])
+    expect(shown).toHaveLength(MIN_AUTO_VISIBLE_COLUMNS)
+    expect(shown.sort()).toEqual([
+      'alt',
+      'chr',
+      'clinvar',
+      'consequence',
+      'gene_symbol',
+      'pos',
+      'ref'
+    ])
+  })
+
+  it.each([1160, 1440 - 280 - 600, 1920 - 280, 2560])(
+    'shown columns always fit a %i px table once past the phone minimum',
+    (tablePx) => {
+      const availableRem = tablePx / 16
+      const hidden = computeAutoHiddenColumns(caseKeys, availableRem, columnWidthRem)
+      const shown = caseKeys.filter((key) => !hidden.has(key))
+      const usedRem = shown.reduce((sum, key) => sum + columnWidthRem(key), 0)
+      // only the phone minimum may overflow; any column beyond it fits whole
+      if (usedRem > availableRem) expect(shown.length - 1).toBe(MIN_AUTO_VISIBLE_COLUMNS)
+      // nothing hidden outranks something shown (priority order is kept)
+      const worstShown = Math.max(
+        ...shown.filter((key) => key !== 'annotations').map((key) => COLUMN_PRIORITY[key] ?? 0)
+      )
+      for (const key of hidden)
+        expect(COLUMN_PRIORITY[key] ?? 100).toBeGreaterThanOrEqual(worstShown)
+    }
+  )
+
+  it('shows gnomAD AF fully at 1440 x 900 next to the sidebar (1160 px table)', () => {
+    const hidden = computeAutoHiddenColumns(caseKeys, 1160 / 16, columnWidthRem)
+    expect(hidden.has('gnomad_af')).toBe(false)
   })
 
   it('never auto-hides structural columns', () => {
-    const hidden = computeAutoHiddenColumns(
-      ['data-table-expand', 'annotations', 'chr', 'gene_symbol'],
-      1
-    )
+    const hidden = computeAutoHiddenColumns(['data-table-expand', ...caseKeys], 0, oneRem)
     expect(hidden.has('annotations')).toBe(false)
     expect(hidden.has('data-table-expand')).toBe(false)
-    expect([...hidden]).toEqual(['chr'])
   })
 
   it('leaves explicit user choices out of the ranking', () => {
-    const keys = ['moi', 'gene_symbol', 'clinvar', 'qual', 'cadd']
-    const hidden = computeAutoHiddenColumns(keys, 2, { moi: true, clinvar: false })
-    // explicit keys are never in the auto-hidden set
+    // 1 structural + 8 data columns fit; moi and clinvar are explicit
+    const hidden = computeAutoHiddenColumns(caseKeys, 9, oneRem, { moi: true, clinvar: false })
     expect(hidden.has('moi')).toBe(false)
     expect(hidden.has('clinvar')).toBe(false)
-    // remaining budget of 2 goes to gene_symbol + cadd; qual is auto-hidden
-    expect([...hidden]).toEqual(['qual'])
+    // clinvar's slot goes to the next column: gnomad_af and cadd stay, func is hidden
+    expect(hidden.has('gnomad_af')).toBe(false)
+    expect(hidden.has('cadd')).toBe(false)
+    expect(hidden.has('func')).toBe(true)
   })
 
   it('does not hide another column when the user shows one explicitly', () => {
-    const keys = ['gene_symbol', 'cadd', 'qual', 'moi']
-    const before = computeAutoHiddenColumns(keys, 2)
-    const after = computeAutoHiddenColumns(keys, 2, { moi: true })
-    expect([...before].sort()).toEqual(['moi', 'qual'])
-    expect([...after]).toEqual(['qual'])
+    const before = computeAutoHiddenColumns(caseKeys, 9, oneRem)
+    const after = computeAutoHiddenColumns(caseKeys, 9, oneRem, { moi: true })
+    expect([...after].sort()).toEqual([...before].filter((key) => key !== 'moi').sort())
   })
 
-  it('maps cohort-only keys onto the same priorities', () => {
-    const cohortKeys = [
-      'data-table-expand',
-      'annotations',
-      'chr',
-      'pos',
-      'gene_symbol',
-      'cadd_phred',
-      'carrier_count',
-      'het_count'
-    ]
-    const hidden = computeAutoHiddenColumns(cohortKeys, 4)
-    expect([...hidden].sort()).toEqual(['carrier_count', 'het_count'])
+  const cohortKeys = [
+    'data-table-expand',
+    'annotations',
+    'chr',
+    'pos',
+    'ref',
+    'alt',
+    'gene_symbol',
+    'consequence',
+    'clinvar',
+    'gnomad_af',
+    'cadd_phred',
+    'carrier_count',
+    'cohort_frequency',
+    'het_count',
+    'func',
+    'transcript',
+    'cdna',
+    'aa_change'
+  ]
+
+  // Each row: one more data column of room after the 7-column minimum
+  it.each([
+    [1, ['carrier_count'], ['cohort_frequency', 'gnomad_af']],
+    [2, ['carrier_count', 'cohort_frequency'], ['gnomad_af']],
+    [3, ['carrier_count', 'cohort_frequency', 'gnomad_af'], ['cadd_phred']]
+  ])(
+    'cohort: with room for %i more column(s) Carriers and frequency come before gnomAD AF',
+    (extra, shown, hidden) => {
+      // 2 structural + 7 minimum + `extra`, all 1 rem wide
+      const result = computeAutoHiddenColumns(cohortKeys, 9 + extra, oneRem)
+      for (const key of shown) expect(result.has(key)).toBe(false)
+      for (const key of hidden) expect(result.has(key)).toBe(true)
+    }
+  )
+
+  it('case view order is unchanged: gnomAD AF and CADD follow the minimum', () => {
+    const hidden = computeAutoHiddenColumns(caseKeys, 10, oneRem)
+    expect(hidden.has('gnomad_af')).toBe(false)
+    expect(hidden.has('cadd')).toBe(false)
+    expect(hidden.has('func')).toBe(true)
   })
 })
 

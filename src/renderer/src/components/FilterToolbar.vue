@@ -706,7 +706,7 @@ onMounted(async () => {
 
 <style scoped>
 .filter-search-input {
-  min-width: 180px;
+  min-width: 8rem;
   max-width: 320px;
   flex-shrink: 1;
   flex-grow: 1;

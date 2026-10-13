@@ -125,9 +125,13 @@
 }
 
 /* Fixed layout: every column gets its width from variant-table/column-widths.ts,
-   so swapping rows during a load can never reflow (jitter) the columns. */
+   so swapping rows during a load can never reflow (jitter) the columns.
+   width 0: a fixed table is max(width, sum of column widths) wide, so spare
+   width is never spread over the columns and docking the details panel does
+   not move every cell (CLS gate); max-content let cell content widen columns. */
 .table-container .v-table__wrapper > table {
   table-layout: fixed;
+  width: 0;
 }
 
 /* Stale-while-revalidate: rows stay visible while a refetch runs and are
