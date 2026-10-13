@@ -145,6 +145,35 @@ describe('AuthService', () => {
       expect(user?.failed_login_count).toBe(2)
     })
 
+    // #563: an expired lock must not let one wrong password relock the account.
+    it('restarts the count at 1 after an expired lock instead of relocking', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+      db.prepare(
+        'UPDATE users SET failed_login_count = 5, locked_until = ? WHERE username = ?'
+      ).run(new Date(Date.now() - 60_000).toISOString(), 'user1')
+
+      await authService.authenticate('user1', 'wrongpass')
+      const user = authService.getUser('user1')
+      expect(user?.failed_login_count).toBe(1)
+      expect(user?.locked_until).toBeNull()
+
+      // The count climbs again from there, and the correct password still works.
+      await authService.authenticate('user1', 'wrongpass')
+      expect(authService.getUser('user1')?.failed_login_count).toBe(2)
+      expect((await authService.authenticate('user1', 'pass123')).success).toBe(true)
+    })
+
+    it('counts a wrong current password in changePassword as a failed attempt', async () => {
+      await authService.createUser('user1', 'User One', 'pass123', 'admin1')
+      for (let i = 0; i < 5; i++) {
+        expect(await authService.changePassword('user1', 'wrongold', 'newpass')).toBe(false)
+      }
+      const user = authService.getUser('user1')
+      expect(user?.failed_login_count).toBe(5)
+      expect(user?.locked_until).not.toBeNull()
+      expect((await authService.authenticate('user1', 'pass123')).locked).toBe(true)
+    })
+
     it('should reset failed count on successful login', async () => {
       await authService.authenticate('admin1', 'wrong')
       await authService.authenticate('admin1', 'correct-password')
