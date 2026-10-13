@@ -30,6 +30,7 @@ import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 import { beginDatabaseStartup, completeDatabaseStartup } from './database/startup-gate'
 import { openDefaultDatabaseAfterWindow, startSqliteHousekeeping } from './startup-sequence'
 import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
+import { installQuitCleanup } from './quit-cleanup'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -327,15 +328,8 @@ if (gotTheLock !== true) {
     })
   })
 
-  // Clean up database on quit (the session owns its worker pool)
-  app.on('before-quit', () => {
-    closeDatabaseManager().catch((e) => {
-      mainLogger.warn(
-        `DatabaseManager close failed during quit: ${e instanceof Error ? e.message : String(e)}`,
-        'app'
-      )
-    })
-  })
+  // Hold the quit until the database closed (the session owns its worker pool)
+  installQuitCleanup(app, closeDatabaseManager)
 
   // Quit when all windows are closed, except on macOS. There, it's common
   // for applications and their menu bar to stay active until the user quits
