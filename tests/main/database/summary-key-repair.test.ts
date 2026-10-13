@@ -82,7 +82,7 @@ describe('cohort summary keys on a drifted v32 database', () => {
     const service = new DatabaseService(path)
     try {
       const db = service.database
-      expect(db.pragma('user_version', { simple: true })).toBe(49)
+      expect(db.pragma('user_version', { simple: true })).toBe(50)
       expect(pk(db, 'cohort_variant_summary')).toEqual([
         'chr',
         'pos',

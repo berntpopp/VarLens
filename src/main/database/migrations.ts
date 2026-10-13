@@ -21,7 +21,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 49
+export const LATEST_SQLITE_SCHEMA_VERSION = 50
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -75,6 +75,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 49
  * - 45: built-in filter preset "Rare, not recurrent" (carrier cap, #455; mirrors PG 0028)
  * - 46: no-call rows are not carriers in the cohort summary (mirrors PG 0029)
  * - 47: chromosome names in each build's reference form (contig-naming-migration.ts; PG 0030)
+ * - 50: decode VEP's %3D / %3B escapes in stored cdna / aa_change (#547; mirrors PG 0033)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2027,8 +2028,29 @@ export function runMigrations(db: Database.Database): void {
     db.exec('PRAGMA user_version = 49')
   }
 
+  // v50: rows imported before #547 kept VEP's %3D / %3B escapes in HGVS
+  // (`p.Pro814%3D`); decode them like import now does (mirrors PG 0033).
+  if (currentVersion < 50) {
+    for (const table of ['variants', 'variant_transcripts', 'cohort_variant_summary']) {
+      const columns = new Set(
+        (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+      )
+      if (columns.has('cdna') && columns.has('aa_change')) {
+        db.exec(decodeVepHgvsEscapesSql(table))
+      }
+    }
+    db.exec('PRAGMA user_version = 50')
+  }
+
   // Not a version: derived summary keys that drifted on real data are restored on every open.
   repairSummaryKeys(db)
+}
+
+function decodeVepHgvsEscapesSql(table: string): string {
+  const decode = (column: string): string =>
+    `${column} = REPLACE(REPLACE(${column}, '%3D', '='), '%3B', ';')`
+  return `UPDATE ${table} SET ${decode('cdna')}, ${decode('aa_change')}
+           WHERE instr(cdna, '%3') > 0 OR instr(aa_change, '%3') > 0`
 }
 
 function backfillMissingCaseDataInfo(db: Database.Database): void {
