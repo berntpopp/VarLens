@@ -331,11 +331,13 @@ export class CohortService {
       }
     ).count
 
-    // Total variant observations of ready cases
+    // Total variant observations of ready cases: the maintained per-case
+    // counts (kept in each import's and append's transaction, #551), not a
+    // scan of every variant row (#560).
     const totalVariants = (
       this.db
         .prepare(
-          "SELECT COUNT(*) as count FROM variants v JOIN cases c ON c.id = v.case_id WHERE c.import_status = 'ready'"
+          "SELECT COALESCE(SUM(variant_count), 0) AS count FROM cases WHERE import_status = 'ready'"
         )
         .get() as { count: number }
     ).count

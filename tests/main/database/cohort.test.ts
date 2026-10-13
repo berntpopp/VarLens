@@ -70,6 +70,8 @@ describe('CohortService', () => {
       options.cdna ?? null,
       options.aa_change ?? null
     )
+    // As every importer does: the cohort total sums these counts (#560).
+    db.prepare('UPDATE cases SET variant_count = variant_count + 1 WHERE id = ?').run(caseId)
   }
 
   const rebuildSummary = (): void => {

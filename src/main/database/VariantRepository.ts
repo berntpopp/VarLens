@@ -614,13 +614,18 @@ export class VariantRepository extends BaseRepository {
       }
     }
     const placeholders = caseIds.map(() => '?').join(', ')
+    // Driven from the small extension table (CROSS JOIN fixes the loop order),
+    // each row's case looked up by primary key: never every variant id of the
+    // scope materialised (#560).
+    const scoped = `FROM ${def.table} e CROSS JOIN variants v ON v.id = e.variant_id
+           WHERE v.case_id IN (${placeholders})`
 
     if (columnDef.kind === 'number') {
       const row = this.db
         .prepare(
-          `SELECT MIN("${column}") AS min, MAX("${column}") AS max, COUNT(DISTINCT "${column}") AS distinctCount
-           FROM ${def.table}
-           WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))`
+          `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max,
+                  COUNT(DISTINCT e."${column}") AS distinctCount
+           ${scoped}`
         )
         .get(...caseIds) as { min: number | null; max: number | null; distinctCount: number }
       return {
@@ -633,11 +638,7 @@ export class VariantRepository extends BaseRepository {
     }
 
     const countRow = this.db
-      .prepare(
-        `SELECT COUNT(DISTINCT "${column}") AS distinctCount
-         FROM ${def.table}
-         WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))`
-      )
+      .prepare(`SELECT COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`)
       .get(...caseIds) as { distinctCount: number }
 
     const entry: ColumnFilterMeta = {
@@ -649,11 +650,9 @@ export class VariantRepository extends BaseRepository {
     if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
       const valRows = this.db
         .prepare(
-          `SELECT DISTINCT "${column}" AS v
-           FROM ${def.table}
-           WHERE variant_id IN (SELECT id FROM variants WHERE case_id IN (${placeholders}))
-             AND "${column}" IS NOT NULL
-           ORDER BY "${column}"`
+          `SELECT DISTINCT e."${column}" AS v ${scoped}
+             AND e."${column}" IS NOT NULL
+           ORDER BY e."${column}"`
         )
         .all(...caseIds) as { v: string | number | null }[]
       entry.distinctValues = valRows.map((r) => String(r.v))

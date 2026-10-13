@@ -20,6 +20,8 @@ describe('provisional cases and their readers', () => {
   const db = (): DatabaseService['database'] => service.database
 
   function addVariant(caseId: number, pos: number, type = 'snv'): number {
+    // As every importer does: the cohort total sums these counts (#560).
+    db().prepare('UPDATE cases SET variant_count = variant_count + 1 WHERE id = ?').run(caseId)
     return Number(
       db()
         .prepare(
