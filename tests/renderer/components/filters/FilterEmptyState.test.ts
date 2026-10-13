@@ -31,8 +31,9 @@ describe('FilterEmptyState (#568)', () => {
 
   it('removes one clause per click, by its id', async () => {
     const wrapper = mountWith(FILTERS)
-    const buttons = wrapper.findAll('[data-testid="filter-empty-state-remove"]')
+    const buttons = wrapper.findAll('.v-chip__close')
     expect(buttons).toHaveLength(FILTERS.length)
+    expect(buttons[2].attributes('aria-label')).toBe('Remove filter: CADD >= 20')
     await buttons[2].trigger('click')
     expect(wrapper.emitted('remove')).toEqual([['col:cadd']])
   })
