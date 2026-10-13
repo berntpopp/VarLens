@@ -162,9 +162,15 @@ export class PanelAppClient {
 
     mainLogger.debug(`PanelApp search: ${url}`, 'api')
 
-    let response: Response
+    let rawBody: unknown
     try {
-      response = await this.fetchWithTimeout(url)
+      const response = await this.fetchWithTimeout(url)
+      if (!response.ok) {
+        mainLogger.warn(`PanelApp ${region} search returned ${response.status}`, 'api')
+        return []
+      }
+      // Inside the try: a body that times out fails this region only, not the combined search.
+      rawBody = await response.json()
     } catch (error) {
       mainLogger.warn(
         `PanelApp ${region} search failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -173,12 +179,6 @@ export class PanelAppClient {
       return []
     }
 
-    if (!response.ok) {
-      mainLogger.warn(`PanelApp ${region} search returned ${response.status}`, 'api')
-      return []
-    }
-
-    const rawBody = await response.json()
     const parseResult = PanelAppSearchResponseSchema.safeParse(rawBody)
     if (!parseResult.success) {
       mainLogger.warn(

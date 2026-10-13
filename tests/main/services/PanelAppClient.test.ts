@@ -120,6 +120,18 @@ describe('PanelAppClient', () => {
       expect(calledUrl).toContain('name=epilepsy')
     })
 
+    it('keeps the other region when one region stalls mid-body', async () => {
+      fetchSpy.mockImplementation(async (url, init) =>
+        String(url).includes('genomicsengland')
+          ? stalledBody(init)
+          : new Response(JSON.stringify(makePanelListResponse([makeRawPanel({ id: 2 })])))
+      )
+
+      const results = await client.searchPanels('epilepsy', 'both')
+
+      expect(results.map((r) => r.region)).toEqual(['aus'])
+    })
+
     it('searches AUS region', async () => {
       fetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify(makePanelListResponse([makeRawPanel({ id: 2 })])), {
