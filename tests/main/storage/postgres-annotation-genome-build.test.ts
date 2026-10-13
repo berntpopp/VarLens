@@ -6,6 +6,9 @@
  * Gated by VARLENS_RUN_POSTGRES_E2E=1. Requires `make pg-up`.
  */
 import { randomBytes } from 'node:crypto'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { Client, Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -14,6 +17,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresAnnotationsRepository } from '../../../src/main/storage/postgres/PostgresAnnotationsRepository'
 import { PostgresBuildReviewRepository } from '../../../src/main/storage/postgres/PostgresBuildReviewRepository'
+import { runContigNamingStep } from '../../../src/main/storage/postgres/postgres-contig-naming'
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -168,5 +172,53 @@ describe.skipIf(!RUN)('migration 0035: global annotations keyed by genome build'
     // 5 was GRCh37-only: now in both; 100 already had a GRCh38 row, which is kept.
     expect(await rowsAt(5)).toEqual([copy('GRCh37'), copy('GRCh38')])
     expect(await rowsAt(100)).toEqual([copy('GRCh37'), copy('GRCh38')])
+  }, 60_000)
+
+  it('queues an hg19 case for its build names; the job renames it and its notes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pg-0035-'))
+    try {
+      const vcf = join(dir, 'hg19.vcf')
+      writeFileSync(vcf, '##fileformat=VCFv4.2\n##reference=file:///ref/hs37d5.fa\n#CHROM\tPOS\n')
+      // 0030 already ran (and dequeued every case): only 0035 can catch this one.
+      await probe.query(`DELETE FROM ${t('contig_naming_pending')}`)
+      const id = await addCase('old', 'hg19')
+      await probe.query(`UPDATE ${t('cases_all')} SET file_path = $1 WHERE id = $2`, [vcf, id])
+      await probe.query(
+        `INSERT INTO ${t('variants_all')} (case_id, chr, pos, ref, alt) VALUES ($1, 'chr1', 100, 'A', 'G')`,
+        [id]
+      )
+      await probe.query(
+        `INSERT INTO ${t('variant_annotations')} (chr, pos, ref, alt, global_comment, starred,
+           created_at, updated_at) VALUES ('chr1', 100, 'A', 'G', 'note', 1, 10, 20)`
+      )
+      const migrateAndRun = async (): Promise<void> => {
+        await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+        while (await runContigNamingStep({ pool, schema })) {
+          // one case per transaction
+        }
+      }
+      const state = async () => ({
+        cases: (await probe.query(`SELECT genome_build FROM ${t('cases_all')}`)).rows,
+        variants: (await probe.query(`SELECT chr FROM ${t('variants_all')}`)).rows,
+        notes: (
+          await probe.query(
+            `SELECT chr, genome_build, global_comment FROM ${t('variant_annotations')}`
+          )
+        ).rows,
+        reviews: (await probe.query(`SELECT case_id FROM ${t('contig_build_review')}`)).rows
+      })
+      await migrateAndRun()
+      const after = await state()
+      expect(after).toEqual({
+        cases: [{ genome_build: 'GRCh37' }],
+        variants: [{ chr: '1' }],
+        notes: [{ chr: '1', genome_build: 'GRCh37', global_comment: 'note' }],
+        reviews: []
+      })
+      await migrateAndRun()
+      expect(await state()).toEqual(after)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   }, 60_000)
 })

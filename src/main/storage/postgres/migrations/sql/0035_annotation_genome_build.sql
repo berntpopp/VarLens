@@ -15,9 +15,12 @@
 -- is kept and its cases get a build review. The alias list and the id list
 -- are genome-builds.config.ts (genomeBuildAliasPairs, GENOME_BUILDS); a drift
 -- test (tests/main/storage/postgres-build-alias-drift.test.ts) keeps them equal.
-UPDATE "__schema__"."cases_all" c
-   SET genome_build = a.id
-  FROM (VALUES
+--
+-- A case whose build is only now recognised is queued for its build's names,
+-- as 0030 queued every case (the job, postgres-contig-naming.ts, plans and
+-- renames it with its notes; a case waiting for a build review is skipped).
+-- A v47-style review keeps showing what is stored, so it names the id too.
+WITH aliases(alias, id) AS (VALUES
   ('b37', 'GRCh37'),
   ('b38', 'GRCh38'),
   ('chm13', 'T2T-CHM13'),
@@ -65,9 +68,25 @@ UPDATE "__schema__"."cases_all" c
   ('human_g1k_v37', 'GRCh37'),
   ('t2t', 'T2T-CHM13'),
   ('t2t-chm13', 'T2T-CHM13')
-  ) AS a(alias, id)
- WHERE regexp_replace(lower(btrim(c.genome_build)), '\.p[0-9]+$', '') = a.alias
-   AND c.genome_build <> a.id;
+),
+renamed AS (
+  UPDATE "__schema__"."cases_all" c
+     SET genome_build = a.id
+    FROM aliases a
+   WHERE regexp_replace(lower(btrim(c.genome_build)), '\.p[0-9]+$', '') = a.alias
+     AND c.genome_build <> a.id
+  RETURNING c.id, a.id AS build
+),
+reviewed AS (
+  UPDATE "__schema__"."contig_build_review" r
+     SET stored_build = n.build
+    FROM renamed n
+   WHERE r.case_id = n.id
+)
+INSERT INTO "__schema__"."contig_naming_pending" (case_id)
+SELECT id FROM renamed
+ WHERE id NOT IN (SELECT case_id FROM "__schema__"."contig_build_review")
+ON CONFLICT (case_id) DO NOTHING;
 
 INSERT INTO "__schema__"."contig_build_review"
   (case_id, stored_build, suggested_build, reason, created_at)

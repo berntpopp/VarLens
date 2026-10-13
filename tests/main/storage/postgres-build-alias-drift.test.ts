@@ -23,13 +23,16 @@ const SQL = readFileSync(
 
 describe('stored genome build normalisation (#577)', () => {
   it('0035 maps exactly the aliases of the config', () => {
-    const values = SQL.slice(SQL.indexOf('FROM (VALUES'), SQL.indexOf(') AS a(alias, id)'))
+    const values = SQL.slice(
+      SQL.indexOf('WITH aliases(alias, id) AS (VALUES'),
+      SQL.indexOf('renamed AS (')
+    )
     const pairs = [...values.matchAll(/\('([^']+)', '([^']+)'\)/g)].map((m) => [m[1], m[2]])
     expect(pairs).toEqual(genomeBuildAliasPairs())
   })
 
   it('0035 flags exactly the values that are no build id', () => {
-    const ids = /NOT IN \(([^)]*)\)/
+    const ids = /NOT IN \(('[^)]*)\)/
       .exec(SQL)?.[1]
       .split(', ')
       .map((id) => id.slice(1, -1))

@@ -14,7 +14,7 @@ import type Database from 'better-sqlite3-multiple-ciphers'
 
 import { canonicalGenomeBuildId } from '../../shared/config/genome-builds.config'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
-import { CONTIG_BUILD_REVIEW_DDL } from './contig-naming-migration'
+import { CONTIG_BUILD_REVIEW_DDL, migrateContigNaming } from './contig-naming-migration'
 import {
   createAnnotationFlagTriggers,
   dropAnnotationFlagTriggers
@@ -46,15 +46,22 @@ function normaliseCaseBuilds(db: Db): void {
     .prepare('SELECT DISTINCT genome_build FROM cases WHERE genome_build IS NOT NULL')
     .pluck()
     .all() as string[]
+  db.exec(CONTIG_BUILD_REVIEW_DDL)
   const rename = db.prepare('UPDATE cases SET genome_build = ? WHERE genome_build = ?')
+  // A v47 review keeps showing what is stored, so it names the id too.
+  const renameReviewed = db.prepare(
+    'UPDATE contig_build_review SET stored_build = ? WHERE stored_build = ?'
+  )
   const unknown: string[] = []
   for (const value of values) {
     const id = canonicalGenomeBuildId(value)
     if (id === null) unknown.push(value)
-    else if (id !== value) rename.run(id, value)
+    else if (id !== value) {
+      rename.run(id, value)
+      renameReviewed.run(id, value)
+    }
   }
   if (unknown.length === 0) return
-  db.exec(CONTIG_BUILD_REVIEW_DDL)
   db.prepare(
     `INSERT OR IGNORE INTO contig_build_review (case_id, stored_build, suggested_build, reason, created_at)
      SELECT id, genome_build, NULL, 'build_unknown', ? FROM cases
@@ -79,8 +86,14 @@ export function migrateAnnotationBuildKey(db: Db): void {
     .all() as string[]
 
   db.transaction(() => {
-    if (hasTable(db, 'cases')) normaliseCaseBuilds(db)
     dropAnnotationFlagTriggers(db)
+    if (hasTable(db, 'cases')) {
+      normaliseCaseBuilds(db)
+      // A case whose build was only now recognised gets its build's names (the
+      // v47 step: a reviewed case is skipped, a confirmed one renamed with its
+      // notes), so the split below sees each case under its build's names.
+      migrateContigNaming(db)
+    }
     db.exec(`
       CREATE TABLE variant_annotations__build (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
