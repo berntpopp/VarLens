@@ -7,18 +7,17 @@
  */
 import { randomBytes } from 'node:crypto'
 
-import Database from 'better-sqlite3-multiple-ciphers'
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { CohortService } from '../../../src/main/database/cohort'
-import { CohortSummaryService } from '../../../src/main/database/CohortSummaryService'
-import { runMigrations } from '../../../src/main/database/migrations'
-import { initializeSchema } from '../../../src/main/database/schema'
+import { DatabaseService } from '../../../src/main/database'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresCohortRepository } from '../../../src/main/storage/postgres/PostgresCohortRepository'
 import { PostgresCohortSummaryRepository } from '../../../src/main/storage/postgres/PostgresCohortSummaryRepository'
+import { PostgresVariantReadRepository } from '../../../src/main/storage/postgres/PostgresVariantReadRepository'
+import type { ColumnFiltersParam } from '../../../src/shared/types/column-filters'
+import type { SortItem } from '../../../src/shared/types/database'
 import type { ColumnFilterMeta } from '../../../src/shared/types/column-filters'
 import type {
   CohortCarrier,
@@ -197,6 +196,9 @@ interface Backend {
   rows(params: CohortSearchParams): Promise<CohortVariant[]>
   carriers(variant: CohortVariantIdentity): Promise<CohortCarrier[]>
   meta(): Promise<ColumnFilterMeta[]>
+  /** Case view of `sv-a`'s SV calls: the SV lengths in row order. */
+  caseLengths(columnFilters?: ColumnFiltersParam, sortBy?: SortItem[]): Promise<number[]>
+  caseMeta(column: string): Promise<ColumnFilterMeta>
 }
 
 function cohortCallAssertions(backend: () => Backend): void {
@@ -267,16 +269,34 @@ function cohortCallAssertions(backend: () => Backend): void {
     const [cnv] = await backend().carriers(identity('chr2', 2000, '<DUP>', 'cnv'))
     expect(cnv).toMatchObject({ copy_number: 3, sv_support: null, end_pos: 9000 })
   })
+
+  it('case view: filters, sorts and bounds SV length by the unsigned length shown', async () => {
+    // sv-a: DEL -2000, DEL -4000, INS 300. Signed, "> 1000" would drop both deletions.
+    const longer = { sv_length: { operator: '>' as const, value: 1000 } }
+    expect((await backend().caseLengths(longer)).sort()).toEqual([-2000, -4000].sort())
+    expect(
+      (await backend().caseLengths(undefined, [{ key: 'sv_length', order: 'asc' }])).map(Math.abs)
+    ).toEqual([300, 2000, 4000])
+    expect(await backend().caseMeta('sv_length')).toMatchObject({
+      dataType: 'numeric',
+      min: 300,
+      max: 7000 // the whole case: its CNV DUP too
+    })
+    expect(await backend().caseMeta('end_pos')).toMatchObject({
+      dataType: 'numeric',
+      min: 3000,
+      max: 9000
+    })
+  })
 }
 
 describe('cohort SV/CNV call context — SQLite', () => {
-  let db: Database.Database
-  let cohort: CohortService
+  let service: DatabaseService
+  let svCase = 0
 
   beforeAll(() => {
-    db = new Database(':memory:')
-    initializeSchema(db)
-    runMigrations(db)
+    service = new DatabaseService(':memory:')
+    const db = service.database
     const placeholders = INSERT_VARIANT_COLUMNS.split(',')
       .map(() => '?')
       .join(', ')
@@ -289,6 +309,7 @@ describe('cohort SV/CNV call context — SQLite', () => {
           .run(fixture.name, fixture.calls.length, fixture.ready ? 'ready' : 'importing')
           .lastInsertRowid
       )
+      if (fixture.name === 'sv-a') svCase = caseId
       for (const call of fixture.calls) {
         const id = db
           .prepare(`INSERT INTO variants (${INSERT_VARIANT_COLUMNS}) VALUES (${placeholders})`)
@@ -308,19 +329,26 @@ describe('cohort SV/CNV call context — SQLite', () => {
         }
       }
     }
-    new CohortSummaryService(db).rebuild()
-    cohort = new CohortService(db)
+    service.cohortSummary.rebuild()
   })
 
-  afterAll(() => {
-    cohort.close()
-    db.close()
-  })
+  afterAll(() => service.close())
 
   cohortCallAssertions(() => ({
-    rows: async (params) => cohort.getCohortVariants({ limit: 50, offset: 0, ...params }).data,
-    carriers: async (variant) => cohort.getCarriers(variant),
-    meta: async () => cohort.getColumnMeta()
+    rows: async (params) =>
+      service.cohort.getCohortVariants({ limit: 50, offset: 0, ...params }).data,
+    carriers: async (variant) => service.cohort.getCarriers(variant),
+    meta: async () => service.cohort.getColumnMeta(),
+    caseLengths: async (columnFilters, sortBy) =>
+      service.variants
+        .getVariants(
+          { case_id: svCase, variant_type: 'sv', column_filters: columnFilters },
+          50,
+          0,
+          sortBy
+        )
+        .data.map((v) => Number(v.sv_length)),
+    caseMeta: async (column) => service.variants.getColumnMeta({ caseId: svCase }, column)
   }))
 })
 
@@ -328,6 +356,7 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
   let schema: string
   let pool: Pool
   let repo: PostgresCohortRepository
+  let svCase = 0
 
   beforeAll(async () => {
     schema = `vt_svcalls_${randomBytes(4).toString('hex')}`
@@ -346,6 +375,7 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
           [fixture.name, fixture.ready ? 'ready' : 'importing']
         )
       ).rows[0].id
+      if (fixture.name === 'sv-a') svCase = Number(caseId)
       for (const call of fixture.calls) {
         const id = (
           await pool.query<{ id: number }>(
@@ -371,6 +401,7 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
       try {
         await client.query('BEGIN')
         await summary.incrementalAdd({ schema, client: client as never, caseId })
+        await summary.refreshColumnMetas({ schema, client: client as never, caseId })
         await client.query('COMMIT')
       } finally {
         client.release()
@@ -388,6 +419,17 @@ describe.skipIf(!RUN_PG)('cohort SV/CNV call context — PostgreSQL parity', () 
   cohortCallAssertions(() => ({
     rows: async (params) => (await repo.queryVariants({ limit: 50, offset: 0, ...params })).data,
     carriers: (variant) => repo.getCarriers(variant),
-    meta: () => repo.getColumnMeta()
+    meta: () => repo.getColumnMeta(),
+    caseLengths: async (columnFilters, sortBy) =>
+      (
+        await new PostgresVariantReadRepository(pool, schema).queryVariants(
+          { case_id: svCase, variant_type: 'sv', column_filters: columnFilters },
+          50,
+          0,
+          sortBy
+        )
+      ).data.map((v) => Number(v.sv_length)),
+    caseMeta: (column) =>
+      new PostgresVariantReadRepository(pool, schema).getColumnMeta({ caseId: svCase }, column)
   }))
 })

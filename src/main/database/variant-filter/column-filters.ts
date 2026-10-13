@@ -6,9 +6,10 @@ import { sql } from 'kysely'
 import { escapeLikePattern } from '../search/search-clause-emitter'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
-import type { Variant, VariantFilter } from '../types'
+import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
 import { SORTABLE_COLUMNS } from './sortable-columns'
+import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
 
 type ColumnFilterDef = NonNullable<VariantFilter['column_filters']>[string]
 type ComparableValue = string | number
@@ -32,6 +33,14 @@ function coerceComparisonValue(value: ComparableValue, numericColumn: boolean): 
   return typeof value === 'number' ? value : Number.isFinite(num) ? num : value
 }
 
+/**
+ * `sqlColumn` below is internal SQL text, never user input: `variants.<column>`
+ * from SORTABLE_COLUMNS (a quoted reference) or that column wrapped by
+ * comparedColumnSql, e.g. `ABS(variants.sv_length)` (raw SQL).
+ */
+const target = (sqlColumn: string) =>
+  sqlColumn.includes('(') ? sql.raw<unknown>(sqlColumn) : sql.ref<unknown>(sqlColumn)
+
 /** Parameterized IN clause using sql.join; an empty list is skipped. */
 function whereIn(
   query: VariantQueryBuilder,
@@ -40,7 +49,7 @@ function whereIn(
 ): VariantQueryBuilder {
   if (value.length === 0) return query
   const params = sql.join(value.map((v) => sql`${String(v)}`))
-  return query.where(sql<boolean>`${sql.ref(sqlColumn)} IN (${params})`)
+  return query.where(sql<boolean>`${target(sqlColumn)} IN (${params})`)
 }
 
 /** Case-insensitive substring match. Blank input is skipped — LIKE '%%' excludes NULLs. */
@@ -51,7 +60,7 @@ function whereLike(
 ): VariantQueryBuilder {
   if (value.trim() === '') return query
   const pattern = `%${escapeLikePattern(value)}%`
-  return query.where(sql<boolean>`${sql.ref(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`)
+  return query.where(sql<boolean>`${target(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`)
 }
 
 /** Range comparison — includeEmpty defaults to true (don't lose unannotated variants). */
@@ -62,7 +71,7 @@ function whereRange(
   compValue: ComparableValue,
   includeEmpty: boolean | undefined
 ): VariantQueryBuilder {
-  const col = sqlColumn as keyof Variant
+  const col = target(sqlColumn)
   if (includeEmpty !== false) {
     return query.where(({ or, eb }) => or([eb(col, 'is', null), eb(col, operator, compValue)]))
   }
@@ -88,7 +97,7 @@ function applyColumnFilter(
   if ((operator === '=' || operator === '!=') && isComparable(value)) {
     // Exact match — NULLs excluded (user is looking for specific values)
     const compValue = coerceComparisonValue(value, numericColumn)
-    return query.where(sqlColumn as keyof Variant, operator, compValue)
+    return query.where(target(sqlColumn), operator, compValue)
   }
   if (
     (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
@@ -154,10 +163,10 @@ export function applyBareColumnFilters(
       continue
     }
     // Always table-qualified, so no join of the base query can make a bare
-    // column reference ambiguous in SQLite.
+    // column reference ambiguous in SQLite. Internal SQL text (SORTABLE_COLUMNS).
     filtered = applyColumnFilter(
       filtered,
-      `variants.${baseColumn}`,
+      comparedColumnSql(column, `variants.${baseColumn}`),
       filterDef,
       NUMERIC_COLUMN_FILTER_KEYS.has(column)
     )

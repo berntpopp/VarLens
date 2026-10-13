@@ -22,6 +22,7 @@
  *
  * The remaining methods are stubbed for the subsequent Sprint A tasks.
  */
+import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
 import type { PoolClient } from 'pg'
 import { refreshAnnotationFlags } from './cohort-annotation-flags-sql'
 import {
@@ -99,10 +100,18 @@ const META_COLUMNS = [
 ] as const
 
 /**
- * Numeric columns get MIN/MAX in min_value/max_value, mirroring SQLite's
- * NUMERIC_COLUMNS set in src/main/database/VariantRepository.ts.
+ * Numeric columns get MIN/MAX in min_value/max_value (sv_length unsigned),
+ * the columns SQLite treats as numeric (NUMERIC_COLUMN_FILTER_KEYS).
  */
-const META_NUMERIC_COLUMNS = new Set<string>(['pos', 'gnomad_af', 'cadd', 'qual', 'hpo_sim_score'])
+const META_NUMERIC_COLUMNS = new Set<string>([
+  'pos',
+  'gnomad_af',
+  'cadd',
+  'qual',
+  'hpo_sim_score',
+  'end_pos',
+  'sv_length'
+])
 
 /**
  * Low-cardinality threshold mirroring SQLite's DISTINCT_THRESHOLD — columns at
@@ -348,8 +357,8 @@ export class PostgresCohortSummaryRepository {
     for (const col of META_COLUMNS) {
       aggSelect.push(`COUNT(DISTINCT "${col}") AS "cnt_${col}"`)
       if (META_NUMERIC_COLUMNS.has(col)) {
-        aggSelect.push(`MIN("${col}") AS "min_${col}"`)
-        aggSelect.push(`MAX("${col}") AS "max_${col}"`)
+        aggSelect.push(`MIN(${comparedColumnSql(col, `"${col}"`)}) AS "min_${col}"`)
+        aggSelect.push(`MAX(${comparedColumnSql(col, `"${col}"`)}) AS "max_${col}"`)
       }
     }
     const aggRes = await client.query(

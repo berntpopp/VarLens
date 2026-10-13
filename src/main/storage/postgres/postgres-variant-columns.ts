@@ -28,7 +28,8 @@ export const POSTGRES_VARIANT_COLUMN_DEFINITIONS: Record<string, PostgresVariant
     variant_type: { key: 'variant_type', sql: 'v.variant_type', kind: 'categorical' },
     end_pos: { key: 'end_pos', sql: 'v.end_pos', kind: 'numeric' },
     sv_type: { key: 'sv_type', sql: 'v.sv_type', kind: 'categorical' },
-    sv_length: { key: 'sv_length', sql: 'v.sv_length', kind: 'numeric' },
+    // Unsigned, as displayed (unsigned-columns.ts).
+    sv_length: { key: 'sv_length', sql: 'ABS(v.sv_length)', kind: 'numeric' },
     caller: { key: 'caller', sql: 'v.caller', kind: 'categorical' },
     'sv.sv_is_precise': { key: 'sv.sv_is_precise', sql: 'sv.sv_is_precise', kind: 'categorical' },
     'sv.support': { key: 'sv.support', sql: 'sv.support', kind: 'numeric' },
