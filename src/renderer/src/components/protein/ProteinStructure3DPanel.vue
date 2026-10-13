@@ -204,7 +204,6 @@ function onClinvarClick(cv: ClinVarVariant): void {
                   "
                   @click="toggleClinvar(chip.key)"
                 >
-                  <ClinVarMark :cls="chip.key" class="mr-1" />
                   {{ chip.label }} ({{ clinvarCounts[chip.key] ?? 0 }})
                 </v-chip>
                 <v-btn
