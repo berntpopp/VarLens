@@ -8,6 +8,20 @@ import {
 } from '../../../../src/renderer/src/utils/acmg/acmg-undo'
 
 describe('planAcmgUndo', () => {
+  it('offers no undo that would restore a reasonless override (#567)', () => {
+    const legacy = JSON.stringify({
+      pathogenic: [{ code: 'PM2', strength: 'supporting', confirmed: true }],
+      benign: [],
+      is_override: true
+    })
+    const plan = planAcmgUndo(
+      { classification: 'Benign', evidenceJson: legacy },
+      { classification: 'Uncertain significance', evidenceJson: '{"pathogenic":[],"benign":[]}' }
+    )
+    expect(plan?.message).toBe('Classified as Uncertain significance')
+    expect(plan?.restore).toBeNull()
+  })
+
   it('returns null when nothing changed (no snackbar, nothing to undo)', () => {
     expect(planAcmgUndo({ classification: null }, { classification: null })).toBeNull()
     expect(

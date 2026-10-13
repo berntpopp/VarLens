@@ -4,37 +4,43 @@
  */
 import { acmgEvidenceFields } from './acmg-evidence'
 
-/** The ACMG call the row exports: per-case in a case export, global in a cohort export. */
-export interface ExportedClassification {
+/** A stored annotation row as the exports read it. */
+export interface ExportedAnnotation {
   acmg_classification: string | null
   acmg_evidence: string | null
-}
-
-/** A comment the details panel shows for the row, with its row's last update. */
-export interface ExportedComment {
   comment: string | null
-  updated_at: number
 }
 
-export interface AnnotationExportCells {
+interface AcmgCells {
   acmg_classification: string | null
   acmg_points: number | null
   acmg_override_reason: string | null
-  annotation_comment: string | null
 }
 
-export function annotationExportCells(
-  classification: ExportedClassification | null,
-  comments: readonly ExportedComment[]
-): AnnotationExportCells {
-  const { points, overrideReason } = acmgEvidenceFields(classification?.acmg_evidence)
-  const latest = comments
-    .filter((c) => c.comment !== null && c.comment.trim() !== '')
-    .sort((a, b) => b.updated_at - a.updated_at)[0]
+function acmgCells(call: ExportedAnnotation | null): AcmgCells {
+  const { points, overrideReason } = acmgEvidenceFields(call?.acmg_evidence)
   return {
-    acmg_classification: classification?.acmg_classification ?? null,
+    acmg_classification: call?.acmg_classification ?? null,
     acmg_points: points,
-    acmg_override_reason: overrideReason,
-    annotation_comment: latest?.comment ?? null
+    acmg_override_reason: overrideReason
   }
+}
+
+/** Case export: the case's own call, its comment and the global comment of its build. */
+export function caseExportCells(
+  own: ExportedAnnotation | null,
+  global: ExportedAnnotation | null
+): AcmgCells & { case_comment: string | null; global_comment: string | null } {
+  return {
+    ...acmgCells(own),
+    case_comment: own?.comment ?? null,
+    global_comment: global?.comment ?? null
+  }
+}
+
+/** Cohort export: the global call and comment of the row's build. */
+export function cohortExportCells(
+  global: ExportedAnnotation | null
+): AcmgCells & { global_comment: string | null } {
+  return { ...acmgCells(global), global_comment: global?.comment ?? null }
 }

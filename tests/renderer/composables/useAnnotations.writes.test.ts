@@ -19,6 +19,7 @@ import {
 } from '@renderer/composables/useAnnotations'
 import { logService } from '@renderer/services/LogService'
 import { AppStateKey, createAppState } from '@renderer/composables/useAppState'
+import { BUILD_COPY } from '../../../src/shared/config/genome-builds.config'
 
 type Annotations = ReturnType<typeof useAnnotations>
 
@@ -112,6 +113,29 @@ describe('failed annotation writes roll back and notify watchers', () => {
 
     expect(await WRITES[name](a)).toBe(false)
     expect(snacks).toEqual([[expect.stringContaining('not saved'), 'error']])
+  })
+})
+
+describe('global notes of a case whose build is not known (#577)', () => {
+  it('are not sent, and the user is told to confirm the build', async () => {
+    _resetAnnotationsForTesting()
+    window.api = createMockApi()
+    window.api.annotations.upsertGlobal = vi.fn()
+    vi.spyOn(logService, 'error').mockImplementation(() => {})
+    const snacks: string[][] = []
+    const state = createAppState()
+    state.setSnackbarHandler((message, type) => snacks.push([message, type]))
+    const app = createApp({ render: () => null })
+    app.provide(AppStateKey, state)
+    let a!: Annotations
+    app.runWithContext(() => {
+      a = useAnnotations({ genomeBuild: 'my-build' })
+    })
+
+    expect(await a.toggleGlobalStar(...V)).toBe(false)
+    expect(window.api.annotations.upsertGlobal).not.toHaveBeenCalled()
+    expect(snacks).toEqual([[BUILD_COPY.globalNotesNeedBuild, 'error']])
+    vi.restoreAllMocks()
   })
 })
 

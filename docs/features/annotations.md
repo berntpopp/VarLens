@@ -27,7 +27,7 @@ Classifications are scored using the Bayesian point-based system and can exist a
 
 Global classifications, stars and comments belong to one genome build: a GRCh37 and a GRCh38 case at the same coordinates do not share them.
 
-Case and cohort exports (CSV and XLSX) include the ACMG class, its evidence points, the override reason and the latest comment. A case export uses the case's own classification; a cohort export the global one.
+Case and cohort exports (CSV and XLSX) include the ACMG class, its evidence points and the override reason, plus the comments. A case export uses the case's own classification and has a Case Comment and a Global Comment column; a cohort export uses the global classification and comment.
 
 ### Auto-Suggest
 

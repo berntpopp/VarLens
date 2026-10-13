@@ -193,7 +193,7 @@
                 Activity Log
               </v-expansion-panel-title>
               <v-expansion-panel-text>
-                <ActivityLogPanel :entity-key="auditEntityKey" />
+                <ActivityLogPanel :entity-keys="auditEntityKeys" />
               </v-expansion-panel-text>
             </v-expansion-panel>
           </v-expansion-panels>
@@ -227,6 +227,7 @@ import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { clampDetailPanelWidth } from '../utils/responsive-layout'
 import { formatConsequence, variantHeading } from '../utils/formatters'
 import { AnnotationBuildKey, useAnnotations } from '../composables/useAnnotations'
+import { globalAnnotationEntityKey } from '../../../shared/audit/annotation-entity-key'
 import { useAcmgUndo } from '../composables/useAcmgUndo'
 import { hasDecidingAcmgEvidence, hasMeaningfulAcmgEvidence } from '../utils/acmg/acmg-undo'
 import { useVepEnrichment } from '../composables/useVepEnrichment'
@@ -384,12 +385,16 @@ const globalAcmgClassification = computed<AcmgClassification | null>(() => {
   )
 })
 
-const auditEntityKey = computed(() => {
-  if (!props.variant) return null
+// A global history is keyed by build (#577); entries from before applied to every build.
+const auditEntityKeys = computed<string[]>(() => {
+  if (!props.variant) return []
   if (props.mode === 'case' && props.caseId !== null && 'id' in props.variant) {
-    return `case:${props.caseId}:variant:${(props.variant as Variant).id}`
+    return [`case:${props.caseId}:variant:${(props.variant as Variant).id}`]
   }
-  return `${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
+  const legacy = globalAnnotationEntityKey(props.variant)
+  return genomeBuild.value === null
+    ? [legacy]
+    : [globalAnnotationEntityKey(props.variant, genomeBuild.value), legacy]
 })
 
 const hasGlobalAcmg = computed(() => {

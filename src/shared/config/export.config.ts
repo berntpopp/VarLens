@@ -14,13 +14,22 @@ export const EXPORT_NUMBER_FORMATS: Readonly<
 /**
  * Annotation columns appended to the case and cohort exports, CSV and XLSX,
  * on both backends (#574). A case export reads the case's own (per-case)
- * classification, like the case view's details panel; a cohort export reads
- * the global one of the row's build. The comment is the most recently
- * updated one the panel shows.
+ * classification, like the case view's details panel, and both comments; a
+ * cohort export the global classification and comment of the row's build.
  */
-export const ANNOTATION_EXPORT_COLUMNS = [
+const ACMG_EXPORT_COLUMNS = [
   { key: 'acmg_classification', header: 'ACMG Class' },
   { key: 'acmg_points', header: 'ACMG Points' },
-  { key: 'acmg_override_reason', header: 'ACMG Override Reason' },
-  { key: 'annotation_comment', header: 'Comment' }
+  { key: 'acmg_override_reason', header: 'ACMG Override Reason' }
+] as const
+
+export const CASE_ANNOTATION_EXPORT_COLUMNS = [
+  ...ACMG_EXPORT_COLUMNS,
+  { key: 'case_comment', header: 'Case Comment' },
+  { key: 'global_comment', header: 'Global Comment' }
+] as const
+
+export const COHORT_ANNOTATION_EXPORT_COLUMNS = [
+  ...ACMG_EXPORT_COLUMNS,
+  { key: 'global_comment', header: 'Global Comment' }
 ] as const

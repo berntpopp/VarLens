@@ -7,6 +7,7 @@
  * and, where the change carried evidence, the previous evidence JSON.
  */
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import { overrideReasonMissing } from '../../../../shared/acmg/acmg-evidence'
 
 export interface AcmgState {
   classification: AcmgClassification | null
@@ -17,8 +18,11 @@ export interface AcmgState {
 export interface AcmgUndoPlan {
   /** Snackbar text describing what was just saved. */
   message: string
-  /** The state to restore when the user clicks Undo. */
-  restore: AcmgState
+  /**
+   * The state to restore when the user clicks Undo; null when the server would
+   * refuse it (a legacy override saved without a reason, #567).
+   */
+  restore: AcmgState | null
 }
 
 function sameEvidence(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -40,13 +44,17 @@ export function planAcmgUndo(previous: AcmgState, next: AcmgState): AcmgUndoPlan
   else if (next.classification === null) message = 'ACMG classification cleared'
   else message = `Classified as ${next.classification}`
 
-  return {
-    message,
-    restore: {
-      classification: previous.classification,
-      ...(touchesEvidence ? { evidenceJson: previous.evidenceJson ?? '' } : {})
-    }
+  const restore: AcmgState = {
+    classification: previous.classification,
+    ...(touchesEvidence ? { evidenceJson: previous.evidenceJson ?? '' } : {})
   }
+  const refused =
+    touchesEvidence &&
+    overrideReasonMissing({
+      acmg_classification: restore.classification,
+      acmg_evidence: restore.evidenceJson
+    })
+  return { message, restore: refused ? null : restore }
 }
 
 /** One-line description of an unsaved evidence draft for the confirm bar. */

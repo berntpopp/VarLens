@@ -12,7 +12,9 @@
  */
 import type Database from 'better-sqlite3-multiple-ciphers'
 
+import { canonicalGenomeBuildId } from '../../shared/config/genome-builds.config'
 import { MARK_STALE_SQL } from '../../shared/sql/cohort-summary-rebuild'
+import { CONTIG_BUILD_REVIEW_DDL, migrateContigNaming } from './contig-naming-migration'
 import {
   createAnnotationFlagTriggers,
   dropAnnotationFlagTriggers
@@ -33,6 +35,40 @@ const hasTable = (db: Db, name: string): boolean =>
   db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !==
   undefined
 
+/**
+ * Before the split (PG twin in 0035): imports before f51a8e6c stored any
+ * build string, but the key needs build ids. Aliases become their id
+ * ('hg19', 'GRCh37.p13' → GRCh37); a value that matches no build is kept
+ * and its cases get a build review, where the user confirms one.
+ */
+function normaliseCaseBuilds(db: Db): void {
+  const values = db
+    .prepare('SELECT DISTINCT genome_build FROM cases WHERE genome_build IS NOT NULL')
+    .pluck()
+    .all() as string[]
+  db.exec(CONTIG_BUILD_REVIEW_DDL)
+  const rename = db.prepare('UPDATE cases SET genome_build = ? WHERE genome_build = ?')
+  // A v47 review keeps showing what is stored, so it names the id too.
+  const renameReviewed = db.prepare(
+    'UPDATE contig_build_review SET stored_build = ? WHERE stored_build = ?'
+  )
+  const unknown: string[] = []
+  for (const value of values) {
+    const id = canonicalGenomeBuildId(value)
+    if (id === null) unknown.push(value)
+    else if (id !== value) {
+      rename.run(id, value)
+      renameReviewed.run(id, value)
+    }
+  }
+  if (unknown.length === 0) return
+  db.prepare(
+    `INSERT OR IGNORE INTO contig_build_review (case_id, stored_build, suggested_build, reason, created_at)
+     SELECT id, genome_build, NULL, 'build_unknown', ? FROM cases
+      WHERE genome_build IN (${unknown.map(() => '?').join(', ')})`
+  ).run(Date.now(), ...unknown)
+}
+
 export function migrateAnnotationBuildKey(db: Db): void {
   if (!hasTable(db, 'variant_annotations')) return
   const columns = db.prepare('PRAGMA table_info(variant_annotations)').all() as Array<{
@@ -51,6 +87,13 @@ export function migrateAnnotationBuildKey(db: Db): void {
 
   db.transaction(() => {
     dropAnnotationFlagTriggers(db)
+    if (hasTable(db, 'cases')) {
+      normaliseCaseBuilds(db)
+      // A case whose build was only now recognised gets its build's names (the
+      // v47 step: a reviewed case is skipped, a confirmed one renamed with its
+      // notes), so the split below sees each case under its build's names.
+      migrateContigNaming(db)
+    }
     db.exec(`
       CREATE TABLE variant_annotations__build (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

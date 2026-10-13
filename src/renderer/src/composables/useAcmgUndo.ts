@@ -27,6 +27,7 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
   function offerUndo(previous: AcmgState, next: AcmgState, restore: () => Promise<boolean>): void {
     const plan = planAcmgUndo(previous, next)
     if (plan === null || appState === null) return
+    if (plan.restore === null) return appState.showSnack(plan.message, 'success')
     appState.showSnack(plan.message, 'success', {
       timeout: UNDO_SNACKBAR_MS,
       action: {

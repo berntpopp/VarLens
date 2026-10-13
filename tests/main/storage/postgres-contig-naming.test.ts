@@ -156,7 +156,7 @@ describe.skipIf(!RUN)('migration 0030 + chromosome-name job (PostgreSQL)', () =>
       [schema]
     )
     expect(audit.rows).toHaveLength(1)
-    expect(audit.rows[0].entity_key).toBe('chr1:100:A:G')
+    expect(audit.rows[0].entity_key).toBe('chr1:100:A:G@GRCh38') // keyed by build (#577)
     expect(
       (await probe.query(`SELECT COUNT(*)::int AS n FROM ${t('cohort_summary_rebuild_requests')}`))
         .rows[0].n

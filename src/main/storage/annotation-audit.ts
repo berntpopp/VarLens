@@ -1,4 +1,10 @@
-import { parseAcmgEvidence } from '../../shared/acmg/acmg-evidence'
+import {
+  mergedOverrideReasonMissing,
+  OVERRIDE_REASON_REQUIRED,
+  parseAcmgEvidence
+} from '../../shared/acmg/acmg-evidence'
+import { globalAnnotationEntityKey } from '../../shared/audit/annotation-entity-key'
+import { InvalidParametersError } from '../ipc/errors'
 import type { AuditAppendParams } from './audit-log-types'
 
 /** The override reason saved with a class (#567), for its history entry. */
@@ -8,8 +14,21 @@ function overrideReasonOf(evidence: unknown): { override_reason?: string } {
   return reason === null ? {} : { override_reason: reason }
 }
 
+/**
+ * #567 on the row as it will be stored (update over `stored`); refuses the
+ * write before anything changes. Both backends' audited writes call it.
+ */
+export function assertOverrideReason(
+  updates: object,
+  stored: Record<string, unknown> | null
+): void {
+  if (mergedOverrideReasonMissing(updates as Record<string, unknown>, stored)) {
+    throw new InvalidParametersError(OVERRIDE_REASON_REQUIRED, OVERRIDE_REASON_REQUIRED)
+  }
+}
+
 export function globalAnnotationAuditEntries(
-  coords: { chr: string; pos: number; ref: string; alt: string },
+  coords: { chr: string; pos: number; ref: string; alt: string; genome_build?: string },
   updates: {
     user_name?: string | null
     starred?: boolean | number
@@ -18,7 +37,7 @@ export function globalAnnotationAuditEntries(
   },
   oldAnnotation: Record<string, unknown> | null
 ): AuditAppendParams[] {
-  const entityKey = `${coords.chr}:${coords.pos}:${coords.ref}:${coords.alt}`
+  const entityKey = globalAnnotationEntityKey(coords, coords.genome_build)
   const entries: AuditAppendParams[] = []
   if (updates.acmg_classification !== undefined) {
     entries.push({

@@ -30,6 +30,32 @@ describe('PostgresExportRepository', () => {
     expect(release).toHaveBeenCalledTimes(1)
   })
 
+  it('only the export stream looks up annotations; the shortlist rows stay plain (#574)', async () => {
+    const texts: string[] = []
+    const query = vi.fn((arg: unknown) => {
+      const text = (arg as { cursor?: { text?: string } })?.cursor?.text
+      if (text !== undefined) texts.push(text)
+      return {
+        async *[Symbol.asyncIterator]() {
+          yield { id: '1', chr: '1', pos: '123', ref: 'A', alt: 'G' }
+        }
+      }
+    })
+    const repo = new PostgresExportRepository(
+      { connect: vi.fn(async () => ({ query, release: vi.fn() })) } as never,
+      'public'
+    )
+    const plain = []
+    for await (const row of repo.streamVariantRows({ case_id: 5 })) plain.push(row)
+    const exported = []
+    for await (const row of repo.streamVariantExportRows({ case_id: 5 })) exported.push(row)
+
+    expect(texts[0]).not.toContain('case_variant_annotations')
+    expect(plain[0]).not.toHaveProperty('acmg_classification')
+    expect(texts[1]).toContain('case_variant_annotations')
+    expect(exported[0]).toHaveProperty('acmg_classification', null)
+  })
+
   it('rejects unsupported column filters before opening a streaming client', async () => {
     const connect = vi.fn()
     const repo = new PostgresExportRepository({ connect } as never, 'public')

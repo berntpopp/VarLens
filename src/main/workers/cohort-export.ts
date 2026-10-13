@@ -16,7 +16,7 @@ import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary
 import type { CohortSearchParams } from '../../shared/types/cohort'
 import type { ExportColumn } from './export-pipeline'
 import { formatCellValue } from './export-renderer'
-import { ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
+import { COHORT_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
 import { cohortRowAnnotations } from '../database/annotation-export-lookup'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
@@ -41,7 +41,7 @@ export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
   { key: 'het_count', header: 'Heterozygous' },
   { key: 'hom_count', header: 'Homozygous' },
   { key: 'transcript', header: 'Transcript' },
-  ...ANNOTATION_EXPORT_COLUMNS
+  ...COHORT_ANNOTATION_EXPORT_COLUMNS
 ]
 
 const PROGRESS_EVERY_ROWS = 5_000

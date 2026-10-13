@@ -5,7 +5,11 @@
  */
 import type { Repositories } from '../../database/createRepositories'
 import type { StorageWriteTask } from '../write-executor'
-import { globalAnnotationAuditEntries, perCaseAnnotationAuditEntries } from '../annotation-audit'
+import {
+  assertOverrideReason,
+  globalAnnotationAuditEntries,
+  perCaseAnnotationAuditEntries
+} from '../annotation-audit'
 
 function normalizeAnnotationUpdates<T extends { starred?: boolean }>(
   updates: T
@@ -135,6 +139,7 @@ export async function executeSqliteWriteTask(
         coords.alt,
         coords.genome_build
       )
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = repos.annotations.upsertGlobalAnnotation(
         coords.chr,
         coords.pos,
@@ -178,6 +183,7 @@ export async function executeSqliteWriteTask(
     case 'annotations:upsertPerCaseWithAudit': {
       const [caseId, variantId, updates] = task.params
       const oldAnnotation = repos.annotations.getPerCaseAnnotation(caseId, variantId)
+      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = repos.annotations.upsertPerCaseAnnotation(
         caseId,
         variantId,

@@ -14,6 +14,7 @@
  */
 
 import { logService } from '../services/LogService'
+import { BUILD_COPY, GENOME_BUILDS } from '../../../shared/config/genome-builds.config'
 import type { WindowAPI } from '../../../shared/types/api'
 import type {
   BatchAnnotationKey,
@@ -87,6 +88,9 @@ interface MutationPlan {
   /** Log prefix, e.g. `Failed to toggle star: `. */
   failureMessage: string
 }
+
+/** A global write for a case whose build the user still has to confirm. */
+class UnconfirmedBuildError extends Error {}
 
 function getTransportErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -245,6 +249,10 @@ function upsert(
     return client.annotations.upsertPerCase(scope.caseId, scope.variantId, updates)
   }
   if (scope.build === null) throw new Error('genome build unknown; global annotation not saved')
+  // A legacy build value matching no build id: the server refuses it (#577).
+  if (!GENOME_BUILDS.some((b) => b.id === scope.build)) {
+    throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
+  }
   const { chr, pos, ref, alt } = coords
   return client.annotations.upsertGlobal(chr, pos, ref, alt, updates, scope.build)
 }
@@ -255,7 +263,7 @@ function upsert(
  */
 async function mutate(
   api: WindowAPI | undefined,
-  onWriteFailed: () => void,
+  onWriteFailed: (message?: string) => void,
   scope: AnnotationWriteScope,
   coords: VariantCoords,
   buildPlan: (current: AnnotationCache | undefined, previous: SlotValue | null) => MutationPlan
@@ -293,7 +301,7 @@ async function mutate(
     return true
   } catch (error) {
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
-    onWriteFailed()
+    onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
     // Every failed write rolls back and notifies, so no view keeps showing the
     // optimistic value of a write that never landed.
@@ -422,7 +430,8 @@ async function loadBatch(
 export function createScopedAnnotationOps(
   api: WindowAPI | undefined,
   getUserName: () => string | undefined,
-  onWriteFailed: () => void = () => {}
+  /** Told every failed write; `message` says what the user can do about it, when known. */
+  onWriteFailed: (message?: string) => void = () => {}
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),

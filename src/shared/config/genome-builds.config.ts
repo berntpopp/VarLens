@@ -277,8 +277,12 @@ export const BUILD_COPY = {
   reviewReason: {
     no_evidence: 'No source header or positions confirm the stored build',
     build_disagrees: 'The source header names another build',
-    build_excluded: 'Stored positions lie beyond the stored build'
+    build_excluded: 'Stored positions lie beyond the stored build',
+    build_unknown: 'The stored build is not one VarLens knows'
   },
+  /** Global notes are keyed by build (#577): a case of an unknown build cannot write them. */
+  globalNotesNeedBuild:
+    "This case's genome build is not confirmed, so global annotations cannot be saved for it. Confirm its build in the genome build check (Review) first.",
   reviewCase: 'Case',
   reviewStored: 'Stored',
   reviewSuggested: 'Header',
@@ -328,6 +332,27 @@ export function genomeBuildLinks(id: string): NonNullable<GenomeBuildDef['links'
  */
 export const withGenomeBuild = (text: string, build: string | null): string =>
   build === null ? text : `${build} ${text}`
+
+/** Lower-case alias (and id) → build id, sorted: the data the stored-build normalisation uses. */
+export function genomeBuildAliasPairs(): Array<[alias: string, id: string]> {
+  const pairs = new Map<string, string>()
+  for (const build of GENOME_BUILDS as readonly GenomeBuildDef[]) {
+    for (const alias of [build.id.toLowerCase(), ...build.aliases]) pairs.set(alias, build.id)
+  }
+  return [...pairs].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+}
+
+/**
+ * The build id a stored value means (case-insensitive id or alias, a `.pN`
+ * patch suffix ignored: 'hg19', 'GRCh37.p13' → GRCh37); null when none.
+ */
+export function canonicalGenomeBuildId(value: string): string | null {
+  const key = value
+    .trim()
+    .toLowerCase()
+    .replace(/\.p\d+$/, '')
+  return genomeBuildAliasPairs().find(([alias]) => alias === key)?.[1] ?? null
+}
 
 export function isImportableGenomeBuild(id: string): boolean {
   return IMPORTABLE_GENOME_BUILDS.some((b) => b.id === id)

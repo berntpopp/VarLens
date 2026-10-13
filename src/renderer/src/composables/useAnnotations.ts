@@ -323,8 +323,8 @@ export function useAnnotations(options: UseAnnotationsOptions = {}) {
   const { api } = useApiService()
   // A failed write is rolled back; say so, or the user believes it was saved (#486).
   const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
-  const ops = createScopedAnnotationOps(api, getUserName, () =>
-    appState?.showSnack('Annotation not saved. The change was reverted.', 'error')
+  const ops = createScopedAnnotationOps(api, getUserName, (message) =>
+    appState?.showSnack(message ?? 'Annotation not saved. The change was reverted.', 'error')
   )
   const build = buildGetter(options)
   const getters = createAnnotationGetters(build)
