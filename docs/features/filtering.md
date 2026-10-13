@@ -175,7 +175,7 @@ The search bar offers context-aware suggestions as you type:
 Type `@` followed by a preset name to apply a saved preset directly from the search bar:
 
 ```
-@rare-pathogenic
+@rare_known_pathogenic
 ```
 
 ### Plain Text Search
