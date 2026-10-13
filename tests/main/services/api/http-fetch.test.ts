@@ -6,7 +6,12 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, setApiFetch } from '../../../../src/main/services/api/http-fetch'
+import {
+  apiFetch,
+  desktopApiFetch,
+  setApiFetch
+} from '../../../../src/main/services/api/http-fetch'
+import { EnsemblApiClient } from '../../../../src/main/services/api/EnsemblApiClient'
 import { HpoApiClient } from '../../../../src/main/services/api/HpoApiClient'
 
 const API_DIR = join(__dirname, '../../../../src/main/services/api')
@@ -44,5 +49,62 @@ describe('apiFetch', () => {
       .filter((f) => f.endsWith('.ts') && f !== 'http-fetch.ts')
       .filter((f) => /(^|[^.\w])fetch\(/.test(readFileSync(join(API_DIR, f), 'utf8')))
     expect(offenders).toEqual([])
+  })
+})
+
+/** Electron net.fetch: headers arrive, then an abort fails the body read with a bare AbortError. */
+function electronStalledBody(_url: string, init?: RequestInit): Promise<Response> {
+  const signal = init?.signal
+  const body = new ReadableStream({
+    start(controller) {
+      signal?.addEventListener('abort', () =>
+        controller.error(new DOMException('The operation was aborted.', 'AbortError'))
+      )
+    }
+  })
+  return Promise.resolve(new Response(body, { status: 200 }))
+}
+
+describe('desktopApiFetch (net.fetch adapter)', () => {
+  afterEach(() => {
+    setApiFetch(null)
+    vi.useRealTimers()
+  })
+
+  it('rethrows the signal reason when an abort fails the body read', async () => {
+    const controller = new AbortController()
+    const response = await desktopApiFetch(electronStalledBody)('https://example.org', {
+      signal: controller.signal
+    })
+    const reading = response.json()
+    controller.abort(new DOMException('The operation timed out.', 'TimeoutError'))
+    await expect(reading).rejects.toMatchObject({ name: 'TimeoutError' })
+  })
+
+  it('sends no cookies and keeps the caller init', async () => {
+    const netFetch = vi.fn(async () => new Response('{}'))
+    await desktopApiFetch(netFetch)('https://example.org', { method: 'POST' })
+    expect(netFetch).toHaveBeenCalledWith('https://example.org', {
+      method: 'POST',
+      credentials: 'omit'
+    })
+  })
+
+  it('lets Ensembl retry a mid-body timeout on the desktop path', async () => {
+    vi.useFakeTimers()
+    const ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 })
+    const netFetch = vi
+      .fn<(url: string, init?: RequestInit) => Promise<Response>>()
+      .mockImplementationOnce(electronStalledBody)
+      .mockResolvedValueOnce(
+        ok({ id: 'ENSG1', start: 1, end: 100, strand: 1, seq_region_name: '22' })
+      )
+    setApiFetch(desktopApiFetch(netFetch))
+
+    const pending = new EnsemblApiClient(null).fetchGeneStructure('THOC5')
+    await vi.runAllTimersAsync()
+    await pending
+
+    expect(netFetch).toHaveBeenCalledTimes(2)
   })
 })
