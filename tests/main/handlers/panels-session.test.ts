@@ -43,14 +43,11 @@ describe('panels session helpers', () => {
         ]
       })
     } as unknown as PanelAppClient
-    const callbacks = { clearPanelIntervalCache: vi.fn() }
-
     const result = await importPanelAppForSession(
       createSession(writeExecute, readExecute),
       { panelId: 42, region: 'uk', confidenceThreshold: 'green' },
       geneRef,
-      client,
-      callbacks
+      client
     )
 
     expect(client.getPanel).toHaveBeenCalledWith(42, 'uk')
@@ -76,7 +73,6 @@ describe('panels session helpers', () => {
       params: [7, [{ hgncId: 'HGNC:1100', symbol: 'BRCA1' }]]
     })
     expect(readExecute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [7] })
-    expect(callbacks.clearPanelIntervalCache).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
       id: 7,
       name: 'Inherited cancer',
@@ -103,8 +99,6 @@ describe('panels session helpers', () => {
     const client = {
       getInteractionPartners: vi.fn().mockResolvedValue([{ symbol: 'BRCA2' }])
     } as unknown as StringDbClient
-    const callbacks = { clearPanelIntervalCache: vi.fn() }
-
     const result = await generateStringDbForSession(
       createSession(writeExecute, readExecute),
       {
@@ -114,8 +108,7 @@ describe('panels session helpers', () => {
         name: 'Custom network'
       },
       geneRef,
-      client,
-      callbacks
+      client
     )
 
     expect(client.getInteractionPartners).toHaveBeenCalledWith(['BRCA1'], {
@@ -149,7 +142,6 @@ describe('panels session helpers', () => {
       ]
     })
     expect(readExecute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [9] })
-    expect(callbacks.clearPanelIntervalCache).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
       id: 9,
       name: 'Custom network',

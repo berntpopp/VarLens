@@ -20,7 +20,6 @@ import {
   prepareCohortExportParams,
   prepareVariantExport
 } from '../../../src/main/ipc/handlers/export-logic'
-import { clearPanelIntervalCache } from '../../../src/main/ipc/handlers/panelIntervalHelper'
 import { buildVariantFilter } from '../../../src/main/ipc/handlers/variants-logic'
 import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { fromTransportableWorkerError } from '../../../src/main/database/worker-error-codec'
@@ -65,7 +64,6 @@ describe('variant filter parity guards (no PostgreSQL required)', () => {
   let panelId: number
 
   beforeEach(() => {
-    clearPanelIntervalCache()
     geneRef.getCoordinatesForGenes.mockReset()
     geneRef.getCoordinatesForGenes.mockImplementation((_ids: string[], assembly: string) =>
       assembly === 'GRCh38'

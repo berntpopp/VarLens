@@ -28,11 +28,6 @@ const GREEN_LEVELS = new Set(['3', '4', 'green'])
 /** Confidence levels considered "green + amber" (medium-high confidence) */
 const GREEN_AMBER_LEVELS = new Set(['2', '3', '4', 'green', 'amber'])
 
-/** Callback for clearing panel interval cache after mutations. */
-export interface PanelCacheCallbacks {
-  clearPanelIntervalCache: () => void
-}
-
 // ============================================================
 // Panel CRUD
 // ============================================================
@@ -66,37 +61,25 @@ export async function getPanelWithGenes(
   return { ...(panel as object), genes }
 }
 
-export function createPanel(
-  params: CreatePanelInput,
-  getDb: () => DatabaseService,
-  callbacks: PanelCacheCallbacks
-): unknown {
+export function createPanel(params: CreatePanelInput, getDb: () => DatabaseService): unknown {
   const db = getDb()
   const result = db.panels.createPanel(params)
-  callbacks.clearPanelIntervalCache()
   return result
 }
 
 export function updatePanel(
   data: { id: number; [key: string]: unknown },
-  getDb: () => DatabaseService,
-  callbacks: PanelCacheCallbacks
+  getDb: () => DatabaseService
 ): unknown {
   const { id, ...updates } = data
   const db = getDb()
   const result = db.panels.updatePanel(id, updates)
-  callbacks.clearPanelIntervalCache()
   return result
 }
 
-export function deletePanel(
-  id: number,
-  getDb: () => DatabaseService,
-  callbacks: PanelCacheCallbacks
-): { success: boolean } {
+export function deletePanel(id: number, getDb: () => DatabaseService): { success: boolean } {
   const db = getDb()
   db.panels.deletePanel(id)
-  callbacks.clearPanelIntervalCache()
   return { success: true }
 }
 
@@ -112,12 +95,10 @@ export function duplicatePanel(id: number, newName: string, getDb: () => Databas
 export function setGenes(
   panelId: number,
   genes: Array<{ hgncId: string; symbol: string }>,
-  getDb: () => DatabaseService,
-  callbacks: PanelCacheCallbacks
+  getDb: () => DatabaseService
 ): { success: boolean } {
   const db = getDb()
   db.panels.setGenes(panelId, genes)
-  callbacks.clearPanelIntervalCache()
   return { success: true }
 }
 
@@ -229,8 +210,7 @@ export async function importPanelApp(
   },
   getDb: () => DatabaseService,
   geneRef: GeneReferenceDb,
-  client: PanelAppClient,
-  callbacks: PanelCacheCallbacks
+  client: PanelAppClient
 ): Promise<unknown> {
   const { panelId, region, confidenceThreshold, name } = params
 
@@ -278,7 +258,6 @@ export async function importPanelApp(
   }
 
   const genes = db.panels.getGenes(createdPanel.id)
-  callbacks.clearPanelIntervalCache()
   return { ...createdPanel, genes }
 }
 
@@ -294,8 +273,7 @@ export async function generateStringDb(
   },
   getDb: () => DatabaseService,
   geneRef: GeneReferenceDb,
-  client: StringDbClient,
-  callbacks: PanelCacheCallbacks
+  client: StringDbClient
 ): Promise<unknown> {
   const { seedGenes, requiredScore, networkType, name } = params
 
@@ -361,7 +339,6 @@ export async function generateStringDb(
   }
 
   const genes = db.panels.getGenes(createdPanel.id)
-  callbacks.clearPanelIntervalCache()
   return { ...createdPanel, genes }
 }
 
