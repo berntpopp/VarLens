@@ -29,7 +29,7 @@ const mountSummary = (details: unknown[]) =>
 describe('BatchSummaryPhase: unrecognised ClinVar values (#469)', () => {
   it('shows nothing when every value was recognised', () => {
     const wrapper = mountSummary([detail('fine')])
-    expect(wrapper.find('[data-testid="unranked-clinvar"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="import-data-warnings"]').exists()).toBe(false)
   })
 
   it('warns per file with the count and the values as the table shows them', () => {
@@ -37,7 +37,7 @@ describe('BatchSummaryPhase: unrecognised ClinVar values (#469)', () => {
       detail('sevA', ['totally_made_up_term', 'reviewed: fine']),
       detail('fine')
     ])
-    const notices = wrapper.findAll('[data-testid="unranked-clinvar"]')
+    const notices = wrapper.findAll('[data-testid="import-data-warnings"]')
     expect(notices).toHaveLength(1)
     const text = notices[0].text()
     expect(text).toContain('sevA')
@@ -54,7 +54,7 @@ describe('BatchSummaryPhase: unrecognised ClinVar values (#469)', () => {
   it('truncates a long list', () => {
     const many = Array.from({ length: 14 }, (_, index) => `odd_${index}`)
     const text = mountSummary([detail('big', many)])
-      .find('[data-testid="unranked-clinvar"]')
+      .find('[data-testid="import-data-warnings"]')
       .text()
     expect(text).toContain('14 ClinVar values not recognised')
     expect(text).toContain('odd 0')

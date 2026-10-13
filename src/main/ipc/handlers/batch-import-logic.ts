@@ -107,6 +107,8 @@ export interface BatchImportResult {
     variantCount?: number
     error?: string
     unrankedClinvar?: string[]
+    /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+    afOutOfRange?: number
   }>
 }
 
@@ -266,7 +268,8 @@ function runBatchWorker(
               caseName: d.caseName,
               variantCount: d.variantCount,
               error: d.error,
-              unrankedClinvar: d.unrankedClinvar
+              unrankedClinvar: d.unrankedClinvar,
+              afOutOfRange: d.afOutOfRange
             }))
           })
         )

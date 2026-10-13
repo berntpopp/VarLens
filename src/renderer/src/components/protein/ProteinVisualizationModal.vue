@@ -6,7 +6,8 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <v-card class="d-flex flex-column fill-height">
-      <!-- Header -->
+      <!-- Header: chips and tabs carry no colour of their own, so they take
+           on-secondary and stay readable in both themes. -->
       <v-toolbar color="secondary" density="comfortable" flat>
         <v-toolbar-title class="d-flex align-center ga-3 ml-4">
           <!-- Gene name -->
@@ -24,27 +25,20 @@
             v-if="proteinData.proteinLength.value > 0"
             size="small"
             variant="outlined"
-            color="white"
             class="ml-1"
           >
             {{ proteinData.proteinLength.value }} aa
           </v-chip>
 
           <!-- UniProt accession -->
-          <v-chip
-            v-if="proteinData.mapping.value"
-            size="small"
-            variant="tonal"
-            color="white"
-            class="ml-1"
-          >
+          <v-chip v-if="proteinData.mapping.value" size="small" variant="tonal" class="ml-1">
             {{ proteinData.mapping.value.uniprotAccession }}
           </v-chip>
         </v-toolbar-title>
 
         <template #append>
           <!-- Tabs -->
-          <v-tabs v-model="activeTab" color="white" density="compact" class="mr-2">
+          <v-tabs v-model="activeTab" density="compact" class="mr-2">
             <v-tab value="lollipop">Lollipop Plot</v-tab>
             <v-tab value="gene-structure">Gene Structure</v-tab>
             <v-tab value="3d">3D Structure</v-tab>

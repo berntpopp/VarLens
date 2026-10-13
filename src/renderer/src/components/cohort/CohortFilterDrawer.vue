@@ -106,6 +106,7 @@
             hide-details
             clearable
             placeholder="Search gene symbol (e.g. BRCA1)"
+            aria-label="Filter by gene symbol"
             :prepend-inner-icon="mdiMagnify"
             @update:search="searchGeneSymbols"
           />

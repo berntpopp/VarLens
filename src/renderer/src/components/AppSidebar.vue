@@ -1,6 +1,6 @@
 <template>
   <div>
-    <v-toolbar density="compact" color="primary" dark>
+    <v-toolbar density="compact" color="app-bar">
       <span class="ml-2 text-body-large font-weight-medium">
         Cases
         <span v-if="(caseCount ?? 0) > 0" class="text-body-small ml-1" style="opacity: 0.8"

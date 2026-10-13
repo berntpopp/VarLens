@@ -4,19 +4,7 @@
  */
 
 import type { ConsequenceCategory, ClinVarSignificance } from '../types/protein'
-import { CLINVAR_OTHER_MARK, SEMANTIC_COLORS } from '../config/domain.config'
-
-/**
- * Consequence category color scheme (cBioPortal convention)
- */
-export const CONSEQUENCE_COLORS: Record<ConsequenceCategory, string> = {
-  missense: '#008000',
-  truncating: '#000000',
-  inframe: '#8B4513',
-  splice: '#FF8C00',
-  synonymous: '#808080',
-  other: '#C0C0C0'
-}
+import { CLINVAR_OTHER_MARK, CONSEQUENCE_COLORS, SEMANTIC_COLORS } from '../config/domain.config'
 
 /**
  * VEP consequence term → category mapping

@@ -22,12 +22,14 @@
           data-tooltip-location="bottom"
           :prepend-inner-icon="mdiMagnify"
           role="combobox"
+          aria-haspopup="listbox"
           :aria-expanded="open ? 'true' : 'false'"
           :aria-controls="listId"
           :aria-activedescendant="open && matches.length > 0 ? `${listId}-${active}` : undefined"
           @update:model-value="onInput"
           @keydown="onKeydown"
           @click:clear="clear"
+          @vue:mounted="dropFieldRole"
         />
       </template>
       <v-list :id="listId" density="compact" role="listbox" class="py-0">
@@ -74,6 +76,7 @@ import { mdiChevronLeft, mdiChevronRight, mdiMagnify } from '@mdi/js'
 import IconButton from '../../common/IconButton.vue'
 import { PLOT_COPY } from '../../../config/proteinPlotConfig'
 import type { TrackNavigator } from '../../../composables/useTrackNavigator'
+import { dropFieldRole } from '../../../utils/combobox-field'
 import { parseTrackQuery, searchTrack, type TrackSearchContext } from '../../../utils/track-search'
 
 const props = defineProps<{

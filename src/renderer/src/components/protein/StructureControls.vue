@@ -89,8 +89,8 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
 
     <v-spacer />
 
-    <!-- Source indicator chip -->
-    <v-chip size="small" variant="tonal" :color="isAlphaFold ? 'blue' : 'green'" class="mr-2">
+    <!-- Source indicator chip: the icon and label tell the source apart -->
+    <v-chip size="small" variant="tonal" class="mr-2">
       <v-icon start size="14" :icon="isAlphaFold ? mdiAlphaACircle : mdiDatabase" />
       {{ sourceLabel }}
     </v-chip>
@@ -114,6 +114,11 @@ const representations: Array<{ value: RepresentationType; label: string; icon: s
 <style scoped>
 .structure-controls {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Inactive toggles fall back to on-surface (2.9:1 on secondary); use the toolbar's on-colour. */
+.structure-controls .v-btn--variant-outlined {
+  color: rgb(var(--v-theme-on-secondary));
 }
 
 .plddt-legend {

@@ -277,7 +277,11 @@ import { useLinkResolvers } from '../composables/useLinkResolvers'
 import { useAutoPageSize } from '../composables/useAutoPageSize'
 import { getAdaptiveRowScrollBehavior } from '../utils/adaptiveRowScroll'
 import { useTableScroll } from '../composables/useTableScroll'
-import { useTableKeyboardNav, hasCommandModifier } from '../composables/useTableKeyboardNav'
+import {
+  useTableKeyboardNav,
+  hasCommandModifier,
+  isControlFocused
+} from '../composables/useTableKeyboardNav'
 import { useProteinViewShortcut } from '../composables/useProteinViewShortcut'
 import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../config/keyboardShortcuts'
@@ -585,7 +589,7 @@ onKeyStroke(
   SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
-    if (selectedItem.value === null) return
+    if (selectedItem.value === null || isControlFocused()) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
   },
@@ -669,7 +673,9 @@ defineExpose({
   resetSort,
   refresh: loadVariants,
   buildQueryFilters,
-  columns: computed(() => headers.value.map((h) => ({ key: h.key, title: h.title }))),
+  columns: computed(() =>
+    headers.value.map((h) => ({ key: h.key, title: h.title, width: h.width }))
+  ),
   hasColumnFilters,
   columnFilterCount,
   clearAllColumnFilters,

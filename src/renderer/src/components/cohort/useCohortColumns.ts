@@ -75,7 +75,7 @@ export function useCohortColumns(
   })
 
   // Responsive default for columns without an explicit choice (parity with the case table)
-  const { isVisible } = useAutoHiddenColumns(() => headers.value.map((h) => h.key), prefs)
+  const { isVisible } = useAutoHiddenColumns(headers, prefs)
 
   /** Only columns visible per user preferences, with shared fixed widths (no jitter). */
   const visibleHeaders = computed(() =>

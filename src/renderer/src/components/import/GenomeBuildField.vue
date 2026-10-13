@@ -123,6 +123,13 @@ defineExpose({ validate })
 </script>
 
 <style scoped>
+/* The legend and hint sit on the dialog's background tint, where Vuetify's
+   medium emphasis is 4.43:1 (WCAG 1.4.3); see a11y.css for the field labels. */
+.genome-build-field :deep(.v-radio-group > .v-input__control > .v-label),
+.genome-build-field :deep(.v-messages) {
+  opacity: var(--v-high-emphasis-opacity);
+}
+
 .genome-build-field--warn :deep(.v-messages) {
   color: rgb(var(--v-theme-warning));
   opacity: 1;

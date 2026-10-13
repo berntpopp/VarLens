@@ -32,7 +32,7 @@
         >
           <v-icon start size="small" :icon="mdiFilterVariant" />
           <strong>{{ filteredCount.toLocaleString() }}</strong>
-          <template v-if="totalCount !== null">
+          <template v-if="totalCount !== null && !compactActions">
             <span class="mx-1" style="opacity: 0.7">/</span>
             <span style="opacity: 0.7">{{ totalCount.toLocaleString() }}</span>
           </template>
@@ -43,19 +43,26 @@
           :disabled="!hasActiveFilters && !hasClearableState"
           :color="hasActiveFilters || hasClearableState ? 'error' : undefined"
           :variant="hasActiveFilters || hasClearableState ? 'tonal' : 'text'"
+          :icon="compactActions"
+          :aria-label="compactActions ? FILTER_TOOLBAR_COPY.clear : undefined"
           @click="clearAll"
         >
-          <v-icon start size="small" :icon="mdiFilterOff" />
-          Clear
+          <v-icon :start="!compactActions" size="small" :icon="mdiFilterOff" />
+          <template v-if="!compactActions">{{ FILTER_TOOLBAR_COPY.clear }}</template>
           <v-tooltip activator="parent" location="bottom">{{
             withShortcut('Clear all filters', 'clearFilters')
           }}</v-tooltip>
         </v-btn>
 
         <!-- Open filter drawer -->
-        <v-btn variant="tonal" @click="emit('open-filter-drawer')">
-          <v-icon start size="small" :icon="mdiFilterVariant" />
-          Filters
+        <v-btn
+          variant="tonal"
+          :icon="compactActions"
+          :aria-label="compactActions ? FILTER_TOOLBAR_COPY.filters : undefined"
+          @click="emit('open-filter-drawer')"
+        >
+          <v-icon :start="!compactActions" size="small" :icon="mdiFilterVariant" />
+          <template v-if="!compactActions">{{ FILTER_TOOLBAR_COPY.filters }}</template>
           <v-badge
             v-if="activeFilterCount > 0"
             :content="activeFilterCount"
@@ -224,6 +231,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { SHORTCUTS, withShortcut } from '../config/keyboardShortcuts'
+import { FILTER_TOOLBAR_COPY } from '../config/uiCopyConfig'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
@@ -285,6 +293,8 @@ watch(
 // Responsive: collapse Columns/Export into overflow menu at non-full widths
 const { tier } = useResponsiveLayout()
 const showOverflowMenu = computed(() => tier.value !== 'full')
+// Phones: icon-only Clear/Filters and a bare count keep every action on screen
+const compactActions = computed(() => tier.value === 'narrow')
 
 const emit = defineEmits<{
   'clear-all': []
@@ -326,6 +336,8 @@ function clearAll(): void {
 }
 
 .results-chip {
+  /* The count is status, not decoration: never squeeze it to "1,5…" */
+  flex-shrink: 0;
   font-size: 0.85rem;
   transition:
     transform 150ms ease,

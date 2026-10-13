@@ -23,13 +23,13 @@
          shown as they are, but ranked as unknown (#469). Tonal alert: its
          background derives from the theme's warning colour in light and dark. -->
     <v-alert
-      v-for="notice in unrankedNotices"
-      :key="notice.caseName"
+      v-for="notice in dataNotices"
+      :key="notice.caseName + notice.summary"
       type="warning"
       variant="tonal"
       density="compact"
       class="mb-2 text-body-small"
-      data-testid="unranked-clinvar"
+      data-testid="import-data-warnings"
     >
       <strong>{{ notice.caseName }}:</strong> {{ notice.summary }}
     </v-alert>
@@ -75,19 +75,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { BatchResult } from '../../../../shared/types/api'
-import { unrankedClinvarSummary } from '../../utils/unranked-clinvar'
+import { importDataNotices } from '../../utils/unranked-clinvar'
 import { mdiAlertCircle, mdiCheckCircle, mdiSkipNext } from '@mdi/js'
 
 const props = defineProps<{
   summary: BatchResult
 }>()
 
-/** One compact warning per file that had ClinVar values the configuration does not know. */
-const unrankedNotices = computed(() =>
+/** One compact warning per data warning of a file (unranked ClinVar values, gnomAD AF range). */
+const dataNotices = computed(() =>
   props.summary.details.flatMap((detail) =>
-    detail.unrankedClinvar !== undefined && detail.unrankedClinvar.length > 0
-      ? [{ caseName: detail.caseName, summary: unrankedClinvarSummary(detail.unrankedClinvar) }]
-      : []
+    importDataNotices(detail).map((summary) => ({ caseName: detail.caseName, summary }))
   )
 )
 </script>

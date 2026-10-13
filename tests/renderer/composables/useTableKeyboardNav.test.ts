@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { withSetup } from '../../utils/test-helpers'
 import {
+  isControlFocused,
   isInputFocused,
   isOverlayOpen,
   isTextEntryFocused,
@@ -379,5 +380,61 @@ describe('isOverlayOpen', () => {
     el.className = className
     document.body.appendChild(el)
     expect(isOverlayOpen()).toBe(expected)
+  })
+})
+
+describe('isControlFocused', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  it.each([
+    ['a button', '<button>Lollipop</button>', true],
+    ['an element inside a button', '<button><span tabindex="-1">x</span></button>', true],
+    ['a role=button element', '<div role="button" tabindex="0">x</div>', true],
+    ['a link', '<a href="https://example.org">x</a>', true],
+    ['a table cell', '<table><tr><td tabindex="0">x</td></tr></table>', false]
+  ])('%s → %s (Enter activates it, not the row panel)', (_label, html, expected) => {
+    document.body.innerHTML = html
+    const focusable = document.body.querySelectorAll<HTMLElement>('[tabindex], button, a')
+    focusable[focusable.length - 1].focus() // the innermost one
+    expect(isControlFocused()).toBe(expected)
+  })
+
+  it('is false with nothing focused', () => {
+    expect(isControlFocused()).toBe(false)
+  })
+})
+
+describe('arrow navigation and a focused control', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  it.each(['moveDown', 'moveUp'] as const)(
+    '%s releases a focused button so Enter opens the row again',
+    (move) => {
+      document.body.innerHTML = '<button>star</button>'
+      const button = document.querySelector('button')!
+      // focus left behind by a mouse click
+      button.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      button.focus()
+      const [nav, app] = withSetup(() =>
+        useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
+      )
+      nav[move]()
+      expect(isControlFocused()).toBe(false)
+      expect(nav.selectedIndex.value).toBe(0)
+      app.unmount()
+    }
+  )
+
+  it('keeps focus reached by keyboard so Tab users keep their place', () => {
+    document.body.innerHTML = '<button>copy</button>'
+    const button = document.querySelector('button')!
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    button.focus() // reached by Tab: the last pointer press was elsewhere
+    const [nav, app] = withSetup(() =>
+      useTableKeyboardNav({ items: ref([{ id: 1 }]), getItemId: (i) => i.id, onSelect: vi.fn() })
+    )
+    nav.moveDown()
+    expect(document.activeElement).toBe(button)
+    app.unmount()
   })
 })

@@ -3,13 +3,14 @@ import {
   takeUnrankedClinvar,
   unrankedClinvarLogLine
 } from '../import/unranked-clinvar'
+import { resetAfOutOfRange, takeAfOutOfRange } from '../import/af-out-of-range'
 import { parentPort } from 'worker_threads'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
 import { basename } from 'node:path'
 
 import type { WorkerMessage, MainMessage } from '../../shared/types/import-worker'
-import { DATABASE_CONFIG } from '../../shared/config'
+import { DATABASE_CONFIG, IMPORT_MESSAGES } from '../../shared/config'
 import { replacementCaseName } from '../../shared/utils/case-name'
 import { detectFormat } from '../import/format-detection'
 import { loadImportFilters } from '../import/vcf/import-filters'
@@ -132,6 +133,8 @@ export async function runImportSession(
       errorCode?: string
       userMessage?: string
       unrankedClinvar?: string[]
+      /** Variants whose gnomAD AF lies outside [0, 1] (stored as imported). */
+      afOutOfRange?: number
     }> = []
     let succeeded = 0
     let failed = 0
@@ -156,6 +159,7 @@ export async function runImportSession(
 
       const file = msg.files[fileIndex]
       resetUnrankedClinvar()
+      resetAfOutOfRange()
       const fileName = basename(file.filePath)
 
       try {
@@ -346,6 +350,12 @@ export async function runImportSession(
               `[import-worker] ${unrankedClinvarLogLine(file.caseName, unrankedClinvar)}`
             )
           }
+          const afOutOfRange = takeAfOutOfRange()
+          if (afOutOfRange !== undefined) {
+            console.warn(
+              `[import-worker] ${file.caseName}: ${IMPORT_MESSAGES.afOutOfRange(afOutOfRange)}`
+            )
+          }
 
           const elapsed = Date.now() - startTime
 
@@ -359,6 +369,7 @@ export async function runImportSession(
               skipped: skipTracker.count,
               skipReasons: skipTracker.reasons,
               ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+              ...(afOutOfRange !== undefined ? { afOutOfRange } : {}),
               elapsed
             }
           }
@@ -371,7 +382,8 @@ export async function runImportSession(
             caseName: file.caseName,
             status: 'success',
             variantCount,
-            ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {})
+            ...(unrankedClinvar !== undefined ? { unrankedClinvar } : {}),
+            ...(afOutOfRange !== undefined ? { afOutOfRange } : {})
           })
           succeeded++
           importedInBatch.add(file.caseName)

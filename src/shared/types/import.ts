@@ -28,15 +28,21 @@ export interface ImportOptions {
   batchSize?: number // Override default 5000
 }
 
+/** What an import reports about its data; the values are stored as imported. */
+export interface ImportDataReport {
+  /** ClinVar values the severity configuration does not know (ranked as unknown). */
+  unrankedClinvar?: string[]
+  /** Variants whose gnomAD AF lies outside [0, 1]. */
+  afOutOfRange?: number
+}
+
 // Result of import operation
-export interface ImportResult {
+export interface ImportResult extends ImportDataReport {
   caseId: number
   variantCount: number
   skipped: number
   errors: string[] // Summary error messages
   elapsed: number // Total time in ms
-  /** ClinVar values of this import that the severity configuration does not know (ranked as unknown). */
-  unrankedClinvar?: string[]
 }
 
 // Raw variant row from columnar format (before mapping)

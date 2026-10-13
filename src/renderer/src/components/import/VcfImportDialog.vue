@@ -256,7 +256,7 @@ import { useAppState } from '../../composables/useAppState'
 import { useImportStatusStore } from '../../stores/importStatusStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { logService } from '../../services/LogService'
-import { logUnrankedClinvar } from '../../utils/unranked-clinvar'
+import { logImportDataWarnings } from '../../utils/unranked-clinvar'
 import VcfFileList, { type VariantTypeOverride } from './VcfFileList.vue'
 import ImportFilterOptions, { type ImportFilterState } from './ImportFilterOptions.vue'
 import ImportProgressView, { type FileStatusEntry } from './ImportProgressView.vue'
@@ -659,9 +659,7 @@ async function startImport(): Promise<void> {
     currentFile.value = null
     overallPercent.value = 100
     importResult.value = serverResult
-    logUnrankedClinvar([
-      { caseName: caseName.value.trim(), unrankedClinvar: serverResult.unrankedClinvar }
-    ])
+    logImportDataWarnings([{ ...serverResult, caseName: caseName.value.trim() }])
     phase.value = 'summary'
 
     // Reset the shared store — the import is finished so the

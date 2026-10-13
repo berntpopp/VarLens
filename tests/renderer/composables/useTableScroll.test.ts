@@ -11,6 +11,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { withSetup } from '../../utils/test-helpers'
 import { useTableScroll } from '@renderer/composables/useTableScroll'
+import { tableViewportWidthPx } from '@renderer/composables/useResponsiveLayout'
 
 describe('useTableScroll', () => {
   let app: { unmount: () => void }
@@ -161,6 +162,24 @@ describe('useTableScroll', () => {
 
       // Inner width follows the table scrollWidth via the observer
       expect(topScrollbarInner.style.width).toBe('1234px')
+    })
+
+    it('a detached (keep-alive-deactivated) table does not overwrite the published width', () => {
+      const [result, appInstance] = withSetup(() => useTableScroll())
+      app = appInstance
+      const tableWrapper = document.createElement('div')
+      Object.defineProperty(tableWrapper, 'clientWidth', { value: 0 })
+      tableViewportWidthPx.value = 1500
+      vi.spyOn(global.ResizeObserver.prototype, 'observe').mockImplementation(function (this: {
+        callback: ResizeObserverCallback
+      }) {
+        this.callback([], this as unknown as ResizeObserver)
+      })
+      result.topScrollbarRef.value = document.createElement('div')
+      result.topScrollbarInnerRef.value = document.createElement('div')
+      result.initScrollSync(tableWrapper)
+
+      expect(tableViewportWidthPx.value).toBe(1500)
     })
 
     it('does not read scrollWidth synchronously (no forced layout during mount)', () => {

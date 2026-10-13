@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ACMG_CLASSIFICATIONS,
   ACMG_COLORS,
+  CONSEQUENCE_COLORS,
   IMPACT_COLORS,
   SEMANTIC_COLORS,
   ZYGOSITY_COLORS
@@ -153,5 +154,9 @@ describe('semantic theme tokens', () => {
       expect(Color.contrast(hex, '#FFFFFF', 'WCAG21'), key).toBeGreaterThanOrEqual(3)
     }
     expectSeparated('protein', CLINVAR_COLORS, Object.keys(CLINVAR_COLORS))
+  })
+
+  it('lollipop consequence marks stay apart under CVD', () => {
+    expectSeparated('consequence', CONSEQUENCE_COLORS, Object.keys(CONSEQUENCE_COLORS))
   })
 })

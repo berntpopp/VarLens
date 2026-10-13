@@ -4,6 +4,8 @@
  * shown the way table cells show them.
  */
 import { clinvarDisplayText } from '../../../shared/config/severity.config'
+import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
+import type { ImportDataReport } from '../../../shared/types/import'
 import { logService } from '../services/LogService'
 
 /** Values listed before the rest is summarised as "and n more". */
@@ -20,17 +22,31 @@ export function unrankedClinvarSummary(values: readonly string[]): string {
 }
 
 /**
- * Put the unrecognised ClinVar values of finished imports into the in-app
- * log: the server-side log line never reaches the user.
+ * The data warnings of one import, one sentence each: ClinVar values it could
+ * not rank and variants whose gnomAD AF lies outside [0, 1]. Both are imported
+ * as they are.
  */
-export function logUnrankedClinvar(
-  details: ReadonlyArray<{ caseName?: string; unrankedClinvar?: string[] }>
+export function importDataNotices(report: ImportDataReport): string[] {
+  const notices: string[] = []
+  if (report.unrankedClinvar !== undefined && report.unrankedClinvar.length > 0) {
+    notices.push(unrankedClinvarSummary(report.unrankedClinvar))
+  }
+  if (report.afOutOfRange !== undefined && report.afOutOfRange > 0) {
+    notices.push(IMPORT_MESSAGES.afOutOfRange(report.afOutOfRange))
+  }
+  return notices
+}
+
+/**
+ * Put the data warnings of finished imports ({@link importDataNotices}) into
+ * the in-app log: the server-side log line never reaches the user.
+ */
+export function logImportDataWarnings(
+  details: ReadonlyArray<ImportDataReport & { caseName?: string }>
 ): void {
   for (const detail of details) {
-    if (detail.unrankedClinvar === undefined || detail.unrankedClinvar.length === 0) continue
-    logService.warn(
-      `Import "${detail.caseName ?? 'case'}": ${unrankedClinvarSummary(detail.unrankedClinvar)}`,
-      'import'
-    )
+    for (const notice of importDataNotices(detail)) {
+      logService.warn(`Import "${detail.caseName ?? 'case'}": ${notice}`, 'import')
+    }
   }
 }

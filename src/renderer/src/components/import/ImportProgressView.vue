@@ -13,6 +13,7 @@
       height="10"
       rounded
       class="mb-4"
+      :aria-label="IMPORT_A11Y_COPY.overallProgress"
     />
 
     <!-- Per-file list -->
@@ -31,6 +32,7 @@
             size="18"
             width="2"
             color="primary"
+            :aria-label="IMPORT_A11Y_COPY.fileProgress(fileName(file.filePath))"
           />
           <v-icon
             v-else-if="statusOf(file.filePath) === 'done'"
@@ -88,6 +90,7 @@
 import { computed } from 'vue'
 import type { VcfPreviewResult } from '../../../../shared/types/import'
 import { mdiAlertCircle, mdiCheckCircle, mdiCircleOutline } from '@mdi/js'
+import { IMPORT_A11Y_COPY } from '../../config/importConfig'
 
 export type FileImportStatus = 'pending' | 'importing' | 'done' | 'error'
 

@@ -1,9 +1,11 @@
-import { computed, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
+import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from 'vue'
 import { useDisplay } from 'vuetify'
+import { columnWidthRem } from '../components/variant-table/column-widths'
+import { LINKS_COLUMN_KEY } from '../utils/link-outs'
+import { readRootFontPx } from './useRootFontSize'
 import {
   computeAutoHiddenColumns,
   getColumnPriority,
-  getMaxAutoVisibleColumns,
   isColumnVisible,
   isDetailPanelDocked
 } from '../utils/responsive-layout'
@@ -41,9 +43,6 @@ export function useResponsiveLayout() {
   // Detail panel docks beside the table (shrinking v-main) on wide viewports
   const detailPanelDocked = computed(() => isDetailPanelDocked(width.value))
 
-  // Maximum data columns to auto-show at the current viewport width
-  const maxAutoVisibleColumns = computed(() => getMaxAutoVisibleColumns(width.value))
-
   return {
     tier,
     width,
@@ -53,25 +52,44 @@ export function useResponsiveLayout() {
     showFooterLinks,
     detailPanelFullWidth,
     detailPanelDocked,
-    maxAutoVisibleColumns,
     getColumnPriority
   }
 }
 
 /**
+ * Visible width (CSS px) of the mounted case/cohort table, published by
+ * `useTableScroll`'s resize observer. Null until a table has been measured.
+ */
+export const tableViewportWidthPx = ref<number | null>(null)
+
+/**
  * Responsive default column visibility. `autoHidden` holds the keys hidden by
- * default at the current viewport width, ranked by `COLUMN_PRIORITY`; columns
- * with an explicit user visibility choice are never part of it. `isVisible`
- * resolves the effective visibility (explicit choice first, then the default).
+ * default because they do not fit the table width (viewport width until the
+ * table is measured), ranked by `COLUMN_PRIORITY`; columns with an explicit
+ * user visibility choice are never part of it. `isVisible` resolves the
+ * effective visibility (explicit choice first, then the default).
  */
 export function useAutoHiddenColumns(
-  keys: MaybeRefOrGetter<readonly string[]>,
+  columns: MaybeRefOrGetter<readonly { key: string; width?: string | number }[]>,
   prefs: Readonly<Ref<{ visibility: Readonly<Record<string, boolean>> }>>
 ) {
-  const { maxAutoVisibleColumns } = useResponsiveLayout()
-  const autoHidden = computed(() =>
-    computeAutoHiddenColumns(toValue(keys), maxAutoVisibleColumns.value, prefs.value.visibility)
-  )
+  const { width } = useDisplay()
+  // ponytail: rem size read on resize only; a text-size change alone refits on the next resize
+  const autoHidden = computed(() => {
+    const cols = toValue(columns)
+    // The Links column's width depends on how many link-outs exist; its header carries it.
+    const linksWidth = cols.find((c) => c.key === LINKS_COLUMN_KEY)?.width
+    const widthRem = (key: string): number =>
+      key === LINKS_COLUMN_KEY && typeof linksWidth === 'string' && linksWidth.endsWith('rem')
+        ? parseFloat(linksWidth)
+        : columnWidthRem(key)
+    return computeAutoHiddenColumns(
+      cols.map((c) => c.key),
+      (tableViewportWidthPx.value ?? width.value) / readRootFontPx(),
+      widthRem,
+      prefs.value.visibility
+    )
+  })
   const isVisible = (key: string): boolean =>
     isColumnVisible(key, prefs.value.visibility, autoHidden.value)
   return { autoHidden, isVisible }

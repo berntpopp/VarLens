@@ -54,6 +54,30 @@ export function isOverlayOpen(): boolean {
 }
 
 /**
+ * A focused button or link activates itself on Enter, so the row's Enter
+ * (open the panel) must not take the key and cancel its click.
+ */
+export function isControlFocused(): boolean {
+  return document.activeElement?.closest(CONTROL_SELECTOR) != null
+}
+
+const CONTROL_SELECTOR = 'button, a[href], [role="button"]'
+
+// The control the last pointer press landed on. Chromium makes a mouse-focused
+// button match :focus-visible once any key is pressed, so the focus source has
+// to be recorded at the press, not read during the keydown.
+let pointerFocusedControl: Element | null = null
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      pointerFocusedControl = (e.target as Element | null)?.closest?.(CONTROL_SELECTOR) ?? null
+    },
+    true
+  )
+}
+
+/**
  * Table row shortcuts bail out on text entry, on an open dialog/menu and on a
  * focused link: a focused link cell owns Enter, so it must not also open the
  * row panel.
@@ -102,7 +126,16 @@ export function useTableKeyboardNav<T>(
     }
   }
 
+  // ↑ / ↓ hand the keyboard back to the table: a button the mouse left focused
+  // must not take the next Enter (isControlFocused) from the selected row.
+  // Focus reached by keyboard (Tab) stays put so Tab users keep their place.
+  function releaseControlFocus(): void {
+    const el = document.activeElement as HTMLElement | null
+    if (el && isControlFocused() && el === pointerFocusedControl) el.blur()
+  }
+
   function moveDown(): void {
+    releaseControlFocus()
     if (items.value.length === 0) return
     if (selectedIndex.value === null) {
       selectIndex(0)
@@ -112,6 +145,7 @@ export function useTableKeyboardNav<T>(
   }
 
   function moveUp(): void {
+    releaseControlFocus()
     if (items.value.length === 0) return
     if (selectedIndex.value === null) {
       selectIndex(items.value.length - 1)

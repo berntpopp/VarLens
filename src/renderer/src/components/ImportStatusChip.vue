@@ -13,6 +13,7 @@
       size="16"
       width="2"
       class="mr-1"
+      :aria-label="IMPORT_A11Y_COPY.statusProgress"
     />
     <span class="text-caption">
       {{ importStore.fileProgress }}
@@ -30,6 +31,7 @@
 
 <script setup lang="ts">
 import { useImportStatusStore } from '../stores/importStatusStore'
+import { IMPORT_A11Y_COPY } from '../config/importConfig'
 
 const importStore = useImportStatusStore()
 

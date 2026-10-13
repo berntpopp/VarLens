@@ -101,8 +101,8 @@ import type {
   ConsequenceCategory,
   ClinVarSignificance
 } from '../../../../shared/types/protein'
+import { CONSEQUENCE_COLORS } from '../../../../shared/config/domain.config'
 import {
-  CONSEQUENCE_COLORS,
   CLINVAR_COLORS,
   getConsequenceCategory,
   getClinVarCategory

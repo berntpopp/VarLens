@@ -8,6 +8,7 @@
     </div>
     <div
       v-else-if="!isEditing"
+      ref="triggerRef"
       class="editable-text d-flex align-center"
       role="button"
       tabindex="0"
@@ -33,7 +34,7 @@
       hide-details
       :loading="loading"
       @blur="saveEdit"
-      @keydown.escape="cancelEdit"
+      @keydown.escape.stop="cancelEdit"
     />
   </div>
 </template>
@@ -68,6 +69,7 @@ const emit = defineEmits<{
 const isEditing = ref(false)
 const editValue = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const triggerRef = ref<HTMLElement | null>(null)
 
 const startEdit = () => {
   isEditing.value = true
@@ -90,8 +92,10 @@ const saveEdit = async () => {
   isEditing.value = false
 }
 
+// Escape only cancels the edit (.stop keeps it from closing the panel) and hands focus back
 const cancelEdit = () => {
   isEditing.value = false
+  nextTick(() => triggerRef.value?.focus())
 }
 </script>
 

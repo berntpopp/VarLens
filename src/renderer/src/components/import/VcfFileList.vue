@@ -22,28 +22,17 @@
           </div>
         </div>
 
-        <!-- Variant type (editable via v-select) -->
+        <!-- Variant type (editable via v-select); plain text, so the value is never clipped. -->
         <v-select
           :model-value="getVariantType(file)"
-          :items="variantTypeOptions"
+          :items="VARIANT_TYPE_OPTIONS"
+          :aria-label="IMPORT_A11Y_COPY.variantType(fileName(file.filePath))"
           density="compact"
           variant="outlined"
           hide-details
           class="vtype-select"
-          style="max-width: 130px"
           @update:model-value="(val: unknown) => onVariantTypeChange(file.filePath, val)"
-        >
-          <template #selection="{ item }">
-            <v-chip
-              :color="variantTypeColor(item.value as string)"
-              size="x-small"
-              variant="tonal"
-              label
-            >
-              {{ item.title }}
-            </v-chip>
-          </template>
-        </v-select>
+        />
 
         <!-- Caller chip -->
         <v-chip
@@ -58,7 +47,9 @@
             v{{ file.callerVersion }}
           </span>
         </v-chip>
-        <v-chip v-else size="small" variant="tonal" label color="grey"> Unknown caller </v-chip>
+        <v-chip v-else size="small" variant="tonal" label class="flex-shrink-0">
+          Unknown caller
+        </v-chip>
 
         <!-- Genome build -->
         <!-- This file's own suggestion; warning colour when it disagrees with the case build. -->
@@ -121,6 +112,11 @@ import {
   mdiCheckCircle,
   mdiDna
 } from '@mdi/js'
+import {
+  IMPORT_A11Y_COPY,
+  LARGE_VCF_VARIANT_ESTIMATE,
+  VARIANT_TYPE_OPTIONS
+} from '../../config/importConfig'
 
 export type VariantTypeOverride = { variantType?: string }
 
@@ -138,17 +134,6 @@ function buildDisagrees(file: VcfPreviewResult): boolean {
 const emit = defineEmits<{
   'update:override': [filePath: string, override: VariantTypeOverride]
 }>()
-
-/** Threshold above which we warn about large files. */
-const LARGE_FILE_THRESHOLD = 100_000
-
-const variantTypeOptions = [
-  { title: 'SNV', value: 'snv' },
-  { title: 'Indel', value: 'indel' },
-  { title: 'SV', value: 'sv' },
-  { title: 'CNV', value: 'cnv' },
-  { title: 'STR', value: 'str' }
-]
 
 function getVariantType(file: VcfPreviewResult): string {
   const override = props.overrides.get(file.filePath)
@@ -180,24 +165,7 @@ function formatCount(count: number): string {
 }
 
 function isLarge(file: VcfPreviewResult): boolean {
-  return file.variantCountEstimate > LARGE_FILE_THRESHOLD
-}
-
-function variantTypeColor(type: string): string {
-  switch (type) {
-    case 'snv':
-      return 'primary'
-    case 'indel':
-      return 'deep-purple'
-    case 'sv':
-      return 'orange'
-    case 'cnv':
-      return 'teal'
-    case 'str':
-      return 'pink'
-    default:
-      return 'grey'
-  }
+  return file.variantCountEstimate > LARGE_VCF_VARIANT_ESTIMATE
 }
 </script>
 
@@ -219,6 +187,11 @@ function variantTypeColor(type: string): string {
 
 .min-width-0 {
   min-width: 0;
+}
+
+/* Fixed width: the file name truncates first, never the variant type. */
+.vtype-select {
+  flex: 0 0 108px;
 }
 
 .vtype-select :deep(.v-field) {
