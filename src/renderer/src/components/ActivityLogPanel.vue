@@ -45,7 +45,8 @@ import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 
 const props = defineProps<{
-  entityKey: string | null
+  /** Every key the history of this item was written under, merged oldest first. */
+  entityKeys: string[]
 }>()
 
 const { api } = useApiService()
@@ -60,14 +61,18 @@ const entries = ref<AuditLogEntry[]>([])
 const loading = ref(false)
 
 async function loadEntries(): Promise<void> {
-  if (restricted.value || props.entityKey === null || props.entityKey === '') {
+  const keys = props.entityKeys.filter((key) => key !== '')
+  if (restricted.value || keys.length === 0) {
     entries.value = []
     return
   }
 
   loading.value = true
   try {
-    entries.value = unwrapIpcResult(await api!.audit.getByEntity(props.entityKey))
+    const lists = await Promise.all(
+      keys.map(async (key) => unwrapIpcResult(await api!.audit.getByEntity(key)))
+    )
+    entries.value = lists.flat().sort((a, b) => a.timestamp - b.timestamp)
   } catch (error) {
     logService.error(
       'Failed to load audit entries: ' +
@@ -150,5 +155,5 @@ function getChangeDescription(entry: AuditLogEntry): string | null {
   return null
 }
 
-watch([() => props.entityKey, restricted], loadEntries, { immediate: true })
+watch([() => props.entityKeys.join('\n'), restricted], loadEntries, { immediate: true })
 </script>

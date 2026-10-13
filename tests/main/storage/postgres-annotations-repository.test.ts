@@ -209,7 +209,7 @@ describe('PostgresAnnotationsRepository', () => {
         'public',
         'acmg_classify',
         'variant_annotation',
-        '1:12345:A:G',
+        '1:12345:A:G@GRCh38',
         JSON.stringify({ acmg_classification: 'VUS' }),
         JSON.stringify({ acmg_classification: 'Pathogenic' }),
         'analyst',

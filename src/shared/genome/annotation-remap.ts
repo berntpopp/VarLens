@@ -12,6 +12,7 @@
  * order cases are renamed in cannot mix two loci (a GRCh38 `1` and an hg19
  * `chr1` swap keys, each note stays with its own locus).
  */
+import { globalAnnotationEntityKey } from '../audit/annotation-entity-key'
 import { bareContig } from '../utils/contig'
 
 /** The user-authored columns of a `variant_annotations` row. */
@@ -115,7 +116,7 @@ export function remapAnnotationGroup(
     let merged: AnnotationValues = { ...ordered[0], chr }
     for (const next of ordered.slice(1)) {
       const m = mergeGlobalAnnotations(merged, next)
-      const key = `${chr}:${next.pos}:${next.ref}:${next.alt}`
+      const key = globalAnnotationEntityKey({ ...next, chr }, next.genome_build)
       if (m.discardedAcmg !== null) {
         result.audits.push({
           key,

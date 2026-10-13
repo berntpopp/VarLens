@@ -3,6 +3,7 @@ import {
   OVERRIDE_REASON_REQUIRED,
   parseAcmgEvidence
 } from '../../shared/acmg/acmg-evidence'
+import { globalAnnotationEntityKey } from '../../shared/audit/annotation-entity-key'
 import { InvalidParametersError } from '../ipc/errors'
 import type { AuditAppendParams } from './audit-log-types'
 
@@ -27,7 +28,7 @@ export function assertOverrideReason(
 }
 
 export function globalAnnotationAuditEntries(
-  coords: { chr: string; pos: number; ref: string; alt: string },
+  coords: { chr: string; pos: number; ref: string; alt: string; genome_build?: string },
   updates: {
     user_name?: string | null
     starred?: boolean | number
@@ -36,7 +37,7 @@ export function globalAnnotationAuditEntries(
   },
   oldAnnotation: Record<string, unknown> | null
 ): AuditAppendParams[] {
-  const entityKey = `${coords.chr}:${coords.pos}:${coords.ref}:${coords.alt}`
+  const entityKey = globalAnnotationEntityKey(coords, coords.genome_build)
   const entries: AuditAppendParams[] = []
   if (updates.acmg_classification !== undefined) {
     entries.push({

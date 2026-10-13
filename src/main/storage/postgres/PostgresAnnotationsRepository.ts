@@ -230,7 +230,7 @@ export class PostgresAnnotationsRepository {
       assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = await this._upsertGlobalAnnotationOn(client, key, updates)
       for (const entry of globalAnnotationAuditEntries(
-        { chr, pos, ref, alt },
+        { chr, pos, ref, alt, genome_build: genomeBuild },
         updates,
         oldAnnotation as Record<string, unknown> | null
       )) {
