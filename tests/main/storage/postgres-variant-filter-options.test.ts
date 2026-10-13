@@ -121,10 +121,9 @@ describe('PostgresVariantReadRepository filter metadata', () => {
       dataType: 'text',
       distinctCount: 0
     })
-    // end_pos is categorical on the write side (no min/max materialised);
-    // sv_length carries its unsigned bounds (#573), numeric like on SQLite.
+    // end_pos and the unsigned sv_length are numeric, like on SQLite (#573).
     const metaByKey = new Map(options.columnMeta.map((meta) => [meta.key, meta]))
-    expect(metaByKey.get('end_pos')?.dataType).toBe('text')
+    expect(metaByKey.get('end_pos')?.dataType).toBe('numeric')
     expect(metaByKey.get('sv_length')?.dataType).toBe('numeric')
   })
 

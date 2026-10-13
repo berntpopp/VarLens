@@ -282,6 +282,11 @@ function cohortCallAssertions(backend: () => Backend): void {
       min: 300,
       max: 7000 // the whole case: its CNV DUP too
     })
+    expect(await backend().caseMeta('end_pos')).toMatchObject({
+      dataType: 'numeric',
+      min: 3000,
+      max: 9000
+    })
   })
 }
 

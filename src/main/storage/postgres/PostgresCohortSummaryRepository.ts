@@ -99,8 +99,8 @@ const META_COLUMNS = [
 ] as const
 
 /**
- * Numeric columns get MIN/MAX in min_value/max_value, mirroring SQLite's
- * NUMERIC_COLUMNS set in src/main/database/VariantRepository.ts.
+ * Numeric columns get MIN/MAX in min_value/max_value (sv_length unsigned),
+ * the columns SQLite treats as numeric (NUMERIC_COLUMN_FILTER_KEYS).
  */
 const META_NUMERIC_COLUMNS = new Set<string>([
   'pos',
@@ -108,6 +108,7 @@ const META_NUMERIC_COLUMNS = new Set<string>([
   'cadd',
   'qual',
   'hpo_sim_score',
+  'end_pos',
   'sv_length'
 ])
 
