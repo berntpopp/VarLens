@@ -9,6 +9,7 @@
 
 import { z } from 'zod'
 import { mainLogger } from '../MainLogger'
+import { apiFetch } from './http-fetch'
 
 // ---------------------------------------------------------------------------
 // Zod schemas for runtime validation of API responses
@@ -137,7 +138,7 @@ export class StringDbClient {
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
     try {
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         body: formData,
         signal: controller.signal,

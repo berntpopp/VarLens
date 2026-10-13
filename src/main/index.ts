@@ -6,6 +6,7 @@ import {
   nativeTheme,
   BrowserWindow,
   ipcMain,
+  net,
   session
 } from 'electron'
 import { join } from 'path'
@@ -33,6 +34,7 @@ import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
 import { installQuitCleanup } from './quit-cleanup'
 import { sweepStaleZipTempDirs } from './import/TempDirectoryManager'
 import { cleanupAllZipExtractions } from './ipc/handlers/batch-import-logic'
+import { setApiFetch } from './services/api/http-fetch'
 
 if (process.env.VARLENS_APP_DATA_DIR !== undefined && process.env.VARLENS_APP_DATA_DIR !== '') {
   app.setPath('appData', process.env.VARLENS_APP_DATA_DIR)
@@ -174,6 +176,10 @@ if (gotTheLock !== true) {
   // Some APIs can only be used after this event occurs.
   app.whenReady().then(async () => {
     markMilestone('app-ready')
+
+    // Reference API clients go through Chromium's network stack so the system
+    // proxy and PAC apply (#126); net.fetch is only usable after app-ready.
+    setApiFetch(net.fetch)
 
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')

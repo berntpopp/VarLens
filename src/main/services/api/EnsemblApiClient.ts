@@ -19,6 +19,7 @@ import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
 import { backoffDelay, deadlineSignal, retryAfterMs } from './retry-backoff'
+import { apiFetch } from './http-fetch'
 
 /** Wait `ms`, or less when the deadline passes first. */
 const sleep = (ms: number, deadline: AbortSignal): Promise<void> =>
@@ -172,7 +173,7 @@ export class EnsemblApiClient {
       let wait: number
       const perTry = deadlineSignal(API_CONFIG.ENSEMBL_TIMEOUT_MS)
       try {
-        const response = await fetch(url, {
+        const response = await apiFetch(url, {
           signal: AbortSignal.any([perTry.signal, deadline]),
           headers: { 'Content-Type': 'application/json' }
         })

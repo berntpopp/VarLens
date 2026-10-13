@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { ApiCache } from './ApiCache'
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
+import { apiFetch } from './http-fetch'
 
 /**
  * Zod schema for myvariant.info dbnsfp response
@@ -193,7 +194,7 @@ export class MyVariantApiClient {
   private async makeRequest(hgvs: string, assembly: string): Promise<unknown> {
     const url = `${this.baseUrl}/variant/${encodeURIComponent(hgvs)}?fields=dbnsfp&assembly=${assembly}`
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json'

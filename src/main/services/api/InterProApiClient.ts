@@ -19,6 +19,7 @@ import type {
 import { mainLogger } from '../MainLogger'
 import { API_CONFIG } from '../../../shared/config'
 import { apiFixturePath, readApiFixture } from './ApiFixtureLoader'
+import { apiFetch } from './http-fetch'
 
 /** Domain entry types to include in results */
 const INCLUDED_DOMAIN_TYPES = new Set([
@@ -152,7 +153,7 @@ export class InterProApiClient {
   private async makeInterProRequest(accession: string): Promise<unknown> {
     const url = `${this.baseUrl}/entry/interpro/protein/uniprot/${accession}`
 
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       signal: AbortSignal.timeout(API_CONFIG.LOOKUP_TIMEOUT_MS),
       headers: {
         Accept: 'application/json'
