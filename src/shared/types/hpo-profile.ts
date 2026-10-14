@@ -50,7 +50,7 @@ export interface HpoNotConflict {
 export interface HpoExplanation {
   /** Score in [0, 1] (raw, uncalibrated). */
   score: number
-  /** Share of the case's genes with a lower score (0..1); not a probability. */
+  /** Share of reference HPO genes scoring strictly lower for this profile (0..1); no probability. */
   percentile: number
   diseaseId: string
   diseaseLabel: string

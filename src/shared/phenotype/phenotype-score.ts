@@ -8,7 +8,7 @@
  * 2. One fused scan over the disease CSR: forward (max over d's terms per
  *    lane), reverse (Σ f·max_l lanes / IC(t), the per-term part precomputed) and the exclusion load
  *    (per-organ-system max of the conservative f_excl, plus NOT annotations).
- * 3. Gene = max over its diseases; the case percentile comes from one sort.
+ * 3. Gene = max over its diseases; the percentile (over all reference HPO genes) comes from one sort.
  * Explanations are rebuilt lazily from the lanes for displayed rows only.
  */
 import { HPO_SCORING_CONFIG, type HpoScoringOptions } from '../config/hpo-scoring.config'
@@ -409,7 +409,7 @@ export function scoreProfile(
   return result
 }
 
-/** Share of the case's genes scoring strictly lower than `score`. */
+/** Share of the reference HPO genes scoring strictly lower than `score` for this profile. */
 function percentile(sorted: Float64Array, score: number): number {
   let lo = 0
   let hi = sorted.length
