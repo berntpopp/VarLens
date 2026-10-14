@@ -5,7 +5,8 @@ import { apiFetch } from '../../services/api/http-fetch'
 import { networkStatus } from '../../services/network/NetworkStatus'
 import { runHpoBuild } from '../../services/phenotype/hpo-build-worker-client'
 import { updateHpoData } from '../../services/phenotype/hpo-data-update'
-import { resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
+import { prewarmHpoIndexInPool, resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
+import { getDbPool } from '../dbPoolManager'
 import { getHpoDataStatus } from '../handlers/hpo-data-logic'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
@@ -28,6 +29,7 @@ export function registerHpoDataDomain(ipcMain: IpcMain): void {
       }).finally(() => (updating = null))
       const result = await updating
       mainLogger.info(result.message, 'hpo-data')
+      if (result.success) prewarmHpoIndexInPool(getDbPool())
       return result
     })
   )

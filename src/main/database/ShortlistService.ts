@@ -9,7 +9,7 @@
  *     For each variant type in scope, merges `baseFilters` with any
  *     `perTypeOverrides[type]`, maps the result to the case-view
  *     `VariantFilter`, resolves an active gene panel, and runs
- *     the case-view filter pipeline over every eligible row in keyset
+ *     the case-view filter pipeline over every eligible row in id-ordered
  *     pages (`forEachCandidatePage`). Per-type errors are collected and, if any
  *     type failed, the whole shortlist aborts with `ShortlistQueryError`
  *     — never a silent scope reduction (spec §7 boundary 1).

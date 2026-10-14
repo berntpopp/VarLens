@@ -5,6 +5,7 @@ import { resolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { isNotADatabaseError } from '../../database/sqlite-error'
 import { getWorkerThreads } from '../../ipc/dbPoolManager'
 import { SqliteStorageSession } from './SqliteStorageSession'
+import { prewarmHpoIndexInPool } from '../../services/phenotype/hpo-similarity-db'
 
 const hasKey = (key?: string): key is string => key !== undefined && key.length > 0
 
@@ -63,6 +64,8 @@ export function createSqliteStorageSession(
     ...(geneRefDbPath !== undefined ? { geneRefDbPath } : {}),
     ...(workerPaths.dbWorkerPath !== undefined ? { workerPath: workerPaths.dbWorkerPath } : {})
   })
+
+  prewarmHpoIndexInPool(dbPool)
 
   return new SqliteStorageSession({
     databaseService,

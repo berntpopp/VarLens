@@ -18,6 +18,7 @@ import {
 import { AppError, ConflictError, ForbiddenError, InvalidParametersError } from '../ipc/errors'
 import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
 import { PanelRegionsUnavailableError } from '../../shared/filters/panel-intervals'
+import { ShortlistQueryError } from './ShortlistService'
 
 export interface EncodedWorkerError {
   name: string
@@ -40,7 +41,8 @@ const KNOWN_CLASSES: Record<string, { prototype: Error }> = {
   ConflictError,
   ForbiddenError,
   ColumnFilterValueError,
-  PanelRegionsUnavailableError
+  PanelRegionsUnavailableError,
+  ShortlistQueryError
 }
 
 export function encodeWorkerError(error: unknown): EncodedWorkerError {

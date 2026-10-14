@@ -27,7 +27,6 @@ import { wrapHandler } from '../errorHandler'
 import type { HandlerDependencies } from '../types'
 import { GetShortlistParamsSchema } from '../../../shared/types/ipc-schemas'
 import { DatabaseError } from '../../database/errors'
-import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
 import { resolveSortColumn } from '../../database/VariantFilterBuilder'
 import { mainLogger } from '../../services/MainLogger'
 import type { GetShortlistParams } from '../../database/ShortlistService'
@@ -45,14 +44,9 @@ import type { GetShortlistParams } from '../../database/ShortlistService'
 
 /**
  * Register the `variants:shortlist` handler against the injected
- * `ipcMain`. Pulls `ShortlistService` off the `DatabaseService` getter
- * exposed in Wave 3 (see `DatabaseService.shortlistService`).
+ * `ipcMain`. Ranks through the current session's read executor.
  */
-export function registerShortlistHandlers({
-  ipcMain,
-  getDb,
-  getDbManager
-}: HandlerDependencies): void {
+export function registerShortlistHandlers({ ipcMain, getDbManager }: HandlerDependencies): void {
   ipcMain.handle('variants:shortlist', async (_event, params: unknown) => {
     return wrapHandler(async () => {
       // ── Step 1: shape validation at the IPC boundary ────────────
@@ -88,25 +82,18 @@ export function registerShortlistHandlers({
         }
       }
 
-      // ── Step 3: dispatch to service ─────────────────────────────
-      // `ShortlistService.getShortlist` is synchronous (Wave 2 adapted
-      // from the plan's `async` signature since better-sqlite3 is
-      // blocking). Cast to the service-level union because the Zod
-      // schema inference widens `Partial<FilterState>` shapes that
-      // the service typing narrows back via its own imports.
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getReadExecutor().execute({
+      // ── Step 3: dispatch through the session's read executor ───
+      // SQLite runs the ranking in a db-worker (never on the Electron main
+      // thread, #631), PostgreSQL in its storage session. Cast to the
+      // service-level union because the Zod schema inference widens
+      // `Partial<FilterState>` shapes that the service typing narrows back.
+      return await getDbManager()
+        .getCurrentSession()
+        .getReadExecutor()
+        .execute({
           type: 'variants:shortlist',
           params: [parsed.data as unknown as GetShortlistParams]
         })
-      }
-
-      const db = getDb()
-      return db.shortlistService.getShortlist(
-        parsed.data as unknown as GetShortlistParams,
-        getGeneReferenceDb
-      )
     })
   })
 }

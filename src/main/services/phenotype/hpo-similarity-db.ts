@@ -19,6 +19,7 @@ import {
 } from '../../../shared/phenotype/hpo-sources'
 import { buildHpoIndex, scoreAllGenes, type HpoIndex } from '../../../shared/phenotype/resnik'
 import { mainLogger } from '../MainLogger'
+import type { DbPool } from '../../database/DbPool'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
 export function resolveHpoDbPath(): string | null {
@@ -189,6 +190,34 @@ function loadIndex(path: string): HpoIndex | null {
   } finally {
     db.close()
   }
+}
+
+/**
+ * Load the HPO index into this process's cache ahead of the first `hpo_resnik`
+ * ranking (#631), so a request never pays for it. A no-op without a file;
+ * never throws — a damaged file is logged and scored as null later.
+ */
+export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): void {
+  if (path === null || !existsSync(path)) return
+  try {
+    loadIndex(path)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO index prewarm failed: ${message}`, 'hpo-data')
+  }
+}
+
+/**
+ * Prewarm in a read worker, where the desktop ranks; only with HPO data
+ * installed, so opening a database without it spawns no worker.
+ */
+export function prewarmHpoIndexInPool(pool: Pick<DbPool, 'run'> | null): void {
+  const path = resolveHpoDbPath()
+  if (pool === null || path === null || !existsSync(path)) return
+  pool.run({ type: 'hpo:prewarm', params: [] }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO index prewarm in the read pool failed: ${message}`, 'hpo-data')
+  })
 }
 
 /**
