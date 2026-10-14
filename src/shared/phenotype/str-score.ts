@@ -144,7 +144,9 @@ function statusBand(status: string, l: StrLocus): StrBand {
 }
 
 function copyBand(c: number, l: StrLocus): StrBand {
-  if (l.pathogenicMin !== null && c >= l.pathogenicMin) return 'full'
+  // A catalogue with benignMax ≥ pathogenicMin (STRchive CHNG3_MIR7-2) is contradictory: benign wins.
+  const benign = l.benignMax !== null && c <= l.benignMax
+  if (l.pathogenicMin !== null && c >= l.pathogenicMin && !benign) return 'full'
   // ponytail: the premutation range is the gap above the intermediate range,
   // only for loci with a premutation disease set (FMR1 55–199); add explicit
   // premutation thresholds to StrLocus if a second such locus appears.
@@ -154,23 +156,48 @@ function copyBand(c: number, l: StrLocus): StrBand {
   return 'normal'
 }
 
+/** IUPAC nucleotide codes → their bases; catalogues write e.g. RFC1 `AARRG`, polyalanine `GCN`. */
+const IUPAC: Readonly<Record<string, string>> = {
+  A: 'A',
+  C: 'C',
+  G: 'G',
+  T: 'T',
+  R: 'AG',
+  Y: 'CT',
+  S: 'CG',
+  W: 'AT',
+  K: 'GT',
+  M: 'AC',
+  B: 'CGT',
+  D: 'AGT',
+  H: 'ACT',
+  V: 'ACG',
+  N: 'ACGT'
+}
 const COMPLEMENT: Readonly<Record<string, string>> = { A: 'T', C: 'G', G: 'C', T: 'A' }
-/** Smallest rotation of the motif or its reverse complement. */
-function canonicalMotif(motif: string): string {
-  const m = motif.toUpperCase()
-  const rc = [...m]
-    .reverse()
-    .map((b) => COMPLEMENT[b] ?? b)
-    .join('')
-  const rotations = [m, rc].flatMap((s) => [...s].map((_, i) => s.slice(i) + s.slice(0, i)))
-  return rotations.sort()[0]
+
+/** Each position's base set: the motif, its reverse complement and all their rotations. */
+function orientations(motif: string): string[][][] {
+  const fwd = [...motif.toUpperCase()].map((b) => [...(IUPAC[b] ?? b)])
+  const rc = [...fwd].reverse().map((set) => set.map((b) => COMPLEMENT[b] ?? b))
+  return [fwd, rc].flatMap((s) => s.map((_, i) => [...s.slice(i), ...s.slice(0, i)]))
 }
 
-/** True when the motif is unknown, the locus lists none, or it matches one (§5.2 step 3). */
+/** Same length and, at every position, a base both codes allow (IUPAC expanded). */
+const compatible = (unit: string[][], motif: string[][]): boolean =>
+  unit.length === motif.length && unit.every((set, i) => set.some((b) => motif[i].includes(b)))
+
+/**
+ * True when the motif is unknown, the locus lists none, or the unit matches one up to
+ * rotation and reverse complement (§5.2 step 3).
+ */
 export function motifMatches(unit: string | null | undefined, motifs: readonly string[]): boolean {
   if (unit == null || unit === '' || motifs.length === 0) return true
-  const c = canonicalMotif(unit)
-  return motifs.some((m) => canonicalMotif(m) === c)
+  const units = orientations(unit)
+  return motifs.some((m) => {
+    const [motif] = orientations(m)
+    return units.some((u) => compatible(u, motif))
+  })
 }
 
 /** AR, XR and hemizygosity gates (§5.2 step 5); a dominant mode never gates. */
