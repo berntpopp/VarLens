@@ -1,4 +1,5 @@
 /** Protocol helpers: canonical JSON identity, fold tuning, the phenotype-enrichment gene set. */
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { compileRuleset } from '../../../src/main/services/scoring/evidence'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
@@ -55,6 +56,10 @@ export function tuneFolds(
 export function loadFrozenRuleset(file: string): EvidenceRuleset {
   const ruleset = JSON.parse(readFileSync(file, 'utf8')) as EvidenceRuleset
   compileRuleset(ruleset) // the production ruleset validation (rulesetProblems)
+  // A registered ruleset carries its own hash (run.ts writes it); an edit after registration breaks it.
+  const actual = createHash('sha256').update(canonicalJson(ruleset)).digest('hex')
+  if (ruleset.sha256 !== undefined && ruleset.sha256 !== actual)
+    throw new Error(`${file}: sha256 ${ruleset.sha256} does not match its content (${actual})`)
   return ruleset
 }
 

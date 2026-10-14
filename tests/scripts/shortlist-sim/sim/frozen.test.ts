@@ -1,9 +1,14 @@
 // `--frozen` (#584): a pre-registered ruleset is validated and evaluated unchanged, never tuned.
+import { createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { foldRulesets, loadFrozenRuleset } from '../../../../scripts/shortlist-sim/sim/protocol'
+import {
+  canonicalJson,
+  foldRulesets,
+  loadFrozenRuleset
+} from '../../../../scripts/shortlist-sim/sim/protocol'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../../src/shared/config/evidence-rulesets/varvis-template'
 
 const write = (value: unknown): string => {
@@ -17,6 +22,16 @@ describe('--frozen', () => {
     expect(loadFrozenRuleset(write(VARVIS_EVIDENCE_TEMPLATE))).toEqual(VARVIS_EVIDENCE_TEMPLATE)
     const broken = { ...VARVIS_EVIDENCE_TEMPLATE, modes: [] }
     expect(() => loadFrozenRuleset(write(broken))).toThrow()
+  })
+
+  it('accepts a matching self-hash and rejects a ruleset edited after registration', () => {
+    const sha256 = createHash('sha256')
+      .update(canonicalJson(VARVIS_EVIDENCE_TEMPLATE))
+      .digest('hex')
+    const registered = { ...VARVIS_EVIDENCE_TEMPLATE, sha256 }
+    expect(loadFrozenRuleset(write(registered))).toEqual(registered)
+    const edited = { ...registered, id: `${VARVIS_EVIDENCE_TEMPLATE.id}-edited` }
+    expect(() => loadFrozenRuleset(write(edited))).toThrow(/does not match its content/)
   })
 
   it('skips tuning and uses the frozen ruleset unchanged in every fold', async () => {
