@@ -199,6 +199,22 @@ describe('HpoTermSelector', () => {
         expect(added(w)[0].excluded).toBe(excluded)
       })
 
+      it('Enter before the debounce fires does not add a stale suggestion', async () => {
+        const w = mountSelector()
+        const input = await typeQuery(w, 'Short stature')
+        vi.useFakeTimers()
+        try {
+          await input.setValue('Macrocephaly')
+          await input.trigger('keydown', { key: 'Enter' })
+          await w.vm.$nextTick()
+          expect(w.emitted('add:term')).toBeUndefined()
+          // Pending search shows as loading, not as "No matching HPO terms".
+          expect(w.findComponent({ name: 'VAutocomplete' }).props('loading')).toBe(true)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
       it('an uppercase query (Shift held while typing) still adds present', async () => {
         const w = mountSelector()
         const input = await typeQuery(w, 'Short stature')
