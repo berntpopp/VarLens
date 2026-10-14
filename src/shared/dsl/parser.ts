@@ -275,7 +275,14 @@ class Parser {
       }
       return buildInfoRule(colToken, operator, raw, valueToken, fail)
     }
-    const colDef = findColumn(colToken.value)
+    const found = findColumn(colToken.value)
+    // A shortlist-only registration of a stored column (sv_length) keeps its plain filter path elsewhere
+    const colDef =
+      found?.shortlistOnly === true &&
+      this.scope !== 'shortlist' &&
+      NUMERIC_COLUMN_FILTER_KEYS.has(found.key)
+        ? undefined
+        : found
     const column = colDef?.key ?? colToken.value
     // Reject before any request: the other view's backend cannot filter on it
     if (colDef && !isColumnInScope(colDef, this.scope)) {

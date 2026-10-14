@@ -90,3 +90,61 @@ describe('evidenceConfigProblems / describeProblem', () => {
     expect(describeProblem(problems[1], rs)).toMatch(/^rule af_missing: /)
   })
 })
+
+// #581: SV/CNV evidence scoring stays behind a config flag (off by default).
+describe('variant-type scoped groups', () => {
+  const svRuleset = (): EvidenceRuleset => {
+    const rs = clone()
+    rs.groups.push({
+      id: 'sv_size',
+      label: 'SV size',
+      scope: 'global',
+      variantType: 'sv',
+      rules: [
+        { id: 'sv_big', label: 'large', when: 'sv_length:>=:100000 AND sv_type:=:DEL', points: 1 }
+      ]
+    })
+    return rs
+  }
+  const svConfig = (ruleset: EvidenceRuleset): ShortlistConfig => ({
+    variantTypeScope: ['snv', 'indel', 'sv', 'cnv'],
+    topN: 10,
+    baseFilters: {},
+    rankConfig: {
+      weights: { impact: 0, pathogenicity: 0, rarity: 0, clinvar: 0, phenotype: 0 },
+      ruleset
+    }
+  })
+
+  it('rejects a type-scoped group and SV/CNV scope while the flag is off (default)', () => {
+    expect(keys(svRuleset())).toEqual([
+      'groups.' + VARVIS_EVIDENCE_TEMPLATE.groups.length + '.variantType'
+    ])
+    expect(evidenceConfigProblems(svConfig(svRuleset())).map((p) => problemKey(p.path))).toEqual([
+      'variantTypeScope',
+      `rankConfig.ruleset.groups.${VARVIS_EVIDENCE_TEMPLATE.groups.length}.variantType`
+    ])
+  })
+
+  it('accepts them when the flag is on', () => {
+    const on = { structuralTypes: true }
+    expect(rulesetProblems(svRuleset(), on)).toEqual([])
+    expect(evidenceConfigProblems(svConfig(svRuleset()), on)).toEqual([])
+  })
+
+  it('keeps rejecting STR, which has no evidence fields', () => {
+    const rs = svRuleset()
+    rs.groups[rs.groups.length - 1].variantType = 'str'
+    const on = { structuralTypes: true }
+    expect(rulesetProblems(rs, on).map((p) => problemKey(p.path))).toEqual([
+      `groups.${rs.groups.length - 1}.variantType`
+    ])
+    const config = {
+      ...svConfig(clone()),
+      variantTypeScope: ['snv', 'str'] as ShortlistConfig['variantTypeScope']
+    }
+    expect(evidenceConfigProblems(config, on).map((p) => problemKey(p.path))).toEqual([
+      'variantTypeScope'
+    ])
+  })
+})

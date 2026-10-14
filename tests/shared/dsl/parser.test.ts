@@ -277,4 +277,14 @@ describe('parseDsl — shortlist scope', () => {
     expect(parseDsl('info.DP:>:3', 'shortlist').errors).toEqual([])
     expect(parseDsl('carrier_count:>:3', 'shortlist').errors).not.toEqual([])
   })
+
+  it('offers SV/CNV extension fields to rules without changing the filter bars (#581)', () => {
+    expect(parseDsl('sv_type:=:DEL AND cnv_copy_number:<:2', 'shortlist').errors).toEqual([])
+    expect(parseDsl('sv_type:=:DEL', 'case').errors).not.toEqual([])
+    expect(parseDsl('cnv_copy_number:<:2', 'cohort').errors).not.toEqual([])
+    // sv_length was already a numeric column filter in both views
+    expect(parseDsl('sv_length:>:1000', 'shortlist').errors).toEqual([])
+    expect(parseDsl('sv_length:>:1000', 'case').errors).toEqual([])
+    expect(parseDsl('sv_length:>:1000', 'cohort').errors).toEqual([])
+  })
 })

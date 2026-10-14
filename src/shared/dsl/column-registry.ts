@@ -238,6 +238,36 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     operators: NUMERIC_OPERATORS,
     caseOnly: true,
     shortlistOnly: true
+  },
+  // SV/CNV extension fields of a shortlist candidate (#581); scored only when
+  // SV/CNV evidence scoring is enabled (SHORTLIST_EVIDENCE_CONFIG.structuralTypes).
+  {
+    key: 'sv_type',
+    label: 'SV type',
+    aliases: [],
+    type: 'categorical',
+    operators: ['=', '!='],
+    caseOnly: true,
+    shortlistOnly: true,
+    commonValues: ['DEL', 'DUP', 'INV', 'INS', 'BND'].map((v) => ({ value: v, label: v }))
+  },
+  {
+    key: 'sv_length',
+    label: 'SV length (SVLEN)',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'cnv_copy_number',
+    label: 'CNV copy number',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
   }
 ] as const
 

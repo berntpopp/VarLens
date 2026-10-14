@@ -34,6 +34,7 @@ export interface CompiledGroup {
   id: string
   label: string
   scope: EvidenceGroup['scope']
+  variantType?: EvidenceGroup['variantType']
   rules: CompiledRule[]
 }
 /** `test` is null for the fallback mode. */
@@ -69,6 +70,7 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
     id: g.id,
     label: g.label,
     scope: g.scope,
+    variantType: g.variantType,
     rules: g.rules.map((r) => ({
       id: r.id,
       label: r.label,

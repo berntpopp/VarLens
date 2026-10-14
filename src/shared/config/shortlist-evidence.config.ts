@@ -70,6 +70,13 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
   variantTypes: ['snv', 'indel'] as const,
 
   /**
+   * SV/CNV evidence scoring (#581): when enabled, presets may scope SV/CNV and
+   * rule groups may name a variant type. Off until SV/CNV rules are calibrated;
+   * the legacy 0-1 scorers keep ranking SV/CNV and no mixed-type order ships.
+   */
+  structuralTypes: { enabled: false as boolean, types: ['sv', 'cnv'] as const },
+
+  /**
    * Rule ids ending in this suffix are a group's catch-all reference bin
    * (spec §11.1, §14–15): last in the group; its points may be tuned.
    */
