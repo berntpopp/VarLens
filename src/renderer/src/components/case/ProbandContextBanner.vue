@@ -14,10 +14,13 @@
         :key="term.hpo_id"
         size="x-small"
         variant="tonal"
-        color="primary"
-        class="text-caption font-weight-medium"
+        :color="term.excluded ? 'error' : 'primary'"
+        :prepend-icon="hpoTermIcon(term)"
+        :class="term.key ? 'font-weight-bold' : 'font-weight-medium'"
+        class="text-caption"
+        :aria-label="hpoTermAriaLabel(term)"
       >
-        {{ term.hpo_label || term.hpo_id }}
+        <HpoTermText :term="term" />
       </v-chip>
       <v-tooltip v-if="overflowHpoCount > 0" location="bottom">
         <template #activator="{ props: tooltipProps }">
@@ -31,14 +34,15 @@
           </v-chip>
         </template>
         <div class="text-caption">
-          <div v-for="t in overflowHpoTerms" :key="t.hpo_id">{{ t.hpo_id }}: {{ t.hpo_label }}</div>
+          <div v-for="line in overflowLines" :key="line">{{ line }}</div>
         </div>
       </v-tooltip>
       <span
-        v-if="displayedHpoTerms.length === 0"
+        v-if="emptyNote !== null"
         class="text-caption text-muted font-italic text-truncate"
+        data-testid="banner-phenotype-empty"
       >
-        No clinical phenotypes recorded
+        {{ emptyNote }}
       </span>
     </div>
     <v-btn
@@ -57,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import HpoTermText from '../HpoTermText.vue'
 import { computed, watch } from 'vue'
 import {
   mdiGenderMale,
@@ -66,6 +71,13 @@ import {
   mdiAccount
 } from '@mdi/js'
 import { useCaseMetadata } from '../../composables/useCaseMetadata'
+import { HPO_TERM_COPY as COPY } from '../../config/hpoTermCopy'
+import {
+  groupedHpoTermLines,
+  hpoTermAriaLabel,
+  hpoTermIcon,
+  orderHpoTerms
+} from '../../utils/hpo-term-status'
 
 const props = defineProps<{
   caseId: number
@@ -120,13 +132,16 @@ const probandDetails = computed(() => {
   return parts.join(', ')
 })
 
-const observedHpoTerms = computed(() => {
-  return currentFullMeta.value?.hpoTerms ?? []
-})
+const orderedHpoTerms = computed(() => orderHpoTerms(currentFullMeta.value?.hpoTerms ?? []))
 
-const displayedHpoTerms = computed(() => observedHpoTerms.value.slice(0, 3))
-const overflowHpoTerms = computed(() => observedHpoTerms.value.slice(3))
-const overflowHpoCount = computed(() => Math.max(0, observedHpoTerms.value.length - 3))
+const displayedHpoTerms = computed(() => orderedHpoTerms.value.slice(0, 3))
+const overflowLines = computed(() => groupedHpoTermLines(orderedHpoTerms.value.slice(3)))
+const overflowHpoCount = computed(() => Math.max(0, orderedHpoTerms.value.length - 3))
+/** Excluded terms alone do not drive the phenotype score, so say it is inactive. */
+const emptyNote = computed(() => {
+  if (orderedHpoTerms.value.length === 0) return COPY.bannerEmpty
+  return orderedHpoTerms.value.every((t) => t.excluded) ? COPY.bannerOnlyExcluded : null
+})
 </script>
 
 <style scoped>

@@ -82,7 +82,8 @@
           <div class="flex-grow-1">
             <HpoTermSelector
               :model-value="currentHpoTerms"
-              @add:term="handleAddHpoTerm"
+              @add:term="handleAssignHpoTerm"
+              @update:term="handleAssignHpoTerm"
               @remove:term="handleRemoveHpoTerm"
             />
           </div>
@@ -97,6 +98,7 @@ import { computed, watch } from 'vue'
 import StatusSelector from './StatusSelector.vue'
 import CohortCombobox from './CohortCombobox.vue'
 import HpoTermSelector from './HpoTermSelector.vue'
+import type { HpoTermChange } from '../utils/hpo-term-status'
 import { useCaseMetadata } from '../composables/useCaseMetadata'
 import { useAppState } from '../composables/useAppState'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
@@ -206,10 +208,14 @@ async function handleCreateCohort(name: string) {
   await runMutation('create cohort', () => createAndAssignCohort(props.caseId, name), true)
 }
 
-async function handleAddHpoTerm(term: { hpoId: string; hpoLabel: string }) {
+async function handleAssignHpoTerm(term: HpoTermChange) {
   await runMutation(
     'assign HPO term',
-    () => assignHpoTerm(props.caseId, term.hpoId, term.hpoLabel),
+    () =>
+      assignHpoTerm(props.caseId, term.hpoId, term.hpoLabel, {
+        excluded: term.excluded,
+        key: term.key
+      }),
     true
   )
 }
