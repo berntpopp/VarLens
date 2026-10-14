@@ -81,6 +81,11 @@ export class GeneReferenceDb {
   private readonly stmtCoordCount: Statement
   private readonly stmtBuiltAt: Statement
 
+  /** File path of the open database (the CNV gene-interval index loads it by path). */
+  get path(): string {
+    return this.db.name
+  }
+
   constructor(private readonly db: DatabaseType) {
     // Validate / autocomplete
     this.stmtGeneBySymbol = db.prepare(

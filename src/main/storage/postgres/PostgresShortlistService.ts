@@ -32,7 +32,13 @@ import {
   withHpoExplanations
 } from '../../services/scoring/evidence/rank-page'
 import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
-import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
+import {
+  compileEvidenceConfig,
+  groupCnvGenes,
+  loadLocusInputs,
+  toCaseInfo
+} from '../../database/shortlist-evidence'
+import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
@@ -45,6 +51,8 @@ interface PostgresShortlistServiceOptions {
   schema: string
   filterPresets: Pick<PostgresFilterPresetsRepository, 'getPreset'>
   rows: Pick<PostgresExportRepository, 'streamVariantRows' | 'variantRowsQuery'>
+  /** `gene_reference.db` for CNV gene intervals; defaults to the bundled copy. */
+  geneRefDbPath?: () => string | undefined
 }
 
 type Queryable = Pick<PoolClient, 'query'>
@@ -181,14 +189,22 @@ export class PostgresShortlistService {
         totalCandidates += rows.length
         builder.add(rows.map(toLightRow))
       })
-      const ctx = builder.build()
+      const ctx = builder.build(
+        builder.needsLocus
+          ? loadLocusInputs(
+              info.build,
+              (this.options.geneRefDbPath ?? tryResolveGeneRefDbPath)() ?? null,
+              await this.cnvGenes(client, builder.cnvIds)
+            )
+          : undefined
+      )
       let kept: ScoredCandidate[] = []
       await this.forEachPage(client, queries, async (rows) => {
         const candidates = this.hydrateCandidates(rows, starredVariantIds)
         const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
         kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
       })
-      return { kept: withHpoExplanations(kept, info), totalCandidates }
+      return { kept: withHpoExplanations(kept, ctx), totalCandidates }
     })
   }
 
@@ -236,6 +252,17 @@ export class PostgresShortlistService {
         throwShortlistQueryErrors([{ type, error: toError(error) }], 'postgres shortlist')
       }
     }
+  }
+
+  /** One batched read of the CSQ genes of the case's CNV rows (CNV/STR spec §6.1). */
+  private async cnvGenes(client: Queryable, ids: readonly number[]) {
+    if (ids.length === 0) return new Map<number, string[]>()
+    const result = await client.query<{ variant_id: string; gene_symbol: string }>(
+      `SELECT DISTINCT variant_id, gene_symbol FROM ${this.schemaName}."variant_transcripts"
+        WHERE variant_id = ANY($1::bigint[]) AND gene_symbol IS NOT NULL AND gene_symbol <> ''`,
+      [ids]
+    )
+    return groupCnvGenes(result.rows)
   }
 
   private async caseHpoProfile(client: Queryable, caseId: number): Promise<HpoProfileTerm[]> {

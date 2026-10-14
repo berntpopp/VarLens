@@ -151,9 +151,10 @@ describe('rank-page', () => {
       'conflict'
     ])
     expect(explained).toEqual([])
-    const kept = withHpoExplanations(scored.slice(0, 1), { build: 'GRCh38', sex: null, hpo })
+    const kept = withHpoExplanations(scored.slice(0, 1), builder.build())
     expect(kept[0].rank_hpo).toBe(explanation)
     expect(explained).toEqual(['SCN1A'])
-    expect(withHpoExplanations(scored, { build: 'GRCh38', sex: null })[0].rank_hpo).toBeUndefined()
+    const noHpo = new GeneContextBuilder({ build: 'GRCh38', sex: null }).build()
+    expect(withHpoExplanations(scored, noHpo)[0].rank_hpo).toBeUndefined()
   })
 })
