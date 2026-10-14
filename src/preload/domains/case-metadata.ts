@@ -20,8 +20,8 @@ export function createCaseMetadataApi(): CaseMetadataDomainContract {
     setCohorts: (caseId, cohortIds) =>
       ipcRenderer.invoke('case-metadata:setCohorts', caseId, cohortIds),
     getHpoTerms: (caseId) => ipcRenderer.invoke('case-metadata:getHpoTerms', caseId),
-    assignHpoTerm: (caseId, hpoId, hpoLabel) =>
-      ipcRenderer.invoke('case-metadata:assignHpoTerm', caseId, hpoId, hpoLabel),
+    assignHpoTerm: (caseId, hpoId, hpoLabel, flags) =>
+      ipcRenderer.invoke('case-metadata:assignHpoTerm', caseId, hpoId, hpoLabel, flags),
     removeHpoTerm: (caseId, hpoId) =>
       ipcRenderer.invoke('case-metadata:removeHpoTerm', caseId, hpoId),
     getDataInfo: (caseId) => ipcRenderer.invoke('case-metadata:getDataInfo', caseId),

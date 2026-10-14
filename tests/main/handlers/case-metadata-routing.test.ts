@@ -99,6 +99,22 @@ describe('case-metadata IPC storage session routing', () => {
     })
   })
 
+  it('passes assignHpoTerm status flags through and rejects malformed ones', async () => {
+    const { registered, writeExecute } = setupHandlers()
+    const assign = registered.get('case-metadata:assignHpoTerm')!
+
+    await assign(undefined, 1, 'HP:0000252', 'Microcephaly', { excluded: true })
+    expect(writeExecute).toHaveBeenCalledWith({
+      type: 'case-metadata:assignHpoTerm',
+      params: [1, 'HP:0000252', 'Microcephaly', { excluded: true }]
+    })
+
+    writeExecute.mockClear()
+    const rejected = await assign(undefined, 1, 'HP:0000252', 'Microcephaly', { excluded: 'yes' })
+    expect(rejected).toMatchObject({ message: 'Invalid parameters' })
+    expect(writeExecute).not.toHaveBeenCalled()
+  })
+
   it('routes case-metadata:getFullMetadata through the active read executor', async () => {
     const expected = {
       metadata: null,

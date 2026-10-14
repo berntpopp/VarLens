@@ -70,6 +70,7 @@ import type {
   VariantTypeKey
 } from '../../shared/types/shortlist'
 import type { FilterPreset } from '../../shared/types/filter-presets'
+import type { HpoProfileTerm } from '../../shared/types/hpo-profile'
 import type { FilterState } from '../../shared/types/filters'
 import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
 import {
@@ -308,8 +309,14 @@ export class ShortlistService {
     }
     if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
 
+    const profile: HpoProfileTerm[] = compiled.usesHpoResnik
+      ? this.stage1.metadata
+          .getCaseHpoTerms(caseId)
+          .map((t) => ({ hpoId: t.hpo_id, excluded: t.excluded, key: t.key }))
+      : []
+    // hpo2: scorer lane switches to HpoProfileTerm[]
     const hpo = compiled.usesHpoResnik
-      ? openHpoGeneScorer(this.stage1.metadata.getCaseHpoTerms(caseId).map((t) => t.hpo_id))
+      ? openHpoGeneScorer(profile.filter((t) => !t.excluded).map((t) => t.hpoId))
       : null
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
