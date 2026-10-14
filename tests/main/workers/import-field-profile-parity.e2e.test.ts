@@ -226,7 +226,7 @@ const VCF = [
 
 interface Imported {
   rows: Record<string, Record<string, string>>
-  dictionary: Record<string, string> | null
+  dictionary: Record<string, unknown> | null
 }
 
 /**
@@ -385,9 +385,9 @@ describe('import field profile: every source, both backends', () => {
       expect(first).not.toHaveProperty('RevelScore')
       expect(rows[keyOf(EVIDENCE[1])]).not.toHaveProperty('LocalSig')
       expect(dictionary).toMatchObject({
-        AltAF_Index: 'JSON:AltAF-Index',
-        REVEL: 'JSON:RevelScore',
-        GNOMAD_POPMAX_AF: 'JSON:GnomPMaxFiltAF'
+        AltAF_Index: { source: 'JSON:AltAF-Index' },
+        REVEL: { source: 'JSON:RevelScore' },
+        GNOMAD_POPMAX_AF: { source: 'JSON:GnomPMaxFiltAF' }
       })
     }, 60_000)
 
@@ -413,9 +413,11 @@ describe('import field profile: every source, both backends', () => {
       expect(first).not.toHaveProperty('SYMBOL') // a column
       expect(rows[keyOf(EVIDENCE[1])]).toMatchObject({ SPLICEAI_MAX: '0.03' })
       expect(dictionary).toMatchObject({
-        REVEL: 'CSQ:REVEL_score',
-        my_flag: 'INFO:my-flag',
-        CLINVAR_REVSTAT: 'CSQ:ClinVarCurrent_CLNREVSTAT'
+        REVEL: { source: 'CSQ:REVEL_score' },
+        // The INFO header's Type/Number is kept with the key (#538).
+        my_flag: { source: 'INFO:my-flag', type: 'Flag', number: '0' },
+        DP: { source: 'INFO:DP', type: 'Integer', number: '1' },
+        CLINVAR_REVSTAT: { source: 'CSQ:ClinVarCurrent_CLNREVSTAT' }
       })
     }, 60_000)
 
@@ -442,7 +444,10 @@ describe('import field profile: every source, both backends', () => {
       expect(rows['chr3:101:A>G']).toEqual({ AF: '0.5', AF_2: '0.01' })
       // The second file has no INFO AF: its CSQ AF keeps the key the first file gave it.
       expect(rows['chr3:202:A>G']).toEqual({ AF_2: '0.02' })
-      expect(dictionary).toEqual({ AF: 'INFO:AF', AF_2: 'CSQ:AF' })
+      expect(dictionary).toEqual({
+        AF: { source: 'INFO:AF', type: 'Float', number: 'A' },
+        AF_2: { source: 'CSQ:AF' }
+      })
     }, 60_000)
 
     it(`${label}: the repo VEP fixture keeps INFO keys and suffixes colliding subfields`, async () => {

@@ -234,10 +234,14 @@ export function seedVcfFields(
   registry: InfoFieldMapping[]
 ): FieldProfileResolver {
   const mapped = new Set(registry.flatMap((mapping) => mapping.infoIds))
+  const kept = [...header.infoDefs.values()].filter(
+    ({ id }) => id !== 'CSQ' && id !== 'ANN' && !mapped.has(id)
+  )
   fields.seed(
     'INFO',
-    [...header.infoDefs.keys()].filter((id) => id !== 'CSQ' && id !== 'ANN' && !mapped.has(id))
+    kept.map(({ id }) => id)
   )
+  for (const def of kept) fields.describe('INFO', def.id, def.type, def.number)
   const unmapped = (name: string): boolean => !isAnnotationColumn(header, name)
   if (header.annotationType === 'csq' && header.csqFields !== null) {
     fields.seed('CSQ', header.csqFields.filter(unmapped))
