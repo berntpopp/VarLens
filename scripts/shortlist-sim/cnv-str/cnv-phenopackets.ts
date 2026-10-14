@@ -38,7 +38,7 @@ const ncChr = (n: number): string => (n === 23 ? 'X' : n === 24 ? 'Y' : String(n
 
 /** One SV text (label or id) → its CNV, or null when chromosome, interval or type is missing. */
 export function parseCnvText(raw: string, structuralLabel = ''): ParsedCnv | null {
-  const t = raw.replace(/ /g, ' ')
+  const t = raw.replace(/\u00a0/g, ' ')
   if (/pter|qter/i.test(t) || /hg18|NCBI[ _]Build[ _]36|GRCh36/i.test(t)) return null
   let build: Build | null = /GRCh37|hg19/i.test(t)
     ? 'GRCh37'
@@ -129,7 +129,7 @@ export function cnvCaseOf(
   return {
     id: str(pp.id),
     build,
-    cnvs: parsed.map(({ build: _b, ...c }) => c),
+    cnvs: parsed.map((c) => ({ chr: c.chr, start: c.start, end: c.end, type: c.type })),
     observed,
     cluster: gene || `${parsed[0].chr}:${band?.[1] ?? Math.floor(parsed[0].start / 1e7)}`
   }
