@@ -102,11 +102,20 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     expect(scores(input, [P('ALIAS_FEB'), X('SEIZ'), X('FEB')]).d).toBeCloseTo(plain.d, 12)
   })
 
-  it('never lowers a disease matching a broad key term', () => {
+  it('raises a disease whose key-term match beats its average forward match', () => {
     const input = toy({ d: [['SEIZ', 0.9, 0.8]] })
     const plain = scores(input, [P('SEIZ'), P('CAT')])
     const keyed = scores(input, [P('SEIZ', true), P('CAT')])
     expect(keyed.d).toBeGreaterThan(plain.d)
+  })
+
+  it('lowers a disease whose key-term match is below its average (τ = 1; not monotone)', () => {
+    // Review 2026-10-14: broad EYE (IC 1, f 0.35) and specific MICRO (IC 4, f 1), both exact.
+    const ix = buildPhenotypeIndex(toy({ d: [['EYE', 0.35, 0.15], ['MICRO', 1, 0.95]] }))
+    const plain = scoreCase(ix, [P('EYE'), P('MICRO')], { tau: 1 })!.geneScore[0]
+    const keyed = scoreCase(ix, [P('EYE', true), P('MICRO')], { tau: 1 })!.geneScore[0]
+    expect(plain).toBeCloseTo(0.790636, 6)
+    expect(keyed).toBeCloseTo(0.778719, 6)
   })
 
   it('prunes a present ancestor, handing its key weight to the descendant', () => {
