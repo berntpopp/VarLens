@@ -4,7 +4,11 @@
  * rule it concerns, so a stored preset fails loudly instead of falling back
  * to legacy scoring.
  */
-import { compileRule, type RowPredicate } from '../../../../shared/dsl/evaluate'
+import {
+  compileRule,
+  rulesetUsesHpoResnik,
+  type RowPredicate
+} from '../../../../shared/dsl/evaluate'
 import {
   describeProblem,
   evidenceConfigProblems,
@@ -51,11 +55,10 @@ export interface CompiledRuleset {
   usesHpoResnik: boolean
 }
 
-function compileText(text: string, columns: Set<string>): RowPredicate {
+function compileText(text: string): RowPredicate {
   const result = compileRule(text)
   // rulesetProblems has compiled every condition already
   if (!result.ok) throw new EvidenceRulesetError(result.errors)
-  for (const c of result.columns) columns.add(c)
   return result.predicate
 }
 
@@ -65,10 +68,9 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
   if (problems.length > 0) {
     throw new EvidenceRulesetError(problems.map((p) => describeProblem(p, input)))
   }
-  const columns = new Set<string>()
   const modes = input.modes.map((profile) => ({
     profile,
-    test: profile.when === null ? null : compileText(profile.when, columns)
+    test: profile.when === null ? null : compileText(profile.when)
   }))
   const groups = input.groups.map((g) => ({
     id: g.id,
@@ -79,10 +81,10 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
       id: r.id,
       label: r.label,
       points: r.points,
-      test: compileText(r.when, columns)
+      test: compileText(r.when)
     }))
   }))
-  return { source: input, modes, groups, usesHpoResnik: columns.has('hpo_resnik') }
+  return { source: input, modes, groups, usesHpoResnik: rulesetUsesHpoResnik(input) }
 }
 
 /** Problems of an evidence preset's configuration as text ([] when fine); see `evidenceConfigProblems`. */
