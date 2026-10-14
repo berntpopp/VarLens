@@ -132,7 +132,7 @@ export interface RunImportDeps {
   ) => Promise<AsyncIterable<VcfMappedVariant>>
 }
 
-const defaultDeps: RunImportDeps = {
+export const defaultDeps: RunImportDeps = {
   createClient: (config) => new Client(config),
   detectFormat: defaultDetectFormat,
   createMapperPipeline: defaultCreateMapperPipeline,
