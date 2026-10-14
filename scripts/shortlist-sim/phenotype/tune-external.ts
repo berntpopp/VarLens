@@ -53,7 +53,6 @@ const RULE = { minDelta: 0, minLower: -0.02, minVsSprint3: 0.05 } as const
 
 /** The shipped defaults (hpo-scoring.config.ts), keyed like the search points so they share the memo. */
 const SHIPPED: Overrides = {
-  ...ORIGINAL_V2,
   tau: HPO_SCORING_CONFIG.tau,
   correction: HPO_SCORING_CONFIG.backgroundCorrection,
   exclusionMode: HPO_SCORING_CONFIG.exclusionMode,
