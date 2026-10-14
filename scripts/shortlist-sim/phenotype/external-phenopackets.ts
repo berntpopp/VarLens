@@ -10,7 +10,7 @@
  * Writes runs/<name>/{cases.json, external-phenopackets.md}. Needs `npm run rebuild:node`.
  */
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
 import {
@@ -28,7 +28,7 @@ import {
   HPO_RAW_DIR,
   RUNS_DIR
 } from '../common/paths'
-import { citedByHpoa, hpoaReferences, parsePhenopacket } from './phenopackets'
+import { citedByHpoa, hpoaReferences, jsonFiles, parsePhenopacket } from './phenopackets'
 import { buildHpoIndex, readSprint3Input, scoreAllGenes } from './sprint3-baseline'
 
 const SCORERS = ['sprint3', 'v2Present', 'v2Full'] as const
@@ -71,14 +71,6 @@ function standing(scores: Float64Array, causal: number): Standing {
     else if (i !== causal && scores[i] === scores[causal]) equal++
   }
   return { higher, equal }
-}
-
-function* jsonFiles(dir: string): Generator<string> {
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, e.name)
-    if (e.isDirectory()) yield* jsonFiles(path)
-    else if (e.name.endsWith('.json')) yield path
-  }
 }
 
 type Stat = (cs: ExternalCase[], s: ScorerId) => number

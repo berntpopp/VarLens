@@ -2,6 +2,17 @@
  * GA4GH phenopacket (schema 2.0) reader for the external HPO benchmark (#600): one published,
  * solved case per file with its observed and excluded HPO terms and its diagnosed gene.
  */
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+/** Every `.json` file under `dir`, depth-first. */
+export function* jsonFiles(dir: string): Generator<string> {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name)
+    if (e.isDirectory()) yield* jsonFiles(path)
+    else if (e.name.endsWith('.json')) yield path
+  }
+}
 
 export interface PhenopacketCase {
   id: string
