@@ -12,7 +12,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(37)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(38)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -50,7 +50,8 @@ describe('Postgres migration definitions', () => {
       '0034',
       '0035',
       '0036',
-      '0037'
+      '0037',
+      '0040'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -89,7 +90,8 @@ describe('Postgres migration definitions', () => {
       'import_integrity',
       'annotation_genome_build',
       'clinical_question_presets',
-      'summary_sv_facts'
+      'summary_sv_facts',
+      'allele_trim'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
