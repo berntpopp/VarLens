@@ -132,7 +132,8 @@ describe('rank-page', () => {
       diseaseId: 'ORPHA:33069',
       diseaseLabel: 'Dravet syndrome',
       matched: [],
-      conflicts: []
+      conflicts: [],
+      notConflicts: []
     }
     const explained: string[] = []
     const hpo = {

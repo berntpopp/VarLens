@@ -244,10 +244,54 @@ describe('phenotype score v2: hand-computed toy cases', () => {
         excludedLabel: 'label SIZE',
         diseaseTerm: 'MICRO',
         diseaseLabel: 'label MICRO',
-        frequency: Math.fround(0.8)
+        frequency: Math.fround(0.8),
+        annotationFrequency: Math.fround(0.9),
+        frequencyRecorded: true
       }
     ])
+    expect(e.notConflicts).toEqual([])
     expect(cs.geneConflicts[ix.genes.get('G1')!]).toBe(1)
+  })
+
+  it('explains conflicts with the annotation frequency, never the conservative bound', () => {
+    const oneOfOne = { f: 0.6, fExcl: 0.245274 } // fractionFrequency(1, 1)
+    const ix = buildPhenotypeIndex(
+      toy({
+        fraction: [['MICRO', oneOfOne.f, oneOfOne.fExcl]],
+        unknown: [['MICRO', C.missing.f, C.missing.fExcl]]
+      })
+    )
+    const cs = scoreCase(ix, [P('FACE'), X('MICRO')])!
+    const conflict = (gene: string) => explainGene(ix, cs, ix.genes.get(gene)!).conflicts[0]
+    expect(conflict('G_fraction')).toMatchObject({
+      annotationFrequency: Math.fround(0.6),
+      frequencyRecorded: true
+    })
+    expect(conflict('G_unknown')).toMatchObject({
+      annotationFrequency: Math.fround(C.missing.f),
+      frequencyRecorded: false
+    })
+  })
+
+  it('lists disease NOT annotations contradicting a present term without scoring them', () => {
+    const input = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'SEIZ']])
+    const ix = buildPhenotypeIndex(input)
+    const cs = scoreCase(ix, [P('FEB'), P('HYPO')])!
+    const plain = scoreCase(buildPhenotypeIndex(toy({ d: [['HYPO', 0.9, 0.8]] })), [
+      P('FEB'),
+      P('HYPO')
+    ])!
+    expect(cs.geneScore[0]).toBe(plain.geneScore[0])
+    const e = explainGene(ix, cs, 0)
+    expect(e.conflicts).toEqual([])
+    expect(e.notConflicts).toEqual([
+      {
+        patientTerm: 'FEB',
+        patientLabel: 'label FEB',
+        diseaseTerm: 'SEIZ',
+        diseaseLabel: 'label SEIZ'
+      }
+    ])
   })
 })
 
@@ -373,6 +417,9 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         ).toEqual(ref.matched)
         expect(new Set(e.conflicts.map((c) => `${c.excludedTerm}>${c.diseaseTerm}`))).toEqual(
           ref.conflicts
+        )
+        expect(new Set(e.notConflicts.map((c) => `${c.patientTerm}>${c.diseaseTerm}`))).toEqual(
+          ref.notConflicts
         )
         expect(fast!.geneConflicts[g]).toBe(ref.conflicts.size)
         compared++

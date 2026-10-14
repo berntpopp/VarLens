@@ -109,7 +109,8 @@ describe('ShortlistTable', () => {
               diseaseId: 'OMIM:1',
               diseaseLabel: 'Dravet syndrome',
               matched: [],
-              conflicts: []
+              conflicts: [],
+              notConflicts: []
             }
           })
         ]

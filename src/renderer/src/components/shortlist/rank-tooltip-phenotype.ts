@@ -23,9 +23,15 @@ export function phenotypeLines(hpo: HpoExplanation): PhenotypeLines {
   const matched = [...hpo.matched]
     .sort((a, b) => Number(b.key) - Number(a.key))
     .map((m) => (m.key ? `★ ${m.patientLabel}` : m.patientLabel))
-  const conflicts = hpo.conflicts.map(
-    (c) => `${c.excludedLabel} excluded (${percent(c.frequency)} in ${hpo.diseaseLabel})`
-  )
+  // The recorded annotation frequency; the conservative penalty bound is no disease frequency.
+  const conflicts = [
+    ...hpo.conflicts.map((c) =>
+      c.frequencyRecorded
+        ? `${c.excludedLabel} excluded (${percent(c.annotationFrequency)} in ${hpo.diseaseLabel})`
+        : `${c.excludedLabel} excluded (frequency not recorded)`
+    ),
+    ...hpo.notConflicts.map((c) => `${c.patientLabel} present (absent in ${hpo.diseaseLabel})`)
+  ]
   // percentile = share of the case's genes scoring lower; never below "top 1 %".
   const top = Math.max(1, Math.round((1 - hpo.percentile) * 100))
   return {
