@@ -1,6 +1,7 @@
 <template>
   <div>
-    <!-- Assigned terms: present and excluded rows (spec 2026-10-14 §4) -->
+    <!-- Assigned terms: present and excluded rows (spec 2026-10-14 §4). Chips are menu
+         buttons (status + remove), so no nested close button (axe nested-interactive). -->
     <template v-if="modelValue.length > 0">
       <div
         v-for="group in groups"
@@ -20,7 +21,7 @@
           <template #activator="{ props: menuProps }">
             <v-chip
               v-bind="menuProps"
-              closable
+              role="button"
               size="small"
               :color="term.excluded ? 'error' : 'info'"
               variant="tonal"
@@ -31,7 +32,6 @@
               aria-keyshortcuts="x k Delete"
               :data-testid="`hpo-chip-${term.hpo_id}`"
               @keydown="onChipKeydown($event, term)"
-              @click:close="remove(term)"
             >
               <!-- One inline span: a flex chip would trim the space after "no". -->
               <span
