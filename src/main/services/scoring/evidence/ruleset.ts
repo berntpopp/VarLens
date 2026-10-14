@@ -5,6 +5,7 @@
  * to legacy scoring.
  */
 import { compileRule, type RowPredicate } from '../../../../shared/dsl/evaluate'
+import { HPO_DERIVED_COLUMNS } from '../../../../shared/dsl/column-registry'
 import {
   describeProblem,
   evidenceConfigProblems,
@@ -47,7 +48,7 @@ export interface CompiledRuleset {
   /** In the fixed decision-list order, fallback last. */
   modes: CompiledMode[]
   groups: CompiledGroup[]
-  /** Some mode or rule reads `hpo_resnik`: only then is the HPO scorer loaded. */
+  /** Some mode or rule reads an `hpo_*` field: only then is the HPO scorer loaded. */
   usesHpoResnik: boolean
 }
 
@@ -82,7 +83,8 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
       test: compileText(r.when, columns)
     }))
   }))
-  return { source: input, modes, groups, usesHpoResnik: columns.has('hpo_resnik') }
+  const usesHpoResnik = HPO_DERIVED_COLUMNS.some((c) => columns.has(c))
+  return { source: input, modes, groups, usesHpoResnik }
 }
 
 /** Problems of an evidence preset's configuration as text ([] when fine); see `evidenceConfigProblems`. */

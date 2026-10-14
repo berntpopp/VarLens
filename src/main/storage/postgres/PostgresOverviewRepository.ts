@@ -102,6 +102,7 @@ export class PostgresOverviewRepository {
         `
           SELECT hpo_id, hpo_label, COUNT(DISTINCT case_id)::int AS case_count
           FROM ${this.table('case_hpo_terms')}
+          WHERE NOT excluded
           GROUP BY hpo_id, hpo_label
           ORDER BY case_count DESC
           LIMIT 25

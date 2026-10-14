@@ -174,6 +174,10 @@ export interface CaseHpoTermsTable {
   case_id: number
   hpo_id: string
   hpo_label: string
+  /** 0/1 (migration v58) */
+  excluded: Generated<number>
+  /** 0/1 (migration v58) */
+  key: Generated<number>
   created_at: number
 }
 

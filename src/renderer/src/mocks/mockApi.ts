@@ -21,6 +21,7 @@ import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { computeCapabilityDocument } from '../../../shared/ipc/capability-document'
 import { genotypeZygosity } from '../../../shared/utils/genotype'
 import { cohortVariantKey } from '../../../shared/utils/cohort-variant-key'
+import { resolveHpoTermFlags } from '../../../shared/utils/hpo-term-flags'
 import { mockCases } from './fixtures/cases'
 import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
@@ -829,11 +830,12 @@ export const mockApi: WindowAPI = {
     removeCohort: async () => {},
     setCohorts: async () => {},
     getHpoTerms: async () => [],
-    assignHpoTerm: async (caseId, hpoId, hpoLabel) => ({
+    assignHpoTerm: async (caseId, hpoId, hpoLabel, flags) => ({
       id: 1,
       case_id: caseId,
       hpo_id: hpoId,
       hpo_label: hpoLabel,
+      ...resolveHpoTermFlags(flags ?? {}),
       created_at: Date.now()
     }),
     removeHpoTerm: async () => {},

@@ -12,7 +12,7 @@ import type {
 } from '../../../../shared/types/shortlist'
 import type { EvidenceRuleset } from '../../../../shared/types/evidence-ruleset'
 import { mapClinvarBoost, ZERO_COMPONENTS } from '../index'
-import type { GeneContext, LightRow } from './case-context'
+import type { CaseInfo, GeneContext, LightRow } from './case-context'
 import { compileRuleset, type CompiledRuleset } from './ruleset'
 import { scoreEvidenceRow } from './score'
 
@@ -70,4 +70,18 @@ export function scoreEvidencePage(
       rank_comphet_phase: s.mode === 'ar_comphet' ? (derived.comphet_phase ?? null) : null
     }
   })
+}
+
+/**
+ * The phenotype explanation (`rank_hpo`) for the rows actually returned, so
+ * explanations are built only for the kept top N, never for every candidate.
+ */
+export function withHpoExplanations(rows: ScoredCandidate[], info: CaseInfo): ScoredCandidate[] {
+  const hpo = info.hpo
+  if (hpo === undefined) return rows
+  return rows.map((row) => ({
+    ...row,
+    rank_hpo:
+      row.gene_symbol === null || row.gene_symbol === '' ? null : hpo.explain(row.gene_symbol)
+  }))
 }

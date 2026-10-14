@@ -37,6 +37,11 @@ describe('compileRuleset', () => {
       ...base.modes
     ]
     expect(compileRuleset({ ...base, modes }).usesHpoResnik).toBe(true)
+    for (const when of ['hpo_conflicts:>=:1', 'hpo_best_disease:~:OMIM']) {
+      expect(compileRuleset({ ...base, groups: [group([rule('a', 1, when)])] }).usesHpoResnik).toBe(
+        true
+      )
+    }
   })
 
   it('accepts a minimal ruleset and a group mixing bonus and penalty bins', () => {

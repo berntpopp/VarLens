@@ -49,14 +49,9 @@ const DEFAULT_DISEASES = 1000
 /** Pre-registered gene-grouped folds (spec §5). */
 const FOLDS = 5
 
-/**
- * The scorer under test, given the full profile. Until the v2 scorer lands this is the sprint-3
- * production scorer standing in (present terms only, flags ignored).
- * ponytail: swap to `openHpoGeneScorer(terms, HPO_DB)` when the v2 contract is merged.
- */
+/** The scorer under test (v2, production), given the full profile incl. excluded and key terms. */
 function openCandidate(terms: HpoProfileTerm[]): ((gene: string) => number | null) | null {
-  const present = terms.filter((t) => !t.excluded).map((t) => t.hpoId)
-  const scorer = openHpoGeneScorer(present, HPO_DB)
+  const scorer = openHpoGeneScorer(terms, HPO_DB)
   return scorer === null ? null : (gene) => scorer.score(gene)
 }
 

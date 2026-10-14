@@ -271,7 +271,25 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
   },
   {
     key: 'hpo_resnik',
-    label: 'HPO Resnik similarity (raw, uncalibrated)',
+    label: 'HPO phenotype match (raw, uncalibrated)',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'hpo_best_disease',
+    label: 'HPO best-matching disease (id)',
+    aliases: [],
+    type: 'text',
+    operators: TEXT_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'hpo_conflicts',
+    label: 'HPO excluded-term conflicts',
     aliases: [],
     type: 'numeric',
     operators: NUMERIC_OPERATORS,
@@ -285,8 +303,13 @@ export const SHORTLIST_DERIVED_COLUMNS = [
   'zygosity',
   'gene_het_hits',
   'gene_hits',
-  'hpo_resnik'
+  'hpo_resnik',
+  'hpo_best_disease',
+  'hpo_conflicts'
 ] as const
+
+/** Derived fields computed by the case's HPO scorer; reading any of them loads it. */
+export const HPO_DERIVED_COLUMNS = ['hpo_resnik', 'hpo_best_disease', 'hpo_conflicts'] as const
 
 const COUNT_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
 

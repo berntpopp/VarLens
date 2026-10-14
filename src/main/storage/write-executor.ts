@@ -6,6 +6,7 @@ import type {
 } from './case-metadata-types'
 import type { MetricValue } from '../../shared/types/api'
 import type { FilterPresetCreate, FilterPresetUpdate } from '../../shared/types/filter-presets'
+import type { HpoTermFlags } from '../../shared/types/hpo-profile'
 import type { CreatePanelInput } from '../../shared/types/panels'
 import type {
   AnalysisGroupRole,
@@ -40,7 +41,7 @@ export type StorageWriteTask =
   | { type: 'case-metadata:setCohorts'; params: [caseId: number, cohortIds: number[]] }
   | {
       type: 'case-metadata:assignHpoTerm'
-      params: [caseId: number, hpoId: string, hpoLabel: string]
+      params: [caseId: number, hpoId: string, hpoLabel: string, flags?: HpoTermFlags]
     }
   | { type: 'case-metadata:removeHpoTerm'; params: [caseId: number, hpoId: string] }
   | { type: 'case-metadata:upsertDataInfo'; params: [caseId: number, updates: DataInfoUpdates] }
