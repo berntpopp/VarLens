@@ -181,8 +181,14 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
   if (current.installed && !current.needsUpdate && current.version === release.tag) {
     return { success: true, message: `HPO data ${release.tag} is up to date.`, status: current }
   }
-  // Tags are vYYYY-MM-DD, so string order is release order; only an explicit tag downgrades.
-  if (deps.tag === undefined && current.version !== null && current.version > release.tag) {
+  // Tags are vYYYY-MM-DD, so string order is release order; only an explicit tag or
+  // unusable installed data (older builder) downgrades.
+  if (
+    deps.tag === undefined &&
+    !current.needsUpdate &&
+    current.version !== null &&
+    current.version > release.tag
+  ) {
     const message = `Installed HPO data ${current.version} is newer than ${release.tag}; left unchanged.`
     return { success: true, message, status: current }
   }

@@ -107,6 +107,19 @@ describe('updateHpoData', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('rebuilds from the pinned release when a newer installed release needs an update', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-10-01')))
+    const db = new Database(dbPath)
+    db.prepare("UPDATE meta SET value = '1' WHERE key = 'builder_version'").run()
+    db.close()
+    const fetch = vi.fn(async (url: string) => {
+      if (url === HPO_DATA_CONFIG.latestReleaseUrl) return new Response('', { status: 403 })
+      return new Response(FILES[url.split('/').pop() ?? ''])
+    })
+    // Unusable data must not be kept as "newer"; the toy files then fail the pinned digests.
+    await expect(updateHpoData(deps(fetch as never))).rejects.toThrow(/Checksum mismatch/)
+  })
+
   it('refuses to run while another live process holds the destination lock', async () => {
     writeFileSync(`${dbPath}.lock`, String(process.pid))
     await expect(updateHpoData(deps(releaseFetch('v2026-09-01')))).rejects.toThrow(
