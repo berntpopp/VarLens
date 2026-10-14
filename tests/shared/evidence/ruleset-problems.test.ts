@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import {
   describeProblem,
   evidenceConfigProblems,
@@ -6,6 +6,7 @@ import {
   problemKey,
   rulesetProblems
 } from '../../../src/shared/evidence/ruleset-problems'
+import { SHORTLIST_EVIDENCE_CONFIG } from '../../../src/shared/config/shortlist-evidence.config'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-rulesets/varvis-template'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
@@ -93,6 +94,13 @@ describe('evidenceConfigProblems / describeProblem', () => {
 
 // #581: SV/CNV evidence scoring stays behind a config flag (off by default).
 describe('variant-type scoped groups', () => {
+  const flag = SHORTLIST_EVIDENCE_CONFIG.structuralTypes as { enabled: boolean }
+  const enable = (): void => {
+    flag.enabled = true
+  }
+  afterEach(() => {
+    flag.enabled = false
+  })
   const svRuleset = (): EvidenceRuleset => {
     const rs = clone()
     rs.groups.push({
@@ -127,23 +135,23 @@ describe('variant-type scoped groups', () => {
   })
 
   it('accepts them when the flag is on', () => {
-    const on = { structuralTypes: true }
-    expect(rulesetProblems(svRuleset(), on)).toEqual([])
-    expect(evidenceConfigProblems(svConfig(svRuleset()), on)).toEqual([])
+    enable()
+    expect(rulesetProblems(svRuleset())).toEqual([])
+    expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
   })
 
   it('keeps rejecting STR, which has no evidence fields', () => {
+    enable()
     const rs = svRuleset()
     rs.groups[rs.groups.length - 1].variantType = 'str'
-    const on = { structuralTypes: true }
-    expect(rulesetProblems(rs, on).map((p) => problemKey(p.path))).toEqual([
+    expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
       `groups.${rs.groups.length - 1}.variantType`
     ])
     const config = {
       ...svConfig(clone()),
       variantTypeScope: ['snv', 'str'] as ShortlistConfig['variantTypeScope']
     }
-    expect(evidenceConfigProblems(config, on).map((p) => problemKey(p.path))).toEqual([
+    expect(evidenceConfigProblems(config).map((p) => problemKey(p.path))).toEqual([
       'variantTypeScope'
     ])
   })

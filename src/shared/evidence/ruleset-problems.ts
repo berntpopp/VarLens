@@ -30,15 +30,9 @@ export interface EvidenceProblem {
 
 const { limits, variantTypes, structuralTypes, referenceRuleSuffix } = SHORTLIST_EVIDENCE_CONFIG
 
-/** `structuralTypes`: allow SV/CNV scope and type-scoped groups (default: the config flag, #581). */
-export interface EvidenceValidationOptions {
-  structuralTypes?: boolean
-}
-
-const evidenceTypes = (o: EvidenceValidationOptions): readonly VariantTypeKey[] =>
-  (o.structuralTypes ?? structuralTypes.enabled)
-    ? [...variantTypes, ...structuralTypes.types]
-    : variantTypes
+/** SV/CNV join the scorable types only while SV/CNV evidence scoring is enabled (#581). */
+const evidenceTypes = (): readonly VariantTypeKey[] =>
+  structuralTypes.enabled ? [...variantTypes, ...structuralTypes.types] : variantTypes
 
 /** Dotted key of a path (`groups.0.rules.1.when`), used to look problems up. */
 export const problemKey = (path: ProblemPath): string => path.join('.')
@@ -73,7 +67,7 @@ function modeProblems(modes: readonly ModeProfile[]): EvidenceProblem[] {
   return problems
 }
 
-function groupProblems(rs: EvidenceRuleset, options: EvidenceValidationOptions): EvidenceProblem[] {
+function groupProblems(rs: EvidenceRuleset): EvidenceProblem[] {
   const problems: EvidenceProblem[] = []
   const groupIds = new Set<string>()
   const ruleIds = new Set<string>()
@@ -88,12 +82,12 @@ function groupProblems(rs: EvidenceRuleset, options: EvidenceValidationOptions):
         message: `scope names mode ${g.scope}, which the ruleset lacks`
       })
     }
-    if (g.variantType !== undefined && !(options.structuralTypes ?? structuralTypes.enabled)) {
+    if (g.variantType !== undefined && !structuralTypes.enabled) {
       problems.push({
         path: ['groups', gi, 'variantType'],
         message: 'variant-type scoped groups need SV/CNV evidence scoring, which is disabled'
       })
-    } else if (g.variantType !== undefined && !evidenceTypes(options).includes(g.variantType)) {
+    } else if (g.variantType !== undefined && !evidenceTypes().includes(g.variantType)) {
       problems.push({
         path: ['groups', gi, 'variantType'],
         message: `evidence rules cannot score ${g.variantType} variants`
@@ -143,10 +137,7 @@ function isWalkable(rs: unknown): rs is EvidenceRuleset {
  * ids, reference rules, size) and conditions that do not compile. Problems are
  * collected together, not first-fail, so an editor can show all at once.
  */
-export function rulesetProblems(
-  input: unknown,
-  options: EvidenceValidationOptions = {}
-): EvidenceProblem[] {
+export function rulesetProblems(input: unknown): EvidenceProblem[] {
   const parsed = EvidenceRulesetSchema.safeParse(input)
   const problems: EvidenceProblem[] = parsed.success
     ? []
@@ -155,7 +146,7 @@ export function rulesetProblems(
         message: i.message
       }))
   if (!isWalkable(input)) return problems
-  problems.push(...modeProblems(input.modes), ...groupProblems(input, options))
+  problems.push(...modeProblems(input.modes), ...groupProblems(input))
   const reported = new Set(problems.map((p) => problemKey(p.path)))
   const check = (path: ProblemPath, text: unknown): void => {
     if (typeof text !== 'string' || reported.has(problemKey(path))) return
@@ -173,16 +164,14 @@ export function rulesetProblems(
 
 /**
  * Problems of an evidence preset's configuration ([] when fine): SNV/indel
- * scope only (plus SV/CNV when `structuralTypes` is on), no inheritance-mode or family filter in any merged per-type
+ * scope (plus SV/CNV when `structuralTypes` is enabled), no inheritance-mode or
+ * family filter in any merged per-type
  * Stage-1 filter (modes are scored, not filtered), and a valid ruleset.
  */
-export function evidenceConfigProblems(
-  config: ShortlistConfig,
-  options: EvidenceValidationOptions = {}
-): EvidenceProblem[] {
+export function evidenceConfigProblems(config: ShortlistConfig): EvidenceProblem[] {
   const problems: EvidenceProblem[] = []
   const scope = config.variantTypeScope ?? []
-  const allowed = evidenceTypes(options)
+  const allowed = evidenceTypes()
   if (scope.length === 0 || scope.some((t) => !allowed.includes(t))) {
     problems.push({
       path: ['variantTypeScope'],
@@ -211,7 +200,7 @@ export function evidenceConfigProblems(
       message: 'evidence presets need rankConfig.ruleset'
     })
   } else {
-    for (const p of rulesetProblems(ruleset, options)) {
+    for (const p of rulesetProblems(ruleset)) {
       problems.push({ ...p, path: ['rankConfig', 'ruleset', ...p.path] })
     }
   }
