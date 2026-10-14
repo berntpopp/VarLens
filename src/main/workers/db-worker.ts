@@ -20,8 +20,10 @@ import { prewarmHpoIndex } from '../services/phenotype/hpo-similarity-db'
 
 // ── Initialise connection from workerData ──────────────────────
 
-const { dbPath, encryptionKey, geneRefDbPath } = workerData as {
+const { dbPath, encryptionKey, geneRefDbPath, hpoScorer } = workerData as {
   dbPath: string
+  /** DbPool's dedicated shortlist worker, the only one holding the HPO index */
+  hpoScorer?: boolean
   encryptionKey?: string
   /** Path to the bundled gene_reference.db — resolved on the main thread
    *  and forwarded here because Electron's `app` is not available in workers */
@@ -74,8 +76,8 @@ function openGeneRefDb(): GeneReferenceDb | null {
 
 const geneRefDb: GeneReferenceDb | null = openGeneRefDb()
 
-// Each worker loads the HPO index once it is up, not inside its first ranking (#631).
-setImmediate(() => prewarmHpoIndex())
+// The scorer worker loads the HPO index once it is up, not inside its first ranking (#631).
+if (hpoScorer === true) setImmediate(() => prewarmHpoIndex())
 
 // ── Task dispatcher ────────────────────────────────────────────
 

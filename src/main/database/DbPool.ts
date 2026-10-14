@@ -10,13 +10,16 @@
  *   const result = await pool.run<MyType>({ type: 'variants:query', params: [...] })
  *   await pool.destroy()
  *
+ * Shortlist ranking and HPO prewarm run on a separate one-worker pool, the
+ * only thread that loads the HPO index (see `SCORER_TASKS`).
+ *
  * An operation that needs the database file to itself (re-key) brackets its
  * work with `await pool.suspend()` / `pool.resume(key)`.
  */
 
 import { resolve } from 'path'
 import os from 'os'
-import type { DbTask } from '../../shared/types/db-task'
+import type { DbTask, DbTaskType } from '../../shared/types/db-task'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { fromTransportableWorkerError } from './worker-error-codec'
 
@@ -37,9 +40,17 @@ interface DbPoolInitOptions {
     dbPath: string
     encryptionKey?: string
     geneRefDbPath?: string
+    /** The one worker that scores shortlists and holds the HPO index (#631). */
+    hpoScorer?: boolean
   }
   execArgv?: string[]
 }
+
+/**
+ * Tasks that run on one dedicated worker, so exactly one HPO index copy exists
+ * (~145 MB) and an update refreshes it there; concurrent shortlists queue.
+ */
+const SCORER_TASKS: ReadonlySet<DbTaskType> = new Set(['variants:shortlist', 'hpo:prewarm'])
 
 type PiscinaConstructor = new (opts: DbPoolInitOptions) => PiscinaInstance
 
@@ -60,6 +71,7 @@ interface Suspension {
 
 export class DbPool {
   private pool: PiscinaInstance | null = null
+  private scorerPool: PiscinaInstance | null = null
   private initOptions: DbPoolInitOptions | null = null
   private suspension: Suspension | null = null
   private readonly inFlight = new Set<Promise<unknown>>()
@@ -120,12 +132,18 @@ export class DbPool {
 
     if (this.initOptions === null) throw new Error('DbPool not initialized — call init() first')
 
-    if (this.pool === null) {
-      const Piscina = getPiscina()
-      this.pool = new Piscina(this.initOptions)
-    }
+    const Piscina = getPiscina()
+    const options = this.initOptions
+    const pool = SCORER_TASKS.has(task.type)
+      ? (this.scorerPool ??= new Piscina({
+          ...options,
+          minThreads: 1,
+          maxThreads: 1,
+          workerData: { ...options.workerData, hpoScorer: true }
+        }))
+      : (this.pool ??= new Piscina(options))
 
-    const result = this.pool.run(task)
+    const result = pool.run(task)
     this.inFlight.add(result)
     const forget = (): void => void this.inFlight.delete(result)
     result.then(forget, forget)
@@ -177,9 +195,10 @@ export class DbPool {
   }
 
   private async destroyWorkers(): Promise<void> {
-    const pool = this.pool
+    const pools = [this.pool, this.scorerPool]
     this.pool = null
-    if (pool !== null) await pool.destroy()
+    this.scorerPool = null
+    await Promise.all(pools.map((pool) => pool?.destroy()))
   }
 
   private releaseSuspension(): void {
