@@ -57,7 +57,7 @@ function locusParts(n: HpoLocusNote): Array<string | false | null | undefined> {
   }
 }
 
-export function locusLine(n: HpoLocusNote | undefined): string | null {
+function locusLine(n: HpoLocusNote | undefined): string | null {
   return n ? `locus: ${locusParts(n).filter(Boolean).join(' · ')}` : null
 }
 
