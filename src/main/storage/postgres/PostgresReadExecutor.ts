@@ -1,4 +1,5 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
+import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
 import type { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
@@ -164,6 +165,10 @@ export class PostgresReadExecutor implements StorageReadExecutor {
 
       case 'variants:shortlist':
         return await this.repositories.shortlist.getShortlist(task.params[0])
+
+      case 'hpo:prewarm':
+        prewarmHpoIndex()
+        return null
 
       case 'variants:columnMeta':
         return await this.repositories.variants.getColumnMeta(task.params[0], task.params[1])
