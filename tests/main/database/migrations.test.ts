@@ -315,7 +315,9 @@ describe('Schema Migrations', () => {
       expect(tagLinkCount.count).toBe(0)
 
       // Verify tag still exists (not cascaded)
-      const tagCount = service.database.prepare('SELECT COUNT(*) as count FROM tags').get() as {
+      const tagCount = service.database
+        .prepare("SELECT COUNT(*) as count FROM tags WHERE name = 'candidate'")
+        .get() as {
         count: number
       }
       expect(tagCount.count).toBe(1)

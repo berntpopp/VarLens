@@ -189,6 +189,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0037',
     name: 'summary_sv_facts',
     fileName: '0037_summary_sv_facts.sql'
+  },
+  {
+    version: '0038',
+    name: 'default_tags',
+    fileName: '0038_default_tags.sql'
   }
 ]
 

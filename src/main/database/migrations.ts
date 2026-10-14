@@ -24,9 +24,10 @@ import { repairSummaryKeys } from './summary-key-repair'
 import { migrateAnnotationBuildKey } from './annotation-build-key-migration'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
+import { DEFAULT_TAGS } from '../../shared/config/default-tags.config'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 54
+export const LATEST_SQLITE_SCHEMA_VERSION = 55
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -85,6 +86,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 54
  * - 52: variant_annotations keyed by genome build (#577; annotation-build-key-migration.ts)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
  * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
+ * - 55: default tags (#125; mirrors PG 0038)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2125,6 +2127,23 @@ export function runMigrations(db: Database.Database): void {
       markPopulatedSummaryStale(db)
     }
     db.exec('PRAGMA user_version = 54')
+  }
+
+  // v55 (#125, mirrors PG 0038): the default quick-flag tags. A name a user
+  // already has (in any letter case) is skipped; user tags are never changed.
+  if (currentVersion < 55) {
+    const hasTagTable =
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tags'").get() !==
+      undefined
+    if (hasTagTable) {
+      const seed = db.prepare(
+        `INSERT INTO tags (name, color, created_at) SELECT ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM tags WHERE lower(name) = lower(?))`
+      )
+      const now = Date.now()
+      for (const tag of DEFAULT_TAGS) seed.run(tag.name, tag.color, now, tag.name)
+    }
+    db.exec('PRAGMA user_version = 55')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

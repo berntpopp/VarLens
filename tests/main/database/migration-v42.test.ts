@@ -37,7 +37,7 @@ describe('migrations v42 / v43 — genotype classes of the cohort summary', () =
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(54)
+    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(55)
     expect(service.database.pragma('user_version', { simple: true })).toBe(
       LATEST_SQLITE_SCHEMA_VERSION
     )
