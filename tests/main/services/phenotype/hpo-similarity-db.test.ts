@@ -14,6 +14,9 @@ import {
   PHENOTYPE_HPOA,
   T
 } from '../../../shared/phenotype/hpo-fixture'
+import type { HpoProfileTerm } from '../../../../src/shared/types/hpo-profile'
+
+const P = (hpoId: string): HpoProfileTerm => ({ hpoId, excluded: false, key: false })
 
 let dir: string
 let dbPath: string
@@ -45,43 +48,75 @@ describe('hpo_similarity.db', () => {
     })
   })
 
-  it('stores only positively supported phenotype-subtree gene terms', () => {
+  it('stores gene-linked diseases with frequencies, NOT annotations and gene links', () => {
     build()
     const db = new Database(dbPath, { readonly: true })
-    const rows = db.prepare('SELECT gene_symbol, term FROM gene_terms ORDER BY 1, 2').all()
-    db.close()
-    expect(rows).toEqual([
-      { gene_symbol: 'GENE1', term: T.D },
-      { gene_symbol: 'GENE2', term: T.C },
-      { gene_symbol: 'GENE2', term: T.E },
-      { gene_symbol: 'GENE3', term: T.D }
+    const all = (sql: string): unknown[] => db.prepare(sql).raw().all()
+    expect(all('SELECT * FROM gene_diseases ORDER BY 1, 2')).toEqual([
+      ['GENE1', 'OMIM:2'],
+      ['GENE2', 'OMIM:3'],
+      ['GENE2', 'OMIM:4'],
+      ['GENE3', 'OMIM:2']
     ])
+    expect(all('SELECT disease, term, f, f_excl FROM disease_terms ORDER BY 1, 2')).toEqual([
+      ['OMIM:2', T.D, 0.35, 0.15],
+      ['OMIM:3', T.E, 0.35, 0.15],
+      ['OMIM:4', T.C, 0.35, 0.15],
+      ['OMIM:4', T.E, 0.35, 0.15]
+    ])
+    expect(all('SELECT * FROM disease_not ORDER BY 1, 2')).toEqual([
+      ['OMIM:2', T.X],
+      ['OMIM:3', T.X],
+      ['OMIM:4', T.D]
+    ])
+    expect(all('SELECT * FROM diseases ORDER BY 1')).toEqual([
+      ['OMIM:2', 'name'],
+      ['OMIM:3', 'name'],
+      ['OMIM:4', 'name']
+    ])
+    db.close()
   })
 
-  it('scores genes with the hand-computed symmetric Resnik BMA', () => {
+  it('scores genes at disease level with the hand-computed v2 score', () => {
     build()
-    const scorer = openHpoGeneScorer([T.C, T.E], dbPath)
+    const scorer = openHpoGeneScorer([P(T.C), P(T.E)], dbPath)
     expect(scorer).not.toBeNull()
-    const l43 = Math.log(4 / 3)
-    expect(scorer?.score('GENE1')).toBeCloseTo((l43 / 2 + l43) / 2, 12)
-    expect(scorer?.score('GENE2')).toBeCloseTo(Math.log(2), 12)
+    // OMIM:4 {C, E}, both missing frequency (f = 0.35): both patient terms match exactly.
+    const f = Math.fround(0.35)
+    const fac = Math.fround(0.75 + 0.25 * f)
+    expect(scorer?.score('GENE2')).toBeCloseTo(0.55 * fac + 0.45 * ((2 * f) / (1 + 2 * f)), 6)
+    expect(scorer?.bestDisease('GENE2')).toBe('OMIM:4')
+    expect(scorer?.conflicts('GENE2')).toBe(0)
+    expect(scorer?.explain('GENE2')).toMatchObject({ diseaseId: 'OMIM:4', diseaseLabel: 'name' })
     expect(scorer?.score('UNKNOWN')).toBeNull()
+    expect(scorer?.explain('UNKNOWN')).toBeNull()
   })
 
   it('canonicalises, deduplicates and drops non-phenotype case terms before scoring', () => {
     build()
-    const plain = openHpoGeneScorer([T.C, T.E], dbPath)
-    const noisy = openHpoGeneScorer([T.ALT, T.C, T.Z2, T.INH, 'HP:9999999'], dbPath)
+    const plain = openHpoGeneScorer([P(T.C), P(T.E)], dbPath)
+    const noisy = openHpoGeneScorer([P(T.ALT), P(T.C), P(T.Z2), P(T.INH), P('HP:9999999')], dbPath)
     expect(noisy?.score('GENE1')).toBeCloseTo(plain!.score('GENE1')!, 12)
     expect(noisy?.score('GENE2')).toBeCloseTo(plain!.score('GENE2')!, 12)
-    expect(openHpoGeneScorer([T.INH], dbPath)).toBeNull()
+    expect(openHpoGeneScorer([P(T.INH)], dbPath)).toBeNull()
+    expect(openHpoGeneScorer([{ hpoId: T.C, excluded: true, key: false }], dbPath)).toBeNull()
+  })
+
+  it('counts an excluded term contradicted by the best disease', () => {
+    build()
+    const scorer = openHpoGeneScorer([P(T.D), { hpoId: T.B, excluded: true, key: false }], dbPath)
+    // GENE2: OMIM:4 (C, E) vs OMIM:3 (E); B ⊃ E is excluded in both, OMIM:4 matches D best.
+    expect(scorer?.conflicts('GENE2')).toBe(1)
+    expect(scorer?.explain('GENE2')?.conflicts).toEqual([
+      expect.objectContaining({ excludedTerm: T.B, diseaseTerm: T.E, frequency: Math.fround(0.15) })
+    ])
   })
 
   it('reloads the cached index when the file is replaced', () => {
     build()
-    expect(openHpoGeneScorer([T.C], dbPath)?.score('GENE2')).not.toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)?.score('GENE2')).not.toBeNull()
     writeFileSync(dbPath, 'replaced by something unreadable '.repeat(300))
-    expect(openHpoGeneScorer([T.C], dbPath)).toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)).toBeNull()
   })
 
   it('has no scorer without patient terms or data', () => {
@@ -93,13 +128,13 @@ describe('hpo_similarity.db', () => {
   it('treats a damaged file as "needs update" and scores nothing, without throwing', () => {
     writeFileSync(dbPath, 'not a database at all, just bytes '.repeat(200))
     expect(readHpoDataStatus(dbPath)).toMatchObject({ installed: false, needsUpdate: true })
-    expect(openHpoGeneScorer([T.C], dbPath)).toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)).toBeNull()
   })
 
   it('reports a DB from an older builder as needing an update', () => {
     build()
     const db = new Database(dbPath)
-    db.prepare("UPDATE meta SET value = '1' WHERE key = 'builder_version'").run()
+    db.prepare("UPDATE meta SET value = '2' WHERE key = 'builder_version'").run()
     db.close()
     expect(readHpoDataStatus(dbPath)).toMatchObject({ installed: true, needsUpdate: true })
   })

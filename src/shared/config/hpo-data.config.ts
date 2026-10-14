@@ -32,7 +32,7 @@ export const HPO_DATA_CONFIG = {
    * Preprocessing version stored in the DB meta; bump when the build changes
    * what lands in the DB so installed data reports "needs update".
    */
-  builderVersion: 2,
+  builderVersion: 3,
   /** Phenotypic abnormality: only its subtree enters IC, gene sets and patient profiles. */
   phenotypeRoot: 'HP:0000118',
   /** HPO frequency term "Excluded" (0 %): an annotation of absence. */
