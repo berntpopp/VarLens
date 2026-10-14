@@ -21,7 +21,7 @@ export interface PhenotypeIndexInput {
   diseaseNot: ReadonlyArray<readonly [string, string]>
   /** [gene symbol, disease] */
   geneDiseases: ReadonlyArray<readonly [string, string]>
-  /** [disease, μ, σ] of S⁺ over random profiles of size 1..nullMaxK; absent → no correction */
+  /** [disease, μ, σ] of S⁺ over random profiles of size 1..nullMaxK, for every disease; absent → no correction */
   diseaseNull?: ReadonlyArray<readonly [string, Float32Array, Float32Array]>
   /** S⁺ parameters the null was built with (`nullParams`) */
   nullParams?: string
@@ -172,12 +172,19 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
   if (input.diseaseNull !== undefined && input.diseaseNull.length > 0) {
     nullMu = new Float32Array(D * K)
     nullSd = new Float32Array(D * K)
+    const covered = new Set<number>()
     for (const [d, mu, sd] of input.diseaseNull) {
       const di = diseaseIndex.get(d)
-      if (di === undefined || mu.length !== K || sd.length !== K) continue
+      if (di === undefined) continue
+      if (mu.length !== K || sd.length !== K)
+        throw new Error(`HPO background null of ${d}: not ${K} sizes`)
       nullMu.set(mu, di * K)
       nullSd.set(sd, di * K)
+      covered.add(di)
     }
+    // A zero-filled gap would silently score that disease against μ = σ = 0.
+    if (covered.size !== D)
+      throw new Error(`HPO background null covers ${covered.size} of ${D} diseases`)
   }
 
   const labelById = new Map(input.terms.map((t) => [t.id, t.label]))

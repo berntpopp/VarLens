@@ -111,7 +111,14 @@ describe('phenotype score v2: hand-computed toy cases', () => {
 
   it('lowers a disease whose key-term match is below its average (τ = 1; not monotone)', () => {
     // Review 2026-10-14: broad EYE (IC 1, f 0.35) and specific MICRO (IC 4, f 1), both exact.
-    const ix = buildPhenotypeIndex(toy({ d: [['EYE', 0.35, 0.15], ['MICRO', 1, 0.95]] }))
+    const ix = buildPhenotypeIndex(
+      toy({
+        d: [
+          ['EYE', 0.35, 0.15],
+          ['MICRO', 1, 0.95]
+        ]
+      })
+    )
     const plain = scoreCase(ix, [P('EYE'), P('MICRO')], { tau: 1 })!.geneScore[0]
     const keyed = scoreCase(ix, [P('EYE', true), P('MICRO')], { tau: 1 })!.geneScore[0]
     expect(plain).toBeCloseTo(0.790636, 6)
@@ -331,6 +338,28 @@ describe('background correction helpers', () => {
   })
 })
 
+describe('stored background null', () => {
+  it('refuses a null that misses a disease or a query size', () => {
+    const input = toy({ a: [['FEB', 0.9, 0.8]], b: [['CAT', 0.5, 0.3]] })
+    const col = new Float32Array(C.nullMaxK)
+    expect(() => buildPhenotypeIndex({ ...input, diseaseNull: [['a', col, col]] })).toThrow()
+    const short = new Float32Array(C.nullMaxK - 1)
+    const partial = {
+      ...input,
+      diseaseNull: [['a', col, col] as const, ['b', short, short] as const]
+    }
+    expect(() => buildPhenotypeIndex(partial)).toThrow()
+    const ix = buildPhenotypeIndex({
+      ...input,
+      diseaseNull: [
+        ['a', col, col],
+        ['b', col, col]
+      ]
+    })
+    expect(ix.nullMu).toHaveLength(2 * C.nullMaxK)
+  })
+})
+
 describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
   it('matches score, best disease and explanation sets on random DAGs', () => {
     let seed = 0xc0ffee
@@ -395,15 +424,13 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         excludeMinFrequency: pick([0, 0, 0.3, 0.8]),
         exclusionMode: pick(['penalty', 'penalty', 'conflictsOnly'] as const)
       })
-      // Random stored null (some diseases without one, some σ = 0) for the options' τ.
+      // Random complete stored null (some σ = 0) for the options' τ.
       const K = C.nullMaxK
-      input.diseaseNull = diseases
-        .filter(() => rand() < 0.9)
-        .map((d) => {
-          const mu = Float32Array.from({ length: K }, () => rand() * 0.9)
-          const sd = Float32Array.from({ length: K }, () => (rand() < 0.1 ? 0 : rand() * 0.3))
-          return [d, mu, sd] as const
-        })
+      input.diseaseNull = diseases.map((d) => {
+        const mu = Float32Array.from({ length: K }, () => rand() * 0.9)
+        const sd = Float32Array.from({ length: K }, () => (rand() < 0.1 ? 0 : rand() * 0.3))
+        return [d, mu, sd] as const
+      })
       input.nullParams = nullParams(options.tau)
       const ix = buildPhenotypeIndex(input)
       const fast = scoreCase(ix, profile, options)

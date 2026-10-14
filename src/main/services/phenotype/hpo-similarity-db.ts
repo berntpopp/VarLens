@@ -193,8 +193,21 @@ function inspect(db: Database.Database): HpoDataStatus {
     geneCount > 0 &&
     count('SELECT COUNT(*) AS c FROM disease_terms') > 0 &&
     count('SELECT COUNT(*) AS c FROM terms WHERE ic > 0') > 0 &&
-    count('SELECT COUNT(*) AS c FROM parents') > 0
+    count('SELECT COUNT(*) AS c FROM parents') > 0 &&
+    nullMatchesConfig(meta.get('null_params'), count)
   return { ...status, needsUpdate: !usable, geneCount }
+}
+
+/** A configured background correction needs a complete null built for the configured τ. */
+function nullMatchesConfig(params: string | undefined, count: (sql: string) => number): boolean {
+  if (HPO_SCORING_CONFIG.backgroundCorrection === 'off') return true
+  const bytes = HPO_SCORING_CONFIG.nullMaxK * 4
+  return (
+    params === nullParams(HPO_SCORING_CONFIG.tau) &&
+    count(
+      `SELECT COUNT(*) AS c FROM disease_null WHERE length(mu) = ${bytes} AND length(sd) = ${bytes}`
+    ) === count('SELECT COUNT(*) AS c FROM diseases')
+  )
 }
 
 /** Installed release; a damaged or wrong-schema file reads as not installed + needs update. */

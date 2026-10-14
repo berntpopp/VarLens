@@ -66,6 +66,8 @@ export function computeDiseaseNull(
   const sumSq = new Float64Array(D * K)
   const rand = rng(seed)
   const marks = { mark: new Int32Array(ix.hpo.ids.length), stamp: 0 }
+  /** scored samples per query size: a profile without a scorable term is skipped, not counted */
+  const valid = new Int32Array(K)
   for (let k = 1; k <= K; k++) {
     for (let r = 0; r < samples; r++) {
       const terms = sampleTerms(ix, k, rand, marks).map((t) => ({
@@ -75,6 +77,7 @@ export function computeDiseaseNull(
       }))
       const profile = prepareProfile(ix, terms)
       if (profile === null) continue
+      valid[k - 1]++
       const plus = scoreProfile(ix, profile, { correction: 'off', tau }).diseasePlus
       for (let d = 0; d < D; d++) {
         sum[d * K + k - 1] += plus[d]
@@ -85,9 +88,10 @@ export function computeDiseaseNull(
   const mu = new Float32Array(D * K)
   const sd = new Float32Array(D * K)
   for (let i = 0; i < D * K; i++) {
-    const m = sum[i] / samples
+    const n = Math.max(1, valid[i % K])
+    const m = sum[i] / n
     mu[i] = m
-    sd[i] = Math.sqrt(Math.max(0, sumSq[i] / samples - m * m))
+    sd[i] = Math.sqrt(Math.max(0, sumSq[i] / n - m * m))
   }
   return { mu, sd }
 }
