@@ -41,6 +41,8 @@ export interface StreamFileArgs {
   vcfFilters: ImportFilters | undefined
   fields: FieldProfileResolver
   vcfSelectedSamples?: string[]
+  /** Bundled gene reference: fills genes of unannotated SV/CNV/STR rows. */
+  geneRefDbPath?: string
 }
 
 /** Stream one file's rows into a case; returns the rows inserted. */
@@ -58,7 +60,8 @@ export function streamFileIntoCase(a: StreamFileArgs): Promise<number> {
       a.onSkip,
       undefined,
       a.vcfFilters,
-      a.fields
+      a.fields,
+      a.geneRefDbPath
     )
   }
   return streamInsertJson(

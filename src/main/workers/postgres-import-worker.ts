@@ -1,4 +1,4 @@
-import { parentPort } from 'node:worker_threads'
+import { parentPort, workerData } from 'node:worker_threads'
 import { basename } from 'node:path'
 import { statSync } from 'node:fs'
 import type { Readable } from 'node:stream'
@@ -58,6 +58,7 @@ import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import type { VcfMappedVariant } from '../import/vcf/types'
 import { BedFilter } from '../import/vcf/bed-filter'
 import { resolveImportGenomeBuild } from '../import/vcf/resolve-genome-build'
+import { createGeneFiller } from '../import/vcf/gene-fallback'
 import { canonicalContig } from '../../shared/utils/contig'
 import { parseVcfHeader } from '../import/vcf/vcf-header-parser'
 import type { ImportFilters } from '../import/vcf/import-filters'
@@ -67,6 +68,8 @@ import { streamMappedVcfRows } from './postgres-vcf-stream'
 export { streamMappedVcfRows } from './postgres-vcf-stream'
 
 const POSTGRES_JSON_IMPORT_BATCH_SIZE = 1000
+// Resolved on the main thread (Electron's `app` is absent here), as for db-worker.
+const geneRefDbPath = (workerData as { geneRefDbPath?: string } | null)?.geneRefDbPath
 
 let cancelled = false
 
@@ -141,7 +144,8 @@ const defaultDeps: RunImportDeps = {
       options.filters,
       options.onSkip,
       options.appendedTo,
-      options.fields
+      options.fields,
+      createGeneFiller(geneRefDbPath, options.genomeBuild)
     )
 }
 

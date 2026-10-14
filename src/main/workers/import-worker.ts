@@ -6,7 +6,7 @@ import {
 } from '../import/unranked-clinvar'
 import { resetAfOutOfRange, takeAfOutOfRange } from '../import/af-out-of-range'
 import { resetAmbiguousCsqSites, takeAmbiguousCsqSites } from '../import/vcf/vcf-csq-allele'
-import { parentPort } from 'worker_threads'
+import { parentPort, workerData } from 'worker_threads'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { statSync } from 'node:fs'
 import { basename } from 'node:path'
@@ -57,6 +57,8 @@ export interface ImportWorkerPort {
 }
 
 let cancelled = false
+// Resolved on the main thread (Electron's `app` is absent here), as for db-worker.
+const geneRefDbPath = (workerData as { geneRefDbPath?: string } | null)?.geneRefDbPath
 
 export async function runImportSession(
   msg: Extract<MainMessage, { type: 'start' }>,
@@ -281,7 +283,8 @@ export async function runImportSession(
             stmts,
             isCancelled,
             onProgress,
-            onSkip
+            onSkip,
+            geneRefDbPath
           })
           if (added === null) skipCancelled()
           else reportImported(file.appendToCaseId, added)
@@ -376,7 +379,8 @@ export async function runImportSession(
               onProgress,
               onSkip,
               vcfFilters,
-              fields
+              fields,
+              geneRefDbPath
             })
           } finally {
             stmts.finishBulkInsert(caseId, variantCount)

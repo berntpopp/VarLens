@@ -34,6 +34,15 @@ export function resolveGeneRefDbPath(): string {
   return resolveDbPath()
 }
 
+/** The gene reference path, or undefined when no copy is found. */
+export function tryResolveGeneRefDbPath(): string | undefined {
+  try {
+    return resolveDbPath()
+  } catch {
+    return undefined
+  }
+}
+
 function resolveDbPath(): string {
   // 1. User data path: updated DB from gene-ref:update takes precedence
   const userDataPath = join(app.getPath('userData'), 'gene_reference.db')

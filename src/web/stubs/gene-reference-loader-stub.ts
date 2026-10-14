@@ -22,6 +22,10 @@ export function resolveGeneRefDbPath(): string {
   return process.env.VARLENS_GENE_REF_DB_PATH ?? join(process.cwd(), 'resources/gene_reference.db')
 }
 
+export function tryResolveGeneRefDbPath(): string | undefined {
+  return resolveGeneRefDbPath()
+}
+
 export function getGeneReferenceDb(): GeneReferenceDb {
   return getWebGeneReferenceService()
 }
