@@ -12,8 +12,7 @@ const port = parentPort
 port.once('message', (request: HpoBuildRequest) => {
   let response: HpoBuildResponse
   try {
-    buildHpoFromFiles(request)
-    response = { type: 'done' }
+    response = { type: 'done', warnings: buildHpoFromFiles(request) }
   } catch (error) {
     response = { type: 'error', error: error instanceof Error ? error.message : String(error) }
   }

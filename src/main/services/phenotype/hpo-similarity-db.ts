@@ -37,6 +37,7 @@ import {
   type CaseScores
 } from '../../../shared/phenotype/phenotype-score'
 import { mainLogger } from '../MainLogger'
+import { writeLocusReference, type LocusSourceInput } from './locus-reference-db'
 import type { DbPool } from '../../database/DbPool'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
@@ -49,6 +50,8 @@ export interface HpoSourceTexts {
   ontology: string
   annotations: string
   genes: string
+  /** optional CNV/STR sources (CNV/STR spec §3); absent: no fresh locus data */
+  locus?: LocusSourceInput
 }
 
 export interface HpoBuildMeta {
@@ -57,6 +60,7 @@ export interface HpoBuildMeta {
   sha256: Record<string, string>
 }
 
+/** Builds the DB at `outPath`; returns one warning per stale or missing optional source. */
 export function buildHpoSimilarityDb(
   sources: HpoSourceTexts,
   meta: HpoBuildMeta,
@@ -68,7 +72,7 @@ export function buildHpoSimilarityDb(
   nullTau: number | null = HPO_SCORING_CONFIG.backgroundCorrection === 'off'
     ? null
     : HPO_SCORING_CONFIG.tau
-): void {
+): string[] {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
   const hpoa = parseHpoaDiseases(sources.annotations, ontology.aliases)
@@ -79,24 +83,27 @@ export function buildHpoSimilarityDb(
     const term = ontology.aliases.get(raw) ?? raw
     return ancestors.has(term) ? term : null
   }
-  // Gene-linked diseases only, phenotype-subtree terms only (aliases already pooled by the parser).
+  // Indexed diseases: phenotype-subtree terms only (aliases already pooled by the parser).
   const linked = new Map<string, Map<string, HpoaFrequency>>()
-  for (const diseases of genes.values()) {
-    for (const d of diseases) {
-      if (linked.has(d)) continue
-      const merged = new Map<string, HpoaFrequency>()
-      for (const [raw, freq] of hpoa.terms.get(d) ?? []) {
-        const term = canonical(raw)
-        const prev = term === null ? undefined : merged.get(term)
-        if (term !== null && (prev === undefined || freq.f > prev.f)) merged.set(term, freq)
-      }
-      if (merged.size > 0) linked.set(d, merged)
+  const admit = (d: string): void => {
+    if (linked.has(d)) return
+    const merged = new Map<string, HpoaFrequency>()
+    for (const [raw, freq] of hpoa.terms.get(d) ?? []) {
+      const term = canonical(raw)
+      const prev = term === null ? undefined : merged.get(term)
+      if (term !== null && (prev === undefined || freq.f > prev.f)) merged.set(term, freq)
     }
+    if (merged.size > 0) linked.set(d, merged)
   }
+  for (const diseases of genes.values()) for (const d of diseases) admit(d)
+  const geneLinked = new Set(linked.keys())
 
   rmSync(outPath, { force: true })
   const db = new Database(outPath)
   try {
+    // Region and STR diseases are indexed but never gene-linked: gene scores stay byte-identical.
+    const locus = writeLocusReference(db, sources.locus)
+    for (const d of locus.diseases) admit(d)
     db.exec(`
       CREATE TABLE terms (id TEXT PRIMARY KEY, label TEXT NOT NULL, ic REAL NOT NULL) WITHOUT ROWID;
       CREATE TABLE parents (term TEXT NOT NULL, parent TEXT NOT NULL, PRIMARY KEY (term, parent)) WITHOUT ROWID;
@@ -132,14 +139,16 @@ export function buildHpoSimilarityDb(
         }
       }
       for (const [gene, diseases] of genes) {
-        for (const d of diseases) if (linked.has(d)) insertGene.run(gene, d)
+        for (const d of diseases) if (geneLinked.has(d)) insertGene.run(gene, d)
       }
       insertMeta.run('hpo_version', meta.release)
       insertMeta.run('builder_version', String(HPO_DATA_CONFIG.builderVersion))
       insertMeta.run('sources_sha256', JSON.stringify(meta.sha256))
+      insertMeta.run('sources', JSON.stringify({ hpo: meta.release, ...locus.sources }))
       insertMeta.run('built_at', String(Math.floor(Date.now() / 1000)))
     })()
     if (nullTau !== null) writeDiseaseNull(db, nullTau)
+    return locus.warnings
   } finally {
     db.close()
   }
@@ -181,11 +190,13 @@ function inspect(db: Database.Database): HpoDataStatus {
   )
   const count = (sql: string): number => (db.prepare(sql).get() as { c: number }).c
   const termCount = count('SELECT COUNT(*) AS c FROM terms')
+  const sources = meta.get('sources')
   const status = {
     installed: true,
     version: meta.get('hpo_version') ?? null,
     builtAt: Number(meta.get('built_at') ?? 0) || null,
-    termCount
+    termCount,
+    ...(sources === undefined ? {} : { sources: JSON.parse(sources) as Record<string, string> })
   }
   // An older builder's file may lack the current tables: report it before querying them.
   if (meta.get('builder_version') !== String(HPO_DATA_CONFIG.builderVersion)) {

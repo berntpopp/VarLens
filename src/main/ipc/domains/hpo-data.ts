@@ -7,6 +7,7 @@ import { runHpoBuild } from '../../services/phenotype/hpo-build-worker-client'
 import { updateHpoData } from '../../services/phenotype/hpo-data-update'
 import { resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
 import { getDatabaseManager } from '../../database'
+import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { getHpoDataStatus } from '../handlers/hpo-data-logic'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
@@ -25,7 +26,8 @@ export function registerHpoDataDomain(ipcMain: IpcMain): void {
         fetch: apiFetch,
         isOnline: () => networkStatus.getStatus(),
         dbPath,
-        build: runHpoBuild
+        build: runHpoBuild,
+        geneRefPath: tryResolveGeneRefDbPath() ?? null
       }).finally(() => (updating = null))
       const result = await updating
       mainLogger.info(result.message, 'hpo-data')
