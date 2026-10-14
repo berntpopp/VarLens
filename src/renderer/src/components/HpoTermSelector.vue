@@ -87,11 +87,12 @@
       item-title="name"
       item-value="id"
       return-object
+      :item-props="(item: HpoSearchResult) => ({ disabled: item.assigned })"
       density="compact"
       variant="outlined"
       hide-details
       clearable
-      auto-select-first
+      :auto-select-first="searchResults[0]?.assigned !== true"
       :disabled="disabled || !hpoApiAvailable"
       label="Search HPO terms"
       :placeholder="COPY.placeholder"
@@ -105,7 +106,7 @@
       <template #item="{ item, props: itemProps }">
         <v-list-item v-bind="itemProps">
           <template #subtitle>
-            {{ item.id }}
+            {{ item.id }}{{ item.assigned ? ` · ${COPY.assigned}` : '' }}
           </template>
         </v-list-item>
       </template>
@@ -144,6 +145,7 @@ import { HPO_TERM_COPY as COPY } from '../config/hpoTermCopy'
 interface HpoSearchResult {
   id: string
   name: string
+  assigned: boolean
 }
 
 const props = defineProps<{
@@ -253,9 +255,10 @@ async function performSearch(query: string) {
   try {
     const terms = await searchBundledTerms(query, 20)
     if (query !== searchQuery.value) return
-    // Filter out already assigned terms
+    // Assigned terms stay listed but disabled; a top hit that is assigned turns off
+    // auto-select-first, so Enter never adds the next match instead.
     const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
-    searchResults.value = terms.filter((t) => !assignedIds.has(t.id))
+    searchResults.value = terms.map((t) => ({ ...t, assigned: assignedIds.has(t.id) }))
     // The composable logs a failed load of the list and returns no terms.
     if (loadError.value !== null) searchError.value = 'HPO search failed. Try again later.'
   } finally {

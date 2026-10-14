@@ -33,7 +33,7 @@ describe('HpoTermSelector', () => {
     autocomplete.vm.$emit('update:search', 'HP:0001250')
 
     await vi.waitFor(() =>
-      expect(autocomplete.props('items')).toEqual([{ id: 'HP:0001250', name: 'Seizure' }])
+      expect(autocomplete.props('items')).toEqual([{ id: 'HP:0001250', name: 'Seizure', assigned: false }])
     )
     expect(api.hpo.search).not.toHaveBeenCalled()
     wrapper.unmount()
@@ -213,6 +213,20 @@ describe('HpoTermSelector', () => {
         } finally {
           vi.useRealTimers()
         }
+      })
+
+      it('an assigned term stays listed but disabled, and Enter adds nothing else', async () => {
+        const w = mountSelector()
+        const input = await typeQuery(w, 'Seizure')
+        const items = w.findComponent({ name: 'VAutocomplete' }).props('items') as {
+          id: string
+          assigned: boolean
+        }[]
+        expect(items[0]).toMatchObject({ id: 'HP:0001250', assigned: true })
+        expect(items.length).toBeGreaterThan(1)
+        await input.trigger('keydown', { key: 'Enter' })
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        expect(w.emitted('add:term')).toBeUndefined()
       })
 
       it('an uppercase query (Shift held while typing) still adds present', async () => {
