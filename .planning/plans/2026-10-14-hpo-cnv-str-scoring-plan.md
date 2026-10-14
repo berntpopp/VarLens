@@ -60,8 +60,8 @@ Tests:
 ### L1 ref-data
 
 Owns:
-- `src/shared/config/hpo-data.config.ts`: source URLs, pinned STRchive and Mondo tags + digests, `builderVersion: 5`.
-- `src/main/services/phenotype/hpo-data-update.ts`: multi-source download, atomic install, ClinGen header and row-floor checks.
+- `src/shared/config/hpo-data.config.ts`: source URLs, pinned STRchive and Mondo tags + digests, `builderVersion: 6`.
+- `src/main/services/phenotype/hpo-data-update.ts`: multi-source download, per-source fallback to the installed copy (spec §3), one atomic rename, ClinGen header and row-floor checks.
 - `src/shared/phenotype/reference-sources.ts` (new, pure): ClinGen TSV, STRchive JSON and Mondo `xref` parsers.
 - `src/shared/str/str-overrides.ts` (new): FMR1, ATXN2, HTT, DMPK, ATXN3.
 - `src/main/services/phenotype/locus-reference-db.ts` (new):

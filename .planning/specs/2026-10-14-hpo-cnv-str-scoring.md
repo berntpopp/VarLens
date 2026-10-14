@@ -51,13 +51,13 @@ Non-goals (each could be a later spec):
 - Short-read saturation rescue from `REPCI`.
 - Mixed-type order calibration (SNV against CNV points), and flipping `structuralTypes.enabled`. Both are decided after §7 runs.
 - New case-table or cohort-table columns.
-- Wiring the new score into the legacy 0-1 SV/CNV/STR scorers. See open question 3.
+- Wiring the new score into the legacy 0-1 SV/CNV/STR scorers. Decided: not before §7 passes (§11).
 
 ## 3. Data sources
 
 All sources are fetched by the existing **Update HPO data** action (`hpo-data-update.ts`) and preprocessed into the same `hpo_similarity.db`. One file means one status row, one atomic rename and one cache key.
 
-`HPO_DATA_CONFIG.builderVersion` goes from 4 to 5, so installed data reports "needs update". The web server keeps reading the operator-built file (`npm run build:hpo-db`), which fetches the same sources.
+`HPO_DATA_CONFIG.builderVersion` goes from 5 to 6 (5 is taken by the v2 review fixes: deduplicated, alias-canonicalised HPOA pooling), so installed data reports "needs update". The web server keeps reading the operator-built file (`npm run build:hpo-db`), which fetches the same sources.
 
 | Source | Asset (URL base in typed config) | Licence | Version pin | Integrity | Size |
 |---|---|---|---|---|---|
@@ -68,8 +68,8 @@ All sources are fetched by the existing **Update HPO data** action (`hpo-data-up
 | Mondo | GitHub release asset `mondo.obo` (`monarch-initiative/mondo`) | **CC BY 4.0** (attribution required) | release tag, e.g. `v2026-10-06` | GitHub asset digest. Pinned fallback sha256 `2631e8e165d41def1a46749adb1ce0a336c8aba7f6bc0978729592cee8fed60b` | ~53 MB, read at build only |
 
 Notes:
-- **Why Mondo.** ClinGen regions name their disease by MONDO id. HPOA uses OMIM and ORPHA ids. The builder keeps only the `xref: OMIM:` and `xref: Orphanet:` lines tagged `MONDO:equivalentTo` for the ≈ 45 MONDO ids it needs, and discards the rest. Mondo is the one source the brief did not name; see open question 1.
-- **Update policy: atomic.** Any source that fails (download, digest, header or row floor) fails the whole update and leaves the installed DB untouched. This matches today's HPO behaviour. HPO and the dosage data must describe the same moment; a half-updated DB is worse than a stale one. See open question 2.
+- **Why Mondo.** ClinGen regions name their disease by MONDO id. HPOA uses OMIM and ORPHA ids. The builder keeps only the `xref: OMIM:` and `xref: Orphanet:` lines tagged `MONDO:equivalentTo` for the ≈ 45 MONDO ids it needs, and discards the rest. Mondo is the one source the brief did not name; the user chose the download (2026-10-14).
+- **Update policy: per source (user decision 2026-10-14).** HPO is required: if HPO fails, the update fails and the installed DB is untouched (today's behaviour). If an optional source (ClinGen, STRchive, Mondo) fails its download, digest, header or row floor, the builder copies that source's tables and `sources` entry from the installed DB, so it keeps its previous version. With no previous copy, its tables stay empty and CNV/STR scoring for that part is null. The status row shows a warning naming the stale or missing source. The build stays one atomic rename.
 - **The VCF is read first.** The CSQ gene set and the INFO HI/TS from varlens-annotation-workflows#3 take precedence over the downloads. The INFO keys are set in typed config (`hpo-locus-scoring.config.ts`) once #3 fixes its format. They are read from `info_json`, so there is no new column and no migration. The tooltip names the dosage source, either "AnnotSV" (from the VCF) or "ClinGen <date>" (downloaded), because AnnotSV's copy of ClinGen can be older. The other #3 fields (ACMG_class, ranking score, B_*_AFmax, P_*_hpo) are **not** read by this score: P_*_hpo and the ranking already contain a phenotype term, and reading them would double-count it. Exposing them as DSL fields is a separate follow-up.
 - **Gene intervals are not new data, and they are the fallback.** They come from the bundled `resources/gene_reference.db` (`gene_coordinates`, both builds), as the import gene fallback already does. ClinGen genes are joined by **HGNC id**, never by symbol, so symbol drift cannot misassign dosage.
 - **Versions in the UI.** `HpoDataStatus` gains `sources: Record<string, string>` (e.g. `{ hpo: 'v2026-09-01', clingen: '2026-10-14', strchive: 'v2.28.0', mondo: 'v2026-10-06' }`). `HpoDataRow.vue` shows them in one line, with attribution for each source.
@@ -384,8 +384,8 @@ No public STR phenopacket benchmark exists (research-str §4).
 
 To be filled after §7 runs: per-criterion results with CIs, ablation table, and the flag decision per type.
 
-## 11. Open questions for the user
+## 11. Decisions (user, 2026-10-14)
 
-1. **Mondo.** Is a 53 MB `mondo.obo` download per update acceptable, only to map about 45 ClinGen MONDO ids to OMIM/ORPHA? The alternative is a hand-curated crosswalk of about 45 rows in typed config. It is smaller, but it is reference data in code and goes stale. Recommendation: download Mondo.
-2. **Update atomicity.** Should one failing source (for example the ClinGen FTP being down) fail the whole update and keep the old data, or should the update install HPO alone and mark CNV/STR scoring as unavailable? Recommendation: atomic.
-3. **Legacy scorers.** Today SV/CNV/STR rows rank with the legacy 0-1 scorers, whose phenotype part is the imported `hpo_sim_score` (null for VCF). Should `hpo_resnik` for CNV/STR also feed that part (`hpo_sim_score ?? hpo_resnik`), giving users the benefit before the evidence flag flips? Or should it stay evidence-only until §7 passes? Recommendation: wait for §7. Then also decide whether to flip the flag per type (CNV and STR separately), which needs `structuralTypes.enabled` to become per-type.
+1. **Mondo:** download `mondo.obo` at runtime (not a hand-curated crosswalk).
+2. **Update failures:** per source. HPO failure fails the update; a failed optional source keeps its previous version, and the status warns (§3).
+3. **Rollout:** score exposed as DSL fields only; the shipped rankings and the legacy scorers stay unchanged until §7 passes; one flag per variant type (`structuralTypes.enabled` becomes per type).
