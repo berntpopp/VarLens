@@ -138,7 +138,8 @@ export function naiveScores(
       for (const s of systemsOf(e)) sysMax.set(s, Math.max(sysMax.get(s) ?? 0, v))
     }
     const excl = [...sysMax.values()].reduce((a, b) => a + b, 0)
-    const nots = (nots0.get(d) ?? []).filter((n) => ancP.has(n)).length
+    const nots =
+      opts.exclusionMode === 'penalty' ? (nots0.get(d) ?? []).filter((n) => ancP.has(n)).length : 0
     const plus = C.gamma * fwd + (1 - C.gamma) * (num / den)
     if (opts.correction === 'off') {
       return plus * Math.exp(-C.lambda * Math.min(C.eMax, excl + nots))

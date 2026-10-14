@@ -57,8 +57,13 @@ export function buildHpoSimilarityDb(
   sources: HpoSourceTexts,
   meta: HpoBuildMeta,
   outPath: string,
-  /** τ the background null is built for (the benchmark builds one DB per τ arm) */
-  nullTau: number = HPO_SCORING_CONFIG.tau
+  /**
+   * τ to build the background null for (~15 s), or null to skip it. Default: only when the
+   * configured correction needs one; the benchmark builds one DB per τ arm.
+   */
+  nullTau: number | null = HPO_SCORING_CONFIG.backgroundCorrection === 'off'
+    ? null
+    : HPO_SCORING_CONFIG.tau
 ): void {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
@@ -130,7 +135,7 @@ export function buildHpoSimilarityDb(
       insertMeta.run('sources_sha256', JSON.stringify(meta.sha256))
       insertMeta.run('built_at', String(Math.floor(Date.now() / 1000)))
     })()
-    writeDiseaseNull(db, nullTau)
+    if (nullTau !== null) writeDiseaseNull(db, nullTau)
   } finally {
     db.close()
   }

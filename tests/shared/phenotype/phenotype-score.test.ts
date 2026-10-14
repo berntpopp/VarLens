@@ -120,6 +120,10 @@ describe('phenotype score v2: hand-computed toy cases', () => {
       scores(input, [P('FEB'), P('HYPO')]).d / scores(unaffected, [P('FEB'), P('HYPO')]).d
     expect(ratio).toBeCloseTo(Math.exp(-C.lambda), 12)
     // A NOT on a descendant of the present term does not contradict it.
+    const conflictsOnly = scoreCase(buildPhenotypeIndex(input), [P('FEB'), P('HYPO')], {
+      exclusionMode: 'conflictsOnly'
+    })!
+    expect(conflictsOnly.geneScore[0]).toBeCloseTo(scores(unaffected, [P('FEB'), P('HYPO')]).d, 12)
     const below = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'FEB']])
     expect(scores(below, [P('SEIZ')]).d).toBeCloseTo(scores(unaffected, [P('SEIZ')]).d, 12)
   })

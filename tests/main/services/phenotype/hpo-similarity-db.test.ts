@@ -122,8 +122,22 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([P(T.C)], dbPath)).toBeNull()
   })
 
-  it('stores a background null per disease and scores in every correction mode', () => {
+  it('builds no background null by default (correction off), and refuses a correction then', () => {
     build()
+    const db = new Database(dbPath, { readonly: true })
+    expect(db.prepare('SELECT COUNT(*) AS c FROM disease_null').get()).toEqual({ c: 0 })
+    db.close()
+    expect(openHpoGeneScorer([P(T.C)], dbPath, { correction: 'mean' })).toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)).not.toBeNull()
+  })
+
+  it('stores a background null per disease and scores in every correction mode', () => {
+    buildHpoSimilarityDb(
+      { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+      { release: 'v2026-09-01', sha256: {} },
+      dbPath,
+      HPO_SCORING_CONFIG.tau
+    )
     const db = new Database(dbPath, { readonly: true })
     const blobs = db.prepare('SELECT mu, sd FROM disease_null').raw().all() as Array<
       [Buffer, Buffer]
