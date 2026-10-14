@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHpoFromFiles } from '../../../../src/main/services/phenotype/hpo-build-worker-client'
-import { updateHpoData } from '../../../../src/main/services/phenotype/hpo-data-update'
+import { replaceFile, updateHpoData } from '../../../../src/main/services/phenotype/hpo-data-update'
 import { readHpoDataStatus } from '../../../../src/main/services/phenotype/hpo-similarity-db'
 import { HPO_DATA_CONFIG } from '../../../../src/shared/config/hpo-data.config'
 import { GENES_TO_PHENOTYPE, HP_JSON, PHENOTYPE_HPOA } from '../../../shared/phenotype/hpo-fixture'
@@ -136,5 +136,21 @@ describe('updateHpoData', () => {
     })
     await expect(updateHpoData(deps(fetch))).rejects.toThrow(/refused/)
     expect(readdirSync(dir)).toEqual([])
+  })
+
+  it('replaceFile retries while Windows reports the target busy, then gives up on other errors', async () => {
+    const busy = Object.assign(new Error('busy'), { code: 'EPERM' })
+    const rename = vi.fn().mockImplementationOnce(() => {
+      throw busy
+    })
+    await replaceFile('a', 'b', rename)
+    expect(rename).toHaveBeenCalledTimes(2)
+
+    const missing = Object.assign(new Error('gone'), { code: 'ENOENT' })
+    const failing = vi.fn(() => {
+      throw missing
+    })
+    await expect(replaceFile('a', 'b', failing)).rejects.toBe(missing)
+    expect(failing).toHaveBeenCalledTimes(1)
   })
 })

@@ -99,6 +99,28 @@ async function download(
   return sha256
 }
 
+/**
+ * Windows refuses to replace a file another handle holds open (a shortlist run
+ * reading the DB), so retry the atomic rename for up to ~10 s before failing;
+ * a failure still leaves the installed data untouched.
+ */
+export async function replaceFile(
+  from: string,
+  to: string,
+  rename: (from: string, to: string) => void = renameSync
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rename(from, to)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (attempt >= 40 || !['EPERM', 'EBUSY', 'EACCES'].includes(code ?? '')) throw error
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+}
+
 export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateResult> {
   const current = readHpoDataStatus(deps.dbPath)
   if (!deps.isOnline()) {
@@ -126,7 +148,7 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
       )
     }
     await deps.build({ files, meta: { release: release.tag, sha256 }, outPath })
-    renameSync(outPath, deps.dbPath)
+    await replaceFile(outPath, deps.dbPath)
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })
     rmSync(outPath, { force: true })
