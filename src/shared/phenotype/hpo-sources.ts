@@ -10,13 +10,15 @@ export interface HpOntology {
   labels: Map<string, string>
   /** term → direct is_a parents (HPO terms only). */
   parents: Map<string, string[]>
+  /** Alternative id or obsolete term (replaced_by) → current term. */
+  aliases: Map<string, string>
 }
 
 interface ObographNode {
   id: string
   lbl?: string
   type?: string
-  meta?: { deprecated?: boolean }
+  meta?: { deprecated?: boolean; basicPropertyValues?: Array<{ pred: string; val: string }> }
 }
 interface ObographEdge {
   sub: string
@@ -27,8 +29,11 @@ interface Obographs {
   graphs?: Array<{ meta?: { version?: string }; nodes?: ObographNode[]; edges?: ObographEdge[] }>
 }
 
-const HP_IRI = /^http:\/\/purl\.obolibrary\.org\/obo\/HP_(\d{7})$/
+const HP_IRI = /^(?:http:\/\/purl\.obolibrary\.org\/obo\/HP_|HP:)(\d{7})$/
+const ALT_ID = 'http://www.geneontology.org/formats/oboInOwl#hasAlternativeId'
+const REPLACED_BY = 'http://purl.obolibrary.org/obo/IAO_0100001'
 
+/** `HP:nnnnnnn` from an HP IRI or CURIE (hp.json uses both). */
 function hpId(iri: string): string | null {
   const m = HP_IRI.exec(iri)
   return m === null ? null : `HP:${m[1]}`
@@ -39,10 +44,21 @@ export function parseHpJson(text: string): HpOntology {
   const graph = (JSON.parse(text) as Obographs).graphs?.[0]
   if (graph?.nodes === undefined) throw new Error('hp.json: no graph nodes')
   const labels = new Map<string, string>()
+  const aliases = new Map<string, string>()
   for (const node of graph.nodes) {
     const id = hpId(node.id)
-    if (id === null || node.type !== 'CLASS' || node.meta?.deprecated === true) continue
-    labels.set(id, node.lbl ?? id)
+    if (id === null || node.type !== 'CLASS') continue
+    const deprecated = node.meta?.deprecated === true
+    for (const { pred, val } of node.meta?.basicPropertyValues ?? []) {
+      const other = hpId(val)
+      if (other === null) continue
+      if (!deprecated && pred === ALT_ID) aliases.set(other, id)
+      if (deprecated && pred === REPLACED_BY) aliases.set(id, other)
+    }
+    if (!deprecated) labels.set(id, node.lbl ?? id)
+  }
+  for (const [alias, term] of aliases) {
+    if (labels.has(alias) || !labels.has(term)) aliases.delete(alias)
   }
   const parents = new Map<string, string[]>()
   for (const edge of graph.edges ?? []) {
@@ -55,13 +71,11 @@ export function parseHpJson(text: string): HpOntology {
     else list.push(obj)
   }
   const version = /releases\/(\d{4}-\d{2}-\d{2})\//.exec(graph.meta?.version ?? '')?.[1] ?? null
-  return { version, labels, parents }
+  return { version, labels, parents, aliases }
 }
 
-/** term → all is_a ancestors including itself. */
-export function ancestorClosure(
-  ontology: Pick<HpOntology, 'labels' | 'parents'>
-): Map<string, string[]> {
+/** term → all is_a ancestors including itself; an alias maps to its term's ancestors. */
+export function ancestorClosure(ontology: HpOntology): Map<string, string[]> {
   const closure = new Map<string, Set<string>>()
   const visit = (term: string, stack: Set<string>): Set<string> => {
     const done = closure.get(term)
@@ -77,7 +91,9 @@ export function ancestorClosure(
     return own
   }
   for (const term of ontology.labels.keys()) visit(term, new Set())
-  return new Map([...closure].map(([term, set]) => [term, [...set]]))
+  const result = new Map([...closure].map(([term, set]) => [term, [...set]]))
+  for (const [alias, term] of ontology.aliases) result.set(alias, result.get(term) ?? [term])
+  return result
 }
 
 /** Rows of a tab-separated file with a header line; `#` lines are comments. */

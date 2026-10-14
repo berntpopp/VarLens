@@ -53,6 +53,13 @@ describe('hpo_similarity.db', () => {
     scorer?.close()
   })
 
+  it('scores alternative / obsolete case term ids like their current term', () => {
+    build()
+    const scorer = openHpoGeneScorer([T.ALT, T.Z], dbPath)
+    expect(scorer?.score('GENE2')).toBeCloseTo(Math.log(2), 12)
+    scorer?.close()
+  })
+
   it('has no scorer without patient terms or data', () => {
     build()
     expect(openHpoGeneScorer([], dbPath)).toBeNull()

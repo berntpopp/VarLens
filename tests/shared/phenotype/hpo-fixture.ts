@@ -1,6 +1,6 @@
 /**
  * Toy HPO release (#600). Ontology: R ⊃ A ⊃ {C, D}; R ⊃ B ⊃ E; plus a
- * deprecated term Z. Diseases: d1 {C}, d2 {D}, d3 {E}, d4 {C, E}, N = 4.
+ * deprecated term Z replaced by E, and alt id ALT of C. Diseases: d1 {C}, d2 {D}, d3 {E}, d4 {C, E}, N = 4.
  * Hand-computed IC = -ln(n/N): R 0, A ln(4/3), B ln 2, C ln 2, D ln 4, E ln 2.
  */
 export const T = {
@@ -10,15 +10,19 @@ export const T = {
   C: 'HP:0000004',
   D: 'HP:0000005',
   E: 'HP:0000006',
-  Z: 'HP:0000009'
+  Z: 'HP:0000009',
+  ALT: 'HP:0000010'
 } as const
 
 const iri = (id: string): string => `http://purl.obolibrary.org/obo/${id.replace(':', '_')}`
-const node = (id: string, deprecated = false): object => ({
+const prop = (pred: string, val: string): object => ({ pred, val })
+const ALT_ID = 'http://www.geneontology.org/formats/oboInOwl#hasAlternativeId'
+const REPLACED_BY = 'http://purl.obolibrary.org/obo/IAO_0100001'
+const node = (id: string, meta?: object): object => ({
   id: iri(id),
   lbl: `label ${id}`,
   type: 'CLASS',
-  ...(deprecated ? { meta: { deprecated: true } } : {})
+  ...(meta !== undefined ? { meta } : {})
 })
 const isA = (sub: string, obj: string): object => ({ sub: iri(sub), pred: 'is_a', obj: iri(obj) })
 
@@ -26,7 +30,15 @@ export const HP_JSON = JSON.stringify({
   graphs: [
     {
       meta: { version: 'http://purl.obolibrary.org/obo/hp/releases/2026-09-01/hp.json' },
-      nodes: [node(T.R), node(T.A), node(T.B), node(T.C), node(T.D), node(T.E), node(T.Z, true)],
+      nodes: [
+        node(T.R),
+        node(T.A),
+        node(T.B),
+        node(T.C, { basicPropertyValues: [prop(ALT_ID, T.ALT)] }),
+        node(T.D),
+        node(T.E),
+        node(T.Z, { deprecated: true, basicPropertyValues: [prop(REPLACED_BY, iri(T.E))] })
+      ],
       edges: [
         isA(T.A, T.R),
         isA(T.B, T.R),

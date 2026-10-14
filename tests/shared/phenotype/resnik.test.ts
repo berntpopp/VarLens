@@ -21,6 +21,21 @@ describe('HPO source parsing', () => {
     expect(ontology.parents.get(T.C)).toEqual([T.A])
   })
 
+  it('maps alternative ids and replaced obsolete terms onto the current term', () => {
+    expect(ontology.aliases).toEqual(
+      new Map([
+        [T.ALT, T.C],
+        [T.Z, T.E]
+      ])
+    )
+    expect(ancestors.get(T.ALT)).toEqual(ancestors.get(T.C))
+    expect(ancestors.get(T.Z)).toEqual(ancestors.get(T.E))
+    expect(resnikBestMatchAverage([T.ALT, T.Z], [T.D], toy)).toBeCloseTo(
+      resnikBestMatchAverage([T.C, T.E], [T.D], toy)!,
+      12
+    )
+  })
+
   it('closes ancestors including self', () => {
     expect(new Set(ancestors.get(T.C))).toEqual(new Set([T.C, T.A, T.R]))
     expect(ancestors.get(T.R)).toEqual([T.R])
