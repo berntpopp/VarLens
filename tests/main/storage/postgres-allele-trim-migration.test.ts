@@ -9,7 +9,10 @@ import { randomBytes } from 'node:crypto'
 import { Pool } from 'pg'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { ALLELE_TRIM_MIGRATION_USER } from '../../../src/shared/genome/allele-trim-plan'
+import {
+  ALLELE_TRIM_MIGRATION_USER,
+  TRIM_PAGE_SIZE
+} from '../../../src/shared/genome/allele-trim-plan'
 import { trimStoredAlleles } from '../../../src/main/storage/postgres/migrations/allele-trim-backfill'
 import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migrations/definitions'
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
@@ -140,6 +143,24 @@ describe.skipIf(!RUN)('migration 0040: minimal alleles for rows imported before 
         )
       ).rows
     ).toEqual([{ ref: 'AT', alt: 'A', carrier_count: 2, acmg_best: 'Likely benign', has_star: 1 }])
+  }, 120_000)
+
+  it('trims every page of a large table', async () => {
+    const rows = 2 * TRIM_PAGE_SIZE + 5
+    await pool.query(
+      `INSERT INTO "${schema}".variants_all (case_id, chr, pos, ref, alt, gt_num, variant_type)
+       SELECT 2, 'chr9', i * 10, 'GCC', 'GC', '0/1', 'indel' FROM generate_series(1, $1) i`,
+      [rows]
+    )
+    await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
+    expect(
+      (
+        await pool.query(
+          `SELECT ref, alt, COUNT(*)::int AS n FROM "${schema}".variants_all
+            WHERE chr = 'chr9' GROUP BY 1, 2`
+        )
+      ).rows
+    ).toEqual([{ ref: 'GC', alt: 'G', n: rows }])
   }, 120_000)
 
   it('is idempotent: a second run changes and audits nothing', async () => {

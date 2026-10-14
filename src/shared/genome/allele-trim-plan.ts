@@ -37,6 +37,9 @@ export function trimCandidateSql(table = ''): string {
       OR substr(${ref}, length(${ref}), 1) = substr(${alt}, length(${alt}), 1))`
 }
 
+/** Candidate rows read and updated per page, so memory stays flat on large databases. */
+export const TRIM_PAGE_SIZE = 10_000
+
 export interface VariantAlleles {
   id: number
   pos: number

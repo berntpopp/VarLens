@@ -6,7 +6,10 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { ALLELE_TRIM_MIGRATION_USER } from '../../../src/shared/genome/allele-trim-plan'
+import {
+  ALLELE_TRIM_MIGRATION_USER,
+  TRIM_PAGE_SIZE
+} from '../../../src/shared/genome/allele-trim-plan'
 import { LATEST_SQLITE_SCHEMA_VERSION, runMigrations } from '../../../src/main/database/migrations'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { rebuildCohortSummary } from '../../../src/main/workers/worker-db'
@@ -41,9 +44,7 @@ describe('migration v57: minimal alleles for rows imported before #587', () => {
   afterEach(() => db.close())
 
   const variants = () =>
-    db
-      .prepare('SELECT case_id, pos, ref, alt, variant_type FROM variants ORDER BY id')
-      .all()
+    db.prepare('SELECT case_id, pos, ref, alt, variant_type FROM variants ORDER BY id').all()
   const annotations = () =>
     db
       .prepare(
@@ -129,6 +130,19 @@ describe('migration v57: minimal alleles for rows imported before #587', () => {
     ).toEqual([
       { pos: 100, ref: 'AT', alt: 'A', carrier_count: 2, acmg_best: 'Likely benign', has_star: 1 }
     ])
+  })
+
+  it('trims every page of a large table', () => {
+    const rows = 2 * TRIM_PAGE_SIZE + 5
+    db.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${rows})
+      INSERT INTO variants (case_id, chr, pos, ref, alt, gt_num, variant_type)
+      SELECT 2, 'chr9', i * 10, 'GCC', 'GC', '0/1', 'indel' FROM n`)
+    runMigrations(db)
+    expect(
+      db
+        .prepare("SELECT ref, alt, COUNT(*) AS n FROM variants WHERE chr = 'chr9' GROUP BY 1, 2")
+        .all()
+    ).toEqual([{ ref: 'GC', alt: 'G', n: rows }])
   })
 
   it('is idempotent: a second run changes and audits nothing', () => {

@@ -13,6 +13,7 @@ import {
   ALLELE_TRIM_MIGRATION_USER,
   planAnnotationTrim,
   trimCandidateSql,
+  TRIM_PAGE_SIZE,
   trimVariantRow,
   type AnnotationTrimPlan,
   type AnnotationTrimRow,
@@ -22,25 +23,27 @@ import { quoteIdentifier } from '../identifiers'
 
 type QueryClient = Pick<PoolClient, 'query'>
 
-/** Rows per UPDATE, so no single statement carries the whole backlog. */
-const UPDATE_CHUNK = 10_000
-
+/** Trim the padded small-variant rows, a page at a time (one read, one UPDATE per page). */
 async function trimVariants(client: QueryClient, tbl: (t: string) => string): Promise<void> {
-  const { rows } = await client.query<{
-    id: string
-    pos: string
-    ref: string
-    alt: string
-    variant_type: string
-  }>(
-    `SELECT id, pos, ref, alt, variant_type FROM ${tbl('variants_all')}
-      WHERE variant_type IN ('snv', 'indel') AND ${trimCandidateSql()}`
-  )
-  const trimmed = rows
-    .map((r) => trimVariantRow({ ...r, id: Number(r.id), pos: Number(r.pos) }))
-    .filter((t): t is VariantAlleles => t !== null)
-  for (let i = 0; i < trimmed.length; i += UPDATE_CHUNK) {
-    const chunk = trimmed.slice(i, i + UPDATE_CHUNK)
+  for (let last = 0; ;) {
+    const { rows } = await client.query<{
+      id: string
+      pos: string
+      ref: string
+      alt: string
+      variant_type: string
+    }>(
+      `SELECT id, pos, ref, alt, variant_type FROM ${tbl('variants_all')}
+        WHERE id > $1 AND variant_type IN ('snv', 'indel') AND ${trimCandidateSql()}
+        ORDER BY id LIMIT ${TRIM_PAGE_SIZE}`,
+      [last]
+    )
+    if (rows.length === 0) return
+    last = Number(rows[rows.length - 1].id)
+    const trimmed = rows
+      .map((r) => trimVariantRow({ ...r, id: Number(r.id), pos: Number(r.pos) }))
+      .filter((t): t is VariantAlleles => t !== null)
+    if (trimmed.length === 0) continue
     await client.query(
       `UPDATE ${tbl('variants_all')} v
           SET pos = u.pos, ref = u.ref, alt = u.alt, variant_type = u.variant_type
@@ -48,11 +51,11 @@ async function trimVariants(client: QueryClient, tbl: (t: string) => string): Pr
               AS u(id, pos, ref, alt, variant_type)
         WHERE v.id = u.id`,
       [
-        chunk.map((t) => t.id),
-        chunk.map((t) => t.pos),
-        chunk.map((t) => t.ref),
-        chunk.map((t) => t.alt),
-        chunk.map((t) => t.variant_type)
+        trimmed.map((t) => t.id),
+        trimmed.map((t) => t.pos),
+        trimmed.map((t) => t.ref),
+        trimmed.map((t) => t.alt),
+        trimmed.map((t) => t.variant_type)
       ]
     )
   }
@@ -161,5 +164,10 @@ export async function trimStoredAlleles(client: QueryClient, schema: string): Pr
   const schemaName = quoteIdentifier(schema)
   const tbl = (t: string): string => `${schemaName}."${t}"`
   await trimVariants(client, tbl)
-  await applyAnnotationPlan(client, schema, tbl, planAnnotationTrim(await annotationRows(client, tbl)))
+  await applyAnnotationPlan(
+    client,
+    schema,
+    tbl,
+    planAnnotationTrim(await annotationRows(client, tbl))
+  )
 }

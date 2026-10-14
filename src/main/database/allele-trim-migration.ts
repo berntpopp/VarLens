@@ -11,6 +11,7 @@ import {
   ALLELE_TRIM_MIGRATION_USER,
   planAnnotationTrim,
   trimCandidateSql,
+  TRIM_PAGE_SIZE,
   trimVariantRow,
   type AnnotationTrimPlan,
   type AnnotationTrimRow,
@@ -21,25 +22,28 @@ import { hasTable } from './contig-rename-sqlite'
 
 type Db = Database.Database
 
-/** Trim the padded small-variant rows; returns how many changed. */
+/** Trim the padded small-variant rows, a page at a time; returns how many changed. */
 function trimVariants(db: Db): number {
-  const candidates = db
-    .prepare(
-      `SELECT id, pos, ref, alt, variant_type FROM variants
-        WHERE variant_type IN ('snv', 'indel') AND ${trimCandidateSql()}`
-    )
-    .all() as VariantAlleles[]
+  const page = db.prepare(
+    `SELECT id, pos, ref, alt, variant_type FROM variants
+      WHERE id > ? AND variant_type IN ('snv', 'indel') AND ${trimCandidateSql()}
+      ORDER BY id LIMIT ${TRIM_PAGE_SIZE}`
+  )
   const update = db.prepare(
     'UPDATE variants SET pos = ?, ref = ?, alt = ?, variant_type = ? WHERE id = ?'
   )
   let changed = 0
-  for (const row of candidates) {
-    const t = trimVariantRow(row)
-    if (t === null) continue
-    update.run(t.pos, t.ref, t.alt, t.variant_type, t.id)
-    changed++
+  for (let last = 0; ;) {
+    const rows = page.all(last) as VariantAlleles[]
+    if (rows.length === 0) return changed
+    for (const row of rows) {
+      const t = trimVariantRow(row)
+      if (t === null) continue
+      update.run(t.pos, t.ref, t.alt, t.variant_type, t.id)
+      changed++
+    }
+    last = rows[rows.length - 1].id
   }
-  return changed
 }
 
 /** Every annotation (the trimmed keys may already hold one); locus_level only matters for candidates. */
@@ -53,7 +57,7 @@ function annotationRows(db: Db): AnnotationTrimRow[] {
        ) ELSE 0 END AS locus_level
        FROM variant_annotations va`
     )
-    .all() as Array<AnnotationTrimRow & { locus_level: number }>
+    .all() as Array<Omit<AnnotationTrimRow, 'locus_level'> & { locus_level: number }>
   return rows.map((r) => ({ ...r, locus_level: r.locus_level === 1 }))
 }
 

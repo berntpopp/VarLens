@@ -62,6 +62,10 @@ export function isTrimmableVariantType(type: string | null): boolean {
 }
 
 /** The stored type after trimming: an indel that trims to one base each side is an SNV. */
-export function trimmedVariantType<T extends string | null>(type: T, ref: string, alt: string): T | 'snv' {
+export function trimmedVariantType<T extends string | null>(
+  type: T,
+  ref: string,
+  alt: string
+): T | 'snv' {
   return type === 'indel' && ref.length === 1 && alt.length === 1 ? 'snv' : type
 }
