@@ -22,6 +22,8 @@ export interface Standing {
   rho: number
   /** Spearman ρ of all gene scores vs gene disease counts, this case. */
   rhoDiseases: number
+  /** ρ(score, gene term count) over the case's top TOP_RHO_GENES genes only (absent in old runs). */
+  rhoTop100?: number
 }
 
 export interface GeneRankCase {
@@ -32,6 +34,8 @@ export interface GeneRankCase {
   fold: number
   /** OMIM/ORPHA diseases of the causal gene. */
   geneDiseases: number
+  /** Positive HPO terms of the causal gene (absent in old runs). */
+  geneTerms?: number
   present: number
   excluded: number
   keys: number
@@ -89,6 +93,23 @@ export function spearman(xs: Float64Array, yRanks: Float64Array): number {
   return sxy / Math.sqrt(sxx * syy)
 }
 
+/**
+ * Breadth bias where it matters: ρ among the case's top genes, not the 5,000 unrelated ones whose
+ * expected score drives the all-gene ρ (s5 research, §0).
+ */
+export const TOP_RHO_GENES = 100
+
+/** Spearman ρ of scores vs counts over the n best-scored genes (ties by gene order). */
+export function topSpearman(scores: Float64Array, counts: Float64Array, n: number): number {
+  const top = Array.from(scores.keys())
+    .sort((a, b) => (scores[b] > scores[a] ? 1 : scores[b] < scores[a] ? -1 : a - b))
+    .slice(0, n)
+  return spearman(
+    Float64Array.from(top, (i) => scores[i]),
+    averageRanks(Float64Array.from(top, (i) => counts[i]))
+  )
+}
+
 const REPS = 2000
 const SEED = 20261015
 const KS = [1, 10, 50, 100] as const
@@ -105,9 +126,9 @@ const mrr: Stat = (cs, s) =>
 const medianRank: Stat = (cs, s) =>
   median(cs.map((c) => c.scorers[s].higher + 1 + c.scorers[s].equal / 2))
 const meanRho =
-  (key: 'rho' | 'rhoDiseases'): Stat =>
+  (key: 'rho' | 'rhoDiseases' | 'rhoTop100'): Stat =>
   (cs, s) =>
-    mean(cs.map((c) => c.scorers[s][key]).filter(Number.isFinite))
+    mean(cs.map((c) => c.scorers[s][key] ?? Number.NaN).filter(Number.isFinite))
 
 const boot = (cs: GeneRankCase[], s: ScorerId, stat: Stat): Interval =>
   clusterBootstrap(
@@ -225,7 +246,9 @@ function stratum(cases: GeneRankCase[], level: NoiseLevelId, arm: ArmId): string
   const cs = at(cases, level, arm)
   const row = (s: ScorerId, label: string): string => {
     const hits = KS.map((k) => pct(boot(cs, s, hit(k)))).join(' | ')
-    const rhos = `${meanRho('rho')(cs, s).toFixed(2)} | ${meanRho('rhoDiseases')(cs, s).toFixed(2)}`
+    const rhos = (['rho', 'rhoTop100', 'rhoDiseases'] as const)
+      .map((k) => meanRho(k)(cs, s).toFixed(2))
+      .join(' | ')
     return `| ${label} | ${hits} | ${num(boot(cs, s, medianRank), 1)} | ${num(boot(cs, s, mrr), 3)} | ${rhos} |`
   }
   const delta = (stat: Stat): string => pct(pairedDelta(cs, 'v2', cs, 'sprint3', stat))
@@ -234,12 +257,26 @@ function stratum(cases: GeneRankCase[], level: NoiseLevelId, arm: ArmId): string
     const multi = cs.filter((c) => c.geneDiseases >= PLEIOTROPIC_MIN)
     return `${s} ${p(hit(10)(single, s))} (n ${single.length}) vs ${p(hit(10)(multi, s))} (n ${multi.length})`
   }
+  const counts = cs
+    .map((c) => c.geneTerms ?? Number.NaN)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+  const [t1, t2] = [quantile(counts, 1 / 3), quantile(counts, 2 / 3)]
+  const terms = (c: GeneRankCase): number => c.geneTerms ?? Number.NaN
+  const bins = [
+    cs.filter((c) => terms(c) <= t1),
+    cs.filter((c) => terms(c) > t1 && terms(c) <= t2),
+    cs.filter((c) => terms(c) > t2)
+  ]
+  const tertiles = (s: ScorerId): string =>
+    `${s} ` + bins.map((b) => `${p(hit(10)(b, s))} (n ${b.length})`).join(' / ')
   return [
     `### ${level} × ${arm} (${cs.length} cases; median ${median(cs.map((c) => c.present))} present, ` +
       `${median(cs.map((c) => c.excluded))} excluded, ${median(cs.map((c) => c.keys))} key)`,
     '',
-    '| Scorer | Hit@1 % | Hit@10 % | Hit@50 % | Hit@100 % | median rank | MRR | ρ(score, terms) | ρ(score, diseases) |',
-    '|---|---|---|---|---|---|---|---|---|',
+    '| Scorer | Hit@1 % | Hit@10 % | Hit@50 % | Hit@100 % | median rank | MRR | ρ(score, terms) | ' +
+      `ρ top ${TOP_RHO_GENES} (terms) | ρ(score, diseases) |`,
+    '|---|---|---|---|---|---|---|---|---|---|',
     row('v2', '**v2** (under test)'),
     row('sprint3', 'sprint 3 (frozen baseline)'),
     '',
@@ -247,6 +284,8 @@ function stratum(cases: GeneRankCase[], level: NoiseLevelId, arm: ArmId): string
       `Hit@50 ${delta(hit(50))} pp; MRR ${num(pairedDelta(cs, 'v2', cs, 'sprint3', mrr), 3)}.`,
     `Hit@10 single-disease vs pleiotropic (≥ ${PLEIOTROPIC_MIN} diseases) causal genes, %: ` +
       `${pleio('v2')}; ${pleio('sprint3')}.`,
+    `Hit@10 by causal-gene term-count tertile (≤ ${t1.toFixed(0)} / ≤ ${t2.toFixed(0)} / more), %: ` +
+      `${tertiles('v2')}; ${tertiles('sprint3')}.`,
     ''
   ]
 }
@@ -258,6 +297,8 @@ export interface RunInfo {
   genes: number
   /** Genes per fold. */
   foldGenes: number[]
+  /** How parameters were set; default: spec defaults, no tuning. */
+  tuning?: string
 }
 
 export function renderGeneRanking(cases: GeneRankCase[], info: RunInfo): string {
@@ -288,8 +329,9 @@ export function renderGeneRanking(cases: GeneRankCase[], info: RunInfo): string 
     '',
     `Folds: ${info.foldGenes.length} gene-grouped folds over connected gene–disease components;`,
     `genes per fold ${info.foldGenes.join(' / ')}, sampled diseases per fold ${casesPerFold.join(' / ')}.`,
-    '**No tuning in this run:** the spec defaults are evaluated on all folds, so every number here is',
-    'out-of-sample with respect to parameter fitting.',
+    info.tuning ??
+      '**No tuning in this run:** the spec defaults are evaluated on all folds, so every number here is\n' +
+        'out-of-sample with respect to parameter fitting.',
     '',
     '## Ship criteria (spec §5)',
     '',
