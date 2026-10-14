@@ -314,9 +314,7 @@ export class ShortlistService {
           .getCaseHpoTerms(caseId)
           .map((t) => ({ hpoId: t.hpo_id, excluded: t.excluded, key: t.key }))
       : []
-    const hpo = compiled.usesHpoResnik
-      ? openHpoGeneScorer(profile)
-      : null
+    const hpo = compiled.usesHpoResnik ? openHpoGeneScorer(profile) : null
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
       this.stage1.metadata.getCaseMetadata(caseId)?.sex,

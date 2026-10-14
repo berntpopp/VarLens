@@ -172,9 +172,7 @@ export class PostgresShortlistService {
 
     return this.inSnapshot(async (client) => {
       const profile = compiled.usesHpoResnik ? await this.caseHpoProfile(client, caseId) : []
-      const hpo = compiled.usesHpoResnik
-        ? openHpoGeneScorer(profile)
-        : null
+      const hpo = compiled.usesHpoResnik ? openHpoGeneScorer(profile) : null
       const info = await this.caseInfo(client, caseId, hpo)
       const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
       const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
