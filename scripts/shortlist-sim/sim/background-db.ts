@@ -36,7 +36,7 @@ export const alleleClassOf = (ref: string, alt: string): AlleleClass =>
 export const SEX_INFERENCE = { maleMaxHetShare: 0.2, minCalls: 10 } as const
 export type InferredSex = 'male' | 'female' | null
 
-const onChrXNonPar = (r: Pick<MappedVariant, 'chr' | 'pos'>): boolean =>
+export const onChrXNonPar = (r: Pick<MappedVariant, 'chr' | 'pos'>): boolean =>
   normalizeContigName(r.chr) === 'X' && !isInPAR(r.chr, r.pos, 'GRCh38')
 
 export function inferSex(rows: readonly MappedVariant[]): InferredSex {

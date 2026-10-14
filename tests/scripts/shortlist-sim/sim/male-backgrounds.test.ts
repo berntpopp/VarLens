@@ -60,6 +60,22 @@ describe('XL spikes in a male background', () => {
     for (const c of xl) expect(['1/1', '1']).toContain(c.causal[0].row.gt_num)
   })
 
+  it('keeps an XL allele in a PAR diploid (het) in a male background', () => {
+    const par = onChrX(poolSpike('GENE1', { moi: 'XLD' }), 'GENEX', 1_500_000)
+    const benign = [...sources].filter(([, s]) => s.pv.label === 'benign')
+    const parSources = new Map([[par.pv.key, par], ...benign])
+    const parBuild = buildCases(
+      [...parSources.values()].map((s) => s.pv),
+      parSources,
+      [{ info, normKeys: new Set() }],
+      7,
+      SPIKE_OPTIONS
+    )
+    expect(parBuild.cases.find((c) => c.mode === 'XLD')!.causal[0].row.gt_num).toMatch(
+      /0\/1|\.\/1|1\/\./
+    )
+  })
+
   it('still skips XLR in a female background (counted)', () => {
     const female = withChrX(syntheticBackground('female'), FEMALE_GTS)
     const fInfo = describeBackground(female.caseLabel, female.rows)

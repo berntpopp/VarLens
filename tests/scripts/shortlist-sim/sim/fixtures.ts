@@ -75,9 +75,9 @@ export function withChrX(bg: Background, gts: string[]): Background {
   return { ...bg, rows: [...bg.rows, ...rows] }
 }
 
-/** A spike source moved to chrX (outside the PARs). */
-export function onChrX(src: SpikeSource, gene = 'GENEX'): SpikeSource {
-  const pos = 40_500_000 + (src.norm.pos % 100_000)
+/** A spike source moved to chrX (outside the PARs unless `base` is in one). */
+export function onChrX(src: SpikeSource, gene = 'GENEX', base = 40_500_000): SpikeSource {
+  const pos = base + (src.norm.pos % 100_000)
   const key = `X:${pos}:C:G`
   return {
     ...src,

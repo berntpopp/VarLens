@@ -7,7 +7,7 @@
 import { CASE_MODES, type CaseMode, type ConsequenceClass } from '../common/types'
 import { rng, shuffle } from '../common/rng'
 import type { PoolVariant } from '../pool/select-pool'
-import type { BackgroundInfo } from './background-db'
+import { onChrXNonPar, type BackgroundInfo } from './background-db'
 import {
   spikeRow,
   type CaddSource,
@@ -121,7 +121,9 @@ function singleCases(ctx: Ctx, plp: PoolVariant[]): Array<Omit<SimCase, 'decoys'
     }
     if (pv.moi === null) continue
     const mode: CaseMode = pv.moi === 'AR' ? 'AR_HOM' : pv.moi
-    const zyg = mode === 'AR_HOM' ? 'hom' : male && mode.startsWith('XL') ? 'hemi' : 'het'
+    // A PAR allele is diploid in a male too: production keeps PAR calls het/hom.
+    const hemi = male && mode.startsWith('XL') && onChrXNonPar(pv)
+    const zyg = mode === 'AR_HOM' ? 'hom' : hemi ? 'hemi' : 'het'
     const spike = trySpike(ctx, pv, 'causal', zyg, true)
     if (spike === null) continue
     out.push({
