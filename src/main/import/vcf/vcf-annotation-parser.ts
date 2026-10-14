@@ -191,7 +191,9 @@ function parseCsqForAlleles(
     }
   }
 
-  return grouped.map(buildCsqResult)
+  // SV/CNV rows span several genes: a gene they hit beats a MANE one they only flank.
+  const impactFirst = info.has('SVTYPE') || originalAltAlleles.some((alt) => alt.startsWith('<'))
+  return grouped.map((filtered) => buildCsqResult(filtered, impactFirst))
 }
 
 const CSQ_ESCAPE_PATTERN = /%(?:3B|3D|2C|7C|20|25)/gi
@@ -202,14 +204,14 @@ function decodeCsqValue(value: string): string {
   return value.replace(CSQ_ESCAPE_PATTERN, (escape) => VEP_CSQ_VALUE_ESCAPES[escape.toUpperCase()])
 }
 
-function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
+function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
   const transcriptMap = new Map<string, CsqTranscript>()
   for (const t of filtered) {
     const tid = t.fields.get('Feature') ?? ''
     const existing = transcriptMap.get(tid)
-    if (existing === undefined || selectBestTranscript([existing, t]) === 1) {
+    if (existing === undefined || selectBestTranscript([existing, t], impactFirst) === 1) {
       transcriptMap.set(tid, t)
     }
   }
@@ -232,7 +234,7 @@ function buildCsqResult(filtered: CsqTranscript[]): AnnotationResult {
     }
   })
 
-  const bestIdx = selectBestTranscript(filtered)
+  const bestIdx = selectBestTranscript(filtered, impactFirst)
   const bestTid = bestIdx >= 0 ? (filtered[bestIdx].fields.get('Feature') ?? '') : ''
   const bestTranscriptRow = transcripts.find((t) => t.transcript_id === bestTid)
   if (bestTranscriptRow) bestTranscriptRow.is_selected = 1
@@ -488,9 +490,10 @@ function addTarget(targets: Map<string, number[]>, allele: string, targetIndex: 
 
 /**
  * Select the best CSQ transcript using priority:
- * MANE Select > Canonical > highest IMPACT > first protein_coding
+ * MANE Select > Canonical > highest IMPACT > first protein_coding,
+ * or highest IMPACT > named gene > MANE ... when `impactFirst` (SV/CNV rows).
  */
-function selectBestTranscript(transcripts: CsqTranscript[]): number {
+function selectBestTranscript(transcripts: CsqTranscript[], impactFirst: boolean): number {
   if (transcripts.length === 0) return -1
 
   let bestIdx = 0
@@ -507,7 +510,9 @@ function selectBestTranscript(transcripts: CsqTranscript[]): number {
     if (canonical === 'YES') score += 100
 
     const impact = t.fields.get('IMPACT') ?? 'MODIFIER'
-    score += (IMPACT_RANK_BY_LEVEL[impact] ?? 0) * 10
+    score += (IMPACT_RANK_BY_LEVEL[impact] ?? 0) * (impactFirst ? 10_000 : 10)
+    // VEP leaves SYMBOL empty on unnamed transcripts; an SV/CNV row needs a gene.
+    if (impactFirst && (t.fields.get('SYMBOL') ?? '') !== '') score += 5_000
 
     const biotype = t.fields.get('BIOTYPE')
     if (biotype === 'protein_coding') score += 5
