@@ -8,6 +8,7 @@ import type AppDialogHostType from '../components/AppDialogHost.vue'
 import { invalidateServerData } from '../queries/invalidation'
 import { useLiveDataSignal } from './useLiveDataSignal'
 import { leadingTrailingThrottle } from '../utils/leadingTrailingThrottle'
+import { useDatabaseStore } from '../stores/databaseStore'
 
 /** At most one in-place refresh per interval while a batch keeps finishing files. */
 export const LIVE_REFRESH_INTERVAL_MS = 1000
@@ -76,6 +77,13 @@ export function useShellLifecycle({
     await caseListRef.value?.refreshCases()
     dialogHostRef.value?.showSnackbar(`Switched to ${currentDatabaseName.value}`, 'success')
   }
+  // The startup "reopen last database" option (#575) switches without the picker's event.
+  watch(
+    () => useDatabaseStore().reopenedAtStartup,
+    (reopened) => {
+      if (reopened) void handleDatabaseSwitched()
+    }
+  )
 
   const handleImportComplete = async (result: SelectedCaseInput): Promise<void> => {
     void invalidateServerData('data-changed')

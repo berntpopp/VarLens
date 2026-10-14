@@ -114,6 +114,13 @@
           color="primary"
           hide-details
         />
+        <v-switch
+          v-if="localDatabaseFiles"
+          v-model="settings.reopenLastDatabase"
+          label="Reopen last database at startup"
+          color="primary"
+          hide-details
+        />
         <div class="text-caption text-medium-emphasis mt-1">Settings are saved automatically</div>
       </v-card-text>
 
@@ -152,6 +159,7 @@ const importPolicyLabel = computed(
 const importChoiceCount = computed(() => Object.keys(settings.importFieldProfile.fields).length)
 const { canUse } = useCapabilityStore()
 const workerThreadsAvailable = canUse('workerThreads')
+const localDatabaseFiles = canUse('localDatabaseFiles')
 const cpuCount = ref(navigator.hardwareConcurrency || 4)
 
 // Options for the "Default active tab" preference. Label wording matches

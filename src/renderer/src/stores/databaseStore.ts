@@ -20,6 +20,9 @@ import type {
   PostgresConnectionTestResult
 } from '../../../shared/types/postgres-profile'
 import { useCapabilityStore } from './capabilityStore'
+import { useSettingsStore } from './settingsStore'
+import { logService } from '../services/LogService'
+import { formatError } from '../utils/ipc-result'
 
 /** Lazy accessor for window.api -- avoids import-time evaluation */
 function getApi(): WindowAPI {
@@ -65,6 +68,9 @@ export const useDatabaseStore = defineStore('database', () => {
   const capabilities = computed(() => capabilityStore.storage)
   const postgresProfiles = ref<PostgresConnectionProfilePublic[]>([])
   const isTestingPostgres = ref<boolean>(false)
+  /** The startup "reopen last database" option switched databases; the shell refreshes on it. */
+  const reopenedAtStartup = ref<boolean>(false)
+  let startupReopenTried = false
   /** Desktop started (or was left) without a database; revision 0 = info not loaded yet. */
   const noDatabaseOpen = computed(
     () =>
@@ -99,6 +105,32 @@ export const useDatabaseStore = defineStore('database', () => {
     }
     await loadCapabilities()
     await fetchRecent()
+    if (!startupReopenTried) {
+      startupReopenTried = true
+      await reopenLastDatabase()
+    }
+  }
+
+  /**
+   * #575: after the first info load, reopen the database the user last opened.
+   * Only the OS-keyring key is tried (no password is ever passed), so a locked
+   * or missing database just leaves the startup default open — never a prompt.
+   */
+  async function reopenLastDatabase(): Promise<void> {
+    const settings = useSettingsStore()
+    const path = settings.lastDatabasePath
+    if (!settings.reopenLastDatabase || path === null || path === currentPath.value) return
+    if (!capabilityStore.canUse('localDatabaseFiles')) return
+    try {
+      const result = await openDatabase(path)
+      if (result.success) reopenedAtStartup.value = true
+      else {
+        const reason = result.needsPassword === true ? 'needs a password' : (result.error ?? '')
+        logService.info(`Not reopening last database (${reason}); staying on default`, 'database')
+      }
+    } catch (e) {
+      logService.warn('Reopening last database failed: ' + formatError(e), 'database')
+    }
   }
 
   async function fetchRecent(): Promise<void> {
@@ -157,6 +189,7 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const result = unwrapIpcResult(await getApi().database.open(path, password))
       if (result.success && result.info) {
+        useSettingsStore().lastDatabasePath = result.info.path
         applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
@@ -179,6 +212,7 @@ export const useDatabaseStore = defineStore('database', () => {
         await getApi().database.create(path, password, setupPassphrase)
       )
       if (result.success && result.info) {
+        useSettingsStore().lastDatabasePath = result.info.path
         applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
@@ -195,6 +229,8 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const result = unwrapIpcResult(await getApi().database.postgresProfileOpen(profileId))
       if (result.success && result.info) {
+        // ponytail: only local files are reopened at startup; a profile clears the memory.
+        useSettingsStore().lastDatabasePath = null
         applyInfo(result.info)
         await loadCapabilities()
         await fetchRecent()
@@ -277,6 +313,7 @@ export const useDatabaseStore = defineStore('database', () => {
     capabilities,
     postgresProfiles,
     isTestingPostgres,
+    reopenedAtStartup,
     noDatabaseOpen,
     fetchInfo,
     fetchRecent,
