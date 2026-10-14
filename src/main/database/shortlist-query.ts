@@ -107,6 +107,12 @@ export function toShortlistCandidate(row: Variant, isStarred: boolean): Shortlis
 export const SHORTLIST_PAGE_SIZE = 2000
 
 /**
+ * Eligible rows the evidence ranking keeps from pass 1 for pass 2 (~75 MB at
+ * the cap); a case with more re-queries in pass 2 so memory stays bounded.
+ */
+export const SHORTLIST_BUFFER_MAX_ROWS = 50_000
+
+/**
  * Stream every eligible candidate of one variant type to `onPage` in
  * keyset pages of `pageSize` rows (ordered by `variants.id`, only as a
  * deterministic paging key — Stage 2 ranks the rows), preparing panel

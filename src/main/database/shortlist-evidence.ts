@@ -1,7 +1,8 @@
 /**
  * Evidence-rule shortlist ranking (spec §3.3): pass 1 builds the whole-case
  * gene context over every eligible SNV/indel row, pass 2 scores each page with
- * it and merges into the top N with the legacy pins and tie-breakers.
+ * it and merges into the top N with the legacy pins and tie-breakers. Pass 2
+ * reuses pass 1's rows up to `SHORTLIST_BUFFER_MAX_ROWS`, else re-queries.
  *
  * The configuration helpers are shared with the PostgreSQL service so both
  * backends reject the same presets with the same message.
@@ -9,6 +10,7 @@
 import { DatabaseError } from './errors'
 import {
   forEachCandidatePage,
+  SHORTLIST_BUFFER_MAX_ROWS,
   SHORTLIST_PAGE_SIZE,
   type ShortlistQuerySource
 } from './shortlist-query'
@@ -25,7 +27,12 @@ import {
   toLightRow
 } from '../services/scoring/evidence/rank-page'
 import type { VariantFilter } from '../../shared/types/database'
-import type { ScoredCandidate, ShortlistConfig, VariantTypeKey } from '../../shared/types/shortlist'
+import type {
+  ScoredCandidate,
+  ShortlistCandidate,
+  ShortlistConfig,
+  VariantTypeKey
+} from '../../shared/types/shortlist'
 import { DEFAULT_PANEL_GENOME_BUILD } from '../../shared/filters/panel-intervals'
 import type { HpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
 
@@ -90,21 +97,30 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
   try {
     const builder = new GeneContextBuilder(input.info, config.baseFilters.considerPhasing === true)
     let totalCandidates = 0
+    // Pass 1 keeps its pages for pass 2 up to the cap: same snapshot, same rows, one query.
+    let buffered: ShortlistCandidate[][] | null = []
     const queryErrors = eachType(filters, (filter) =>
       forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
         totalCandidates += page.length
         builder.add(page.map(toLightRow))
+        if (buffered !== null && totalCandidates <= SHORTLIST_BUFFER_MAX_ROWS) buffered.push(page)
+        else buffered = null
       })
     )
     if (queryErrors.length > 0) return { kept: [], totalCandidates, queryErrors }
 
     const ctx = builder.build()
     let kept: ScoredCandidate[] = []
+    const scorePage = (page: ShortlistCandidate[]): void => {
+      const scored = scoreEvidencePage(page, ctx, input.compiled, config.rankConfig)
+      kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
+    }
+    if (buffered !== null) {
+      for (const page of buffered) scorePage(page)
+      return { kept, totalCandidates, queryErrors: [] }
+    }
     const pass2Errors = eachType(filters, (filter) =>
-      forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {
-        const scored = scoreEvidencePage(page, ctx, input.compiled, config.rankConfig)
-        kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
-      })
+      forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, scorePage)
     )
     return { kept, totalCandidates, queryErrors: pass2Errors }
   } finally {

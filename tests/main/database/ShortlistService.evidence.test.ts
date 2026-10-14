@@ -20,11 +20,23 @@ import {
   EVIDENCE_RULESET,
   evidenceFixtureRows
 } from '../../fixtures/shortlist/evidence-fixture'
+import { SHORTLIST_PAGE_SIZE } from '../../../src/main/database/shortlist-query'
 
 vi.mock('../../../src/main/services/phenotype/hpo-similarity-db', async (original) => ({
   ...(await original<object>()),
   openHpoGeneScorer: vi.fn(() => null)
 }))
+
+const bufferCap = vi.hoisted(() => ({ rows: null as number | null }))
+vi.mock('../../../src/main/database/shortlist-query', async (original) => {
+  const actual = await original<typeof import('../../../src/main/database/shortlist-query')>()
+  return {
+    ...actual,
+    get SHORTLIST_BUFFER_MAX_ROWS() {
+      return bufferCap.rows ?? actual.SHORTLIST_BUFFER_MAX_ROWS
+    }
+  }
+})
 
 function seed(db: DatabaseType): void {
   db.prepare(
@@ -176,6 +188,22 @@ describe('ShortlistService — evidence ranking', () => {
     expect(all.rows.slice(0, top.rows.length).map((r) => [r.id, r.rank_score])).toEqual(
       top.rows.map((r) => [r.id, r.rank_score])
     )
+  })
+
+  it('ranks identically whether pass 2 reuses the pass-1 rows or re-queries them', () => {
+    const buffered = service.rankCase({ caseId: 1, adHocConfig: EVIDENCE_CONFIG }, () => null, Infinity)
+    bufferCap.rows = 0
+    try {
+      const requeried = service.rankCase(
+        { caseId: 1, adHocConfig: EVIDENCE_CONFIG },
+        () => null,
+        Infinity
+      )
+      expect(requeried.rows.length).toBeGreaterThan(SHORTLIST_PAGE_SIZE)
+      expect(buffered.rows).toEqual(requeried.rows)
+    } finally {
+      bufferCap.rows = null
+    }
   })
 
   it('keeps legacy rows free of evidence fields', () => {
