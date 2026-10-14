@@ -25,7 +25,8 @@ export function toLightRow(row: LightRow): LightRow {
     ref: row.ref,
     alt: row.alt,
     gene_symbol: row.gene_symbol,
-    gt_num: row.gt_num
+    gt_num: row.gt_num,
+    ps: row.ps ?? null
   }
 }
 
@@ -65,7 +66,8 @@ export function scoreEvidencePage(
       rank_starred_pinned: rankConfig.pinStarredTop === true && row.is_starred === true,
       rank_mode: s.mode,
       rank_evidence: s.contributions,
-      rank_partners: s.mode === 'ar_comphet' ? derived.partners : []
+      rank_partners: s.mode === 'ar_comphet' ? derived.partners : [],
+      rank_comphet_phase: s.mode === 'ar_comphet' ? (derived.comphet_phase ?? null) : null
     }
   })
 }

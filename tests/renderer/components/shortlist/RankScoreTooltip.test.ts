@@ -103,5 +103,23 @@ describe('RankScoreTooltip', () => {
       )
       expect(mountEvidence([7, 9]).text()).toContain('(with 2 other variants)')
     })
+
+    it('names the phase proven by a shared phase set (#586)', () => {
+      const withPhase = (phase: 'trans' | 'cis' | 'possible'): string =>
+        mount(RankScoreTooltip, {
+          props: {
+            score: 6.5,
+            components: componentsFixture,
+            pinned: null,
+            evidence,
+            partners: [7],
+            phase
+          },
+          global: { plugins: [vuetify] }
+        }).text()
+      expect(withPhase('trans')).toContain('Confirmed compound heterozygous, in trans by phase set')
+      expect(withPhase('cis')).toContain('In cis by phase set (same haplotype)')
+      expect(withPhase('possible')).toContain('Possible compound heterozygous')
+    })
   })
 })

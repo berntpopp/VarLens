@@ -396,6 +396,7 @@ onKeyStroke(
       :pinned="pinFor(rankTipRow)"
       :evidence="rankTipRow.rank_evidence"
       :partners="rankTipRow.rank_partners"
+      :phase="rankTipRow.rank_comphet_phase"
     />
   </v-tooltip>
 </template>

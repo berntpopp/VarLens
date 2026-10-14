@@ -46,9 +46,11 @@ function bound(text: string, caseId: number, groupId: number): SqlCondition {
 /**
  * Inheritance-mode predicates for the case variant query.
  *
- * NOTE: `filter.consider_phasing` is accepted but not yet implemented.
- * Phasing-aware compound het detection (distinguishing 0|1 from 1|0)
- * will be added when long-read phased VCF import is supported.
+ * `filter.consider_phasing` never changes which rows match (#586): a pair
+ * proven in cis by a shared phase set (src/shared/utils/phasing.ts) is
+ * labelled, not excluded. The label is shown where a compound het is
+ * explained — the evidence shortlist (`rank_comphet_phase`). Trio
+ * compound het already proves trans from the parents.
  *
  * The SQL fragments below are emitted verbatim (including their internal
  * whitespace), so the multi-line template literals deliberately keep the

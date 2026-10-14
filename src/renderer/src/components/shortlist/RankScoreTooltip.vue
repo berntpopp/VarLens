@@ -10,7 +10,8 @@
  *
  * Evidence-ranked rows (`evidence` set) instead list the inheritance mode and
  * each contributing rule with its signed points — they sum to the score —
- * plus a "possible compound heterozygous" note when the row has partners.
+ * plus a compound-heterozygous note when the row has partners: "possible",
+ * or, with phasing considered, "confirmed (in trans)" / "in cis" (#586).
  *
  * Stateless: no composable, no IPC. Composition lives in ShortlistPanel
  * (Wave 5).
@@ -20,6 +21,7 @@
 
 import { computed } from 'vue'
 import type { RankComponents } from '../../../../shared/types/shortlist'
+import type { CompHetPhase } from '../../../../shared/utils/phasing'
 import type { EvidenceContribution } from '../../../../shared/types/evidence-ruleset'
 import { formatPoints, formatRankScore } from '../../utils/formatters'
 
@@ -29,6 +31,7 @@ const props = defineProps<{
   pinned: 'starred' | 'clinvar' | null
   evidence?: EvidenceContribution[]
   partners?: number[]
+  phase?: CompHetPhase | null
 }>()
 
 interface Row {
@@ -59,6 +62,13 @@ const scoreLine = computed(() =>
 
 const partnerCount = computed(() => props.partners?.length ?? 0)
 
+const COMPHET_PHASE_LABELS: Record<CompHetPhase, string> = {
+  trans: 'Confirmed compound heterozygous, in trans by phase set',
+  cis: 'In cis by phase set (same haplotype), not compound heterozygous',
+  possible: 'Possible compound heterozygous'
+}
+const compHetLabel = computed(() => COMPHET_PHASE_LABELS[props.phase ?? 'possible'])
+
 function pinLabel(): string {
   if (props.pinned === 'starred') return 'Pinned: Starred'
   if (props.pinned === 'clinvar') return 'Pinned: ClinVar P/LP'
@@ -77,7 +87,7 @@ function pinLabel(): string {
     <template v-if="evidence != null && partnerCount > 0">
       <v-divider class="my-1" />
       <div class="rank-tooltip__note">
-        Possible compound heterozygous (with {{ partnerCount }} other
+        {{ compHetLabel }} (with {{ partnerCount }} other
         {{ partnerCount === 1 ? 'variant' : 'variants' }})
       </div>
     </template>
