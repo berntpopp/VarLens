@@ -97,6 +97,11 @@
     <BackgroundJobsPanel />
 
     <KeyboardShortcutsDialog v-if="keyboardHelpMounted" v-model="showKeyboardHelp" />
+    <CommandPalette
+      v-if="commandPaletteMounted"
+      v-model="showCommandPalette"
+      :actions="shortcutActions"
+    />
     <ProteinViewHost v-if="proteinViewMounted" />
 
     <ViewTransitionOverlay v-if="transitionOverlayMounted" :model-value="transitioning" />
@@ -123,6 +128,7 @@ import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
 import { filterShortcutCallbacks } from './composables/useFilterShortcutDispatch'
+import type { ShortcutActions } from './config/keyboardShortcuts'
 import { useDatabaseStore } from './stores/databaseStore'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { useCaseMetadata } from './composables/useCaseMetadata'
@@ -159,6 +165,7 @@ const AppDialogHost = defineAsyncComponent(() => import('./components/AppDialogH
 const KeyboardShortcutsDialog = defineAsyncComponent(
   () => import('./components/KeyboardShortcutsDialog.vue')
 )
+const CommandPalette = defineAsyncComponent(() => import('./components/CommandPalette.vue'))
 const ProteinViewHost = defineAsyncComponent(
   () => import('./components/protein/ProteinViewHost.vue')
 )
@@ -218,6 +225,8 @@ const { smAndDown: sidebarIsOverlay } = useDisplay()
 // first paint, which taxed every cold Home load.
 const detailsPanelMounted = useMountOnFirstOpen(() => panelOpen.value)
 const keyboardHelpMounted = useMountOnFirstOpen(() => showKeyboardHelp.value)
+const showCommandPalette = ref(false)
+const commandPaletteMounted = useMountOnFirstOpen(() => showCommandPalette.value)
 const transitionOverlayMounted = useMountOnFirstOpen(() => transitioning.value)
 const proteinViewMounted = useMountOnFirstOpen(() => appState.proteinViewOpen.value)
 
@@ -430,18 +439,22 @@ const handleDatabaseError = (message: string): void => {
   dialogHostRef.value?.showSnackbar(message, 'error')
 }
 
-// Keyboard shortcuts
-useKeyboardShortcuts({
-  onDisclaimer: () => dialogHostRef.value?.showDisclaimer(),
-  onFaq: () => dialogHostRef.value?.showFaq(),
-  onLogViewer: () => dialogHostRef.value?.toggleLogViewer(),
+/** App-wide shortcut actions: bound to their keys and listed by the command palette. */
+const shortcutActions = {
+  disclaimer: () => dialogHostRef.value?.showDisclaimer(),
+  faq: () => dialogHostRef.value?.showFaq(),
+  logViewer: () => dialogHostRef.value?.toggleLogViewer(),
   ...filterShortcutCallbacks(appState),
-  onHelp: () => {
+  help: () => {
     showKeyboardHelp.value = true
   },
+  palette: () => {
+    showCommandPalette.value = true
+  },
   // Viewers are read-only: the shortcut does nothing (the menu item is disabled).
-  onImport: openImportDialog
-})
+  import: openImportDialog
+} satisfies ShortcutActions
+useKeyboardShortcuts(shortcutActions)
 
 const perfModeEnabled = api?.perf?.isEnabled?.() === true
 

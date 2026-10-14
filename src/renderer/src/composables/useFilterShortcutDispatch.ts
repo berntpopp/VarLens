@@ -1,4 +1,5 @@
 import type { AppStateReturn } from './useAppState'
+import type { ShortcutActions } from '../config/keyboardShortcuts'
 
 /** Commands both FilterToolbar (case) and CohortFilterBar (cohort) expose. */
 export interface FilterCommands {
@@ -18,20 +19,17 @@ type DispatchState = Pick<
  * bar of the visible view. A view without a visible filter bar (case Shortlist,
  * cohort Gene Burden, not yet mounted) gets nothing: a hidden bar is never mutated.
  */
-export function filterShortcutCallbacks(state: DispatchState): {
-  onSearchFocus: () => void
-  onToggleFilterDrawer: () => void
-  onToggleColumnsDrawer: () => void
-  onClearAllFilters: () => void
-} {
+export function filterShortcutCallbacks(
+  state: DispatchState
+): Required<Pick<ShortcutActions, 'search' | 'toggleFilters' | 'toggleColumns' | 'clearFilters'>> {
   const target = (): FilterCommands | null => {
     if (state.activeTab.value === 'cohort') return state.cohortViewRef.value?.filterBar ?? null
     return state.caseShortlistActive.value ? null : state.filterToolbarRef.value
   }
   return {
-    onSearchFocus: () => target()?.focusSearch(),
-    onToggleFilterDrawer: () => target()?.toggleFilterDrawer(),
-    onToggleColumnsDrawer: () => target()?.toggleColumnsDrawer(),
-    onClearAllFilters: () => target()?.handleClearAll()
+    search: () => target()?.focusSearch(),
+    toggleFilters: () => target()?.toggleFilterDrawer(),
+    toggleColumns: () => target()?.toggleColumnsDrawer(),
+    clearFilters: () => target()?.handleClearAll()
   }
 }
