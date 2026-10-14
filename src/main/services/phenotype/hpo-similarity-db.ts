@@ -10,7 +10,10 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { existsSync, rmSync, statSync } from 'fs'
 import { HPO_DATA_CONFIG } from '../../../shared/config/hpo-data.config'
 import type { HpoDataStatus } from '../../../shared/types/hpo-data'
-import { HPO_SCORING_CONFIG } from '../../../shared/config/hpo-scoring.config'
+import {
+  HPO_SCORING_CONFIG,
+  type HpoScoringOptions
+} from '../../../shared/config/hpo-scoring.config'
 import type { HpoExplanation, HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import {
   informationContent,
@@ -21,6 +24,8 @@ import {
   type HpoaFrequency
 } from '../../../shared/phenotype/hpo-sources'
 import { buildPhenotypeIndex, type PhenotypeIndex } from '../../../shared/phenotype/phenotype-index'
+import { computeDiseaseNull } from '../../../shared/phenotype/phenotype-null'
+import { nullParams } from '../../../shared/phenotype/phenotype-calibration'
 import {
   explainGene,
   prepareProfile,
@@ -51,7 +56,9 @@ export interface HpoBuildMeta {
 export function buildHpoSimilarityDb(
   sources: HpoSourceTexts,
   meta: HpoBuildMeta,
-  outPath: string
+  outPath: string,
+  /** τ the background null is built for (the benchmark builds one DB per τ arm) */
+  nullTau: number = HPO_SCORING_CONFIG.tau
 ): void {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
@@ -89,6 +96,7 @@ export function buildHpoSimilarityDb(
       CREATE TABLE disease_terms (disease TEXT NOT NULL, term TEXT NOT NULL, f REAL NOT NULL, f_excl REAL NOT NULL, PRIMARY KEY (disease, term)) WITHOUT ROWID;
       CREATE TABLE disease_not (disease TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY (disease, term)) WITHOUT ROWID;
       CREATE TABLE gene_diseases (gene_symbol TEXT NOT NULL, disease TEXT NOT NULL, PRIMARY KEY (gene_symbol, disease)) WITHOUT ROWID;
+      CREATE TABLE disease_null (disease TEXT PRIMARY KEY, mu BLOB NOT NULL, sd BLOB NOT NULL) WITHOUT ROWID;
       CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
     `)
     const insertTerm = db.prepare('INSERT INTO terms VALUES (?, ?, ?)')
@@ -122,9 +130,24 @@ export function buildHpoSimilarityDb(
       insertMeta.run('sources_sha256', JSON.stringify(meta.sha256))
       insertMeta.run('built_at', String(Math.floor(Date.now() / 1000)))
     })()
+    writeDiseaseNull(db, nullTau)
   } finally {
     db.close()
   }
+}
+
+/** Background null of S⁺ per disease (Float32 μ, σ for query sizes 1..nullMaxK), from the built tables. */
+function writeDiseaseNull(db: Database.Database, tau: number): void {
+  const index = readIndex(db)
+  const { mu, sd } = computeDiseaseNull(index, tau)
+  const K = HPO_SCORING_CONFIG.nullMaxK
+  const insert = db.prepare('INSERT INTO disease_null VALUES (?, ?, ?)')
+  const bytes = (a: Float32Array, d: number): Buffer =>
+    Buffer.from(a.buffer, a.byteOffset + d * K * 4, K * 4)
+  db.transaction(() => {
+    index.diseaseIds.forEach((id, d) => insert.run(id, bytes(mu, d), bytes(sd, d)))
+    db.prepare('INSERT INTO meta VALUES (?, ?)').run('null_params', nullParams(tau))
+  })()
 }
 
 function openReadonly(path: string | null): Database.Database | null {
@@ -219,6 +242,32 @@ const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw
  * thread (desktop update) or by an operator (web), so mtime/size is the only
  * signal every reader sees. Null key when the file is missing.
  */
+const float32 = (blob: Buffer): Float32Array =>
+  new Float32Array(blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength))
+
+function readIndex(db: Database.Database): PhenotypeIndex {
+  // Terms with an entry in `parents` or the subtree root are the phenotype subtree.
+  const terms = db
+    .prepare('SELECT id, ic, label FROM terms WHERE id = ? OR id IN (SELECT term FROM parents)')
+    .all(HPO_DATA_CONFIG.phenotypeRoot) as Array<{ id: string; ic: number; label: string }>
+  return buildPhenotypeIndex({
+    terms,
+    edges: rows(db, 'SELECT term, parent FROM parents'),
+    aliases: rows(db, 'SELECT alias, term FROM aliases'),
+    diseases: rows(db, 'SELECT id, label FROM diseases'),
+    diseaseTerms: rows(db, 'SELECT disease, term, f, f_excl FROM disease_terms'),
+    diseaseNot: rows(db, 'SELECT disease, term FROM disease_not'),
+    geneDiseases: rows(db, 'SELECT gene_symbol, disease FROM gene_diseases'),
+    diseaseNull: rows<[string, Buffer, Buffer]>(db, 'SELECT disease, mu, sd FROM disease_null').map(
+      ([d, mu, sd]) => [d, float32(mu), float32(sd)] as const
+    ),
+    nullParams: (
+      db.prepare("SELECT value FROM meta WHERE key = 'null_params'").get() as
+        { value: string } | undefined
+    )?.value
+  })
+}
+
 function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } | null {
   const stat = statSync(path, { throwIfNoEntry: false })
   if (stat === undefined) return null
@@ -231,20 +280,7 @@ function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } 
       mainLogger.warn(`HPO data at ${path} needs an update; hpo_resnik stays null`, 'hpo-data')
       return (cached = { key, index: null })
     }
-    // Terms with an entry in `parents` or the subtree root are the phenotype subtree.
-    const terms = db
-      .prepare('SELECT id, ic, label FROM terms WHERE id = ? OR id IN (SELECT term FROM parents)')
-      .all(HPO_DATA_CONFIG.phenotypeRoot) as Array<{ id: string; ic: number; label: string }>
-    const index = buildPhenotypeIndex({
-      terms,
-      edges: rows(db, 'SELECT term, parent FROM parents'),
-      aliases: rows(db, 'SELECT alias, term FROM aliases'),
-      diseases: rows(db, 'SELECT id, label FROM diseases'),
-      diseaseTerms: rows(db, 'SELECT disease, term, f, f_excl FROM disease_terms'),
-      diseaseNot: rows(db, 'SELECT disease, term FROM disease_not'),
-      geneDiseases: rows(db, 'SELECT gene_symbol, disease FROM gene_diseases')
-    })
-    return (cached = { key, index })
+    return (cached = { key, index: readIndex(db) })
   } finally {
     db.close()
   }
@@ -271,13 +307,18 @@ export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boole
 }
 
 /** Score the profile, or reuse one of the last few results for the same profile. */
-function caseScores(key: string, index: PhenotypeIndex, profile: CaseProfile): CaseScores {
-  const memoKey = `${key}\0${profile.hash}`
+function caseScores(
+  key: string,
+  index: PhenotypeIndex,
+  profile: CaseProfile,
+  options: Partial<HpoScoringOptions>
+): CaseScores {
+  const memoKey = `${key}\0${JSON.stringify(options)}\0${profile.hash}`
   let hit = results.get(memoKey)
   if (hit !== undefined) {
     results.delete(memoKey)
   } else {
-    hit = scoreProfile(index, profile)
+    hit = scoreProfile(index, profile, options)
     if (results.size >= HPO_SCORING_CONFIG.memoisedCases) {
       results.delete(results.keys().next().value as string)
     }
@@ -295,7 +336,9 @@ function caseScores(key: string, index: PhenotypeIndex, profile: CaseProfile): C
  */
 export function openHpoGeneScorer(
   terms: readonly HpoProfileTerm[],
-  path: string | null = resolveHpoDbPath()
+  path: string | null = resolveHpoDbPath(),
+  /** tuning overrides (benchmark); defaults come from HPO_SCORING_CONFIG */
+  options: Partial<HpoScoringOptions> = {}
 ): HpoGeneScorer | null {
   if (terms.length === 0 || path === null) return null
   try {
@@ -303,7 +346,7 @@ export function openHpoGeneScorer(
     const index = loaded?.index ?? null
     const profile = index === null ? null : prepareProfile(index, terms)
     if (loaded === null || index === null || profile === null) return null
-    const scores = caseScores(loaded.key, index, profile)
+    const scores = caseScores(loaded.key, index, profile, options)
     const explained = new Map<number, HpoExplanation>()
     const { genes } = index
     return {

@@ -1,4 +1,26 @@
 /**
+ * Background correction of S⁺ by the disease's score over random profiles (annotation-breadth
+ * bias, spec criterion 3). 'mean': S⁺ ← max(0, (S⁺ − μ)/(1 − μ)), exclusions multiplicative.
+ * 'z': z⁺ = (S⁺ − μ)/σ, error-tolerant exclusion LRs subtracted, gene max corrected for its
+ * disease count; reported through logistic(S/2) so it stays in [0, 1] (ranks unchanged).
+ */
+export type HpoBackgroundCorrection = 'off' | 'mean' | 'z'
+
+/** Per-call overrides of the tunable scoring knobs (the benchmark tunes them on training folds). */
+export interface HpoScoringOptions {
+  correction: HpoBackgroundCorrection
+  tau: number
+  geneMaxPenalty: number
+  lrEpsilon: number
+  lambdaZ: number
+  excludeMinFrequency: number
+  exclusionMode: HpoExclusionMode
+}
+
+/** 'conflictsOnly': excluded terms are explained as conflicts but never lower the score. */
+export type HpoExclusionMode = 'penalty' | 'conflictsOnly'
+
+/**
  * Phenotype scoring v2 constants (spec §3, `.planning/specs/2026-10-14-hpo-phenotype-scoring-v2.md`).
  * Tuned on training folds only; frozen before the test folds are read.
  */
@@ -29,6 +51,37 @@ export const HPO_SCORING_CONFIG = {
   } as Record<string, { f: number; fExcl: number }>,
   /** No frequency: the empirical mean of quantified annotations; weak exclusion penalty. */
   missing: { f: 0.35, fExcl: 0.15 },
+  /** Background correction mode; 'off' until the pre-registered benchmark passes with another. */
+  backgroundCorrection: 'off' as HpoBackgroundCorrection,
+  /** τ: forward weight w·IC(p)^τ, so generic noise terms count less (0 = plain key weights). */
+  tau: 0,
+  /** Null query sizes 1..nullMaxK; larger (effective) profiles use the nullMaxK column. */
+  nullMaxK: 20,
+  /** Random present-only profiles per query size at DB build (build time ∝ this). */
+  nullSamples: 200,
+  /** Fixed seed: the same release always builds the same null. */
+  nullSeed: 0x5eed,
+  /** σ floor = this quantile of σ over all diseases (per size), so sparse diseases cannot inflate z. */
+  sigmaFloorQuantile: 0.05,
+  /** Absolute σ floor, for when that quantile is 0 (a null that never varies must not divide by 0). */
+  sigmaMin: 1e-3,
+  /** c: z-mode gene score = max_d z_d − c·√(2 ln n_d); the max of n noisy z grows that way. */
+  geneMaxPenalty: 0.5,
+  /** ε: z-mode exclusion error rate; caps one excluded term's LR at −ln ε. */
+  lrEpsilon: 0.1,
+  /** λ_z: z-mode weight of the exclusion load. */
+  lambdaZ: 0.5,
+  /**
+   * Penalise an excluded term only where the disease's point frequency f_d(e) is at least this;
+   * above 0, annotations without a recorded frequency never penalise. Real case reports exclude
+   * features of the suspected disease itself (differential checklists), so only near-obligate
+   * features are safe to penalise.
+   */
+  excludeMinFrequency: 0,
+  /** Whether exclusions lower the score or are only reported as conflicts. */
+  exclusionMode: 'penalty' as HpoExclusionMode,
+  /** z mode: load of one disease NOT annotation contradicting a present term, and the load cap. */
+  lrCap: Math.log(20),
   /** Case results kept per process, so shortlist paging / re-sorting never rescores. */
   memoisedCases: 8,
   /** A present term counts as "matched" in the explanation from this relative match r(p, d). */

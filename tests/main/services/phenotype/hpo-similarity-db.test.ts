@@ -16,6 +16,8 @@ import {
   T
 } from '../../../shared/phenotype/hpo-fixture'
 import type { HpoProfileTerm } from '../../../../src/shared/types/hpo-profile'
+import { HPO_SCORING_CONFIG } from '../../../../src/shared/config/hpo-scoring.config'
+import { nullParams } from '../../../../src/shared/phenotype/phenotype-calibration'
 
 const P = (hpoId: string): HpoProfileTerm => ({ hpoId, excluded: false, key: false })
 
@@ -118,6 +120,29 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([P(T.C)], dbPath)?.score('GENE2')).not.toBeNull()
     writeFileSync(dbPath, 'replaced by something unreadable '.repeat(300))
     expect(openHpoGeneScorer([P(T.C)], dbPath)).toBeNull()
+  })
+
+  it('stores a background null per disease and scores in every correction mode', () => {
+    build()
+    const db = new Database(dbPath, { readonly: true })
+    const blobs = db.prepare('SELECT mu, sd FROM disease_null').raw().all() as Array<
+      [Buffer, Buffer]
+    >
+    const params = db.prepare("SELECT value FROM meta WHERE key = 'null_params'").get()
+    db.close()
+    expect(blobs).toHaveLength(3)
+    for (const [mu, sd] of blobs) {
+      expect(mu.byteLength).toBe(HPO_SCORING_CONFIG.nullMaxK * 4)
+      expect(sd.byteLength).toBe(HPO_SCORING_CONFIG.nullMaxK * 4)
+    }
+    expect(params).toEqual({ value: nullParams(HPO_SCORING_CONFIG.tau) })
+    for (const correction of ['off', 'mean', 'z'] as const) {
+      const score = openHpoGeneScorer([P(T.C), P(T.E)], dbPath, { correction })?.score('GENE2')
+      expect(score).toBeGreaterThanOrEqual(0)
+      expect(score).toBeLessThanOrEqual(1)
+    }
+    // A null built for another τ is refused (logged; no scorer) rather than silently misused.
+    expect(openHpoGeneScorer([P(T.C)], dbPath, { correction: 'z', tau: 1 })).toBeNull()
   })
 
   it('prewarms the index without throwing on missing or damaged files', () => {
