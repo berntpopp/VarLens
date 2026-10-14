@@ -266,10 +266,10 @@ async function performSearch(query: string) {
 const { debouncedFn: debouncedSearch } = useDebounce(performSearch, 300)
 
 watch(searchQuery, (query) => {
+  // Drop the old hits at once, so Enter cannot pick one before the new search lands.
+  searchResults.value = []
   if (query && query.length >= 2) {
     debouncedSearch(query)
-  } else {
-    searchResults.value = []
   }
 })
 
