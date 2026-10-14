@@ -7,10 +7,12 @@ import { SCORING_CONFIG } from './scoring-config'
  *
  * Formula:
  *
- *   impact =
- *     str_status === 'pathologic'   → pathologicImpact
- *     str_status === 'intermediate' → intermediateImpact
- *     otherwise                     → normalOrUnknownImpact
+ *   impact (Stranger STR_STATUS vocabulary, stored verbatim at import;
+ *   an unsplit per-allele value like `normal,full_mutation` scores its
+ *   most severe allele) =
+ *     any 'full_mutation' → pathologicImpact
+ *     any 'pre_mutation'  → intermediateImpact
+ *     otherwise           → normalOrUnknownImpact
  *
  *   pathogenicity = knownLocus
  *                     ? knownLocusPathogenicity
@@ -36,12 +38,12 @@ import { SCORING_CONFIG } from './scoring-config'
  */
 export function scoreStr(row: ShortlistCandidate): RankComponents {
   const { str, defaults } = SCORING_CONFIG
-  const statusImpact =
-    row.str_status === 'pathologic'
-      ? str.pathologicImpact
-      : row.str_status === 'intermediate'
-        ? str.intermediateImpact
-        : str.normalOrUnknownImpact
+  const alleles = row.str_status?.split(',') ?? []
+  const statusImpact = alleles.includes('full_mutation')
+    ? str.pathologicImpact
+    : alleles.includes('pre_mutation')
+      ? str.intermediateImpact
+      : str.normalOrUnknownImpact
   const knownLocus = row.str_disease != null && row.str_disease.trim() !== ''
   return {
     impact: statusImpact,

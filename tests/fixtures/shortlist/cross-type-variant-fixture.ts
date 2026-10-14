@@ -252,7 +252,7 @@ export function buildCrossTypeVariantFixture(): ShortlistCandidate[] {
       id: 19,
       variant_type: 'str',
       gene_symbol: 'HTT',
-      str_status: 'pathologic',
+      str_status: 'full_mutation',
       str_disease: "Huntington's disease",
       str_alt_copies: '45'
     })

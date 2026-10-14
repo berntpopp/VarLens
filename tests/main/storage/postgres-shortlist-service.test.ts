@@ -116,7 +116,7 @@ describe('PostgresShortlistService', () => {
       variant_type: 'str',
       consequence: null,
       clinvar: null,
-      _str_status: 'pathologic',
+      _str_status: 'full_mutation',
       _str_disease: 'Huntington disease'
     } as Partial<Variant>)
     const service = new PostgresShortlistService({
@@ -141,6 +141,8 @@ describe('PostgresShortlistService', () => {
       rank_clinvar_pinned: false
     })
     expect(result.rows[0].rank_components.clinvar).toBe(0)
+    // Stranger's full_mutation earns full impact credit.
+    expect(result.rows[0].rank_components.impact).toBe(1)
   })
 
   it('rethrows a refused panel filter as-is and aggregates other failures', async () => {
