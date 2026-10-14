@@ -65,6 +65,9 @@ describe('PostgresOverviewRepository', () => {
           rows: [{ hpo_id: 'HP:0001250', hpo_label: 'Seizure', case_count: '2' }]
         }
       }
+      if (sql.includes('FROM "public"."tags" t')) {
+        return { rows: [{ id: '1', name: 'Reported', color: '#1565C0', usage_count: '3' }] }
+      }
       return { rows: [] }
     })
     const repo = new PostgresOverviewRepository({ query } as never, 'public')
@@ -110,7 +113,7 @@ describe('PostgresOverviewRepository', () => {
           member_count: 2
         }
       ],
-      tags: [],
+      tags: [{ id: 1, name: 'Reported', color: '#1565C0', usage_count: 3 }],
       topPhenotypes: [{ hpo_id: 'HP:0001250', hpo_label: 'Seizure', case_count: 2 }]
     })
   })
