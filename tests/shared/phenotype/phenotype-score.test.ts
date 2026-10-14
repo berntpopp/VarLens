@@ -71,9 +71,12 @@ function toy(
 }
 
 /** Scores of every gene (G_<disease>) for a profile. */
+/** The penalty code paths these hand-computed cases cover (shipped defaults: conflicts only, τ 1). */
+const PENALTY = { exclusionMode: 'penalty', tau: 0 } as const
+
 function scores(input: PhenotypeIndexInput, profile: HpoProfileTerm[]): Record<string, number> {
   const ix = buildPhenotypeIndex(input)
-  const cs = scoreCase(ix, profile)!
+  const cs = scoreCase(ix, profile, PENALTY)!
   return Object.fromEntries([...ix.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
 }
 
@@ -121,6 +124,7 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     expect(ratio).toBeCloseTo(Math.exp(-C.lambda), 12)
     // A NOT on a descendant of the present term does not contradict it.
     const conflictsOnly = scoreCase(buildPhenotypeIndex(input), [P('FEB'), P('HYPO')], {
+      ...PENALTY,
       exclusionMode: 'conflictsOnly'
     })!
     expect(conflictsOnly.geneScore[0]).toBeCloseTo(scores(unaffected, [P('FEB'), P('HYPO')]).d, 12)
@@ -159,7 +163,7 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     })
     const ix = buildPhenotypeIndex(input)
     const run = (o: Parameters<typeof scoreCase>[2]): Record<string, number> => {
-      const cs = scoreCase(ix, [P('FACE'), X('MICRO')], o)!
+      const cs = scoreCase(ix, [P('FACE'), X('MICRO')], { ...PENALTY, ...o })!
       return Object.fromEntries([...ix.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
     }
     const none = run({ exclusionMode: 'conflictsOnly' })
@@ -175,6 +179,30 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     const cs = scoreCase(ix, [P('FACE'), X('MICRO')], { exclusionMode: 'conflictsOnly' })!
     expect(explainGene(ix, cs, ix.genes.get('G_frequent')!).conflicts).toHaveLength(1)
     expect(cs.geneConflicts[ix.genes.get('G_unknown')!]).toBe(1)
+  })
+
+  it('ships conflicts-only exclusions and τ = 1: an excluded term never changes a score', () => {
+    expect(C.exclusionMode).toBe('conflictsOnly')
+    expect(C.tau).toBe(1)
+    expect(C.backgroundCorrection).toBe('off')
+    const input = toy(
+      {
+        d: [
+          ['MICRO', 0.95, 0.8],
+          ['FEB', 0.9, 0.8]
+        ]
+      },
+      [['d', 'SEIZ']]
+    )
+    const ix = buildPhenotypeIndex(input)
+    const plain = scoreCase(ix, [P('FACE')])!
+    const excluded = scoreCase(ix, [P('FACE'), P('FEB'), X('MICRO')])!
+    const withFeb = scoreCase(ix, [P('FACE'), P('FEB')])!
+    expect(excluded.geneScore[0]).toBe(withFeb.geneScore[0])
+    expect(plain.geneScore[0]).toBeGreaterThan(0)
+    expect(explainGene(ix, excluded, 0).conflicts).toEqual([
+      expect.objectContaining({ excludedTerm: 'MICRO', diseaseTerm: 'MICRO' })
+    ])
   })
 
   it('is inactive without a present term', () => {

@@ -53,8 +53,11 @@ export const HPO_SCORING_CONFIG = {
   missing: { f: 0.35, fExcl: 0.15 },
   /** Background correction mode; 'off' until the pre-registered benchmark passes with another. */
   backgroundCorrection: 'off' as HpoBackgroundCorrection,
-  /** τ: forward weight w·IC(p)^τ, so generic noise terms count less (0 = plain key weights). */
-  tau: 0,
+  /**
+   * τ: forward weight w·IC(p)^τ, so generic noise terms count less. 1 was chosen by all 5 outer
+   * folds of the pre-registered real-data tuning (external-tuning.md, 2026-10-14).
+   */
+  tau: 1,
   /** Null query sizes 1..nullMaxK; larger (effective) profiles use the nullMaxK column. */
   nullMaxK: 20,
   /** Random present-only profiles per query size at DB build (build time ∝ this). */
@@ -78,8 +81,12 @@ export const HPO_SCORING_CONFIG = {
    * features are safe to penalise.
    */
   excludeMinFrequency: 0,
-  /** Whether exclusions lower the score or are only reported as conflicts. */
-  exclusionMode: 'penalty' as HpoExclusionMode,
+  /**
+   * Whether exclusions lower the score or are only reported as conflicts. Conflicts only: on real
+   * case reports no penalty mode beat it (exclusions are mostly features of the true disease);
+   * pre-registered real-data tuning, external-tuning.md (2026-10-14).
+   */
+  exclusionMode: 'conflictsOnly' as HpoExclusionMode,
   /** z mode: load of one disease NOT annotation contradicting a present term, and the load cap. */
   lrCap: Math.log(20),
   /** Case results kept per process, so shortlist paging / re-sorting never rescores. */

@@ -136,7 +136,7 @@ describe('hpo_similarity.db', () => {
       { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
       { release: 'v2026-09-01', sha256: {} },
       dbPath,
-      HPO_SCORING_CONFIG.tau
+      0
     )
     const db = new Database(dbPath, { readonly: true })
     const blobs = db.prepare('SELECT mu, sd FROM disease_null').raw().all() as Array<
@@ -149,9 +149,11 @@ describe('hpo_similarity.db', () => {
       expect(mu.byteLength).toBe(HPO_SCORING_CONFIG.nullMaxK * 4)
       expect(sd.byteLength).toBe(HPO_SCORING_CONFIG.nullMaxK * 4)
     }
-    expect(params).toEqual({ value: nullParams(HPO_SCORING_CONFIG.tau) })
+    expect(params).toEqual({ value: nullParams(0) })
     for (const correction of ['off', 'mean', 'z'] as const) {
-      const score = openHpoGeneScorer([P(T.C), P(T.E)], dbPath, { correction })?.score('GENE2')
+      const score = openHpoGeneScorer([P(T.C), P(T.E)], dbPath, { correction, tau: 0 })?.score(
+        'GENE2'
+      )
       expect(score).toBeGreaterThanOrEqual(0)
       expect(score).toBeLessThanOrEqual(1)
     }
@@ -170,7 +172,7 @@ describe('hpo_similarity.db', () => {
   it('has no scorer without patient terms or data', () => {
     build()
     expect(openHpoGeneScorer([], dbPath)).toBeNull()
-    expect(openHpoGeneScorer([T.C], join(dir, 'missing.db'))).toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], join(dir, 'missing.db'))).toBeNull()
   })
 
   it('treats a damaged file as "needs update" and scores nothing, without throwing', () => {

@@ -25,6 +25,7 @@ const HAS_DATA = existsSync(join(RAW, 'phenotype.hpoa'))
 
 const P = (hpoId: string): HpoProfileTerm => ({ hpoId, excluded: false, key: false })
 const X = (hpoId: string): HpoProfileTerm => ({ hpoId, excluded: true, key: false })
+const PENALTY = { exclusionMode: 'penalty', tau: 0 } as const
 const MICROCEPHALY = 'HP:0000252'
 // Febrile seizure, bilateral tonic-clonic seizure, developmental regression, hypotonia,
 // multifocal epileptiform discharges.
@@ -51,8 +52,9 @@ describe.skipIf(!HAS_DATA)('phenotype score v2 on the real HPO release', () => {
   afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
   it('excluding microcephaly demotes ORPHA:293181 but keeps SCN1A via Dravet syndrome', () => {
-    const before = openHpoGeneScorer(DRAVET_LIKE, dbPath)!
-    const after = openHpoGeneScorer([...DRAVET_LIKE, X(MICROCEPHALY)], dbPath)!
+    // The penalty mode (shipped default: conflicts only, see the test below).
+    const before = openHpoGeneScorer(DRAVET_LIKE, dbPath, PENALTY)!
+    const after = openHpoGeneScorer([...DRAVET_LIKE, X(MICROCEPHALY)], dbPath, PENALTY)!
     expect(before.bestDisease('SCN1A')).toBe('ORPHA:293181')
     expect(before.explain('SCN1A')!.conflicts).toEqual([])
 
@@ -62,8 +64,15 @@ describe.skipIf(!HAS_DATA)('phenotype score v2 on the real HPO release', () => {
     // ORPHA:293181 itself: microcephaly is "frequent" there (f_excl 0.3) → penalised.
     const ix = loadPhenotypeIndex(dbPath)!
     const d = ix.diseaseIds.indexOf('ORPHA:293181')
-    const plain = scoreCase(ix, DRAVET_LIKE)!.diseaseScore[d]
-    const excluded = scoreCase(ix, [...DRAVET_LIKE, X(MICROCEPHALY)])!.diseaseScore[d]
+    const plain = scoreCase(ix, DRAVET_LIKE, PENALTY)!.diseaseScore[d]
+    const excluded = scoreCase(ix, [...DRAVET_LIKE, X(MICROCEPHALY)], PENALTY)!.diseaseScore[d]
     expect(excluded).toBeLessThanOrEqual(plain * Math.exp(-HPO_SCORING_CONFIG.lambda * 0.29))
+  })
+
+  it('with the shipped defaults, excluding microcephaly only adds a conflict to explain()', () => {
+    const before = openHpoGeneScorer(DRAVET_LIKE, dbPath)!
+    const after = openHpoGeneScorer([...DRAVET_LIKE, X(MICROCEPHALY)], dbPath)!
+    expect(after.score('SCN1A')).toBe(before.score('SCN1A'))
+    expect(after.bestDisease('SCN1A')).toBe(before.bestDisease('SCN1A'))
   })
 })
