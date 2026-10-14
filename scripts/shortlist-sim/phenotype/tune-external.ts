@@ -2,7 +2,9 @@
  * Nested cross-validated tuning of the v2 phenotype scorer on phenopacket-store (#600), following
  * the pre-registered protocol `.planning/artifacts/shortlist-sim/2026-10-14-hpo-v2/external-tuning.md`:
  *
- *   npx jiti scripts/shortlist-sim/phenotype/tune-external.ts --release <tag> --run <name>
+ *   npx jiti scripts/shortlist-sim/phenotype/tune-external.ts --release <tag> --run <name> [--sample N]
+ *
+ * `--sample N` keeps every ⌈cases / N⌉-th case (smoke test only; not the protocol).
  *
  * Cases as in external-phenopackets.ts. Every setting is scored through the production scorer
  * (`scoreCase` with option overrides); standings are computed once per setting over all cases
@@ -120,6 +122,10 @@ function render(cases: TuneCase[], folds: GreedyResult[], frozen: GreedyResult):
     '',
     `**Decision: ${nonInferior && ahead ? 'SHIP the chosen setting' : 'NO SHIP'}.** Frozen setting ` +
       `(greedy on all cases): ${formatOverrides(frozen.chosen)}.`,
+    frozen.chosen.exclusionMode === 'conflictsOnly'
+      ? 'No scored exclusion mode beat conflicts-only on the training folds: per protocol, excluded ' +
+        'terms are shown as conflicts and not scored.'
+      : '',
     '',
     '| Outer fold | chosen on the other four | training Hit@10 % |',
     '|---|---|---|',
@@ -146,6 +152,7 @@ function main(argv: string[]): void {
   const release = argv.includes('--release') ? argv[argv.indexOf('--release') + 1] : undefined
   if (release === undefined || !/^[\w.-]+$/.test(release)) throw new Error('--release <tag>')
   const { outDir } = runArgs(argv)
+  const sample = argv.includes('--sample') ? Number(argv[argv.indexOf('--sample') + 1]) : Infinity
   const storeDir = join(DATA_DIR, 'external', 'phenopacket-store', release)
   const hpoa = readFileSync(join(HPO_RAW_DIR, 'phenotype.hpoa'), 'utf8')
   const g2p = readFileSync(join(HPO_RAW_DIR, 'genes_to_phenotype.txt'), 'utf8')
@@ -175,6 +182,7 @@ function main(argv: string[]): void {
     .sort()
     .map((f) => parsePhenopacket(JSON.parse(readFileSync(f, 'utf8'))))
     .flatMap((c) => (c === null || !geneIndex.has(c.gene) ? [] : [c]))
+    .filter((_, i, all) => i % Math.ceil(all.length / sample) === 0)
   const foldOf = geneFolds(
     raw.map((c) => c.gene),
     FOLDS,
