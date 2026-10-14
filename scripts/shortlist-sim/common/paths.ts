@@ -16,6 +16,9 @@ export const POOL_FILE = join(DATA_DIR, 'pool', 'pool.json')
 export const POOL_NORMALIZED_FILE = join(DATA_DIR, 'pool', 'pool-normalized.json')
 export const POOL_LOCAL_VEP_FILE = join(CACHE_DIR, 'pool-local-vep.json')
 export const RUNS_DIR = join(DATA_DIR, 'runs')
+/** `npm run build:hpo-db -- --out <HPO_DB>` plus the same release's raw files in HPO_RAW_DIR. */
+export const HPO_DB = join(CACHE_DIR, 'hpo', 'hpo_similarity.db')
+export const HPO_RAW_DIR = join(CACHE_DIR, 'hpo', 'raw-v2026-09-01')
 
 export const BACKGROUND_DIR =
   process.env.VARLENS_SIM_BACKGROUND_DIR ?? '/run/media/bernt-popp/1819-E513/immunology_cases'
