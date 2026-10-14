@@ -64,6 +64,23 @@ describe('CommandPalette', () => {
     expect(document.activeElement).toBe(opener)
   })
 
+  it('Tab never runs a command; Enter runs the first match', async () => {
+    const faq = vi.fn()
+    await mountPalette({ help: vi.fn(), faq })
+    const input = document.body.querySelector('input')!
+    input.value = SHORTCUTS.faq.description
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    await flushPromises()
+    expect(faq).not.toHaveBeenCalled()
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(faq).toHaveBeenCalledTimes(1)
+  })
+
   it('closes on Escape', async () => {
     const wrapper = await mountPalette({ help: vi.fn() })
     document.body

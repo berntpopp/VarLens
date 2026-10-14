@@ -1,6 +1,9 @@
 <template>
   <v-dialog v-model="model" max-width="560" aria-label="Command palette">
-    <v-card>
+    <!-- Swallow Tab before VAutocomplete sees it: with auto-select-first it would run the
+         highlighted command. The input is the dialog's only control, so the focus trap would
+         keep focus there anyway. -->
+    <v-card @keydown.tab.capture.stop.prevent>
       <v-autocomplete
         ref="inputRef"
         v-model:menu="menuOpen"
@@ -47,7 +50,9 @@ import {
 const props = defineProps<{ actions: ShortcutActions }>()
 const model = defineModel<boolean>({ default: false })
 const menuOpen = ref(false)
-// Named, focusable listbox: axe flags an unnamed list and a scrollable region keyboards cannot reach.
+// Named, focusable listbox: axe flags an unnamed list and a scrollable region keyboards cannot
+// reach (VAutocomplete moves real focus into options, no aria-activedescendant). Not an extra
+// Tab stop: Tab is swallowed in the input above.
 const LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Commands', tabindex: 0 }
 // Autofocus is ignored while the page already has focus: focus by hand, before the
 // enter transition ends, so keys typed right after Ctrl+K are not lost.
