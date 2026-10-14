@@ -18,8 +18,9 @@ Ranks are tie-averaged; intervals are 95 % percentile bootstrap over diseases (2
 
 Folds: 5 gene-grouped folds over connected gene–disease components;
 genes per fold 2002 / 817 / 817 / 816 / 816, sampled diseases per fold 426 / 137 / 141 / 139 / 157.
-**No tuning in this run:** the spec defaults are evaluated on all folds, so every number here is
-out-of-sample with respect to parameter fitting.
+**Scorer options (resolved):** correction = off, tau = 1, geneMaxPenalty = 0.5, lrEpsilon = 0.1, lambdaZ = 0.5, excludeMinFrequency = 0, exclusionMode = conflictsOnly. Source: the shipped defaults in src/shared/config/hpo-scoring.config.ts (τ, correction
+and exclusion mode chosen by the real-data tuning, external-tuning.md).
+Nothing is fitted on these simulated cases, so every number here is out-of-sample.
 
 ## Ship criteria (spec §5)
 
@@ -34,7 +35,7 @@ out-of-sample with respect to parameter fitting.
 | 4. clean: Hit@50 drop E1 → E2 (pp) | 0.0 [0.0, 0.0] | ≤ 2.0 (point estimate) | PASS |
 | 4. moderate: Hit@50 drop E1 → E2 (pp) | 0.0 [0.0, 0.0] | ≤ 2.0 (point estimate) | PASS |
 | 4. noisy: Hit@50 drop E1 → E2 (pp) | 1.2 [0.4, 2.0] | ≤ 2.0 (point estimate) | PASS |
-| 5. p95 latency per case, all genes (ms) | 4.0 | ≤ 8 | PASS |
+| 5. p95 latency per case, all genes (ms) | 3.8 | ≤ 8 | PASS |
 
 **Verdict: NO SHIP.**
 
@@ -143,6 +144,6 @@ Paired Δ v2 − sprint 3: Hit@1 26.0 [23.1, 28.7]; Hit@10 30.5 [27.4, 33.7]; Hi
 Hit@10 single-disease vs pleiotropic (≥ 2 diseases) causal genes, %: v2 54.0 (n 187) vs 62.4 (n 813); sprint3 42.7 (n 187) vs 27.4 (n 813).
 Hit@10 by causal-gene term-count tertile (≤ 35 / ≤ 79 / more), %: v2 64.6 (n 338) / 59.5 (n 330) / 58.4 (n 332); sprint3 44.9 (n 338) / 22.1 (n 330) / 23.5 (n 332).
 
-Scorer-under-test runtime per case (all genes): median 3.0 ms, p95 4.0 ms (the first case includes the index load).
+Scorer-under-test runtime per case (all genes): median 3.0 ms, p95 3.8 ms (the first case includes the index load).
 
-Run: frozen real-data setting `--options {"tau":1,"correction":"off","exclusionMode":"conflictsOnly"}` (external-tuning.md), DB `hpo_similarity.tau-1.db`; feat/hpo2-bench `81bf9262`. Secondary evidence only.
+Run: shipped defaults (no `--options`), builder-v5 DB `hpo_similarity.tau-1.db`; fix/hpo2-bench `2506e698` (scorer + builder v5 at `f0674af6`). Secondary evidence only. Accuracy numbers equal the builder-v4 run (`81bf9262`) to 0.1 pp; only latency moved.
