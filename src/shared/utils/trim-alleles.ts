@@ -51,3 +51,17 @@ export function trimAlleles(pos: number, ref: string, alt: string): TrimmedAllel
     alt: alt.slice(start, alt.length - end)
   }
 }
+
+/**
+ * Small variants are trimmed; SV/CNV/STR records keep their alleles, since
+ * their identity is the locus (POS..END), not the sequence. Shared by the VCF
+ * import and the v57 / PG 0040 migration so both decide alike.
+ */
+export function isTrimmableVariantType(type: string | null): boolean {
+  return type === 'snv' || type === 'indel'
+}
+
+/** The stored type after trimming: an indel that trims to one base each side is an SNV. */
+export function trimmedVariantType<T extends string | null>(type: T, ref: string, alt: string): T | 'snv' {
+  return type === 'indel' && ref.length === 1 && alt.length === 1 ? 'snv' : type
+}

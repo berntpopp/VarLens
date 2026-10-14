@@ -26,7 +26,11 @@ import {
   CSQ_COLUMN_FIELDS
 } from '../../../shared/config/import-fields.config'
 import { FieldProfileResolver } from '../../../shared/utils/import-field-profile'
-import { trimAlleles } from '../../../shared/utils/trim-alleles'
+import {
+  isTrimmableVariantType,
+  trimAlleles,
+  trimmedVariantType
+} from '../../../shared/utils/trim-alleles'
 
 const MAX_VCF_EXPANDED_RECORD_BYTES = 64 * 1024 * 1024
 const MAX_VCF_ALLELE_EXPANSION_WORK = 1_000_000
@@ -164,7 +168,11 @@ export function mapVcfRecord(
 
     // Step 6: Assemble the mapped variant. Trimmed only now: the split keeps the
     // full REF (`ATT>A,AT` → `ATT>AT`) and CSQ/ANN matching needs the untrimmed ALT.
-    const { pos, ref, alt } = trimAlleles(rec.pos, rec.ref, altAllele)
+    // SV/CNV/STR records keep theirs: their identity is the locus (POS..END).
+    const recordType = detectVariantType(rec.ref, altAllele, rec.info, callerName)
+    const { pos, ref, alt } = isTrimmableVariantType(recordType)
+      ? trimAlleles(rec.pos, rec.ref, altAllele)
+      : { pos: rec.pos, ref: rec.ref, alt: altAllele }
     const mapped: VcfMappedVariant = {
       chr: rec.chrom,
       pos,
@@ -198,7 +206,7 @@ export function mapVcfRecord(
       info_json: vcfInfoJson(fields, header, infoResult.infoJson, annotation),
       source_format: 'vcf',
       _transcripts: annotation.transcripts.length > 0 ? annotation.transcripts : undefined,
-      variant_type: detectVariantType(ref, alt, rec.info, callerName),
+      variant_type: trimmedVariantType(recordType, ref, alt),
       end_pos: parseIntOrNull(rec.info.get('END')),
       sv_type: rec.info.get('SVTYPE') ?? null,
       sv_length: parseIntOrNull(rec.info.get('SVLEN')),

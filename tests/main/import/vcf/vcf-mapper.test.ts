@@ -380,6 +380,29 @@ describe('VcfMapper', () => {
     expect(JSON.parse(v.info_json!)['AF']).toBe('0.1')
   })
 
+  it.each([
+    // [ref, alt, info] → stored [pos, ref, alt, variant_type] (#587)
+    ['ACG', 'ATG', [], [101, 'C', 'T', 'snv']], // padded SNV trims to an SNV
+    ['CAGCAACAG', 'CAGCAGCAG', [['SVTYPE', 'STR']], [100, 'CAGCAACAG', 'CAGCAGCAG', 'str']],
+    ['ACGTACGT', 'AT', [['SVTYPE', 'DEL']], [100, 'ACGTACGT', 'AT', 'sv']]
+  ] as const)('trims %s>%s only when it is a small variant', (ref, alt, info, expected) => {
+    const record: VcfRawRecord = {
+      chrom: 'chr22',
+      pos: 100,
+      id: null,
+      ref,
+      alt: [alt],
+      qual: 50,
+      filter: 'PASS',
+      info: new Map(info.map(([k, v]) => [k, v])),
+      format: ['GT'],
+      samples: new Map([['HG005', ['0/1']]])
+    }
+    const noCsq: VcfHeader = { ...header, annotationType: 'none', csqFields: null }
+    const [v] = mapVcfRecord(record, noCsq, 'HG005', DEFAULT_INFO_FIELD_MAPPINGS)
+    expect([v.pos, v.ref, v.alt, v.variant_type]).toEqual(expected)
+  })
+
   it('rejects structural ALT fanout before expanded INFO output can exhaust memory', () => {
     const alt = Array.from({ length: 1_000 }, (_, index) => `<DEL:${index}>`)
     const record: VcfRawRecord = {
