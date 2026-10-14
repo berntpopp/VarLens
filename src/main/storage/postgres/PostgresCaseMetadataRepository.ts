@@ -6,6 +6,8 @@ import type {
   FullCaseMetadataResult,
   MetadataUpdates
 } from '../case-metadata-types'
+import type { HpoTermFlags } from '../../../shared/types/hpo-profile'
+import { resolveHpoTermFlags } from '../../../shared/utils/hpo-term-flags'
 import { quoteIdentifier } from './identifiers'
 import { withTransaction } from './transaction'
 
@@ -218,15 +220,27 @@ export class PostgresCaseMetadataRepository {
     return allNormalized(result)
   }
 
-  async assignCaseHpoTerm(caseId: number, hpoId: string, hpoLabel: string): Promise<unknown> {
+  /** Upsert; flag semantics as MetadataRepository.assignCaseHpoTerm (SQLite twin). */
+  async assignCaseHpoTerm(
+    caseId: number,
+    hpoId: string,
+    hpoLabel: string,
+    flags?: HpoTermFlags
+  ): Promise<unknown> {
+    const status = flags === undefined ? null : resolveHpoTermFlags(flags)
+    // $5/$6 NULL = no flags given: insert as present, keep an existing row's status.
     const result = await this.pool.query<Row>(
       `
-        INSERT INTO ${this.table('case_hpo_terms')} (case_id, hpo_id, hpo_label, created_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (case_id, hpo_id) DO UPDATE SET hpo_label = EXCLUDED.hpo_label
+        INSERT INTO ${this.table('case_hpo_terms')} AS t
+          (case_id, hpo_id, hpo_label, created_at, excluded, "key")
+        VALUES ($1, $2, $3, $4, COALESCE($5::boolean, FALSE), COALESCE($6::boolean, FALSE))
+        ON CONFLICT (case_id, hpo_id) DO UPDATE SET
+          hpo_label = EXCLUDED.hpo_label,
+          excluded = COALESCE($5::boolean, t.excluded),
+          "key" = COALESCE($6::boolean, t."key")
         RETURNING *
       `,
-      [caseId, hpoId, hpoLabel, Date.now()]
+      [caseId, hpoId, hpoLabel, Date.now(), status?.excluded ?? null, status?.key ?? null]
     )
     return firstNormalized(result)
   }
@@ -369,6 +383,7 @@ export class PostgresCaseMetadataRepository {
       `
         SELECT hpo_id, MIN(hpo_label) AS hpo_label
         FROM ${this.table('case_hpo_terms')}
+        WHERE NOT excluded
         GROUP BY hpo_id
         ORDER BY hpo_label
       `,

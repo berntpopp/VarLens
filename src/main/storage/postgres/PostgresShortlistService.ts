@@ -29,6 +29,7 @@ import { GeneContextBuilder } from '../../services/scoring/evidence'
 import { scoreEvidencePage, toLightRow } from '../../services/scoring/evidence/rank-page'
 import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
+import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresExportRepository } from './PostgresExportRepository'
@@ -166,8 +167,10 @@ export class PostgresShortlistService {
     if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     return this.inSnapshot(async (client) => {
+      const profile = compiled.usesHpoResnik ? await this.caseHpoProfile(client, caseId) : []
+      // hpo2: scorer lane switches to HpoProfileTerm[]
       const hpo = compiled.usesHpoResnik
-        ? openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
+        ? openHpoGeneScorer(profile.filter((t) => !t.excluded).map((t) => t.hpoId))
         : null
       const info = await this.caseInfo(client, caseId, hpo)
       const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
@@ -234,12 +237,13 @@ export class PostgresShortlistService {
     }
   }
 
-  private async caseHpoTerms(client: Queryable, caseId: number): Promise<string[]> {
-    const result = await client.query<{ hpo_id: string }>(
-      `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1 ORDER BY hpo_id`,
+  private async caseHpoProfile(client: Queryable, caseId: number): Promise<HpoProfileTerm[]> {
+    const result = await client.query<HpoProfileTerm>(
+      `SELECT hpo_id AS "hpoId", excluded, "key" FROM ${this.schemaName}."case_hpo_terms"
+        WHERE case_id = $1 ORDER BY hpo_id`,
       [caseId]
     )
-    return result.rows.map((r) => r.hpo_id)
+    return result.rows
   }
 
   private async caseInfo(

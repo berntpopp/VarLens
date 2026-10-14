@@ -149,11 +149,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         return await this.caseMetadata.setCaseCohorts(task.params[0], task.params[1])
 
       case 'case-metadata:assignHpoTerm':
-        return await this.caseMetadata.assignCaseHpoTerm(
-          task.params[0],
-          task.params[1],
-          task.params[2]
-        )
+        return await this.caseMetadata.assignCaseHpoTerm(...task.params)
 
       case 'case-metadata:removeHpoTerm':
         return await this.caseMetadata.removeCaseHpoTerm(task.params[0], task.params[1])

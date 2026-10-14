@@ -48,6 +48,7 @@ export class DatabaseOverviewService extends BaseRepository {
     const topPhenotypesCompiled = sql<OverviewPhenotype>`
       SELECT hpo_id, hpo_label, COUNT(DISTINCT case_id) as case_count
       FROM case_hpo_terms
+      WHERE excluded = 0
       GROUP BY hpo_id, hpo_label
       ORDER BY case_count DESC
       LIMIT 25

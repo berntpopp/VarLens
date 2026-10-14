@@ -248,11 +248,12 @@ export class CaseRepository extends BaseRepository {
       whereParams.push(...cohort_ids)
     }
 
-    // HPO term filter
+    // HPO term filter: present terms only, an excluded term is a finding's absence
     if (hpo_ids !== undefined && hpo_ids.length > 0) {
       const placeholders = sqlPlaceholders(hpo_ids.length)
       whereClauses.push(
-        `c.id IN (SELECT case_id FROM case_hpo_terms WHERE hpo_id IN (${placeholders}))`
+        `c.id IN (SELECT case_id FROM case_hpo_terms
+                   WHERE excluded = 0 AND hpo_id IN (${placeholders}))`
       )
       whereParams.push(...hpo_ids)
     }

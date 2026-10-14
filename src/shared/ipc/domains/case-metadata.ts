@@ -31,7 +31,7 @@ export interface CaseMetadataDomainContract {
     caseId: number,
     hpoId: string,
     hpoLabel: string,
-    // hpo2: optional flags added by the ui lane; the data lane forwards them in preload/handler.
+    /** Sets the term's status (upsert); omitted: new terms are present, existing keep theirs. */
     flags?: HpoTermFlags
   ) => Promise<IpcResult<CaseHpoTerm>>
   removeHpoTerm: (caseId: number, hpoId: string) => Promise<IpcResult<void>>

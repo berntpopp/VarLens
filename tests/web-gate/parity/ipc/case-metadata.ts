@@ -8,6 +8,18 @@ export const caseMetadataScenario: IpcScenario = {
       { affected_status: 'affected', sex: 'female', notes: 'IPC parity clinical note', age: 42 }
     ]),
     await ctx.call('caseMetadata', 'assignHpoTerm', [ctx.primaryCaseId, 'HP:0001250', 'Seizure']),
+    await ctx.call('caseMetadata', 'assignHpoTerm', [
+      ctx.primaryCaseId,
+      'HP:0000252',
+      'Microcephaly',
+      { excluded: true, key: true }
+    ]),
+    await ctx.call('caseMetadata', 'assignHpoTerm', [
+      ctx.primaryCaseId,
+      'HP:0001250',
+      'Seizure',
+      { key: true }
+    ]),
     await ctx.call('caseMetadata', 'upsertDataInfo', [
       ctx.primaryCaseId,
       { platform: 'genome', platform_details: 'synthetic IPC parity fixture' }

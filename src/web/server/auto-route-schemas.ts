@@ -19,6 +19,7 @@ import {
   DataInfoUpsertSchema,
   ExternalIdUpsertSchema,
   HpoTermAssignSchema,
+  HpoTermFlagsSchema,
   MetadataUpsertSchema
 } from '../../shared/api/schemas/case-metadata'
 import { CaseMetricInvokeBodySchemas } from '../../shared/api/schemas/case-metrics'
@@ -83,7 +84,9 @@ export const AUTO_ROUTE_ARG_SCHEMAS: Readonly<Record<string, z.ZodType<unknown[]
   'case-metadata:assignHpoTerm': z.tuple([
     id,
     HpoTermAssignSchema.shape.hpoId,
-    HpoTermAssignSchema.shape.hpoLabel
+    HpoTermAssignSchema.shape.hpoLabel,
+    // Absent or JSON `null`: no flags, so an existing term keeps its status.
+    HpoTermFlagsSchema.nullish().transform((flags) => flags ?? undefined)
   ]),
   'case-metadata:removeHpoTerm': z.tuple([id, HpoTermAssignSchema.shape.hpoId]),
   'case-metadata:upsertDataInfo': z.tuple([id, DataInfoUpsertSchema]),
