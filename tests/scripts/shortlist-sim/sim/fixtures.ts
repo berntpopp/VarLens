@@ -48,6 +48,44 @@ export function syntheticBackground(label = 'bg1'): Background {
   return { caseLabel: label, rows, skipped: 0 }
 }
 
+/** `bg` plus one chrX non-PAR row per genotype in gene `GENEX` (sex-inference fixtures). */
+export function withChrX(bg: Background, gts: string[]): Background {
+  const rows = gts.map((gt, j) =>
+    mapVarvisObject({
+      chr: 'X',
+      pos: 40_000_000 + j * 100,
+      ref: 'A',
+      alt: 'G',
+      gene_symbol: 'GENEX',
+      omim_mim_number: '300000',
+      consequence: 'LOW',
+      gnomad_af: 0.001,
+      cadd: 10,
+      clinvar: null,
+      gt_num: gt,
+      func: 'synonymous_variant',
+      qual: 50,
+      hpo_sim_score: 0.5,
+      transcript: 'NM_SYNX.1',
+      cdna: null,
+      aa_change: null,
+      moi: [{ abbreviation: 'XLR' }]
+    } as never)
+  )
+  return { ...bg, rows: [...bg.rows, ...rows] }
+}
+
+/** A spike source moved to chrX (outside the PARs unless `base` is in one). */
+export function onChrX(src: SpikeSource, gene = 'GENEX', base = 40_500_000): SpikeSource {
+  const pos = base + (src.norm.pos % 100_000)
+  const key = `X:${pos}:C:G`
+  return {
+    ...src,
+    pv: { ...src.pv, gene, chr: 'X', pos, key },
+    norm: { ...src.norm, chr: 'X', pos, key, input: key }
+  }
+}
+
 export const SPIKE_OPTIONS: SpikeOptions = {
   afField: 'joint',
   funcMapping: [

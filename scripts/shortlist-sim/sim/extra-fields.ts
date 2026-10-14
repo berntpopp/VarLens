@@ -60,7 +60,7 @@ async function tabixLines(
   file: string,
   keys: string[],
   tmp: string,
-  parallel = 4
+  parallel = 8
 ): Promise<string[]> {
   const byChr = new Map<string, Set<string>>()
   for (const k of keys) {

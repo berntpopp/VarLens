@@ -6,7 +6,8 @@ import {
   type CaseMode,
   type CaseResult,
   type RunManifest,
-  type ScenarioId
+  type ScenarioId,
+  XL_MODES
 } from '../common/types'
 import {
   clusterBootstrap,
@@ -75,6 +76,8 @@ export interface ReportData {
   byClass: Array<{ stratum: string; n: number; values: number[] }>
   byBackground: Array<{ stratum: string; n: number; values: number[] }>
   byTemporal: Array<{ stratum: string; n: number; values: number[] }>
+  /** X-linked stratum (XLD + XLR, primary): candidate Hit@10 and Δ vs reference with intervals. */
+  xl: { n: number; hit10: Interval; deltaHit10: Interval }
   scenarios: Array<{ scenario: ScenarioId; n: number; values: number[]; delta?: Interval }>
   ablations: Array<{ id: string; label: string; delta: Interval }>
   ship: ShipVerdict
@@ -235,8 +238,11 @@ function shipVerdict(
 
 function strataRows(
   ctx: Ctx
-): Pick<ReportData, 'byMode' | 'byClass' | 'byBackground' | 'byTemporal'> {
+): Pick<ReportData, 'byMode' | 'byClass' | 'byBackground' | 'byTemporal' | 'xl'> {
   const primaryAll = ctx.results.filter((r) => r.scenario === 'primary')
+  const xl = (scorer: string): CaseResult[] =>
+    primaryAll.filter((r) => r.scorer === scorer && XL_MODES.includes(r.mode))
+  const xlCand = xl(ctx.candidate)
   const primary = primaryAll.filter((r) => ctx.modes.includes(r.mode))
   const backgrounds = [...new Set(primaryAll.map((r) => r.bg))].sort()
   const temporal = (c: CaseResult): string => (c.newSince2024 ? 'new since 2024' : 'older')
@@ -256,7 +262,19 @@ function strataRows(
       (cs) => mean(cs.map(hit10))
     ),
     byBackground: row(primary, backgrounds, (c) => c.bg, macroHit10),
-    byTemporal: row(primary, ['new since 2024', 'older'], temporal, macroHit10)
+    byTemporal: row(primary, ['new since 2024', 'older'], temporal, macroHit10),
+    xl: {
+      n: xlCand.length,
+      hit10: clusterBootstrap(xlCand, byGene, macroHit10, ctx.reps, ctx.seed),
+      deltaHit10: pairedClusterBootstrap(
+        xlCand,
+        xl(ctx.reference),
+        byGene,
+        macroHit10,
+        ctx.reps,
+        ctx.seed
+      )
+    }
   }
 }
 

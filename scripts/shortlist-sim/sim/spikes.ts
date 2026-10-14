@@ -49,6 +49,9 @@ export interface SpikeOptions {
   imputeSeed: number
 }
 
+/** `hemi`: an XL allele in a male background, encoded like its chrX non-PAR alt calls. */
+export type SpikeZygosity = 'het' | 'hom' | 'hemi'
+
 export type SpikeSkip = 'unmapped' | 'collision' | 'gene_absent'
 
 const seedOf = (text: string): number =>
@@ -102,7 +105,7 @@ export function spikeRow(
   role: SpikeRow['role'],
   bg: BackgroundInfo,
   bgNormKeys: ReadonlySet<string>,
-  zyg: 'het' | 'hom',
+  zyg: SpikeZygosity,
   rnd: () => number,
   opts: SpikeOptions
 ): SpikeRow | SpikeSkip {
@@ -122,7 +125,7 @@ export function spikeRow(
   const cls = alleleClassOf(norm.ref, norm.alt)
   const encodings = bg.encodings[`${cls}:${zyg}`] ?? bg.encodings[`snv:${zyg}`] ?? []
   const [gt, qual] =
-    encodings.length > 0 ? pick(encodings, rnd) : [zyg === 'hom' ? '1/1' : '0/1', null]
+    encodings.length > 0 ? pick(encodings, rnd) : [zyg === 'het' ? '0/1' : '1/1', null]
   // Imputation has its own stream (run seed + background + allele), so switching it off
   // leaves genotype and decoy sampling unchanged.
   const imputeRnd = rng(seedOf(`${opts.imputeSeed}|${bg.label}|${norm.key}`))

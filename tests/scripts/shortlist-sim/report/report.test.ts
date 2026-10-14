@@ -11,6 +11,8 @@ import {
   type RunManifest,
   type ScenarioId
 } from '../../../../scripts/shortlist-sim/common/types'
+import { analyze } from '../../../../scripts/shortlist-sim/report/analysis'
+import { pointsSection } from '../../../../scripts/shortlist-sim/report/markdown'
 import { renderReport } from '../../../../scripts/shortlist-sim/report/report'
 import { mulberry32 } from '../../../../scripts/shortlist-sim/stats/prng'
 
@@ -182,6 +184,34 @@ describe('simulation report', () => {
     expect(small.md).toContain('**Verdict: DO NOT SHIP**')
     expect(small.md).toContain('Underpowered')
     expect(small.data.ship.reasons.some((r) => r.startsWith('Test gene clusters'))).toBe(true)
+  })
+
+  it('reports the X-linked stratum with its interval', () => {
+    expect(big.data.xl.n).toBe(1)
+    expect(big.md).toMatch(/X-linked stratum \(XLD \+ XLR, 1 cases;[^\n]*Hit@10 [\d.]+ % \[/)
+  })
+
+  it('reports the X-linked Δ as candidate minus reference', () => {
+    const base = synthResults(60, 5)
+    const xlr = (scorer: string, rank: number): CaseResult => ({
+      ...base[0],
+      caseId: 'xlr-1',
+      mode: 'XLR',
+      scorer,
+      gene: 'GENEXL',
+      alleles: [{ rank, higher: rank - 1, equal: 0 }],
+      causalEligible: [true]
+    })
+    // The reference misses its only X-linked case, so Δ equals the candidate's Hit@10.
+    const { xl } = analyze([...base, xlr('evidence_tuned', 1), xlr('tier1', 50)], manifest)
+    expect(xl.hit10.estimate).toBeGreaterThan(0)
+    expect(xl.deltaHit10.estimate).toBeCloseTo(xl.hit10.estimate)
+  })
+
+  it('says a frozen rerun tuned nothing', () => {
+    const md = pointsSection({ ...manifest, frozenRuleset: 'ruleset.json' })
+    expect(md).toContain('evaluated unchanged in every fold')
+    expect(md).not.toContain('Tuned points')
   })
 
   it('emits self-contained SVGs with a dark-mode palette', () => {
