@@ -58,6 +58,10 @@ interface PersistedSettings {
   defaultShortlistPresetId: number | null
   /** Default import field profile (spec §16): which annotation fields imports keep. */
   importFieldProfile: ImportFieldProfile
+  /** Desktop: reopen `lastDatabasePath` at startup instead of staying on the default database (#575). */
+  reopenLastDatabase: boolean
+  /** Last local database the user opened or created (not the startup default). */
+  lastDatabasePath: string | null
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -69,7 +73,9 @@ const DEFAULTS: PersistedSettings = {
   defaultCaseTab: 'shortlist',
   themePreference: DEFAULT_THEME_PREFERENCE,
   defaultShortlistPresetId: null,
-  importFieldProfile: DEFAULT_IMPORT_FIELD_PROFILE
+  importFieldProfile: DEFAULT_IMPORT_FIELD_PROFILE,
+  reopenLastDatabase: false,
+  lastDatabasePath: null
 }
 
 function load(): PersistedSettings {
@@ -84,6 +90,8 @@ function load(): PersistedSettings {
       if (!ImportFieldProfileSchema.safeParse(merged.importFieldProfile).success) {
         merged.importFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE
       }
+      if (typeof merged.reopenLastDatabase !== 'boolean') merged.reopenLastDatabase = false
+      if (typeof merged.lastDatabasePath !== 'string') merged.lastDatabasePath = null
       return merged
     }
   } catch (e) {
@@ -108,6 +116,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const themePreference = ref<ThemePreference>(persisted.themePreference)
   const defaultShortlistPresetId = ref<number | null>(persisted.defaultShortlistPresetId)
   const importFieldProfile = ref<ImportFieldProfile>(persisted.importFieldProfile)
+  const reopenLastDatabase = ref(persisted.reopenLastDatabase)
+  const lastDatabasePath = ref<string | null>(persisted.lastDatabasePath)
 
   // Auto-persist on change
   watch(
@@ -120,7 +130,9 @@ export const useSettingsStore = defineStore('settings', () => {
       defaultCaseTab,
       themePreference,
       defaultShortlistPresetId,
-      importFieldProfile
+      importFieldProfile,
+      reopenLastDatabase,
+      lastDatabasePath
     ],
     () => {
       save({
@@ -132,7 +144,9 @@ export const useSettingsStore = defineStore('settings', () => {
         defaultCaseTab: defaultCaseTab.value,
         themePreference: themePreference.value,
         defaultShortlistPresetId: defaultShortlistPresetId.value,
-        importFieldProfile: importFieldProfile.value
+        importFieldProfile: importFieldProfile.value,
+        reopenLastDatabase: reopenLastDatabase.value,
+        lastDatabasePath: lastDatabasePath.value
       })
     }
   )
@@ -146,6 +160,8 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultCaseTab,
     themePreference,
     defaultShortlistPresetId,
-    importFieldProfile
+    importFieldProfile,
+    reopenLastDatabase,
+    lastDatabasePath
   }
 })
