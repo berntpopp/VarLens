@@ -269,6 +269,9 @@ describe('scoreStr band, motif and gates', () => {
     expect(r).toMatchObject({ band: 'full', score: 0.74 })
     const pre = scoreStr(row({ str_repeat_id: 'FMR1', str_status: 'pre_mutation' }), REF, cs())
     expect(pre?.band).toBe('premutation')
+    // Stranger's pre_mutation on a locus without a premutation set is intermediate.
+    const mid = scoreStr(row({ str_repeat_id: 'ATXN3', str_status: 'pre_mutation' }), REF, cs())
+    expect(mid?.band).toBe('intermediate')
   })
 
   it('a hom full_mutation status counts as biallelic for AR', () => {

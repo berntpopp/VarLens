@@ -129,12 +129,18 @@ export function bandOf(row: StrRow, locus: StrLocus): { band: StrBand; alleles: 
   const bands =
     copies.length > 0 && locus.pathogenicMin !== null
       ? copies.map((c) => copyBand(c, locus))
-      : (row.str_status ?? '').split(',').map((s) => CFG.strangerStatusBand[s.trim()] ?? 'normal')
+      : (row.str_status ?? '').split(',').map((s) => statusBand(s.trim(), locus))
   const band = bands.reduce((a, b) => (BAND_ORDER.indexOf(b) > BAND_ORDER.indexOf(a) ? b : a))
   let alleles = bands.filter((b) => b === band).length
   // A single status for a homozygous call stands for both alleles.
   if (copies.length === 0 && alleles === 1 && genotypeZygosity(row.gt_num) === 'hom') alleles = 2
   return { band, alleles }
+}
+
+/** Stranger writes `pre_mutation` for any sub-pathogenic expansion; premutation is FMR1-only. */
+function statusBand(status: string, l: StrLocus): StrBand {
+  const band = CFG.strangerStatusBand[status] ?? 'normal'
+  return band === 'premutation' && l.diseases.premutation === undefined ? 'intermediate' : band
 }
 
 function copyBand(c: number, l: StrLocus): StrBand {
