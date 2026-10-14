@@ -55,7 +55,8 @@ const VARIANT_BATCH_RECORDSET_TYPES: Record<string, string> = {
   sv_length: 'bigint',
   caller: 'text',
   impact_rank: 'smallint',
-  clinvar_rank: 'smallint'
+  clinvar_rank: 'smallint',
+  ps: 'bigint'
 }
 
 const TRANSCRIPT_RECORDSET_TYPES: Record<string, string> = {

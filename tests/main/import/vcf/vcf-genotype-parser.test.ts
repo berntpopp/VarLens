@@ -15,6 +15,14 @@ describe('vcf-genotype-parser', () => {
     expect(gt.ab).toBeCloseTo(23 / 45, 4)
   })
 
+  it('parses the PS phase set id; absent or missing PS is null (#586)', () => {
+    const phased = ['GT', 'GQ', 'PS']
+    expect(parseGenotype(['0|1', '50', '12345'], phased).ps).toBe(12345)
+    expect(parseGenotype(['0|1', '50', '.'], phased).ps).toBeNull()
+    expect(parseGenotype(['0|1', '50'], phased).ps).toBeNull()
+    expect(parseGenotype(['0/1', '99', '45', '22,23'], FORMAT).ps).toBeNull()
+  })
+
   it('parses a homozygous alt genotype', () => {
     const gt = parseGenotype(['1/1', '78', '30', '0,30'], FORMAT)
 

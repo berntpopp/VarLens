@@ -191,6 +191,7 @@ export function mapVcfRecord(
       ad_ref: genotype.adRef,
       ad_alt: genotype.adAlt,
       ab: genotype.ab,
+      ps: genotype.ps,
       filter: rec.filter,
       info_json: vcfInfoJson(fields, header, infoResult.infoJson, annotation),
       source_format: 'vcf',
