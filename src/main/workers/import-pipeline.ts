@@ -30,6 +30,7 @@ import {
   type ImportFilters
 } from '../import/vcf/import-filters'
 import { DEFAULT_INFO_FIELD_MAPPINGS } from '../import/vcf/info-field-registry'
+import { createGeneFiller } from '../import/vcf/gene-fallback'
 import type { VcfHeader } from '../import/vcf/types'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
 import { isFatalImportRowError } from '../import/vcf/vcf-resource-limits'
@@ -286,7 +287,8 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
       }
     },
     insertBatch,
-    finishBulkInsert
+    finishBulkInsert,
+    caseBuild
   }
 }
 
@@ -382,8 +384,10 @@ export async function streamInsertVcf(
   onSkip?: (reason: string) => void,
   limits?: ImportBatchLimits,
   filters?: ImportFilters,
-  fields: FieldProfileResolver = new FieldProfileResolver()
+  fields: FieldProfileResolver = new FieldProfileResolver(),
+  geneRefDbPath?: string
 ): Promise<number> {
+  const fillGene = createGeneFiller(geneRefDbPath, stmts.caseBuild(caseId))
   if (vcfSelectedSamples && vcfSelectedSamples.length > 1) {
     throw new Error(
       `Worker expects at most one VCF sample per file entry but received ${vcfSelectedSamples.length}`
@@ -457,6 +461,7 @@ export async function streamInsertVcf(
         // may retain that line's INFO payload.
         for (const variant of mapped) {
           if (!passesPostMappingFilters(variant, filters)) continue
+          fillGene(variant)
           full = batch.add(variant as unknown as MappedRow, line.length) || full
         }
       } catch (e) {

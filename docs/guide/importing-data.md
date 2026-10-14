@@ -37,6 +37,26 @@ Common evidence fields get one **canonical key** whatever their source, so the s
 
 Columnar files whose rows have a different number of values than the header are rejected with the row number, instead of importing shifted values.
 
+## SV, CNV and STR files
+
+VarLens reads the gene of a VCF row from the VEP `CSQ` field (`SYMBOL`) or the SnpEff `ANN` field (`Gene_Name`). Structural-variant, CNV and repeat callers write neither, so annotate their output before import:
+
+- **SV and CNV:** run VEP on the caller's VCF as you do for SNVs. VEP annotates symbolic alleles (`<DEL>`, `<DUP>`, …) from their `SVTYPE` and `END`, and lists every gene the event overlaps. It skips events longer than 10 Mb unless you raise `--max_sv_size`:
+
+  ```bash
+  vep --input_file sv.vcf.gz --output_file sv.vep.vcf.gz --vcf --compress_output bgzip \
+      --cache --offline --assembly GRCh38 --symbol --max_sv_size 50000000
+  ```
+
+- **STR:** run [Stranger](https://github.com/Clinical-Genomics/stranger) with its variant catalogue on the ExpansionHunter (or TRGT) output. Stranger adds the locus (`REPID`), its gene (`HGNCId`), the disease and the expansion status (`STR_STATUS`: `normal`, `pre_mutation`, `full_mutation`). VarLens shows the status in the STR table and gives `full_mutation` (and, less, `pre_mutation`) expansions credit in the Shortlist.
+
+Rows that still arrive without a gene get one at import, from the gene reference bundled with VarLens and the case's genome build:
+
+- **STR:** the gene named by the locus (`REPID`, then `VARID`, then `HGNCId`), else the gene the repeat lies in.
+- **SV and CNV:** the gene the event overlaps, a protein-coding gene before any other. An event over several genes shows the first protein-coding one; annotate it with VEP to see all of them.
+
+An annotated gene is never replaced.
+
 ## After Import
 
 Once import completes, the case appears in the sidebar. Click it to open the variant table.
