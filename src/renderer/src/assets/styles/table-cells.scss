@@ -138,7 +138,11 @@
 // row never shifts the layout. The ring keeps light colours (amber) visible on
 // both themes (WCAG 1.4.11 non-text contrast).
 .annotation-btn.tag-btn {
-  width: 24px;
+  // 16px wide keeps the column dense; with the 4px gap (ga-1) to the comment
+  // button it meets WCAG 2.5.8 through the spacing exception (24px circle).
+  width: 16px;
+  min-width: 16px;
+  padding: 0;
 }
 
 .tag-dots {
