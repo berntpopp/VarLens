@@ -57,6 +57,31 @@
         size="x-small"
       />
     </button>
+
+    <!-- Tags (#125): coloured dots in a fixed 2x2 box; opens the table's tag menu -->
+    <button
+      v-if="tagMenu && tagSource"
+      ref="tagButtonRef"
+      type="button"
+      class="annotation-btn tag-btn"
+      :aria-label="tagLabel"
+      aria-haspopup="menu"
+      :aria-expanded="tagMenu.isOpenFor(tagButtonRef)"
+      :data-tooltip="tagLabel"
+      data-tooltip-location="top"
+      @click.stop="openTagMenu"
+    >
+      <span v-if="rowTags.length > 0" class="tag-dots" aria-hidden="true">
+        <span
+          v-for="tag in tagDots"
+          :key="tag.id"
+          class="tag-dot"
+          :style="{ backgroundColor: tag.color }"
+        />
+        <span v-if="rowTags.length > MAX_TAG_DOTS" class="tag-dots-more">+</span>
+      </span>
+      <CellIcon v-else :icon="mdiTagOutline" size="x-small" color="muted" />
+    </button>
   </div>
 </template>
 
@@ -76,8 +101,12 @@ import {
   mdiCommentText,
   mdiCommentTextOutline,
   mdiStar,
-  mdiStarOutline
+  mdiStarOutline,
+  mdiTagOutline
 } from '@mdi/js'
+import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
+import { injectTagQuickMenu, tagButtonLabel, toggleCaseRowTag } from './tag-quick-menu'
 import {
   acmgLabel,
   acmgReadOnlyLabel,
@@ -109,6 +138,8 @@ interface Props {
   acmgLocked?: boolean
   /** The row's variant, for the quick menu's Protein view entry */
   variant?: Variant | CohortVariant
+  /** Tag dots: the case row's own tags, or (read-only) those of the cohort row's carriers */
+  tagSource?: 'case' | 'carriers'
 }
 
 interface Emits {
@@ -124,7 +155,8 @@ const props = withDefaults(defineProps<Props>(), {
   hasGlobalComment: false,
   showGlobalIndicators: true,
   annotationScope: 'case',
-  variant: undefined
+  variant: undefined,
+  tagSource: undefined
 })
 
 const emit = defineEmits<Emits>()
@@ -172,6 +204,48 @@ function openAcmgMenu(): void {
     openEvidence: () => emit('acmg-evidence-click'),
     variant: props.variant,
     readOnly: props.readOnly === true
+  })
+}
+
+// Tags: the table's shared menu; no button when rendered outside a table.
+const MAX_TAG_DOTS = 4
+const tagMenu = injectTagQuickMenu()
+const tagButtonRef = ref<HTMLButtonElement | null>(null)
+// Same reference while unchanged, so an unrelated cache update re-renders nothing.
+const knownTags = computed(() => {
+  const variant = props.variant as Variant | undefined
+  if (tagMenu === null || variant === undefined || props.tagSource !== 'case') return undefined
+  return tagMenu.knownTags(variant.case_id, variant.id)
+})
+const rowTags = computed(() => {
+  if (tagMenu === null || props.variant === undefined) return []
+  const known = knownTags.value
+  // Known tags are filtered by the tag list too, which drops a deleted tag.
+  return tagMenu.tagsOf(known !== undefined ? known.map((t) => t.id) : props.variant.tag_ids)
+})
+// More than four tags: three dots and a "+" keep the box the same size.
+const tagDots = computed(() =>
+  rowTags.value.length > MAX_TAG_DOTS ? rowTags.value.slice(0, MAX_TAG_DOTS - 1) : rowTags.value
+)
+const tagsReadOnly = computed(() => props.readOnly === true || props.tagSource !== 'case')
+const tagLabel = computed(() => tagButtonLabel(rowTags.value, tagsReadOnly.value))
+
+function openTagMenu(): void {
+  const variant = props.variant as Variant | undefined
+  if (tagMenu === null || tagButtonRef.value === null || variant === undefined) return
+  const target = { caseId: variant.case_id, variantId: variant.id }
+  tagMenu.toggle(tagButtonRef.value, {
+    assigned: () => rowTags.value,
+    toggle: tagsReadOnly.value
+      ? undefined
+      : (tag) =>
+          void toggleCaseRowTag(target, rowTags.value, tag).catch((error: unknown) =>
+            logService.error(`Failed to toggle tag: ${formatError(error)}`, 'tags')
+          ),
+    readOnlyHint:
+      props.tagSource === 'carriers'
+        ? 'Tags given in the carrier cases. Assign tags in the case view.'
+        : undefined
   })
 }
 

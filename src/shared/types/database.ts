@@ -159,6 +159,7 @@ export interface Variant {
   caller?: string | null
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null
+  tag_ids?: number[] // tags of this case's row, set by table page reads (#125)
 }
 
 /**

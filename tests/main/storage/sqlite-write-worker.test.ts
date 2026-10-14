@@ -13,6 +13,10 @@ import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { SqliteWriteExecutor } from '../../../src/main/storage/sqlite/SqliteWriteExecutor'
 import { ErrorCode } from '../../../src/shared/types/errors'
 import { bundleWorker } from '../../utils/bundle-worker'
+import { DEFAULT_TAGS } from '../../../src/shared/config/default-tags.config'
+
+/** Tags this test made, not the defaults every database starts with (v55). */
+const isUserTag = (name: string): boolean => !DEFAULT_TAGS.some((t) => t.name === name)
 
 describe('SQLite write worker (single writer thread)', () => {
   let workerPath: string
@@ -48,7 +52,12 @@ describe('SQLite write worker (single writer thread)', () => {
     }
 
     expect(tag.name).toBe('urgent')
-    expect(db.tags.listTags().map((t) => t.name)).toEqual(['urgent'])
+    expect(
+      db.tags
+        .listTags()
+        .map((t) => t.name)
+        .filter(isUserTag)
+    ).toEqual(['urgent'])
   })
 
   it('preserves FIFO order across queued writes', async () => {
@@ -84,6 +93,11 @@ describe('SQLite write worker (single writer thread)', () => {
     await executor.close()
     await executor.execute({ type: 'tags:create', params: ['two', '#000000'] })
 
-    expect(db.tags.listTags().map((t) => t.name)).toEqual(['one', 'two'])
+    expect(
+      db.tags
+        .listTags()
+        .map((t) => t.name)
+        .filter(isUserTag)
+    ).toEqual(['one', 'two'])
   })
 })

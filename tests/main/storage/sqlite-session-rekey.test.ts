@@ -14,6 +14,10 @@ import { jobRunner } from '../../../src/main/services/jobs/runner'
 import { createSqliteStorageSession } from '../../../src/main/storage/sqlite/createSqliteStorageSession'
 import type { SqliteStorageSession } from '../../../src/main/storage/sqlite/SqliteStorageSession'
 import { bundleWorker } from '../../utils/bundle-worker'
+import { DEFAULT_TAGS } from '../../../src/shared/config/default-tags.config'
+
+/** Tags this test made, not the defaults every database starts with (v55). */
+const isUserTag = (name: string): boolean => !DEFAULT_TAGS.some((t) => t.name === name)
 
 const OLD_KEY = 'old-password'
 const NEW_KEY = "new'password"
@@ -115,6 +119,7 @@ describe('SqliteStorageSession.rekey', () => {
       .getDatabaseService()
       .tags.listTags()
       .map((t) => t.name)
+      .filter(isUserTag)
     expect(names.sort()).toEqual(['after', 'before'])
   })
 

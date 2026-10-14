@@ -71,6 +71,8 @@ export interface CohortVariant extends CohortVariantIdentity {
   sv_type?: string | null
   /** Unsigned call length of the carriers at this end position */
   sv_length?: number | null
+  /** Tags any carrier case gave this variant (set by table page reads, #125) */
+  tag_ids?: number[]
 }
 
 /**

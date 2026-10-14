@@ -192,6 +192,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     fileName: '0037_summary_sv_facts.sql'
   },
   {
+    version: '0038',
+    name: 'default_tags',
+    fileName: '0038_default_tags.sql'
+  },
+  {
     version: '0039',
     name: 'variant_phase_set',
     fileName: '0039_variant_phase_set.sql'

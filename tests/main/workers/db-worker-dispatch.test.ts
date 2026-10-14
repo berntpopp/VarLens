@@ -4,6 +4,8 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
+import { DEFAULT_TAGS } from '../../../src/shared/config/default-tags.config'
+import type { Tag } from '../../../src/shared/types/database-entities'
 import { createRepositories } from '../../../src/main/database/createRepositories'
 import {
   dispatchTask,
@@ -38,9 +40,9 @@ describe('db-worker-dispatch', () => {
     expect(result).toEqual([])
   })
 
-  it('tags:list returns empty for fresh DB', () => {
-    const result = dispatchTask(makeDeps(), { type: 'tags:list', params: [] })
-    expect(result).toEqual([])
+  it('tags:list returns the default tags for a fresh DB', () => {
+    const result = dispatchTask(makeDeps(), { type: 'tags:list', params: [] }) as Tag[]
+    expect(result.map((t) => t.name).sort()).toEqual(DEFAULT_TAGS.map((t) => t.name).sort())
   })
 
   it('cohort:summary returns summary object', () => {

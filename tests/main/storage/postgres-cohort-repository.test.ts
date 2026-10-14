@@ -73,11 +73,36 @@ describe('PostgresCohortRepository', () => {
           }
         ]
       })
+      // The page's tag lookup (#125): a carrier's tag, and one of another build.
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            chr: '1',
+            pos: '123',
+            ref: 'A',
+            alt: 'G',
+            variant_type: 'snv',
+            genome_build: 'GRCh38',
+            tag_id: '7'
+          },
+          {
+            chr: '1',
+            pos: '123',
+            ref: 'A',
+            alt: 'G',
+            variant_type: 'snv',
+            genome_build: 'GRCh37',
+            tag_id: '8'
+          }
+        ]
+      })
     const repository = new PostgresCohortRepository({ query } as never, 'public')
 
     const result = await repository.queryVariants({ limit: 25, offset: 50 })
 
-    expect(query).toHaveBeenCalledTimes(3)
+    expect(query).toHaveBeenCalledTimes(4)
+    expect(callText(query.mock.calls[3])).toContain('FROM "public"."variant_tags" vt')
+    expect(callParams(query.mock.calls[3])).toEqual([[123]])
     expect(normalizeSql(query.mock.calls[0][0] as string)).toBe(
       'SELECT COUNT(*)::bigint AS total_cases FROM "public"."cases"'
     )
@@ -109,7 +134,8 @@ describe('PostgresCohortRepository', () => {
           omim_id: '113705',
           end_pos: null,
           sv_type: null,
-          sv_length: null
+          sv_length: null,
+          tag_ids: [7]
         }
       ]
     })

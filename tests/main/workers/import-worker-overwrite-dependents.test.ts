@@ -105,7 +105,9 @@ describe('import worker: rows that depend on a replaced case', () => {
       expect(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get(), table).toEqual({ n: 0 })
     }
     // What is not the case's own stays.
-    expect(db.prepare('SELECT name FROM tags').all()).toEqual([{ name: 'review' }])
+    expect(db.prepare("SELECT name FROM tags WHERE name = 'review'").all()).toEqual([
+      { name: 'review' }
+    ])
     expect(db.prepare('SELECT name FROM analysis_groups').all()).toEqual([{ name: 'FAM' }])
   })
 
@@ -126,6 +128,8 @@ describe('import worker: rows that depend on a replaced case', () => {
 
     expect(db.pragma('foreign_key_check')).toEqual([])
     expect(db.prepare('SELECT content FROM case_comments').all()).toEqual([{ content: 'kept' }])
-    expect(db.prepare('SELECT name FROM tags').all()).toEqual([{ name: 'review' }])
+    expect(db.prepare("SELECT name FROM tags WHERE name = 'review'").all()).toEqual([
+      { name: 'review' }
+    ])
   })
 })
