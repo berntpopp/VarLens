@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
+
+let canUpdateHpoData = true
+vi.mock('../../../../src/renderer/src/stores/capabilityStore', () => ({
+  useCapabilityStore: () => ({ canUse: (f: string) => f !== 'hpoDataUpdate' || canUpdateHpoData })
+}))
+
 import RankingHpoHint from '../../../../src/renderer/src/components/shortlist-ranking/RankingHpoHint.vue'
 import type { EvidenceRuleset } from '../../../../src/shared/types/evidence-ruleset'
 import type { HpoDataStatus } from '../../../../src/shared/types/hpo-data'
@@ -23,7 +29,7 @@ const status = (installed: boolean, needsUpdate = false): HpoDataStatus => ({
   geneCount: 0
 })
 
-async function shown(when: string, current: HpoDataStatus): Promise<boolean> {
+async function hint(when: string, current: HpoDataStatus) {
   ;(window as unknown as { api: unknown }).api = {
     hpoData: { status: vi.fn().mockResolvedValue(current) }
   }
@@ -32,8 +38,10 @@ async function shown(when: string, current: HpoDataStatus): Promise<boolean> {
     global: { plugins: [createVuetify({ components })] }
   })
   await flushPromises()
-  return wrapper.find('[data-testid="ranking-hpo-missing"]').exists()
+  return wrapper.find('[data-testid="ranking-hpo-missing"]')
 }
+const shown = async (when: string, current: HpoDataStatus): Promise<boolean> =>
+  (await hint(when, current)).exists()
 
 describe('RankingHpoHint', () => {
   it('warns when a rule reads an HPO-derived column and HPO data is missing or outdated', async () => {
@@ -46,5 +54,14 @@ describe('RankingHpoHint', () => {
   it('stays quiet when the data is current or no rule reads hpo_resnik', async () => {
     expect(await shown('hpo_resnik:>=:2', status(true))).toBe(false)
     expect(await shown('cadd:>:20', status(false))).toBe(false)
+  })
+
+  it('points web users, who cannot install HPO data, to their administrator', async () => {
+    canUpdateHpoData = false
+    const text = (await hint('hpo_resnik:>=:2', status(false))).text()
+    canUpdateHpoData = true
+    expect(text).toContain('Ask your administrator')
+    expect(text).not.toContain('Gene panels')
+    expect((await hint('hpo_resnik:>=:2', status(false))).text()).toContain('Gene panels')
   })
 })
