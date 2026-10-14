@@ -34,7 +34,6 @@ import {
 import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
-import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresExportRepository } from './PostgresExportRepository'
