@@ -113,10 +113,13 @@ export const SHORTLIST_PAGE_SIZE = 2000
 export const SHORTLIST_BUFFER_MAX_ROWS = 50_000
 
 /**
- * Stream every eligible candidate of one variant type to `onPage` in
- * keyset pages of `pageSize` rows (ordered by `variants.id`, only as a
- * deterministic paging key — Stage 2 ranks the rows), preparing panel
- * regions once.
+ * Stream every eligible candidate of one variant type to `onPage` in pages of
+ * `pageSize` rows (ordered by `variants.id`, only as a deterministic order —
+ * Stage 2 ranks the rows), preparing panel regions once.
+ *
+ * One query execution is streamed: `LIMIT`-paged re-queries let SQLite pick a
+ * rowid scan that walks every earlier case's rows on each page. While it runs
+ * the connection is busy, so `onPage` must not use it.
  *
  * @param filter From {@link toShortlistVariantFilter}, with any active gene
  *   panel already resolved into `panel_intervals` by the caller.
@@ -128,13 +131,32 @@ export function forEachCandidatePage(
   onPage: (rows: ShortlistCandidate[]) => void
 ): void {
   withPanelIntervals(source, filter, () => {
-    let afterId = 0
-    for (;;) {
-      const rows = selectPage(source, filter, pageSize, afterId)
-      if (rows.length > 0) onPage(rows)
-      if (rows.length < pageSize) return
-      afterId = rows[rows.length - 1].id
+    const { db, filterBuilder } = source
+    const compiled = filterBuilder
+      .build(filter)
+      .select(
+        sql<number>`COALESCE((SELECT cva.starred FROM case_variant_annotations cva WHERE cva.case_id = variants.case_id AND cva.variant_id = variants.id LIMIT 1), 0)`.as(
+          'is_starred'
+        )
+      )
+      .orderBy(sql`variants.id ASC`)
+      .compile()
+    const statement = db.prepare(compiled.sql).raw(true)
+    const columns = statement.columns().map((column) => column.name)
+    let page: ShortlistCandidate[] = []
+    for (const values of statement.iterate(...compiled.parameters) as Iterable<unknown[]>) {
+      // better-sqlite3 row objects are slow to copy (~4 µs per wide row), so build plain
+      // objects from raw rows; toShortlistCandidate makes the one copy and overwrites the
+      // 0/1 `is_starred` with a boolean.
+      const row: Record<string, unknown> = {}
+      for (let i = 0; i < columns.length; i++) row[columns[i]] = values[i]
+      page.push(toShortlistCandidate(row as unknown as Variant, row.is_starred === 1))
+      if (page.length === pageSize) {
+        onPage(page)
+        page = []
+      }
     }
+    if (page.length > 0) onPage(page)
   })
 }
 
@@ -149,33 +171,4 @@ function withPanelIntervals<T>(
   } finally {
     if (usesTempTable) filterBuilder.cleanupPanelIntervalsTable()
   }
-}
-
-function selectPage(
-  { db, filterBuilder }: ShortlistQuerySource,
-  filter: VariantFilter,
-  limit: number,
-  afterId: number
-): ShortlistCandidate[] {
-  const compiled = filterBuilder
-    .build(filter)
-    .select(
-      sql<number>`COALESCE((SELECT cva.starred FROM case_variant_annotations cva WHERE cva.case_id = variants.case_id AND cva.variant_id = variants.id LIMIT 1), 0)`.as(
-        'is_starred'
-      )
-    )
-    .where(sql<boolean>`variants.id > ${afterId}`)
-    .orderBy(sql`variants.id ASC`)
-    .limit(limit)
-    .compile()
-  const statement = db.prepare(compiled.sql).raw(true)
-  const columns = statement.columns().map((column) => column.name)
-  // better-sqlite3 row objects are slow to copy (~4 µs per wide row), so build plain
-  // objects from raw rows; toShortlistCandidate makes the one copy and overwrites the
-  // 0/1 `is_starred` with a boolean.
-  return (statement.all(...compiled.parameters) as unknown[][]).map((values) => {
-    const row: Record<string, unknown> = {}
-    for (let i = 0; i < columns.length; i++) row[columns[i]] = values[i]
-    return toShortlistCandidate(row as unknown as Variant, row.is_starred === 1)
-  })
 }
