@@ -62,10 +62,7 @@ describe('infoFieldLimitation', () => {
     { source: 'INFO:DP', type: 'Integer', number: '1' },
     { source: 'INFO:AC', type: 'Integer', number: 'A' },
     { source: 'CSQ:REVEL_score' }
-  ])(
-    'accepts %o',
-    (field) => {
-      expect(infoFieldLimitation(field)).toBeNull()
-    }
-  )
+  ])('accepts %o', (field) => {
+    expect(infoFieldLimitation(field)).toBeNull()
+  })
 })
