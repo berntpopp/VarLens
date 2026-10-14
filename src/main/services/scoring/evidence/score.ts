@@ -2,7 +2,8 @@
  * Row scoring with a compiled evidence ruleset (spec §3.4). Groups and modes
  * are decision lists: a group contributes its first matching rule; the row's
  * mode is the first specific mode that matches, fallback only when none does.
- * score = mode points + global groups + groups scoped to that mode, and the
+ * score = mode points + global groups + groups scoped to that mode (and, for a
+ * type-scoped group, to the row's variant type), and the
  * returned contributions sum exactly to the score.
  */
 import type { DerivedFields } from './case-context'
@@ -38,7 +39,13 @@ export function scoreEvidenceRow(
     ...row,
     zygosity: derived.zygosity,
     gene_het_hits: derived.gene_het_hits,
-    gene_hits: derived.gene_hits
+    gene_hits: derived.gene_hits,
+    hpo_resnik: derived.hpo_resnik,
+    hpo_best_disease: derived.hpo_best_disease,
+    hpo_conflicts: derived.hpo_conflicts,
+    hpo_best_locus: derived.hpo_best_locus,
+    cnv_gene_count: derived.cnv_gene_count,
+    str_band: derived.str_band
   }
   const mode = selectMode(compiled.modes, view)
   const contributions: EvidenceContribution[] = [
@@ -52,6 +59,7 @@ export function scoreEvidenceRow(
   ]
   for (const g of compiled.groups) {
     if (g.scope !== 'global' && g.scope !== mode.profile.id) continue
+    if (g.variantType !== undefined && g.variantType !== view.variant_type) continue
     const c = groupContribution(g, view)
     if (c !== null) contributions.push(c)
   }

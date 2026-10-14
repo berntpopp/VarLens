@@ -33,6 +33,9 @@ import { ref, shallowRef, markRaw, watch, onBeforeUnmount, type Ref } from 'vue'
 import { useFilterPresetStore } from './useFilterPresetStore'
 import { useApiService } from './useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
+import { phenotypeChange } from './phenotypeChanges'
+import { shortlistConfigOf } from './useShortlistRankingEditor'
+import { rulesetUsesHpoResnik } from '../../../shared/dsl/evaluate'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { ShortlistResult } from '../../../shared/types/shortlist'
@@ -135,6 +138,16 @@ export function useShortlistQuery(caseId: Ref<number>) {
       result.value = null
     }
     void fetch()
+  })
+
+  // hpo_resnik inputs changed: HPO data installed, or this case's HPO terms edited
+  // (the latter only matters when the selected ranking reads hpo_resnik).
+  watch(phenotypeChange, (change) => {
+    if (change === null) return
+    if (change.caseId === null) return void fetch()
+    const preset = shortlistPresets.value.find((p) => p.id === selectedPresetId.value)
+    const ruleset = preset ? shortlistConfigOf(preset)?.rankConfig?.ruleset : undefined
+    if (change.caseId === caseId.value && rulesetUsesHpoResnik(ruleset)) void fetch()
   })
 
   // Auto-select the default ranking (Settings → Shortlist ranking), else the

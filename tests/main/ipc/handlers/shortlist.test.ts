@@ -53,10 +53,17 @@ function makeDeps(service: { getShortlist: ReturnType<typeof vi.fn> }): {
   getDb: () => unknown
   getDbManager: () => unknown
 } {
-  const getDb = vi.fn().mockReturnValue({ shortlistService: service })
+  // The SQLite read executor runs the service in a db-worker (#631); this one runs it inline.
+  const execute = vi.fn(async (task: { params: [unknown] }) =>
+    service.getShortlist(task.params[0], () => null)
+  )
+  const getDb = vi.fn(() => {
+    throw new Error('the shortlist must not run on the main-thread DatabaseService')
+  })
   const getDbManager = vi.fn().mockReturnValue({
     getCurrentSession: vi.fn().mockReturnValue({
-      capabilities: { backend: 'sqlite' }
+      capabilities: { backend: 'sqlite' },
+      getReadExecutor: vi.fn().mockReturnValue({ execute })
     })
   })
   return { ipcMain, getDb, getDbManager }
@@ -125,7 +132,7 @@ describe('variants:shortlist handler', () => {
     })
   })
 
-  it('routes PostgreSQL sessions through the storage read executor', async () => {
+  it('routes PostgreSQL sessions through the storage read executor too', async () => {
     const expected = {
       rows: [],
       totalCandidates: 0,
@@ -143,6 +150,18 @@ describe('variants:shortlist handler', () => {
       params: [{ caseId: 1, presetId: 7 }]
     })
     expect(result).toBe(expected)
+  })
+
+  it('routes SQLite sessions through the storage read executor, off the main thread', async () => {
+    const service = makeMockService()
+    const deps = makeDeps(service)
+    registerShortlistHandlers(deps as never)
+
+    const result = await invokeHandler('variants:shortlist', { caseId: 1, presetId: 7 })
+
+    expect(deps.getDb).not.toHaveBeenCalled()
+    expect(isIpcError(result)).toBe(false)
+    expect(service.getShortlist).toHaveBeenCalledTimes(1)
   })
 
   it('passes adHocConfig params through to service', async () => {

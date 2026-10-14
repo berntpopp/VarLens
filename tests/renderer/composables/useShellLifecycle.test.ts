@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
+import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
 import type { BatchCompleteEvent, BatchFileCompleteEvent } from '../../../src/shared/types/api'
 import {
   LIVE_REFRESH_INTERVAL_MS,
@@ -13,6 +15,31 @@ vi.mock('../../../src/renderer/src/queries/invalidation', () => ({
 }))
 
 describe('useShellLifecycle', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('refreshes like a picker switch when the last database was reopened at startup (#575)', async () => {
+    const refreshCases = vi.fn().mockResolvedValue(undefined)
+    const clearMetadataCache = vi.fn()
+    useShellLifecycle({
+      api: undefined,
+      currentDatabasePath: ref(null),
+      currentDatabaseName: ref('last.db'),
+      incrementDataGeneration: vi.fn(),
+      resetForDatabaseSwitch: vi.fn(),
+      clearMetadataCache,
+      selectCase: vi.fn(),
+      caseListRef: ref({ refreshCases, selectCase: vi.fn() }),
+      dialogHostRef: ref(null),
+      importStore: {} as never
+    })
+
+    useDatabaseStore().reopenedAtStartup = true
+    await nextTick()
+
+    expect(clearMetadataCache).toHaveBeenCalledOnce()
+    expect(refreshCases).toHaveBeenCalledOnce()
+  })
+
   it('bumps data generation and refreshes cases on batch import completion', async () => {
     const incrementDataGeneration = vi.fn()
     const refreshCases = vi.fn().mockResolvedValue(undefined)

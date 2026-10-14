@@ -38,6 +38,7 @@ vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', () => ({
 // Import under test — AFTER vi.mock call so the mock resolves correctly.
 import { useShortlistQuery } from '../../../src/renderer/src/composables/useShortlistQuery'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
+import { notifyPhenotypeChanged } from '../../../src/renderer/src/composables/phenotypeChanges'
 
 type AnnotationCallback = (ev: AnnotationChangeEvent) => void
 
@@ -190,6 +191,39 @@ describe('useShortlistQuery', () => {
 
     expect(h.shortlistMock).toHaveBeenCalledTimes(1)
     expect(h.shortlistMock).toHaveBeenCalledWith({ caseId: 1, presetId: 1 })
+  })
+
+  it('re-fetches when HPO data is installed or the case HPO terms change', async () => {
+    const h = harness()
+    app = h.app
+    const rankConfig = (
+      mockVisiblePresets.value[0].filterJson as unknown as {
+        shortlist: { rankConfig: Record<string, unknown> }
+      }
+    ).shortlist.rankConfig
+    await flushPromises()
+    await flushPromises()
+
+    h.shortlistMock.mockClear()
+    notifyPhenotypeChanged(1)
+    await flushPromises()
+    // Legacy ranking never reads hpo_resnik: a term edit changes nothing.
+    expect(h.shortlistMock).not.toHaveBeenCalled()
+    notifyPhenotypeChanged(null)
+    await flushPromises()
+    expect(h.shortlistMock).toHaveBeenCalledTimes(1)
+
+    rankConfig.ruleset = {
+      modes: [],
+      groups: [{ rules: [{ when: 'hpo_resnik:>=:2' }] }]
+    }
+    h.shortlistMock.mockClear()
+    notifyPhenotypeChanged(2)
+    await flushPromises()
+    expect(h.shortlistMock).not.toHaveBeenCalled()
+    notifyPhenotypeChanged(1)
+    await flushPromises()
+    expect(h.shortlistMock).toHaveBeenCalledTimes(1)
   })
 
   it('ignores annotation-change events for other cases', async () => {

@@ -68,6 +68,7 @@
           :read-only="!canWrite"
           :acmg-locked="hasAcmgEvidence?.(item) === true"
           :variant="item"
+          tag-source="carriers"
           @star-toggle="emit('star-toggle', item)"
           @acmg-select="(classification) => emit('acmg-select', { item, classification })"
           @acmg-evidence-click="emit('acmg-evidence-click', item)"
@@ -199,6 +200,7 @@
       </template>
     </v-data-table-server>
     <AcmgQuickMenu :state="acmgQuickMenu" />
+    <TagQuickMenu :state="tagQuickMenu" />
   </div>
 </template>
 
@@ -243,6 +245,8 @@ import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
 import { useDatabaseStore } from '../../stores/databaseStore'
 import AcmgQuickMenu from '../table-cells/AcmgQuickMenu.vue'
 import { provideAcmgQuickMenu } from '../table-cells/acmg-quick-menu'
+import TagQuickMenu from '../table-cells/TagQuickMenu.vue'
+import { provideTagQuickMenu } from '../table-cells/tag-quick-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import TableSkeletonRows from '../table-state/TableSkeletonRows.vue'
@@ -330,6 +334,7 @@ const { tableItemsPerPage, pageSizeOptions } = useAutoPageSize({
 })
 
 const acmgQuickMenu = provideAcmgQuickMenu() // one shared ACMG menu, not one per row
+const tagQuickMenu = provideTagQuickMenu() // read-only: the carriers' tags (#125)
 // Template refs (used in template via ref="...")
 // @ts-expect-error - These refs ARE used in template bindings
 const { topScrollbarRef, topScrollbarInnerRef, initScrollSync } = useTableScroll()

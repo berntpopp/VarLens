@@ -40,6 +40,7 @@ describe('tags-logic', () => {
 
   beforeEach(() => {
     db = new DatabaseService(':memory:')
+    db.database.exec('DELETE FROM tags') // start without the default tags (v55)
     getDb = () => db
     caseId = insertCase('Test Case')
     variantId = insertVariant(caseId, '1', 12345, 'A', 'G')

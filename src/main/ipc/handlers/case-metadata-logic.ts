@@ -5,6 +5,7 @@
  * IPC/Electron APIs directly. This makes them testable without mocking
  * Electron internals.
  */
+import type { HpoTermFlags } from '../../../shared/types/hpo-profile'
 import type { StorageSession } from '../../storage/session'
 import type {
   CohortCreateParams,
@@ -210,19 +211,20 @@ export async function getHpoTerms(
 }
 
 /**
- * Assign HPO term to case.
+ * Assign (upsert) an HPO term; `flags` set its status (see MetadataRepository.assignCaseHpoTerm).
  */
 export async function assignHpoTerm(
   caseId: number,
   hpoId: string,
   hpoLabel: string,
-  getSession: () => StorageSession
+  getSession: () => StorageSession,
+  flags?: HpoTermFlags
 ): Promise<unknown> {
   return await getSession()
     .getWriteExecutor()
     .execute({
       type: 'case-metadata:assignHpoTerm',
-      params: [caseId, hpoId, hpoLabel]
+      params: flags === undefined ? [caseId, hpoId, hpoLabel] : [caseId, hpoId, hpoLabel, flags]
     })
 }
 

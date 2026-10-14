@@ -189,6 +189,7 @@
           Update
         </v-btn>
       </div>
+      <HpoDataRow v-if="modelValue" />
     </v-card>
 
     <!-- Panel editor sub-dialog -->
@@ -269,6 +270,7 @@ import { useCapabilityStore } from '../../stores/capabilityStore'
 import PanelEditorDialog from './PanelEditorDialog.vue'
 import PanelAppImportDialog from './PanelAppImportDialog.vue'
 import StringDbGenerateDialog from './StringDbGenerateDialog.vue'
+import HpoDataRow from './HpoDataRow.vue'
 import { usePanelManager } from '../../composables/usePanelManager'
 import type { PanelListItem } from '../../composables/usePanelManager'
 import { useApiService } from '../../composables/useApiService'

@@ -122,3 +122,21 @@ describe('scoreEvidenceRow', () => {
     expect(s.mode).toBe('ar_hom')
   })
 })
+
+describe('variant-type scoped groups (#581)', () => {
+  // Built directly: compileRuleset rejects type scopes while SV/CNV scoring is off.
+  const base = compileRuleset(RS)
+  const c = {
+    ...base,
+    groups: base.groups.map((g) => (g.id === 'lof' ? { ...g, variantType: 'sv' as const } : g))
+  }
+
+  it('scores a type-scoped group only on rows of that type', () => {
+    const row = { gnomad_af: 0.000001, func: 'stop_gained', moi: null }
+    const sv = scoreEvidenceRow({ ...row, variant_type: 'sv' }, d({}), c)
+    const snv = scoreEvidenceRow({ ...row, variant_type: 'snv' }, d({}), c)
+    expect(sv.contributions.map((x) => x.id)).toContain('lof')
+    expect(snv.contributions.map((x) => x.id)).not.toContain('lof')
+    expect(sv.score - snv.score).toBe(5)
+  })
+})

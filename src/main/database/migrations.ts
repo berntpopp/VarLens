@@ -22,11 +22,13 @@ import { migrateSeverityRanks } from './severity-rank-migration'
 import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
 import { repairSummaryKeys } from './summary-key-repair'
 import { migrateAnnotationBuildKey } from './annotation-build-key-migration'
+import { migrateAlleleTrim } from './allele-trim-migration'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
+import { DEFAULT_TAGS } from '../../shared/config/default-tags.config'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 54
+export const LATEST_SQLITE_SCHEMA_VERSION = 58
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -85,6 +87,10 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 54
  * - 52: variant_annotations keyed by genome build (#577; annotation-build-key-migration.ts)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
  * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
+ * - 55: default tags (#125; mirrors PG 0038)
+ * - 56: variants.ps, the VCF phase set id (#586; mirrors PG 0039)
+ * - 57: trim pre-#587 rows to minimal alleles, merging global annotations (#587; mirrors PG 0040)
+ * - 58: case_hpo_terms.excluded / key, Phenopackets term status (#600; mirrors PG 0041)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2125,6 +2131,62 @@ export function runMigrations(db: Database.Database): void {
       markPopulatedSummaryStale(db)
     }
     db.exec('PRAGMA user_version = 54')
+  }
+
+  // v55 (#125, mirrors PG 0038): the default quick-flag tags. A name a user
+  // already has (in any letter case) is skipped; user tags are never changed.
+  if (currentVersion < 55) {
+    const hasTagTable =
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tags'").get() !==
+      undefined
+    if (hasTagTable) {
+      const seed = db.prepare(
+        `INSERT INTO tags (name, color, created_at) SELECT ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM tags WHERE lower(name) = lower(?))`
+      )
+      const now = Date.now()
+      for (const tag of DEFAULT_TAGS) seed.run(tag.name, tag.color, now, tag.name)
+    }
+    db.exec('PRAGMA user_version = 55')
+  }
+
+  // v56 (#586, mirrors PG 0039): the VCF FORMAT PS phase set id of each call,
+  // for phase-aware compound-het labels. Rows imported before have none (NULL).
+  if (currentVersion < 56) {
+    const variantColumns = (
+      db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]
+    ).map((c) => c.name)
+    if (variantColumns.length > 0 && !variantColumns.includes('ps')) {
+      db.exec('ALTER TABLE variants ADD COLUMN ps INTEGER')
+    }
+    db.exec('PRAGMA user_version = 56')
+  }
+
+  // v57 (#587, mirrors PG 0040): rows imported before allele trimming get the
+  // minimal alleles an import stores now (allele-trim-migration.ts).
+  if (currentVersion < 57) {
+    migrateAlleleTrim(db)
+    db.exec('PRAGMA user_version = 57')
+  }
+
+  // v58 (#600, mirrors PG 0041): an HPO term can be excluded (looked for, absent)
+  // or key (the leading finding), never both. Existing rows stay present, not key.
+  if (currentVersion < 58) {
+    const hpoColumns = (
+      db.prepare('PRAGMA table_info(case_hpo_terms)').all() as { name: string }[]
+    ).map((c) => c.name)
+    // One transaction, each column checked on its own: a crash between the two
+    // ALTERs must not leave "key" missing behind a bumped version.
+    db.transaction(() => {
+      if (hpoColumns.length > 0 && !hpoColumns.includes('excluded')) {
+        db.exec('ALTER TABLE case_hpo_terms ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0')
+      }
+      if (hpoColumns.length > 0 && !hpoColumns.includes('key')) {
+        db.exec(`ALTER TABLE case_hpo_terms ADD COLUMN "key" INTEGER NOT NULL DEFAULT 0
+          CHECK (NOT ("key" = 1 AND excluded = 1))`)
+      }
+      db.exec('PRAGMA user_version = 58')
+    })()
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

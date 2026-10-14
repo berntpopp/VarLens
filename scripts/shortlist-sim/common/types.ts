@@ -1,8 +1,10 @@
 // Records exchanged between the simulation runner and the statistics/report layer.
 // They hold no coordinates or row-level background data — only ranks and counts.
 
-export type CaseMode = 'AD' | 'AR_HOM' | 'AR_COMPHET' | 'XLD'
-export const CASE_MODES: readonly CaseMode[] = ['AD', 'AR_HOM', 'AR_COMPHET', 'XLD']
+export type CaseMode = 'AD' | 'AR_HOM' | 'AR_COMPHET' | 'XLD' | 'XLR'
+export const CASE_MODES: readonly CaseMode[] = ['AD', 'AR_HOM', 'AR_COMPHET', 'XLD', 'XLR']
+/** X-linked modes, reported together as the XL stratum (#583). */
+export const XL_MODES: readonly CaseMode[] = ['XLD', 'XLR']
 
 export type ScenarioId =
   'primary' | 'clinvar_visible' | 'pheno_free' | 'pheno_shuffled' | 'missingness' | 'pheno_enriched'
@@ -48,6 +50,8 @@ export interface CaseResult {
   eligible: number
   /** Per causal allele: passed the scorer's gate. */
   causalEligible: boolean[]
+  /** Wall time of this scorer's ranking of the case (ms). */
+  ms?: number
 }
 
 /** Counts behind one tuned bin (spec §11.1). */
@@ -94,6 +98,8 @@ export interface RunManifest {
     disabledGroups: string[]
   }
   tuned: { A: number; B: number; bins: BinSupport[] }
+  /** Pre-registered rerun (#584): the ruleset file evaluated unchanged; nothing was tuned. */
+  frozenRuleset?: string
   scorers: {
     /** "Tier 1 candidates" — the ship comparator. */
     reference: string

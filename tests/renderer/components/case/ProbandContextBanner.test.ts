@@ -97,4 +97,50 @@ describe('ProbandContextBanner', () => {
 
     expect(wrapper.emitted('edit')).toBeTruthy()
   })
+
+  function mountWith(
+    hpoTerms: Array<{ hpo_id: string; hpo_label: string; excluded: boolean; key: boolean }>
+  ) {
+    window.api.caseMetadata.getFullMetadata = vi.fn().mockResolvedValue({
+      metadata: null,
+      cohorts: [],
+      hpoTerms: hpoTerms.map((t, i) => ({ id: i, case_id: 10, created_at: 0, ...t })),
+      comments: [],
+      metrics: [],
+      dataInfo: null,
+      externalIds: []
+    })
+    return mount(ProbandContextBanner, {
+      props: { caseId: 10, caseName: 'Case 001' },
+      global: { plugins: [vuetify] }
+    })
+  }
+
+  it('orders key, present, excluded chips with state in their text', async () => {
+    const wrapper = mountWith([
+      { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly', excluded: true, key: false },
+      { hpo_id: 'HP:0001252', hpo_label: 'Hypotonia', excluded: false, key: false },
+      { hpo_id: 'HP:0001250', hpo_label: 'Seizure', excluded: false, key: true }
+    ])
+    await flushPromises()
+    const chips = wrapper.findAll('.v-chip')
+    // Non-interactive chips are role-less spans, so the state must be in their text.
+    expect(chips.slice(0, 3).map((c) => c.text())).toEqual([
+      'Seizure, key finding',
+      'Hypotonia',
+      'no Microcephaly'
+    ])
+    expect(chips[0].attributes('aria-label')).toBeUndefined()
+    expect(wrapper.find('[data-testid="banner-phenotype-empty"]').exists()).toBe(false)
+  })
+
+  it('says the phenotype score is inactive when only excluded terms exist', async () => {
+    const wrapper = mountWith([
+      { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly', excluded: true, key: false }
+    ])
+    await flushPromises()
+    expect(wrapper.get('[data-testid="banner-phenotype-empty"]').text()).toContain(
+      'phenotype score inactive'
+    )
+  })
 })

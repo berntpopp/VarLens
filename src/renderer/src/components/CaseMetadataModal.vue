@@ -32,7 +32,7 @@
           :active="currentTab === tab.value"
           :color="currentTab === tab.value ? 'primary' : undefined"
           :prepend-icon="tab.icon"
-          variant="text"
+          :variant="currentTab === tab.value ? 'flat' : 'text'"
           class="metadata-tab-button"
           @click="setActiveTab(tab.value)"
         >

@@ -16,8 +16,17 @@
  * In web mode the router uses HTML5 history, so this is real deep-linking;
  * on desktop it runs against memory history (harmless, keeps one code path).
  */
-import { nextTick, onScopeDispose, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onScopeDispose,
+  ref,
+  shallowReactive,
+  watch,
+  type ComputedRef
+} from 'vue'
 import type { LocationQuery, LocationQueryRaw, Router } from 'vue-router'
+import { VIEW_STATE_KEYS } from '../utils/url-state/view-state-memory'
 
 export type ViewRoute = 'case' | 'cohort'
 
@@ -35,9 +44,15 @@ export interface UrlParamBinding {
   apply: (value: string | undefined) => void | Promise<void>
 }
 
-const bindings = new Set<UrlParamBinding>()
+const bindings = shallowReactive(new Set<UrlParamBinding>())
 let router: Router | null = null
 let restoring = 0
+/**
+ * URL-state work in flight that will still change view state: restores, and
+ * history steps (case/tab) until their navigation and the view memory settled.
+ * Tables hold their queries meanwhile (see useViewStatePending).
+ */
+const settling = ref(0)
 /**
  * Restores run strictly one after another: fast back/forward must not
  * interleave two half-applied states. Each run reads the route afresh, so
@@ -45,7 +60,10 @@ let restoring = 0
  */
 let restoreChain: Promise<void> = Promise.resolve()
 function queueRestore(): void {
-  restoreChain = restoreChain.then(restoreFromRoute, restoreFromRoute)
+  settling.value++
+  restoreChain = restoreChain
+    .then(restoreFromRoute, restoreFromRoute)
+    .finally(() => settling.value--)
 }
 let flushScheduled = false
 let pendingPush = false
@@ -76,9 +94,15 @@ export function queryForRoute(route: ViewRoute): LocationQueryRaw {
 
 function flushWrites(): void {
   flushScheduled = false
+  const usePush = pendingPush
+  pendingPush = false
+  // A history step holds view queries until its navigation (and view memory) settled.
+  const settled = (): void => {
+    if (usePush) settling.value--
+  }
   const route = currentRoute()
   if (router === null || route === null || restoring > 0) {
-    pendingPush = false
+    settled()
     return
   }
   const current = router.currentRoute.value.query
@@ -93,17 +117,22 @@ function flushWrites(): void {
     if (value === undefined) delete next[b.key]
     else next[b.key] = value
   }
-  const usePush = pendingPush
-  pendingPush = false
-  if (!changed) return
+  if (!changed) {
+    settled()
+    return
+  }
   selfNavigations.add(router.resolve({ query: next }).fullPath)
-  void (usePush ? router.push({ query: next }) : router.replace({ query: next }))
+  const navigation = usePush ? router.push({ query: next }) : router.replace({ query: next })
+  void navigation.finally(settled)
 }
 
 function scheduleWrite(binding: UrlParamBinding): void {
   if (restoring > 0) return
   const history = typeof binding.history === 'function' ? binding.history() : binding.history
-  if (history === 'push') pendingPush = true
+  if (history === 'push' && !pendingPush) {
+    pendingPush = true
+    settling.value++
+  }
   if (flushScheduled) return
   flushScheduled = true
   void Promise.resolve().then(flushWrites)
@@ -161,10 +190,12 @@ export function useUrlParam(binding: UrlParamBinding): void {
     if (value !== undefined && value !== binding.read()) {
       // Deferred a microtask: the owner may still be mid-setup.
       restoring++
+      settling.value++
       void Promise.resolve()
         .then(() => binding.apply(value))
         .finally(() => {
           restoring--
+          settling.value--
         })
     }
   }
@@ -172,11 +203,51 @@ export function useUrlParam(binding: UrlParamBinding): void {
   watch(binding.read, () => scheduleWrite(binding))
 }
 
+/** True while a URL restore applies state (it should land at once, not debounced). */
+export function isRestoringUrlState(): boolean {
+  return restoring > 0
+}
+
+/**
+ * Navigate to `query` and apply it to the bindings, holding view queries until
+ * done (view memory restore). Works without the sync installed (navigation only).
+ */
+export async function replaceAndRestore(target: Router, query: LocationQueryRaw): Promise<void> {
+  settling.value++
+  try {
+    if (router !== null) selfNavigations.add(target.resolve({ query }).fullPath)
+    await target.replace({ query })
+    if (router !== null) queueRestore()
+  } finally {
+    settling.value--
+  }
+}
+
+/**
+ * Whether `route`'s table state is still being settled from the URL: a restore
+ * or history step is in flight, or the URL carries view state (`f`/`q`/`sort`)
+ * whose owner has not registered yet (e.g. the deferred case filter toolbar).
+ * A table holds its page query meanwhile, so it queries once, with that state.
+ */
+export function useViewStatePending(route: ViewRoute): ComputedRef<boolean> {
+  return computed(() => {
+    if (router === null || currentRoute() !== route) return false
+    if (settling.value > 0) return true
+    const query = router.currentRoute.value.query
+    return VIEW_STATE_KEYS.some(
+      (key) =>
+        queryValue(query, key) !== undefined &&
+        ![...bindings].some((b) => b.route === route && b.key === key)
+    )
+  })
+}
+
 /** Test seam: reset module state between tests. */
 export function _resetUrlStateForTesting(): void {
   bindings.clear()
   router = null
   restoring = 0
+  settling.value = 0
   flushScheduled = false
   pendingPush = false
   selfNavigations.clear()

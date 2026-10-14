@@ -9,7 +9,7 @@
  *     For each variant type in scope, merges `baseFilters` with any
  *     `perTypeOverrides[type]`, maps the result to the case-view
  *     `VariantFilter`, resolves an active gene panel, and runs
- *     the case-view filter pipeline over every eligible row in keyset
+ *     the case-view filter pipeline over every eligible row in id-ordered
  *     pages (`forEachCandidatePage`). Per-type errors are collected and, if any
  *     type failed, the whole shortlist aborts with `ShortlistQueryError`
  *     — never a silent scope reduction (spec §7 boundary 1).
@@ -51,6 +51,7 @@ import {
 import type { CaseRepository } from './CaseRepository'
 import type { MetadataRepository } from './MetadataRepository'
 import { compileEvidenceConfig, rankEvidenceSqlite, toCaseInfo } from './shortlist-evidence'
+import { openHpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import {
   resolvePanelIntervalsInPlace,
@@ -69,6 +70,7 @@ import type {
   VariantTypeKey
 } from '../../shared/types/shortlist'
 import type { FilterPreset } from '../../shared/types/filter-presets'
+import type { HpoProfileTerm } from '../../shared/types/hpo-profile'
 import type { FilterState } from '../../shared/types/filters'
 import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
 import {
@@ -170,8 +172,8 @@ export function normalizeTieBreakerKey(key: string): string {
 export interface ShortlistStage1Dependencies extends PanelResolutionRepositories {
   filterBuilder: VariantFilterBuilder
   cases: Pick<CaseRepository, 'getCase'>
-  /** Case sex for the evidence ranking's hemizygosity rule. */
-  metadata: Pick<MetadataRepository, 'getCaseMetadata'>
+  /** Case sex (hemizygosity rule) and HPO terms (`hpo_resnik`). */
+  metadata: Pick<MetadataRepository, 'getCaseMetadata' | 'getCaseHpoTerms'>
 }
 
 /**
@@ -307,9 +309,16 @@ export class ShortlistService {
     }
     if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
 
+    const profile: HpoProfileTerm[] = compiled.usesHpoResnik
+      ? this.stage1.metadata
+          .getCaseHpoTerms(caseId)
+          .map((t) => ({ hpoId: t.hpo_id, excluded: t.excluded, key: t.key }))
+      : []
+    const hpo = compiled.usesHpoResnik ? openHpoGeneScorer(profile) : null
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
-      this.stage1.metadata.getCaseMetadata(caseId)?.sex
+      this.stage1.metadata.getCaseMetadata(caseId)?.sex,
+      hpo
     )
     const result = rankEvidenceSqlite({
       source: this.stage1Source,
@@ -317,7 +326,16 @@ export class ShortlistService {
       info,
       compiled,
       config,
-      limit
+      limit,
+      geneRefDbPath: () => {
+        try {
+          return getGeneReference()?.path ?? null
+        } catch (e) {
+          // The desktop loader throws when no copy exists: the CNV gene count stays 0.
+          mainLogger.warn(`Gene reference unavailable: ${toError(e).message}`, 'shortlist.service')
+          return null
+        }
+      }
     })
     if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
     return result

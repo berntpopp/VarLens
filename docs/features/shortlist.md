@@ -51,7 +51,7 @@ Starred variants override ClinVar-pinned ones, so a star is the strongest curati
 The **Evidence ranking (beta)** preset scores each SNV/indel with **evidence points** instead of a weighted average:
 
 - **Evidence groups.** Each group (population frequency, variant effect, CADD, ClinVar, phenotype match, disease gene) is a list of rules written in the [filter language](./filtering.md). The **first** rule that matches adds its points; a pinned *reference* rule catches everything else. A field a variant does not have never adds points — missing data is a rule of its own (e.g. *not in gnomAD*).
-- **Inheritance modes.** The modes are checked in a fixed order — recessive homozygous, recessive *possible* compound heterozygous (two or more heterozygous candidate alleles in the gene; phase is unknown), X-linked, dominant heterozygous — and the first that fits adds its points. If none fits, *No compatible inheritance* applies. Inheritance comes from the gene's mode of inheritance and the variant's zygosity; chrX calls in male cases (case sex) count as hemizygous outside the pseudoautosomal regions.
+- **Inheritance modes.** The modes are checked in a fixed order — recessive homozygous, recessive *possible* compound heterozygous (two or more heterozygous candidate alleles in the gene; phase is unknown unless **Consider phased variants** is on and the calls share a VCF `PS` phase set, in which case the score tooltip says *confirmed, in trans* or *in cis*; a cis pair keeps its points and only gets the label), X-linked, dominant heterozygous — and the first that fits adds its points. If none fits, *No compatible inheritance* applies. Inheritance comes from the gene's mode of inheritance and the variant's zygosity; chrX calls in male cases (case sex) count as hemizygous outside the pseudoautosomal regions.
 - **Points are ranking points, not probabilities.** A higher score means more supporting evidence under these rules; it is not a likelihood of pathogenicity.
 
 Hover the **Score** to see the inheritance mode, every rule that contributed and its points — they add up to the score. Rows of a possible compound heterozygous pair say so and name how many partner variants there are.
@@ -76,6 +76,33 @@ Rankings can be exported and imported as JSON to share them between installation
 ## Score breakdown on hover
 
 Hover any row's **Score** badge to see the weighted breakdown: the five components (impact, pathogenicity, rarity, ClinVar, phenotype) with their raw sub-scores in [0, 1], alongside any active pin flag (Starred or ClinVar P/LP). This makes the ranking transparent — you can always see *why* a row is near the top.
+
+## CNV and STR phenotype scoring
+
+::: warning Not active yet
+This scoring is built but switched off until it passes validation. Until then, CNV and STR rows are not part of the evidence ranking, so the `locus:` line and the fields below stay empty.
+:::
+
+For copy-number variants (CNVs) and short tandem repeats (STRs), the phenotype match comes from the **locus** the call hits. It is not taken from the best of every gene the variant overlaps:
+
+- **CNVs, gene route.** Each overlapped gene is weighted by its dosage sensitivity, for example haploinsufficiency for a deletion. The weights come from the VCF's AnnotSV annotation when present, otherwise from ClinGen. The best gene is then size-corrected against this case's own gene scores, so a CNV spanning 30 genes does not win just by having more chances.
+- **CNVs, region route.** A CNV that covers a ClinGen dosage-sensitive region (for example 16p11.2 BP4–BP5) is scored against that region's syndrome, scaled by how much of the region it covers. The higher of the two routes is used.
+- **STRs.** The call is matched to its STRchive locus. Its repeat size gives a band (normal, intermediate, premutation or full), and the score covers only the diseases of that band. A normal band, a recessive locus with only one expanded allele, or a refuted locus gives no score.
+
+Hover the **Score** to see a `locus:` line under the phenotype block. For a region it shows the region, the dosage score and its source, the coverage, and how many of the overlapped genes are HPO genes (genes with HPO disease annotations). For a gene it shows the driving gene and its dosage source. For an STR it shows the gene, motif, repeat copies, band, inheritance and typical onset. The rank line still compares the score with all HPO genes. It is a ranking aid, not a likelihood of pathogenicity.
+
+The results are available as [filter language](./filtering.md) fields in custom rankings: `hpo_best_locus` (gene, region or STR id), `cnv_gene_count` (protein-coding genes the CNV overlaps) and `str_band`. The built-in rankings do not use them yet.
+
+### Data sources
+
+**Update HPO data** downloads all reference sources and keeps them versioned on your machine. The HPO data row lists the installed version of each source:
+
+- **Human Phenotype Ontology** (HPO licence): terms and disease annotations.
+- **ClinGen Dosage Sensitivity** (CC0 1.0): gene and region haploinsufficiency and triplosensitivity scores.
+- **STRchive** (MIT): repeat loci, thresholds and diseases.
+- **Mondo** (CC BY 4.0): maps ClinGen region diseases to OMIM and Orphanet ids.
+
+If an optional source (ClinGen, STRchive or Mondo) fails to download, the update keeps that source's previous version and warns. If the HPO download fails, the whole update fails and the installed data is left untouched.
 
 ## Auto-refresh on annotation
 

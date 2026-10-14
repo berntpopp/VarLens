@@ -52,6 +52,7 @@ import {
   panelsManifest,
   proteinManifest,
   referenceServicesManifest,
+  hpoDataManifest,
   spliceaiManifest,
   vepManifest
 } from './parity-manifest/reference'
@@ -104,7 +105,8 @@ export const PARITY_MANIFEST = {
   perf: perfManifest,
   debug: debugManifest,
   jobs: jobsManifest,
-  referenceServices: referenceServicesManifest
+  referenceServices: referenceServicesManifest,
+  hpoData: hpoDataManifest
 } as const satisfies ParityManifestShape
 
 /** Flat list of every manifest entry, in declaration order. */

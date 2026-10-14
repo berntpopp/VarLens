@@ -22,6 +22,7 @@ type Statements = ReturnType<typeof prepareStatements>
 function recordingStatements(): { stmts: Statements; batches: number[] } {
   const batches: number[] = []
   const stmts = {
+    caseBuild: () => 'GRCh38',
     insertBatch: (_caseId: number, rows: unknown[]) => {
       batches.push(rows.length)
     }
@@ -173,6 +174,7 @@ describe('byte-bounded import batches (SQLite worker streams)', () => {
 
   it('fails the VCF import when a batch insert fails, instead of skipping the line', async () => {
     const stmts = {
+      caseBuild: () => 'GRCh38',
       insertBatch: () => {
         throw new Error('disk full')
       }

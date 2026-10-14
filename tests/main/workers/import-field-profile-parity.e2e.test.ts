@@ -226,7 +226,7 @@ const VCF = [
 
 interface Imported {
   rows: Record<string, Record<string, string>>
-  dictionary: Record<string, string> | null
+  dictionary: Record<string, unknown> | null
 }
 
 /**
@@ -385,9 +385,9 @@ describe('import field profile: every source, both backends', () => {
       expect(first).not.toHaveProperty('RevelScore')
       expect(rows[keyOf(EVIDENCE[1])]).not.toHaveProperty('LocalSig')
       expect(dictionary).toMatchObject({
-        AltAF_Index: 'JSON:AltAF-Index',
-        REVEL: 'JSON:RevelScore',
-        GNOMAD_POPMAX_AF: 'JSON:GnomPMaxFiltAF'
+        AltAF_Index: { source: 'JSON:AltAF-Index' },
+        REVEL: { source: 'JSON:RevelScore' },
+        GNOMAD_POPMAX_AF: { source: 'JSON:GnomPMaxFiltAF' }
       })
     }, 60_000)
 
@@ -413,9 +413,11 @@ describe('import field profile: every source, both backends', () => {
       expect(first).not.toHaveProperty('SYMBOL') // a column
       expect(rows[keyOf(EVIDENCE[1])]).toMatchObject({ SPLICEAI_MAX: '0.03' })
       expect(dictionary).toMatchObject({
-        REVEL: 'CSQ:REVEL_score',
-        my_flag: 'INFO:my-flag',
-        CLINVAR_REVSTAT: 'CSQ:ClinVarCurrent_CLNREVSTAT'
+        REVEL: { source: 'CSQ:REVEL_score' },
+        // The INFO header's Type/Number is kept with the key (#538).
+        my_flag: { source: 'INFO:my-flag', type: 'Flag', number: '0' },
+        DP: { source: 'INFO:DP', type: 'Integer', number: '1' },
+        CLINVAR_REVSTAT: { source: 'CSQ:ClinVarCurrent_CLNREVSTAT' }
       })
     }, 60_000)
 
@@ -442,7 +444,32 @@ describe('import field profile: every source, both backends', () => {
       expect(rows['chr3:101:A>G']).toEqual({ AF: '0.5', AF_2: '0.01' })
       // The second file has no INFO AF: its CSQ AF keeps the key the first file gave it.
       expect(rows['chr3:202:A>G']).toEqual({ AF_2: '0.02' })
-      expect(dictionary).toEqual({ AF: 'INFO:AF', AF_2: 'CSQ:AF' })
+      expect(dictionary).toEqual({
+        AF: { source: 'INFO:AF', type: 'Float', number: 'A' },
+        AF_2: { source: 'CSQ:AF' }
+      })
+    }, 60_000)
+
+    it(`${label}: a multi-allelic split stores minimal alleles, the same as their plain spelling`, async () => {
+      const vcf = (ref: string, alt: string, gt: string, ac: string): string =>
+        [
+          '##fileformat=VCFv4.2',
+          '##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count">',
+          '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1',
+          `chr5\t100\t.\t${ref}\t${alt}\t50\tPASS\tAC=${ac}\tGT\t${gt}`,
+          ''
+        ].join('\n')
+      const split = join(dir, 'multi-allelic.vcf')
+      const plain = join(dir, 'minimal.vcf')
+      writeFileSync(split, vcf('ATT', 'A,AT', '1/2', '1,2'))
+      writeFileSync(plain, vcf('AT', 'A', '0/1', '2'))
+      // ATT>AT (the split's second ALT, full REF kept) is the same deletion as AT>A (#587).
+      expect((await importCase(split)).rows).toEqual({
+        'chr5:100:ATT>A': { AC: '1' },
+        'chr5:100:AT>A': { AC: '2' }
+      })
+      expect((await importCase(plain)).rows).toEqual({ 'chr5:100:AT>A': { AC: '2' } })
     }, 60_000)
 
     it(`${label}: the repo VEP fixture keeps INFO keys and suffixes colliding subfields`, async () => {

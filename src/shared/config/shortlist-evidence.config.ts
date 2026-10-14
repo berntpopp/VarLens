@@ -70,6 +70,17 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
   variantTypes: ['snv', 'indel'] as const,
 
   /**
+   * SV/CNV/STR evidence scoring (#581, #582), one flag per type: an enabled
+   * type may be scoped by presets and named by rule groups. All off until the
+   * CNV/STR spec §7 criteria pass; the legacy 0-1 scorers keep ranking them and
+   * no mixed-type order ships. Any flip is a separate, user-approved commit.
+   */
+  structuralTypes: {
+    types: ['sv', 'cnv', 'str'] as const,
+    enabled: { sv: false, cnv: false, str: false } as Record<'sv' | 'cnv' | 'str', boolean>
+  },
+
+  /**
    * Rule ids ending in this suffix are a group's catch-all reference bin
    * (spec §11.1, §14–15): last in the group; its points may be tuned.
    */

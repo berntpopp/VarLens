@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import {
   describeProblem,
   evidenceConfigProblems,
@@ -6,6 +6,7 @@ import {
   problemKey,
   rulesetProblems
 } from '../../../src/shared/evidence/ruleset-problems'
+import { SHORTLIST_EVIDENCE_CONFIG } from '../../../src/shared/config/shortlist-evidence.config'
 import { VARVIS_EVIDENCE_TEMPLATE } from '../../../src/shared/config/evidence-rulesets/varvis-template'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
@@ -88,5 +89,80 @@ describe('evidenceConfigProblems / describeProblem', () => {
       'rankConfig.ruleset.groups.0.rules.0.when'
     ])
     expect(describeProblem(problems[1], rs)).toMatch(/^rule af_missing: /)
+  })
+})
+
+// #581, #582: SV/CNV/STR evidence scoring stays behind one flag per type (all off by default).
+describe('variant-type scoped groups', () => {
+  const flags = SHORTLIST_EVIDENCE_CONFIG.structuralTypes.enabled
+  const enable = (...types: Array<keyof typeof flags>): void => {
+    for (const t of types.length > 0 ? types : (['sv', 'cnv'] as const)) flags[t] = true
+  }
+  afterEach(() => {
+    flags.sv = flags.cnv = flags.str = false
+  })
+  const svRuleset = (): EvidenceRuleset => {
+    const rs = clone()
+    rs.groups.push({
+      id: 'sv_size',
+      label: 'SV size',
+      scope: 'global',
+      variantType: 'sv',
+      rules: [
+        { id: 'sv_big', label: 'large', when: 'sv_length:>=:100000 AND sv_type:=:DEL', points: 1 }
+      ]
+    })
+    return rs
+  }
+  const svConfig = (ruleset: EvidenceRuleset): ShortlistConfig => ({
+    variantTypeScope: ['snv', 'indel', 'sv', 'cnv'],
+    topN: 10,
+    baseFilters: {},
+    rankConfig: {
+      weights: { impact: 0, pathogenicity: 0, rarity: 0, clinvar: 0, phenotype: 0 },
+      ruleset
+    }
+  })
+
+  it('rejects a type-scoped group and SV/CNV scope while the flag is off (default)', () => {
+    expect(keys(svRuleset())).toEqual([
+      'groups.' + VARVIS_EVIDENCE_TEMPLATE.groups.length + '.variantType'
+    ])
+    expect(evidenceConfigProblems(svConfig(svRuleset())).map((p) => problemKey(p.path))).toEqual([
+      'variantTypeScope',
+      `rankConfig.ruleset.groups.${VARVIS_EVIDENCE_TEMPLATE.groups.length}.variantType`
+    ])
+  })
+
+  it('accepts them when the flag is on', () => {
+    enable()
+    expect(rulesetProblems(svRuleset())).toEqual([])
+    expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
+  })
+
+  it('enables each type on its own', () => {
+    enable('str')
+    const rs = svRuleset()
+    expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
+      `groups.${rs.groups.length - 1}.variantType`
+    ])
+    rs.groups[rs.groups.length - 1].variantType = 'str'
+    expect(rulesetProblems(rs)).toEqual([])
+  })
+
+  it('keeps rejecting STR while only SV/CNV are enabled', () => {
+    enable()
+    const rs = svRuleset()
+    rs.groups[rs.groups.length - 1].variantType = 'str'
+    expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
+      `groups.${rs.groups.length - 1}.variantType`
+    ])
+    const config = {
+      ...svConfig(clone()),
+      variantTypeScope: ['snv', 'str'] as ShortlistConfig['variantTypeScope']
+    }
+    expect(evidenceConfigProblems(config).map((p) => problemKey(p.path))).toEqual([
+      'variantTypeScope'
+    ])
   })
 })

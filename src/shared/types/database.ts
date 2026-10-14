@@ -159,6 +159,7 @@ export interface Variant {
   caller?: string | null
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null
+  tag_ids?: number[] // tags of this case's row, set by table page reads (#125)
 }
 
 /**
@@ -512,6 +513,10 @@ export interface CaseHpoTerm {
   hpo_id: string
   /** HPO label */
   hpo_label: string
+  /** Looked for and found absent (Phenopackets `excluded`); unlisted terms are not assessed. */
+  excluded: boolean
+  /** Leading finding; never set together with `excluded`. */
+  key: boolean
   /** Unix timestamp in milliseconds */
   created_at: number
 }

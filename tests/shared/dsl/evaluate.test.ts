@@ -76,6 +76,14 @@ describe('compileRule — semantics', () => {
     ).toBe(true)
   })
 
+  it('reads SV/CNV extension fields of a candidate (#581)', () => {
+    const p = pred('(sv_type:=:DEL AND sv_length:>=:100000) OR cnv_copy_number:<=:1')
+    expect(p(row({ sv_type: 'DEL', sv_length: 250000 }))).toBe(true)
+    expect(p(row({ sv_type: 'DUP', sv_length: 250000 }))).toBe(false)
+    expect(p(row({ cnv_copy_number: 1 }))).toBe(true)
+    expect(p(row({}))).toBe(false)
+  })
+
   it('never throws on odd imported values (Review Focus 5)', () => {
     const p = pred('hpo_sim_score:>=:0.1 OR func:=:missense_variant')
     expect(() => p(row({ hpo_sim_score: [], func: ['a'] }))).not.toThrow()

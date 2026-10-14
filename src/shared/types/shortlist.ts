@@ -1,3 +1,4 @@
+import type { HpoExplanation } from './hpo-profile'
 /**
  * Shared shortlist types for the unified case Shortlist tab.
  *
@@ -14,6 +15,7 @@ import type { EvidenceContribution, EvidenceRuleset, ModeId } from './evidence-r
 import type { Variant, SortItem } from './database'
 import type { FilterState } from './filters'
 import type { FilterPreset } from './filter-presets'
+import type { CompHetPhase } from '../utils/phasing'
 
 /** Every value `v-tabs` can hold in the case view. */
 export type VisibleTab = 'shortlist' | 'snv' | 'sv' | 'cnv' | 'str'
@@ -91,6 +93,14 @@ export interface ScoredRow {
   rank_evidence?: EvidenceContribution[]
   /** Evidence presets only: ids of the other het alleles of a possible compound het. */
   rank_partners?: number[]
+  /**
+   * Evidence presets with "consider phasing": the phase of a compound het
+   * against its partners (#586) — `trans` or `cis` when proven by a shared
+   * phase set, `possible` otherwise. A cis pair is labelled, not excluded.
+   */
+  rank_comphet_phase?: CompHetPhase | null
+  /** Evidence presets with case HPO terms and installed HPO data: the phenotype explanation. */
+  rank_hpo?: HpoExplanation | null
 }
 
 /**
@@ -118,12 +128,18 @@ export interface ShortlistCandidate extends Variant {
   cnv_copy_number?: number | null
   /** CNV-only: caller-reported quality for the copy-number estimate. */
   cnv_copy_number_quality?: number | null
-  /** STR-only: expansion status vs disease thresholds. */
-  str_status?: 'normal' | 'intermediate' | 'pathologic' | null
+  /** STR-only: Stranger STR_STATUS (`normal` | `pre_mutation` | `full_mutation`), comma-joined if unsplit. */
+  str_status?: string | null
   /** STR-only: associated disease name, if known. */
   str_disease?: string | null
   /** STR-only: alternate allele copy count expression. */
   str_alt_copies?: string | null
+  /** STR-only: Stranger/ExpansionHunter REPID (locus id, may carry an `_n` suffix). */
+  str_repeat_id?: string | null
+  /** STR-only: ExpansionHunter VARID (variant catalog id). */
+  str_variant_catalog_id?: string | null
+  /** STR-only: repeat unit (RU) of the call. */
+  str_repeat_unit?: string | null
   /** Derived from `COALESCE(cva.starred, 0)`; always present. */
   is_starred: boolean
 }

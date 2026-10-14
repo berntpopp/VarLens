@@ -62,12 +62,16 @@ describe('variant search parity', () => {
     const sqliteResults = sqlite.variants.searchVariants(caseId, 'stop', 20)
 
     const pool = {
-      query: vi.fn().mockResolvedValueOnce({
-        rows: sqliteResults.map((variant) => ({
-          ...variant,
-          internal_af: null
-        }))
-      })
+      // Default: the page's tag lookup (#125).
+      query: vi
+        .fn()
+        .mockResolvedValue({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: sqliteResults.map((variant) => ({
+            ...variant,
+            internal_af: null
+          }))
+        })
     }
     const postgres = new PostgresVariantReadRepository(pool as never, 'public')
     const postgresResults = await postgres.searchVariants(caseId, 'stop', 20)

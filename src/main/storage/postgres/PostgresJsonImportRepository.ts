@@ -55,7 +55,8 @@ const VARIANT_BATCH_RECORDSET_TYPES: Record<string, string> = {
   sv_length: 'bigint',
   caller: 'text',
   impact_rank: 'smallint',
-  clinvar_rank: 'smallint'
+  clinvar_rank: 'smallint',
+  ps: 'bigint'
 }
 
 const TRANSCRIPT_RECORDSET_TYPES: Record<string, string> = {
@@ -135,7 +136,7 @@ export interface PostgresJsonImportRequest {
   genomeBuild: string
   importFileType: PostgresJsonImportFileType
   /** Read after the variants are written: stored info key → original source field. */
-  fieldDictionary?: () => Record<string, string> | null
+  fieldDictionary?: () => Record<string, unknown> | null
 }
 
 export interface PostgresJsonImportBatchResult {

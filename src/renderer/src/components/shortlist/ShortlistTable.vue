@@ -286,10 +286,14 @@ onKeyStroke(
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
     @mouseover="rankTip.onMouseover"
     @mouseout="rankTip.onMouseout"
+    @focusin="rankTip.onFocusin"
+    @focusout="rankTip.onFocusout"
   >
     <!-- Score breakdown: one shared tooltip (below), not a v-tooltip per row -->
     <template #[`item.rank_score`]="{ item }">
-      <span :data-rank-tip="item.id">{{ formatRankScore(item) }}</span>
+      <span :data-rank-tip="item.id" tabindex="0" @keydown.esc="rankTip.close">{{
+        formatRankScore(item)
+      }}</span>
     </template>
 
     <template #[`item.variant_type`]="{ item }">
@@ -396,6 +400,8 @@ onKeyStroke(
       :pinned="pinFor(rankTipRow)"
       :evidence="rankTipRow.rank_evidence"
       :partners="rankTipRow.rank_partners"
+      :phase="rankTipRow.rank_comphet_phase"
+      :hpo="rankTipRow.rank_hpo"
     />
   </v-tooltip>
 </template>

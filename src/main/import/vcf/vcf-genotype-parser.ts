@@ -1,7 +1,7 @@
 /**
  * VCF genotype parser
  *
- * Extracts per-sample GT/GQ/DP/AD fields from VCF FORMAT+sample columns.
+ * Extracts per-sample GT/GQ/DP/AD/PS fields from VCF FORMAT+sample columns.
  * Pure functions with no side effects.
  */
 
@@ -42,6 +42,9 @@ export function parseGenotype(
   const dpIdx = fieldIndex.get('DP')
   const dp = parseIntField(dpIdx, sampleValues)
 
+  // Extract PS (phase set id; Number=1 Integer, missing → null)
+  const ps = parseIntField(fieldIndex.get('PS'), sampleValues)
+
   // Extract AD (comma-separated: ref,alt1[,alt2,...])
   const adIdx = fieldIndex.get('AD')
   let adRef: number | null = null
@@ -74,7 +77,7 @@ export function parseGenotype(
     }
   }
 
-  return { gt, gq, dp, adRef, adAlt, ab }
+  return { gt, gq, dp, adRef, adAlt, ab, ps }
 }
 
 /**

@@ -2,13 +2,14 @@
  * Evidence-rule ranking in the SQLite shortlist service (spec §3.3–3.4,
  * Review Focus 2 and 4).
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { createRepositories } from '../../../src/main/database/createRepositories'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
 import type { ShortlistService } from '../../../src/main/database/ShortlistService'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import {
@@ -19,6 +20,23 @@ import {
   EVIDENCE_RULESET,
   evidenceFixtureRows
 } from '../../fixtures/shortlist/evidence-fixture'
+import { SHORTLIST_PAGE_SIZE } from '../../../src/main/database/shortlist-query'
+
+vi.mock('../../../src/main/services/phenotype/hpo-similarity-db', async (original) => ({
+  ...(await original<object>()),
+  openHpoGeneScorer: vi.fn(() => null)
+}))
+
+const bufferCap = vi.hoisted(() => ({ rows: null as number | null }))
+vi.mock('../../../src/main/database/shortlist-query', async (original) => {
+  const actual = await original<typeof import('../../../src/main/database/shortlist-query')>()
+  return {
+    ...actual,
+    get SHORTLIST_BUFFER_MAX_ROWS() {
+      return bufferCap.rows ?? actual.SHORTLIST_BUFFER_MAX_ROWS
+    }
+  }
+})
 
 function seed(db: DatabaseType): void {
   db.prepare(
@@ -56,6 +74,76 @@ describe('ShortlistService — evidence ranking', () => {
     config: ShortlistConfig = EVIDENCE_CONFIG
   ): ReturnType<ShortlistService['getShortlist']> =>
     service.getShortlist({ caseId: 1, adHocConfig: config }, () => null)
+
+  it('opens the HPO scorer only for rulesets that read hpo_resnik', () => {
+    vi.mocked(openHpoGeneScorer).mockClear()
+    run()
+    expect(openHpoGeneScorer).not.toHaveBeenCalled()
+    const ruleset = EVIDENCE_CONFIG.rankConfig.ruleset!
+    const hpoGroup = {
+      id: 'hpo',
+      label: 'HPO',
+      scope: 'global' as const,
+      rules: [{ id: 'hpo', label: 'HPO', when: 'hpo_resnik:>=:2', points: 1 }]
+    }
+    run({
+      ...EVIDENCE_CONFIG,
+      rankConfig: {
+        ...EVIDENCE_CONFIG.rankConfig,
+        ruleset: { ...ruleset, groups: [...ruleset.groups, hpoGroup] }
+      }
+    })
+    expect(openHpoGeneScorer).toHaveBeenCalledTimes(1)
+  })
+
+  it('explains the kept rows (rank_hpo) whether pass 2 reuses the pass-1 rows or re-queries', () => {
+    db.prepare(
+      `INSERT INTO case_hpo_terms (case_id, hpo_id, hpo_label, created_at) VALUES (1, 'HP:0001250', 'Seizure', 0)`
+    ).run()
+    const explanation = { diseaseId: 'OMIM:1', diseaseLabel: 'D' } as never
+    vi.mocked(openHpoGeneScorer).mockReturnValue({
+      score: () => 0.5,
+      bestDisease: () => 'OMIM:1',
+      conflicts: () => 0,
+      explain: () => explanation
+    } as never)
+    const ruleset = EVIDENCE_CONFIG.rankConfig.ruleset!
+    const config: ShortlistConfig = {
+      ...EVIDENCE_CONFIG,
+      rankConfig: {
+        ...EVIDENCE_CONFIG.rankConfig,
+        ruleset: {
+          ...ruleset,
+          groups: [
+            ...ruleset.groups,
+            {
+              id: 'hpo',
+              label: 'HPO',
+              scope: 'global' as const,
+              rules: [{ id: 'hpo', label: 'HPO', when: 'hpo_resnik:>=:0.2', points: 1 }]
+            }
+          ]
+        }
+      }
+    }
+    try {
+      const withGene = (rows: Array<{ gene_symbol: string | null }>) =>
+        rows.filter((r) => r.gene_symbol !== null && r.gene_symbol !== '')
+      const buffered = withGene(run(config).rows as never)
+      expect(buffered.length).toBeGreaterThan(0)
+      expect(buffered.every((r) => (r as { rank_hpo?: unknown }).rank_hpo === explanation)).toBe(
+        true
+      )
+      bufferCap.rows = 0
+      const requeried = withGene(run(config).rows as never)
+      expect(requeried.every((r) => (r as { rank_hpo?: unknown }).rank_hpo === explanation)).toBe(
+        true
+      )
+    } finally {
+      bufferCap.rows = null
+      vi.mocked(openHpoGeneScorer).mockReturnValue(null)
+    }
+  })
 
   it('pairs compound-het alleles split across pages and SNV/indel types', () => {
     const { rows } = run()
@@ -149,6 +237,26 @@ describe('ShortlistService — evidence ranking', () => {
     expect(all.rows.slice(0, top.rows.length).map((r) => [r.id, r.rank_score])).toEqual(
       top.rows.map((r) => [r.id, r.rank_score])
     )
+  })
+
+  it('ranks identically whether pass 2 reuses the pass-1 rows or re-queries them', () => {
+    const buffered = service.rankCase(
+      { caseId: 1, adHocConfig: EVIDENCE_CONFIG },
+      () => null,
+      Infinity
+    )
+    bufferCap.rows = 0
+    try {
+      const requeried = service.rankCase(
+        { caseId: 1, adHocConfig: EVIDENCE_CONFIG },
+        () => null,
+        Infinity
+      )
+      expect(requeried.rows.length).toBeGreaterThan(SHORTLIST_PAGE_SIZE)
+      expect(buffered.rows).toEqual(requeried.rows)
+    } finally {
+      bufferCap.rows = null
+    }
   })
 
   it('keeps legacy rows free of evidence fields', () => {

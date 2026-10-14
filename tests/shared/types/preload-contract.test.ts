@@ -31,7 +31,8 @@ const DOMAIN_CONTRACT_PATHS: Record<string, string> = {
   ReferenceServicesApi: 'src/shared/ipc/domains/reference-services.ts',
   CaseMetadataDomainContract: 'src/shared/ipc/domains/case-metadata.ts',
   ImportDomainContract: 'src/shared/ipc/domains/import.ts',
-  AuthDomainContract: 'src/shared/ipc/domains/auth.ts'
+  AuthDomainContract: 'src/shared/ipc/domains/auth.ts',
+  HpoDataApi: 'src/shared/ipc/domains/hpo-data.ts'
 }
 
 /**

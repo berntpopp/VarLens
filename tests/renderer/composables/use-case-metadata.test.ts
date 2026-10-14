@@ -13,11 +13,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { computed } from 'vue'
 import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useCaseMetadata } from '@renderer/composables/useCaseMetadata'
 import type { CohortGroup, CaseHpoTerm, FullCaseMetadata } from '../../../src/shared/types/api'
 import { logService } from '../../../src/renderer/src/services/LogService'
+import { phenotypeChange } from '../../../src/renderer/src/composables/phenotypeChanges'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -182,6 +184,46 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
     })
   })
 
+  describe('re-render after cache writes', () => {
+    it('re-renders computeds over status, sex, age, dob, and cohorts edits', async () => {
+      // The server returns the merged row, like the real upsert.
+      let row = makeFullMetadata().metadata
+      window.api.caseMetadata.upsert = vi.fn().mockImplementation(async (_id, updates: object) => {
+        row = { ...row!, ...updates }
+        return row
+      })
+      window.api.caseMetadata.setCohorts = vi.fn().mockResolvedValue(undefined)
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(1, makeFullMetadata())
+      result.cohortGroupsCache.value = [fakeCohort]
+      // Same shape as CaseMetadataCard: a computed over the entry, then over its fields.
+      const entry = computed(() => result.getMetadata(1))
+      const view = computed(() => ({
+        status: entry.value?.metadata?.affected_status,
+        sex: entry.value?.metadata?.sex,
+        age: entry.value?.metadata?.age,
+        dob: entry.value?.metadata?.date_of_birth,
+        cohorts: entry.value?.cohorts.map((c) => c.id)
+      }))
+      expect(view.value.status).toBeNull()
+
+      await result.updateStatus(1, 'affected')
+      await result.updateSex(1, 'female')
+      await result.updateAge(1, 4)
+      await result.updateDob(1, '2020-01-01')
+      await result.setCaseCohorts(1, [fakeCohort.id])
+      await flushPromises()
+      expect(view.value).toEqual({
+        status: 'affected',
+        sex: 'female',
+        age: 4,
+        dob: '2020-01-01',
+        cohorts: [fakeCohort.id]
+      })
+    })
+  })
+
   describe('assignHpoTerm', () => {
     const caseId = 1
 
@@ -199,10 +241,99 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       app = appInstance
       result.metadataCache.value.set(caseId, makeFullMetadata())
 
+      phenotypeChange.value = null
       await result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')
 
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([serverTerm])
+      expect(phenotypeChange.value).toEqual({ caseId })
+    })
+
+    it('re-renders computeds that read the cached HPO terms', async () => {
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue({
+        id: 5,
+        case_id: caseId,
+        hpo_id: 'HP:0001250',
+        hpo_label: 'Seizure',
+        excluded: false,
+        key: false,
+        created_at: 0
+      })
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+      // Same shape as CaseMetadataCard: a computed over the entry, then over its terms.
+      const entry = computed(() => result.getMetadata(caseId))
+      const ids = computed(() => entry.value?.hpoTerms.map((t) => t.hpo_id) ?? [])
+      expect(ids.value).toEqual([])
+      await result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure', { excluded: false, key: false })
+      await flushPromises()
+      expect(ids.value).toEqual(['HP:0001250'])
+    })
+
+    it('inserts a new term in server order (by HPO ID), so a reload keeps the chip order', async () => {
+      const term = (hpo_id: string): CaseHpoTerm => ({
+        id: 1,
+        case_id: caseId,
+        hpo_id,
+        hpo_label: hpo_id,
+        excluded: false,
+        key: false,
+        created_at: 0
+      })
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue(term('HP:0001250'))
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(
+        caseId,
+        makeFullMetadata({ hpoTerms: [term('HP:0000252'), term('HP:0001252')] })
+      )
+      await result.assignHpoTerm(caseId, 'HP:0001250', 'HP:0001250')
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms.map((t) => t.hpo_id)).toEqual([
+        'HP:0000252',
+        'HP:0001250',
+        'HP:0001252'
+      ])
+    })
+
+    it('upserts status flags in place and rolls back to the previous flags on failure', async () => {
+      const present: CaseHpoTerm = {
+        id: 7,
+        case_id: caseId,
+        hpo_id: 'HP:0000252',
+        hpo_label: 'Microcephaly',
+        excluded: false,
+        key: true,
+        created_at: 1_700_000_000_000
+      }
+      const pending = deferred<unknown>()
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockReturnValue(pending.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [present] }))
+
+      phenotypeChange.value = null
+      // key requested together with excluded: the optimistic row drops key, like the repository.
+      const call = result.assignHpoTerm(caseId, present.hpo_id, present.hpo_label, {
+        excluded: true,
+        key: true
+      })
+      await flushPromises()
+      expect(window.api.caseMetadata.assignHpoTerm).toHaveBeenCalledWith(
+        caseId,
+        present.hpo_id,
+        present.hpo_label,
+        { excluded: true, key: true }
+      )
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([
+        { ...present, excluded: true, key: false }
+      ])
+
+      pending.resolve(fakeSerializableError)
+      await expect(call).rejects.toMatchObject({ code: 'DB_ERROR' })
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([present])
+      expect(phenotypeChange.value).toBeNull()
     })
 
     it('reverts the optimistic push when assignHpoTerm fails (duplicate HPO term)', async () => {
@@ -214,9 +345,11 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
 
       const baselineLength = result.metadataCache.value.get(caseId)?.hpoTerms.length ?? 0
 
+      phenotypeChange.value = null
       await expect(result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')).rejects.toMatchObject({
         code: 'DB_ERROR'
       })
+      expect(phenotypeChange.value).toBeNull()
 
       const cached = result.metadataCache.value.get(caseId)
       // Reverted back to baseline — no error-shaped object and no orphaned
@@ -291,10 +424,12 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       app = appInstance
       result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [existingTerm] }))
 
+      phenotypeChange.value = null
       await result.removeHpoTerm(caseId, existingTerm.hpo_id)
 
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([])
+      expect(phenotypeChange.value).toEqual({ caseId })
     })
 
     it('reverts the optimistic removal when removeHpoTerm fails', async () => {

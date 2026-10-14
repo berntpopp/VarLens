@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { nextTick, ref } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import { createAppState } from '../../../src/renderer/src/composables/useAppState'
@@ -62,6 +63,9 @@ async function settle(): Promise<void> {
 }
 
 describe('cohort deep link', () => {
+  // useShellLifecycle reads the database store (startup reopen, #575).
+  beforeEach(() => setActivePinia(createPinia()))
+
   it('stays on /cohort, query included, when the database path first resolves', async () => {
     const router = makeRouter()
     const { state, databasePath } = mountShell(router)

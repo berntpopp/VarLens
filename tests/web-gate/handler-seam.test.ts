@@ -86,6 +86,7 @@ const EXPECTED_ROUTE_OVERRIDE_MODULES = new Set([
   'gene-ref.ts',
   'gnomad.ts',
   'hpo.ts',
+  'hpo-data.ts',
   'import.ts',
   'jobs.ts',
   'myvariant.ts',

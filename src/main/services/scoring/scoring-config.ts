@@ -230,14 +230,14 @@ export const SCORING_CONFIG = {
 
   str: {
     /**
-     * `impact` when `str_status === 'pathologic'`. The caller has
+     * `impact` when an allele's Stranger `str_status` is `full_mutation`. The caller has
      * already determined the expansion exceeds the pathologic threshold
      * for the locus — this is the strongest signal STR data provides.
      */
     pathologicImpact: 1.0,
 
     /**
-     * `impact` when `str_status === 'intermediate'`. Premutation-range
+     * `impact` when an allele's Stranger `str_status` is `pre_mutation`. Premutation-range
      * or borderline expansions — meaningful but not definitively
      * pathologic.
      */

@@ -13,6 +13,8 @@ import {
 } from '../../../src/main/database/createRepositories'
 import { alleleKey } from '../../../src/main/services/scoring/evidence'
 import { genotypeZygosity } from '../../../src/shared/utils/genotype'
+import { isInPAR } from '../../../src/shared/utils/par-regions'
+import { normalizeContigName } from '../../../src/shared/sql/chromosome-order'
 import type { Background, MappedVariant } from '../concordance/load-backgrounds'
 import { rng } from '../common/rng'
 import {
@@ -26,11 +28,39 @@ export type AlleleClass = 'snv' | 'indel'
 export const alleleClassOf = (ref: string, alt: string): AlleleClass =>
   ref.length === 1 && alt.length === 1 ? 'snv' : 'indel'
 
-/** `${class}:${zygosity}` → observed [gt_num, qual] pairs. */
+/**
+ * Sex inference from chrX outside the PARs: a male has no true chrX hets (only artefacts), a
+ * female about as many as on the autosomes, so a het share below `maleMaxHetShare` means male;
+ * fewer than `minCalls` calls give no call at all.
+ */
+export const SEX_INFERENCE = { maleMaxHetShare: 0.2, minCalls: 10 } as const
+export type InferredSex = 'male' | 'female' | null
+
+export const onChrXNonPar = (r: Pick<MappedVariant, 'chr' | 'pos'>): boolean =>
+  normalizeContigName(r.chr) === 'X' && !isInPAR(r.chr, r.pos, 'GRCh38')
+
+export function inferSex(rows: readonly MappedVariant[]): InferredSex {
+  let calls = 0
+  let het = 0
+  for (const r of rows) {
+    const zyg = onChrXNonPar(r) ? genotypeZygosity(r.gt_num) : null
+    if (zyg === null) continue
+    calls++
+    if (zyg === 'het') het++
+  }
+  if (calls < SEX_INFERENCE.minCalls) return null
+  return het / calls < SEX_INFERENCE.maleMaxHetShare ? 'male' : 'female'
+}
+
+/**
+ * `${class}:${zygosity}` → observed [gt_num, qual] pairs; `hemi` holds a male background's
+ * chrX non-PAR alt calls, so an XL spike copies its varvis encoding.
+ */
 export type EncodingStats = Record<string, Array<[string | null, number | null]>>
 
 export interface BackgroundInfo extends SpikeScenarioContext {
   label: string
+  sex: InferredSex
   rowCount: number
   genes: Set<string>
   encodings: EncodingStats
@@ -87,10 +117,14 @@ export function describeBackground(label: string, rows: readonly MappedVariant[]
   const missingByFunc = new Map<string, Array<[boolean, boolean]>>()
   const caddByFuncClass = new Map<string, Array<number | null>>()
   const prodKeys = new Set<string>()
+  const sex = inferSex(rows)
   for (const r of rows) {
     const cls = alleleClassOf(r.ref, r.alt)
-    const zyg = genotypeZygosity(r.gt_num)
-    if (zyg === 'het' || zyg === 'hom') (encodings[`${cls}:${zyg}`] ??= []).push([r.gt_num, r.qual])
+    const gtZyg = genotypeZygosity(r.gt_num)
+    const zyg =
+      sex === 'male' && (gtZyg === 'hom' || gtZyg === 'hemi') && onChrXNonPar(r) ? 'hemi' : gtZyg
+    if (zyg === 'het' || zyg === 'hom' || zyg === 'hemi')
+      (encodings[`${cls}:${zyg}`] ??= []).push([r.gt_num, r.qual])
     if (r.func !== null) {
       push(missingByFunc, r.func, [r.gnomad_af === null, r.cadd === null] as [boolean, boolean])
       push(caddByFuncClass, `${r.func}|${cls}`, r.cadd)
@@ -99,6 +133,7 @@ export function describeBackground(label: string, rows: readonly MappedVariant[]
   }
   return {
     label,
+    sex,
     rowCount: rows.length,
     encodings,
     missingByFunc,
@@ -118,14 +153,19 @@ export function openBackgroundDb(bg: Background, scenario: ScenarioId, seed: num
   initializeSchema(db)
   runMigrations(db)
   const caseId = 1
-  // Sex stays unset: all backgrounds are female (spec §4.1), and unknown sex keeps chrX hom = hom.
   db.prepare(
     `INSERT INTO cases (id, name, file_path, file_size, variant_count, created_at, genome_build)
      VALUES (?, ?, 'simulation', 0, ?, 0, 'GRCh38')`
   ).run(caseId, bg.caseLabel, rows.length)
+  const info = describeBackground(bg.caseLabel, rows)
+  // The ranking reads case sex from case_metadata (male chrX non-PAR hom → hemizygous).
+  if (info.sex !== null)
+    db.prepare(
+      `INSERT INTO case_metadata (case_id, sex, created_at, updated_at) VALUES (?, ?, 0, 0)`
+    ).run(caseId, info.sex)
   const repos = createRepositories(db)
   repos.variants.insertBatch(rows, caseId)
-  return { ...describeBackground(bg.caseLabel, rows), db, caseId, repos, scenario }
+  return { ...info, db, caseId, repos, scenario }
 }
 
 /** Number of variant rows of the case (rollback checks). */

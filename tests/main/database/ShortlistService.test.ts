@@ -49,7 +49,7 @@ function insertCase(db: DatabaseType, caseId: number, name: string): void {
  *   id=5-8 MODERATE rare SNVs with ascending CADD          — middle of pack
  *   id=9   precise SV with high VAF (DMD)                  — top of SV bucket
  *   id=10  CNV homozygous deletion (SMN1)                  — top of CNV bucket
- *   id=11  pathologic STR (HTT)                            — top of STR bucket
+ *   id=11  full_mutation STR (HTT)                         — top of STR bucket
  */
 function seedMultiTypeCase(db: DatabaseType, caseId: number): void {
   insertCase(db, caseId, `case-${caseId}`)
@@ -221,7 +221,7 @@ function seedMultiTypeCase(db: DatabaseType, caseId: number): void {
      VALUES (?, 0, 95)`
   ).run(10)
 
-  // STR row (id=11) — pathologic HTT expansion
+  // STR row (id=11) — full_mutation HTT expansion
   insertVariant.run(
     11,
     caseId,
@@ -240,7 +240,7 @@ function seedMultiTypeCase(db: DatabaseType, caseId: number): void {
   )
   db.prepare(
     `INSERT INTO variant_str (variant_id, str_status, disease, alt_copies)
-     VALUES (?, 'pathologic', 'Huntington disease', '45')`
+     VALUES (?, 'full_mutation', 'Huntington disease', '45')`
   ).run(11)
 }
 
@@ -525,7 +525,7 @@ describe('ShortlistService', () => {
       ;(db as unknown as { prepare: typeof originalPrepare }).prepare = ((sql: string) => {
         // Let DISTINCT (scope detection) and non-variant queries succeed.
         // Fail only the Stage-1 variants SELECT for a specific type.
-        if (sql.includes('is_starred_int') && callCount++ === 1) {
+        if (sql.includes('as "is_starred"') && callCount++ === 1) {
           throw new Error('simulated Stage-1 failure')
         }
         return originalPrepare(sql)
@@ -596,6 +596,8 @@ describe('ShortlistService', () => {
         rank_clinvar_pinned: false
       })
       expect(result.rows[0].rank_components.clinvar).toBe(0)
+      // Stranger's full_mutation earns full impact credit.
+      expect(result.rows[0].rank_components.impact).toBe(1)
     })
 
     it('applies pinStarredTop: starred LOW row floats above Pathogenic', () => {

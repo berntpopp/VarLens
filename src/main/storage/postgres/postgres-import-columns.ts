@@ -53,7 +53,9 @@ export const VARIANT_BASE_COLUMNS = [
   'caller',
   // Severity ranks of `consequence` (impact) and `clinvar`, see setSeverityRanks.
   'impact_rank',
-  'clinvar_rank'
+  'clinvar_rank',
+  // Phase set id (VCF FORMAT PS), migration 0039.
+  'ps'
 ] as const
 
 /**
@@ -218,6 +220,7 @@ export const VARIANT_COLUMN_ENCODERS: Record<string, CopyColumnEncoder> = {
   caller: encodeText,
   impact_rank: encodeInteger,
   clinvar_rank: encodeInteger,
+  ps: encodeInteger,
   // variant_transcripts
   variant_id: encodeInteger,
   transcript_id: encodeText,

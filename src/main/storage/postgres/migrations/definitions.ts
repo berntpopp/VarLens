@@ -9,6 +9,7 @@ import { BUILT_IN_SHORTLIST_PRESETS } from '../../../database/built-in-shortlist
 import { CLINICAL_METRICS } from '../../../database/clinical-metrics'
 import { quoteIdentifier } from '../identifiers'
 import { fillClinvarSeverityLookup } from './severity-rank-backfill'
+import { trimStoredAlleles } from './allele-trim-backfill'
 
 interface MigrationFile {
   version: string
@@ -189,13 +190,34 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0037',
     name: 'summary_sv_facts',
     fileName: '0037_summary_sv_facts.sql'
+  },
+  {
+    version: '0038',
+    name: 'default_tags',
+    fileName: '0038_default_tags.sql'
+  },
+  {
+    version: '0039',
+    name: 'variant_phase_set',
+    fileName: '0039_variant_phase_set.sql'
+  },
+  {
+    version: '0040',
+    name: 'allele_trim',
+    fileName: '0040_allele_trim.sql'
+  },
+  {
+    version: '0041',
+    name: 'case_hpo_term_flags',
+    fileName: '0041_case_hpo_term_flags.sql'
   }
 ]
 
 /** Steps that need code, run in the migration's transaction after its SQL. */
 const AFTER_APPLY: Record<string, PostgresMigration['afterApply']> = {
   '0005': seedWorkflowDefaults,
-  '0025': fillClinvarSeverityLookup
+  '0025': fillClinvarSeverityLookup,
+  '0040': trimStoredAlleles
 }
 
 const SOURCE_SQL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'sql')

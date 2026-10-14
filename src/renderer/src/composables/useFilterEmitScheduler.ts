@@ -11,6 +11,7 @@
  * both views apply filters with the same timing (cohort parity).
  */
 import { useDebounce } from './useDebounce'
+import { isRestoringUrlState } from './useUrlState'
 
 export const TYPED_FILTER_DEBOUNCE_MS = 250
 
@@ -47,7 +48,9 @@ export function useFilterEmitScheduler(emit: () => void, typedDelayMs = TYPED_FI
   const onStateChange = (next: string, previous: string | undefined): void => {
     const changed = changedFilterFields(previous, next)
     if (changed.length === 0) return
-    if (changed.every((field) => TYPED_FILTER_FIELDS.has(field))) emitTyped()
+    // A URL restore (deep link, back/forward, view memory) applies at once.
+    const typed = changed.every((field) => TYPED_FILTER_FIELDS.has(field))
+    if (typed && !isRestoringUrlState()) emitTyped()
     else emitNow()
   }
 

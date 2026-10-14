@@ -89,3 +89,11 @@ export const IGV_COPY = {
     'IGV did not answer on port 60151. Start IGV desktop with its batch port enabled (View > Preferences > Advanced), then retry.',
   retry: 'Retry'
 } as const
+
+/** HPO data row: name and licence per reference source key of `HpoDataStatus.sources` (CNV/STR spec §3). */
+export const HPO_DATA_SOURCE_ATTRIBUTION: Readonly<Record<string, string>> = {
+  hpo: 'Human Phenotype Ontology',
+  clingen: 'ClinGen Dosage Sensitivity (CC0)',
+  strchive: 'STRchive (MIT)',
+  mondo: 'Mondo (CC BY 4.0)'
+}

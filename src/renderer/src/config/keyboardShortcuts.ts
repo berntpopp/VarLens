@@ -41,6 +41,7 @@ export const SHORTCUTS = {
   clearFilters: { key: `${MOD}+Shift+X`, description: 'Clear all filters' },
   closeDrawer: { key: 'Escape', description: 'Close drawer / blur search' },
   help: { key: '?', description: 'Show this help' },
+  palette: { key: `${MOD}+K`, description: 'Open command palette' },
   import: { key: `${ALT}+Shift+O`, description: 'Import data' },
   logViewer: { key: `${ALT}+Shift+L`, description: 'Toggle log viewer' },
   disclaimer: { key: `${ALT}+Shift+D`, description: 'Show disclaimer' },
@@ -48,6 +49,9 @@ export const SHORTCUTS = {
 } as const satisfies Record<string, Shortcut>
 
 export type ShortcutId = keyof typeof SHORTCUTS
+
+/** App-wide actions by shortcut: bound by useKeyboardShortcuts and listed by the command palette. */
+export type ShortcutActions = Partial<Record<ShortcutId, () => void>>
 
 const s = SHORTCUTS
 export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; shortcuts: readonly Shortcut[] }> = [
@@ -60,7 +64,7 @@ export const SHORTCUT_GROUPS: ReadonlyArray<{ title: string; shortcuts: readonly
     title: 'Search & Filters',
     shortcuts: [s.search, s.toggleFilters, s.toggleColumns, s.clearFilters, s.closeDrawer]
   },
-  { title: 'General', shortcuts: [s.help, s.import, s.logViewer, s.disclaimer, s.faq] }
+  { title: 'General', shortcuts: [s.help, s.palette, s.import, s.logViewer, s.disclaimer, s.faq] }
 ]
 
 /** Tooltip text with its shortcut: `withShortcut('Filters', 'toggleFilters')` → "Filters (Ctrl+Shift+F)". */

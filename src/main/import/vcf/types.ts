@@ -102,6 +102,8 @@ export interface GenotypeData {
   adAlt: number | null
   /** Allele balance: adAlt / (adRef + adAlt) */
   ab: number | null
+  /** Phase set id (FORMAT PS); null when absent or missing */
+  ps: number | null
 }
 
 // ── Annotation types ─────────────────────────────────────────
@@ -182,6 +184,8 @@ export interface VcfMappedVariant {
   ad_ref: number | null
   ad_alt: number | null
   ab: number | null
+  /** Phase set id (FORMAT PS) of a phased genotype; null when absent */
+  ps: number | null
   filter: string | null
   info_json: string | null
   source_format: string | null

@@ -4,7 +4,11 @@
  * rule it concerns, so a stored preset fails loudly instead of falling back
  * to legacy scoring.
  */
-import { compileRule, type RowPredicate } from '../../../../shared/dsl/evaluate'
+import {
+  compileRule,
+  rulesetUsesHpoResnik,
+  type RowPredicate
+} from '../../../../shared/dsl/evaluate'
 import {
   describeProblem,
   evidenceConfigProblems,
@@ -34,6 +38,7 @@ export interface CompiledGroup {
   id: string
   label: string
   scope: EvidenceGroup['scope']
+  variantType?: EvidenceGroup['variantType']
   rules: CompiledRule[]
 }
 /** `test` is null for the fallback mode. */
@@ -46,6 +51,8 @@ export interface CompiledRuleset {
   /** In the fixed decision-list order, fallback last. */
   modes: CompiledMode[]
   groups: CompiledGroup[]
+  /** Some mode or rule reads an `hpo_*` field: only then is the HPO scorer loaded. */
+  usesHpoResnik: boolean
 }
 
 function compileText(text: string): RowPredicate {
@@ -69,6 +76,7 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
     id: g.id,
     label: g.label,
     scope: g.scope,
+    variantType: g.variantType,
     rules: g.rules.map((r) => ({
       id: r.id,
       label: r.label,
@@ -76,7 +84,7 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
       test: compileText(r.when)
     }))
   }))
-  return { source: input, modes, groups }
+  return { source: input, modes, groups, usesHpoResnik: rulesetUsesHpoResnik(input) }
 }
 
 /** Problems of an evidence preset's configuration as text ([] when fine); see `evidenceConfigProblems`. */

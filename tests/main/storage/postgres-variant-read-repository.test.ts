@@ -23,12 +23,15 @@ import {
 describe('PostgresVariantReadRepository', () => {
   it('returns variant type counts with bigint strings normalized', async () => {
     const pool = {
-      query: vi.fn().mockResolvedValueOnce({
-        rows: [
-          { variant_type: 'snv', count: '2' },
-          { variant_type: 'sv', count: '1' }
-        ]
-      })
+      query: vi
+        .fn()
+        .mockResolvedValue({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [
+            { variant_type: 'snv', count: '2' },
+            { variant_type: 'sv', count: '1' }
+          ]
+        })
     }
     const repository = new PostgresVariantReadRepository(pool as never, 'public')
 
@@ -42,6 +45,7 @@ describe('PostgresVariantReadRepository', () => {
     const pool = {
       query: vi
         .fn()
+        .mockResolvedValue({ rows: [] }) // the page's tag lookup (#125)
         .mockResolvedValueOnce({ rows: [{ variant_type: 'snv' }, { variant_type: 'str' }] })
     }
     const repository = new PostgresVariantReadRepository(pool as never, 'public')
@@ -56,7 +60,12 @@ describe('PostgresVariantReadRepository', () => {
   })
 
   it('returns gene symbols by prefix case-insensitively', async () => {
-    const pool = { query: vi.fn().mockResolvedValueOnce({ rows: [{ gene_symbol: 'BRCA1' }] }) }
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValue({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ gene_symbol: 'BRCA1' }] })
+    }
     const repository = new PostgresVariantReadRepository(pool as never, 'public')
 
     await expect(repository.getGeneSymbols(1, 'br', 20)).resolves.toStrictEqual(['BRCA1'])
@@ -67,21 +76,24 @@ describe('PostgresVariantReadRepository', () => {
 
   it('searches the full search document instead of narrowing to gene_symbol', async () => {
     const pool = {
-      query: vi.fn().mockResolvedValueOnce({
-        rows: [
-          {
-            id: '1',
-            case_id: '1',
-            chr: '1',
-            pos: '1000',
-            ref: 'A',
-            alt: 'G',
-            gene_symbol: 'GENE1',
-            consequence: 'stop_gained',
-            internal_af: null
-          }
-        ]
-      })
+      query: vi
+        .fn()
+        .mockResolvedValue({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: '1',
+              case_id: '1',
+              chr: '1',
+              pos: '1000',
+              ref: 'A',
+              alt: 'G',
+              gene_symbol: 'GENE1',
+              consequence: 'stop_gained',
+              internal_af: null
+            }
+          ]
+        })
     }
     const repository = new PostgresVariantReadRepository(pool as never, 'public')
 
@@ -122,6 +134,7 @@ describe('PostgresVariantReadRepository', () => {
     const pool = {
       query: vi
         .fn()
+        .mockResolvedValue({ rows: [] }) // the page's tag lookup (#125)
         .mockResolvedValueOnce({ rows: [{ count: '0' }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ count: '0' }] })
@@ -142,6 +155,7 @@ describe('PostgresVariantReadRepository', () => {
     const pool = {
       query: vi
         .fn()
+        .mockResolvedValue({ rows: [] }) // the page's tag lookup (#125)
         .mockResolvedValueOnce({ rows: [{ count: '2' }] })
         .mockResolvedValueOnce({
           rows: [
@@ -247,6 +261,7 @@ describe('PostgresVariantReadRepository', () => {
     const pool = {
       query: vi
         .fn()
+        .mockResolvedValue({ rows: [] }) // the page's tag lookup (#125)
         .mockResolvedValueOnce({ rows: [{ count: '1' }] })
         .mockResolvedValueOnce({
           rows: [
@@ -283,6 +298,7 @@ describe('PostgresVariantReadRepository', () => {
     const pool = {
       query: vi
         .fn()
+        .mockResolvedValue({ rows: [] }) // the page's tag lookup (#125)
         .mockResolvedValueOnce({ rows: [{ count: '1' }] })
         .mockResolvedValueOnce({
           rows: [

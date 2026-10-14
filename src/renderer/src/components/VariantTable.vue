@@ -71,6 +71,7 @@
           :read-only="!canWrite"
           :acmg-locked="annotationDialogsRef?.hasAcmgEvidence(item) === true"
           :variant="item"
+          tag-source="case"
           @star-toggle="annotationDialogsRef?.handleStarToggle(item)"
           @acmg-select="(c) => annotationDialogsRef?.handleQuickAcmgSelect(item, c)"
           @acmg-evidence-click="annotationDialogsRef?.openAcmgEvidenceDialog(item)"
@@ -228,6 +229,7 @@
     </v-data-table-server>
 
     <AcmgQuickMenu :state="acmgQuickMenu" />
+    <TagQuickMenu :state="tagQuickMenu" />
     <AnnotationDialogs
       ref="annotationDialogsRef"
       :case-id="caseId"
@@ -305,6 +307,8 @@ import {
 } from './table-cells'
 import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
 import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
+import TagQuickMenu from './table-cells/TagQuickMenu.vue'
+import { provideTagQuickMenu } from './table-cells/tag-quick-menu'
 import { useResultSetKeys } from './table-state/useResultSetKeys'
 import { usePermissions } from '../composables/usePermissions'
 
@@ -351,6 +355,7 @@ const emit = defineEmits<{
 const viewActive = ref(true)
 // One shared ACMG quick-classify menu for all rows (not a v-menu per row)
 const acmgQuickMenu = provideAcmgQuickMenu()
+const tagQuickMenu = provideTagQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
 const appState = inject(AppStateKey, null) // null without a provider (isolated unit tests)

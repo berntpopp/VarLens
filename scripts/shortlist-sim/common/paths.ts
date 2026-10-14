@@ -16,6 +16,18 @@ export const POOL_FILE = join(DATA_DIR, 'pool', 'pool.json')
 export const POOL_NORMALIZED_FILE = join(DATA_DIR, 'pool', 'pool-normalized.json')
 export const POOL_LOCAL_VEP_FILE = join(CACHE_DIR, 'pool-local-vep.json')
 export const RUNS_DIR = join(DATA_DIR, 'runs')
+/** `npm run build:hpo-db -- --out <HPO_DB>` plus the same release's raw files in HPO_RAW_DIR. */
+export const HPO_DB = join(CACHE_DIR, 'hpo', 'hpo_similarity.db')
+export const HPO_RAW_DIR = join(CACHE_DIR, 'hpo', 'raw-v2026-09-01')
+/** Frozen copy of the builder-v2 DB: the sprint-3 baseline of the HPO scoring v2 benchmark. */
+export const HPO_DB_SPRINT3 = join(CACHE_DIR, 'hpo', 'hpo_similarity.sprint3.db')
+/** Builder-v6 DB (CNV/STR locus tables: ClinGen, STRchive, Mondo) of the v2026-09-01 release. */
+export const HPO_DB_V6 = join(CACHE_DIR, 'hpo', 'hpo_similarity.v6.db')
+/** Public CNV/STR benchmark downloads: 1000 Genomes SV calls, ClinVar variant_summary. */
+export const CNV_STR_EXTERNAL_DIR = join(DATA_DIR, 'external', 'cnv-str')
+/** v2 DB whose background null is built for forward weight exponent τ (build-tau-dbs.ts). */
+export const hpoDbForTau = (tau: number): string =>
+  join(CACHE_DIR, 'hpo', `hpo_similarity.tau-${tau}.db`)
 
 export const BACKGROUND_DIR =
   process.env.VARLENS_SIM_BACKGROUND_DIR ?? '/run/media/bernt-popp/1819-E513/immunology_cases'

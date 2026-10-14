@@ -433,7 +433,15 @@
             class="mb-3"
             no-data-text="No families defined yet"
             @click:clear="filters.analysisGroupId = null"
-          />
+          >
+            <template #append>
+              <AnalysisGroupsDialog
+                @deleted="
+                  (id) => id === filters.analysisGroupId && (filters.analysisGroupId = null)
+                "
+              />
+            </template>
+          </v-select>
           <div class="text-caption text-medium-emphasis mb-1">Genotype (always available)</div>
           <div class="d-flex ga-1 flex-wrap mb-3">
             <v-chip
@@ -532,6 +540,7 @@ import { CARRIER_FREQUENCY_COPY } from '../config/uiCopyConfig'
 import CarrierFrequencyField from './filters/CarrierFrequencyField.vue'
 import { INHERITANCE_MODE_META, SOLO_MODES, TRIO_MODES } from '../../../shared/types/inheritance'
 import { useAnalysisGroups } from '../composables/useAnalysisGroups'
+import AnalysisGroupsDialog from './analysis-groups/AnalysisGroupsDialog.vue'
 import type { Tag } from '../../../shared/types/database-entities'
 import type { FilterDrawerState } from './filterDrawerTypes'
 import {

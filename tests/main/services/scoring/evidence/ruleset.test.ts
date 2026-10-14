@@ -22,6 +22,28 @@ const group = (rules: ReturnType<typeof rule>[], scope: 'global' | 'ad' = 'globa
 })
 
 describe('compileRuleset', () => {
+  it('records whether any mode or rule reads hpo_resnik', () => {
+    expect(compileRuleset(base).usesHpoResnik).toBe(false)
+    expect(
+      compileRuleset({ ...base, groups: [group([rule('a', 1, 'gene_symbol:=:hpo_resnik')])] })
+        .usesHpoResnik
+    ).toBe(false)
+    expect(
+      compileRuleset({ ...base, groups: [group([rule('a', 1, 'cadd:>:1 OR hpo_resnik:>=:2')])] })
+        .usesHpoResnik
+    ).toBe(true)
+    const modes = [
+      { id: 'ad' as const, label: 'ad', when: 'hpo_resnik:>:1', points: 1 },
+      ...base.modes
+    ]
+    expect(compileRuleset({ ...base, modes }).usesHpoResnik).toBe(true)
+    for (const when of ['hpo_conflicts:>=:1', 'hpo_best_disease:~:OMIM']) {
+      expect(compileRuleset({ ...base, groups: [group([rule('a', 1, when)])] }).usesHpoResnik).toBe(
+        true
+      )
+    }
+  })
+
   it('accepts a minimal ruleset and a group mixing bonus and penalty bins', () => {
     expect(() => compileRuleset(base)).not.toThrow()
     expect(() =>

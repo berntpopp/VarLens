@@ -4,6 +4,8 @@
  *   npx jiti scripts/shortlist-sim/run.ts --run <name> [--quick] [--workers N]
  *        [--cadd-impute on|off] [--scenarios primary,clinvar_visible,...] [--concordance <file>]
  *        [--template varvis|full]   (full: #597 template, paired with the varvis template)
+ *        [--frozen <ruleset.json>]  (pre-registered rerun, #584: no tuning, the ruleset unchanged)
+ *        [--pheno]                  (#600: phenotype benchmark instead of the scorer comparison)
  *
  * Writes runs/<run>/{results.jsonl, manifest.json, protocol.lock.json, ruleset-tuned.json,
  * support.json} under _data/shortlist-sim (outside the repository). Background rows never leave
@@ -22,12 +24,20 @@ import { buildCases, type SimCase } from './sim/cases'
 import { backgroundNormKeys, fileHash, loadInputs, spikeOptions, sha256 } from './sim/inputs'
 import type { Job, JobResult } from './sim/jobs'
 import { runJobs } from './sim/pool'
-import { canonicalJson, phenoEnrichedGenes, tuneFolds } from './sim/protocol'
+import {
+  canonicalJson,
+  foldRulesets,
+  loadFrozenRuleset,
+  phenoEnrichedGenes,
+  tuneFolds,
+  type FoldTuning
+} from './sim/protocol'
 import { SCENARIOS } from './sim/scenarios'
 import { addExtraFields } from './sim/full-inputs'
-import { isTemplateId, TEMPLATES, type TemplateId, type TunedByTemplate } from './sim/templates'
+import { isTemplateId, TEMPLATES, type TemplateId } from './sim/templates'
 import { buildScorers, CANDIDATE_SCORER, REFERENCE_SCORER } from './sim/scorers'
 import { geneFolds } from './stats/folds'
+import { runPhenoBench } from './phenotype/variant-bench'
 
 const SEEDS = {
   cases: 20261012,
@@ -37,6 +47,7 @@ const SEEDS = {
   quick: 20261016
 }
 const FOLDS = 5
+const NOT_TUNED = { A: 0, B: 0, bins: [] }
 const CHUNK = 20
 
 interface Args {
@@ -47,6 +58,8 @@ interface Args {
   scenarios: ScenarioId[]
   concordance?: string
   template: TemplateId
+  frozen?: string
+  pheno: boolean
 }
 
 function templateArg(t: string): TemplateId {
@@ -65,6 +78,14 @@ function parseArgs(argv: string[]): Args {
   const scenarios = (arg('--scenarios')?.split(',') ?? [...SCENARIOS]) as ScenarioId[]
   for (const s of ['primary', 'clinvar_visible'] as const)
     if (!scenarios.includes(s)) throw new Error(`--scenarios must include ${s} (tuning needs it)`)
+  const template = templateArg(arg('--template') ?? 'varvis')
+  const frozen = arg('--frozen')
+  // The full template's paired varvis scorer needs tuned varvis points.
+  if (frozen !== undefined && template !== 'varvis')
+    throw new Error('--frozen supports --template varvis only')
+  const pheno = argv.includes('--pheno')
+  if (pheno && (frozen !== undefined || template !== 'varvis'))
+    throw new Error('--pheno tunes the varvis template: no --frozen, no --template full')
   return {
     run,
     quick: argv.includes('--quick'),
@@ -72,7 +93,9 @@ function parseArgs(argv: string[]): Args {
     caddImpute: (arg('--cadd-impute') ?? 'on') !== 'off',
     scenarios,
     concordance: arg('--concordance'),
-    template: templateArg(arg('--template') ?? 'varvis')
+    template,
+    frozen,
+    pheno
   }
 }
 
@@ -105,6 +128,7 @@ async function main(argv: string[]): Promise<void> {
   const outDir = assertOutsideRepo(join(RUNS_DIR, args.run))
   mkdirSync(outDir, { recursive: true })
 
+  const frozen = args.frozen === undefined ? undefined : loadFrozenRuleset(resolve(args.frozen))
   const inputs = loadInputs(args.concordance)
   let backgrounds = await loadBackgrounds()
   if (args.quick) backgrounds = backgrounds.slice(0, 1)
@@ -136,44 +160,72 @@ async function main(argv: string[]): Promise<void> {
   }
   const byBg = (label: string): SimCase[] => cases.filter((c) => c.bg === label)
 
-  // Phase A: first-match assignments of training material (template rules; points irrelevant).
-  const assignJobs: Job[] = backgrounds.flatMap((bg) =>
-    (['primary', 'clinvar_visible'] as const).flatMap((scenario) => {
-      const parts = chunks(bg.caseLabel, scenario, byBg(bg.caseLabel))
-      if (parts.length === 0) parts.push({ bg: bg.caseLabel, scenario, cases: [] })
-      return parts.map((p, i) => ({
-        kind: 'assign' as const,
-        ...p,
-        withBackground: i === 0,
-        templates
-      }))
-    })
-  )
-  const assigned = (await runJobs(assignJobs, init, args.workers, progress('assign'))) as Array<
-    Extract<JobResult, { kind: 'assign' }>
-  >
   const reps = args.quick ? 200 : 2000
   const overlaps: Record<string, Record<string, number>> = {}
-  const tunings = Object.fromEntries(
-    templates.map((tid) => {
-      const input = {
-        positives: assigned.flatMap((r) => r.positives[tid] ?? []),
-        background: assigned.flatMap((r) => r.background[tid] ?? [])
-      }
-      const o: Record<string, number> = {}
-      for (const r of assigned)
-        for (const [g, k] of Object.entries(r.overlaps[tid] ?? {})) o[g] = (o[g] ?? 0) + k
-      overlaps[tid] = o
-      const id = tid === 'varvis' ? 'varvis-exome-tuned' : `varvis-${tid}-tuned`
-      const opts = { reps, seed: SEEDS.bootstrap, template: TEMPLATES[tid], id }
-      return [tid, tuneFolds(input, folds, FOLDS, inputs.acceptance.disabledGroups, opts)]
+  /** Background → gene → eligible rows (evidence gate, primary), for --pheno. */
+  const eligible = new Map<string, Map<string, number>>()
+  // Phase A (skipped for --frozen): first-match assignments of training material, then tuning.
+  const tune = async (): Promise<Record<TemplateId, FoldTuning>> => {
+    const assignJobs: Job[] = backgrounds.flatMap((bg) =>
+      (['primary', 'clinvar_visible'] as const).flatMap((scenario) => {
+        const parts = chunks(bg.caseLabel, scenario, byBg(bg.caseLabel))
+        if (parts.length === 0) parts.push({ bg: bg.caseLabel, scenario, cases: [] })
+        return parts.map((p, i) => ({
+          kind: 'assign' as const,
+          ...p,
+          withBackground: i === 0,
+          templates
+        }))
+      })
+    )
+    const assigned = (await runJobs(assignJobs, init, args.workers, progress('assign'))) as Array<
+      Extract<JobResult, { kind: 'assign' }>
+    >
+    assignJobs.forEach((job, i) => {
+      if (job.kind !== 'assign' || !job.withBackground || job.scenario !== 'primary') return
+      const genes = new Map<string, number>()
+      for (const a of assigned[i].background.varvis ?? [])
+        if (a.gene !== '') genes.set(a.gene, (genes.get(a.gene) ?? 0) + 1)
+      eligible.set(job.bg, genes)
     })
-  ) as Record<TemplateId, ReturnType<typeof tuneFolds>>
-  const tuned = tunings[args.template]
-  const tunedBy: TunedByTemplate = Object.fromEntries(
-    templates.map((tid) => [tid, tunings[tid].perFold])
-  )
+    return Object.fromEntries(
+      templates.map((tid) => {
+        const input = {
+          positives: assigned.flatMap((r) => r.positives[tid] ?? []),
+          background: assigned.flatMap((r) => r.background[tid] ?? [])
+        }
+        const o: Record<string, number> = {}
+        for (const r of assigned)
+          for (const [g, k] of Object.entries(r.overlaps[tid] ?? {})) o[g] = (o[g] ?? 0) + k
+        overlaps[tid] = o
+        const id = tid === 'varvis' ? 'varvis-exome-tuned' : `varvis-${tid}-tuned`
+        const opts = { reps, seed: SEEDS.bootstrap, template: TEMPLATES[tid], id }
+        return [tid, tuneFolds(input, folds, FOLDS, inputs.acceptance.disabledGroups, opts)]
+      })
+    ) as Record<TemplateId, FoldTuning>
+  }
+  const { tunedBy, tunings } = await foldRulesets(frozen, args.template, FOLDS, tune)
+  const tuned = tunings?.[args.template]
   t = lap('assign_and_tune', t)
+  if (args.pheno) {
+    await runPhenoBench({
+      cases,
+      folds,
+      k: FOLDS,
+      tunedVarvis: tunedBy.varvis!,
+      eligible,
+      pool: inputs.pool.variants,
+      init,
+      workers: args.workers,
+      outDir,
+      reps,
+      seed: SEEDS.bootstrap,
+      progress
+    })
+    lap('pheno', t)
+    console.log(`timing: ${JSON.stringify(timing)}`)
+    return
+  }
 
   // Phase B: every scorer on every case and scenario; fold-specific tuned points.
   const enriched = new Map(caseBgs.map((b) => [b.info.label, phenoEnrichedGenes(b.info)]))
@@ -204,8 +256,9 @@ async function main(argv: string[]): Promise<void> {
   lap('evaluate', t)
   timing.total = (Date.now() - t0) / 1000
 
-  for (const tid of templates) {
-    const refit = { ...tunings[tid].refit.ruleset }
+  // A frozen rerun writes no ruleset: its input file is the artefact (hash in the manifest).
+  for (const [tid, tuning] of Object.entries(tunings ?? {})) {
+    const refit = { ...tuning.refit.ruleset }
     const shipped = { ...refit, sha256: sha256(canonicalJson(refit)) }
     compileRuleset(shipped) // the artefact must load in the app; throws otherwise
     const suffix = tid === args.template ? '' : `-${tid}`
@@ -215,10 +268,10 @@ async function main(argv: string[]): Promise<void> {
     )
     writeFileSync(
       join(outDir, `support${suffix}.json`),
-      JSON.stringify(tunings[tid].refit.support, null, 2) + '\n'
+      JSON.stringify(tuning.refit.support, null, 2) + '\n'
     )
   }
-  const rulesetSha256 = sha256(canonicalJson(tuned.refit.ruleset))
+  const rulesetSha256 = sha256(canonicalJson(frozen ?? tuned!.refit.ruleset))
 
   const scorers = buildScorers(tunedBy, inputs.acceptance.disabledGroups, args.template)
   const manifest: RunManifest & Record<string, unknown> = {
@@ -250,7 +303,8 @@ async function main(argv: string[]): Promise<void> {
         inputs.funcUnmapped.of > 0 ? inputs.funcUnmapped.n / inputs.funcUnmapped.of : 0,
       disabledGroups: inputs.acceptance.disabledGroups
     },
-    tuned: { A: tuned.refit.A, B: tuned.refit.B, bins: tuned.refit.support },
+    tuned: tuned ? { A: tuned.refit.A, B: tuned.refit.B, bins: tuned.refit.support } : NOT_TUNED,
+    frozenRuleset: args.frozen === undefined ? undefined : resolve(args.frozen),
     scorers: {
       reference: REFERENCE_SCORER,
       candidate: CANDIDATE_SCORER,
@@ -263,7 +317,7 @@ async function main(argv: string[]): Promise<void> {
     caddImpute: args.caddImpute,
     caddSources: build.caddSources,
     binOverlaps: overlaps,
-    foldPoints: tuned.perFold.map((rs) => ({ sha256: sha256(canonicalJson(rs)) })),
+    foldPoints: tunedBy[args.template]!.map((rs) => ({ sha256: sha256(canonicalJson(rs)) })),
     scenarios: args.scenarios,
     resultsLines: n,
     cases: cases.length,

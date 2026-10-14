@@ -61,12 +61,16 @@ export function annotationGroupKey(
 /**
  * Merge two global annotations that land on one key: the star is kept, the
  * comments are joined, the newer classification (with its evidence) wins.
- * `discardedAcmg` is the other classification when both differ, for audit_log.
+ * `discardedAcmg` / `discardedEvidence` are the other row's values when they
+ * differ from the kept ones, for audit_log.
  */
 export function mergeGlobalAnnotations(
   target: GlobalAnnotationFields,
   source: GlobalAnnotationFields
-): Omit<GlobalAnnotationFields, 'updated_at'> & { discardedAcmg: string | null } {
+): Omit<GlobalAnnotationFields, 'updated_at'> & {
+  discardedAcmg: string | null
+  discardedEvidence: string | null
+} {
   // Paragraphs, so a comment merged earlier is not repeated by a later merge.
   const comments = [target.global_comment, source.global_comment]
     .flatMap((c) => (c ?? '').split('\n\n'))
@@ -83,8 +87,53 @@ export function mergeGlobalAnnotations(
     discardedAcmg:
       other.acmg_classification !== null && other.acmg_classification !== kept.acmg_classification
         ? other.acmg_classification
+        : null,
+    discardedEvidence:
+      other.acmg_evidence !== null && other.acmg_evidence !== kept.acmg_evidence
+        ? other.acmg_evidence
         : null
   }
+}
+
+/**
+ * Merge the rows that land on one key `at`, oldest first (mergeGlobalAnnotations).
+ * Each classification and evidence dropped on the way is returned for audit_log
+ * (the contig rename records the classifications only).
+ */
+export function mergeAnnotationRowsAt(
+  sources: readonly AnnotationRow[],
+  at: Pick<AnnotationRow, 'chr' | 'pos' | 'ref' | 'alt'>
+): {
+  merged: AnnotationValues
+  audits: GroupRemap['audits']
+  evidenceAudits: Array<{ key: string; discarded: string; kept: string | null }>
+} {
+  const ordered = [...sources].sort((a, b) => a.updated_at - b.updated_at)
+  const from = ordered.map((r) => `${r.chr}:${r.pos}:${r.ref}:${r.alt}`).join(', ')
+  const audits: GroupRemap['audits'] = []
+  const evidenceAudits: Array<{ key: string; discarded: string; kept: string | null }> = []
+  const { chr, pos, ref, alt } = at
+  let merged: AnnotationValues = { ...ordered[0], chr, pos, ref, alt }
+  for (const next of ordered.slice(1)) {
+    const m = mergeGlobalAnnotations(merged, next)
+    const key = globalAnnotationEntityKey(merged, next.genome_build)
+    if (m.discardedAcmg !== null) {
+      audits.push({ key, discarded: m.discardedAcmg, kept: m.acmg_classification, from })
+    }
+    if (m.discardedEvidence !== null) {
+      evidenceAudits.push({ key, discarded: m.discardedEvidence, kept: m.acmg_evidence })
+    }
+    merged = {
+      ...merged,
+      global_comment: m.global_comment,
+      starred: m.starred,
+      acmg_classification: m.acmg_classification,
+      acmg_evidence: m.acmg_evidence,
+      created_at: Math.min(merged.created_at, next.created_at),
+      updated_at: Math.max(merged.updated_at, next.updated_at)
+    }
+  }
+  return { merged, audits, evidenceAudits }
 }
 
 /**
@@ -112,29 +161,8 @@ export function remapAnnotationGroup(
       untouched.add(sources[0].id)
       continue
     }
-    const ordered = [...sources].sort((a, b) => a.updated_at - b.updated_at)
-    let merged: AnnotationValues = { ...ordered[0], chr }
-    for (const next of ordered.slice(1)) {
-      const m = mergeGlobalAnnotations(merged, next)
-      const key = globalAnnotationEntityKey({ ...next, chr }, next.genome_build)
-      if (m.discardedAcmg !== null) {
-        result.audits.push({
-          key,
-          discarded: m.discardedAcmg,
-          kept: m.acmg_classification,
-          from: ordered.map((r) => `${r.chr}:${r.pos}:${r.ref}:${r.alt}`).join(', ')
-        })
-      }
-      merged = {
-        ...merged,
-        global_comment: m.global_comment,
-        starred: m.starred,
-        acmg_classification: m.acmg_classification,
-        acmg_evidence: m.acmg_evidence,
-        created_at: Math.min(merged.created_at, next.created_at),
-        updated_at: Math.max(merged.updated_at, next.updated_at)
-      }
-    }
+    const { merged, audits } = mergeAnnotationRowsAt(sources, { ...sources[0], chr })
+    result.audits.push(...audits)
     result.inserts.push(merged)
   }
   // A row kept as-is for its own key is not deleted, even if copied elsewhere.

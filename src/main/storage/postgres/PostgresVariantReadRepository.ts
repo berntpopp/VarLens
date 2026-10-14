@@ -52,6 +52,7 @@ import {
   type PostgresOrderTerm
 } from './postgres-variant-order'
 import type { VariantPageRequest, VariantPageResult } from '../../../shared/types/variant-paging'
+import { attachCaseTagIds, caseTagIdsSql } from '../../../shared/sql/variant-tag-ids-sql'
 
 // The column definitions' SQL: `sv_length` sorts unsigned, as displayed.
 const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
@@ -60,7 +61,7 @@ const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
 POSTGRES_BASE_SORT_COLUMNS.id = 'v.id'
 
 const NUMERIC_VARIANT_FIELDS = new Set(
-  'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
+  'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,ps,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
     ','
   )
 )
@@ -282,6 +283,7 @@ export function buildPostgresVariantQueryParts(
     projections.push(
       'str_ext.repeat_id AS _str_repeat_id',
       'str_ext.repeat_unit AS _str_repeat_unit',
+      'str_ext.variant_catalog_id AS _str_variant_catalog_id',
       'str_ext.display_repeat_unit AS _str_display_ru',
       'str_ext.ref_copies AS _str_ref_copies',
       'str_ext.alt_copies AS _str_alt_copies',
@@ -484,8 +486,15 @@ export class PostgresVariantReadRepository {
         ? encodeVariantCursor(plan, scope, lastRow)
         : undefined
 
+    const data = rows.map((row) => normalizeVariantRow(row))
+    if (data.length > 0) {
+      const tagSql = caseTagIdsSql('postgres', (table) => `${this.schemaName}."${table}"`)
+      const ids = data.map((v) => v.id)
+      attachCaseTagIds(data, (await this.pool.query(tagSql, [filter.case_id, ids])).rows)
+    }
+
     return {
-      data: rows.map((row) => normalizeVariantRow(row)),
+      data,
       total_count: totalCount,
       ...(seek !== null ? { paging: 'keyset' as const } : {}),
       ...(nextCursor !== undefined ? { next_cursor: nextCursor } : {}),

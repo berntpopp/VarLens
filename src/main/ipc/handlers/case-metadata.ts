@@ -274,9 +274,9 @@ export function registerCaseMetadataHandlers({ ipcMain, getDbManager }: HandlerD
 
   ipcMain.handle(
     'case-metadata:assignHpoTerm',
-    async (_event, caseId: unknown, hpoId: unknown, hpoLabel: unknown) => {
+    async (_event, caseId: unknown, hpoId: unknown, hpoLabel: unknown, flags?: unknown) => {
       return wrapHandler(async () => {
-        const validated = HpoTermAssignSchema.safeParse({ caseId, hpoId, hpoLabel })
+        const validated = HpoTermAssignSchema.safeParse({ caseId, hpoId, hpoLabel, flags })
         if (!validated.success) {
           mainLogger.error(
             `Invalid case-metadata:assignHpoTerm params: ${validated.error.message}`,
@@ -289,7 +289,8 @@ export function registerCaseMetadataHandlers({ ipcMain, getDbManager }: HandlerD
           validated.data.caseId,
           validated.data.hpoId,
           validated.data.hpoLabel,
-          getSession
+          getSession,
+          validated.data.flags
         )
       })
     }

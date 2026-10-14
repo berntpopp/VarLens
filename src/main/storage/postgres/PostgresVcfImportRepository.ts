@@ -215,7 +215,7 @@ export class PostgresVcfImportRepository {
     fileName: string,
     importFileType: string,
     fence?: ImportFence,
-    fieldDictionary: Record<string, string> | null = null
+    fieldDictionary: Record<string, unknown> | null = null
   ): Promise<void> {
     const current =
       fence === undefined ? '' : ` AND ${importGenerationUnchangedSql(fence.schema, 2)}`
@@ -562,6 +562,6 @@ export class PostgresVcfImportRepository {
   }
 }
 
-export function fieldDictionaryText(dictionary: Record<string, string> | null): string | null {
+export function fieldDictionaryText(dictionary: Record<string, unknown> | null): string | null {
   return dictionary === null ? null : JSON.stringify(dictionary)
 }

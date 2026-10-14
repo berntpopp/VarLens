@@ -59,6 +59,7 @@ export type MockApi = {
   debug: MockApiDomain<WindowAPI['debug']>
   jobs: MockApiDomain<WindowAPI['jobs']>
   referenceServices: MockApiDomain<WindowAPI['referenceServices']>
+  hpoData: MockApiDomain<WindowAPI['hpoData']>
 }
 
 const TEST_SQLITE_CAPABILITIES: StorageCapabilities = {
@@ -510,6 +511,17 @@ export function createMockApi(): MockApi {
           buildReferenceServicesStatus('desktop', uniformReferenceServicePolicy(true))
         ),
       setPolicy: vi.fn().mockResolvedValue(undefined)
+    },
+    hpoData: {
+      status: vi.fn().mockResolvedValue({
+        installed: false,
+        needsUpdate: false,
+        version: null,
+        builtAt: null,
+        termCount: 0,
+        geneCount: 0
+      }),
+      update: vi.fn().mockResolvedValue({ success: false, message: '', status: null })
     }
   }
 

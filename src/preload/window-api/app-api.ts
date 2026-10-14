@@ -54,8 +54,8 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       removeCohort: (caseId, cohortId) => caseMetadataDomain.removeCohort(caseId, cohortId),
       setCohorts: (caseId, cohortIds) => caseMetadataDomain.setCohorts(caseId, cohortIds),
       getHpoTerms: (caseId) => caseMetadataDomain.getHpoTerms(caseId),
-      assignHpoTerm: (caseId, hpoId, hpoLabel) =>
-        caseMetadataDomain.assignHpoTerm(caseId, hpoId, hpoLabel),
+      assignHpoTerm: (caseId, hpoId, hpoLabel, flags) =>
+        caseMetadataDomain.assignHpoTerm(caseId, hpoId, hpoLabel, flags),
       removeHpoTerm: (caseId, hpoId) => caseMetadataDomain.removeHpoTerm(caseId, hpoId),
       getDataInfo: (caseId) => caseMetadataDomain.getDataInfo(caseId),
       upsertDataInfo: (caseId, updates) => caseMetadataDomain.upsertDataInfo(caseId, updates),

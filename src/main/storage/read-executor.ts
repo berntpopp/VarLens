@@ -56,6 +56,8 @@ export type StorageReadTask =
     }
   | { type: 'variants:filterOptions'; params: [caseId: number] }
   | { type: 'variants:shortlist'; params: [params: GetShortlistParams] }
+  /** Load the HPO index in the process that scores shortlists, off the request path. */
+  | { type: 'hpo:prewarm'; params: [] }
   | {
       type: 'variants:columnMeta'
       params: [scope: { caseId: number } | { caseIds: number[] }, columnKey: string]

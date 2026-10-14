@@ -42,12 +42,14 @@ export async function invalidateTags(includeAssignments: boolean): Promise<void>
 }
 
 /**
- * Show a variant's new tags at once and run the write behind them. On failure
- * the previous tags come back, unless something else has written since. Either
- * way the server's answer is then fetched, which also covers a write made
- * before the first read had finished. The key is fixed when the write starts,
- * so a write that settles after another database was opened can only reach
- * the old database's entry.
+ * Show a variant's new tags at once and run the write behind them. The latest
+ * write of a variant settles it: on failure its previous tags come back, and
+ * either way the server's answer is then fetched (even for a row whose entry
+ * no component watches), which also corrects an older overlapping write that
+ * failed. An older write settling does nothing, so it never shows a read taken
+ * before the newer write landed. The key is fixed when the write starts, so a
+ * write that settles after another database was opened can only reach the old
+ * database's entry.
  */
 export async function writeVariantTags(
   target: { caseId: number; variantId: number },
@@ -55,18 +57,24 @@ export async function writeVariantTags(
   run: () => Promise<unknown>
 ): Promise<void> {
   const cache = useQueryCache()
-  const key = queryKeys.variantTags(target.caseId, target.variantId)
+  const options = variantTagsQuery(target)
+  const key = options.key
   const previous = cache.getQueryData<Tag[]>(key) ?? []
 
   // A read still in flight would overwrite the optimistic value when it lands.
   cache.cancelQueries({ key, exact: true })
   cache.setQueryData(key, next)
+  let failed = false
   try {
     await run()
   } catch (error) {
-    if (cache.getQueryData(key) === next) cache.setQueryData(key, previous)
+    failed = true
     throw error
   } finally {
-    void cache.invalidateQueries({ key, exact: true }).catch(() => undefined)
+    if (cache.getQueryData(key) === next) {
+      if (failed) cache.setQueryData(key, previous)
+      cache.ensure(options) // an entry made by setQueryData has no query to refetch with
+      void cache.invalidateQueries({ key, exact: true }, 'all').catch(() => undefined)
+    }
   }
 }

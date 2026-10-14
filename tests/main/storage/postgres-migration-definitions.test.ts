@@ -4,6 +4,8 @@ import {
 } from '../../../src/shared/config/filter-presets.config'
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_TAGS } from '../../../src/shared/config/default-tags.config'
+
 import {
   EVIDENCE_BETA_PRESET,
   evidenceBetaFilterJson
@@ -12,7 +14,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 
 describe('Postgres migration definitions', () => {
   it('loads the PostgreSQL migrations with SQL and sha256 checksums', () => {
-    expect(POSTGRES_MIGRATIONS).toHaveLength(37)
+    expect(POSTGRES_MIGRATIONS).toHaveLength(41)
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.version)).toEqual([
       '0001',
       '0002',
@@ -50,7 +52,11 @@ describe('Postgres migration definitions', () => {
       '0034',
       '0035',
       '0036',
-      '0037'
+      '0037',
+      '0038',
+      '0039',
+      '0040',
+      '0041'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -89,7 +95,11 @@ describe('Postgres migration definitions', () => {
       'import_integrity',
       'annotation_genome_build',
       'clinical_question_presets',
-      'summary_sv_facts'
+      'summary_sv_facts',
+      'default_tags',
+      'variant_phase_set',
+      'allele_trim',
+      'case_hpo_term_flags'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {
@@ -188,6 +198,17 @@ describe('Postgres migration definitions', () => {
       expect(migration?.sql).toContain(`('${oldName}', '${newName}', '${description}')`)
     }
     expect(migration?.sql).toContain('AND p.is_built_in = 1')
+    expect(migration?.afterApply).toBeUndefined()
+  })
+
+  // #125: the checksummed SQL and the shared default tags (also seeded by SQLite v55) must not drift apart.
+  it('0038 seeds each default tag exactly as DEFAULT_TAGS defines it', () => {
+    const migration = POSTGRES_MIGRATIONS.find((m) => m.version === '0038')
+    expect(DEFAULT_TAGS).toHaveLength(4)
+    for (const [index, tag] of DEFAULT_TAGS.entries()) {
+      expect(migration?.sql).toContain(`('${tag.name}', '${tag.color}', ${index + 1})`)
+    }
+    expect(migration?.sql).toContain('WHERE lower(t.name) = lower(d.name)')
     expect(migration?.afterApply).toBeUndefined()
   })
 
