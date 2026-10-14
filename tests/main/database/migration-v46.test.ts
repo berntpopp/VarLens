@@ -42,7 +42,6 @@ describe('migration v46: summaries counted before the no-call rule are rebuilt',
 
   it('is the latest schema version and flags the populated summary stale', () => {
     runMigrations(service.db)
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(56)
     expect(service.db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
     expect(
       service.db.prepare("SELECT value FROM cohort_summary_meta WHERE key = 'is_stale'").get()

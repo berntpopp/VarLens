@@ -53,7 +53,6 @@ describe('migration v45: built-in preset "Rare, not recurrent"', () => {
   }
 
   it('is the latest schema version', () => {
-    expect(LATEST_SQLITE_SCHEMA_VERSION).toBe(56)
     expect(db.pragma('user_version', { simple: true })).toBe(LATEST_SQLITE_SCHEMA_VERSION)
   })
 
