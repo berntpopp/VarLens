@@ -36,6 +36,7 @@ import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
+import { attachCaseTagIds, caseTagIdsSql, idListParam } from '../../shared/sql/variant-tag-ids-sql'
 import { VariantSearchService } from './VariantSearchService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
@@ -311,6 +312,14 @@ export class VariantRepository extends BaseRepository {
         .limit(limit)
         .offset(offset)
       const data = this.execAll<Variant>(sortedQuery)
+      if (data.length > 0) {
+        const ids = idListParam(
+          'sqlite',
+          data.map((v) => v.id)
+        )
+        const hits = this.db.prepare(caseTagIdsSql('sqlite')).all(filter.case_id, ids)
+        attachCaseTagIds(data, hits as Array<{ variant_id: number; tag_id: number }>)
+      }
 
       let unfiltered_count: number | undefined
       if (includeUnfilteredCount === true) {

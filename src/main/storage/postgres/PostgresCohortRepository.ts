@@ -37,6 +37,11 @@ import {
   COHORT_SUMMARY_FILTER_COLUMNS
 } from '../../../shared/filters/cohort-column-filter-keys'
 import { cohortCarriersSql } from '../../../shared/sql/cohort-call-sql'
+import {
+  attachCohortTagIds,
+  cohortTagIdsSql,
+  pagePositions
+} from '../../../shared/sql/variant-tag-ids-sql'
 
 type CohortPool = Pick<Pool, 'query' | 'connect'>
 
@@ -173,6 +178,11 @@ export class PostgresCohortRepository {
     const summaryResult = await this.querySummaryPage(resolvedParams, totalCases)
     if (summaryResult === null) {
       throw new Error('Cohort query cannot be served from the cohort summary')
+    }
+    if (summaryResult.data.length > 0) {
+      const tagSql = cohortTagIdsSql('postgres', (table) => this.tbl(table))
+      const hits = await this.pool.query(tagSql, [pagePositions(summaryResult.data)])
+      attachCohortTagIds(summaryResult.data, hits.rows)
     }
     return summaryResult
   }

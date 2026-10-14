@@ -110,6 +110,17 @@ describe('PostgresVariantReadRepository keyset paging', () => {
     }
   }
 
+  /** The last page read (the tag lookup after it is a plain-text query, #125). */
+  function lastPageQuery(pool: ReturnType<typeof makePool>): { text: string; values: unknown[] } {
+    const calls = pool.query.mock.calls.map(([arg]) => arg)
+    return calls
+      .filter((arg) => typeof arg !== 'string' && arg.text?.includes('LIMIT $'))
+      .at(-1) as {
+      text: string
+      values: unknown[]
+    }
+  }
+
   it('returns next_cursor only when the client opts in and the page is full', async () => {
     const rows = [
       { id: '1', chr: '1', pos: '10' },
@@ -138,7 +149,7 @@ describe('PostgresVariantReadRepository keyset paging', () => {
     })
 
     expect(second.paging).toBe('keyset')
-    const call = pool.query.mock.calls.at(-1)![0] as { text: string; values: unknown[] }
+    const call = lastPageQuery(pool)
     expect(call.text).toContain(`AND (${RANK}, v.chr COLLATE "C", v.pos, v.id) > (`)
     expect(call.text).toContain('$3::text COLLATE "C", $4::bigint, $5::bigint)')
     expect(call.values).toEqual([1, '2', '2', '5', '3', 1, 0])
@@ -158,7 +169,7 @@ describe('PostgresVariantReadRepository keyset paging', () => {
     )
     expect(result.paging).toBeUndefined()
     expect(result.next_cursor).toBeUndefined()
-    const call = pool.query.mock.calls.at(-1)![0] as { values: unknown[] }
+    const call = lastPageQuery(pool)
     expect(call.values.slice(-2)).toEqual([1, 40])
   })
 })

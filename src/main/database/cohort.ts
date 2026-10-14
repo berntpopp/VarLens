@@ -35,6 +35,12 @@ import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
 import { SUMMARY_CONTENT_STAMP_KEY } from '../../shared/sql/cohort-summary-rebuild'
 import { cohortVariantKey } from '../../shared/utils/cohort-variant-key'
+import {
+  attachCohortTagIds,
+  cohortTagIdsSql,
+  idListParam,
+  pagePositions
+} from '../../shared/sql/variant-tag-ids-sql'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
   COHORT_BUILD_TOTALS_JOIN,
@@ -318,6 +324,11 @@ export class CohortService {
     const results = stmt.all(...bound) as CohortVariant[]
     // Built here, not read: the stored variant_key is the four-field form (#503).
     for (const row of results) row.variant_key = cohortVariantKey(row)
+    if (results.length > 0) {
+      const positions = idListParam('sqlite', pagePositions(results))
+      const hits = this.getStatement(cohortTagIdsSql('sqlite')).all(positions)
+      attachCohortTagIds(results, hits as Parameters<typeof attachCohortTagIds>[1])
+    }
     const paging = keyset?.finalize(results as unknown as Array<Record<string, unknown>>, limit)
 
     return {

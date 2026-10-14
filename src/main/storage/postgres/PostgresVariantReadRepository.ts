@@ -52,6 +52,7 @@ import {
   type PostgresOrderTerm
 } from './postgres-variant-order'
 import type { VariantPageRequest, VariantPageResult } from '../../../shared/types/variant-paging'
+import { attachCaseTagIds, caseTagIdsSql } from '../../../shared/sql/variant-tag-ids-sql'
 
 // The column definitions' SQL: `sv_length` sorts unsigned, as displayed.
 const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
@@ -484,8 +485,15 @@ export class PostgresVariantReadRepository {
         ? encodeVariantCursor(plan, scope, lastRow)
         : undefined
 
+    const data = rows.map((row) => normalizeVariantRow(row))
+    if (data.length > 0) {
+      const tagSql = caseTagIdsSql('postgres', (table) => `${this.schemaName}."${table}"`)
+      const ids = data.map((v) => v.id)
+      attachCaseTagIds(data, (await this.pool.query(tagSql, [filter.case_id, ids])).rows)
+    }
+
     return {
-      data: rows.map((row) => normalizeVariantRow(row)),
+      data,
       total_count: totalCount,
       ...(seek !== null ? { paging: 'keyset' as const } : {}),
       ...(nextCursor !== undefined ? { next_cursor: nextCursor } : {}),
