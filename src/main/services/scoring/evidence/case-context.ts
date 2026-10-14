@@ -12,6 +12,7 @@ import type { StrBand } from '../../../../shared/types/locus-reference'
 import {
   isLocusRow,
   scoreLocusRow,
+  strBand,
   type LocusFields,
   type LocusInputs,
   type LocusResult
@@ -147,9 +148,10 @@ interface GeneEntry {
 
 export class GeneContextBuilder {
   private readonly genes = new Map<string, GeneEntry>()
-  /** Pass-1 CNV row ids (their CSQ genes are read in one batch) and whether any STR row was seen. */
+  /** Pass-1 CNV row ids (their CSQ genes are read in one batch). */
   readonly cnvIds: number[] = []
-  private sawStr = false
+  /** STR rows join their gene in `build`, once their band is known. */
+  private readonly strRows: LightRow[] = []
 
   constructor(
     private readonly info: CaseInfo,
@@ -159,29 +161,36 @@ export class GeneContextBuilder {
   add(rows: readonly LightRow[]): void {
     for (const row of rows) {
       if (row.variant_type === 'cnv') this.cnvIds.push(row.id)
-      // An STR call is never another allele of its gene: a het expansion would be its own second hit.
-      if (row.variant_type === 'str') {
-        this.sawStr = true
-        continue
-      }
-      if (row.gene_symbol === null || row.gene_symbol === '') continue
-      let entry = this.genes.get(row.gene_symbol)
-      if (entry === undefined) {
-        entry = { het: new Map(), all: new Set() }
-        this.genes.set(row.gene_symbol, entry)
-      }
-      const key = alleleKey(row)
-      entry.all.add(key)
-      if (deriveZygosity(row, this.info) === 'het' && !entry.het.has(key)) entry.het.set(key, row)
+      if (row.variant_type === 'str') this.strRows.push(row)
+      else this.addAllele(row)
     }
+  }
+
+  private addAllele(row: LightRow): void {
+    if (row.gene_symbol === null || row.gene_symbol === '') return
+    let entry = this.genes.get(row.gene_symbol)
+    if (entry === undefined) {
+      entry = { het: new Map(), all: new Set() }
+      this.genes.set(row.gene_symbol, entry)
+    }
+    const key = alleleKey(row)
+    entry.all.add(key)
+    if (deriveZygosity(row, this.info) === 'het' && !entry.het.has(key)) entry.het.set(key, row)
   }
 
   /** True when pass 1 saw a CNV or STR row, so the backend loads {@link LocusInputs}. */
   get needsLocus(): boolean {
-    return this.sawStr || this.cnvIds.length > 0
+    return this.strRows.length > 0 || this.cnvIds.length > 0
   }
 
   build(locusInputs?: LocusInputs): GeneContext {
+    // Only an expanded STR is an allele of its gene (a compound-het partner of an SNV, e.g. FXN GAA +
+    // missense): ExpansionHunter reports every catalogue locus, mostly normal and often "het".
+    const reference = locusInputs?.reference ?? null
+    for (const row of this.strRows) {
+      const band = strBand(row, this.info.build, reference)
+      if (band !== null && band !== 'normal') this.addAllele(row)
+    }
     const { genes, info, considerPhasing } = this
     const hetHits = (gene: string): number => genes.get(gene)?.het.size ?? 0
     const memo = new Map<number, LocusResult>()

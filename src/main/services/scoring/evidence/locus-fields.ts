@@ -12,7 +12,7 @@ import {
   scoreCnv,
   type GeneSpanLookup
 } from '../../../../shared/phenotype/cnv-score'
-import { scoreStr } from '../../../../shared/phenotype/str-score'
+import { bandOf, resolveLocus, scoreStr } from '../../../../shared/phenotype/str-score'
 import type { HpoExplanation, HpoLocusNote } from '../../../../shared/types/hpo-profile'
 import type { LocusReference, StrBand } from '../../../../shared/types/locus-reference'
 import type { CaseInfo, DerivedFields, LightRow } from './case-context'
@@ -68,6 +68,17 @@ function strangerBand(status: string | null | undefined): StrBand | null {
   return bands.reduce((a, b) => (BANDS.indexOf(b) > BANDS.indexOf(a) ? b : a))
 }
 
+/** The band of an STR row: catalogue thresholds, else Stranger's status; null off-catalogue. */
+export function strBand(
+  row: LightRow,
+  build: string,
+  reference: LocusReference | null
+): StrBand | null {
+  if (reference === null) return strangerBand(row.str_status)
+  const locus = resolveLocus(row, reference.strLoci, build)
+  return locus === null ? null : bandOf(row, locus).band
+}
+
 /** Conflicts of a disease-level score; explanations are only built for scored loci. */
 function diseaseConflicts(info: CaseInfo, disease: string | null): number | null {
   return disease === null ? null : (info.hpo?.explainDisease(disease)?.conflicts.length ?? null)
@@ -86,7 +97,7 @@ export function scoreLocusRow(
   const reference = inputs?.reference ?? null
   if (row.variant_type === 'str') {
     if (reference === null) {
-      return { fields: { ...EMPTY, str_band: strangerBand(row.str_status) }, note: null }
+      return { fields: { ...EMPTY, str_band: strBand(row, info.build, null) }, note: null }
     }
     const s = scoreStr(row, reference, { ...info, hetHits: otherHetHits })
     if (s === null) return NONE

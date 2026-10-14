@@ -214,10 +214,25 @@ describe('STR locus fields', () => {
     ).toMatchObject({ str_band: null })
   })
 
-  it('an STR row never counts as an allele of its gene', () => {
-    const r = str(13)
-    const { ctx } = context([r])
-    expect(ctx.hetHits('ATXN3')).toBe(0)
+  it('a normal-length STR never counts as an allele of its gene', () => {
+    const normal = str(13, { str_alt_copies: '20/24', str_status: 'normal' })
+    const snv = row(14, { chr: 'chr14', pos: 92_000_000, ref: 'A', alt: 'G', gene_symbol: 'ATXN3' })
+    const { ctx } = context([normal, snv])
+    expect(ctx.hetHits('ATXN3')).toBe(1)
+    expect(ctx.derived(snv)).toMatchObject({ gene_het_hits: 1, partners: [] })
+  })
+
+  it('an expanded STR pairs with an SNV in its gene, but is not its own second hit', () => {
+    // FXN GAA expansion + FXN missense (Friedreich ataxia), on an AR locus.
+    const ar = { ...REFERENCE, strLoci: [{ ...ATXN3, inheritance: ['AR'] }] }
+    const expansion = str(15)
+    const snv = row(16, { chr: 'chr14', pos: 92_000_000, ref: 'A', alt: 'G', gene_symbol: 'ATXN3' })
+    const alone = context([expansion], { hpo: scorer() }, inputs({ reference: ar }))
+    expect(alone.ctx.hetHits('ATXN3')).toBe(1)
+    expect(alone.ctx.derived(expansion).hpo_resnik).toBeNull()
+    const pair = context([expansion, snv], { hpo: scorer() }, inputs({ reference: ar }))
+    expect(pair.ctx.derived(snv)).toMatchObject({ gene_het_hits: 2, partners: [15] })
+    expect(pair.ctx.derived(expansion)).toMatchObject({ hpo_resnik: 0.75, partners: [16] })
   })
 })
 

@@ -26,6 +26,7 @@ import type {
 } from '../../../shared/types/shortlist'
 import { mergeTopScored, scoreRow } from '../../services/scoring'
 import { GeneContextBuilder } from '../../services/scoring/evidence'
+import { isLocusRow } from '../../services/scoring/evidence/locus-fields'
 import {
   scoreEvidencePage,
   toLightRow,
@@ -187,7 +188,8 @@ export class PostgresShortlistService {
       let totalCandidates = 0
       await this.forEachPage(client, queries, async (rows) => {
         totalCandidates += rows.length
-        builder.add(rows.map(toLightRow))
+        // Raw rows carry the STR fields as `_str_*`: flatten locus rows so pass 1 sees their band.
+        builder.add(rows.map((r) => toLightRow(isLocusRow(r) ? toShortlistCandidate(r, false) : r)))
       })
       const ctx = builder.build(
         builder.needsLocus
