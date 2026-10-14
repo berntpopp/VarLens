@@ -99,6 +99,11 @@ describe('disposable CI containers', () => {
     const runs = calls.filter((call) => call.args[0] === 'run')
     expect(runs).toHaveLength(2)
     expect(runs[0].args).toContain('postgres:16')
+    // WAL shares the 1 GiB data tmpfs; the PG16 default max_wal_size (1 GB) can fill it.
+    expect(runs[0].args.slice(runs[0].args.indexOf('postgres:16') + 1)).toEqual([
+      '-c',
+      'max_wal_size=256MB'
+    ])
     expect(runs[0].args).toContain('127.0.0.1::5432')
     expect(runs[0].args).not.toContain('--env-file')
     expect(runs[0].args).not.toContain('-v')
