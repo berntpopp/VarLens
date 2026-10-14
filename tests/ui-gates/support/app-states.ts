@@ -17,6 +17,7 @@ export type GateStateName =
   | 'case-details-panel'
   | 'case-filter-drawer'
   | 'case-columns-drawer'
+  | 'case-acmg-evidence-dialog'
   | 'cohort'
   | 'cohort-filter-drawer'
 
@@ -27,6 +28,7 @@ export const GATE_STATES: readonly GateStateName[] = [
   'case-details-panel',
   'case-filter-drawer',
   'case-columns-drawer',
+  'case-acmg-evidence-dialog',
   'cohort',
   'cohort-filter-drawer'
 ]
@@ -103,6 +105,20 @@ async function openDrawer(page: Page, which: keyof typeof DRAWER_BUTTONS): Promi
   await settle(page)
 }
 
+/** ACMG cell button on the first row -> quick menu -> "Evidence editor...". */
+async function openAcmgEvidenceDialog(page: Page): Promise<void> {
+  await page
+    .locator('.v-main tbody tr.v-data-table__tr')
+    .first()
+    .locator('button[aria-haspopup="menu"][aria-label*="ACMG"]')
+    .click()
+  await page.getByText('Evidence editor...').click()
+  await expect(
+    page.locator('.v-overlay--active .v-card').filter({ hasText: 'ACMG Evidence Classification' })
+  ).toBeVisible({ timeout: 15_000 })
+  await settle(page)
+}
+
 export async function gotoState(page: Page, state: GateStateName): Promise<void> {
   if (state === 'login') {
     await page.goto('/login')
@@ -121,6 +137,8 @@ export async function gotoState(page: Page, state: GateStateName): Promise<void>
   if (state === 'case-table') return
   if (state === 'case-filter-drawer') return openDrawer(page, 'filters')
   if (state === 'case-columns-drawer') return openDrawer(page, 'columns')
+
+  if (state === 'case-acmg-evidence-dialog') return openAcmgEvidenceDialog(page)
 
   if (state === 'case-details-panel') {
     await page

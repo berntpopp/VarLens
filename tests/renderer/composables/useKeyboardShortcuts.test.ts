@@ -50,13 +50,13 @@ describe('useKeyboardShortcuts', () => {
     const clearAll = vi.fn()
     const { useKeyboardShortcuts } =
       await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
-    useKeyboardShortcuts({ onClearAllFilters: clearAll })
+    useKeyboardShortcuts({ clearFilters: clearAll })
 
     const handler = keyHandlers.get('X')
     expect(handler).toBeDefined()
   })
 
-  it('does not register X handler when onClearAllFilters is not provided', async () => {
+  it('does not register X handler when clearFilters is not provided', async () => {
     const { useKeyboardShortcuts } =
       await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
     useKeyboardShortcuts({})
@@ -70,7 +70,7 @@ describe('useKeyboardShortcuts', () => {
       const toggleColumns = vi.fn()
       const { useKeyboardShortcuts } =
         await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
-      useKeyboardShortcuts({ onToggleColumnsDrawer: toggleColumns })
+      useKeyboardShortcuts({ toggleColumns })
       return toggleColumns
     }
 
@@ -113,7 +113,7 @@ describe('useKeyboardShortcuts', () => {
   })
 
   describe('Alt+Shift app shortcuts (browser-safe)', () => {
-    type CallbackName = 'onFaq' | 'onLogViewer' | 'onDisclaimer' | 'onImport'
+    type CallbackName = 'faq' | 'logViewer' | 'disclaimer' | 'import'
     const cases: Array<{
       name: CallbackName
       code: string
@@ -122,7 +122,7 @@ describe('useKeyboardShortcuts', () => {
       old: KeyboardEventInit[]
     }> = [
       {
-        name: 'onFaq',
+        name: 'faq',
         code: 'KeyQ',
         upper: 'Q',
         macKey: 'Œ',
@@ -132,7 +132,7 @@ describe('useKeyboardShortcuts', () => {
         ]
       },
       {
-        name: 'onLogViewer',
+        name: 'logViewer',
         code: 'KeyL',
         upper: 'L',
         macKey: 'Ò',
@@ -142,7 +142,7 @@ describe('useKeyboardShortcuts', () => {
         ]
       },
       {
-        name: 'onDisclaimer',
+        name: 'disclaimer',
         code: 'KeyD',
         upper: 'D',
         macKey: 'Î',
@@ -152,7 +152,7 @@ describe('useKeyboardShortcuts', () => {
         ]
       },
       {
-        name: 'onImport',
+        name: 'import',
         code: 'KeyO',
         upper: 'O',
         macKey: 'Ø',
@@ -167,10 +167,10 @@ describe('useKeyboardShortcuts', () => {
 
     async function setup(): Promise<Record<CallbackName, ReturnType<typeof vi.fn>>> {
       const spies = {
-        onFaq: vi.fn(),
-        onLogViewer: vi.fn(),
-        onDisclaimer: vi.fn(),
-        onImport: vi.fn()
+        faq: vi.fn(),
+        logViewer: vi.fn(),
+        disclaimer: vi.fn(),
+        import: vi.fn()
       }
       const { useKeyboardShortcuts } =
         await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
@@ -224,12 +224,25 @@ describe('useKeyboardShortcuts', () => {
     }
   })
 
+  it('opens the command palette on Ctrl/Cmd+K, even while typing in a field', async () => {
+    const palette = vi.fn()
+    const { useKeyboardShortcuts } =
+      await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
+    useKeyboardShortcuts({ palette })
+    inputFocused.value = true
+    expect(dispatch({ key: 'k', code: 'KeyK', ctrlKey: true }).defaultPrevented).toBe(true)
+    dispatch({ key: 'k', code: 'KeyK', metaKey: true })
+    dispatch({ key: 'K', code: 'KeyK', ctrlKey: true, shiftKey: true })
+    dispatch({ key: 'k', code: 'KeyK' })
+    expect(palette).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps Ctrl/Cmd+Shift+F and Ctrl/Cmd+Shift+X unchanged', async () => {
     const onToggleFilterDrawer = vi.fn()
     const onClearAllFilters = vi.fn()
     const { useKeyboardShortcuts } =
       await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
-    useKeyboardShortcuts({ onToggleFilterDrawer, onClearAllFilters })
+    useKeyboardShortcuts({ toggleFilters: onToggleFilterDrawer, clearFilters: onClearAllFilters })
     expect(dispatch({ key: 'F', ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true)
     dispatch({ key: 'F', metaKey: true, shiftKey: true })
     expect(dispatch({ key: 'X', ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true)
@@ -244,10 +257,6 @@ describe('useKeyboardShortcuts', () => {
  * keys are bound by reference to SHORTCUTS in the table components.
  */
 describe('every shared shortcut has a binding', () => {
-  type Callbacks = Parameters<
-    typeof import('../../../src/renderer/src/composables/useKeyboardShortcuts').useKeyboardShortcuts
-  >[0]
-
   /** Build the keydown a user produces for a listed key such as "Alt+Shift+C". */
   function eventFor(keyText: string): KeyboardEventInit {
     const parts = keyText.split('+')
@@ -264,19 +273,20 @@ describe('every shared shortcut has a binding', () => {
     }
   }
 
-  const APP_WIDE: Partial<Record<ShortcutId, keyof Callbacks>> = {
-    search: 'onSearchFocus',
-    toggleFilters: 'onToggleFilterDrawer',
-    toggleColumns: 'onToggleColumnsDrawer',
-    clearFilters: 'onClearAllFilters',
-    help: 'onHelp',
-    import: 'onImport',
-    logViewer: 'onLogViewer',
-    disclaimer: 'onDisclaimer',
-    faq: 'onFaq'
-  }
+  const APP_WIDE = [
+    'search',
+    'toggleFilters',
+    'toggleColumns',
+    'clearFilters',
+    'help',
+    'palette',
+    'import',
+    'logViewer',
+    'disclaimer',
+    'faq'
+  ] as const satisfies readonly ShortcutId[]
   /** Where the remaining shortcuts are bound (typed: a new shortcut must be placed). */
-  const BOUND_ELSEWHERE: Record<Exclude<ShortcutId, keyof typeof APP_WIDE>, string> = {
+  const BOUND_ELSEWHERE: Record<Exclude<ShortcutId, (typeof APP_WIDE)[number]>, string> = {
     moveSelection: 'VariantTable / CohortDataTable ArrowUp/ArrowDown (interactive-prop.test.ts)',
     openDetails: 'VariantTable / CohortDataTable via SHORTCUTS.openDetails.key',
     closeDetails: 'VariantTable / CohortDataTable via SHORTCUTS.closeDetails.key',
@@ -295,16 +305,16 @@ describe('every shared shortcut has a binding', () => {
   })
 
   it('lists every shortcut exactly once', () => {
-    const covered = [...Object.keys(APP_WIDE), ...Object.keys(BOUND_ELSEWHERE)].sort()
+    const covered = [...APP_WIDE, ...Object.keys(BOUND_ELSEWHERE)].sort()
     expect(covered).toEqual(Object.keys(SHORTCUTS).sort())
   })
 
-  it.each(Object.entries(APP_WIDE))('%s fires from its listed key text', async (id, callback) => {
+  it.each(APP_WIDE)('%s fires from its listed key text', async (id) => {
     const spy = vi.fn()
     const { useKeyboardShortcuts } =
       await import('../../../src/renderer/src/composables/useKeyboardShortcuts')
-    useKeyboardShortcuts({ [callback!]: spy })
-    dispatch(eventFor(SHORTCUTS[id as ShortcutId].key))
+    useKeyboardShortcuts({ [id]: spy })
+    dispatch(eventFor(SHORTCUTS[id].key))
     expect(spy).toHaveBeenCalledTimes(1)
   })
 })

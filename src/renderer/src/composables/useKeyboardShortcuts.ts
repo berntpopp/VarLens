@@ -1,27 +1,6 @@
 import { onKeyStroke } from '@vueuse/core'
 import { isTextEntryFocused } from './useTableKeyboardNav'
-import { SHORTCUTS } from '../config/keyboardShortcuts'
-
-interface KeyboardShortcutCallbacks {
-  /** Alt+Shift+D (Option+Shift+D on macOS): Show disclaimer */
-  onDisclaimer?: () => void
-  /** Alt+Shift+Q (Option+Shift+Q on macOS): Show FAQ */
-  onFaq?: () => void
-  /** Alt+Shift+L (Option+Shift+L on macOS): Toggle log viewer */
-  onLogViewer?: () => void
-  onToggleFilterDrawer?: () => void
-  /** Alt+Shift+C (Option+Shift+C on macOS): Toggle columns panel */
-  onToggleColumnsDrawer?: () => void
-  onSearchFocus?: () => void
-  onHelp?: () => void
-  /** Ctrl/Cmd+Shift+X: Clear all filters */
-  onClearAllFilters?: () => void
-  /**
-   * Alt+Shift+O (Option+Shift+O on macOS): Import variant data. Not Alt+Shift+I,
-   * which opens Chrome's "Report an issue" form on Windows/Linux.
-   */
-  onImport?: () => void
-}
+import { SHORTCUTS, type ShortcutActions } from '../config/keyboardShortcuts'
 
 /**
  * Matcher for an Alt+Shift+<key> chord (Option+Shift on macOS), used for app
@@ -47,39 +26,54 @@ function onAltShift(code: string, callback: (() => void) | undefined): void {
   })
 }
 
-export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void {
-  onAltShift('KeyD', callbacks.onDisclaimer)
-  onAltShift('KeyQ', callbacks.onFaq)
-  onAltShift('KeyL', callbacks.onLogViewer)
-  onAltShift('KeyC', callbacks.onToggleColumnsDrawer)
-  onAltShift('KeyO', callbacks.onImport)
+/**
+ * Bind the app-wide shortcuts to their actions. Alt+Shift+O is import, not
+ * Alt+Shift+I, which opens Chrome's "Report an issue" form on Windows/Linux.
+ */
+export function useKeyboardShortcuts(actions: ShortcutActions): void {
+  onAltShift('KeyD', actions.disclaimer)
+  onAltShift('KeyQ', actions.faq)
+  onAltShift('KeyL', actions.logViewer)
+  onAltShift('KeyC', actions.toggleColumns)
+  onAltShift('KeyO', actions.import)
 
   onKeyStroke('F', (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
       e.preventDefault()
-      callbacks.onToggleFilterDrawer?.()
+      actions.toggleFilters?.()
     }
   })
 
   onKeyStroke(SHORTCUTS.search.key, (e: KeyboardEvent) => {
     if (isTextEntryFocused()) return
     e.preventDefault()
-    callbacks.onSearchFocus?.()
+    actions.search?.()
   })
 
   onKeyStroke(SHORTCUTS.help.key, (e: KeyboardEvent) => {
     if (isTextEntryFocused()) return
     e.preventDefault()
-    callbacks.onHelp?.()
+    actions.help?.()
   })
 
   // Clear all filters: Ctrl/Cmd+Shift+X
-  if (callbacks.onClearAllFilters) {
+  if (actions.clearFilters) {
     onKeyStroke('X', (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault()
-        callbacks.onClearAllFilters!()
+        actions.clearFilters!()
       }
     })
+  }
+
+  // Command palette: Ctrl/Cmd+K, also from a text field (like other palettes).
+  if (actions.palette) {
+    onKeyStroke(
+      (e) => e.code === 'KeyK' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey,
+      (e: KeyboardEvent) => {
+        e.preventDefault()
+        actions.palette!()
+      }
+    )
   }
 }
