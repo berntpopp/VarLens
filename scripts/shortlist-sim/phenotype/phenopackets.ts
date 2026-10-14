@@ -96,7 +96,14 @@ export function hpoaReferences(hpoa: string): Map<string, Set<string>> {
   return out
 }
 
-/** True when a case's publication is cited by HPOA for one of its diseases (leakage risk). */
-export function citedByHpoa(c: PhenopacketCase, refs: Map<string, Set<string>>): boolean {
-  return c.diseases.some((d) => c.pmids.some((p) => refs.get(d)?.has(p) === true))
+/**
+ * True when a case's publication is cited by HPOA for one of `diseases` (leakage risk): by default
+ * the case's own diagnoses (registered); the sensitivity analysis passes every disease of its gene.
+ */
+export function citedByHpoa(
+  c: PhenopacketCase,
+  refs: Map<string, Set<string>>,
+  diseases: readonly string[] = c.diseases
+): boolean {
+  return diseases.some((d) => c.pmids.some((p) => refs.get(d)?.has(p) === true))
 }

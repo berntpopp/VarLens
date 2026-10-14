@@ -9,6 +9,10 @@
  * Cases as in external-phenopackets.ts. Every setting is scored through the production scorer
  * (`scoreCase` with option overrides); standings are computed once per setting over all cases
  * and shared by every fold. Writes runs/<name>/{cases.json, tuning.json, external-tuning.md}.
+ *
+ * Sensitivity analyses (not registered; the primary analysis is unchanged): (a) "non-cited" with
+ * citations of every disease of the causal gene, (b) folds grouped by connected gene–disease–
+ * publication component, (c) a joint τ × correction × exclusion-mode search.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -23,18 +27,22 @@ import {
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
 import { DATA_DIR, HPO_DB_SPRINT3, HPO_RAW_DIR, hpoDbForTau } from '../common/paths'
 import { clusterBootstrap, quantile, type Interval } from '../stats/bootstrap'
-import { geneFolds } from '../stats/folds'
+import { componentFolds, geneFolds } from '../stats/folds'
 import { mean, tieAveragedHit, tieAveragedReciprocal } from '../stats/metrics'
 import { runArgs, standing } from './bench-setup'
 import { citedByHpoa, hpoaReferences, jsonFiles, parsePhenopacket } from './phenopackets'
+import { parseDiseases } from './profiles'
 import { buildHpoIndex, readSprint3Input, scoreAllGenes } from './sprint3-baseline'
 import {
+  EXTERNAL_JOINT,
   EXTERNAL_STEPS,
   EXTERNAL_TAUS,
   formatOverrides,
   greedy,
+  ORIGINAL_V2,
   type GreedyResult,
-  type Overrides
+  type Overrides,
+  type TuneStep
 } from './tuning'
 
 const FOLDS = 5
@@ -43,19 +51,32 @@ const REPS = 2000
 /** Primary ship rule (protocol): non-inferior to v2 observed-only, and ahead of sprint 3. */
 const RULE = { minDelta: 0, minLower: -0.02, minVsSprint3: 0.05 } as const
 
+/** The shipped defaults (hpo-scoring.config.ts), keyed like the search points so they share the memo. */
+const SHIPPED: Overrides = {
+  tau: HPO_SCORING_CONFIG.tau,
+  correction: HPO_SCORING_CONFIG.backgroundCorrection,
+  exclusionMode: HPO_SCORING_CONFIG.exclusionMode,
+  excludeMinFrequency: HPO_SCORING_CONFIG.excludeMinFrequency
+}
+
 type Standing = { higher: number; equal: number }
 const SCORERS = ['sprint3', 'v2Present', 'tunedPresent', 'tuned'] as const
-type ScorerId = (typeof SCORERS)[number]
+type ScorerId = (typeof SCORERS)[number] | 'shipped' | 'tunedComponent' | 'tunedJoint'
 const LABELS: Record<ScorerId, string> = {
   sprint3: '(a) sprint 3, observed',
-  v2Present: '(b) v2 defaults, observed',
+  v2Present: '(b) original v2 (τ 0, penalty, correction off), observed',
   tunedPresent: '(b′) chosen setting, observed',
-  tuned: '(t) chosen setting, observed + excluded'
+  tuned: '(t) chosen setting, observed + excluded',
+  shipped: 'shipped defaults (fixed), observed + excluded',
+  tunedComponent: '(t) with component + publication folds',
+  tunedJoint: '(t) with joint τ × correction × exclusion search'
 }
 
 interface TuneCase {
   gene: string
   cited: boolean
+  /** Sensitivity (a): cited by HPOA for any disease of the causal gene. */
+  citedGene: boolean
   fold: number
   ms: number
   scorers: Record<ScorerId, Standing>
@@ -93,7 +114,76 @@ function table(title: string, cs: TuneCase[]): string[] {
   ]
 }
 
-function render(cases: TuneCase[], folds: GreedyResult[], frozen: GreedyResult): string {
+const foldRows = (folds: GreedyResult[]): string[] => [
+  '| Outer fold | chosen on the other four | training Hit@10 % |',
+  '|---|---|---|',
+  ...folds.map(
+    (f, i) => `| ${i} | ${formatOverrides(f.chosen)} | ${(100 * f.objective).toFixed(1)} |`
+  )
+]
+
+interface Sensitivity {
+  componentFolds: GreedyResult[]
+  componentSizes: number[]
+  jointFolds: GreedyResult[]
+  /** Hit@10 of τ ∈ EXTERNAL_TAUS at the shipped correction and exclusion mode, in-sample. */
+  tauRows: Array<{ tau: number; all: number; nonCited: number; nonCitedGene: number }>
+}
+
+function renderSensitivity(cases: TuneCase[], s: Sensitivity): string[] {
+  const subsets: Array<[string, TuneCase[]]> = [
+    ['non-cited, registered', cases.filter((c) => !c.cited)],
+    ['(a) non-cited, citations of all diseases of the gene', cases.filter((c) => !c.citedGene)]
+  ]
+  const scorers: ScorerId[] = ['shipped', 'tuned', 'tunedComponent', 'tunedJoint']
+  const d = (cs: TuneCase[], a: ScorerId, b: ScorerId): string =>
+    pct(boot(cs, (x) => hit(10)(x, a) - hit(10)(x, b)))
+  return [
+    '## Sensitivity analyses (added after the result; the registered analysis above is unchanged)',
+    '',
+    '(a) cases whose PMID HPOA cites for any disease of the causal gene count as cited; (b) outer',
+    'folds group connected gene–disease–publication components (`componentFolds`); (c) τ is',
+    'searched jointly with correction × exclusion mode (60 settings) instead of first. Paired',
+    `ΔHit@10 in pp, gene-clustered bootstrap (${REPS} replicates).`,
+    '',
+    '| Subset | Scorer | Hit@10 % | Δ vs (b) original v2 | Δ vs (a) sprint 3 |',
+    '|---|---|---|---|---|',
+    ...subsets.flatMap(([name, cs]) =>
+      scorers.map(
+        (sc) =>
+          `| ${name} (${cs.length} cases, ${new Set(cs.map((c) => c.gene)).size} genes) | ` +
+          `${LABELS[sc]} | ${pct(boot(cs, (x) => hit(10)(x, sc)))} | ` +
+          `${d(cs, sc, 'v2Present')} | ${d(cs, sc, 'sprint3')} |`
+      )
+    ),
+    '',
+    `(b) Component + publication folds (genes per fold ${s.componentSizes.join(' / ')}):`,
+    '',
+    ...foldRows(s.componentFolds),
+    '',
+    '(c) Joint search, gene folds:',
+    '',
+    ...foldRows(s.jointFolds),
+    '',
+    `(c) τ at correction = ${String(SHIPPED.correction)}, exclusionMode = ${String(SHIPPED.exclusionMode)}, ` +
+      'Hit@10 % (in-sample, descriptive):',
+    '',
+    '| τ | all cases | non-cited | (a) non-cited, gene-wide |',
+    '|---|---|---|---|',
+    ...s.tauRows.map(
+      (r) =>
+        `| ${r.tau} | ${(100 * r.all).toFixed(1)} | ${(100 * r.nonCited).toFixed(1)} | ${(100 * r.nonCitedGene).toFixed(1)} |`
+    ),
+    ''
+  ]
+}
+
+function render(
+  cases: TuneCase[],
+  folds: GreedyResult[],
+  frozen: GreedyResult,
+  sensitivity: Sensitivity
+): string {
   const clean = cases.filter((c) => !c.cited)
   const vsB = boot(clean, (x) => hit(10)(x, 'tuned') - hit(10)(x, 'v2Present'))
   const vsA = boot(clean, (x) => hit(10)(x, 'tuned') - hit(10)(x, 'sprint3'))
@@ -127,11 +217,7 @@ function render(cases: TuneCase[], folds: GreedyResult[], frozen: GreedyResult):
         'terms are shown as conflicts and not scored.'
       : '',
     '',
-    '| Outer fold | chosen on the other four | training Hit@10 % |',
-    '|---|---|---|',
-    ...folds.map(
-      (f, i) => `| ${i} | ${formatOverrides(f.chosen)} | ${(100 * f.objective).toFixed(1)} |`
-    ),
+    ...foldRows(folds),
     '',
     ...table('non-cited (primary)', clean),
     ...table(
@@ -144,7 +230,8 @@ function render(cases: TuneCase[], folds: GreedyResult[], frozen: GreedyResult):
     '',
     '### Greedy path on all cases (frozen setting; in-sample, descriptive)',
     '',
-    ...stepRows
+    ...stepRows,
+    ...renderSensitivity(cases, sensitivity)
   ].join('\n')
 }
 
@@ -159,6 +246,9 @@ function main(argv: string[]): void {
   const genes = [...parseGenesToPhenotype(g2p, parseHpoaDiseaseTerms(hpoa)).keys()].sort()
   const geneIndex = new Map(genes.map((g, i) => [g, i]))
   const refs = hpoaReferences(hpoa)
+  const geneDiseases = new Map<string, string[]>()
+  for (const d of parseDiseases(hpoa, g2p))
+    for (const g of d.genes) geneDiseases.set(g, [...(geneDiseases.get(g) ?? []), d.id])
   const s3 = buildHpoIndex(readSprint3Input(HPO_DB_SPRINT3))
   // One index per τ: the stored background null is τ-specific (build-tau-dbs.ts).
   const ixs = new Map<number, PhenotypeIndex>(
@@ -188,6 +278,15 @@ function main(argv: string[]): void {
     FOLDS,
     SEED
   )
+  // Sensitivity (b): genes sharing a disease (diagnosed or annotated) or a publication share a fold.
+  const componentOf = componentFolds(
+    raw.flatMap((c) =>
+      [...c.diseases, ...(geneDiseases.get(c.gene) ?? []), ...c.pmids].map(
+        (n) => [c.gene, n] as const
+      )
+    ),
+    FOLDS
+  )
   const items = raw.map((c) => {
     const present = c.observed.map((hpoId) => ({ hpoId, excluded: false, key: false }))
     const absent = c.excluded.map((hpoId) => ({ hpoId, excluded: true, key: false }))
@@ -204,7 +303,7 @@ function main(argv: string[]): void {
       full: [...present, ...absent],
       fold: foldOf.get(c.gene)!,
       sprint3: standing(sprint3, causal),
-      v2Present: standing(v2(present, {}), causal)
+      v2Present: standing(v2(present, ORIGINAL_V2), causal)
     }
   })
   if (items.length === 0) throw new Error('no cases')
@@ -225,16 +324,29 @@ function main(argv: string[]): void {
     console.log(`setting ${memo.size}: ${key}`)
     return st
   }
-  const search = (subset: number[]): GreedyResult =>
-    greedy(EXTERNAL_STEPS, (o) => {
-      const st = standings(o)
-      return mean(subset.map((i) => tieAveragedHit(st[2 * i], st[2 * i + 1], 10)))
-    })
+  const hit10 = (o: Overrides, subset: number[]): number => {
+    const st = standings(o)
+    return mean(subset.map((i) => tieAveragedHit(st[2 * i], st[2 * i + 1], 10)))
+  }
+  const at = (o: Overrides, i: number): Standing => {
+    const st = standings(o)
+    return { higher: st[2 * i], equal: st[2 * i + 1] }
+  }
+  const search = (subset: number[], steps: TuneStep[] = EXTERNAL_STEPS): GreedyResult =>
+    greedy(steps, (o) => hit10(o, subset), ORIGINAL_V2)
   const idx = items.map((_, i) => i)
-  const folds = Array.from({ length: FOLDS }, (_, f) =>
-    search(idx.filter((i) => items[i].fold !== f))
-  )
-  const cases: TuneCase[] = items.map((it) => {
+  const nested = (fold: (i: number) => number, steps?: TuneStep[]): GreedyResult[] =>
+    Array.from({ length: FOLDS }, (_, f) =>
+      search(
+        idx.filter((i) => fold(i) !== f),
+        steps
+      )
+    )
+  const folds = nested((i) => items[i].fold)
+  const compOf = (i: number): number => componentOf.get(items[i].c.gene)!
+  const compFolds = nested(compOf)
+  const jointFolds = nested((i) => items[i].fold, EXTERNAL_JOINT)
+  const cases: TuneCase[] = items.map((it, i) => {
     const o = folds[it.fold].chosen
     const t0 = performance.now()
     const tuned = standing(v2(it.full, o), it.causal)
@@ -242,20 +354,52 @@ function main(argv: string[]): void {
     return {
       gene: it.c.gene,
       cited: citedByHpoa(it.c, refs),
+      citedGene: citedByHpoa(it.c, refs, [
+        ...it.c.diseases,
+        ...(geneDiseases.get(it.c.gene) ?? [])
+      ]),
       fold: it.fold,
       ms,
       scorers: {
         sprint3: it.sprint3,
         v2Present: it.v2Present,
         tunedPresent: standing(v2(it.present, o), it.causal),
-        tuned
+        tuned,
+        shipped: at(SHIPPED, i),
+        tunedComponent: at(compFolds[compOf(i)].chosen, i),
+        tunedJoint: at(jointFolds[it.fold].chosen, i)
       }
     }
   })
   const frozen = search(idx)
-  writeFileSync(join(outDir, 'external-tuning.md'), render(cases, folds, frozen) + '\n')
+  const nonCited = idx.filter((i) => !cases[i].cited)
+  const nonCitedGene = idx.filter((i) => !cases[i].citedGene)
+  const sensitivity: Sensitivity = {
+    componentFolds: compFolds,
+    componentSizes: Array.from(
+      { length: FOLDS },
+      (_, f) => [...componentOf.values()].filter((x) => x === f).length
+    ),
+    jointFolds,
+    tauRows: EXTERNAL_TAUS.map((tau) => {
+      const o = { ...SHIPPED, tau }
+      return {
+        tau,
+        all: hit10(o, idx),
+        nonCited: hit10(o, nonCited),
+        nonCitedGene: hit10(o, nonCitedGene)
+      }
+    })
+  }
+  writeFileSync(
+    join(outDir, 'external-tuning.md'),
+    render(cases, folds, frozen, sensitivity) + '\n'
+  )
   writeFileSync(join(outDir, 'cases.json'), JSON.stringify(cases) + '\n')
-  writeFileSync(join(outDir, 'tuning.json'), JSON.stringify({ folds, frozen }) + '\n')
+  writeFileSync(
+    join(outDir, 'tuning.json'),
+    JSON.stringify({ folds, frozen, compFolds, jointFolds }) + '\n'
+  )
   console.log(`wrote ${join(outDir, 'external-tuning.md')} (${memo.size} settings scored)`)
 }
 

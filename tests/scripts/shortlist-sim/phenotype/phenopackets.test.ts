@@ -89,4 +89,9 @@ describe('HPOA leakage', () => {
     expect(citedByHpoa(c, refs)).toBe(true)
     expect(citedByHpoa({ ...c, pmids: ['PMID:2'] }, refs)).toBe(false)
   })
+
+  it('flags a publication cited by another disease of the gene (gene-wide sensitivity)', () => {
+    const c = { ...parsePhenopacket(fixture)!, pmids: ['PMID:2'] }
+    expect(citedByHpoa(c, refs, [...c.diseases, 'OMIM:100002'])).toBe(true)
+  })
 })

@@ -24,6 +24,18 @@ const axis = (key: string, values: ReadonlyArray<number | string>): Overrides[] 
 export const EXTERNAL_TAUS = [0, 0.5, 1] as const
 
 /**
+ * The v2 spec defaults the protocol was registered and first run with (hpo-scoring.config.ts at
+ * d013c6e8): comparator (b) and the start of every search. Frozen here so later config changes
+ * (the shipped τ = 1 / conflicts only) cannot move the historical comparator.
+ */
+export const ORIGINAL_V2: Overrides = {
+  tau: 0,
+  correction: 'off',
+  exclusionMode: 'penalty',
+  excludeMinFrequency: 0
+}
+
+/**
  * Pre-registered order and grids. Step 2 is joint because the scorer couples them: correction
  * `off`/`mean` applies exclusions multiplicatively, `z` the error-tolerant LR (B1). keyWeight is
  * not tuned: phenopackets carry no key terms.
@@ -53,6 +65,14 @@ export const EXTERNAL_STEPS: TuneStep[] = [
   }
 ]
 
+/** Sensitivity analysis (not registered): τ searched jointly with step 2 instead of first. */
+export const EXTERNAL_JOINT: TuneStep[] = [
+  {
+    label: 'joint τ × correction × exclusion mode',
+    grid: cross(axis('tau', EXTERNAL_TAUS), EXTERNAL_STEPS[1].grid)
+  }
+]
+
 export interface StepResult {
   label: string
   points: Overrides[]
@@ -66,9 +86,16 @@ export interface GreedyResult {
   path: StepResult[]
 }
 
-/** Greedy coordinate search maximising `objective`; ties keep the earlier grid point. */
-export function greedy(steps: TuneStep[], objective: (o: Overrides) => number): GreedyResult {
-  let chosen: Overrides = {}
+/**
+ * Greedy coordinate search maximising `objective`, every point merged over `start`; ties keep the
+ * earlier grid point.
+ */
+export function greedy(
+  steps: TuneStep[],
+  objective: (o: Overrides) => number,
+  start: Overrides
+): GreedyResult {
+  let chosen: Overrides = start
   let best = Number.NaN
   const path: StepResult[] = []
   for (const step of steps) {
