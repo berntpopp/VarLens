@@ -61,6 +61,7 @@ import { createWebRuntimeServices } from './server/runtime-services'
 import { createWebReferenceServices } from './server/reference-services/create'
 import { WebAssociationRuns } from './server/association/web-association-runs'
 import { PostgresAssociationDataBuilder } from '../main/storage/postgres/PostgresAssociationDataBuilder'
+import { prewarmHpoIndex } from '../main/services/phenotype/hpo-similarity-db'
 import {
   type AppMetrics,
   createAppMetricsFromEnv,
@@ -512,6 +513,8 @@ async function main(): Promise<void> {
 
   const app = await buildApp({ admin: readAdminEnv(), metrics })
 
+  // Load the HPO index before serving, not inside the first hpo_resnik shortlist (#631).
+  prewarmHpoIndex()
   await app.listen({ port, host })
   const metricsServer = metricsEnabled
     ? await startMetricsServer({ metrics, host: metricsHost, port: metricsPort, path: metricsPath })

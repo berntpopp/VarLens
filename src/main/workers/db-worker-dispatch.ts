@@ -15,6 +15,7 @@ import type { VariantFilters } from '../statistics/types'
 import type { VariantFilter } from '../database/types'
 import { convertBigInts } from '../utils/convertBigInts'
 import { toTransportableWorkerError } from '../database/worker-error-codec'
+import { prewarmHpoIndex } from '../services/phenotype/hpo-similarity-db'
 import {
   resolvePanelIntervalsInPlace,
   type PanelAwareFilter
@@ -257,6 +258,10 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
         const overview = repos.overview.getDatabaseOverview()
         return convertBigInts(overview)
       }
+
+      case 'hpo:prewarm':
+        prewarmHpoIndex()
+        return null
 
       default:
         throw new Error(`Unknown db-worker task type: ${type}`)

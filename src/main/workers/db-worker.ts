@@ -16,6 +16,7 @@ import { GeneReferenceDb } from '../database/GeneReferenceDb'
 import { assertNotHexLiteralKey } from '../database/sqlcipher-key-guard'
 import type { DbTask } from '../../shared/types/db-task'
 import { dispatchTask } from './db-worker-dispatch'
+import { prewarmHpoIndex } from '../services/phenotype/hpo-similarity-db'
 
 // ── Initialise connection from workerData ──────────────────────
 
@@ -72,6 +73,9 @@ function openGeneRefDb(): GeneReferenceDb | null {
 }
 
 const geneRefDb: GeneReferenceDb | null = openGeneRefDb()
+
+// Each worker loads the HPO index once it is up, not inside its first ranking (#631).
+setImmediate(() => prewarmHpoIndex())
 
 // ── Task dispatcher ────────────────────────────────────────────
 
