@@ -120,7 +120,6 @@ function main(argv: string[]): void {
       const scorer = openHpoGeneScorer(profile, HPO_DB)
       if (scorer === null) throw new Error(`no scorer for ${disease.id}`)
       const resnik = Float64Array.from(genes, (g) => scorer.score(g) ?? -Infinity)
-      scorer.close()
       const ms = performance.now() - t0
       const profileSet = new Set(profile)
       const byScorer: Record<ScorerId, Float64Array> = {

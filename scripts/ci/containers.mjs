@@ -115,7 +115,10 @@ export function createContainerServices(dependencies = {}) {
           'POSTGRES_DB=varlens_ci',
           '--env',
           `POSTGRES_PASSWORD=${password}`,
-          'postgres:16'
+          'postgres:16',
+          // WAL lives on the 1 GiB data tmpfs; the PG16 default max_wal_size (1 GB) can fill it.
+          '-c',
+          'max_wal_size=256MB'
         ],
         commandOptions
       )

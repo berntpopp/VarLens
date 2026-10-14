@@ -316,19 +316,14 @@ export class ShortlistService {
       this.stage1.metadata.getCaseMetadata(caseId)?.sex,
       hpo
     )
-    let result: ReturnType<typeof rankEvidenceSqlite>
-    try {
-      result = rankEvidenceSqlite({
-        source: this.stage1Source,
-        filters,
-        info,
-        compiled,
-        config,
-        limit
-      })
-    } finally {
-      hpo?.close()
-    }
+    const result = rankEvidenceSqlite({
+      source: this.stage1Source,
+      filters,
+      info,
+      compiled,
+      config,
+      limit
+    })
     if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
     return result
   }
