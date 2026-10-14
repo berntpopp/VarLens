@@ -80,6 +80,11 @@
     {
       "file": "src/main/database/migrations.ts",
       "callerFunction": "runMigrations",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/database/migrations.ts",
+      "callerFunction": "runMigrations",
       "assignedTo": "cleanupTransaction"
     },
     {
@@ -125,6 +130,11 @@
     {
       "file": "src/main/services/phenotype/hpo-similarity-db.ts",
       "callerFunction": "buildHpoSimilarityDb",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/services/phenotype/hpo-similarity-db.ts",
+      "callerFunction": "writeDiseaseNull",
       "assignedTo": null
     },
     {
