@@ -33,7 +33,9 @@ describe('HpoTermSelector', () => {
     autocomplete.vm.$emit('update:search', 'HP:0001250')
 
     await vi.waitFor(() =>
-      expect(autocomplete.props('items')).toEqual([{ id: 'HP:0001250', name: 'Seizure', assigned: false }])
+      expect(autocomplete.props('items')).toEqual([
+        { id: 'HP:0001250', name: 'Seizure', assigned: false }
+      ])
     )
     expect(api.hpo.search).not.toHaveBeenCalled()
     wrapper.unmount()
@@ -227,6 +229,10 @@ describe('HpoTermSelector', () => {
         await input.trigger('keydown', { key: 'Enter' })
         await new Promise((resolve) => setTimeout(resolve, 50))
         expect(w.emitted('add:term')).toBeUndefined()
+        // Removing the chip re-enables the suggestion without a new search.
+        await w.setProps({ modelValue: terms.slice(1) })
+        const after = w.findComponent({ name: 'VAutocomplete' }).props('items') as typeof items
+        expect(after[0]).toMatchObject({ id: 'HP:0001250', assigned: false })
       })
 
       it('an uppercase query (Shift held while typing) still adds present', async () => {
