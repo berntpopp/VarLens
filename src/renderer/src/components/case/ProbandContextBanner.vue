@@ -18,7 +18,6 @@
         :prepend-icon="hpoTermIcon(term)"
         :class="term.key ? 'font-weight-bold' : 'font-weight-medium'"
         class="text-caption"
-        :aria-label="hpoTermAriaLabel(term)"
       >
         <HpoTermText :term="term" />
       </v-chip>
@@ -72,12 +71,7 @@ import {
 } from '@mdi/js'
 import { useCaseMetadata } from '../../composables/useCaseMetadata'
 import { HPO_TERM_COPY as COPY } from '../../config/hpoTermCopy'
-import {
-  groupedHpoTermLines,
-  hpoTermAriaLabel,
-  hpoTermIcon,
-  orderHpoTerms
-} from '../../utils/hpo-term-status'
+import { groupedHpoTermLines, hpoTermIcon, orderHpoTerms } from '../../utils/hpo-term-status'
 
 const props = defineProps<{
   caseId: number

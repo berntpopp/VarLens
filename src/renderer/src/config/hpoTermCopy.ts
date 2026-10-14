@@ -6,6 +6,8 @@ export const HPO_TERM_COPY = {
   excluded: 'Excluded',
   excludedMenu: 'Excluded (examined, absent)',
   key: 'Key finding',
+  /** Lower-case state for screen-reader text and chip labels. */
+  keyState: 'key finding',
   remove: 'Remove',
   presentGroup: 'Present phenotypes',
   excludedGroup: 'Excluded phenotypes',

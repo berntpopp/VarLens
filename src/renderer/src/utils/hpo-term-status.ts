@@ -24,7 +24,7 @@ export function hpoTermIcon(term: StatusTerm): string | undefined {
 }
 
 export function hpoTermAriaLabel(term: StatusTerm): string {
-  const state = term.excluded ? 'excluded' : term.key ? 'key finding' : 'present'
+  const state = term.excluded ? 'excluded' : term.key ? COPY.keyState : 'present'
   return `${hpoTermLabel(term)}, ${state}`
 }
 

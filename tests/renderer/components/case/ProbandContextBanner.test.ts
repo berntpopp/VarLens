@@ -116,7 +116,7 @@ describe('ProbandContextBanner', () => {
     })
   }
 
-  it('orders key, present, excluded chips with state in text and aria labels', async () => {
+  it('orders key, present, excluded chips with state in their text', async () => {
     const wrapper = mountWith([
       { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly', excluded: true, key: false },
       { hpo_id: 'HP:0001252', hpo_label: 'Hypotonia', excluded: false, key: false },
@@ -124,12 +124,13 @@ describe('ProbandContextBanner', () => {
     ])
     await flushPromises()
     const chips = wrapper.findAll('.v-chip')
-    expect(chips.slice(0, 3).map((c) => c.attributes('aria-label'))).toEqual([
+    // Non-interactive chips are role-less spans, so the state must be in their text.
+    expect(chips.slice(0, 3).map((c) => c.text())).toEqual([
       'Seizure, key finding',
-      'Hypotonia, present',
-      'Microcephaly, excluded'
+      'Hypotonia',
+      'no Microcephaly'
     ])
-    expect(chips[2].text()).toContain('no Microcephaly')
+    expect(chips[0].attributes('aria-label')).toBeUndefined()
     expect(wrapper.find('[data-testid="banner-phenotype-empty"]').exists()).toBe(false)
   })
 
