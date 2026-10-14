@@ -251,8 +251,12 @@ export interface HpoGeneScorer {
 
 /** Phenotype index of one DB file, kept per process until the file changes. */
 let cached: { key: string; index: PhenotypeIndex | null } | null = null
-/** Last case results per (index, canonical profile): paging and re-sorting never rescore. */
-const results = new Map<string, CaseScores>()
+/** Last case results per (index, canonical profile): paging never rescores or re-explains. */
+interface Memo {
+  scores: CaseScores
+  explained: Map<number, HpoExplanation>
+}
+const results = new Map<string, Memo>()
 
 const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
 
@@ -331,13 +335,13 @@ function caseScores(
   index: PhenotypeIndex,
   profile: CaseProfile,
   options: Partial<HpoScoringOptions>
-): CaseScores {
+): Memo {
   const memoKey = `${key}\0${JSON.stringify(options)}\0${profile.hash}`
   let hit = results.get(memoKey)
   if (hit !== undefined) {
     results.delete(memoKey)
   } else {
-    hit = scoreProfile(index, profile, options)
+    hit = { scores: scoreProfile(index, profile, options), explained: new Map() }
     if (results.size >= HPO_SCORING_CONFIG.memoisedCases) {
       results.delete(results.keys().next().value as string)
     }
@@ -378,8 +382,7 @@ export function openHpoGeneScorer(
     const index = loaded?.index ?? null
     const profile = index === null ? null : prepareProfile(index, terms)
     if (loaded === null || index === null || profile === null) return null
-    const scores = caseScores(loaded.key, index, profile, options)
-    const explained = new Map<number, HpoExplanation>()
+    const { scores, explained } = caseScores(loaded.key, index, profile, options)
     const { genes } = index
     return {
       score: (symbol) => {

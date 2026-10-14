@@ -210,6 +210,13 @@ describe('hpo_similarity.db', () => {
     open.mockRestore()
   })
 
+  it('reuses explanations of a memoised case across scorers', () => {
+    build()
+    const first = openHpoGeneScorer([P(T.C)], dbPath)!.explain('GENE2')
+    expect(first).not.toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)!.explain('GENE2')).toBe(first)
+  })
+
   it('has no scorer without patient terms or data', () => {
     build()
     expect(openHpoGeneScorer([], dbPath)).toBeNull()
