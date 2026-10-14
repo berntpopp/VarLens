@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { UniqueConstraintError } from '../../../src/main/database/errors'
 import { decodeWorkerError, encodeWorkerError } from '../../../src/main/database/worker-error-codec'
+import { ShortlistQueryError } from '../../../src/main/database/ShortlistService'
 import { AppError, ConflictError, ForbiddenError } from '../../../src/main/ipc/errors'
 import { toSerializableError } from '../../../src/main/ipc/serializable-error'
 import { JobRunner } from '../../../src/main/services/jobs/JobRunner'
@@ -62,6 +63,13 @@ describe('error envelope', () => {
     )
     const rehydrated = decodeWorkerError(encodeWorkerError(sqliteError))
     expect(toSerializableError(rehydrated).code).toBe(ErrorCode.CONFLICT)
+  })
+
+  it('a shortlist query failure keeps its DB_ERROR message across the db-worker hop', () => {
+    const error = new ShortlistQueryError('Shortlist query failed for snv', [])
+    const rehydrated = decodeWorkerError(encodeWorkerError(error))
+    expect(rehydrated).toBeInstanceOf(ShortlistQueryError)
+    expect(toSerializableError(rehydrated)).toEqual(toSerializableError(error))
   })
 
   it('a rehydrated UniqueConstraintError keeps its readable message', () => {
