@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'fs'
+import Database from 'better-sqlite3-multiple-ciphers'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -38,31 +39,62 @@ describe('hpo_similarity.db', () => {
     expect(readHpoDataStatus(dbPath)).toMatchObject({
       installed: true,
       version: 'v2026-09-01',
-      termCount: 6,
-      geneCount: 2
+      needsUpdate: false,
+      termCount: 10,
+      geneCount: 3
     })
   })
 
-  it('scores genes with the hand-computed Resnik BMA', () => {
+  it('stores only positively supported phenotype-subtree gene terms', () => {
+    build()
+    const db = new Database(dbPath, { readonly: true })
+    const rows = db.prepare('SELECT gene_symbol, term FROM gene_terms ORDER BY 1, 2').all()
+    db.close()
+    expect(rows).toEqual([
+      { gene_symbol: 'GENE1', term: T.D },
+      { gene_symbol: 'GENE2', term: T.C },
+      { gene_symbol: 'GENE2', term: T.E },
+      { gene_symbol: 'GENE3', term: T.D }
+    ])
+  })
+
+  it('scores genes with the hand-computed symmetric Resnik BMA', () => {
     build()
     const scorer = openHpoGeneScorer([T.C, T.E], dbPath)
     expect(scorer).not.toBeNull()
-    expect(scorer?.score('GENE1')).toBeCloseTo(Math.log(4 / 3) / 2, 12)
+    const l43 = Math.log(4 / 3)
+    expect(scorer?.score('GENE1')).toBeCloseTo((l43 / 2 + l43) / 2, 12)
     expect(scorer?.score('GENE2')).toBeCloseTo(Math.log(2), 12)
     expect(scorer?.score('UNKNOWN')).toBeNull()
     scorer?.close()
   })
 
-  it('scores alternative / obsolete case term ids like their current term', () => {
+  it('canonicalises, deduplicates and drops non-phenotype case terms before scoring', () => {
     build()
-    const scorer = openHpoGeneScorer([T.ALT, T.Z], dbPath)
-    expect(scorer?.score('GENE2')).toBeCloseTo(Math.log(2), 12)
-    scorer?.close()
+    const plain = openHpoGeneScorer([T.C, T.E], dbPath)
+    const noisy = openHpoGeneScorer([T.ALT, T.C, T.Z2, T.INH, 'HP:9999999'], dbPath)
+    expect(noisy?.score('GENE1')).toBeCloseTo(plain!.score('GENE1')!, 12)
+    expect(noisy?.score('GENE2')).toBeCloseTo(plain!.score('GENE2')!, 12)
+    expect(openHpoGeneScorer([T.INH], dbPath)).toBeNull()
   })
 
   it('has no scorer without patient terms or data', () => {
     build()
     expect(openHpoGeneScorer([], dbPath)).toBeNull()
     expect(openHpoGeneScorer([T.C], join(dir, 'missing.db'))).toBeNull()
+  })
+
+  it('treats a damaged file as "needs update" and scores nothing, without throwing', () => {
+    writeFileSync(dbPath, 'not a database at all, just bytes '.repeat(200))
+    expect(readHpoDataStatus(dbPath)).toMatchObject({ installed: false, needsUpdate: true })
+    expect(openHpoGeneScorer([T.C], dbPath)).toBeNull()
+  })
+
+  it('reports a DB from an older builder as needing an update', () => {
+    build()
+    const db = new Database(dbPath)
+    db.prepare("UPDATE meta SET value = '1' WHERE key = 'builder_version'").run()
+    db.close()
+    expect(readHpoDataStatus(dbPath)).toMatchObject({ installed: true, needsUpdate: true })
   })
 })

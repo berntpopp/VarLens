@@ -3,6 +3,7 @@ import type { HpoDataStatus } from '../../../shared/types/hpo-data'
 
 const NO_HPO_DATA: HpoDataStatus = {
   installed: false,
+  needsUpdate: false,
   version: null,
   builtAt: null,
   termCount: 0,

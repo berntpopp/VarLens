@@ -11,7 +11,7 @@ import { join } from 'path'
 import { HPO_DATA_CONFIG, type HpoAssetKey } from '../../../shared/config/hpo-data.config'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import type { HpoBuildRequest } from './hpo-build-worker-client'
-import { readHpoDataStatus } from './hpo-similarity-db'
+import { assertUsableHpoDb, readHpoDataStatus } from './hpo-similarity-db'
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -143,7 +143,7 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
     return { success: false, message: 'Offline: HPO data left unchanged.', status: current }
   }
   const release = await resolveRelease(deps.fetch, deps.tag)
-  if (current.installed && current.version === release.tag) {
+  if (current.installed && !current.needsUpdate && current.version === release.tag) {
     return { success: true, message: `HPO data ${release.tag} is up to date.`, status: current }
   }
 
@@ -167,6 +167,7 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
       )
     }
     await deps.build({ files, meta: { release: release.tag, sha256 }, outPath })
+    assertUsableHpoDb(outPath)
     await replaceFile(outPath, deps.dbPath)
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })
