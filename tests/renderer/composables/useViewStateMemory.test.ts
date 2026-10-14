@@ -6,6 +6,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useViewStateMemory } from '../../../src/renderer/src/composables/useViewUrlBindings'
 import { useDatabaseStore } from '../../../src/renderer/src/stores/databaseStore'
 import { VIEW_STATE_MEMORY } from '../../../src/renderer/src/config/viewStateMemory'
+import { saveViewState } from '../../../src/renderer/src/utils/url-state/view-state-memory'
 
 const Empty = defineComponent({ render: () => null })
 const F1 = '{"starredOnly":true}'
@@ -138,5 +139,17 @@ describe('useViewStateMemory (#124)', () => {
     db.currentPath = 'web:postgres'
     await settle()
     expect(router.currentRoute.value.query).toEqual({ case: '4', q: 'BRCA2' })
+  })
+
+  it('evicts the least recently written views beyond the cap', () => {
+    const cap = VIEW_STATE_MEMORY.maxEntries
+    for (let i = 0; i <= cap; i++) saveViewState(`/a.db|case:${i}`, { q: 'x' })
+    saveViewState('/a.db|case:1', { q: 'y' }) // rewrite moves case:1 to most recent
+    saveViewState('/a.db|case:extra', { q: 'z' })
+    const keys = Object.keys(stored())
+    expect(keys).toHaveLength(cap)
+    expect(keys).not.toContain('/a.db|case:0')
+    expect(keys).not.toContain('/a.db|case:2')
+    expect(keys.slice(-2)).toEqual(['/a.db|case:1', '/a.db|case:extra'])
   })
 })

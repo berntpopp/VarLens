@@ -109,4 +109,18 @@ describe('databaseStore: reopen last database at startup (#575)', () => {
     await store.openDatabase(LAST_INFO.path)
     expect(useSettingsStore().lastDatabasePath).toBe(LAST_INFO.path)
   })
+
+  it('does not reopen a local file after the user switched to a PostgreSQL profile', async () => {
+    const store = useDatabaseStore()
+    await store.fetchInfo() // loads capabilities; the reopen option is off
+    useSettingsStore().lastDatabasePath = LAST_INFO.path
+    ;(window.api.database as unknown as Record<string, unknown>).postgresProfileOpen = vi
+      .fn()
+      .mockResolvedValue({ success: true, info: { path: 'pg:1', name: 'pg', encrypted: false } })
+    ;(window.api.database as unknown as Record<string, unknown>).postgresProfilesList = vi
+      .fn()
+      .mockResolvedValue([])
+    await store.openPostgresProfile('1')
+    expect(useSettingsStore().lastDatabasePath).toBeNull()
+  })
 })
