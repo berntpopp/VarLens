@@ -271,6 +271,31 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       expect(ids.value).toEqual(['HP:0001250'])
     })
 
+    it('inserts a new term in server order (by HPO ID), so a reload keeps the chip order', async () => {
+      const term = (hpo_id: string): CaseHpoTerm => ({
+        id: 1,
+        case_id: caseId,
+        hpo_id,
+        hpo_label: hpo_id,
+        excluded: false,
+        key: false,
+        created_at: 0
+      })
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue(term('HP:0001250'))
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(
+        caseId,
+        makeFullMetadata({ hpoTerms: [term('HP:0000252'), term('HP:0001252')] })
+      )
+      await result.assignHpoTerm(caseId, 'HP:0001250', 'HP:0001250')
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms.map((t) => t.hpo_id)).toEqual([
+        'HP:0000252',
+        'HP:0001250',
+        'HP:0001252'
+      ])
+    })
+
     it('upserts status flags in place and rolls back to the previous flags on failure', async () => {
       const present: CaseHpoTerm = {
         id: 7,
