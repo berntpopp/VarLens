@@ -37,7 +37,7 @@ export function orderHpoTerms<T extends StatusTerm>(terms: readonly T[]): T[] {
 /** Overflow tooltip lines grouped by state; empty groups are omitted. */
 export function groupedHpoTermLines(terms: readonly StatusTerm[]): string[] {
   const groups: Array<[string, StatusTerm[]]> = [
-    ['Key', terms.filter((t) => !t.excluded && t.key)],
+    [COPY.keyGroup, terms.filter((t) => !t.excluded && t.key)],
     [COPY.present, terms.filter((t) => !t.excluded && !t.key)],
     [COPY.excluded, terms.filter((t) => t.excluded)]
   ]

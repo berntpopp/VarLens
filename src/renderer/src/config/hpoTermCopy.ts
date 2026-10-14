@@ -8,6 +8,7 @@ export const HPO_TERM_COPY = {
   key: 'Key finding',
   /** Lower-case state for screen-reader text and chip labels. */
   keyState: 'key finding',
+  keyGroup: 'Key',
   remove: 'Remove',
   presentGroup: 'Present phenotypes',
   excludedGroup: 'Excluded phenotypes',
