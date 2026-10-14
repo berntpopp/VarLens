@@ -14,6 +14,10 @@
  * Point this test at your local ONT test dataset by setting the env var
  * `ONT_TEST_DATA_DIR`. The directory must contain files matching the
  * `LB*.wf_sv.vcf.gz` / `.wf_cnv.vcf.gz` / `.wf_str.vcf.gz` naming pattern.
+ * VEP-annotated bundles from the annotation workflow (`*.sv.vep.vcf.gz` /
+ * `*.cnv.vep.vcf.gz`, CSQ instead of SnpEff ANN) are accepted for SV and CNV;
+ * that output has no STR VCF or BED, so put the raw `wf_str.vcf.gz` and
+ * `regions.bed.gz` beside them.
  * When the env var is unset (CI and most dev machines), the suite is
  * skipped at beforeAll so runs are clean.
  *
@@ -33,21 +37,22 @@ import { join } from 'path'
 
 const ONT_DIR = process.env.ONT_TEST_DATA_DIR ?? ''
 
-function findFileBySuffix(dir: string, suffix: string): string | null {
+function findFileBySuffix(dir: string, ...suffixes: string[]): string | null {
   if (dir === '' || !existsSync(dir)) return null
   try {
     const entries = readdirSync(dir)
-    const match = entries.find((e) => e.endsWith(suffix))
+    const match = entries.find((e) => suffixes.some((suffix) => e.endsWith(suffix)))
     return match !== undefined ? join(dir, match) : null
   } catch {
     return null
   }
 }
 
-const SV_VCF = findFileBySuffix(ONT_DIR, '.wf_sv.vcf.gz') ?? ''
-const CNV_VCF = findFileBySuffix(ONT_DIR, '.wf_cnv.vcf.gz') ?? ''
+const SV_VCF = findFileBySuffix(ONT_DIR, '.wf_sv.vcf.gz', '.sv.vep.vcf.gz') ?? ''
+const CNV_VCF = findFileBySuffix(ONT_DIR, '.wf_cnv.vcf.gz', '.cnv.vep.vcf.gz') ?? ''
 const STR_VCF = findFileBySuffix(ONT_DIR, '.wf_str.vcf.gz') ?? ''
 const BED_FILE = findFileBySuffix(ONT_DIR, '.regions.bed.gz') ?? ''
+const annotationOf = (file: string): string => (file.endsWith('.vep.vcf.gz') ? 'csq' : 'ann')
 
 const CASE_NAME = 'ONT_P2_LB25-4957_Wizard'
 
@@ -205,19 +210,19 @@ test('Step 3: Programmatically feed files to wizard and capture review phase', a
   }
 
   // Verify the callers are correctly detected
-  const sv = preview.files.find((f) => f.filePath.endsWith('wf_sv.vcf.gz'))
-  const cnv = preview.files.find((f) => f.filePath.endsWith('wf_cnv.vcf.gz'))
-  const str = preview.files.find((f) => f.filePath.endsWith('wf_str.vcf.gz'))
+  const sv = preview.files.find((f) => f.filePath === SV_VCF)
+  const cnv = preview.files.find((f) => f.filePath === CNV_VCF)
+  const str = preview.files.find((f) => f.filePath === STR_VCF)
 
   expect(sv?.callerName).toBe('Sniffles2')
   expect(sv?.defaultVariantType).toBe('sv')
   expect(sv?.variantCountEstimate).toBeGreaterThan(100)
-  expect(sv?.annotationType).toBe('ann') // SnpEff
+  expect(sv?.annotationType).toBe(annotationOf(SV_VCF))
 
   expect(cnv?.callerName).toBe('Spectre')
   expect(cnv?.defaultVariantType).toBe('cnv')
   expect(cnv?.variantCountEstimate).toBeGreaterThan(50)
-  expect(cnv?.annotationType).toBe('ann')
+  expect(cnv?.annotationType).toBe(annotationOf(CNV_VCF))
 
   expect(str?.callerName).toBe('Straglr')
   expect(str?.defaultVariantType).toBe('str')
@@ -235,7 +240,7 @@ test('Step 4: Import ONT files via startMultiFile and capture progress', async (
   const startTime = Date.now()
 
   const result = await window.evaluate(
-    async ([caseName, sv, cnv, str]: [string, string, string, string]) => {
+    async ([caseName, sv, cnv, str, svAnn, cnvAnn]: string[]) => {
       const w = window as unknown as {
         api: {
           import: {
@@ -263,12 +268,12 @@ test('Step 4: Import ONT files via startMultiFile and capture progress', async (
         }
       }
       return await w.api.import.startMultiFile(caseName, [
-        { filePath: sv, variantType: 'sv', caller: 'Sniffles2', annotationFormat: 'ann' },
-        { filePath: cnv, variantType: 'cnv', caller: 'Spectre', annotationFormat: 'ann' },
+        { filePath: sv, variantType: 'sv', caller: 'Sniffles2', annotationFormat: svAnn },
+        { filePath: cnv, variantType: 'cnv', caller: 'Spectre', annotationFormat: cnvAnn },
         { filePath: str, variantType: 'str', caller: 'Straglr', annotationFormat: null }
       ])
     },
-    [CASE_NAME, SV_VCF, CNV_VCF, STR_VCF] as [string, string, string, string]
+    [CASE_NAME, SV_VCF, CNV_VCF, STR_VCF, annotationOf(SV_VCF), annotationOf(CNV_VCF)]
   )
 
   const clientElapsed = Date.now() - startTime
