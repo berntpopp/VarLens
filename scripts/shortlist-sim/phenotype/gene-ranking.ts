@@ -5,16 +5,19 @@
  *
  * One simulated profile per sampled HPO disease, noise level and arm (E0/E1/E2, arms.ts); every
  * gene in genes_to_phenotype.txt (positive annotations) is scored by the candidate production
- * scorer (`openHpoGeneScorer` on HPO_DB) and the frozen sprint-3 baseline (sprint3-baseline.ts on
+ * scorer (`openHpoGeneScorer` on the τ-matched DB, `hpoDbForTau`) and the frozen sprint-3 baseline (sprint3-baseline.ts on
  * HPO_DB_SPRINT3), on identical profiles. Same seed and diseases as the sprint-3 run.
  * Writes runs/<name>/{cases.json, gene-ranking.md}. Needs `npm run rebuild:node`.
  */
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
-import type { HpoScoringOptions } from '../../../src/shared/config/hpo-scoring.config'
+import {
+  HPO_SCORING_CONFIG,
+  type HpoScoringOptions
+} from '../../../src/shared/config/hpo-scoring.config'
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
-import { HPO_DB } from '../common/paths'
+import { hpoDbForTau } from '../common/paths'
 import { rng, shuffle } from '../common/rng'
 import { readVerifiedSources, runArgs, SEED, setupBench } from './bench-setup'
 import { renderGeneRanking, type GeneRankCase } from './gene-ranking-report'
@@ -24,7 +27,11 @@ function openCandidate(
   terms: HpoProfileTerm[],
   options: Partial<HpoScoringOptions>
 ): ((gene: string) => number | null) | null {
-  const scorer = openHpoGeneScorer(terms, HPO_DB, options)
+  const scorer = openHpoGeneScorer(
+    terms,
+    hpoDbForTau(options.tau ?? HPO_SCORING_CONFIG.tau),
+    options
+  )
   return scorer === null ? null : (gene) => scorer.score(gene)
 }
 

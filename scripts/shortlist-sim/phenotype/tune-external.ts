@@ -11,13 +11,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadPhenotypeIndex } from '../../../src/main/services/phenotype/hpo-similarity-db'
+import { HPO_SCORING_CONFIG } from '../../../src/shared/config/hpo-scoring.config'
+import type { PhenotypeIndex } from '../../../src/shared/phenotype/phenotype-index'
 import { scoreCase } from '../../../src/shared/phenotype/phenotype-score'
 import {
   parseGenesToPhenotype,
   parseHpoaDiseaseTerms
 } from '../../../src/shared/phenotype/hpo-sources'
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
-import { DATA_DIR, HPO_DB, HPO_DB_SPRINT3, HPO_RAW_DIR } from '../common/paths'
+import { DATA_DIR, HPO_DB_SPRINT3, HPO_RAW_DIR, hpoDbForTau } from '../common/paths'
 import { clusterBootstrap, quantile, type Interval } from '../stats/bootstrap'
 import { geneFolds } from '../stats/folds'
 import { mean, tieAveragedHit, tieAveragedReciprocal } from '../stats/metrics'
@@ -26,6 +28,7 @@ import { citedByHpoa, hpoaReferences, jsonFiles, parsePhenopacket } from './phen
 import { buildHpoIndex, readSprint3Input, scoreAllGenes } from './sprint3-baseline'
 import {
   EXTERNAL_STEPS,
+  EXTERNAL_TAUS,
   formatOverrides,
   greedy,
   type GreedyResult,
@@ -150,12 +153,19 @@ function main(argv: string[]): void {
   const geneIndex = new Map(genes.map((g, i) => [g, i]))
   const refs = hpoaReferences(hpoa)
   const s3 = buildHpoIndex(readSprint3Input(HPO_DB_SPRINT3))
-  const ix = loadPhenotypeIndex(HPO_DB)
-  if (ix === null) throw new Error(`${HPO_DB} needs an update`)
-  const map = Int32Array.from(genes, (g) => ix.hpo.genes.get(g) ?? -1)
+  // One index per τ: the stored background null is τ-specific (build-tau-dbs.ts).
+  const ixs = new Map<number, PhenotypeIndex>(
+    EXTERNAL_TAUS.map((tau) => {
+      const ix = loadPhenotypeIndex(hpoDbForTau(tau))
+      if (ix === null) throw new Error(`${hpoDbForTau(tau)} needs an update`)
+      return [tau, ix]
+    })
+  )
+  const ix0 = ixs.get(HPO_SCORING_CONFIG.tau)!
+  const map = Int32Array.from(genes, (g) => ix0.genes.get(g) ?? -1)
   // A profile without a known present term scores nothing: every gene ties (a miss, not a skip).
   const v2 = (terms: HpoProfileTerm[], o: Overrides): Float64Array => {
-    const r = scoreCase(ix, terms, o)
+    const r = scoreCase(ixs.get(Number(o.tau ?? HPO_SCORING_CONFIG.tau))!, terms, o)
     return Float64Array.from(map, (g) =>
       r === null || g < 0 || r.geneBest[g] < 0 ? -Infinity : r.geneScore[g]
     )

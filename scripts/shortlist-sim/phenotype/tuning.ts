@@ -20,13 +20,16 @@ const cross = (a: Overrides[], b: Overrides[]): Overrides[] =>
 const axis = (key: string, values: ReadonlyArray<number | string>): Overrides[] =>
   values.map((v) => ({ [key]: v }))
 
+/** τ arms of step 1; each needs its own DB (the stored background null is τ-specific). */
+export const EXTERNAL_TAUS = [0, 0.5, 1] as const
+
 /**
  * Pre-registered order and grids. Step 2 is joint because the scorer couples them: correction
  * `off`/`mean` applies exclusions multiplicatively, `z` the error-tolerant LR (B1). keyWeight is
  * not tuned: phenopackets carry no key terms.
  */
 export const EXTERNAL_STEPS: TuneStep[] = [
-  { label: 'C1 IC-weighted forward (τ)', grid: axis('tau', [0, 0.5, 1]) },
+  { label: 'C1 IC-weighted forward (τ)', grid: axis('tau', EXTERNAL_TAUS) },
   {
     label: 'A1 correction × exclusion mode',
     grid: cross(
