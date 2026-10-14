@@ -169,26 +169,22 @@ export class PostgresShortlistService {
       const hpo = compiled.usesHpoResnik
         ? openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
         : null
-      try {
-        const info = await this.caseInfo(client, caseId, hpo)
-        const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
-        const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
-        let totalCandidates = 0
-        await this.forEachPage(client, queries, async (rows) => {
-          totalCandidates += rows.length
-          builder.add(rows.map(toLightRow))
-        })
-        const ctx = builder.build()
-        let kept: ScoredCandidate[] = []
-        await this.forEachPage(client, queries, async (rows) => {
-          const candidates = this.hydrateCandidates(rows, starredVariantIds)
-          const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
-          kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
-        })
-        return { kept, totalCandidates }
-      } finally {
-        hpo?.close()
-      }
+      const info = await this.caseInfo(client, caseId, hpo)
+      const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
+      const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
+      let totalCandidates = 0
+      await this.forEachPage(client, queries, async (rows) => {
+        totalCandidates += rows.length
+        builder.add(rows.map(toLightRow))
+      })
+      const ctx = builder.build()
+      let kept: ScoredCandidate[] = []
+      await this.forEachPage(client, queries, async (rows) => {
+        const candidates = this.hydrateCandidates(rows, starredVariantIds)
+        const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
+        kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
+      })
+      return { kept, totalCandidates }
     })
   }
 

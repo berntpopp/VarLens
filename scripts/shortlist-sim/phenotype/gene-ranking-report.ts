@@ -25,7 +25,7 @@ export interface GeneRankCase {
   disease: string
   level: NoiseLevelId
   profileSize: number
-  /** Production scorer wall time for all genes (open → score → close). */
+  /** Production scorer wall time for all genes (open → score). */
   ms: number
   /** ScorerId keys; a `--before` run may carry other (retired) scorers. */
   scorers: Record<string, Standing>

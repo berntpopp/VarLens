@@ -66,7 +66,6 @@ describe('hpo_similarity.db', () => {
     expect(scorer?.score('GENE1')).toBeCloseTo((l43 / 2 + l43) / 2, 12)
     expect(scorer?.score('GENE2')).toBeCloseTo(Math.log(2), 12)
     expect(scorer?.score('UNKNOWN')).toBeNull()
-    scorer?.close()
   })
 
   it('canonicalises, deduplicates and drops non-phenotype case terms before scoring', () => {

@@ -157,7 +157,6 @@ export function assertUsableHpoDb(path: string): void {
 export interface HpoGeneScorer {
   /** Symmetric Resnik BMA of the case's terms vs the gene; null without gene data. */
   score(gene: string): number | null
-  close(): void
 }
 
 /** Phenotype-subtree index of one DB file, kept per process until the file changes. */
@@ -212,8 +211,7 @@ export function openHpoGeneScorer(
       score(gene) {
         const g = index.genes.get(gene)
         return g === undefined ? null : scores[g]
-      },
-      close: () => undefined
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
