@@ -29,6 +29,15 @@ export const HPO_DATA_CONFIG = {
   },
   dbFileName: 'hpo_similarity.db',
   /**
+   * Preprocessing version stored in the DB meta; bump when the build changes
+   * what lands in the DB so installed data reports "needs update".
+   */
+  builderVersion: 2,
+  /** Phenotypic abnormality: only its subtree enters IC, gene sets and patient profiles. */
+  phenotypeRoot: 'HP:0000118',
+  /** HPO frequency term "Excluded" (0 %): an annotation of absence. */
+  excludedFrequency: 'HP:0040285',
+  /**
    * Overrides the DB location (web server: operator-installed file, built with
    * `npm run build:hpo-db -- [--out <path>] [--tag vYYYY-MM-DD]`).
    */

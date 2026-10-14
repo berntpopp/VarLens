@@ -1,11 +1,12 @@
 /**
- * Runs the HPO preprocessing (JSON parse, closure, ~10^6 inserts) in a
- * one-shot worker so the main thread stays responsive. Falls back to
- * in-process when the bundled worker is absent (unit tests).
+ * Runs the HPO preprocessing (JSON parse, closure, ~10^5 inserts) in a
+ * one-shot worker so the main thread stays responsive. Outside Electron
+ * (unit tests) without the bundle it runs in-process; in Electron a missing
+ * bundle is an error, never a silent main-thread build.
  */
 import { Worker } from 'worker_threads'
 import { existsSync, readFileSync } from 'fs'
-import { resolve } from 'path'
+import { dirname, join } from 'path'
 import type { HpoAssetKey } from '../../../shared/config/hpo-data.config'
 import { buildHpoSimilarityDb, type HpoBuildMeta } from './hpo-similarity-db'
 
@@ -29,9 +30,24 @@ export function buildHpoFromFiles({ files, meta, outPath }: HpoBuildRequest): vo
   )
 }
 
-export function runHpoBuild(request: HpoBuildRequest): Promise<void> {
-  const workerPath = resolve(__dirname, 'hpo-build-worker.js')
-  if (!existsSync(workerPath)) {
+/**
+ * The worker bundle sits next to the main entry (`out/main/index.js`); this
+ * module is bundled into `out/main/chunks/` (the worker imports it), so its own
+ * `__dirname` is the wrong anchor.
+ */
+export function hpoWorkerPath(mainFile = require.main?.filename): string | null {
+  return mainFile === undefined ? null : join(dirname(mainFile), 'hpo-build-worker.js')
+}
+
+export function runHpoBuild(
+  request: HpoBuildRequest,
+  workerPath = hpoWorkerPath(),
+  inElectron = process.versions.electron !== undefined
+): Promise<void> {
+  if (workerPath === null || !existsSync(workerPath)) {
+    if (inElectron) {
+      return Promise.reject(new Error(`HPO build worker bundle missing: ${workerPath}`))
+    }
     buildHpoFromFiles(request)
     return Promise.resolve()
   }

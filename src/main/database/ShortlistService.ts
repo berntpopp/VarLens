@@ -308,7 +308,9 @@ export class ShortlistService {
     }
     if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
 
-    const hpo = openHpoGeneScorer(this.stage1.metadata.getCaseHpoTerms(caseId).map((t) => t.hpo_id))
+    const hpo = compiled.usesHpoResnik
+      ? openHpoGeneScorer(this.stage1.metadata.getCaseHpoTerms(caseId).map((t) => t.hpo_id))
+      : null
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
       this.stage1.metadata.getCaseMetadata(caseId)?.sex,

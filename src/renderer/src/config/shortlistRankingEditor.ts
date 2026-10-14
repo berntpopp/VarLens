@@ -81,6 +81,10 @@ export const SHORTLIST_RANKING_EDITOR = {
     n > 0 ? `up ${n} places` : n < 0 ? `down ${-n} places` : 'same place',
   announceMoved: (label: string, position: number): string =>
     `${label} moved to position ${position}`,
+  /** A rule reads hpo_resnik but the HPO reference data is missing (#600). */
+  hpoDataMissing:
+    'This ranking uses hpo_resnik, but HPO data is not installed or needs an update, so ' +
+    'hpo_resnik is empty for every variant. Install it under Gene panels → HPO data.',
   errors: {
     count: (n: number): string => `${n} problem${n === 1 ? '' : 's'}`,
     nameRequired: 'A name is required',

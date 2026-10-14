@@ -515,6 +515,7 @@ export function createMockApi(): MockApi {
     hpoData: {
       status: vi.fn().mockResolvedValue({
         installed: false,
+        needsUpdate: false,
         version: null,
         builtAt: null,
         termCount: 0,
