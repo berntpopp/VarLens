@@ -1,13 +1,13 @@
 /**
  * Download + install of the HPO release files behind `hpo_resnik` (#600).
- * Files land in a temp dir next to the DB, are checked against the GitHub
+ * Files land in `<db>.download`, are checked against the GitHub
  * asset `digest` (or the pinned digests; no digest → refused), preprocessed into
  * `<db>.tmp` and atomically renamed over the DB. Any failure leaves the
  * installed data untouched.
  */
 import { createHash } from 'crypto'
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { dirname, join } from 'path'
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { HPO_DATA_CONFIG, type HpoAssetKey } from '../../../shared/config/hpo-data.config'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import type { HpoBuildRequest } from './hpo-build-worker-client'
@@ -131,7 +131,10 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
     return { success: true, message: `HPO data ${release.tag} is up to date.`, status: current }
   }
 
-  const tmpDir = mkdtempSync(join(dirname(deps.dbPath), 'hpo-download-'))
+  // Fixed name, cleared first: a crash mid-download leaves no orphaned ~80 MB dirs behind.
+  const tmpDir = `${deps.dbPath}.download`
+  rmSync(tmpDir, { recursive: true, force: true })
+  mkdirSync(tmpDir, { recursive: true })
   const outPath = `${deps.dbPath}.tmp`
   try {
     const files = {} as Record<HpoAssetKey, string>
