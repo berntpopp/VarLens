@@ -51,7 +51,6 @@ describe('infoJsonEntries', () => {
 describe('infoFieldLimitation', () => {
   it.each([
     [{ source: 'INFO:DB', type: 'Flag', number: '0' }, /Flag field/],
-    [{ source: 'INFO:AC', type: 'Integer', number: 'A' }, /Number=A/],
     [{ source: 'INFO:AD', type: 'Integer', number: 'R' }, /Number=R/],
     [{ source: 'INFO:X', type: 'String', number: '.' }, /Number=\./],
     [{ source: 'INFO:Y', type: 'Float', number: '2' }, /Number=2/]
@@ -59,10 +58,11 @@ describe('infoFieldLimitation', () => {
     expect(infoFieldLimitation(field)).toMatch(reason)
   })
 
-  it.each([{ source: 'INFO:DP', type: 'Integer', number: '1' }, { source: 'CSQ:REVEL_score' }])(
-    'accepts %o',
-    (field) => {
-      expect(infoFieldLimitation(field)).toBeNull()
-    }
-  )
+  it.each([
+    { source: 'INFO:DP', type: 'Integer', number: '1' },
+    { source: 'INFO:AC', type: 'Integer', number: 'A' },
+    { source: 'CSQ:REVEL_score' }
+  ])('accepts %o', (field) => {
+    expect(infoFieldLimitation(field)).toBeNull()
+  })
 })

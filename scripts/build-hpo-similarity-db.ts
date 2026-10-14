@@ -5,6 +5,8 @@
  * Usage: npm run build:hpo-db -- [--out <path>] [--tag vYYYY-MM-DD]
  * Output defaults to $VARLENS_HPO_DB_PATH, else ./hpo_similarity.db.
  * Exits non-zero on any download or verification failure.
+ * Restart a running web server afterwards: its boot prewarm loads the new index;
+ * otherwise the first hpo_resnik ranking reloads it on the event loop, stalling every request.
  * Requires: npm run rebuild:node (so better-sqlite3 works under Node.js)
  */
 import { resolve } from 'node:path'

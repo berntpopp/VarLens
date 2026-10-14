@@ -6,7 +6,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
 import { createGeneFiller } from '../../../../src/main/import/vcf/gene-fallback'
@@ -19,8 +19,12 @@ const VCF_DIR = resolve(__dirname, '../../../test-data/vcf')
 const tmp = mkdtempSync(join(tmpdir(), 'varlens-gene-fallback-'))
 afterAll(() => rmSync(tmp, { recursive: true, force: true }))
 
-async function rows(file: string, build: string | null): Promise<VcfMappedVariant[]> {
-  const fill = build === null ? undefined : createGeneFiller(GENE_REF, build)
+async function rows(
+  file: string,
+  build: string | null,
+  geneRef = GENE_REF
+): Promise<VcfMappedVariant[]> {
+  const fill = build === null ? undefined : createGeneFiller(geneRef, build)
   const out: VcfMappedVariant[] = []
   for await (const v of streamMappedVcfRows(
     file,
@@ -82,6 +86,19 @@ describe('gene fallback at import', () => {
     createGeneFiller(join(tmp, 'missing.db'), 'GRCh38')(v)
     createGeneFiller(undefined, 'GRCh38')(v)
     expect(v.gene_symbol).toBeNull()
+  })
+
+  it('keeps every row, reading an unreadable gene reference once', async () => {
+    const broken = join(tmp, 'broken.db')
+    writeFileSync(broken, 'not a database')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const vs = await rows(join(VCF_DIR, 'synthetic-str.vcf'), 'GRCh38', broken)
+      expect(vs.map((v) => v.gene_symbol)).toEqual([null, null, null, null])
+      expect(warn.mock.calls.filter(([m]) => String(m).includes('[gene-fallback]'))).toHaveLength(1)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('stores the gene on the SQLite import path, under the case build', async () => {
