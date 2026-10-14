@@ -155,7 +155,7 @@ function selectPage(
     .build(filter)
     .select(
       sql<number>`COALESCE((SELECT cva.starred FROM case_variant_annotations cva WHERE cva.case_id = variants.case_id AND cva.variant_id = variants.id LIMIT 1), 0)`.as(
-        'is_starred_int'
+        'is_starred'
       )
     )
     .where(sql<boolean>`variants.id > ${afterId}`)
@@ -163,9 +163,9 @@ function selectPage(
     .limit(limit)
     .compile()
   const rows = db.prepare(compiled.sql).all(...compiled.parameters) as Array<
-    Variant & { is_starred_int?: number }
+    Variant & { is_starred: number }
   >
-  return rows.map(({ is_starred_int, ...row }) =>
-    toShortlistCandidate(row as Variant, is_starred_int === 1)
-  )
+  // One copy per row: toShortlistCandidate overwrites the 0/1 `is_starred` with a boolean
+  // (a rest-destructure first would copy every row twice — measurable on large cases).
+  return rows.map((row) => toShortlistCandidate(row, row.is_starred === 1))
 }

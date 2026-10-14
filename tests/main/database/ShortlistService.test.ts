@@ -525,7 +525,7 @@ describe('ShortlistService', () => {
       ;(db as unknown as { prepare: typeof originalPrepare }).prepare = ((sql: string) => {
         // Let DISTINCT (scope detection) and non-variant queries succeed.
         // Fail only the Stage-1 variants SELECT for a specific type.
-        if (sql.includes('is_starred_int') && callCount++ === 1) {
+        if (sql.includes('as "is_starred"') && callCount++ === 1) {
           throw new Error('simulated Stage-1 failure')
         }
         return originalPrepare(sql)
