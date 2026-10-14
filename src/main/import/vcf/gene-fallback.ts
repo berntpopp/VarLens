@@ -144,12 +144,25 @@ export function createGeneFiller(
 ): GeneFiller {
   if (geneRefDbPath === undefined || !existsSync(geneRefDbPath)) return () => undefined
   const cacheKey = `${geneRefDbPath}\0${genomeBuild}`
+  let unreadable = false
   return (variant) => {
+    if (unreadable) return
     if (variant.gene_symbol != null && variant.gene_symbol !== '') return
     if (!FILLED_TYPES.has(variant.variant_type)) return
     let index = indexCache.get(cacheKey)
     if (index === undefined) {
-      index = loadIndex(geneRefDbPath, genomeBuild)
+      try {
+        index = loadIndex(geneRefDbPath, genomeBuild)
+      } catch (e) {
+        // A broken reference must not drop the row (the caller skips rows that throw).
+        unreadable = true
+        // Worker thread: no Electron IPC logger (AGENTS.md exception).
+        console.warn(
+          '[gene-fallback] Gene reference unreadable, importing without fallback genes:',
+          e
+        )
+        return
+      }
       indexCache.set(cacheKey, index)
     }
     variant.gene_symbol =
