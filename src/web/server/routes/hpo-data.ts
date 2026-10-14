@@ -1,4 +1,4 @@
-import { readHpoDataStatus } from '../../../main/services/phenotype/hpo-similarity-db'
+import { getHpoDataStatus } from '../../../main/ipc/handlers/hpo-data-logic'
 import type { OverrideHandler } from './types'
 
 /**
@@ -10,7 +10,7 @@ export function buildHpoDataOverrides(): Record<string, OverrideHandler> {
   return {
     'hpo-data:status': {
       handle() {
-        return readHpoDataStatus()
+        return getHpoDataStatus()
       }
     }
   }
