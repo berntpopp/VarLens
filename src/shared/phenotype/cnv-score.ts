@@ -235,6 +235,25 @@ function geneRoute(
   return best === null ? null : { best, n }
 }
 
+/** Dosage-sensitive regions per `build\0chr\0type`, built once per reference (5,000 CNVs per case). */
+const regionCache = new WeakMap<LocusReference, Map<string, DosageRegion[]>>()
+function sensitiveRegions(ref: LocusReference, build: string, chr: string, type: CnvType) {
+  let byKey = regionCache.get(ref)
+  if (byKey === undefined) {
+    byKey = new Map()
+    for (const r of ref.dosageRegions) {
+      if (r.end <= r.start) continue
+      for (const t of ['del', 'dup'] as const) {
+        if (!sensitive(t === 'del' ? r.hi : r.ts)) continue
+        const key = `${r.build}\0${bareChr(r.chr)}\0${t}`
+        byKey.set(key, [...(byKey.get(key) ?? []), r])
+      }
+    }
+    regionCache.set(ref, byKey)
+  }
+  return byKey.get(`${build}\0${chr}\0${type}`) ?? []
+}
+
 function regionRoute(
   call: CnvCall,
   type: CnvType,
@@ -244,10 +263,7 @@ function regionRoute(
   const a = call.pos
   const b = cnvEnd(call)
   let best: { region: DosageRegion; cov: number; score: number; disease: string } | null = null
-  for (const region of ctx.reference.dosageRegions) {
-    if (region.build !== ctx.build || bareChr(region.chr) !== chr) continue
-    const dosage = type === 'del' ? region.hi : region.ts
-    if (!sensitive(dosage)) continue
+  for (const region of sensitiveRegions(ctx.reference, ctx.build, chr, type)) {
     const cov =
       Math.max(0, Math.min(b, region.end) - Math.max(a, region.start)) / (region.end - region.start)
     const v = regionWeight(cov)

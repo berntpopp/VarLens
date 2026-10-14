@@ -318,3 +318,14 @@ describe('gene set: CSQ genes vs interval fallback', () => {
     expect(scoreCnv(DUP, genes, NO_INFO, c)!.score).toBeCloseTo(0.5 * 0.6 * 0.62, 12)
   })
 })
+
+describe('region index', () => {
+  it('skips zero-length and non-sensitive regions', () => {
+    const regions = [
+      { ...REGION, iscaId: 'ISCA-0', end: REGION.start },
+      { ...REGION, iscaId: 'ISCA-40', hi: 40 as const }
+    ]
+    const r = scoreCnv(DEL, GENES, NO_INFO, ctx({ reference: reference([TBX6_HI3], regions) }))!
+    expect(r.bestLocus).toBe('TBX6')
+  })
+})
