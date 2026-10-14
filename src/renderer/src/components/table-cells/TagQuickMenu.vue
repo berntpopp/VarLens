@@ -9,7 +9,16 @@
     location="bottom"
   >
     <v-card v-if="request" min-width="200" max-width="280">
-      <v-list v-if="request.toggle" density="compact" class="py-1" aria-label="Tags">
+      <div v-if="request.toggle && tags.length === 0" class="text-body-small text-muted pa-2">
+        No tags yet. Create tags in Settings.
+      </div>
+      <v-list
+        v-else-if="request.toggle"
+        density="compact"
+        class="py-1"
+        role="menu"
+        aria-label="Tags"
+      >
         <v-list-item
           v-for="tag in tags"
           :key="tag.id"
@@ -30,9 +39,6 @@
             <span class="tag-dot tag-dot--menu ml-2" :style="{ backgroundColor: tag.color }" />
           </template>
         </v-list-item>
-        <div v-if="tags.length === 0" class="text-body-small text-muted pa-2">
-          No tags yet. Create tags in Settings.
-        </div>
       </v-list>
       <div v-else class="pa-2">
         <div v-if="request.readOnlyHint" class="text-body-small text-medium-emphasis mb-1">

@@ -87,6 +87,8 @@ describe('row tag dots', () => {
     await button().trigger('click')
     await flushPromises()
     const items = menuItems()
+    // menuitemcheckbox needs a menu parent (axe aria-required-parent)
+    expect(items.every((el) => el.parentElement?.getAttribute('role') === 'menu')).toBe(true)
     expect(items.map((el) => el.getAttribute('aria-checked'))).toEqual([
       'false',
       'true',
