@@ -51,6 +51,7 @@ import {
 import type { CaseRepository } from './CaseRepository'
 import type { MetadataRepository } from './MetadataRepository'
 import { compileEvidenceConfig, rankEvidenceSqlite, toCaseInfo } from './shortlist-evidence'
+import { openHpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import {
   resolvePanelIntervalsInPlace,
@@ -170,8 +171,8 @@ export function normalizeTieBreakerKey(key: string): string {
 export interface ShortlistStage1Dependencies extends PanelResolutionRepositories {
   filterBuilder: VariantFilterBuilder
   cases: Pick<CaseRepository, 'getCase'>
-  /** Case sex for the evidence ranking's hemizygosity rule. */
-  metadata: Pick<MetadataRepository, 'getCaseMetadata'>
+  /** Case sex (hemizygosity rule) and HPO terms (`hpo_resnik`). */
+  metadata: Pick<MetadataRepository, 'getCaseMetadata' | 'getCaseHpoTerms'>
 }
 
 /**
@@ -307,18 +308,25 @@ export class ShortlistService {
     }
     if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
 
+    const hpo = openHpoGeneScorer(this.stage1.metadata.getCaseHpoTerms(caseId).map((t) => t.hpo_id))
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
-      this.stage1.metadata.getCaseMetadata(caseId)?.sex
+      this.stage1.metadata.getCaseMetadata(caseId)?.sex,
+      hpo
     )
-    const result = rankEvidenceSqlite({
-      source: this.stage1Source,
-      filters,
-      info,
-      compiled,
-      config,
-      limit
-    })
+    let result: ReturnType<typeof rankEvidenceSqlite>
+    try {
+      result = rankEvidenceSqlite({
+        source: this.stage1Source,
+        filters,
+        info,
+        compiled,
+        config,
+        limit
+      })
+    } finally {
+      hpo?.close()
+    }
     if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
     return result
   }

@@ -38,7 +38,8 @@ export function scoreEvidenceRow(
     ...row,
     zygosity: derived.zygosity,
     gene_het_hits: derived.gene_het_hits,
-    gene_hits: derived.gene_hits
+    gene_hits: derived.gene_hits,
+    hpo_resnik: derived.hpo_resnik
   }
   const mode = selectMode(compiled.modes, view)
   const contributions: EvidenceContribution[] = [

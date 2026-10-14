@@ -23,6 +23,7 @@ import {
 import { mainLogger } from './services/MainLogger'
 import { initAutoUpdater, scheduleUpdateChecks } from './services/AutoUpdater'
 import { APP_CONFIG } from '../shared/config'
+import { HPO_DATA_CONFIG } from '../shared/config/hpo-data.config'
 import { isUrlSafeForExternal } from './utils/url-validation'
 import { markMilestone } from './services/MainPerfTrace'
 import { isMainWindowNavigationAllowed } from './window-navigation-policy'
@@ -180,6 +181,13 @@ if (gotTheLock !== true) {
     // Reference API clients go through Chromium's network stack so the system
     // proxy and PAC apply (#126); net.fetch is only usable after app-ready.
     setApiFetch(desktopApiFetch(net.fetch))
+
+    // HPO similarity data lives in userData; set before any DB worker starts so
+    // the shortlist's hpo_resnik scorer finds it in every thread (#600).
+    process.env[HPO_DATA_CONFIG.envPath] ||= join(
+      app.getPath('userData'),
+      HPO_DATA_CONFIG.dbFileName
+    )
 
     // Set app user model id for windows
     electronApp.setAppUserModelId('com.varlens.app')

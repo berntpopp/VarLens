@@ -238,11 +238,25 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     operators: NUMERIC_OPERATORS,
     caseOnly: true,
     shortlistOnly: true
+  },
+  {
+    key: 'hpo_resnik',
+    label: 'HPO Resnik similarity (derived)',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
   }
 ] as const
 
 /** Fields the shortlist computes per row; never stored, never filterable in a view. */
-export const SHORTLIST_DERIVED_COLUMNS = ['zygosity', 'gene_het_hits', 'gene_hits'] as const
+export const SHORTLIST_DERIVED_COLUMNS = [
+  'zygosity',
+  'gene_het_hits',
+  'gene_hits',
+  'hpo_resnik'
+] as const
 
 const COUNT_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
 

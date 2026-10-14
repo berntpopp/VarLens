@@ -27,6 +27,7 @@ import {
 import type { VariantFilter } from '../../shared/types/database'
 import type { ScoredCandidate, ShortlistConfig, VariantTypeKey } from '../../shared/types/shortlist'
 import { DEFAULT_PANEL_GENOME_BUILD } from '../../shared/filters/panel-intervals'
+import type { HpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
 
 /**
  * Validate an evidence configuration and compile its ruleset. A broken stored
@@ -46,15 +47,17 @@ export function compileEvidenceConfig(
   return getCompiledRuleset(config.rankConfig.ruleset)
 }
 
-/** Case build and sex as the context builder wants them (`unknown`/`other` → null). */
+/** Case build, sex (`unknown`/`other` → null) and HPO scorer as the context builder wants them. */
 export function toCaseInfo(
   build: string | null | undefined,
-  sex: string | null | undefined
+  sex: string | null | undefined,
+  hpo?: HpoGeneScorer | null
 ): CaseInfo {
   const normalized = sex?.toLowerCase() ?? null
   return {
     build: build ?? DEFAULT_PANEL_GENOME_BUILD,
-    sex: normalized === 'male' || normalized === 'female' ? normalized : null
+    sex: normalized === 'male' || normalized === 'female' ? normalized : null,
+    ...(hpo != null ? { hpoResnik: (gene: string) => hpo.score(gene) } : {})
   }
 }
 

@@ -28,6 +28,7 @@ import { mergeTopScored, scoreRow } from '../../services/scoring'
 import { GeneContextBuilder } from '../../services/scoring/evidence'
 import { scoreEvidencePage, toLightRow } from '../../services/scoring/evidence/rank-page'
 import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
+import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
 import type { PostgresExportRepository } from './PostgresExportRepository'
@@ -165,22 +166,27 @@ export class PostgresShortlistService {
     if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     return this.inSnapshot(async (client) => {
-      const info = await this.caseInfo(client, caseId)
-      const builder = new GeneContextBuilder(info)
-      const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
-      let totalCandidates = 0
-      await this.forEachPage(client, queries, async (rows) => {
-        totalCandidates += rows.length
-        builder.add(rows.map(toLightRow))
-      })
-      const ctx = builder.build()
-      let kept: ScoredCandidate[] = []
-      await this.forEachPage(client, queries, async (rows) => {
-        const candidates = this.hydrateCandidates(rows, starredVariantIds)
-        const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
-        kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
-      })
-      return { kept, totalCandidates }
+      const hpo = openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
+      try {
+        const info = await this.caseInfo(client, caseId, hpo)
+        const builder = new GeneContextBuilder(info)
+        const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
+        let totalCandidates = 0
+        await this.forEachPage(client, queries, async (rows) => {
+          totalCandidates += rows.length
+          builder.add(rows.map(toLightRow))
+        })
+        const ctx = builder.build()
+        let kept: ScoredCandidate[] = []
+        await this.forEachPage(client, queries, async (rows) => {
+          const candidates = this.hydrateCandidates(rows, starredVariantIds)
+          const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
+          kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
+        })
+        return { kept, totalCandidates }
+      } finally {
+        hpo?.close()
+      }
     })
   }
 
@@ -230,7 +236,19 @@ export class PostgresShortlistService {
     }
   }
 
-  private async caseInfo(client: Queryable, caseId: number): Promise<CaseInfo> {
+  private async caseHpoTerms(client: Queryable, caseId: number): Promise<string[]> {
+    const result = await client.query<{ hpo_id: string }>(
+      `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1`,
+      [caseId]
+    )
+    return result.rows.map((r) => r.hpo_id)
+  }
+
+  private async caseInfo(
+    client: Queryable,
+    caseId: number,
+    hpo: HpoGeneScorer | null
+  ): Promise<CaseInfo> {
     const result = await client.query<{ genome_build: string | null; sex: string | null }>(
       `SELECT c.genome_build, cm.sex
        FROM ${this.schemaName}."cases" c
@@ -238,7 +256,7 @@ export class PostgresShortlistService {
        WHERE c.id = $1`,
       [caseId]
     )
-    return toCaseInfo(result.rows[0]?.genome_build, result.rows[0]?.sex)
+    return toCaseInfo(result.rows[0]?.genome_build, result.rows[0]?.sex, hpo)
   }
 
   private async resolveConfig(params: GetShortlistParams): Promise<{
