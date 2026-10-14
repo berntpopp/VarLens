@@ -2,6 +2,7 @@ import { Worker, type ResourceLimits } from 'node:worker_threads'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { mainLogger } from '../../services/MainLogger'
+import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { importWorkerResourceLimits } from '../../workers/import-worker-limits'
 import { describeWorkerCrash } from '../import-worker-errors'
 import type {
@@ -60,7 +61,10 @@ export class PostgresImportWorkerClient {
           `Postgres import worker bundle not found. Checked: ${this.workerPathCandidates.join(', ')}`
         )
       }
-      this.worker = new Worker(this.workerPath, { resourceLimits: this.resourceLimits })
+      this.worker = new Worker(this.workerPath, {
+        resourceLimits: this.resourceLimits,
+        workerData: { geneRefDbPath: tryResolveGeneRefDbPath() }
+      })
     }
 
     this.worker.on('message', (msg: PostgresImportWorkerOutboundMessage) => {

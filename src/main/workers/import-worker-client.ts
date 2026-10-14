@@ -6,6 +6,7 @@ import type {
   FileImportRequest
 } from '../../shared/types/import-worker'
 import { mainLogger } from '../services/MainLogger'
+import { tryResolveGeneRefDbPath } from '../database/geneReferenceLoader'
 import { describeWorkerCrash } from '../storage/import-worker-errors'
 import { importWorkerResourceLimits } from './import-worker-limits'
 
@@ -131,7 +132,10 @@ export class ImportWorkerClient {
   }
 
   private spawn(): Worker {
-    const worker = new Worker(this.workerPath, { resourceLimits: this.resourceLimits })
+    const worker = new Worker(this.workerPath, {
+      resourceLimits: this.resourceLimits,
+      workerData: { geneRefDbPath: tryResolveGeneRefDbPath() }
+    })
     this.worker = worker
     worker.on('exit', (code) => {
       // Only the current worker may clear the slot: a crashed worker's exit

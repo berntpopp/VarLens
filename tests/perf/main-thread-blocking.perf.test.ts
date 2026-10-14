@@ -35,6 +35,8 @@ import { runCohortExport } from '../../src/main/workers/cohort-export'
 import { ExportWorkerClient } from '../../src/main/workers/export-worker-client'
 import { rebuildCohortSummary } from '../../src/main/workers/worker-db'
 import { bundleWorker } from '../utils/bundle-worker'
+import { DbPool } from '../../src/main/database/DbPool'
+import { EVIDENCE_BETA_PRESET } from '../../src/main/database/evidence-ranking-preset'
 
 const requireFromHere = createRequire(import.meta.url)
 const SHOULD_RUN = process.env.VARLENS_RUN_MAIN_BLOCKING_PERF === '1'
@@ -197,6 +199,27 @@ describe.skipIf(!SHOULD_RUN)('main-thread blocking: before vs after', () => {
       lines.join('\n') + '\n'
     )
   })
+
+  it('evidence shortlist (one case, every row eligible)', async () => {
+    const params = { caseId: CASES, adHocConfig: EVIDENCE_BETA_PRESET.config }
+    results.push(
+      await measure('evidence shortlist (1 case)', 'before (inline on main)', () =>
+        db.shortlistService.getShortlist(params, () => null)
+      )
+    )
+    const pool = new DbPool()
+    pool.init(db.getPath(), undefined, {
+      workerPath: await bundleWorker('src/main/workers/db-worker.ts'),
+      maxThreads: 1
+    })
+    await pool.run({ type: 'cases:list', params: [] }) // spawn the worker outside the window
+    results.push(
+      await measure('evidence shortlist (1 case)', 'after (worker)', () =>
+        pool.run({ type: 'variants:shortlist', params: [params] })
+      )
+    )
+    await pool.destroy()
+  }, 600_000)
 
   it('cohort export (XLSX)', async () => {
     const params = { genome_build: 'GRCh38' } as never

@@ -1,10 +1,11 @@
 import { DatabaseService } from '../../database/DatabaseService'
 import { DbPool } from '../../database/DbPool'
 import { WrongPasswordError } from '../../database/errors'
-import { resolveGeneRefDbPath } from '../../database/geneReferenceLoader'
+import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { isNotADatabaseError } from '../../database/sqlite-error'
 import { getWorkerThreads } from '../../ipc/dbPoolManager'
 import { SqliteStorageSession } from './SqliteStorageSession'
+import { prewarmHpoIndexInPool } from '../../services/phenotype/hpo-similarity-db'
 
 const hasKey = (key?: string): key is string => key !== undefined && key.length > 0
 
@@ -47,12 +48,7 @@ export function createSqliteStorageSession(
     }
   }
 
-  let geneRefDbPath: string | undefined
-  try {
-    geneRefDbPath = resolveGeneRefDbPath()
-  } catch {
-    geneRefDbPath = undefined
-  }
+  const geneRefDbPath = tryResolveGeneRefDbPath()
 
   const configuredWorkerThreads = getWorkerThreads()
   const maxThreads = configuredWorkerThreads > 0 ? configuredWorkerThreads : undefined
@@ -63,6 +59,8 @@ export function createSqliteStorageSession(
     ...(geneRefDbPath !== undefined ? { geneRefDbPath } : {}),
     ...(workerPaths.dbWorkerPath !== undefined ? { workerPath: workerPaths.dbWorkerPath } : {})
   })
+
+  prewarmHpoIndexInPool(dbPool)
 
   return new SqliteStorageSession({
     databaseService,

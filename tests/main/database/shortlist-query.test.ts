@@ -76,7 +76,7 @@ function seedMinimalCase(db: DatabaseType, caseId: number): void {
   ).run(4, caseId)
   db.prepare(
     `INSERT INTO variant_str (variant_id, str_status, disease, alt_copies)
-     VALUES (?, 'pathologic', 'Huntington disease', '45')`
+     VALUES (?, 'full_mutation', 'Huntington disease', '45')`
   ).run(4)
 }
 
@@ -155,7 +155,7 @@ describe('forEachCandidatePage()', () => {
   it('flattens STR extension columns into str_* aliases', () => {
     const rows = query(1, 'str', {} as Partial<FilterState>, 100)
     expect(rows).toHaveLength(1)
-    expect(rows[0].str_status).toBe('pathologic')
+    expect(rows[0].str_status).toBe('full_mutation')
     expect(rows[0].str_disease).toBe('Huntington disease')
     expect(rows[0].str_alt_copies).toBe('45')
   })

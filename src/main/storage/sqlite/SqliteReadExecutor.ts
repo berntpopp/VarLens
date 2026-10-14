@@ -1,6 +1,7 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
+import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
 import { panelStatusGenomeBuild } from '../../../shared/filters/panel-intervals'
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
 
@@ -192,6 +193,11 @@ export class SqliteReadExecutor implements StorageReadExecutor {
           task.params[0],
           getGeneReferenceDb
         )
+
+      case 'hpo:prewarm':
+        if (this.dbPool !== null) return await this.dbPool.run({ type: task.type, params: [] })
+        prewarmHpoIndex()
+        return null
 
       case 'variants:columnMeta':
         if (this.dbPool !== null)

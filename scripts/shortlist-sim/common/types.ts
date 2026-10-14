@@ -50,6 +50,8 @@ export interface CaseResult {
   eligible: number
   /** Per causal allele: passed the scorer's gate. */
   causalEligible: boolean[]
+  /** Wall time of this scorer's ranking of the case (ms). */
+  ms?: number
 }
 
 /** Counts behind one tuned bin (spec §11.1). */

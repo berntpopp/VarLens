@@ -2,7 +2,7 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildHpoSimilarityDb,
   openHpoGeneScorer,
@@ -167,6 +167,20 @@ describe('hpo_similarity.db', () => {
     expect(prewarmHpoIndex(dbPath)).toBe(true)
     writeFileSync(dbPath, 'not a database at all, just bytes '.repeat(200))
     expect(prewarmHpoIndex(dbPath)).toBe(false)
+  })
+
+  it('prewarms the index so the first scorer does not read the file, and never throws', () => {
+    expect(() => prewarmHpoIndex(null)).not.toThrow()
+    expect(() => prewarmHpoIndex(join(dir, 'missing.db'))).not.toThrow()
+    writeFileSync(dbPath, 'not a database at all, just bytes '.repeat(200))
+    expect(() => prewarmHpoIndex(dbPath)).not.toThrow()
+    rmSync(dbPath)
+    build()
+    prewarmHpoIndex(dbPath)
+    const open = vi.spyOn(Database.prototype, 'prepare')
+    expect(openHpoGeneScorer([T.C], dbPath)?.score('GENE2')).not.toBeNull()
+    expect(open).not.toHaveBeenCalled()
+    open.mockRestore()
   })
 
   it('has no scorer without patient terms or data', () => {

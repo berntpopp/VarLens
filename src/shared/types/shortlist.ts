@@ -128,8 +128,8 @@ export interface ShortlistCandidate extends Variant {
   cnv_copy_number?: number | null
   /** CNV-only: caller-reported quality for the copy-number estimate. */
   cnv_copy_number_quality?: number | null
-  /** STR-only: expansion status vs disease thresholds. */
-  str_status?: 'normal' | 'intermediate' | 'pathologic' | null
+  /** STR-only: Stranger STR_STATUS (`normal` | `pre_mutation` | `full_mutation`), comma-joined if unsplit. */
+  str_status?: string | null
   /** STR-only: associated disease name, if known. */
   str_disease?: string | null
   /** STR-only: alternate allele copy count expression. */

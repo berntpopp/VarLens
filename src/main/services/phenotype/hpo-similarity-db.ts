@@ -34,6 +34,7 @@ import {
   type CaseScores
 } from '../../../shared/phenotype/phenotype-score'
 import { mainLogger } from '../MainLogger'
+import type { DbPool } from '../../database/DbPool'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
 export function resolveHpoDbPath(): string | null {
@@ -301,7 +302,7 @@ export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
  * or an HPO install), so a later `openHpoGeneScorer` only scores. Never throws.
  */
 export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boolean {
-  if (path === null) return false
+  if (path === null || !existsSync(path)) return false
   try {
     return (loadIndex(path)?.index ?? null) !== null
   } catch (error) {
@@ -330,6 +331,19 @@ function caseScores(
   }
   results.set(memoKey, hit)
   return hit
+}
+
+/**
+ * Prewarm in a read worker, where the desktop ranks; only with HPO data
+ * installed, so opening a database without it spawns no worker.
+ */
+export function prewarmHpoIndexInPool(pool: Pick<DbPool, 'run'> | null): void {
+  const path = resolveHpoDbPath()
+  if (pool === null || path === null || !existsSync(path)) return
+  pool.run({ type: 'hpo:prewarm', params: [] }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO index prewarm in the read pool failed: ${message}`, 'hpo-data')
+  })
 }
 
 /**
