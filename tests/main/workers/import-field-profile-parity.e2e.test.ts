@@ -450,6 +450,28 @@ describe('import field profile: every source, both backends', () => {
       })
     }, 60_000)
 
+    it(`${label}: a multi-allelic split stores minimal alleles, the same as their plain spelling`, async () => {
+      const vcf = (ref: string, alt: string, gt: string, ac: string): string =>
+        [
+          '##fileformat=VCFv4.2',
+          '##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count">',
+          '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1',
+          `chr5\t100\t.\t${ref}\t${alt}\t50\tPASS\tAC=${ac}\tGT\t${gt}`,
+          ''
+        ].join('\n')
+      const split = join(dir, 'multi-allelic.vcf')
+      const plain = join(dir, 'minimal.vcf')
+      writeFileSync(split, vcf('ATT', 'A,AT', '1/2', '1,2'))
+      writeFileSync(plain, vcf('AT', 'A', '0/1', '2'))
+      // ATT>AT (the split's second ALT, full REF kept) is the same deletion as AT>A (#587).
+      expect((await importCase(split)).rows).toEqual({
+        'chr5:100:ATT>A': { AC: '1' },
+        'chr5:100:AT>A': { AC: '2' }
+      })
+      expect((await importCase(plain)).rows).toEqual({ 'chr5:100:AT>A': { AC: '2' } })
+    }, 60_000)
+
     it(`${label}: the repo VEP fixture keeps INFO keys and suffixes colliding subfields`, async () => {
       const { rows } = await importCase(resolve(VCF_DIR, 'single-sample.vep.vcf.gz'))
       const all = Object.values(rows)

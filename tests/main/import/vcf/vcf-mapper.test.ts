@@ -292,8 +292,11 @@ describe('VcfMapper', () => {
       ad_ref: 5,
       ad_alt: 7
     })
+    // CAT>CA trimmed to its minimal anchored form after CSQ matching (#587).
     expect(results[1]).toMatchObject({
-      alt: 'CA',
+      pos: 20006001,
+      ref: 'AT',
+      alt: 'A',
       gene_symbol: 'GENE2',
       func: 'inframe_deletion',
       gt_num: './1',
