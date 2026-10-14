@@ -116,11 +116,10 @@ import { useApiService } from '../../composables/useApiService'
 import { useAnalysisGroups } from '../../composables/useAnalysisGroups'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import type { AnalysisGroup } from '../../../../shared/types/api'
-import type { AffectedStatusValue, AnalysisGroupRole } from '../../../../shared/types/database'
 import { formatError } from '../../utils/ipc-result'
 import AnalysisGroupEditor from './AnalysisGroupEditor.vue'
 import PedImportPanel from './PedImportPanel.vue'
-import { cloneDraft, type CaseOption, type GroupDraft } from './group-draft'
+import { cloneDraft, draftFromGroup, type CaseOption, type GroupDraft } from './group-draft'
 
 const emit = defineEmits<{ deleted: [groupId: number] }>()
 
@@ -170,18 +169,7 @@ async function onToggle(isOpen: boolean): Promise<void> {
 
 async function editGroup(id: number): Promise<void> {
   await run(async () => {
-    const group = unwrapIpcResult(await api!.analysisGroups.get(id))
-    const draft: GroupDraft = {
-      id,
-      name: group.name,
-      groupType: group.group_type === 'tumor_normal' ? 'tumor_normal' : 'family',
-      members: group.members.map((m) => ({
-        caseId: m.case_id,
-        role: m.role as AnalysisGroupRole,
-        affectedStatus: m.affected_status as AffectedStatusValue,
-        individualId: m.individual_id
-      }))
-    }
+    const draft = draftFromGroup(unwrapIpcResult(await api!.analysisGroups.get(id)))
     startEdit(cloneDraft(draft), draft)
   }, 'load group')
 }

@@ -2,9 +2,11 @@
  * Draft model for the analysis-group editor: the form state, its PED-derived
  * preview, and the save that turns it into existing `analysisGroups.*` IPC calls.
  */
-import type { WindowAPI } from '../../../../shared/types/api'
+import type { AnalysisGroup, AnalysisGroupMember, WindowAPI } from '../../../../shared/types/api'
 import type { AffectedStatusValue, AnalysisGroupRole } from '../../../../shared/types/database'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { logService } from '../../services/LogService'
+import { formatError } from '../../utils/ipc-result'
 import { derivePedRoles, type PedIndividual } from '../../../../shared/utils/ped-parser'
 
 export interface MemberDraft {
@@ -89,32 +91,40 @@ const sameMember = (a: MemberDraft, b: MemberDraft): boolean =>
   a.affectedStatus === b.affectedStatus &&
   (a.individualId ?? null) === (b.individualId ?? null)
 
-/**
- * Persist a draft. There is no update-member channel, so a changed member is
- * removed and re-added; removals run first because a case is unique per group.
- */
-export async function saveGroupDraft(
-  api: WindowAPI,
-  draft: GroupDraft,
-  original: GroupDraft | null
-): Promise<number> {
-  const name = draft.name.trim()
-  let groupId = draft.id
-  if (groupId === null) {
-    groupId = unwrapIpcResult(
-      await api.analysisGroups.create({ name, groupType: draft.groupType })
-    ).id
-  } else if (original && original.name !== name) {
-    unwrapIpcResult(await api.analysisGroups.update(groupId, { name }))
+/** Form state of a persisted group as returned by `analysisGroups.get`. */
+export function draftFromGroup(
+  group: AnalysisGroup & { members: AnalysisGroupMember[] }
+): GroupDraft {
+  return {
+    id: group.id,
+    name: group.name,
+    groupType: group.group_type === 'tumor_normal' ? 'tumor_normal' : 'family',
+    members: group.members.map((m) => ({
+      caseId: m.case_id,
+      role: m.role as AnalysisGroupRole,
+      affectedStatus: m.affected_status as AffectedStatusValue,
+      individualId: m.individual_id
+    }))
   }
-  const before = original?.members ?? []
-  for (const old of before) {
-    if (!draft.members.some((m) => sameMember(m, old))) {
+}
+
+/**
+ * Turn the members `from` into `to`. There is no update-member channel, so a changed
+ * member is removed and re-added; removals run first because a case is unique per group.
+ */
+async function syncMembers(
+  api: WindowAPI,
+  groupId: number,
+  from: MemberDraft[],
+  to: MemberDraft[]
+): Promise<void> {
+  for (const old of from) {
+    if (!to.some((m) => sameMember(m, old))) {
       unwrapIpcResult(await api.analysisGroups.removeMember(groupId, old.caseId as number))
     }
   }
-  for (const member of draft.members) {
-    if (before.some((old) => sameMember(member, old))) continue
+  for (const member of to) {
+    if (from.some((old) => sameMember(member, old))) continue
     unwrapIpcResult(
       await api.analysisGroups.addMember({
         groupId,
@@ -124,6 +134,62 @@ export async function saveGroupDraft(
         individualId: member.individualId ?? undefined
       })
     )
+  }
+}
+
+/** Best-effort undo of a failed edit: bring the stored group back to `original`. */
+async function restoreGroup(api: WindowAPI, groupId: number, original: GroupDraft): Promise<void> {
+  try {
+    const current = draftFromGroup(unwrapIpcResult(await api.analysisGroups.get(groupId)))
+    if (current.name !== original.name) {
+      unwrapIpcResult(await api.analysisGroups.update(groupId, { name: original.name }))
+    }
+    await syncMembers(api, groupId, current.members, original.members)
+  } catch (err) {
+    logService.error(`Could not restore group ${groupId}: ${formatError(err)}`, 'group-draft')
+  }
+}
+
+async function deleteQuietly(api: WindowAPI, groupId: number): Promise<void> {
+  try {
+    unwrapIpcResult(await api.analysisGroups.delete(groupId))
+  } catch (err) {
+    logService.error(`Could not roll back group ${groupId}: ${formatError(err)}`, 'group-draft')
+  }
+}
+
+/**
+ * Persist a draft with the existing per-row IPC calls. The calls are not one transaction,
+ * so a failure rolls back: a new group is deleted, an edited group is restored.
+ */
+export async function saveGroupDraft(
+  api: WindowAPI,
+  draft: GroupDraft,
+  original: GroupDraft | null
+): Promise<number> {
+  const name = draft.name.trim()
+  if (draft.id === null) {
+    const groupId = unwrapIpcResult(
+      await api.analysisGroups.create({ name, groupType: draft.groupType })
+    ).id
+    try {
+      await syncMembers(api, groupId, [], draft.members)
+    } catch (err) {
+      // Without this a retry of Save would create a second, duplicate group.
+      await deleteQuietly(api, groupId)
+      throw err
+    }
+    return groupId
+  }
+  const groupId = draft.id
+  try {
+    if (original && original.name !== name) {
+      unwrapIpcResult(await api.analysisGroups.update(groupId, { name }))
+    }
+    await syncMembers(api, groupId, original?.members ?? [], draft.members)
+  } catch (err) {
+    if (original) await restoreGroup(api, groupId, original)
+    throw err
   }
   return groupId
 }

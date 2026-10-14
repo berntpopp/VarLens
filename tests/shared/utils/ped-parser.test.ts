@@ -27,6 +27,12 @@ describe('parsePed', () => {
     expect(individuals[1]).toMatchObject({ fatherId: null, motherId: null, line: 3 })
   })
 
+  it('skips a plain header row', () => {
+    const { individuals, errors } = parsePed('FID IID PAT MAT SEX PHENO\nF a 0 0 1 2\n')
+    expect(errors).toEqual([])
+    expect(individuals.map((i) => [i.individualId, i.line])).toEqual([['a', 2]])
+  })
+
   it('handles CRLF, extra genotype columns and -9 phenotype', () => {
     const { individuals, errors } = parsePed('F a 0 0 0 -9 A A C T\r\nF b 0 0 1 0\r\n')
     expect(errors).toEqual([])

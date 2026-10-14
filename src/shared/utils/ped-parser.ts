@@ -1,8 +1,8 @@
 /**
  * Parser for 6-column PED (pedigree) files:
  *   family  individual  father  mother  sex  phenotype
- * Columns are whitespace separated (tabs or spaces). Lines starting with `#` and blank
- * lines are ignored; columns after the sixth (linkage genotypes) are ignored.
+ * Columns are whitespace separated (tabs or spaces). Lines starting with `#`, blank
+ * lines and a header row (fifth column `sex`, e.g. `FID IID PAT MAT SEX PHENO`) are ignored; columns after the sixth (linkage genotypes) are ignored.
  * Missing parents are `0`; sex is 1=male, 2=female, 0=unknown; phenotype is
  * 1=unaffected, 2=affected, 0 or -9=unknown.
  */
@@ -50,6 +50,7 @@ export function parsePed(text: string): PedParseResult {
     const trimmed = raw.trim()
     if (trimmed === '' || trimmed.startsWith('#')) return
     const cols = trimmed.split(/\s+/)
+    if (cols[4]?.toLowerCase() === 'sex') return
     if (cols.length < 6) {
       errors.push({ line, message: `expected 6 columns, found ${cols.length}` })
       return
