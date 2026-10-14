@@ -127,18 +127,22 @@ describe('getAutocompleteSuggestions — case info.<KEY> fields (#596, #538)', (
   it('marks Flag and list fields as not comparable, with the reason', () => {
     const typed = [
       { key: 'DB', source: 'INFO:DB', type: 'Flag', number: '0' },
+      { key: 'AD', source: 'INFO:AD', type: 'Integer', number: 'R' },
       { key: 'AC', source: 'INFO:AC', type: 'Integer', number: 'A' },
       { key: 'DP', source: 'INFO:DP', type: 'Integer', number: '1' }
     ]
     const [db] = getAutocompleteSuggestions('info.DB', [], 'case', typed)
     expect(db.description).toMatch(/^INFO:DB · Flag field/)
-    const [hint] = getAutocompleteSuggestions('info.AC:', [], 'case', typed)
+    const [hint] = getAutocompleteSuggestions('info.AD:', [], 'case', typed)
     expect(hint).toMatchObject({
       category: 'hint',
-      label: expect.stringMatching(/AC: List field \(Number=A\)/)
+      label: expect.stringMatching(/AD: List field \(Number=R\)/)
     })
-    const dp = getAutocompleteSuggestions('info.DP:', [], 'case', typed)
-    expect(dp.some((s) => s.category === 'hint')).toBe(false)
+    // Number=A is split per ALT at import, so each row holds one comparable value.
+    for (const key of ['AC', 'DP']) {
+      const suggestions = getAutocompleteSuggestions(`info.${key}:`, [], 'case', typed)
+      expect(suggestions.some((s) => s.category === 'hint')).toBe(false)
+    }
   })
 
   it('stays silent about unknown keys when the case has no field dictionary', () => {
