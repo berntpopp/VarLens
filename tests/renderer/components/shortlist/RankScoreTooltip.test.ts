@@ -16,6 +16,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import RankScoreTooltip from '../../../../src/renderer/src/components/shortlist/RankScoreTooltip.vue'
 import { phenotypeLines } from '../../../../src/renderer/src/components/shortlist/rank-tooltip-phenotype'
+import type { HpoExplanation, HpoLocusNote } from '../../../../src/shared/types/hpo-profile'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -193,6 +194,79 @@ describe('RankScoreTooltip', () => {
       expect(phenotypeLines({ ...hpo, percentile: 29 / 100 }).rank).toBe(
         'scores above 29 % of HPO genes'
       )
+    })
+
+    describe('locus line (CNV/STR spec §6.3)', () => {
+      const region: HpoLocusNote = {
+        kind: 'region',
+        id: 'ISCA-37400',
+        label: '16p11.2 BP4–BP5',
+        dosage: 'HI 3 (ClinGen 2026-10-14)',
+        coverage: 0.996,
+        diseaseGenes: 9,
+        genes: 27
+      }
+      const gene: HpoLocusNote = {
+        kind: 'gene',
+        id: 'TBX6',
+        label: 'TBX6',
+        dosage: 'HI 3 (AnnotSV)',
+        diseaseGenes: 9,
+        genes: 27
+      }
+      const str: HpoLocusNote = {
+        kind: 'str',
+        id: 'ATXN3_SCA3',
+        label: 'ATXN3',
+        motif: 'CAG',
+        copies: '72/24',
+        band: 'full',
+        inheritance: 'AD',
+        onset: '20–50'
+      }
+
+      it('CNV region route names region, dosage source, coverage and HPO gene count', () => {
+        expect(phenotypeLines({ ...hpo, locus: region }).locus).toBe(
+          'locus: 16p11.2 BP4–BP5 (ISCA-37400) · HI 3 (ClinGen 2026-10-14) · 99 % covered · ' +
+            '9 HPO genes of 27 overlapped'
+        )
+      })
+
+      it('CNV gene route names the driving gene, dosage source and size correction', () => {
+        expect(phenotypeLines({ ...hpo, locus: gene }).locus).toBe(
+          'locus: TBX6 · HI 3 (AnnotSV) · best of 9 HPO genes of 27 overlapped, size-corrected'
+        )
+        // One HPO gene: the Šidák step is the identity, so no size-correction claim.
+        expect(
+          phenotypeLines({
+            ...hpo,
+            locus: { ...gene, dosage: undefined, diseaseGenes: 1, genes: undefined }
+          }).locus
+        ).toBe('locus: TBX6 · best of 1 HPO gene')
+      })
+
+      it('STR names locus, motif, copies, band, inheritance and onset; disease stays in the title', () => {
+        const lines = phenotypeLines({ ...hpo, locus: str })
+        expect(lines.locus).toBe('locus: ATXN3 CAG 72/24 · full · AD · onset 20–50')
+        expect(lines.title).toContain('best: Dravet syndrome')
+      })
+
+      it('SNV has no locus line and the tooltip renders it only when set', () => {
+        expect(phenotypeLines(hpo).locus).toBeNull()
+        const text = (h: HpoExplanation) =>
+          mount(RankScoreTooltip, {
+            props: { score: 3, components: componentsFixture, pinned: null, evidence: [], hpo: h },
+            global: { plugins: [vuetify] }
+          })
+            .get('[data-testid="rank-tooltip-phenotype"]')
+            .text()
+        expect(text(hpo)).not.toContain('locus:')
+        const cnv = text({ ...hpo, locus: region })
+        expect(cnv).toContain('locus: 16p11.2 BP4–BP5')
+        expect(cnv).toContain('of HPO genes')
+        expect(cnv).not.toContain('genes in this case')
+        expect(cnv.toLowerCase()).not.toContain('probab')
+      })
     })
 
     it('omits the block without an explanation', () => {
