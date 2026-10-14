@@ -286,6 +286,7 @@ export function scoreProfile(
   conflict.fill(0, 0, K)
   penal.fill(0, 0, K)
   // Conflicts are always listed; only gated ones (f_d(e) ≥ minF, known f) add to the load.
+  // conflictsOnly: no penalty at all, disease NOT annotations included.
   const penalise = opts.exclusionMode === 'penalty'
   const minF = opts.excludeMinFrequency
   // C1: forward weight w·IC^τ (τ = 0: key weights only); r = laneMax / IC(p).
@@ -354,7 +355,10 @@ export function scoreProfile(
       }
     }
     let nots = 0
-    for (let j = notOffsets[d]; j < notOffsets[d + 1]; j++) if (mark[notTerms[j]] === union) nots++
+    if (penalise) {
+      for (let j = notOffsets[d]; j < notOffsets[d + 1]; j++)
+        if (mark[notTerms[j]] === union) nots++
+    }
     const plus = gamma * fwd + (1 - gamma) * (rev / (f0 + freqSum[d]))
     diseasePlus[d] = plus
     diseaseConflicts[d] = conflicts
