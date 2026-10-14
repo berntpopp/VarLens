@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   FILTER_COLUMNS,
+  HPO_DERIVED_COLUMNS,
+  SHORTLIST_DERIVED_COLUMNS,
   findColumn,
+  getColumnSuggestions,
   getOperatorsForColumn,
   getCommonValues
 } from '../../../src/shared/dsl/column-registry'
@@ -120,5 +123,26 @@ describe('column-registry', () => {
     it('returns empty for columns without common values', () => {
       expect(getCommonValues('chr')).toEqual([])
     })
+  })
+})
+
+describe('CNV/STR locus fields (spec 2026-10-14-hpo-cnv-str-scoring §6.1)', () => {
+  const keys = ['hpo_best_locus', 'cnv_gene_count', 'str_band']
+
+  it('are case-only, shortlist-only derived fields, absent from the cohort and case views', () => {
+    for (const key of keys) {
+      expect(findColumn(key)).toMatchObject({ caseOnly: true, shortlistOnly: true })
+      expect(SHORTLIST_DERIVED_COLUMNS).toContain(key)
+      for (const scope of ['cohort', 'case'] as const) {
+        expect(getColumnSuggestions('', scope).map((c) => c.key)).not.toContain(key)
+      }
+      expect(getColumnSuggestions('', 'shortlist').map((c) => c.key)).toContain(key)
+    }
+  })
+
+  it('only hpo_best_locus loads the HPO scorer', () => {
+    expect(HPO_DERIVED_COLUMNS).toContain('hpo_best_locus')
+    expect(HPO_DERIVED_COLUMNS).not.toContain('cnv_gene_count')
+    expect(HPO_DERIVED_COLUMNS).not.toContain('str_band')
   })
 })

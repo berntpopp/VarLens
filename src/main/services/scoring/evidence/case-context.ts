@@ -8,6 +8,7 @@ import { isInPAR } from '../../../../shared/utils/par-regions'
 import { compHetPhase, type CompHetPhase } from '../../../../shared/utils/phasing'
 import { trimAlleles } from '../../../../shared/utils/trim-alleles'
 import type { HpoGeneScorer } from '../../phenotype/hpo-similarity-db'
+import type { StrBand } from '../../../../shared/types/locus-reference'
 
 export type { Zygosity }
 export type CaseSex = 'male' | 'female' | null
@@ -30,6 +31,17 @@ export interface LightRow {
   gt_num: string | null
   /** Phase set id (VCF FORMAT PS); compared only when phasing is considered. */
   ps?: number | null
+  // CNV/STR locus scoring (CNV/STR spec §6.1): set only for non-SNV rows, so
+  // pass-1 memory stays ~100 bytes per SNV.
+  variant_type?: string | null
+  end_pos?: number | null
+  sv_type?: string | null
+  cnv_copy_number?: number | null
+  str_alt_copies?: string | null
+  str_status?: string | null
+  str_repeat_id?: string | null
+  str_variant_catalog_id?: string | null
+  str_repeat_unit?: string | null
 }
 
 export interface DerivedFields {
@@ -46,6 +58,12 @@ export interface DerivedFields {
   hpo_best_disease: string | null
   /** Excluded case terms contradicted by that disease; null like hpo_resnik. */
   hpo_conflicts: number | null
+  /** Gene symbol, ISCA region id or STRchive id the score came from; null like hpo_resnik. */
+  hpo_best_locus: string | null
+  /** CNV rows: protein-coding genes overlapped; null on other types. */
+  cnv_gene_count: number | null
+  /** STR rows: catalogue band; null on other types or off-catalogue. */
+  str_band: StrBand | null
   /** Alias for partners (lazy compound-het partner IDs). */
   readonly compoundHetPartnerVariantIds?: number[]
   /** Phase of the row against its partners (#586); null unless phasing is considered and it has partners. */
@@ -59,6 +77,8 @@ export const lookupCaseContext = (ctx: GeneContext, row: LightRow): DerivedField
 export interface GeneContext {
   info: CaseInfo
   derived(row: LightRow): DerivedFields
+  /** Distinct het alleles of the gene in the case (pass 1); the CNV HI 30 and STR AR second hit. */
+  hetHits(gene: string): number
 }
 
 const bareChr = (chr: string): string => chr.replace(/^chr/i, '').toUpperCase()
@@ -127,13 +147,18 @@ export class GeneContextBuilder {
     const { genes, info, considerPhasing } = this
     return {
       info,
+      hetHits: (gene) => genes.get(gene)?.het.size ?? 0,
       derived(row: LightRow): DerivedFields {
         const zygosity = deriveZygosity(row, info)
         const gene = row.gene_symbol === null || row.gene_symbol === '' ? null : row.gene_symbol
         const hpo = {
           hpo_resnik: gene === null ? null : (info.hpo?.score(gene) ?? null),
           hpo_best_disease: gene === null ? null : (info.hpo?.bestDisease(gene) ?? null),
-          hpo_conflicts: gene === null ? null : (info.hpo?.conflicts(gene) ?? null)
+          hpo_conflicts: gene === null ? null : (info.hpo?.conflicts(gene) ?? null),
+          // Locus fields are filled by the CNV/STR scorers (plan lane L5).
+          hpo_best_locus: null,
+          cnv_gene_count: null,
+          str_band: null
         }
         const entry =
           row.gene_symbol === null || row.gene_symbol === ''

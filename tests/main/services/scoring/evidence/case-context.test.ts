@@ -91,6 +91,19 @@ describe('GeneContextBuilder', () => {
     expect(ctx.derived(r(2, { ref: 'CT', alt: 'C' })).compoundHetPartnerVariantIds).toEqual([1])
   })
 
+  it('exposes het hits per gene and null locus fields until the CNV/STR scorers fill them', () => {
+    const b = new GeneContextBuilder(info)
+    b.add([r(1, {}), r(2, { ref: 'CT', alt: 'C' })])
+    const ctx = b.build()
+    expect(ctx.hetHits('G1')).toBe(2)
+    expect(ctx.hetHits('NONE')).toBe(0)
+    expect(ctx.derived(r(1, {}))).toMatchObject({
+      hpo_best_locus: null,
+      cnv_gene_count: null,
+      str_band: null
+    })
+  })
+
   it('two spellings of the same allele are one allele (Review Focus 3)', () => {
     const b = new GeneContextBuilder(info)
     b.add([r(1, { pos: 100, ref: 'CTT', alt: 'CT' }), r(2, { pos: 99, ref: 'ACTT', alt: 'ACT' })])

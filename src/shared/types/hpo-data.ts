@@ -9,6 +9,8 @@ export interface HpoDataStatus {
   builtAt: number | null
   termCount: number
   geneCount: number
+  /** Version per reference source, e.g. `{ hpo, clingen, strchive, mondo }`; absent before builder 6. */
+  sources?: Record<string, string>
 }
 
 export interface HpoDataUpdateResult {
