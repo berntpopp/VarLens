@@ -98,6 +98,29 @@ describe('updateHpoData', () => {
     expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
   })
 
+  it('keeps a newer installed release when the API falls back to the pinned one', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-10-01')))
+    const fetch = vi.fn(async () => new Response('', { status: 403 }))
+    const result = await updateHpoData(deps(fetch as never))
+    expect(result.message).toMatch(/newer/)
+    expect(result.status.version).toBe('v2026-10-01')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to run while another live process holds the destination lock', async () => {
+    writeFileSync(`${dbPath}.lock`, String(process.pid))
+    await expect(updateHpoData(deps(releaseFetch('v2026-09-01')))).rejects.toThrow(
+      /already running/
+    )
+    expect(existsSync(dbPath)).toBe(false)
+  })
+
+  it('takes over a stale lock and releases it afterwards', async () => {
+    writeFileSync(`${dbPath}.lock`, '2147483646')
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
+  })
+
   it('rejects a checksum mismatch and keeps the installed data', async () => {
     await updateHpoData(deps(releaseFetch('v2026-09-01')))
     const bad = releaseFetch('v2026-10-01', { 'phenotype.hpoa': `sha256:${'0'.repeat(64)}` })

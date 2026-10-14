@@ -48,6 +48,15 @@ describe('build-hpo-similarity-db script', () => {
     )
   })
 
+  it('downgrades only on an explicit --tag', async () => {
+    const out = join(dir, 'hpo.db')
+    stubNetwork('v2026-10-01')
+    await buildHpoDbCli(['--out', out], {})
+    stubNetwork('v2026-06-01')
+    const result = await buildHpoDbCli(['--out', out, '--tag', 'v2026-06-01'], {})
+    expect(result.status.version).toBe('v2026-06-01')
+  })
+
   it('defaults the output to VARLENS_HPO_DB_PATH', async () => {
     stubNetwork('v2026-09-01')
     const out = join(dir, 'env.db')
