@@ -168,10 +168,14 @@ function selectPage(
     .orderBy(sql`variants.id ASC`)
     .limit(limit)
     .compile()
-  const rows = db.prepare(compiled.sql).all(...compiled.parameters) as Array<
-    Variant & { is_starred: number }
-  >
-  // One copy per row: toShortlistCandidate overwrites the 0/1 `is_starred` with a boolean
-  // (a rest-destructure first would copy every row twice — measurable on large cases).
-  return rows.map((row) => toShortlistCandidate(row, row.is_starred === 1))
+  const statement = db.prepare(compiled.sql).raw(true)
+  const columns = statement.columns().map((column) => column.name)
+  // better-sqlite3 row objects are slow to copy (~4 µs per wide row), so build plain
+  // objects from raw rows; toShortlistCandidate makes the one copy and overwrites the
+  // 0/1 `is_starred` with a boolean.
+  return (statement.all(...compiled.parameters) as unknown[][]).map((values) => {
+    const row: Record<string, unknown> = {}
+    for (let i = 0; i < columns.length; i++) row[columns[i]] = values[i]
+    return toShortlistCandidate(row as unknown as Variant, row.is_starred === 1)
+  })
 }
