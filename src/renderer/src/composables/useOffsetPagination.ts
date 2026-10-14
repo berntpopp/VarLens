@@ -13,7 +13,7 @@ import { APP_CONFIG } from '../../../shared/config'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
 import { createPageCache, runWhenIdle } from './pageCache'
-import type { ViewRoute } from './useUrlState'
+import { useViewStatePending, type ViewRoute } from './useUrlState'
 import { useSortUrlParam } from './useViewUrlBindings'
 
 export interface SortItem {
@@ -60,7 +60,10 @@ export interface UseOffsetPaginationOptions<T> {
    * filter change. The cache is also cleared automatically when this value changes.
    */
   filterKey?: Ref<string>
-  /** Mirror sort keys into the URL query (`?sort=`) for this view. */
+  /**
+   * Mirror sort keys into the URL query (`?sort=`) for this view. Page queries
+   * also wait while the view's URL state is still being applied (one query on open).
+   */
   urlSortRoute?: ViewRoute
 }
 
@@ -72,6 +75,9 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   const itemsPerPage = ref(settingsStore.itemsPerPage)
   const sortBy = ref<SortItem[]>([])
   if (options.urlSortRoute !== undefined) useSortUrlParam(options.urlSortRoute, sortBy)
+  const viewStatePending =
+    options.urlSortRoute === undefined ? null : useViewStatePending(options.urlSortRoute)
+  let heldLoad = false
   const itemsPerPageOptions = [...APP_CONFIG.ITEMS_PER_PAGE_OPTIONS]
 
   // Result state
@@ -233,6 +239,10 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
    * Reads page/sortBy/itemsPerPage from reactive refs (set by Vuetify v-model).
    */
   const loadPage = (): Promise<void> => {
+    if (viewStatePending?.value === true) {
+      heldLoad = true
+      return Promise.resolve()
+    }
     const offset = (page.value - 1) * itemsPerPage.value
     const signature = `${buildPrefetchKey(offset)}|count:${cachedTotalCount === null ? 'need' : 'cached'}`
     if (inFlight !== null && inFlight.signature === signature) {
@@ -287,6 +297,14 @@ export function useOffsetPagination<T>(options: UseOffsetPaginationOptions<T>) {
   const reloadIfFiltersChanged = async (): Promise<void> => {
     if (options.filterKey !== undefined && options.filterKey.value === lastIssuedFilterKey) return
     await invalidateAndReload()
+  }
+
+  if (viewStatePending !== null) {
+    watch(viewStatePending, (pending) => {
+      if (pending || !heldLoad) return
+      heldLoad = false
+      void loadPage()
+    })
   }
 
   // Watch sort changes — reset page and clear the page cache.

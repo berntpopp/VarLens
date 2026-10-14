@@ -7,7 +7,7 @@
 import { nextTick, watch, type Ref } from 'vue'
 import { useRouter, type LocationQuery, type RouteLocationNormalizedLoaded } from 'vue-router'
 import type { AppStateReturn } from './useAppState'
-import { useUrlParam, type ViewRoute } from './useUrlState'
+import { replaceAndRestore, useUrlParam, type ViewRoute } from './useUrlState'
 import { useApiService } from './useApiService'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
@@ -118,7 +118,7 @@ export function useViewStateMemory(): void {
       const snapshot = viewSnapshot(route.query)
       if (entered && Object.keys(snapshot).length === 0) {
         const stored = loadViewState(key)
-        if (stored !== null) void router.replace({ query: { ...route.query, ...stored } })
+        if (stored !== null) void replaceAndRestore(router, { ...route.query, ...stored })
         return
       }
       saveViewState(key, snapshot)
