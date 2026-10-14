@@ -260,11 +260,6 @@ const results = new Map<string, Memo>()
 
 const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
 
-/**
- * One stat per call is the cache check: the file is replaced by another
- * thread (desktop update) or by an operator (web), so mtime/size is the only
- * signal every reader sees. Null key when the file is missing.
- */
 const float32 = (blob: Buffer): Float32Array =>
   new Float32Array(blob.buffer.slice(blob.byteOffset, blob.byteOffset + blob.byteLength))
 
@@ -291,6 +286,11 @@ function readIndex(db: Database.Database): PhenotypeIndex {
   })
 }
 
+/**
+ * One stat per call is the cache check: the file is replaced by another
+ * thread (desktop update) or by an operator (web), so mtime/size is the only
+ * signal every reader sees. Null key when the file is missing.
+ */
 function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } | null {
   const stat = statSync(path, { throwIfNoEntry: false })
   if (stat === undefined) return null

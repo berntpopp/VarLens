@@ -118,7 +118,7 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
     }
     if (buffered !== null) {
       for (const page of buffered) scorePage(page)
-      return { kept, totalCandidates, queryErrors: [] }
+      return { kept: withHpoExplanations(kept, input.info), totalCandidates, queryErrors: [] }
     }
     const pass2Errors = eachType(filters, (filter) =>
       forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, scorePage)
