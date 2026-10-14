@@ -196,7 +196,7 @@
 .table-container .variant-table--sticky th:nth-child(2),
 .table-container .variant-table--sticky td:nth-child(2) {
   position: sticky;
-  left: 6.75rem; /* = ANNOTATIONS_COLUMN_WIDTH_REM in variant-table/column-widths.ts */
+  left: 8.75rem; /* = ANNOTATIONS_COLUMN_WIDTH_REM in variant-table/column-widths.ts */
   z-index: 2;
   background-color: rgb(var(--v-theme-surface));
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.12);

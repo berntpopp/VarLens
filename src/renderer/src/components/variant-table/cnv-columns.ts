@@ -13,7 +13,7 @@ import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
  * would otherwise interpret a dotted key as a nested path accessor.
  */
 export const cnvHeaders: ColumnDef[] = [
-  { title: '', key: 'annotations', sortable: false, width: '128px', align: 'center' },
+  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' },
   {

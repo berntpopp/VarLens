@@ -35,7 +35,7 @@
         </div>
       </v-list>
       <div v-else class="pa-2">
-        <div v-if="request.readOnlyHint" class="text-caption text-medium-emphasis mb-1">
+        <div v-if="request.readOnlyHint" class="text-body-small text-medium-emphasis mb-1">
           {{ request.readOnlyHint }}
         </div>
         <div v-if="request.assigned().length === 0" class="text-body-small text-muted">No tags</div>

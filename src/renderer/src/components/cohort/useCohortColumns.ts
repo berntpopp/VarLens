@@ -14,7 +14,7 @@ import { cnvHeaders } from '../variant-table/cnv-columns'
  */
 export const baseHeaders: ColumnDef[] = [
   { title: '', key: 'data-table-expand', sortable: false, width: '40px' },
-  { title: '', key: 'annotations', sortable: false, width: '128px', align: 'center' },
+  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' },
   { title: 'Ref', key: 'ref', sortable: false, width: '80px' },

@@ -21,9 +21,9 @@ import { LINKS_COLUMN_KEY } from '../../utils/link-outs'
 
 /**
  * Width of the leading annotations column (rem); the sticky 2nd column
- * offsets by it (`left: 6.75rem` in data-table-shared.css).
+ * offsets by it (`left: 8.75rem` in data-table-shared.css).
  */
-export const ANNOTATIONS_COLUMN_WIDTH_REM = 6.75
+export const ANNOTATIONS_COLUMN_WIDTH_REM = 8.75 // star, ACMG, comment, tags (#125)
 
 export const COLUMN_WIDTHS_REM: Readonly<Record<string, number>> = {
   'data-table-expand': 2.5,
