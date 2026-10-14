@@ -3,6 +3,8 @@ import {
   buildPhenotypeIndex,
   type PhenotypeIndexInput
 } from '../../../src/shared/phenotype/phenotype-index'
+import { nullParams, scoringOptions } from '../../../src/shared/phenotype/phenotype-calibration'
+import { HPO_SCORING_CONFIG } from '../../../src/shared/config/hpo-scoring.config'
 import {
   explainDisease,
   explainGene,
@@ -78,5 +80,32 @@ describe('locus scoring contracts', () => {
     expect(e.percentile).toBeGreaterThanOrEqual(0)
     const g = ix.genes.get('G0')!
     expect(explainDisease(ix, cs, cs.geneBest[g])).toEqual(explainGene(ix, cs, g))
+  })
+
+  it('z mode: admitting gene-less diseases leaves every gene score unchanged', () => {
+    const { input } = fixture()
+    const K = HPO_SCORING_CONFIG.nullMaxK
+    // Gene-less diseases get σ = 0: calibrated over all diseases, the 5 % σ floor would drop to 0.
+    const withNull = (keep: (d: string) => boolean): PhenotypeIndexInput => ({
+      ...input,
+      diseases: input.diseases.filter(([d]) => keep(d)),
+      diseaseTerms: input.diseaseTerms.filter(([d]) => keep(d)),
+      diseaseNull: input.diseases
+        .filter(([d]) => keep(d))
+        .map(([d], i) => {
+          const sd = Number(d.slice(1)) >= 70 ? 0 : 0.01 * (1 + i)
+          return [d, new Float32Array(K).fill(0.2), new Float32Array(K).fill(sd)] as const
+        }),
+      nullParams: nullParams(HPO_SCORING_CONFIG.tau)
+    })
+    const genesOnly = buildPhenotypeIndex(withNull((d) => Number(d.slice(1)) < 70))
+    const admitted = buildPhenotypeIndex(withNull(() => true))
+    // Penalty mode reads the exclusion background b_e of the excluded term.
+    const z = scoringOptions({ correction: 'z', exclusionMode: 'penalty' })
+    const before = scoreCase(genesOnly, PROFILE, z)!
+    const after = scoreCase(admitted, PROFILE, z)!
+    for (const [gene, g] of genesOnly.genes) {
+      expect(after.geneScore[admitted.genes.get(gene)!]).toBe(before.geneScore[g])
+    }
   })
 })

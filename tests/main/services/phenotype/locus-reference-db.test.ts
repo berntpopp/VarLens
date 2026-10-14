@@ -12,6 +12,7 @@ import {
   readLocusReference,
   type LocusSourceInput
 } from '../../../../src/main/services/phenotype/locus-reference-db'
+import { HPO_SCORING_CONFIG } from '../../../../src/shared/config/hpo-scoring.config'
 import type { HpoProfileTerm } from '../../../../src/shared/types/hpo-profile'
 import {
   GENES_TO_PHENOTYPE,
@@ -47,12 +48,17 @@ const input = (over: Partial<LocusSourceInput> = {}): LocusSourceInput => ({
   previousPath: null,
   ...over
 })
-const build = (name: string, locus?: LocusSourceInput): { path: string; warnings: string[] } => {
+const build = (
+  name: string,
+  locus?: LocusSourceInput,
+  nullTau: number | null = null
+): { path: string; warnings: string[] } => {
   const path = join(dir, name)
   const warnings = buildHpoSimilarityDb(
     { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE, locus },
     { release: 'v2026-09-01', sha256: {} },
-    path
+    path,
+    nullTau
   )
   return { path, warnings }
 }
@@ -89,6 +95,15 @@ describe('locus reference build', () => {
     }
     expect(before.scoreDiseases(['OMIM:1'])).toBeNull()
     expect(after.scoreDiseases(['OMIM:1'])?.disease).toBe('OMIM:1')
+
+    // z mode: σ floors and the exclusion background are calibrated over gene-linked diseases only.
+    const tau = HPO_SCORING_CONFIG.tau
+    const [plainZ, fullZ] = [build('plain-z.db', undefined, tau), build('full-z.db', input(), tau)]
+    const withExcluded = [...PROFILE, { hpoId: T.F, excluded: true, key: false }]
+    const z = (path: string) => openHpoGeneScorer(withExcluded, path, { correction: 'z' })!
+    for (const gene of ['GENE1', 'GENE2', 'GENE3']) {
+      expect(z(fullZ.path).score(gene)).toBe(z(plainZ.path).score(gene))
+    }
   })
 
   it('stores versions and the normalised reference', () => {
