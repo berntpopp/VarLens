@@ -119,6 +119,7 @@ describe('ShortlistTable', () => {
     })
     const cell = wrapper.get('[data-rank-tip="1"]')
     expect(cell.attributes('tabindex')).toBe('0')
+    ;(cell.element as HTMLElement).focus()
     await cell.trigger('focusin')
     await vi.waitFor(() =>
       expect(
@@ -127,6 +128,21 @@ describe('ShortlistTable', () => {
     )
     await cell.trigger('keydown', { key: 'Escape' })
     await cell.trigger('focusout')
+    wrapper.unmount()
+  })
+
+  it('does not open the score tooltip when a mouse click focuses the score cell', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [row({ rank_evidence: [] })] },
+      attachTo: document.body,
+      global: { plugins: [vuetify] }
+    })
+    const cell = wrapper.get('[data-rank-tip="1"]')
+    // Browsers match :focus-visible only for keyboard focus; happy-dom always does.
+    vi.spyOn(cell.element, 'matches').mockImplementation((s) => s !== ':focus-visible')
+    await cell.trigger('focusin')
+    await flushPromises()
+    expect(document.body.querySelector('.rank-tooltip')).toBeNull()
     wrapper.unmount()
   })
 

@@ -14,7 +14,7 @@ export interface RowHoverTarget {
   rowId: Ref<string | null>
   onMouseover: (event: MouseEvent) => void
   onMouseout: (event: MouseEvent) => void
-  /** Keyboard: a focused trigger opens at once, losing focus closes. */
+  /** Keyboard focus (`:focus-visible`) on a trigger opens at once; mouse focus does not. */
   onFocusin: (event: FocusEvent) => void
   onFocusout: (event: FocusEvent) => void
   close: () => void
@@ -68,7 +68,7 @@ export function useRowHoverTarget(attribute: string, openDelayMs = 400): RowHove
 
   function onFocusin(event: FocusEvent): void {
     const trigger = triggerOf(event.target)
-    if (trigger === null) return
+    if (trigger === null || !trigger.matches(':focus-visible')) return
     clearTimer()
     element.value = trigger
     rowId.value = trigger.getAttribute(attribute)
