@@ -1,0 +1,17 @@
+import { readHpoDataStatus } from '../../../main/services/phenotype/hpo-similarity-db'
+import type { OverrideHandler } from './types'
+
+/**
+ * HPO similarity data status. The operator installs `hpo_similarity.db` and
+ * points `VARLENS_HPO_DB_PATH` at it; without it the status reads "not
+ * installed" and the ranking's `hpo_resnik` stays null. Updates are desktop-only.
+ */
+export function buildHpoDataOverrides(): Record<string, OverrideHandler> {
+  return {
+    'hpo-data:status': {
+      handle() {
+        return readHpoDataStatus()
+      }
+    }
+  }
+}

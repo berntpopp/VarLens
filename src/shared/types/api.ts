@@ -115,6 +115,7 @@ import type { DebugApi } from '../ipc/domains/debug'
 import type { PanelsDomainContract } from '../ipc/domains/panels'
 import type { JobsApi } from '../ipc/domains/jobs'
 import type { ReferenceServicesApi } from '../ipc/domains/reference-services'
+import type { HpoDataApi } from '../ipc/domains/hpo-data'
 import type { CaseMetadataDomainContract } from '../ipc/domains/case-metadata'
 import type { ImportDomainContract } from '../ipc/domains/import'
 import type { AuthDomainContract } from '../ipc/domains/auth'
@@ -858,6 +859,7 @@ export interface WindowAPI {
   debug: DebugAPI
   jobs: JobsAPI
   referenceServices: ReferenceServicesAPI
+  hpoData: HpoDataAPI
 }
 
 export type DebugAPI = DebugApi
@@ -865,6 +867,8 @@ export type DebugAPI = DebugApi
 export type JobsAPI = JobsApi
 
 export type ReferenceServicesAPI = ReferenceServicesApi
+
+export type HpoDataAPI = HpoDataApi
 
 export interface PresetsAPI {
   list: () => Promise<IpcResult<FilterPreset[]>>

@@ -145,6 +145,7 @@ export const DOMAIN_CAMEL_TO_KEBAB: Record<string, string> = {
   caseMetrics: 'case-metrics',
   geneLists: 'gene-lists',
   geneRef: 'gene-ref',
+  hpoData: 'hpo-data',
   regionFiles: 'region-files',
   analysisGroups: 'analysis-groups',
   batchImport: 'batch-import',

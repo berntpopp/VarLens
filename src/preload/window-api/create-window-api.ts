@@ -2,6 +2,7 @@ import { createAppApi } from './app-api'
 import { createCoreApi } from './core-api'
 import { createPreloadDomainApis } from './domains'
 import { createDebugApi } from '../domains/debug'
+import { createHpoDataApi } from '../domains/hpo-data'
 import { createJobsApi } from '../domains/jobs'
 import { createReferenceServicesApi } from '../domains/reference-services'
 import type { WindowAPI } from '../../shared/types/api'
@@ -46,6 +47,7 @@ export function createWindowApi(): WindowAPI {
     presets: app.presets,
     debug: createDebugApi(),
     jobs: createJobsApi(),
-    referenceServices: createReferenceServicesApi()
+    referenceServices: createReferenceServicesApi(),
+    hpoData: createHpoDataApi()
   }
 }
