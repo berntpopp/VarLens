@@ -108,10 +108,10 @@
     },
     {
       "path": "src/shared/types/database.ts",
-      "lines": 656,
+      "lines": 660,
       "threshold": 600,
       "category": "source",
-      "reason": "existing shared contract surface; must not grow before contract split"
+      "reason": "existing shared contract surface; must not grow before contract split. HPO scoring v2 (#600) added the two required CaseHpoTerm status fields (excluded, key) with their one-line semantics (+4 lines); the row type must carry them and cannot be split from CaseHpoTerm."
     },
     {
       "path": "src/shared/types/ipc-schemas.ts",
