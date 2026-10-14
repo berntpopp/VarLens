@@ -26,7 +26,7 @@
         v-model="member.affectedStatus"
         :items="AFFECTED_STATUSES"
         label="Status"
-        style="max-width: 140px"
+        style="max-width: 160px"
       />
       <v-btn
         icon

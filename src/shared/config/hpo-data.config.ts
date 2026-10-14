@@ -32,7 +32,7 @@ export const HPO_DATA_CONFIG = {
    * Preprocessing version stored in the DB meta; bump when the build changes
    * what lands in the DB so installed data reports "needs update".
    */
-  builderVersion: 2,
+  builderVersion: 6,
   /** Phenotypic abnormality: only its subtree enters IC, gene sets and patient profiles. */
   phenotypeRoot: 'HP:0000118',
   /** HPO frequency term "Excluded" (0 %): an annotation of absence. */
@@ -43,8 +43,52 @@ export const HPO_DATA_CONFIG = {
    */
   envPath: 'VARLENS_HPO_DB_PATH',
   requestTimeoutMs: 5 * 60 * 1000,
-  /** Per-file cap; the v2026-09-01 assets are 21-36 MB. */
-  maxDownloadBytes: 256 * 1024 * 1024
+  /** Per-file cap; the v2026-09-01 assets are 21-36 MB, mondo.obo ~53 MB. */
+  maxDownloadBytes: 256 * 1024 * 1024,
+  /**
+   * Optional CNV/STR reference sources (CNV/STR spec §3), built into the same DB.
+   * A failed source keeps its previous installed copy; HPO itself stays required.
+   */
+  locusSources: {
+    /** ClinGen dosage (CC0): no releases and no digests; TLS + header and row-floor checks. */
+    clingen: {
+      baseUrl: 'https://ftp.clinicalgenome.org',
+      genes: 'ClinGen_gene_curation_list_GRCh38.tsv',
+      regions: {
+        GRCh37: 'ClinGen_region_curation_list_GRCh37.tsv',
+        GRCh38: 'ClinGen_region_curation_list_GRCh38.tsv'
+      },
+      minGenes: 1000,
+      minRegions: 400
+    },
+    /** STRchive loci (MIT), a GitHub release asset named after its tag. */
+    strchive: {
+      latestReleaseUrl: 'https://api.github.com/repos/dashnowlab/STRchive/releases/latest',
+      downloadBaseUrl: 'https://github.com/dashnowlab/STRchive/releases/download',
+      asset: (tag: string): string => `STRchive-loci-${tag}.json`,
+      tagPattern: /^v\d+\.\d+\.\d+$/,
+      defaultRelease: {
+        tag: 'v2.28.0',
+        digests: {
+          'STRchive-loci-v2.28.0.json':
+            '16301ecb00239f0e3c684913aefc2f48c6f5a7c2a481958aab4db55d282bca86'
+        } as Record<string, string>
+      }
+    },
+    /** Mondo (CC BY 4.0): only the OMIM/Orphanet equivalents of the MONDO ids the build needs. */
+    mondo: {
+      latestReleaseUrl: 'https://api.github.com/repos/monarch-initiative/mondo/releases/latest',
+      downloadBaseUrl: 'https://github.com/monarch-initiative/mondo/releases/download',
+      asset: (): string => 'mondo.obo',
+      tagPattern: /^v\d{4}-\d{2}-\d{2}$/,
+      defaultRelease: {
+        tag: 'v2026-10-06',
+        digests: {
+          'mondo.obo': '2631e8e165d41def1a46749adb1ce0a336c8aba7f6bc0978729592cee8fed60b'
+        } as Record<string, string>
+      }
+    }
+  }
 } as const
 
 export type HpoAssetKey = keyof typeof HPO_DATA_CONFIG.assets

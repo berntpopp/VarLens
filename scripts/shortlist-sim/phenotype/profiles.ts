@@ -128,23 +128,45 @@ export function generalise(
   return t
 }
 
+export interface SampledProfile {
+  /** True disease terms, frequency-weighted. */
+  truth: string[]
+  /** truth[i] as reported: itself or, when imprecise, an ancestor. */
+  reported: string[]
+  /** Random phenotypic-abnormality terms. */
+  noise: string[]
+}
+
 /**
- * One simulated profile. The random stream is consumed in the same order for every level, so
- * with the same seed all levels share the same true terms (paired strata).
+ * One simulated profile in parts. The random stream is consumed in the same order for every
+ * level, so with the same seed all levels share the same true terms (paired strata).
  */
+export function sampleProfile(
+  disease: Disease,
+  level: NoiseLevel,
+  ont: ProfileOntology,
+  rnd: () => number
+): SampledProfile {
+  const truth = weightedSample(disease.terms, PROFILE_TERMS, rnd)
+  const reported = truth.map((t) =>
+    rnd() < level.imprecision ? generalise(t, level.steps, ont, rnd) : t
+  )
+  const noise = Array.from(
+    { length: level.noise },
+    () => ont.abnormalities[Math.floor(rnd() * ont.abnormalities.length)]
+  )
+  return { truth, reported, noise }
+}
+
+/** One simulated profile: the distinct reported and noise terms. */
 export function generateProfile(
   disease: Disease,
   level: NoiseLevel,
   ont: ProfileOntology,
   rnd: () => number
 ): string[] {
-  const out = weightedSample(disease.terms, PROFILE_TERMS, rnd).map((t) =>
-    rnd() < level.imprecision ? generalise(t, level.steps, ont, rnd) : t
-  )
-  for (let i = 0; i < level.noise; i++) {
-    out.push(ont.abnormalities[Math.floor(rnd() * ont.abnormalities.length)])
-  }
-  return [...new Set(out)]
+  const { reported, noise } = sampleProfile(disease, level, ont, rnd)
+  return [...new Set([...reported, ...noise])]
 }
 
 /** Stable 32-bit seed for one disease (FNV-1a of the id, mixed with the run seed). */

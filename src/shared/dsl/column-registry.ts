@@ -239,8 +239,8 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     caseOnly: true,
     shortlistOnly: true
   },
-  // SV/CNV extension fields of a shortlist candidate (#581); scored only when
-  // SV/CNV evidence scoring is enabled (SHORTLIST_EVIDENCE_CONFIG.structuralTypes).
+  // SV/CNV extension fields of a shortlist candidate (#581); scored only for the
+  // types enabled in SHORTLIST_EVIDENCE_CONFIG.structuralTypes.
   {
     key: 'sv_type',
     label: 'SV type',
@@ -271,12 +271,62 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
   },
   {
     key: 'hpo_resnik',
-    label: 'HPO Resnik similarity (raw, uncalibrated)',
+    label: 'HPO phenotype match (raw, uncalibrated)',
     aliases: [],
     type: 'numeric',
     operators: NUMERIC_OPERATORS,
     caseOnly: true,
     shortlistOnly: true
+  },
+  {
+    key: 'hpo_best_disease',
+    label: 'HPO best-matching disease (id)',
+    aliases: [],
+    type: 'text',
+    operators: TEXT_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'hpo_conflicts',
+    label: 'HPO excluded-term conflicts',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  // CNV/STR locus scoring (spec .planning/specs/2026-10-14-hpo-cnv-str-scoring.md §6.1).
+  {
+    key: 'hpo_best_locus',
+    label: 'HPO best-matching locus (gene, region or STR id)',
+    aliases: [],
+    type: 'text',
+    operators: TEXT_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'cnv_gene_count',
+    label: 'CNV protein-coding genes overlapped',
+    aliases: [],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    caseOnly: true,
+    shortlistOnly: true
+  },
+  {
+    key: 'str_band',
+    label: 'STR band (normal, intermediate, premutation, full)',
+    aliases: [],
+    type: 'categorical',
+    operators: ['=', '!='],
+    caseOnly: true,
+    shortlistOnly: true,
+    commonValues: ['normal', 'intermediate', 'premutation', 'full'].map((v) => ({
+      value: v,
+      label: v
+    }))
   }
 ] as const
 
@@ -285,7 +335,20 @@ export const SHORTLIST_DERIVED_COLUMNS = [
   'zygosity',
   'gene_het_hits',
   'gene_hits',
-  'hpo_resnik'
+  'hpo_resnik',
+  'hpo_best_disease',
+  'hpo_conflicts',
+  'hpo_best_locus',
+  'cnv_gene_count',
+  'str_band'
+] as const
+
+/** Derived fields computed by the case's HPO scorer; reading any of them loads it. */
+export const HPO_DERIVED_COLUMNS = [
+  'hpo_resnik',
+  'hpo_best_disease',
+  'hpo_conflicts',
+  'hpo_best_locus'
 ] as const
 
 const COUNT_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']

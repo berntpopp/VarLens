@@ -15,11 +15,16 @@ import { GENES, poolSpike, SPIKE_OPTIONS, syntheticBackground } from './fixtures
 // Synthetic scorer: the causal gene scores high only under the matching profile.
 vi.mock('../../../../src/main/services/phenotype/hpo-similarity-db', async (original) => ({
   ...(await original<object>()),
-  openHpoGeneScorer: vi.fn((terms: string[]) =>
-    terms.length === 0
-      ? null
-      : { score: (g: string) => (terms.includes('HP:MATCH') && g === 'GENE1' ? 5 : null) }
-  )
+  openHpoGeneScorer: vi.fn((terms: Array<{ hpoId: string }>) => {
+    if (terms.length === 0) return null
+    const match = terms.some((t) => t.hpoId === 'HP:MATCH')
+    return {
+      score: (g: string) => (match && g === 'GENE1' ? 5 : null),
+      bestDisease: () => null,
+      conflicts: () => null,
+      explain: () => null
+    }
+  })
 }))
 
 const bg = syntheticBackground()
@@ -61,7 +66,7 @@ describe('pheno job', () => {
     }) as Extract<JobResult, { kind: 'eval' }>
 
     expect(r.results.map((x) => x.scorer)).toEqual(['a', 'c:match', 'c:other'])
-    const calls = vi.mocked(openHpoGeneScorer).mock.calls.map(([t]) => [...t].sort())
+    const calls = vi.mocked(openHpoGeneScorer).mock.calls.map(([t]) => t.map((x) => x.hpoId).sort())
     expect(calls).toEqual([['HP:0000001', 'HP:MATCH'], ['HP:OTHER']])
     const rank = (id: string): number => r.results.find((x) => x.scorer === id)!.alleles[0].rank!
     expect(rank('c:match')).toBeLessThan(rank('c:other'))

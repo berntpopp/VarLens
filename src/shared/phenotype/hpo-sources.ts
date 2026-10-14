@@ -4,6 +4,8 @@
  * ancestor closure and annotation-based information content. Pure.
  */
 import { HPO_DATA_CONFIG } from '../config/hpo-data.config'
+import { HPO_SCORING_CONFIG } from '../config/hpo-scoring.config'
+import { betaQuantile } from './beta-quantile'
 
 export interface HpOntology {
   /** e.g. `2026-09-01`, from the graph's versionIRI; null when absent. */
@@ -143,35 +145,138 @@ export function* tsvRows(
   if (cols === null) throw new Error('No header line')
 }
 
-/** `0/n`, `0%` or the HPO "Excluded" frequency: the phenotype was observed absent. */
-function isAbsent(frequency: string): boolean {
-  return (
-    /^0+\/\d+$/.test(frequency) ||
-    /^0+(\.0+)?%$/.test(frequency) ||
-    frequency === HPO_DATA_CONFIG.excludedFrequency
-  )
+/** Smoothed frequency of a positive annotation and its conservative lower bound for exclusions. */
+export interface HpoaFrequency {
+  f: number
+  fExcl: number
 }
 
-/**
- * phenotype.hpoa: disease → its positive phenotype (aspect P) terms. NOT and
- * zero-frequency / excluded rows are skipped: they record absent phenotypes.
- */
-export function parseHpoaDiseaseTerms(text: string): Map<string, Set<string>> {
-  const diseases = new Map<string, Set<string>>()
-  const cols = ['database_id', 'qualifier', 'hpo_id', 'aspect', 'frequency']
-  for (const row of tsvRows(text, cols)) {
-    if (row.aspect !== 'P' || row.qualifier === 'NOT' || isAbsent(row.frequency)) continue
-    let set = diseases.get(row.database_id)
-    if (set === undefined) diseases.set(row.database_id, (set = new Set()))
-    set.add(row.hpo_id)
+export interface HpoaDiseases {
+  labels: Map<string, string>
+  /** disease → positive phenotype (aspect P) term → frequency */
+  terms: Map<string, Map<string, HpoaFrequency>>
+  /** disease → terms it is annotated as lacking (NOT, 0 %, "Excluded", pooled 0/n) */
+  not: Map<string, Set<string>>
+}
+
+interface PairEvidence {
+  m: number
+  n: number
+  /** max over frequency-term, percentage and missing rows */
+  other: HpoaFrequency | null
+  absent: boolean
+}
+
+const { fractionPrior, exclusionQuantile, frequencyTerms, missing } = HPO_SCORING_CONFIG
+
+/** Smoothed f and Beta lower quantile for pooled m/n (m > 0), memoised: few distinct pairs. */
+const fractionCache = new Map<string, HpoaFrequency>()
+export function fractionFrequency(m: number, n: number): HpoaFrequency {
+  const key = `${m}/${n}`
+  let hit = fractionCache.get(key)
+  if (hit === undefined) {
+    const a = m + fractionPrior.a
+    const b = n - m + fractionPrior.b
+    hit = { f: a / (a + b), fExcl: betaQuantile(exclusionQuantile, a, b) }
+    fractionCache.set(key, hit)
   }
-  return diseases
+  return hit
+}
+
+/** f / f_excl of a non-fraction frequency cell; `absent` for 0 % / "Excluded", null when unparseable. */
+function otherFrequency(frequency: string): HpoaFrequency | null | 'absent' {
+  if (frequency === '' || frequency === '-') return missing
+  const term = frequencyTerms[frequency]
+  if (term !== undefined) return term
+  if (frequency === HPO_DATA_CONFIG.excludedFrequency) return 'absent'
+  const pct = /^(\d+(?:\.\d+)?)%$/.exec(frequency)
+  if (pct !== null) {
+    const f = Math.min(1, Number(pct[1]) / 100)
+    return f > 0 ? { f, fExcl: f } : 'absent'
+  }
+  return null
 }
 
 /**
- * genes_to_phenotype.txt: gene symbol → its distinct HPO terms. The file has
- * no qualifier column, so a row counts only when its disease positively
- * supports the term in phenotype.hpoa (`positive`, from parseHpoaDiseaseTerms).
+ * phenotype.hpoa, aspect P rows: per (disease, term) the smoothed frequency
+ * (spec §3). Fractions are pooled over rows (Σm, Σn) and win over coarser
+ * cells; otherwise the highest frequency-term / percentage / missing value
+ * counts. A pair with no positive evidence (NOT, 0 %, "Excluded", pooled 0/n)
+ * is a NOT annotation instead. Unknown frequency formats count as missing.
+ * Terms are mapped through `aliases` (alt id → current term) before pooling,
+ * and a row repeating another's evidence (all columns but disease_name and
+ * biocuration equal) counts once.
+ */
+export function parseHpoaDiseases(
+  text: string,
+  aliases: ReadonlyMap<string, string> = new Map()
+): HpoaDiseases {
+  const labels = new Map<string, string>()
+  const pairs = new Map<string, Map<string, PairEvidence>>()
+  const seen = new Set<string>()
+  const cols = ['database_id', 'disease_name', 'qualifier', 'hpo_id', 'aspect', 'frequency']
+  for (const row of tsvRows(text, cols)) {
+    if (row.aspect !== 'P') continue
+    const term = aliases.get(row.hpo_id) ?? row.hpo_id
+    const evidenceKey = [
+      row.database_id,
+      row.qualifier,
+      term,
+      row.reference,
+      row.evidence,
+      row.onset,
+      row.frequency,
+      row.sex,
+      row.modifier
+    ].join('\t')
+    if (seen.has(evidenceKey)) continue
+    seen.add(evidenceKey)
+    if (!labels.has(row.database_id)) labels.set(row.database_id, row.disease_name)
+    let byTerm = pairs.get(row.database_id)
+    if (byTerm === undefined) pairs.set(row.database_id, (byTerm = new Map()))
+    let ev = byTerm.get(term)
+    if (ev === undefined) byTerm.set(term, (ev = { m: 0, n: 0, other: null, absent: false }))
+    const fraction = /^(\d+)\/(\d+)$/.exec(row.frequency)
+    if (row.qualifier === 'NOT') ev.absent = true
+    else if (fraction !== null && Number(fraction[2]) > 0) {
+      ev.m += Math.min(Number(fraction[1]), Number(fraction[2]))
+      ev.n += Number(fraction[2])
+    } else {
+      const other = otherFrequency(row.frequency) ?? missing
+      if (other === 'absent') ev.absent = true
+      else if (ev.other === null || other.f > ev.other.f) ev.other = other
+    }
+  }
+  const terms = new Map<string, Map<string, HpoaFrequency>>()
+  const not = new Map<string, Set<string>>()
+  for (const [disease, byTerm] of pairs) {
+    for (const [term, ev] of byTerm) {
+      const freq = ev.m > 0 ? fractionFrequency(ev.m, ev.n) : ev.other
+      if (freq !== null) {
+        let map = terms.get(disease)
+        if (map === undefined) terms.set(disease, (map = new Map()))
+        map.set(term, freq)
+      } else if (ev.absent || ev.n > 0) {
+        let set = not.get(disease)
+        if (set === undefined) not.set(disease, (set = new Set()))
+        set.add(term)
+      }
+    }
+  }
+  return { labels, terms, not }
+}
+
+/** phenotype.hpoa: disease → its positive phenotype (aspect P) terms. */
+export function parseHpoaDiseaseTerms(text: string): Map<string, Set<string>> {
+  const { terms } = parseHpoaDiseases(text)
+  return new Map([...terms].map(([disease, map]) => [disease, new Set(map.keys())]))
+}
+
+/**
+ * genes_to_phenotype.txt: gene symbol → its distinct HPO terms (the
+ * simulation harness's exact-overlap baseline). The file has no qualifier
+ * column, so a row counts only when its disease positively supports the term
+ * in phenotype.hpoa (`positive`, from parseHpoaDiseaseTerms).
  */
 export function parseGenesToPhenotype(
   text: string,
@@ -183,6 +288,24 @@ export function parseGenesToPhenotype(
     let set = genes.get(row.gene_symbol)
     if (set === undefined) genes.set(row.gene_symbol, (set = new Set()))
     set.add(row.hpo_id)
+  }
+  return genes
+}
+
+/**
+ * genes_to_phenotype.txt: gene symbol → its diseases. Only diseases with a
+ * positive phenotype annotation in phenotype.hpoa (`positive`) count.
+ */
+export function parseGeneDiseases(
+  text: string,
+  positive: ReadonlyMap<string, unknown>
+): Map<string, Set<string>> {
+  const genes = new Map<string, Set<string>>()
+  for (const row of tsvRows(text, ['gene_symbol', 'disease_id'])) {
+    if (row.gene_symbol === '' || !positive.has(row.disease_id)) continue
+    let set = genes.get(row.gene_symbol)
+    if (set === undefined) genes.set(row.gene_symbol, (set = new Set()))
+    set.add(row.disease_id)
   }
   return genes
 }

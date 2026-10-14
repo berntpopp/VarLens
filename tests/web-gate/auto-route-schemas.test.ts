@@ -73,6 +73,7 @@ describe('web dispatcher: auto-route argument schemas', () => {
   test.each<[string, unknown[]]>([
     ['case-metadata/upsert', [1, { age: 'old' }]],
     ['case-metadata/assignHpoTerm', [1, '', 'Seizure']],
+    ['case-metadata/assignHpoTerm', [1, 'HP:0000252', 'Microcephaly', { excluded: 'yes' }]],
     ['tags/create', [{}]],
     ['tags/setVariantTags', [1, 2, Array.from({ length: 10_001 }, () => 1)]],
     ['tags/setVariantTags', [1, 2, [-1]]],
@@ -115,6 +116,8 @@ describe('web dispatcher: auto-route argument schemas', () => {
     ['case-metadata:removeCohort', [7, 3]],
     ['case-metadata:setCohorts', [7, [3, 4]]],
     ['case-metadata:assignHpoTerm', [7, 'HP:0001250', 'Seizure']],
+    ['case-metadata:assignHpoTerm', [7, 'HP:0000252', 'Microcephaly', { excluded: true }]],
+    ['case-metadata:assignHpoTerm', [7, 'HP:0001250', 'Seizure', undefined]],
     ['case-metadata:removeHpoTerm', [7, 'HP:0001250']],
     [
       'case-metadata:upsertDataInfo',

@@ -70,6 +70,7 @@ import type {
   VariantTypeKey
 } from '../../shared/types/shortlist'
 import type { FilterPreset } from '../../shared/types/filter-presets'
+import type { HpoProfileTerm } from '../../shared/types/hpo-profile'
 import type { FilterState } from '../../shared/types/filters'
 import { ColumnFilterValueError } from '../../shared/filters/column-filter-validation'
 import {
@@ -308,9 +309,12 @@ export class ShortlistService {
     }
     if (filterErrors.length > 0) throwShortlistQueryErrors(filterErrors, 'shortlist')
 
-    const hpo = compiled.usesHpoResnik
-      ? openHpoGeneScorer(this.stage1.metadata.getCaseHpoTerms(caseId).map((t) => t.hpo_id))
-      : null
+    const profile: HpoProfileTerm[] = compiled.usesHpoResnik
+      ? this.stage1.metadata
+          .getCaseHpoTerms(caseId)
+          .map((t) => ({ hpoId: t.hpo_id, excluded: t.excluded, key: t.key }))
+      : []
+    const hpo = compiled.usesHpoResnik ? openHpoGeneScorer(profile) : null
     const info = toCaseInfo(
       this.stage1.cases.getCase(caseId)?.genome_build,
       this.stage1.metadata.getCaseMetadata(caseId)?.sex,
@@ -322,7 +326,16 @@ export class ShortlistService {
       info,
       compiled,
       config,
-      limit
+      limit,
+      geneRefDbPath: () => {
+        try {
+          return getGeneReference()?.path ?? null
+        } catch (e) {
+          // The desktop loader throws when no copy exists: the CNV gene count stays 0.
+          mainLogger.warn(`Gene reference unavailable: ${toError(e).message}`, 'shortlist.service')
+          return null
+        }
+      }
     })
     if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
     return result

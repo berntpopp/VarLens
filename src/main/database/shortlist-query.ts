@@ -96,6 +96,9 @@ export function toShortlistCandidate(row: Variant, isStarred: boolean): Shortlis
     str_status: (source._str_status as ShortlistCandidate['str_status']) ?? null,
     str_disease: (source._str_disease as string | null | undefined) ?? null,
     str_alt_copies: (source._str_alt_copies as string | null | undefined) ?? null,
+    str_repeat_id: (source._str_repeat_id as string | null | undefined) ?? null,
+    str_variant_catalog_id: (source._str_variant_catalog_id as string | null | undefined) ?? null,
+    str_repeat_unit: (source._str_repeat_unit as string | null | undefined) ?? null,
     is_starred: isStarred
   }
 }

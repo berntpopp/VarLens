@@ -84,7 +84,11 @@ export const SHORTLIST_RANKING_EDITOR = {
   /** A rule reads hpo_resnik but the HPO reference data is missing (#600). */
   hpoDataMissing:
     'This ranking uses hpo_resnik, but HPO data is not installed or needs an update, so ' +
-    'hpo_resnik is empty for every variant. Install it under Gene panels → HPO data.',
+    'hpo_resnik is empty for every variant, and excluded or key phenotype terms have no ' +
+    'effect.',
+  /** Where to get HPO data: in the app, or (web) from the server operator. */
+  hpoDataInstall: 'Install it under Gene panels → HPO data.',
+  hpoDataAskAdmin: 'Ask your administrator to install HPO data (npm run build:hpo-db).',
   errors: {
     count: (n: number): string => `${n} problem${n === 1 ? '' : 's'}`,
     nameRequired: 'A name is required',

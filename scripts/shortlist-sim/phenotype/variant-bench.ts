@@ -120,7 +120,10 @@ function scoreCases(
     const out: Scored = { causal: [], background: [] }
     LEVELS.forEach((level, li) => {
       const t0 = performance.now()
-      const scorer = openHpoGeneScorer(profiles[level], HPO_DB)
+      const scorer = openHpoGeneScorer(
+        profiles[level].map((hpoId) => ({ hpoId, excluded: false, key: false })),
+        HPO_DB
+      )
       ms.push(performance.now() - t0)
       const score = (g: string): number | null => scorer?.score(g) ?? null
       const causal = score(c.gene)

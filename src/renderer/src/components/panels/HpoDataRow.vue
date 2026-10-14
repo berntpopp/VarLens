@@ -5,6 +5,9 @@
       {{ status?.installed === true ? status.version : 'not installed' }}
       <template v-if="status?.needsUpdate === true">&middot; needs update</template>
       <template v-if="message !== ''">&middot; {{ message }}</template>
+      <span v-if="sources !== ''" class="d-block" data-testid="hpo-data-sources">{{
+        sources
+      }}</span>
     </span>
     <v-btn
       v-if="canUpdate"
@@ -29,6 +32,7 @@ import { formatError } from '../../utils/ipc-result'
 import { notifyPhenotypeChanged } from '../../composables/phenotypeChanges'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import type { HpoDataStatus } from '../../../../shared/types/hpo-data'
+import { HPO_DATA_SOURCE_ATTRIBUTION } from '../../config/uiCopyConfig'
 
 const { api } = useApiService()
 const capabilities = useCapabilityStore()
@@ -36,6 +40,12 @@ const canUpdate = computed(() => capabilities.canUse('hpoDataUpdate'))
 const status = ref<HpoDataStatus | null>(null)
 const updating = ref(false)
 const message = ref('')
+// One line: each source with its attribution and installed version.
+const sources = computed(() =>
+  Object.entries(status.value?.sources ?? {})
+    .map(([key, version]) => `${HPO_DATA_SOURCE_ATTRIBUTION[key] ?? key} ${version}`)
+    .join(' · ')
+)
 
 onMounted(async () => {
   try {

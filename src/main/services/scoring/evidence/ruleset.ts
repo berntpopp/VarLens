@@ -51,7 +51,7 @@ export interface CompiledRuleset {
   /** In the fixed decision-list order, fallback last. */
   modes: CompiledMode[]
   groups: CompiledGroup[]
-  /** Some mode or rule reads `hpo_resnik`: only then is the HPO scorer loaded. */
+  /** Some mode or rule reads an `hpo_*` field: only then is the HPO scorer loaded. */
   usesHpoResnik: boolean
 }
 

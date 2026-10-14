@@ -3,7 +3,8 @@ import { GeneContextBuilder } from '../../../../../src/main/services/scoring/evi
 import {
   getCompiledRuleset,
   scoreEvidencePage,
-  toLightRow
+  toLightRow,
+  withHpoExplanations
 } from '../../../../../src/main/services/scoring/evidence/rank-page'
 import type { ShortlistCandidate } from '../../../../../src/shared/types/shortlist'
 import { makeVariant } from '../../../../utils/make-variant'
@@ -79,13 +80,81 @@ describe('rank-page', () => {
       builder.add(rows.map(toLightRow))
       return scoreEvidencePage(rows, builder.build(), getCompiledRuleset(ruleset), rank)
     }
-    const hpoResnik = (gene: string): number | null => (gene === 'FIT' ? 2.5 : 0.4)
-    const withHpo = score({ build: 'GRCh38', sex: null, hpoResnik })
+    const hpo = {
+      score: (gene: string): number | null => (gene === 'FIT' ? 2.5 : 0.4),
+      bestDisease: (): string | null => 'OMIM:1',
+      conflicts: (): number | null => 0,
+      explain: () => null
+    }
+    const withHpo = score({ build: 'GRCh38', sex: null, hpo })
     expect(withHpo.map((r) => r.rank_evidence?.some((c) => c.id === 'resnik'))).toEqual([
       true,
       false
     ])
     const without = score({ build: 'GRCh38', sex: null })
     expect(without.every((r) => r.rank_evidence?.every((c) => c.id !== 'resnik'))).toBe(true)
+  })
+
+  it('exposes hpo_best_disease / hpo_conflicts to rules and explains only the returned rows', () => {
+    const ruleset = structuredClone(EVIDENCE_RULESET)
+    ruleset.groups.push({
+      id: 'pheno',
+      label: 'Phenotype',
+      scope: 'global',
+      rules: [
+        { id: 'conflict', label: 'Conflict', when: 'hpo_conflicts:>=:1', points: -3 },
+        { id: 'dravet', label: 'Dravet', when: 'hpo_best_disease:=:"ORPHA:33069"', points: 5 }
+      ]
+    })
+    const rows = [
+      candidate({
+        id: 1,
+        chr: '1',
+        pos: 1,
+        ref: 'A',
+        alt: 'G',
+        gene_symbol: 'SCN1A',
+        gt_num: '0/1'
+      }),
+      candidate({
+        id: 2,
+        chr: '1',
+        pos: 2,
+        ref: 'A',
+        alt: 'G',
+        gene_symbol: 'KCNT1',
+        gt_num: '0/1'
+      })
+    ]
+    const explanation = {
+      score: 0.6,
+      percentile: 0.99,
+      diseaseId: 'ORPHA:33069',
+      diseaseLabel: 'Dravet syndrome',
+      matched: [],
+      conflicts: [],
+      notConflicts: []
+    }
+    const explained: string[] = []
+    const hpo = {
+      score: (): number | null => 0.6,
+      bestDisease: (gene: string): string | null => (gene === 'SCN1A' ? 'ORPHA:33069' : 'ORPHA:1'),
+      conflicts: (gene: string): number | null => (gene === 'KCNT1' ? 1 : 0),
+      explain: (gene: string) => (explained.push(gene), explanation)
+    }
+    const builder = new GeneContextBuilder({ build: 'GRCh38', sex: null, hpo })
+    builder.add(rows.map(toLightRow))
+    const rank = { weights: { impact: 1, pathogenicity: 1, rarity: 1, clinvar: 1, phenotype: 0 } }
+    const scored = scoreEvidencePage(rows, builder.build(), getCompiledRuleset(ruleset), rank)
+    expect(scored.map((r) => r.rank_evidence?.find((c) => c.group === 'pheno')?.id)).toEqual([
+      'dravet',
+      'conflict'
+    ])
+    expect(explained).toEqual([])
+    const kept = withHpoExplanations(scored.slice(0, 1), builder.build())
+    expect(kept[0].rank_hpo).toBe(explanation)
+    expect(explained).toEqual(['SCN1A'])
+    const noHpo = new GeneContextBuilder({ build: 'GRCh38', sex: null }).build()
+    expect(withHpoExplanations(scored, noHpo)[0].rank_hpo).toBeUndefined()
   })
 })

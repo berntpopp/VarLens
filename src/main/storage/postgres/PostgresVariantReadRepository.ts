@@ -283,6 +283,7 @@ export function buildPostgresVariantQueryParts(
     projections.push(
       'str_ext.repeat_id AS _str_repeat_id',
       'str_ext.repeat_unit AS _str_repeat_unit',
+      'str_ext.variant_catalog_id AS _str_variant_catalog_id',
       'str_ext.display_repeat_unit AS _str_display_ru',
       'str_ext.ref_copies AS _str_ref_copies',
       'str_ext.alt_copies AS _str_alt_copies',

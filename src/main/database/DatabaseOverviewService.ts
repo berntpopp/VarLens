@@ -46,10 +46,11 @@ export class DatabaseOverviewService extends BaseRepository {
     const tags = this.db.prepare(tagsCompiled.sql).all(...tagsCompiled.parameters) as OverviewTag[]
 
     const topPhenotypesCompiled = sql<OverviewPhenotype>`
-      SELECT hpo_id, hpo_label, COUNT(DISTINCT case_id) as case_count
+      SELECT hpo_id, MIN(hpo_label) AS hpo_label, COUNT(DISTINCT case_id) as case_count
       FROM case_hpo_terms
-      GROUP BY hpo_id, hpo_label
-      ORDER BY case_count DESC
+      WHERE excluded = 0
+      GROUP BY hpo_id
+      ORDER BY case_count DESC, hpo_id ASC
       LIMIT 25
     `.compile(this.kysely)
     const topPhenotypes = this.db

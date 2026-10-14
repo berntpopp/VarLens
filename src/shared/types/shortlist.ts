@@ -1,3 +1,4 @@
+import type { HpoExplanation } from './hpo-profile'
 /**
  * Shared shortlist types for the unified case Shortlist tab.
  *
@@ -98,6 +99,8 @@ export interface ScoredRow {
    * phase set, `possible` otherwise. A cis pair is labelled, not excluded.
    */
   rank_comphet_phase?: CompHetPhase | null
+  /** Evidence presets with case HPO terms and installed HPO data: the phenotype explanation. */
+  rank_hpo?: HpoExplanation | null
 }
 
 /**
@@ -131,6 +134,12 @@ export interface ShortlistCandidate extends Variant {
   str_disease?: string | null
   /** STR-only: alternate allele copy count expression. */
   str_alt_copies?: string | null
+  /** STR-only: Stranger/ExpansionHunter REPID (locus id, may carry an `_n` suffix). */
+  str_repeat_id?: string | null
+  /** STR-only: ExpansionHunter VARID (variant catalog id). */
+  str_variant_catalog_id?: string | null
+  /** STR-only: repeat unit (RU) of the call. */
+  str_repeat_unit?: string | null
   /** Derived from `COALESCE(cva.starred, 0)`; always present. */
   is_starred: boolean
 }

@@ -4,7 +4,8 @@ import type {
   DatabaseOverview,
   OverviewCase,
   OverviewCohortGroup,
-  OverviewPhenotype
+  OverviewPhenotype,
+  OverviewTag
 } from '../../../shared/types/database-overview'
 import { cohortVariantTotalsSql } from './cohort-gene-summary-sql'
 import { checkCohortReadFreshness } from './cohort-read-freshness'
@@ -54,7 +55,8 @@ export class PostgresOverviewRepository {
       genesWithVariantsResult,
       casesResult,
       cohortGroupsResult,
-      topPhenotypesResult
+      topPhenotypesResult,
+      tagsResult
     ] = await Promise.all([
       runNamed<Row>(this.pool as Pool, {
         name: 'overview:total_cases:v1',
@@ -100,11 +102,21 @@ export class PostgresOverviewRepository {
       ),
       this.pool.query<Row>(
         `
-          SELECT hpo_id, hpo_label, COUNT(DISTINCT case_id)::int AS case_count
+          SELECT hpo_id, MIN(hpo_label) AS hpo_label, COUNT(DISTINCT case_id)::int AS case_count
           FROM ${this.table('case_hpo_terms')}
-          GROUP BY hpo_id, hpo_label
-          ORDER BY case_count DESC
+          WHERE NOT excluded
+          GROUP BY hpo_id
+          ORDER BY case_count DESC, hpo_id ASC
           LIMIT 25
+        `
+      ),
+      this.pool.query<Row>(
+        `
+          SELECT t.id, t.name, t.color, COUNT(vt.variant_id)::int AS usage_count
+          FROM ${this.table('tags')} t
+          LEFT JOIN ${this.table('variant_tags')} vt ON t.id = vt.tag_id
+          GROUP BY t.id, t.name, t.color
+          ORDER BY t.name
         `
       )
     ])
@@ -130,7 +142,7 @@ export class PostgresOverviewRepository {
       },
       cases: casesResult.rows.map((row) => this.toOverviewCase(row)),
       cohortGroups: cohortGroupsResult.rows.map((row) => this.toOverviewCohortGroup(row)),
-      tags: [],
+      tags: tagsResult.rows.map((row) => this.toOverviewTag(row)),
       topPhenotypes: topPhenotypesResult.rows.map((row) => this.toOverviewPhenotype(row)),
       ...(warnings !== undefined ? { warnings } : {})
     }
@@ -157,6 +169,15 @@ export class PostgresOverviewRepository {
       description: row.description === null ? null : String(row.description),
       created_at: numberValue(row.created_at),
       member_count: numberValue(row.member_count)
+    }
+  }
+
+  private toOverviewTag(row: Row): OverviewTag {
+    return {
+      id: numberValue(row.id),
+      name: String(row.name),
+      color: String(row.color),
+      usage_count: numberValue(row.usage_count)
     }
   }
 

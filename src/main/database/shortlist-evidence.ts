@@ -24,7 +24,8 @@ import {
 import {
   getCompiledRuleset,
   scoreEvidencePage,
-  toLightRow
+  toLightRow,
+  withHpoExplanations
 } from '../services/scoring/evidence/rank-page'
 import type { VariantFilter } from '../../shared/types/database'
 import type {
@@ -34,7 +35,11 @@ import type {
   VariantTypeKey
 } from '../../shared/types/shortlist'
 import { DEFAULT_PANEL_GENOME_BUILD } from '../../shared/filters/panel-intervals'
-import type { HpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
+import { resolveHpoDbPath, type HpoGeneScorer } from '../services/phenotype/hpo-similarity-db'
+import { readLocusReference } from '../services/phenotype/locus-reference-db'
+import { loadGeneIntervals } from '../services/reference/gene-intervals'
+import type { LocusInputs } from '../services/scoring/evidence/locus-fields'
+import { mainLogger } from '../services/MainLogger'
 
 /**
  * Validate an evidence configuration and compile its ruleset. A broken stored
@@ -64,7 +69,7 @@ export function toCaseInfo(
   return {
     build: build ?? DEFAULT_PANEL_GENOME_BUILD,
     sex: normalized === 'male' || normalized === 'female' ? normalized : null,
-    ...(hpo != null ? { hpoResnik: (gene: string) => hpo.score(gene) } : {})
+    ...(hpo != null ? { hpo } : {})
   }
 }
 
@@ -76,6 +81,66 @@ export interface EvidencePassInput {
   compiled: CompiledRuleset
   config: ShortlistConfig
   limit: number
+  /** `gene_reference.db`, read only when the case has CNV rows (their gene intervals). */
+  geneRefDbPath: () => string | null
+}
+
+function tryLoad<T>(what: string, load: () => T | null): T | null {
+  try {
+    return load()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`${what} unavailable: ${message}; CNV/STR locus scores stay null`, 'hpo-data')
+    return null
+  }
+}
+
+/**
+ * Reference data of the CNV/STR locus fields for the case build. Both are
+ * cached per process (the locus tables are prewarmed with the HPO index); a
+ * damaged file is logged, never thrown: rankings must not break on reference data.
+ */
+export function loadLocusInputs(
+  build: string,
+  geneRefDbPath: string | null,
+  cnvGenes: ReadonlyMap<number, readonly string[]>
+): LocusInputs {
+  return {
+    reference: tryLoad('CNV/STR locus reference', () => readLocusReference(resolveHpoDbPath())),
+    genes:
+      geneRefDbPath === null
+        ? null
+        : tryLoad('Gene intervals', () => loadGeneIntervals(geneRefDbPath, build)),
+    cnvGenes
+  }
+}
+
+/** CNV row id → its distinct transcript genes, sorted in JS so both backends see one order. */
+export function groupCnvGenes(
+  rows: ReadonlyArray<{ variant_id: number | string; gene_symbol: string }>
+): Map<number, string[]> {
+  const out = new Map<number, string[]>()
+  for (const r of rows) {
+    const id = Number(r.variant_id)
+    const list = out.get(id)
+    if (list === undefined) out.set(id, [r.gene_symbol])
+    else list.push(r.gene_symbol)
+  }
+  for (const list of out.values()) list.sort()
+  return out
+}
+
+/** One batched read of the CSQ genes of the case's CNV rows (CNV/STR spec §6.1). */
+function readCnvGenes(db: EvidencePassInput['source']['db'], ids: readonly number[]) {
+  if (ids.length === 0) return new Map<number, string[]>()
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT variant_id, gene_symbol FROM variant_transcripts
+       WHERE variant_id IN (SELECT value FROM json_each(?))
+         AND gene_symbol IS NOT NULL AND gene_symbol <> ''`
+    )
+    .all(JSON.stringify(ids)) as Array<{ variant_id: number; gene_symbol: string }>
+  return groupCnvGenes(rows)
 }
 
 /**
@@ -109,7 +174,11 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
     )
     if (queryErrors.length > 0) return { kept: [], totalCandidates, queryErrors }
 
-    const ctx = builder.build()
+    const ctx = builder.build(
+      builder.needsLocus
+        ? loadLocusInputs(input.info.build, input.geneRefDbPath(), readCnvGenes(db, builder.cnvIds))
+        : undefined
+    )
     let kept: ScoredCandidate[] = []
     const scorePage = (page: ShortlistCandidate[]): void => {
       const scored = scoreEvidencePage(page, ctx, input.compiled, config.rankConfig)
@@ -117,12 +186,16 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
     }
     if (buffered !== null) {
       for (const page of buffered) scorePage(page)
-      return { kept, totalCandidates, queryErrors: [] }
+      return { kept: withHpoExplanations(kept, ctx), totalCandidates, queryErrors: [] }
     }
     const pass2Errors = eachType(filters, (filter) =>
       forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, scorePage)
     )
-    return { kept, totalCandidates, queryErrors: pass2Errors }
+    return {
+      kept: withHpoExplanations(kept, ctx),
+      totalCandidates,
+      queryErrors: pass2Errors
+    }
   } finally {
     if (startedTx && db.inTransaction) {
       db.exec('COMMIT')

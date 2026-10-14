@@ -205,6 +205,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0040',
     name: 'allele_trim',
     fileName: '0040_allele_trim.sql'
+  },
+  {
+    version: '0041',
+    name: 'case_hpo_term_flags',
+    fileName: '0041_case_hpo_term_flags.sql'
   }
 ]
 

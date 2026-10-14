@@ -26,8 +26,20 @@ import type {
 } from '../../../shared/types/shortlist'
 import { mergeTopScored, scoreRow } from '../../services/scoring'
 import { GeneContextBuilder } from '../../services/scoring/evidence'
-import { scoreEvidencePage, toLightRow } from '../../services/scoring/evidence/rank-page'
-import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
+import { isLocusRow } from '../../services/scoring/evidence/locus-fields'
+import {
+  scoreEvidencePage,
+  toLightRow,
+  withHpoExplanations
+} from '../../services/scoring/evidence/rank-page'
+import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
+import {
+  compileEvidenceConfig,
+  groupCnvGenes,
+  loadLocusInputs,
+  toCaseInfo
+} from '../../database/shortlist-evidence'
+import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
 import type { PostgresFilterPresetsRepository } from './PostgresFilterPresetsRepository'
@@ -40,6 +52,8 @@ interface PostgresShortlistServiceOptions {
   schema: string
   filterPresets: Pick<PostgresFilterPresetsRepository, 'getPreset'>
   rows: Pick<PostgresExportRepository, 'streamVariantRows' | 'variantRowsQuery'>
+  /** `gene_reference.db` for CNV gene intervals; defaults to the bundled copy. */
+  geneRefDbPath?: () => string | undefined
 }
 
 type Queryable = Pick<PoolClient, 'query'>
@@ -166,25 +180,33 @@ export class PostgresShortlistService {
     if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     return this.inSnapshot(async (client) => {
-      const hpo = compiled.usesHpoResnik
-        ? openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
-        : null
+      const profile = compiled.usesHpoResnik ? await this.caseHpoProfile(client, caseId) : []
+      const hpo = compiled.usesHpoResnik ? openHpoGeneScorer(profile) : null
       const info = await this.caseInfo(client, caseId, hpo)
       const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
       const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
       let totalCandidates = 0
       await this.forEachPage(client, queries, async (rows) => {
         totalCandidates += rows.length
-        builder.add(rows.map(toLightRow))
+        // Raw rows carry the STR fields as `_str_*`: flatten locus rows so pass 1 sees their band.
+        builder.add(rows.map((r) => toLightRow(isLocusRow(r) ? toShortlistCandidate(r, false) : r)))
       })
-      const ctx = builder.build()
+      const ctx = builder.build(
+        builder.needsLocus
+          ? loadLocusInputs(
+              info.build,
+              (this.options.geneRefDbPath ?? tryResolveGeneRefDbPath)() ?? null,
+              await this.cnvGenes(client, builder.cnvIds)
+            )
+          : undefined
+      )
       let kept: ScoredCandidate[] = []
       await this.forEachPage(client, queries, async (rows) => {
         const candidates = this.hydrateCandidates(rows, starredVariantIds)
         const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
         kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
       })
-      return { kept, totalCandidates }
+      return { kept: withHpoExplanations(kept, ctx), totalCandidates }
     })
   }
 
@@ -234,12 +256,24 @@ export class PostgresShortlistService {
     }
   }
 
-  private async caseHpoTerms(client: Queryable, caseId: number): Promise<string[]> {
-    const result = await client.query<{ hpo_id: string }>(
-      `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1 ORDER BY hpo_id`,
+  /** One batched read of the CSQ genes of the case's CNV rows (CNV/STR spec §6.1). */
+  private async cnvGenes(client: Queryable, ids: readonly number[]) {
+    if (ids.length === 0) return new Map<number, string[]>()
+    const result = await client.query<{ variant_id: string; gene_symbol: string }>(
+      `SELECT DISTINCT variant_id, gene_symbol FROM ${this.schemaName}."variant_transcripts"
+        WHERE variant_id = ANY($1::bigint[]) AND gene_symbol IS NOT NULL AND gene_symbol <> ''`,
+      [ids]
+    )
+    return groupCnvGenes(result.rows)
+  }
+
+  private async caseHpoProfile(client: Queryable, caseId: number): Promise<HpoProfileTerm[]> {
+    const result = await client.query<HpoProfileTerm>(
+      `SELECT hpo_id AS "hpoId", excluded, "key" FROM ${this.schemaName}."case_hpo_terms"
+        WHERE case_id = $1 ORDER BY hpo_id`,
       [caseId]
     )
-    return result.rows.map((r) => r.hpo_id)
+    return result.rows
   }
 
   private async caseInfo(
