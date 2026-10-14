@@ -422,8 +422,39 @@ function percentile(sorted: Float64Array, score: number): number {
 }
 
 /** Best disease, matched pairs and conflicts of gene g. */
-export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation {
-  const d = cs.geneBest[g]
+export const explainGene = (ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation =>
+  explainDisease(ix, cs, cs.geneBest[g], cs.geneScore[g])
+
+/** S(d) on the gene scale [0, 1]: z scores are bounded like a one-disease gene's. */
+export const diseaseScore01 = (cs: CaseScores, d: number): number =>
+  cs.options.correction === 'z' ? boundedZ(cs.diseaseScore[d]) : cs.diseaseScore[d]
+
+/**
+ * Šidák size correction on the case's own gene distribution (CNV/STR spec
+ * §4.1): the score the best of n random genes of this case reaches with the
+ * same tail probability as `score`. `score` should be one of the case's gene
+ * scores; sidak(cs, s, 1) === s and the result never exceeds `score`.
+ */
+export function sidak(cs: CaseScores, score: number, n: number): number {
+  const G = cs.sorted.length
+  if (G === 0 || n < 1) return score
+  const q = 1 - percentile(cs.sorted, score)
+  const p = 1 - Math.pow(1 - q, n)
+  // 1e-9 absorbs float error in p·G so an exact rank is not pushed one past.
+  const rank = Math.min(G, Math.max(1, Math.ceil(p * G - 1e-9)))
+  return Math.min(score, cs.sorted[G - rank])
+}
+
+/**
+ * Matched pairs and conflicts of disease d (explainGene's body; STR and region
+ * routes call it directly). The percentile is against the case's gene scores.
+ */
+export function explainDisease(
+  ix: PhenotypeIndex,
+  cs: CaseScores,
+  d: number,
+  score: number = diseaseScore01(cs, d)
+): HpoExplanation {
   const s = scratchFor(ix)
   if (s.owner !== cs) fillLanes(ix, s, cs.profile, cs)
   const { present, key, excluded } = cs.profile
@@ -495,8 +526,8 @@ export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoE
     }
   }
   return {
-    score: cs.geneScore[g],
-    percentile: percentile(cs.sorted, cs.geneScore[g]),
+    score,
+    percentile: percentile(cs.sorted, score),
     diseaseId: ix.diseaseIds[d],
     diseaseLabel: ix.diseaseLabels[d],
     matched,

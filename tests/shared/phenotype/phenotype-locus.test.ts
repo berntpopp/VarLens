@@ -3,7 +3,12 @@ import {
   buildPhenotypeIndex,
   type PhenotypeIndexInput
 } from '../../../src/shared/phenotype/phenotype-index'
-import { explainGene, scoreCase } from '../../../src/shared/phenotype/phenotype-score'
+import {
+  explainDisease,
+  explainGene,
+  scoreCase,
+  sidak
+} from '../../../src/shared/phenotype/phenotype-score'
 
 // Seeded random index (CNV/STR spec §4.1, §6.1): many genes, so ties and ranks are exercised.
 function fixture(): { ix: ReturnType<typeof buildPhenotypeIndex>; input: PhenotypeIndexInput } {
@@ -50,5 +55,28 @@ describe('locus scoring contracts', () => {
     // One JSON line per gene keeps the snapshot readable.
     const lines = [...ix.genes.values()].map((g) => JSON.stringify(explainGene(ix, cs, g)))
     expect(lines).toMatchSnapshot()
+  })
+
+  it('sidak(s, 1) === s for every gene, and never rises with n', () => {
+    for (const g of ix.genes.values()) {
+      const s = cs.geneScore[g]
+      expect(sidak(cs, s, 1)).toBe(s)
+      let last = s
+      for (const n of [2, 5, 27, 500]) {
+        const v = sidak(cs, s, n)
+        expect(v).toBeLessThanOrEqual(last)
+        last = v
+      }
+    }
+    expect(sidak(cs, cs.sorted[cs.sorted.length - 1], 1e6)).toBe(cs.sorted[0])
+  })
+
+  it('explainDisease explains a gene-less disease and equals explainGene for a best disease', () => {
+    const d = ix.diseaseIds.indexOf('D75')
+    const e = explainDisease(ix, cs, d)
+    expect(e).toMatchObject({ diseaseId: 'D75', score: cs.diseaseScore[d] })
+    expect(e.percentile).toBeGreaterThanOrEqual(0)
+    const g = ix.genes.get('G0')!
+    expect(explainDisease(ix, cs, cs.geneBest[g])).toEqual(explainGene(ix, cs, g))
   })
 })

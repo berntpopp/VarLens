@@ -27,8 +27,11 @@ import { buildPhenotypeIndex, type PhenotypeIndex } from '../../../shared/phenot
 import { computeDiseaseNull } from '../../../shared/phenotype/phenotype-null'
 import { nullParams } from '../../../shared/phenotype/phenotype-calibration'
 import {
+  diseaseScore01,
+  explainDisease,
   explainGene,
   prepareProfile,
+  sidak,
   scoreProfile,
   type CaseProfile,
   type CaseScores
@@ -247,6 +250,23 @@ export interface HpoGeneScorer {
   conflicts(gene: string): number | null
   /** Lazy explanation, for displayed rows only. */
   explain(gene: string): HpoExplanation | null
+  /** Max S(d) over the listed disease ids that are indexed; null if none is (CNV/STR spec §6.1). */
+  scoreDiseases(ids: readonly string[]): { score: number; disease: string } | null
+  /** Explanation of one disease (STR, region route); percentile against the gene distribution. */
+  explainDisease(id: string): HpoExplanation | null
+  /** Šidák mapping of a gene score onto the best of n genes of this case; sidak(s, 1) === s. */
+  sidak(score: number, n: number): number
+}
+
+/** Disease id → index position, built once per loaded index. */
+const diseaseIndexes = new WeakMap<PhenotypeIndex, ReadonlyMap<string, number>>()
+function diseaseIndexOf(index: PhenotypeIndex): ReadonlyMap<string, number> {
+  let map = diseaseIndexes.get(index)
+  if (map === undefined) {
+    map = new Map(index.diseaseIds.map((id, d) => [id, d]))
+    diseaseIndexes.set(index, map)
+  }
+  return map
 }
 
 /** Phenotype index of one DB file, kept per process until the file changes. */
@@ -403,7 +423,23 @@ export function openHpoGeneScorer(
         let e = explained.get(g)
         if (e === undefined) explained.set(g, (e = explainGene(index, scores, g)))
         return e
-      }
+      },
+      scoreDiseases(ids) {
+        const diseases = diseaseIndexOf(index)
+        let best: { score: number; disease: string } | null = null
+        for (const id of ids) {
+          const d = diseases.get(id)
+          if (d === undefined) continue
+          const score = diseaseScore01(scores, d)
+          if (best === null || score > best.score) best = { score, disease: id }
+        }
+        return best
+      },
+      explainDisease(id) {
+        const d = diseaseIndexOf(index).get(id)
+        return d === undefined ? null : explainDisease(index, scores, d)
+      },
+      sidak: (score, n) => sidak(scores, score, n)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
