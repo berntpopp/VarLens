@@ -63,7 +63,9 @@
 
         <!-- Cohorts row -->
         <div class="d-flex align-start mb-3">
-          <span class="text-body-medium text-muted mr-2 mt-2" style="min-width: 60px">Cohorts</span>
+          <span class="text-body-medium text-muted mr-2 mt-2 flex-shrink-0" style="min-width: 60px"
+            >Cohorts</span
+          >
           <div class="flex-grow-1">
             <CohortCombobox
               :model-value="currentCohorts"
@@ -76,7 +78,7 @@
 
         <!-- HPO Terms row -->
         <div class="d-flex align-start">
-          <span class="text-body-medium text-muted mr-2 mt-2" style="min-width: 60px"
+          <span class="text-body-medium text-muted mr-2 mt-2 flex-shrink-0" style="min-width: 60px"
             >Phenotypes</span
           >
           <div class="flex-grow-1">
