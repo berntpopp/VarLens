@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   informationContent,
+  fractionFrequency,
+  parseGeneDiseases,
   parseGenesToPhenotype,
   parseHpJson,
+  parseHpoaDiseases,
   parseHpoaDiseaseTerms,
   phenotypeClosure
 } from '../../../src/shared/phenotype/hpo-sources'
@@ -12,6 +15,7 @@ import {
   type HpoIndexInput
 } from '../../../src/shared/phenotype/resnik'
 import { GENES_TO_PHENOTYPE, HP_JSON, PHENOTYPE_HPOA, T } from './hpo-fixture'
+import { HPO_SCORING_CONFIG } from '../../../src/shared/config/hpo-scoring.config'
 
 const ontology = parseHpJson(HP_JSON)
 const ancestors = phenotypeClosure(ontology)
@@ -133,13 +137,85 @@ describe('HPO source parsing', () => {
     )
   })
 
+  it('links a gene only to diseases with a positive phenotype annotation', () => {
+    expect(parseGeneDiseases(GENES_TO_PHENOTYPE, diseases)).toEqual(
+      new Map([
+        ['GENE1', new Set(['OMIM:2'])],
+        ['GENE2', new Set(['OMIM:4', 'OMIM:3'])],
+        ['GENE3', new Set(['OMIM:2'])]
+      ])
+    )
+  })
+
+  it('keeps per-pair frequencies, NOT annotations and disease labels', () => {
+    const parsed = parseHpoaDiseases(PHENOTYPE_HPOA)
+    expect(parsed.terms.get('OMIM:1')?.get(T.C)).toEqual(fractionFrequency(3, 4))
+    expect(parsed.terms.get('OMIM:2')?.get(T.D)).toEqual(HPO_SCORING_CONFIG.missing)
+    expect(parsed.not).toEqual(
+      new Map([
+        ['OMIM:1', new Set([T.X])],
+        ['OMIM:2', new Set([T.X])],
+        ['OMIM:3', new Set([T.X])],
+        ['OMIM:4', new Set([T.D])],
+        ['OMIM:5', new Set([T.C])]
+      ])
+    )
+    expect(parsed.labels.get('OMIM:1')).toBe('name')
+  })
+
+  it('pools fractions, prefers them over categories and maps frequency terms and percentages', () => {
+    const header =
+      'database_id\tdisease_name\tqualifier\thpo_id\treference\tevidence\tonset\tfrequency\tsex\tmodifier\taspect\tbiocuration'
+    const row = (t: string, freq: string, q = ''): string =>
+      ['D:1', 'n', q, t, 'PMID:1', 'PCS', '', freq, '', '', 'P', 'x'].join('\t')
+    const parsed = parseHpoaDiseases(
+      [
+        header,
+        row(T.C, '1/4'),
+        row(T.C, '2/6'),
+        row(T.C, 'HP:0040281'),
+        row(T.D, 'HP:0040283'),
+        row(T.D, 'HP:0040282'),
+        row(T.E, '25%'),
+        row(T.X, '0/3'),
+        row(T.X, 'HP:0040284'),
+        row(T.A, '-'),
+        row(T.B, '0/5'),
+        row(T.F, '1/1', 'NOT'),
+        row(T.F, '2/2')
+      ].join('\n')
+    ).terms.get('D:1')!
+    expect(parsed.get(T.C)).toEqual(fractionFrequency(3, 10))
+    expect(parsed.get(T.D)).toEqual({ f: 0.545, fExcl: 0.3 })
+    expect(parsed.get(T.E)).toEqual({ f: 0.25, fExcl: 0.25 })
+    expect(parsed.get(T.X)).toEqual({ f: 0.025, fExcl: 0.01 })
+    expect(parsed.get(T.A)).toEqual(HPO_SCORING_CONFIG.missing)
+    expect(parsed.has(T.B)).toBe(false)
+    expect(parsed.get(T.F)).toEqual(fractionFrequency(2, 2))
+  })
+
+  it('smooths fractions and takes the Beta 10th percentile as f_excl (scipy reference values)', () => {
+    // scipy.stats.beta.ppf(0.1, m + 0.8, n − m + 1.2)
+    const cases: Array<[number, number, number, number]> = [
+      [1, 1, 0.6, 0.24527408783017812],
+      [1, 9, 0.16363636363636364, 0.043965781921507234],
+      [49, 50, 0.9576923076923076, 0.9203147603860767],
+      [10, 10, 0.9, 0.7847280626238927],
+      [100, 200, 0.499009900990099, 0.45396330875877483]
+    ]
+    for (const [m, n, f, fExcl] of cases) {
+      expect(fractionFrequency(m, n).f).toBeCloseTo(f, 12)
+      expect(fractionFrequency(m, n).fExcl).toBeCloseTo(fExcl, 9)
+    }
+  })
+
   it('refuses an is_a cycle in the index', () => {
     const input = toyInput([])
     expect(() => buildHpoIndex({ ...input, edges: [...input.edges, [T.P, T.C]] })).toThrow(/cycle/)
   })
 
   it('rejects a file without the required columns', () => {
-    expect(() => parseGenesToPhenotype('a\tb\n1\t2', diseases)).toThrow(/Missing columns/)
+    expect(() => parseGeneDiseases('a\tb\n1\t2', diseases)).toThrow(/Missing columns/)
   })
 })
 

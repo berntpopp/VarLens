@@ -1,0 +1,271 @@
+import { describe, expect, it } from 'vitest'
+import { HPO_SCORING_CONFIG as C } from '../../../src/shared/config/hpo-scoring.config'
+import {
+  buildPhenotypeIndex,
+  type PhenotypeIndexInput
+} from '../../../src/shared/phenotype/phenotype-index'
+import { explainGene, scoreCase } from '../../../src/shared/phenotype/phenotype-score'
+import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
+import { naiveScores } from './naive-phenotype-score'
+
+const ROOT = 'HP:0000118'
+const P = (hpoId: string, key = false): HpoProfileTerm => ({ hpoId, excluded: false, key })
+const X = (hpoId: string): HpoProfileTerm => ({ hpoId, excluded: true, key: false })
+
+/**
+ * Toy ontology (IC exact in float32): ROOT ⊃ HEAD(1) ⊃ SIZE(2) ⊃ {MICRO(4), MACRO(4)};
+ * ROOT ⊃ NEURO(1) ⊃ SEIZ(2) ⊃ FEB(4); ROOT ⊃ EYE(1) ⊃ CAT(4); NEURO ⊃ HYPO(3);
+ * HEAD ⊃ FACE(2) (second head term for the per-system max).
+ */
+const terms = {
+  HEAD: 1,
+  SIZE: 2,
+  MICRO: 4,
+  MACRO: 4,
+  NEURO: 1,
+  SEIZ: 2,
+  FEB: 4,
+  EYE: 1,
+  CAT: 4,
+  HYPO: 3,
+  FACE: 2
+}
+const edges: Array<[string, string]> = [
+  ['HEAD', ROOT],
+  ['SIZE', 'HEAD'],
+  ['MICRO', 'SIZE'],
+  ['MACRO', 'SIZE'],
+  ['NEURO', ROOT],
+  ['SEIZ', 'NEURO'],
+  ['FEB', 'SEIZ'],
+  ['EYE', ROOT],
+  ['CAT', 'EYE'],
+  ['HYPO', 'NEURO'],
+  ['FACE', 'HEAD']
+]
+
+function toy(
+  diseases: Record<string, Array<[string, number, number]>>,
+  nots: Array<[string, string]> = []
+): PhenotypeIndexInput {
+  return {
+    terms: [
+      { id: ROOT, ic: 0, label: 'root' },
+      ...Object.entries(terms).map(([id, ic]) => ({ id, ic, label: `label ${id}` }))
+    ],
+    edges,
+    aliases: [['ALIAS_FEB', 'FEB']],
+    diseases: Object.keys(diseases).map((d) => [d, `name ${d}`] as const),
+    diseaseTerms: Object.entries(diseases).flatMap(([d, list]) =>
+      list.map(([t, f, fx]) => [d, t, f, fx] as const)
+    ),
+    diseaseNot: nots,
+    geneDiseases: Object.keys(diseases).map((d) => [`G_${d}`, d] as const)
+  }
+}
+
+/** Scores of every gene (G_<disease>) for a profile. */
+function scores(input: PhenotypeIndexInput, profile: HpoProfileTerm[]): Record<string, number> {
+  const ix = buildPhenotypeIndex(input)
+  const cs = scoreCase(ix, profile)!
+  return Object.fromEntries([...ix.hpo.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
+}
+
+describe('phenotype score v2: hand-computed toy cases', () => {
+  it('scores a 1-term exact match with f₀ shrinkage on the reverse half', () => {
+    // fwd = 4·1/4 = 1 (f = 1 → factor 1); rev = 1·(4/4)/(f₀ + 1) = 0.5.
+    const s = scores(toy({ d: [['FEB', 1, 0.95]] }), [P('FEB')])
+    expect(s.d).toBeCloseTo(C.gamma + (1 - C.gamma) * (1 / (C.f0 + 1)), 12)
+  })
+
+  it('penalises only descendants of an excluded term, never siblings', () => {
+    const input = toy({ micro: [['MICRO', 0.9, 0.8]], macro: [['MACRO', 0.9, 0.8]] })
+    const plain = scores(input, [P('SEIZ')])
+    const excl = scores(input, [P('SEIZ'), X('MICRO')])
+    expect(excl.macro).toBeCloseTo(plain.macro, 12)
+    expect(excl.micro).toBeCloseTo(plain.micro * Math.exp(-C.lambda * Math.fround(0.8)), 12)
+  })
+
+  it('drops an excluded ancestor of a present term and canonicalises aliases', () => {
+    const input = toy({ d: [['FEB', 0.9, 0.8]] })
+    const plain = scores(input, [P('FEB')])
+    expect(scores(input, [P('ALIAS_FEB'), X('SEIZ'), X('FEB')]).d).toBeCloseTo(plain.d, 12)
+  })
+
+  it('never lowers a disease matching a broad key term', () => {
+    const input = toy({ d: [['SEIZ', 0.9, 0.8]] })
+    const plain = scores(input, [P('SEIZ'), P('CAT')])
+    const keyed = scores(input, [P('SEIZ', true), P('CAT')])
+    expect(keyed.d).toBeGreaterThan(plain.d)
+  })
+
+  it('prunes a present ancestor, handing its key weight to the descendant', () => {
+    const input = toy({ d: [['FEB', 0.9, 0.8]], e: [['CAT', 0.9, 0.8]] })
+    expect(scores(input, [P('SEIZ', true), P('FEB'), P('CAT')])).toEqual(
+      scores(input, [P('FEB', true), P('CAT')])
+    )
+  })
+
+  it('adds 1 to the load for a NOT annotation that is an ancestor-or-self of a present term', () => {
+    const input = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'SEIZ']])
+    const unaffected = toy({ d: [['HYPO', 0.9, 0.8]] })
+    const ratio =
+      scores(input, [P('FEB'), P('HYPO')]).d / scores(unaffected, [P('FEB'), P('HYPO')]).d
+    expect(ratio).toBeCloseTo(Math.exp(-C.lambda), 12)
+    // A NOT on a descendant of the present term does not contradict it.
+    const below = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'FEB']])
+    expect(scores(below, [P('SEIZ')]).d).toBeCloseTo(scores(unaffected, [P('SEIZ')]).d, 12)
+  })
+
+  it('takes the per-organ-system max, sums systems, and caps the load', () => {
+    const d = {
+      d: [
+        ['MICRO', 0.9, 0.8],
+        ['FACE', 0.6, 0.5],
+        ['FEB', 0.9, 0.95],
+        ['CAT', 0.9, 0.95]
+      ]
+    }
+    const input = toy(d as Record<string, Array<[string, number, number]>>)
+    const base = scores(input, [P('HYPO')]).d
+    // Two head exclusions: max(0.8, 0.5) = 0.8, not 1.3.
+    expect(scores(input, [P('HYPO'), X('MICRO'), X('FACE')]).d / base).toBeCloseTo(
+      Math.exp(-C.lambda * Math.fround(0.8)),
+      12
+    )
+    // Head 0.8 + neuro 0.95 + eye 0.95 = 2.7 → capped at E_max.
+    expect(scores(input, [P('HYPO'), X('MICRO'), X('FEB'), X('CAT')]).d / base).toBeCloseTo(
+      Math.exp(-C.lambda * C.eMax),
+      12
+    )
+  })
+
+  it('is inactive without a present term', () => {
+    const ix = buildPhenotypeIndex(toy({ d: [['FEB', 0.9, 0.8]] }))
+    expect(scoreCase(ix, [X('FEB')])).toBeNull()
+    expect(scoreCase(ix, [P('UNKNOWN'), P(ROOT)])).toBeNull()
+  })
+
+  it('explains the best disease with matched pairs, key flags, conflicts and the percentile', () => {
+    const input = toy({
+      a: [
+        ['FEB', 0.9, 0.8],
+        ['MICRO', 0.9, 0.8]
+      ],
+      b: [['CAT', 0.5, 0.3]]
+    })
+    input.geneDiseases = [
+      ['G1', 'a'],
+      ['G1', 'b'],
+      ['G2', 'b']
+    ]
+    const ix = buildPhenotypeIndex(input)
+    const cs = scoreCase(ix, [P('FEB', true), P('HYPO'), X('SIZE')])!
+    const e = explainGene(ix, cs, ix.hpo.genes.get('G1')!)!
+    expect(e).toMatchObject({ diseaseId: 'a', diseaseLabel: 'name a', percentile: 0.5 })
+    expect(e.matched).toEqual([
+      {
+        patientTerm: 'FEB',
+        patientLabel: 'label FEB',
+        diseaseTerm: 'FEB',
+        diseaseLabel: 'label FEB',
+        key: true,
+        frequency: Math.fround(0.9)
+      }
+    ])
+    expect(e.conflicts).toEqual([
+      {
+        excludedTerm: 'SIZE',
+        excludedLabel: 'label SIZE',
+        diseaseTerm: 'MICRO',
+        diseaseLabel: 'label MICRO',
+        frequency: Math.fround(0.8)
+      }
+    ])
+    expect(cs.geneConflicts[ix.hpo.genes.get('G1')!]).toBe(1)
+  })
+})
+
+describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
+  it('matches score, best disease and explanation sets on random DAGs', () => {
+    let seed = 0xc0ffee
+    const rand = (): number => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x80000000
+    const int = (n: number): number => Math.floor(rand() * n)
+    const pick = <V>(xs: readonly V[]): V => xs[int(xs.length)]
+    let compared = 0
+    for (let round = 0; round < 150; round++) {
+      const n = 4 + int(40)
+      const ids = [ROOT, ...Array.from({ length: n }, (_, i) => `T${i}`)]
+      const edges: Array<[string, string]> = []
+      for (let i = 1; i < ids.length; i++) {
+        // Parents have lower indices: acyclic, with chains, diamonds and multi-system terms.
+        const k = rand() < 0.25 ? 1 + int(3) : 1
+        for (const p of new Set(Array.from({ length: k }, () => int(i))))
+          edges.push([ids[i], ids[p]])
+      }
+      const monotone = rand() < 0.5
+      const depth = new Map<string, number>([[ROOT, 0]])
+      for (const [c, p] of edges) depth.set(c, Math.max(depth.get(c) ?? 0, depth.get(p)! + 1))
+      const input: PhenotypeIndexInput = {
+        terms: ids.map((id) => ({
+          id,
+          ic: id === ROOT ? 0 : rand() < 0.1 ? 0 : monotone ? depth.get(id)! + rand() : rand() * 5,
+          label: id
+        })),
+        edges,
+        aliases: [['ALIAS', pick(ids.slice(1))]],
+        diseases: [],
+        diseaseTerms: [],
+        diseaseNot: [],
+        geneDiseases: []
+      }
+      const diseases = Array.from({ length: 2 + int(8) }, (_, d) => `D${d}`)
+      const freqs = [0.025, 0.17, 0.35, 0.545, 0.6, 0.895, 1]
+      for (const d of diseases) {
+        input.diseases.push([d, d])
+        const own = new Set(Array.from({ length: 1 + int(6) }, () => pick(ids.slice(1))))
+        for (const t of own) {
+          const f = pick(freqs)
+          input.diseaseTerms.push([d, t, f, rand() < 0.2 ? 0 : f * rand()])
+        }
+        if (rand() < 0.3) input.diseaseNot.push([d, pick(ids)])
+      }
+      for (let g = 0; g < 6; g++) {
+        for (const d of new Set(Array.from({ length: 1 + int(3) }, () => pick(diseases)))) {
+          input.geneDiseases.push([`G${g}`, d])
+        }
+      }
+      const profile = Array.from({ length: 1 + int(8) }, () => ({
+        hpoId: rand() < 0.1 ? pick(['ALIAS', 'UNKNOWN', ROOT]) : pick(ids),
+        excluded: rand() < 0.35,
+        key: rand() < 0.3
+      }))
+      const ix = buildPhenotypeIndex(input)
+      const fast = scoreCase(ix, profile)
+      const want = naiveScores(input, profile)
+      if (want === null) {
+        expect(fast).toBeNull()
+        continue
+      }
+      expect(fast).not.toBeNull()
+      expect(ix.hpo.genes.size).toBe(want.size)
+      for (const [gene, g] of ix.hpo.genes) {
+        const ref = want.get(gene)!
+        expect(Math.abs(fast!.geneScore[g] - ref.score)).toBeLessThan(1e-12)
+        const ranked = [...ref.diseases].sort((a, b) => b.score - a.score)
+        if (ranked.length > 1 && ranked[0].score - ranked[1].score < 1e-9) continue
+        const e = explainGene(ix, fast!, g)!
+        expect(e.diseaseId).toBe(ref.best)
+        expect(
+          new Set(e.matched.map((m) => `${m.patientTerm}>${m.diseaseTerm}${m.key ? '*' : ''}`))
+        ).toEqual(ref.matched)
+        expect(new Set(e.conflicts.map((c) => `${c.excludedTerm}>${c.diseaseTerm}`))).toEqual(
+          ref.conflicts
+        )
+        expect(fast!.geneConflicts[g]).toBe(ref.conflicts.size)
+        compared++
+      }
+    }
+    expect(compared).toBeGreaterThan(300)
+  })
+})

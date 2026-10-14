@@ -26,7 +26,12 @@ import type {
 } from '../../../shared/types/shortlist'
 import { mergeTopScored, scoreRow } from '../../services/scoring'
 import { GeneContextBuilder } from '../../services/scoring/evidence'
-import { scoreEvidencePage, toLightRow } from '../../services/scoring/evidence/rank-page'
+import {
+  scoreEvidencePage,
+  toLightRow,
+  withHpoExplanations
+} from '../../services/scoring/evidence/rank-page'
+import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
 import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
@@ -168,9 +173,8 @@ export class PostgresShortlistService {
 
     return this.inSnapshot(async (client) => {
       const profile = compiled.usesHpoResnik ? await this.caseHpoProfile(client, caseId) : []
-      // hpo2: scorer lane switches to HpoProfileTerm[]
       const hpo = compiled.usesHpoResnik
-        ? openHpoGeneScorer(profile.filter((t) => !t.excluded).map((t) => t.hpoId))
+        ? openHpoGeneScorer(profile)
         : null
       const info = await this.caseInfo(client, caseId, hpo)
       const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
@@ -187,7 +191,7 @@ export class PostgresShortlistService {
         const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
         kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
       })
-      return { kept, totalCandidates }
+      return { kept: withHpoExplanations(kept, info), totalCandidates }
     })
   }
 

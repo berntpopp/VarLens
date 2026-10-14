@@ -10,14 +10,24 @@ import Database from 'better-sqlite3-multiple-ciphers'
 import { existsSync, rmSync, statSync } from 'fs'
 import { HPO_DATA_CONFIG } from '../../../shared/config/hpo-data.config'
 import type { HpoDataStatus } from '../../../shared/types/hpo-data'
+import { HPO_SCORING_CONFIG } from '../../../shared/config/hpo-scoring.config'
+import type { HpoExplanation, HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import {
   informationContent,
-  parseGenesToPhenotype,
+  parseGeneDiseases,
   parseHpJson,
-  parseHpoaDiseaseTerms,
-  phenotypeClosure
+  parseHpoaDiseases,
+  phenotypeClosure,
+  type HpoaFrequency
 } from '../../../shared/phenotype/hpo-sources'
-import { buildHpoIndex, scoreAllGenes, type HpoIndex } from '../../../shared/phenotype/resnik'
+import { buildPhenotypeIndex, type PhenotypeIndex } from '../../../shared/phenotype/phenotype-index'
+import {
+  explainGene,
+  prepareProfile,
+  scoreProfile,
+  type CaseProfile,
+  type CaseScores
+} from '../../../shared/phenotype/phenotype-score'
 import { mainLogger } from '../MainLogger'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
@@ -45,9 +55,28 @@ export function buildHpoSimilarityDb(
 ): void {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
-  const diseases = parseHpoaDiseaseTerms(sources.annotations)
-  const ic = informationContent(diseases, ancestors)
-  const genes = parseGenesToPhenotype(sources.genes, diseases)
+  const hpoa = parseHpoaDiseases(sources.annotations)
+  const positive = new Map([...hpoa.terms].map(([d, map]) => [d, new Set(map.keys())]))
+  const ic = informationContent(positive, ancestors)
+  const genes = parseGeneDiseases(sources.genes, hpoa.terms)
+  const canonical = (raw: string): string | null => {
+    const term = ontology.aliases.get(raw) ?? raw
+    return ancestors.has(term) ? term : null
+  }
+  // Gene-linked diseases only; aliases merged onto the current term (higher frequency wins).
+  const linked = new Map<string, Map<string, HpoaFrequency>>()
+  for (const diseases of genes.values()) {
+    for (const d of diseases) {
+      if (linked.has(d)) continue
+      const merged = new Map<string, HpoaFrequency>()
+      for (const [raw, freq] of hpoa.terms.get(d) ?? []) {
+        const term = canonical(raw)
+        const prev = term === null ? undefined : merged.get(term)
+        if (term !== null && (prev === undefined || freq.f > prev.f)) merged.set(term, freq)
+      }
+      if (merged.size > 0) linked.set(d, merged)
+    }
+  }
 
   rmSync(outPath, { force: true })
   const db = new Database(outPath)
@@ -56,13 +85,19 @@ export function buildHpoSimilarityDb(
       CREATE TABLE terms (id TEXT PRIMARY KEY, label TEXT NOT NULL, ic REAL NOT NULL) WITHOUT ROWID;
       CREATE TABLE parents (term TEXT NOT NULL, parent TEXT NOT NULL, PRIMARY KEY (term, parent)) WITHOUT ROWID;
       CREATE TABLE aliases (alias TEXT PRIMARY KEY, term TEXT NOT NULL) WITHOUT ROWID;
-      CREATE TABLE gene_terms (gene_symbol TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY (gene_symbol, term)) WITHOUT ROWID;
+      CREATE TABLE diseases (id TEXT PRIMARY KEY, label TEXT NOT NULL) WITHOUT ROWID;
+      CREATE TABLE disease_terms (disease TEXT NOT NULL, term TEXT NOT NULL, f REAL NOT NULL, f_excl REAL NOT NULL, PRIMARY KEY (disease, term)) WITHOUT ROWID;
+      CREATE TABLE disease_not (disease TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY (disease, term)) WITHOUT ROWID;
+      CREATE TABLE gene_diseases (gene_symbol TEXT NOT NULL, disease TEXT NOT NULL, PRIMARY KEY (gene_symbol, disease)) WITHOUT ROWID;
       CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
     `)
     const insertTerm = db.prepare('INSERT INTO terms VALUES (?, ?, ?)')
     const insertParent = db.prepare('INSERT INTO parents VALUES (?, ?)')
     const insertAlias = db.prepare('INSERT INTO aliases VALUES (?, ?)')
-    const insertGene = db.prepare('INSERT OR IGNORE INTO gene_terms VALUES (?, ?)')
+    const insertDisease = db.prepare('INSERT INTO diseases VALUES (?, ?)')
+    const insertDiseaseTerm = db.prepare('INSERT INTO disease_terms VALUES (?, ?, ?, ?)')
+    const insertNot = db.prepare('INSERT OR IGNORE INTO disease_not VALUES (?, ?)')
+    const insertGene = db.prepare('INSERT INTO gene_diseases VALUES (?, ?)')
     const insertMeta = db.prepare('INSERT INTO meta VALUES (?, ?)')
     db.transaction(() => {
       for (const [id, label] of ontology.labels) insertTerm.run(id, label, ic.get(id) ?? 0)
@@ -71,11 +106,16 @@ export function buildHpoSimilarityDb(
         for (const parent of list) if (ancestors.has(parent)) insertParent.run(term, parent)
       }
       for (const [alias, term] of ontology.aliases) insertAlias.run(alias, term)
-      for (const [gene, terms] of genes) {
-        for (const raw of terms) {
-          const term = ontology.aliases.get(raw) ?? raw
-          if (ancestors.has(term)) insertGene.run(gene, term)
+      for (const [d, terms] of linked) {
+        insertDisease.run(d, hpoa.labels.get(d) ?? d)
+        for (const [term, { f, fExcl }] of terms) insertDiseaseTerm.run(d, term, f, fExcl)
+        for (const raw of hpoa.not.get(d) ?? []) {
+          const term = canonical(raw)
+          if (term !== null && !terms.has(term)) insertNot.run(d, term)
         }
+      }
+      for (const [gene, diseases] of genes) {
+        for (const d of diseases) if (linked.has(d)) insertGene.run(gene, d)
       }
       insertMeta.run('hpo_version', meta.release)
       insertMeta.run('builder_version', String(HPO_DATA_CONFIG.builderVersion))
@@ -109,21 +149,23 @@ function inspect(db: Database.Database): HpoDataStatus {
   )
   const count = (sql: string): number => (db.prepare(sql).get() as { c: number }).c
   const termCount = count('SELECT COUNT(*) AS c FROM terms')
-  const geneCount = count('SELECT COUNT(DISTINCT gene_symbol) AS c FROM gene_terms')
-  const current = meta.get('builder_version') === String(HPO_DATA_CONFIG.builderVersion)
-  const usable =
-    current &&
-    geneCount > 0 &&
-    count('SELECT COUNT(*) AS c FROM terms WHERE ic > 0') > 0 &&
-    count('SELECT COUNT(*) AS c FROM parents') > 0
-  return {
+  const status = {
     installed: true,
-    needsUpdate: !usable,
     version: meta.get('hpo_version') ?? null,
     builtAt: Number(meta.get('built_at') ?? 0) || null,
-    termCount,
-    geneCount
+    termCount
   }
+  // An older builder's file may lack the current tables: report it before querying them.
+  if (meta.get('builder_version') !== String(HPO_DATA_CONFIG.builderVersion)) {
+    return { ...status, needsUpdate: true, geneCount: 0 }
+  }
+  const geneCount = count('SELECT COUNT(DISTINCT gene_symbol) AS c FROM gene_diseases')
+  const usable =
+    geneCount > 0 &&
+    count('SELECT COUNT(*) AS c FROM disease_terms') > 0 &&
+    count('SELECT COUNT(*) AS c FROM terms WHERE ic > 0') > 0 &&
+    count('SELECT COUNT(*) AS c FROM parents') > 0
+  return { ...status, needsUpdate: !usable, geneCount }
 }
 
 /** Installed release; a damaged or wrong-schema file reads as not installed + needs update. */
@@ -155,62 +197,121 @@ export function assertUsableHpoDb(path: string): void {
 }
 
 export interface HpoGeneScorer {
-  /** Symmetric Resnik BMA of the case's terms vs the gene; null without gene data. */
+  /** Disease-level phenotype score of the gene in [0, 1] (spec §3); null without gene data. */
   score(gene: string): number | null
+  /** Id of the gene's best-matching disease. */
+  bestDisease(gene: string): string | null
+  /** Excluded case terms contradicted by the best disease (cheap: no explanation built). */
+  conflicts(gene: string): number | null
+  /** Lazy explanation, for displayed rows only. */
+  explain(gene: string): HpoExplanation | null
 }
 
-/** Phenotype-subtree index of one DB file, kept per process until the file changes. */
-let cached: { key: string; index: HpoIndex | null } | null = null
+/** Phenotype index of one DB file, kept per process until the file changes. */
+let cached: { key: string; index: PhenotypeIndex | null } | null = null
+/** Last case results per (index, canonical profile): paging and re-sorting never rescore. */
+const results = new Map<string, CaseScores>()
 
-function loadIndex(path: string): HpoIndex | null {
+const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
+
+function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } {
   const stat = statSync(path)
   const key = `${path}\0${stat.mtimeMs}\0${stat.size}`
-  if (cached?.key === key) return cached.index
+  if (cached?.key === key) return cached
+  results.clear()
   const db = new Database(path, { readonly: true, fileMustExist: true })
   try {
     if (inspect(db).needsUpdate) {
       mainLogger.warn(`HPO data at ${path} needs an update; hpo_resnik stays null`, 'hpo-data')
-      cached = { key, index: null }
-      return null
+      return (cached = { key, index: null })
     }
     // Terms with an entry in `parents` or the subtree root are the phenotype subtree.
-    const index = buildHpoIndex({
-      terms: db
-        .prepare(`SELECT id, ic FROM terms WHERE id = ? OR id IN (SELECT term FROM parents)`)
-        .all(HPO_DATA_CONFIG.phenotypeRoot) as Array<{ id: string; ic: number }>,
-      edges: db.prepare('SELECT term, parent FROM parents').raw().all() as Array<[string, string]>,
-      aliases: db.prepare('SELECT alias, term FROM aliases').raw().all() as Array<[string, string]>,
-      geneTerms: db.prepare('SELECT gene_symbol, term FROM gene_terms').raw().all() as Array<
-        [string, string]
-      >
+    const terms = db
+      .prepare('SELECT id, ic, label FROM terms WHERE id = ? OR id IN (SELECT term FROM parents)')
+      .all(HPO_DATA_CONFIG.phenotypeRoot) as Array<{ id: string; ic: number; label: string }>
+    const index = buildPhenotypeIndex({
+      terms,
+      edges: rows(db, 'SELECT term, parent FROM parents'),
+      aliases: rows(db, 'SELECT alias, term FROM aliases'),
+      diseases: rows(db, 'SELECT id, label FROM diseases'),
+      diseaseTerms: rows(db, 'SELECT disease, term, f, f_excl FROM disease_terms'),
+      diseaseNot: rows(db, 'SELECT disease, term FROM disease_not'),
+      geneDiseases: rows(db, 'SELECT gene_symbol, disease FROM gene_diseases')
     })
-    cached = { key, index }
-    return index
+    return (cached = { key, index })
   } finally {
     db.close()
   }
 }
 
+/** The process-cached index of `path` (null when it needs an update); throws on an unreadable file. */
+export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
+  return loadIndex(path).index
+}
+
 /**
- * Scorer for one case's HPO terms, or null when there are no phenotype terms
- * or no usable HPO data (the ranking then has `hpo_resnik` null). All genes are
- * scored up front from the in-memory index; the DB is read once per process
- * (again only after an update replaces the file). A damaged DB is logged,
- * never thrown: rankings must not break on reference data.
+ * Load and cache the index off the request path (after DB open, worker start
+ * or an HPO install), so a later `openHpoGeneScorer` only scores. Never throws.
+ */
+export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boolean {
+  if (path === null || !existsSync(path)) return false
+  try {
+    return loadIndex(path).index !== null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
+    return false
+  }
+}
+
+/** Score the profile, or reuse one of the last few results for the same profile. */
+function caseScores(key: string, index: PhenotypeIndex, profile: CaseProfile): CaseScores {
+  const memoKey = `${key}\0${profile.hash}`
+  let hit = results.get(memoKey)
+  if (hit !== undefined) {
+    results.delete(memoKey)
+  } else {
+    hit = scoreProfile(index, profile)
+    if (results.size >= HPO_SCORING_CONFIG.memoisedCases) {
+      results.delete(results.keys().next().value as string)
+    }
+  }
+  results.set(memoKey, hit)
+  return hit
+}
+
+/**
+ * Scorer for one case's HPO profile, or null when there is no present
+ * phenotype term or no usable HPO data (the ranking then has `hpo_resnik`
+ * null). All genes are scored up front from the in-memory index; the DB is
+ * read once per process (again only after an update replaces the file). A
+ * damaged DB is logged, never thrown: rankings must not break on reference data.
  */
 export function openHpoGeneScorer(
-  patientTerms: readonly string[],
+  terms: readonly HpoProfileTerm[],
   path: string | null = resolveHpoDbPath()
 ): HpoGeneScorer | null {
-  if (patientTerms.length === 0 || path === null || !existsSync(path)) return null
+  if (terms.length === 0 || path === null || !existsSync(path)) return null
   try {
-    const index = loadIndex(path)
-    const scores = index === null ? null : scoreAllGenes(index, patientTerms)
-    if (index === null || scores === null) return null
+    const { key, index } = loadIndex(path)
+    const profile = index === null ? null : prepareProfile(index, terms)
+    if (index === null || profile === null) return null
+    const scores = caseScores(key, index, profile)
+    const explained = new Map<number, HpoExplanation | null>()
+    const gene = (symbol: string): number => {
+      const g = index.hpo.genes.get(symbol)
+      return g === undefined || scores.geneBest[g] < 0 ? -1 : g
+    }
     return {
-      score(gene) {
-        const g = index.genes.get(gene)
-        return g === undefined ? null : scores[g]
+      score: (symbol) => (gene(symbol) < 0 ? null : scores.geneScore[gene(symbol)]),
+      bestDisease: (symbol) =>
+        gene(symbol) < 0 ? null : index.diseaseIds[scores.geneBest[gene(symbol)]],
+      conflicts: (symbol) => (gene(symbol) < 0 ? null : scores.geneConflicts[gene(symbol)]),
+      explain(symbol) {
+        const g = gene(symbol)
+        if (g < 0) return null
+        if (!explained.has(g)) explained.set(g, explainGene(index, scores, g))
+        return explained.get(g) ?? null
       }
     }
   } catch (error) {

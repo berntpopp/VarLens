@@ -86,15 +86,15 @@ export function buildHpoIndex(input: HpoIndexInput): HpoIndex {
     if (t !== undefined && !index.has(alias)) index.set(alias, t)
   }
   const genes = new Map<string, number>()
-  const seen = new Set<string>()
+  const seen = new Set<number>()
   const pairs: Array<[number, number]> = []
   for (const [gene, term] of input.geneTerms) {
     const t = index.get(term)
     if (t === undefined) continue
     let g = genes.get(gene)
     if (g === undefined) genes.set(gene, (g = genes.size))
-    if (seen.has(`${g}:${t}`)) continue
-    seen.add(`${g}:${t}`)
+    if (seen.has(g * n + t)) continue
+    seen.add(g * n + t)
     pairs.push([g, t])
   }
   const [geneOffsets, geneTerms] = csr(genes.size, pairs)
@@ -102,7 +102,7 @@ export function buildHpoIndex(input: HpoIndexInput): HpoIndex {
 }
 
 /** out[t] = max IC over Anc(t) ∩ {u : mark[u] === stamp} (0 when empty). */
-function propagate(ix: HpoIndex, mark: Int32Array, stamp: number, out: Float64Array): void {
+export function propagate(ix: HpoIndex, mark: Int32Array, stamp: number, out: Float64Array): void {
   const { topo, ic, parentOffsets, parents } = ix
   for (let i = 0; i < topo.length; i++) {
     const t = topo[i]
@@ -116,7 +116,7 @@ function propagate(ix: HpoIndex, mark: Int32Array, stamp: number, out: Float64Ar
 }
 
 /** Stamp t and all its ancestors with `stamp`. */
-function markAncestors(ix: HpoIndex, t: number, mark: Int32Array, stamp: number): void {
+export function markAncestors(ix: HpoIndex, t: number, mark: Int32Array, stamp: number): void {
   const stack = [t]
   mark[t] = stamp
   while (stack.length > 0) {
