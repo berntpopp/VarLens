@@ -5,6 +5,7 @@
  *        [--cadd-impute on|off] [--scenarios primary,clinvar_visible,...] [--concordance <file>]
  *        [--template varvis|full]   (full: #597 template, paired with the varvis template)
  *        [--frozen <ruleset.json>]  (pre-registered rerun, #584: no tuning, the ruleset unchanged)
+ *        [--pheno]                  (#600: phenotype benchmark instead of the scorer comparison)
  *
  * Writes runs/<run>/{results.jsonl, manifest.json, protocol.lock.json, ruleset-tuned.json,
  * support.json} under _data/shortlist-sim (outside the repository). Background rows never leave
@@ -36,6 +37,7 @@ import { addExtraFields } from './sim/full-inputs'
 import { isTemplateId, TEMPLATES, type TemplateId } from './sim/templates'
 import { buildScorers, CANDIDATE_SCORER, REFERENCE_SCORER } from './sim/scorers'
 import { geneFolds } from './stats/folds'
+import { runPhenoBench } from './phenotype/variant-bench'
 
 const SEEDS = {
   cases: 20261012,
@@ -57,6 +59,7 @@ interface Args {
   concordance?: string
   template: TemplateId
   frozen?: string
+  pheno: boolean
 }
 
 function templateArg(t: string): TemplateId {
@@ -80,6 +83,9 @@ function parseArgs(argv: string[]): Args {
   // The full template's paired varvis scorer needs tuned varvis points.
   if (frozen !== undefined && template !== 'varvis')
     throw new Error('--frozen supports --template varvis only')
+  const pheno = argv.includes('--pheno')
+  if (pheno && (frozen !== undefined || template !== 'varvis'))
+    throw new Error('--pheno tunes the varvis template: no --frozen, no --template full')
   return {
     run,
     quick: argv.includes('--quick'),
@@ -88,7 +94,8 @@ function parseArgs(argv: string[]): Args {
     scenarios,
     concordance: arg('--concordance'),
     template,
-    frozen
+    frozen,
+    pheno
   }
 }
 
@@ -155,6 +162,8 @@ async function main(argv: string[]): Promise<void> {
 
   const reps = args.quick ? 200 : 2000
   const overlaps: Record<string, Record<string, number>> = {}
+  /** Background → gene → eligible rows (evidence gate, primary), for --pheno. */
+  const eligible = new Map<string, Map<string, number>>()
   // Phase A (skipped for --frozen): first-match assignments of training material, then tuning.
   const tune = async (): Promise<Record<TemplateId, FoldTuning>> => {
     const assignJobs: Job[] = backgrounds.flatMap((bg) =>
@@ -172,6 +181,13 @@ async function main(argv: string[]): Promise<void> {
     const assigned = (await runJobs(assignJobs, init, args.workers, progress('assign'))) as Array<
       Extract<JobResult, { kind: 'assign' }>
     >
+    assignJobs.forEach((job, i) => {
+      if (job.kind !== 'assign' || !job.withBackground || job.scenario !== 'primary') return
+      const genes = new Map<string, number>()
+      for (const a of assigned[i].background.varvis ?? [])
+        if (a.gene !== '') genes.set(a.gene, (genes.get(a.gene) ?? 0) + 1)
+      eligible.set(job.bg, genes)
+    })
     return Object.fromEntries(
       templates.map((tid) => {
         const input = {
@@ -191,6 +207,25 @@ async function main(argv: string[]): Promise<void> {
   const { tunedBy, tunings } = await foldRulesets(frozen, args.template, FOLDS, tune)
   const tuned = tunings?.[args.template]
   t = lap('assign_and_tune', t)
+  if (args.pheno) {
+    await runPhenoBench({
+      cases,
+      folds,
+      k: FOLDS,
+      tunedVarvis: tunedBy.varvis!,
+      eligible,
+      pool: inputs.pool.variants,
+      init,
+      workers: args.workers,
+      outDir,
+      reps,
+      seed: SEEDS.bootstrap,
+      progress
+    })
+    lap('pheno', t)
+    console.log(`timing: ${JSON.stringify(timing)}`)
+    return
+  }
 
   // Phase B: every scorer on every case and scenario; fold-specific tuned points.
   const enriched = new Map(caseBgs.map((b) => [b.info.label, phenoEnrichedGenes(b.info)]))

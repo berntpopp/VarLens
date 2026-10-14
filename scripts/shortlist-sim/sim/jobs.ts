@@ -5,15 +5,15 @@
 import { compileRuleset } from '../../../src/main/services/scoring/evidence'
 import { isReferenceRule } from '../../../src/shared/evidence/ruleset-problems'
 import type { ModeId } from '../../../src/shared/types/evidence-ruleset'
-import type { ShortlistRow } from '../../../src/shared/types/shortlist'
+import type { ShortlistConfig, ShortlistRow } from '../../../src/shared/types/shortlist'
 import type { CaseResult, ScenarioId } from '../common/types'
 import { rng } from '../common/rng'
 import type { Background } from '../concordance/load-backgrounds'
 import type { Assignment } from '../stats/tune'
 import { openBackgroundDb, type BackgroundDb } from './background-db'
 import type { SimCase } from './cases'
-import { rankAll, runCase, withSpikes } from './run-case'
-import { buildScorers, evidenceConfig } from './scorers'
+import { rankAll, rankScorers, runCase, withSpikes } from './run-case'
+import { buildScorers, evidenceConfig, type ScorerDef } from './scorers'
 import { TEMPLATES, type TemplateId, type TunedByTemplate } from './templates'
 
 export interface WorkerInit {
@@ -42,6 +42,19 @@ export type Job =
       cases: SimCase[]
       folds: number[]
       tuned: TunedByTemplate
+    }
+  | {
+      /** Phenotype benchmark (#600): `fixed` scorers once, `perProfile` once per HPO profile. */
+      kind: 'pheno'
+      bg: string
+      scenario: ScenarioId
+      cases: SimCase[]
+      folds: number[]
+      /** Per case: profile id (noise level) → HPO terms, written to the case for the ranking. */
+      profiles: Array<Record<string, string[]>>
+      /** Per fold: scorer id → config. */
+      fixed: Array<Record<string, ShortlistConfig>>
+      perProfile: Array<Record<string, ShortlistConfig>>
     }
 
 export type JobResult =
@@ -100,6 +113,7 @@ export class JobRunner {
 
   run(job: Job): JobResult {
     const bg = this.open(job.bg, job.scenario)
+    if (job.kind === 'pheno') return this.phenotype(bg, job)
     return job.kind === 'assign' ? this.assign(bg, job) : this.evaluate(bg, job)
   }
 
@@ -134,6 +148,30 @@ export class JobRunner {
     const results = job.cases.flatMap((c, i) =>
       runCase(bg, c, scorers, job.folds[i], caseRng(this.init.seed, c.id, job.scenario))
     )
+    return { kind: 'eval', results }
+  }
+
+  private phenotype(bg: BackgroundDb, job: Extract<Job, { kind: 'pheno' }>): JobResult {
+    const defs = (configs: Record<string, ShortlistConfig>, suffix = ''): ScorerDef[] =>
+      Object.entries(configs).map(([id, config]) => ({
+        id: id + suffix,
+        label: id,
+        config: () => config,
+        scenarios: 'all'
+      }))
+    const results = job.cases.flatMap((c, i) => {
+      const fold = job.folds[i]
+      return withSpikes(bg, c, caseRng(this.init.seed, c.id, job.scenario), (ids) => {
+        const out = rankScorers(bg, c, ids, defs(job.fixed[fold]), fold)
+        for (const [profile, terms] of Object.entries(job.profiles[i])) {
+          // Inside the case savepoint: rolled back with the spikes.
+          bg.db.prepare('DELETE FROM case_hpo_terms WHERE case_id = ?').run(bg.caseId)
+          for (const t of terms) bg.repos.metadata.assignCaseHpoTerm(bg.caseId, t, t)
+          out.push(...rankScorers(bg, c, ids, defs(job.perProfile[fold], `:${profile}`), fold))
+        }
+        return out
+      })
+    })
     return { kind: 'eval', results }
   }
 }
