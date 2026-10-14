@@ -185,6 +185,13 @@ describe('CNV locus fields', () => {
       }
     })
   })
+  it('without gene_reference.db only the CSQ genes count; an unscored CNV has no explanation', () => {
+    const r = cnv(5, { pos: 900, end_pos: 5_500 })
+    const { ctx } = context([r], { hpo: scorer() }, inputs({ genes: null, cnvGenes: new Map() }))
+    expect(ctx.derived(r)).toMatchObject({ hpo_resnik: null, hpo_best_locus: null })
+    const [kept] = withHpoExplanations([r as unknown as ScoredCandidate], ctx)
+    expect(kept.rank_hpo ?? null).toBeNull()
+  })
 })
 
 describe('STR locus fields', () => {
@@ -207,6 +214,11 @@ describe('STR locus fields', () => {
     expect(context([r]).ctx.derived(r)).toMatchObject({ hpo_resnik: null, str_band: 'full' })
     const noRef = context([r], {}, inputs({ reference: null })).ctx.derived(r)
     expect(noRef).toMatchObject({ hpo_resnik: null, str_band: 'full' })
+    // Per-allele Stranger status: the highest band wins.
+    const mixed = str(17, { str_status: 'normal,pre_mutation' })
+    expect(context([mixed], {}, inputs({ reference: null })).ctx.derived(mixed).str_band).toBe(
+      'premutation'
+    )
     expect(
       context([r], {}, inputs()).ctx.derived(
         str(12, { str_repeat_id: null, chr: '1', gene_symbol: null })
