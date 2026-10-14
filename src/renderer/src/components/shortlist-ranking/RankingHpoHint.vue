@@ -12,14 +12,13 @@
 </template>
 
 <script setup lang="ts">
-// HPO-derived columns silently stay null without HPO data (#600): say so where rules are written.
+// hpo_resnik silently stays null without HPO data (#600): say so where rules are written.
 import { computed, onMounted, ref } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
 import { SHORTLIST_RANKING_EDITOR as COPY } from '../../config/shortlistRankingEditor'
-import { compileRule } from '../../../../shared/dsl/evaluate'
-import { HPO_DERIVED_COLUMNS } from '../../../../shared/dsl/column-registry'
+import { rulesetUsesHpoResnik } from '../../../../shared/dsl/evaluate'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import type { EvidenceRuleset } from '../../../../shared/types/evidence-ruleset'
 import type { HpoDataStatus } from '../../../../shared/types/hpo-data'
@@ -29,16 +28,7 @@ const props = defineProps<{ ruleset: EvidenceRuleset | undefined }>()
 const { api } = useApiService()
 const status = ref<HpoDataStatus | null>(null)
 
-const usesHpo = computed(() =>
-  [
-    ...(props.ruleset?.modes ?? []).map((m) => m.when),
-    ...(props.ruleset?.groups ?? []).flatMap((g) => g.rules.map((r) => r.when))
-  ].some((text) => {
-    if (text === null) return false
-    const result = compileRule(text)
-    return result.ok && HPO_DERIVED_COLUMNS.some((c) => result.columns.has(c))
-  })
-)
+const usesHpo = computed(() => rulesetUsesHpoResnik(props.ruleset))
 
 onMounted(async () => {
   try {

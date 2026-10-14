@@ -66,10 +66,24 @@ export function createGeneFiller(
   genomeBuild: string
 ): GeneFiller {
   if (geneRefDbPath === undefined || !existsSync(geneRefDbPath)) return () => undefined
+  let unreadable = false
   return (variant) => {
+    if (unreadable) return
     if (variant.gene_symbol != null && variant.gene_symbol !== '') return
     if (!FILLED_TYPES.has(variant.variant_type)) return
-    const index = loadGeneIntervals(geneRefDbPath, genomeBuild)
+    let index: GeneIntervals
+    try {
+      index = loadGeneIntervals(geneRefDbPath, genomeBuild)
+    } catch (e) {
+      // A broken reference must not drop the row (the caller skips rows that throw).
+      unreadable = true
+      // Worker thread: no Electron IPC logger (AGENTS.md exception).
+      console.warn(
+        '[gene-fallback] Gene reference unreadable, importing without fallback genes:',
+        e
+      )
+      return
+    }
     variant.gene_symbol =
       (variant.variant_type === 'str' ? strLocusGene(index, variant) : null) ??
       overlappingGene(index, variant.chr, variant.pos, variant.end_pos ?? variant.pos)

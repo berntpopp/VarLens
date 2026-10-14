@@ -15,8 +15,9 @@
  * never throw.
  */
 import { parseDsl } from './parser'
-import { findColumn } from './column-registry'
+import { findColumn, HPO_DERIVED_COLUMNS } from './column-registry'
 import type { DslNode, DslFilterRule } from './types'
+import type { EvidenceRuleset } from '../types/evidence-ruleset'
 import {
   impactRank,
   clinvarRank,
@@ -189,4 +190,17 @@ export function compileRule(input: string): CompileResult {
   }
   if (shape.problems.length > 0) return { ok: false, errors: [...new Set(shape.problems)] }
   return { ok: true, predicate: build(parsed.ast), columns: shape.columns }
+}
+
+/** Some mode or rule reads an HPO-derived field (`hpo_resnik`, `hpo_best_disease`, `hpo_conflicts`): only then is HPO scoring (or a refetch on a term edit) needed. */
+export function rulesetUsesHpoResnik(ruleset: EvidenceRuleset | null | undefined): boolean {
+  if (ruleset == null) return false
+  return [
+    ...ruleset.modes.map((m) => m.when),
+    ...ruleset.groups.flatMap((g) => g.rules.map((r) => r.when))
+  ].some((text) => {
+    if (text === null) return false
+    const result = compileRule(text)
+    return result.ok && HPO_DERIVED_COLUMNS.some((c) => result.columns.has(c))
+  })
 }

@@ -244,6 +244,7 @@ async function performSearch(query: string) {
   if (query !== searchQuery.value) return
   if (!hpoApiAvailable.value || query.length < 2) {
     searchResults.value = []
+    loading.value = false
     return
   }
 
@@ -266,11 +267,11 @@ async function performSearch(query: string) {
 const { debouncedFn: debouncedSearch } = useDebounce(performSearch, 300)
 
 watch(searchQuery, (query) => {
-  if (query && query.length >= 2) {
-    debouncedSearch(query)
-  } else {
-    searchResults.value = []
-  }
+  // Drop the old hits at once, so Enter cannot pick one before the new search lands;
+  // loading covers the debounce, so the list does not flash "No matching HPO terms".
+  searchResults.value = []
+  loading.value = Boolean(query && query.length >= 2)
+  if (loading.value) debouncedSearch(query)
 })
 
 function handleTermSelected(term: HpoSearchResult | null) {

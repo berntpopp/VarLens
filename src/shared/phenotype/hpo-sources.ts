@@ -124,7 +124,10 @@ export function phenotypeClosure(ontology: HpOntology): Map<string, string[]> {
 }
 
 /** Rows of a tab-separated file with a header line; `#` lines are comments. */
-function* tsvRows(text: string, required: readonly string[]): Generator<Record<string, string>> {
+export function* tsvRows(
+  text: string,
+  required: readonly string[]
+): Generator<Record<string, string>> {
   let cols: string[] | null = null
   for (const line of text.split(/\r?\n/)) {
     if (line === '' || line.startsWith('#')) continue

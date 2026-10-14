@@ -99,7 +99,7 @@ export class DbPool {
       geneRefDbPath?: string
     }
   ): void {
-    if (this.pool !== null) {
+    if (this.pool !== null || this.scorerPool !== null) {
       throw new Error('DbPool has live workers — call destroy() before init()')
     }
 

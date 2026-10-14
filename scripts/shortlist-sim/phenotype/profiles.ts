@@ -3,7 +3,7 @@
  * of the Phenomizer simulation (Köhler et al. 2009, AJHG): true disease terms, imprecision (a term
  * replaced by an ancestor) and noise (random phenotypic-abnormality terms). Public data only.
  */
-import type { HpOntology } from '../../../src/shared/phenotype/hpo-sources'
+import { tsvRows, type HpOntology } from '../../../src/shared/phenotype/hpo-sources'
 
 export const PHENOTYPIC_ABNORMALITY = 'HP:0000118'
 /** True terms per profile: the size of a typical clinical HPO profile. */
@@ -55,16 +55,6 @@ export interface Disease {
   genes: string[]
 }
 
-function* tsv(text: string): Generator<Record<string, string>> {
-  let cols: string[] | null = null
-  for (const line of text.split(/\r?\n/)) {
-    if (line === '' || line.startsWith('#')) continue
-    const f = line.split('\t')
-    if (cols === null) cols = f
-    else yield Object.fromEntries(cols.map((c, i) => [c, f[i] ?? '']))
-  }
-}
-
 const DISEASE_DB = /^(OMIM|ORPHA):/
 
 /**
@@ -73,14 +63,14 @@ const DISEASE_DB = /^(OMIM|ORPHA):/
  */
 export function parseDiseases(hpoa: string, genesToPhenotype: string): Disease[] {
   const genes = new Map<string, Set<string>>()
-  for (const r of tsv(genesToPhenotype)) {
+  for (const r of tsvRows(genesToPhenotype, ['disease_id', 'gene_symbol'])) {
     if (!DISEASE_DB.test(r.disease_id) || r.gene_symbol === '') continue
     let set = genes.get(r.disease_id)
     if (set === undefined) genes.set(r.disease_id, (set = new Set()))
     set.add(r.gene_symbol)
   }
   const terms = new Map<string, Map<string, number>>()
-  for (const r of tsv(hpoa)) {
+  for (const r of tsvRows(hpoa, ['database_id', 'qualifier', 'hpo_id', 'frequency', 'aspect'])) {
     if (r.aspect !== 'P' || r.qualifier === 'NOT' || !genes.has(r.database_id)) continue
     const w = frequencyWeight(r.frequency)
     if (w <= 0) continue

@@ -42,13 +42,14 @@ export function fieldDictionaryEntry(value: unknown): FieldDictionaryEntry | nul
 
 /**
  * Why an `info.<KEY>` filter cannot compare this field's values; null when it can
- * or the header did not say. A Flag has no value, and a list (Number other than 1)
- * is not compared element-wise (`info-field-filter.ts`).
+ * or the header did not say. A Flag has no value, and a list (Number other than 1
+ * or A) is not compared element-wise (`info-field-filter.ts`). Number=A holds one
+ * value per row because import splits multi-allelic rows (`vcf-allele-splitter.ts`).
  */
 export function infoFieldLimitation(field: FieldDictionaryEntry): string | null {
   if (field.type === 'Flag')
     return 'Flag field: has no value to compare, only is:null / is:notnull apply'
-  if (field.number !== undefined && field.number !== '1') {
+  if (field.number !== undefined && field.number !== '1' && field.number !== 'A') {
     return `List field (Number=${field.number}): values are not compared element-wise`
   }
   return null
