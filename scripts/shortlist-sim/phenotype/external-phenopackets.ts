@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
+import { HPO_SCORING_CONFIG } from '../../../src/shared/config/hpo-scoring.config'
 import {
   parseGenesToPhenotype,
   parseHpoaDiseaseTerms
@@ -23,9 +24,9 @@ import { mean, median, tieAveragedHit, tieAveragedReciprocal } from '../stats/me
 import {
   assertOutsideRepo,
   DATA_DIR,
-  HPO_DB,
   HPO_DB_SPRINT3,
   HPO_RAW_DIR,
+  hpoDbForTau,
   RUNS_DIR
 } from '../common/paths'
 import { citedByHpoa, hpoaReferences, jsonFiles, parsePhenopacket } from './phenopackets'
@@ -216,7 +217,7 @@ function main(argv: string[]): void {
   }
   // A profile without a known present term scores nothing: every gene ties (a miss, not a skip).
   const v2 = (terms: HpoProfileTerm[]) => {
-    const scorer = openHpoGeneScorer(terms, HPO_DB)
+    const scorer = openHpoGeneScorer(terms, hpoDbForTau(HPO_SCORING_CONFIG.tau))
     return { scorer, scores: Float64Array.from(genes, (g) => scorer?.score(g) ?? -Infinity) }
   }
 
