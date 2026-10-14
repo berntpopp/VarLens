@@ -326,7 +326,16 @@ export class ShortlistService {
       info,
       compiled,
       config,
-      limit
+      limit,
+      geneRefDbPath: () => {
+        try {
+          return getGeneReference()?.path ?? null
+        } catch (e) {
+          // The desktop loader throws when no copy exists: the CNV gene count stays 0.
+          mainLogger.warn(`Gene reference unavailable: ${toError(e).message}`, 'shortlist.service')
+          return null
+        }
+      }
     })
     if (result.queryErrors.length > 0) throwShortlistQueryErrors(result.queryErrors, 'shortlist')
     return result

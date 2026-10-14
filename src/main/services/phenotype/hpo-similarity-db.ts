@@ -37,7 +37,11 @@ import {
   type CaseScores
 } from '../../../shared/phenotype/phenotype-score'
 import { mainLogger } from '../MainLogger'
-import { writeLocusReference, type LocusSourceInput } from './locus-reference-db'
+import {
+  readLocusReference,
+  writeLocusReference,
+  type LocusSourceInput
+} from './locus-reference-db'
 import type { DbPool } from '../../database/DbPool'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
@@ -263,8 +267,11 @@ export interface HpoGeneScorer {
   explain(gene: string): HpoExplanation | null
   /** Max S(d) over the listed disease ids that are indexed; null if none is (CNV/STR spec §6.1). */
   scoreDiseases(ids: readonly string[]): { score: number; disease: string } | null
-  /** Explanation of one disease (STR, region route); percentile against the gene distribution. */
-  explainDisease(id: string): HpoExplanation | null
+  /**
+   * Explanation of one disease (STR, region route); percentile against the gene distribution.
+   * `score` (default S(d)) is the locus score a CNV/STR row ranked with.
+   */
+  explainDisease(id: string, score?: number): HpoExplanation | null
   /** Šidák mapping of a gene score onto the best of n genes of this case; sidak(s, 1) === s. */
   sidak(score: number, n: number): number
 }
@@ -352,6 +359,8 @@ export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
 export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boolean {
   if (path === null || !existsSync(path)) return false
   try {
+    // The CNV/STR locus tables live in the same file; cached on the same key.
+    readLocusReference(path)
     return (loadIndex(path)?.index ?? null) !== null
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -446,9 +455,9 @@ export function openHpoGeneScorer(
         }
         return best
       },
-      explainDisease(id) {
+      explainDisease(id, score) {
         const d = diseaseIndexOf(index).get(id)
-        return d === undefined ? null : explainDisease(index, scores, d)
+        return d === undefined ? null : explainDisease(index, scores, d, score)
       },
       sidak: (score, n) => sidak(scores, score, n)
     }

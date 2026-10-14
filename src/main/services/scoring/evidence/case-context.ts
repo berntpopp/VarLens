@@ -9,6 +9,13 @@ import { compHetPhase, type CompHetPhase } from '../../../../shared/utils/phasin
 import { trimAlleles } from '../../../../shared/utils/trim-alleles'
 import type { HpoGeneScorer } from '../../phenotype/hpo-similarity-db'
 import type { StrBand } from '../../../../shared/types/locus-reference'
+import {
+  isLocusRow,
+  scoreLocusRow,
+  type LocusFields,
+  type LocusInputs,
+  type LocusResult
+} from './locus-fields'
 
 export type { Zygosity }
 export type CaseSex = 'male' | 'female' | null
@@ -42,6 +49,8 @@ export interface LightRow {
   str_repeat_id?: string | null
   str_variant_catalog_id?: string | null
   str_repeat_unit?: string | null
+  /** CNV rows: AnnotSV HI/TS per gene (CNV/STR spec §4.1). */
+  info_json?: string | null
 }
 
 export interface DerivedFields {
@@ -79,6 +88,8 @@ export interface GeneContext {
   derived(row: LightRow): DerivedFields
   /** Distinct het alleles of the gene in the case (pass 1); the CNV HI 30 and STR AR second hit. */
   hetHits(gene: string): number
+  /** Locus fields and note of a CNV/STR row (memoised per row id); null for other types. */
+  locus(row: LightRow): LocusResult | null
 }
 
 const bareChr = (chr: string): string => chr.replace(/^chr/i, '').toUpperCase()
@@ -115,6 +126,19 @@ export function deriveZygosity(
   return zygosity
 }
 
+/** SNV/indel/SV rows: the row gene's score; `hpo_best_locus` is the gene, null like the score. */
+function geneHpo(gene: string | null, info: CaseInfo): LocusFields {
+  const hpo_resnik = gene === null ? null : (info.hpo?.score(gene) ?? null)
+  return {
+    hpo_resnik,
+    hpo_best_disease: gene === null ? null : (info.hpo?.bestDisease(gene) ?? null),
+    hpo_conflicts: gene === null ? null : (info.hpo?.conflicts(gene) ?? null),
+    hpo_best_locus: hpo_resnik === null ? null : gene,
+    cnv_gene_count: null,
+    str_band: null
+  }
+}
+
 interface GeneEntry {
   /** het allele key → the first row carrying it */
   het: Map<string, LightRow>
@@ -123,6 +147,9 @@ interface GeneEntry {
 
 export class GeneContextBuilder {
   private readonly genes = new Map<string, GeneEntry>()
+  /** Pass-1 CNV row ids (their CSQ genes are read in one batch) and whether any STR row was seen. */
+  readonly cnvIds: number[] = []
+  private sawStr = false
 
   constructor(
     private readonly info: CaseInfo,
@@ -131,6 +158,12 @@ export class GeneContextBuilder {
 
   add(rows: readonly LightRow[]): void {
     for (const row of rows) {
+      if (row.variant_type === 'cnv') this.cnvIds.push(row.id)
+      // An STR call is never another allele of its gene: a het expansion would be its own second hit.
+      if (row.variant_type === 'str') {
+        this.sawStr = true
+        continue
+      }
       if (row.gene_symbol === null || row.gene_symbol === '') continue
       let entry = this.genes.get(row.gene_symbol)
       if (entry === undefined) {
@@ -143,23 +176,35 @@ export class GeneContextBuilder {
     }
   }
 
-  build(): GeneContext {
+  /** True when pass 1 saw a CNV or STR row, so the backend loads {@link LocusInputs}. */
+  get needsLocus(): boolean {
+    return this.sawStr || this.cnvIds.length > 0
+  }
+
+  build(locusInputs?: LocusInputs): GeneContext {
     const { genes, info, considerPhasing } = this
+    const hetHits = (gene: string): number => genes.get(gene)?.het.size ?? 0
+    const memo = new Map<number, LocusResult>()
+    const locus = (row: LightRow): LocusResult | null => {
+      if (!isLocusRow(row)) return null
+      let hit = memo.get(row.id)
+      if (hit === undefined) {
+        // Other het alleles only: a het CNV is counted under its own gene in pass 1.
+        const own = genes.get(row.gene_symbol ?? '')?.het.has(alleleKey(row)) === true
+        const other = (gene: string): number =>
+          hetHits(gene) - (own && gene === row.gene_symbol ? 1 : 0)
+        memo.set(row.id, (hit = scoreLocusRow(row, info, locusInputs, other)))
+      }
+      return hit
+    }
     return {
       info,
-      hetHits: (gene) => genes.get(gene)?.het.size ?? 0,
+      hetHits,
+      locus,
       derived(row: LightRow): DerivedFields {
         const zygosity = deriveZygosity(row, info)
         const gene = row.gene_symbol === null || row.gene_symbol === '' ? null : row.gene_symbol
-        const hpo = {
-          hpo_resnik: gene === null ? null : (info.hpo?.score(gene) ?? null),
-          hpo_best_disease: gene === null ? null : (info.hpo?.bestDisease(gene) ?? null),
-          hpo_conflicts: gene === null ? null : (info.hpo?.conflicts(gene) ?? null),
-          // Locus fields are filled by the CNV/STR scorers (plan lane L5).
-          hpo_best_locus: null,
-          cnv_gene_count: null,
-          str_band: null
-        }
+        const hpo = locus(row)?.fields ?? geneHpo(gene, info)
         const entry =
           row.gene_symbol === null || row.gene_symbol === ''
             ? undefined

@@ -90,6 +90,7 @@ function joinStrProjection(query: VariantQueryBuilder): VariantQueryBuilder {
     .select([
       'str_ext.repeat_id as _str_repeat_id',
       'str_ext.repeat_unit as _str_repeat_unit',
+      'str_ext.variant_catalog_id as _str_variant_catalog_id',
       'str_ext.display_repeat_unit as _str_display_ru',
       'str_ext.ref_copies as _str_ref_copies',
       'str_ext.alt_copies as _str_alt_copies',
