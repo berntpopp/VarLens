@@ -9,43 +9,75 @@ import { replaceFile, updateHpoData } from '../../../../src/main/services/phenot
 import { readHpoDataStatus } from '../../../../src/main/services/phenotype/hpo-similarity-db'
 import { HPO_DATA_CONFIG } from '../../../../src/shared/config/hpo-data.config'
 import { GENES_TO_PHENOTYPE, HP_JSON, PHENOTYPE_HPOA } from '../../../shared/phenotype/hpo-fixture'
+import {
+  clingenGenes,
+  clingenRegions,
+  ENTREZ_TO_HGNC,
+  MONDO_OBO,
+  STRCHIVE_LOCI
+} from '../../../shared/phenotype/locus-fixture'
 
 const FILES: Record<string, string> = {
   'hp.json': HP_JSON,
   'phenotype.hpoa': PHENOTYPE_HPOA,
   'genes_to_phenotype.txt': GENES_TO_PHENOTYPE
 }
+const { clingen, strchive, mondo } = HPO_DATA_CONFIG.locusSources
+const LOCUS_FILES: Record<string, string> = {
+  [clingen.genes]: clingenGenes(),
+  [clingen.regions.GRCh37]: clingenRegions(),
+  [clingen.regions.GRCh38]: clingenRegions(),
+  'STRchive-loci-v2.28.0.json': STRCHIVE_LOCI,
+  'mondo.obo': MONDO_OBO
+}
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex')
+const release = (tag: string, files: Record<string, string>, digests: Record<string, string>) =>
+  Response.json({
+    tag_name: tag,
+    assets: Object.keys(files).map((name) => ({
+      name,
+      browser_download_url: `https://evil.example/${name}`,
+      digest: name in digests ? digests[name] : `sha256:${sha(files[name])}`
+    }))
+  })
 
-function releaseFetch(tag: string, digests: Record<string, string> = {}) {
+/** HPO release `tag` plus the locus sources; `missing` file names answer 404. */
+function releaseFetch(tag: string, digests: Record<string, string> = {}, missing: string[] = []) {
   return vi.fn(async (url: string) => {
-    if (url === HPO_DATA_CONFIG.latestReleaseUrl) {
-      return Response.json({
-        tag_name: tag,
-        assets: Object.keys(FILES).map((name) => ({
-          name,
-          browser_download_url: `https://evil.example/${name}`,
-          digest: name in digests ? digests[name] : `sha256:${sha(FILES[name])}`
-        }))
-      })
-    }
+    if (url === HPO_DATA_CONFIG.latestReleaseUrl) return release(tag, FILES, digests)
+    if (url === strchive.latestReleaseUrl) return release('v2.28.0', LOCUS_FILES, digests)
+    if (url === mondo.latestReleaseUrl) return release('v2026-10-06', LOCUS_FILES, digests)
     const name = url.split('/').pop() ?? ''
-    return new Response(FILES[name], { status: name in FILES ? 200 : 404 })
+    const body = missing.includes(name) ? undefined : (FILES[name] ?? LOCUS_FILES[name])
+    return new Response(body, { status: body === undefined ? 404 : 200 })
   })
 }
 
 let dir: string
 let dbPath: string
+let geneRefDir: string
+let geneRefPath: string
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'hpo-update-'))
   dbPath = join(dir, 'hpo_similarity.db')
+  geneRefDir = mkdtempSync(join(tmpdir(), 'hpo-update-generef-'))
+  geneRefPath = join(geneRefDir, 'gene_reference.db')
+  const db = new Database(geneRefPath)
+  db.exec('CREATE TABLE genes (hgnc_id TEXT PRIMARY KEY, entrez_id TEXT)')
+  const insert = db.prepare('INSERT INTO genes VALUES (?, ?)')
+  for (const [entrez, hgnc] of ENTREZ_TO_HGNC) insert.run(hgnc, entrez)
+  db.close()
 })
-afterEach(() => rmSync(dir, { recursive: true, force: true }))
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true })
+  rmSync(geneRefDir, { recursive: true, force: true })
+})
 
 const deps = (fetch: ReturnType<typeof releaseFetch>, online = true) => ({
   fetch,
   isOnline: () => online,
   dbPath,
+  geneRefPath,
   build: async (request: Parameters<typeof buildHpoFromFiles>[0]) => buildHpoFromFiles(request)
 })
 
@@ -54,9 +86,53 @@ describe('updateHpoData', () => {
     const result = await updateHpoData(deps(releaseFetch('v2026-09-01')))
     expect(result).toMatchObject({
       success: true,
+      message: 'HPO data v2026-09-01 installed.',
       status: { installed: true, version: 'v2026-09-01' }
     })
+    expect(result.status.sources).toEqual({
+      hpo: 'v2026-09-01',
+      clingen: '03 Oct,2026',
+      strchive: 'v2.28.0',
+      mondo: 'v2026-10-06'
+    })
     expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
+  })
+
+  it('keeps the installed STRchive when its digest mismatches, and warns', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    const bad = { 'STRchive-loci-v2.28.0.json': `sha256:${'0'.repeat(64)}` }
+    const result = await updateHpoData(deps(releaseFetch('v2026-10-01', bad)))
+    expect(result.success).toBe(true)
+    expect(result.message).toMatch(/STRchive: Checksum mismatch .*; kept v2\.28\.0/)
+    expect(result.status).toMatchObject({
+      version: 'v2026-10-01',
+      sources: { strchive: 'v2.28.0' }
+    })
+  })
+
+  it('keeps the installed ClinGen when its download fails', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    const fetch = releaseFetch('v2026-10-01', {}, [clingen.regions.GRCh37])
+    const result = await updateHpoData(deps(fetch))
+    expect(result.message).toMatch(/ClinGen: Download of .* failed: HTTP 404; kept /)
+    expect(result.status.sources?.clingen).toBeDefined()
+    expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
+  })
+
+  it('rebuilds a current HPO release while a locus source is missing', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01', {}, ['mondo.obo'])))
+    expect(readHpoDataStatus(dbPath).sources).not.toHaveProperty('mondo')
+    const result = await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    expect(result.message).toMatch(/installed/)
+    expect(result.status.sources?.mondo).toBe('v2026-10-06')
+  })
+
+  it('fails the update when HPO itself fails, whatever the locus sources do', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    await expect(updateHpoData(deps(releaseFetch('v2026-10-01', {}, ['hp.json'])))).rejects.toThrow(
+      /hp.json failed: HTTP 404/
+    )
+    expect(readHpoDataStatus(dbPath).version).toBe('v2026-09-01')
   })
 
   it('is a no-op when the installed release is current', async () => {
@@ -179,9 +255,16 @@ describe('updateHpoData', () => {
     const fetch = releaseFetch('v2026-09-01')
     await updateHpoData(deps(fetch))
     const urls = fetch.mock.calls.map(([url]) => url).slice(1)
-    expect(urls).toEqual(
-      Object.keys(FILES).map((name) => `${HPO_DATA_CONFIG.downloadBaseUrl}/v2026-09-01/${name}`)
-    )
+    expect(urls).toEqual([
+      ...Object.keys(FILES).map((name) => `${HPO_DATA_CONFIG.downloadBaseUrl}/v2026-09-01/${name}`),
+      `${clingen.baseUrl}/${clingen.genes}`,
+      `${clingen.baseUrl}/${clingen.regions.GRCh37}`,
+      `${clingen.baseUrl}/${clingen.regions.GRCh38}`,
+      strchive.latestReleaseUrl,
+      `${strchive.downloadBaseUrl}/v2.28.0/STRchive-loci-v2.28.0.json`,
+      mondo.latestReleaseUrl,
+      `${mondo.downloadBaseUrl}/v2026-10-06/mondo.obo`
+    ])
   })
 
   it.each([

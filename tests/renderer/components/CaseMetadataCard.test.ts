@@ -157,3 +157,20 @@ describe('CaseMetadataCard — handleCreateCohort', () => {
     )
   })
 })
+
+describe('CaseMetadataCard — layout', () => {
+  beforeEach(() => {
+    window.api = createMockApi()
+  })
+  afterEach(() => useCaseMetadata().clearCache())
+
+  // Wide HPO chips must wrap, not squeeze the row label into "Phenoty-pes".
+  it('keeps the labels of the growing rows from shrinking', async () => {
+    const { wrapper } = mountCard(1)
+    await flushPromises()
+    for (const name of ['Cohorts', 'Phenotypes']) {
+      const label = wrapper.findAll('span').find((s) => s.text() === name)
+      expect(label?.classes(), name).toContain('flex-shrink-0')
+    }
+  })
+})

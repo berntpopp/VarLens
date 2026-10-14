@@ -58,4 +58,27 @@ export interface HpoExplanation {
   conflicts: HpoConflict[]
   /** Listed in every exclusion mode; they lower the score only under 'penalty'. */
   notConflicts: HpoNotConflict[]
+  /** CNV and STR rows: the locus the score came from (CNV/STR spec §6.1); absent for SNVs. */
+  locus?: HpoLocusNote
+}
+
+/** The tooltip's locus line (CNV/STR spec §6.3). */
+export interface HpoLocusNote {
+  kind: 'gene' | 'region' | 'str'
+  /** Gene symbol, ISCA region id or STRchive locus id. */
+  id: string
+  label: string
+  /** Dosage score and its source, e.g. `HI 3 (ClinGen 2026-10-14)` or `HI 3 (AnnotSV)`. */
+  dosage?: string
+  /** Region route: share of the region the CNV covers (0..1). */
+  coverage?: number
+  /** Indexed genes of the CNV (the Šidák n). */
+  diseaseGenes?: number
+  /** Protein-coding genes of the CNV. */
+  genes?: number
+  band?: string
+  copies?: string
+  motif?: string
+  inheritance?: string
+  onset?: string
 }

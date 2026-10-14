@@ -8,6 +8,7 @@
     data-testid="ranking-hpo-missing"
   >
     {{ COPY.hpoDataMissing }}
+    {{ capabilities.canUse('hpoDataUpdate') ? COPY.hpoDataInstall : COPY.hpoDataAskAdmin }}
   </v-alert>
 </template>
 
@@ -17,6 +18,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
+import { useCapabilityStore } from '../../stores/capabilityStore'
 import { SHORTLIST_RANKING_EDITOR as COPY } from '../../config/shortlistRankingEditor'
 import { rulesetUsesHpoResnik } from '../../../../shared/dsl/evaluate'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
@@ -26,6 +28,7 @@ import type { HpoDataStatus } from '../../../../shared/types/hpo-data'
 const props = defineProps<{ ruleset: EvidenceRuleset | undefined }>()
 
 const { api } = useApiService()
+const capabilities = useCapabilityStore()
 const status = ref<HpoDataStatus | null>(null)
 
 const usesHpo = computed(() => rulesetUsesHpoResnik(props.ruleset))

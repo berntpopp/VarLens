@@ -103,6 +103,7 @@ function pinLabel(): string {
         <div class="font-weight-bold">{{ phenotype.title }}</div>
         <div v-if="phenotype.matched !== null">{{ phenotype.matched }}</div>
         <div v-if="phenotype.conflicts !== null">{{ phenotype.conflicts }}</div>
+        <div v-if="phenotype.locus !== null">{{ phenotype.locus }}</div>
         <div>{{ phenotype.rank }}</div>
       </div>
     </template>

@@ -17,6 +17,7 @@
         variant="solo"
         :prepend-inner-icon="mdiMagnify"
         hide-details
+        no-data-text="No matching commands"
         auto-select-first
         @update:model-value="run"
         @keydown.esc="model = false"

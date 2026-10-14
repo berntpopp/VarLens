@@ -10,6 +10,8 @@ export const HPO_TERM_COPY = {
   keyState: 'key finding',
   keyGroup: 'Key',
   remove: 'Remove',
+  /** Suggestion subtitle for a term the case already has. */
+  assigned: 'already assigned',
   presentGroup: 'Present phenotypes',
   excludedGroup: 'Excluded phenotypes',
   empty: 'No phenotype terms assigned',

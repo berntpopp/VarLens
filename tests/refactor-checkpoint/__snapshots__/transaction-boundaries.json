@@ -138,6 +138,11 @@
       "assignedTo": null
     },
     {
+      "file": "src/main/services/phenotype/locus-reference-db.ts",
+      "callerFunction": "writeLocusReference",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/workers/delete-operations.ts",
       "callerFunction": "deleteCasesIncrementally",
       "assignedTo": "deleteOne"

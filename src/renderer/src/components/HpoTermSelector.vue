@@ -82,16 +82,17 @@
       ref="searchField"
       v-model="selectedTerm"
       v-model:search="searchQuery"
-      :items="searchResults"
+      :items="suggestions"
       :loading="loading"
       item-title="name"
       item-value="id"
       return-object
+      :item-props="(item: HpoSuggestion) => ({ disabled: item.assigned })"
       density="compact"
       variant="outlined"
       hide-details
       clearable
-      auto-select-first
+      :auto-select-first="suggestions[0]?.assigned !== true"
       :disabled="disabled || !hpoApiAvailable"
       label="Search HPO terms"
       :placeholder="COPY.placeholder"
@@ -105,7 +106,7 @@
       <template #item="{ item, props: itemProps }">
         <v-list-item v-bind="itemProps">
           <template #subtitle>
-            {{ item.id }}
+            {{ item.id }}{{ item.assigned ? ` · ${COPY.assigned}` : '' }}
           </template>
         </v-list-item>
       </template>
@@ -145,6 +146,8 @@ interface HpoSearchResult {
   id: string
   name: string
 }
+/** A search hit, marked when the case already has the term. */
+type HpoSuggestion = HpoSearchResult & { assigned: boolean }
 
 const props = defineProps<{
   modelValue: CaseHpoTerm[]
@@ -227,7 +230,13 @@ const HPO_LIST_PROPS: Record<string, unknown> = {
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
 const loading = ref(false)
-const selectedTerm = ref<HpoSearchResult | null>(null)
+const selectedTerm = ref<HpoSuggestion | null>(null)
+/** Assigned terms stay listed but disabled; an assigned top hit turns off auto-select-first,
+ *  so Enter never adds the next match instead. */
+const suggestions = computed<HpoSuggestion[]>(() => {
+  const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
+  return searchResults.value.map((t) => ({ ...t, assigned: assignedIds.has(t.id) }))
+})
 const hpoUnavailableReason = runtimeFeatureUnavailableReason('hpoSearch')
 const hpoApiAvailable = ref(false)
 /** Search failure (as opposed to "no matches") shown in the dropdown. */
@@ -253,9 +262,7 @@ async function performSearch(query: string) {
   try {
     const terms = await searchBundledTerms(query, 20)
     if (query !== searchQuery.value) return
-    // Filter out already assigned terms
-    const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
-    searchResults.value = terms.filter((t) => !assignedIds.has(t.id))
+    searchResults.value = terms
     // The composable logs a failed load of the list and returns no terms.
     if (loadError.value !== null) searchError.value = 'HPO search failed. Try again later.'
   } finally {

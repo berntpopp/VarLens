@@ -302,8 +302,11 @@ export function useCaseMetadata() {
         ...(flags ? resolveHpoTermFlags(flags) : {})
       }
 
+      // New terms go where the server lists them (ORDER BY hpo_id on SQLite and Postgres).
       setCachedHpoTerms(caseId, (terms) =>
-        existing ? terms.map((t) => (t.hpo_id === hpoId ? optimistic : t)) : [...terms, optimistic]
+        existing
+          ? terms.map((t) => (t.hpo_id === hpoId ? optimistic : t))
+          : [...terms, optimistic].sort((x, y) => (x.hpo_id < y.hpo_id ? -1 : 1))
       )
 
       try {

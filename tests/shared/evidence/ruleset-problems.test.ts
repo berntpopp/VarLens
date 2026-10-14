@@ -92,14 +92,14 @@ describe('evidenceConfigProblems / describeProblem', () => {
   })
 })
 
-// #581: SV/CNV evidence scoring stays behind a config flag (off by default).
+// #581, #582: SV/CNV/STR evidence scoring stays behind one flag per type (all off by default).
 describe('variant-type scoped groups', () => {
-  const flag = SHORTLIST_EVIDENCE_CONFIG.structuralTypes as { enabled: boolean }
-  const enable = (): void => {
-    flag.enabled = true
+  const flags = SHORTLIST_EVIDENCE_CONFIG.structuralTypes.enabled
+  const enable = (...types: Array<keyof typeof flags>): void => {
+    for (const t of types.length > 0 ? types : (['sv', 'cnv'] as const)) flags[t] = true
   }
   afterEach(() => {
-    flag.enabled = false
+    flags.sv = flags.cnv = flags.str = false
   })
   const svRuleset = (): EvidenceRuleset => {
     const rs = clone()
@@ -140,7 +140,17 @@ describe('variant-type scoped groups', () => {
     expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
   })
 
-  it('keeps rejecting STR, which has no evidence fields', () => {
+  it('enables each type on its own', () => {
+    enable('str')
+    const rs = svRuleset()
+    expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
+      `groups.${rs.groups.length - 1}.variantType`
+    ])
+    rs.groups[rs.groups.length - 1].variantType = 'str'
+    expect(rulesetProblems(rs)).toEqual([])
+  })
+
+  it('keeps rejecting STR while only SV/CNV are enabled', () => {
     enable()
     const rs = svRuleset()
     rs.groups[rs.groups.length - 1].variantType = 'str'

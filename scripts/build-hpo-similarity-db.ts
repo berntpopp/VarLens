@@ -4,6 +4,7 @@
  *
  * Usage: npm run build:hpo-db -- [--out <path>] [--tag vYYYY-MM-DD]
  * Output defaults to $VARLENS_HPO_DB_PATH, else ./hpo_similarity.db.
+ * ClinGen genes are keyed by HGNC id via $VARLENS_GENE_REF_DB_PATH, else ./resources/gene_reference.db.
  * Exits non-zero on any download or verification failure.
  * Restart a running web server afterwards: its boot prewarm loads the new index;
  * otherwise the first hpo_resnik ranking reloads it on the event loop, stalling every request.
@@ -32,6 +33,7 @@ export async function buildHpoDbCli(
     isOnline: () => true,
     dbPath,
     tag: values.tag,
+    geneRefPath: env.VARLENS_GENE_REF_DB_PATH ?? resolve('resources/gene_reference.db'),
     build: async (request) => buildHpoFromFiles(request)
   })
 }

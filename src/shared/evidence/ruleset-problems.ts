@@ -30,9 +30,13 @@ export interface EvidenceProblem {
 
 const { limits, variantTypes, structuralTypes, referenceRuleSuffix } = SHORTLIST_EVIDENCE_CONFIG
 
-/** SV/CNV join the scorable types only while SV/CNV evidence scoring is enabled (#581). */
-const evidenceTypes = (): readonly VariantTypeKey[] =>
-  structuralTypes.enabled ? [...variantTypes, ...structuralTypes.types] : variantTypes
+/** A structural type joins the scorable types only while its flag is on (#581, #582). */
+const evidenceTypes = (): readonly VariantTypeKey[] => [
+  ...variantTypes,
+  ...structuralTypes.types.filter((t) => structuralTypes.enabled[t])
+]
+const anyStructuralType = (): boolean =>
+  structuralTypes.types.some((t) => structuralTypes.enabled[t])
 
 /** Dotted key of a path (`groups.0.rules.1.when`), used to look problems up. */
 export const problemKey = (path: ProblemPath): string => path.join('.')
@@ -82,7 +86,7 @@ function groupProblems(rs: EvidenceRuleset): EvidenceProblem[] {
         message: `scope names mode ${g.scope}, which the ruleset lacks`
       })
     }
-    if (g.variantType !== undefined && !structuralTypes.enabled) {
+    if (g.variantType !== undefined && !anyStructuralType()) {
       problems.push({
         path: ['groups', gi, 'variantType'],
         message: 'variant-type scoped groups need SV/CNV evidence scoring, which is disabled'
@@ -164,7 +168,7 @@ export function rulesetProblems(input: unknown): EvidenceProblem[] {
 
 /**
  * Problems of an evidence preset's configuration ([] when fine): SNV/indel
- * scope (plus SV/CNV when `structuralTypes` is enabled), no inheritance-mode or
+ * scope (plus each SV/CNV/STR type enabled in `structuralTypes`), no inheritance-mode or
  * family filter in any merged per-type
  * Stage-1 filter (modes are scored, not filtered), and a valid ruleset.
  */

@@ -99,16 +99,19 @@ export function naiveScores(
   const hi = Math.min(lo + 1, K - 1)
   const frac = kEff - (lo + 1)
   const interp = (get: (col: number) => number): number => get(lo) + frac * (get(hi) - get(lo))
+  // Calibration runs over gene-linked diseases only (region/STR diseases leave gene scores unchanged).
+  const linked = new Set(input.geneDiseases.map(([, d]) => d))
+  const calibrated = diseaseIds.filter((d) => linked.has(d))
   const floorAt = (col: number): number => {
-    const sds = diseaseIds.map((d) => sdAt(d, col)).sort((a, b) => a - b)
+    const sds = calibrated.map((d) => sdAt(d, col)).sort((a, b) => a - b)
     return sds[Math.floor(C.sigmaFloorQuantile * (sds.length - 1))]
   }
   const sigmaFloor = Math.max(C.sigmaMin, interp(floorAt))
   // b_e: mean over diseases of the max point frequency of the disease's annotations at or below e.
   const background = (e: string): number =>
-    diseaseIds
+    calibrated
       .map((d) => Math.max(0, ...(ann.get(d) ?? []).filter((a) => anc(a.t).has(e)).map((a) => a.f)))
-      .reduce((x, y) => x + y, 0) / diseaseIds.length
+      .reduce((x, y) => x + y, 0) / calibrated.length
   const lr = (f: number, b: number): number => {
     const eps = opts.lrEpsilon
     return Math.max(0, -Math.log(((1 - eps) * (1 - f) + eps) / ((1 - eps) * (1 - b) + eps)))

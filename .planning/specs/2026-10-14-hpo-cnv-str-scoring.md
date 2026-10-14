@@ -382,7 +382,47 @@ No public STR phenopacket benchmark exists (research-str §4).
 
 ## 10. Outcome
 
-To be filled after §7 runs: per-criterion results with CIs, ablation table, and the flag decision per type.
+§7 ran once on 2026-10-14 (protocol pre-registered at `eaccf974`; report
+`.planning/artifacts/shortlist-sim/2026-10-14-cnv-str/report.md`, with ablation tables and notes).
+HPO v2026-09-01, ClinGen 2026-10-14, STRchive v2.28.0, Mondo v2026-10-06. Δ in pp, 95 % paired
+locus-clustered bootstrap CIs.
+
+| # | Result | Value |
+|---|---|---|
+| CNV-1 | **FAILED** | real cases (n = 130, 12 clusters): A3 − A0 Hit@10 −3.0 [−7.6, −0.6] (bar ≥ −2.0) |
+| CNV-2 | **FAILED** | simulation, moderate, ≥ 1 Mb backgrounds: A3 − A0 Hit@10 −10.7 [−17.7, −3.5] (bar ≥ +5.0) |
+| CNV-3 | PASS | region diseases (n = 44): A3 − A2 Hit@10 +41.4 [29.0, 53.8] (bar ≥ +20) |
+| CNV-4 | PASS | median ρ(S_cnv, n_c) −0.10 (A0 0.05) |
+| CNV-5 | PASS | 200 real-data profiles × 5,268 genes identical to the v5 DB |
+| CNV-6 | **FAILED** | p95 5.86 ms at 5,000 CNVs (bar 5); index load 113 ms (bar 50), almost all the gene-interval index |
+| STR-1 | **FAILED** | 45 false leads, all `CHNG3_MIR7-2` (STRchive benign max 4 ≥ pathogenic min 3); T1–T4: 0 |
+| STR-2 | PASS | Hit@1 new − baseline +27.9 [17.9, 38.3] |
+| STR-3 | PASS | +23.3 / +27.9 / +59.4 (clean / moderate / noisy) |
+| STR-4 | PASS | ORPHA:273 0.88, ORPHA:401901 0.83, ORPHA:98757 0.93 |
+
+**Flags: CNV off, STR off** (each type has a failed criterion). Findings for the follow-up:
+- CNV: the gene route loses to the naive max. Dosage weights cost 9–11 pp Hit@10 in simulation
+  (+5 pp on real cases), Šidák another ~9 pp; regions recover ~9 pp overall. Revisiting the gene
+  route needs a new pre-registered run, not a retune on these cases.
+- CNV-6: cache or prewarm the gene-interval index (it is shared with the import fallback); the
+  per-case scoring is ~4.6 ms median on a loaded host.
+- STR-1: a catalogue locus whose benign maximum reaches its pathogenic minimum must band such
+  calls as normal (or get an override); then STR-1 should be re-run.
+
+**POST-HOC run after the review bug fixes** (not pre-registered; the verdicts above stand). Same
+harness, seeds and data, at `e871d786`; no tunable parameter changed (report, section "POST-HOC").
+
+| # | Pre-registered | Post-hoc |
+|---|---|---|
+| CNV-1 | **FAILED** −3.0 | **FAILED** −3.0 (unchanged) |
+| CNV-2 | **FAILED** −10.7 | **FAILED** −10.7 (unchanged) |
+| CNV-3 to CNV-5 | PASS | PASS (unchanged) |
+| CNV-6 | **FAILED** p95 5.86 ms; load 112.9 ms | **FAILED** p95 5.90 ms; load 24.5 ms (load bar met) |
+| STR-1 | **FAILED** 45 false leads | PASS 0 false leads |
+| STR-2 to STR-4 | PASS | PASS (unchanged) |
+
+Flags stay off: CNV still fails CNV-1/2/6; STR passes all four only post-hoc, so switching it on
+needs a new pre-registered STR run.
 
 ## 11. Decisions (user, 2026-10-14)
 

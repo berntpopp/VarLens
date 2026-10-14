@@ -21,6 +21,10 @@ export const HPO_DB = join(CACHE_DIR, 'hpo', 'hpo_similarity.db')
 export const HPO_RAW_DIR = join(CACHE_DIR, 'hpo', 'raw-v2026-09-01')
 /** Frozen copy of the builder-v2 DB: the sprint-3 baseline of the HPO scoring v2 benchmark. */
 export const HPO_DB_SPRINT3 = join(CACHE_DIR, 'hpo', 'hpo_similarity.sprint3.db')
+/** Builder-v6 DB (CNV/STR locus tables: ClinGen, STRchive, Mondo) of the v2026-09-01 release. */
+export const HPO_DB_V6 = join(CACHE_DIR, 'hpo', 'hpo_similarity.v6.db')
+/** Public CNV/STR benchmark downloads: 1000 Genomes SV calls, ClinVar variant_summary. */
+export const CNV_STR_EXTERNAL_DIR = join(DATA_DIR, 'external', 'cnv-str')
 /** v2 DB whose background null is built for forward weight exponent τ (build-tau-dbs.ts). */
 export const hpoDbForTau = (tau: number): string =>
   join(CACHE_DIR, 'hpo', `hpo_similarity.tau-${tau}.db`)

@@ -81,6 +81,15 @@ describe('CommandPalette', () => {
     expect(faq).toHaveBeenCalledTimes(1)
   })
 
+  it('says so when no command matches', async () => {
+    await mountPalette({ help: vi.fn() })
+    const input = document.body.querySelector('input')!
+    input.value = 'zzz-no-such-command'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    expect(document.body.textContent).toContain('No matching commands')
+  })
+
   it('closes on Escape', async () => {
     const wrapper = await mountPalette({ help: vi.fn() })
     document.body
