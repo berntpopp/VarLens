@@ -16,7 +16,7 @@ import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
  * two registry columns (`sv.dr` + `sv.dv`) — no single sort target exists.
  */
 export const svHeaders: ColumnDef[] = [
-  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
+  { title: '', key: 'annotations', sortable: false, width: '128px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' },
   {

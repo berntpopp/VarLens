@@ -57,7 +57,7 @@ export function getHeadersForType(variantType: string): ColumnDef[] {
  * screen at 1366 px (audit 06 §3.2); a saved user order still wins.
  */
 export const baseHeaders: ColumnDef[] = [
-  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
+  { title: '', key: 'annotations', sortable: false, width: '128px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
   { title: 'Position', key: 'pos', sortable: true, align: 'end' },
   { title: 'Ref', key: 'ref', sortable: false, width: '100px' },

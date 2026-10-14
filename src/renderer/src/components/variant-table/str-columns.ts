@@ -14,7 +14,7 @@ import type { ColumnDef } from './columns'
  * decision on compound TEXT values.
  */
 export const strHeaders: ColumnDef[] = [
-  { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
+  { title: '', key: 'annotations', sortable: false, width: '128px', align: 'center' },
   {
     title: 'Locus',
     key: 'str.repeat_id',

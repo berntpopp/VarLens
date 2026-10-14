@@ -134,6 +134,44 @@
   }
 }
 
+// Row tag dots (#125): up to four 6px dots in a fixed 14x14 box, so tagging a
+// row never shifts the layout. The ring keeps light colours (amber) visible on
+// both themes (WCAG 1.4.11 non-text contrast).
+.annotation-btn.tag-btn {
+  width: 24px;
+}
+
+.tag-dots {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-auto-rows: 6px;
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+  align-content: center;
+}
+
+.tag-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, rgb(var(--v-theme-on-surface)) 45%, transparent);
+  flex-shrink: 0;
+}
+
+.tag-dot--menu {
+  width: 10px;
+  height: 10px;
+}
+
+.tag-dots-more {
+  font-size: 8px;
+  line-height: 6px;
+  font-weight: 700;
+  text-align: center;
+}
+
 // Common cursor utility
 .cursor-pointer {
   cursor: pointer;
