@@ -110,6 +110,7 @@ export function strataSection(d: ReportData): string {
       d,
       d.byMode
     ),
+    `X-linked stratum (XLD + XLR, ${d.xl.n} cases; XLR only in male backgrounds): candidate Hit@10 ${ci(d.xl.hit10)}, Δ vs reference ${dpts(d.xl.deltaHit10)}.`,
     strataTable(
       'Per consequence class',
       'Plain mean within the class (spec §11.2 class of a case).',
@@ -178,6 +179,8 @@ export function sensitivitySection(d: ReportData): string {
 }
 
 export function pointsSection(m: RunManifest): string {
+  if (m.frozenRuleset !== undefined)
+    return `## Points\n\nFrozen rerun: the ruleset \`${m.frozenRuleset}\` was evaluated unchanged in every fold; nothing was tuned.`
   const rows = m.tuned.bins.map((b) => [
     b.group,
     b.bin + (b.isReference ? ' (catch-all)' : '') + (b.isAnchor ? ' (anchor)' : ''),

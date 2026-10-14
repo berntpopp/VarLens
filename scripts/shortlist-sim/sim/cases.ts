@@ -1,10 +1,10 @@
 /**
  * Simulated cases (spec §4.5, §11.3): per background, every plausible pool P/LP variant in a
- * background gene once as a single-allele case (AD/XLD het, AR hom), up to 3 compound-het pairs
- * per AR gene from alleles of the same disease, and 10 benign decoys per case. XLR is not
- * simulated (female backgrounds).
+ * background gene once as a single-allele case (AD/XLD het, AR hom; XLD/XLR hemizygous in a male
+ * background), up to 3 compound-het pairs per AR gene from alleles of the same disease, and 10
+ * benign decoys per case. XLR is simulated in male backgrounds only (#583).
  */
-import type { CaseMode, ConsequenceClass } from '../common/types'
+import { CASE_MODES, type CaseMode, type ConsequenceClass } from '../common/types'
 import { rng, shuffle } from '../common/rng'
 import type { PoolVariant } from '../pool/select-pool'
 import type { BackgroundInfo } from './background-db'
@@ -13,7 +13,8 @@ import {
   type CaddSource,
   type SpikeOptions,
   type SpikeRow,
-  type SpikeSource
+  type SpikeSource,
+  type SpikeZygosity
 } from './spikes'
 
 export type { CaseMode }
@@ -94,7 +95,7 @@ function trySpike(
   ctx: Ctx,
   pv: PoolVariant,
   role: SpikeRow['role'],
-  zyg: 'het' | 'hom',
+  zyg: SpikeZygosity,
   count: boolean
 ): SpikeRow | null {
   const src = ctx.sources.get(pv.key)
@@ -113,13 +114,15 @@ function trySpike(
 function singleCases(ctx: Ctx, plp: PoolVariant[]): Array<Omit<SimCase, 'decoys' | 'id'>> {
   const out: Array<Omit<SimCase, 'decoys' | 'id'>> = []
   for (const pv of plp) {
-    if (pv.moi === 'XLR') {
+    const male = ctx.bg.info.sex === 'male'
+    if (pv.moi === 'XLR' && !male) {
       ctx.funnel.add('causal_xlr_not_simulated')
       continue
     }
     if (pv.moi === null) continue
     const mode: CaseMode = pv.moi === 'AR' ? 'AR_HOM' : pv.moi
-    const spike = trySpike(ctx, pv, 'causal', mode === 'AR_HOM' ? 'hom' : 'het', true)
+    const zyg = mode === 'AR_HOM' ? 'hom' : male && mode.startsWith('XL') ? 'hemi' : 'het'
+    const spike = trySpike(ctx, pv, 'causal', zyg, true)
     if (spike === null) continue
     out.push({
       bg: ctx.bg.info.label,
@@ -207,7 +210,6 @@ export function buildCases(
     none: 0
   }
   for (const c of cases) for (const s of [...c.causal, ...c.decoys]) caddSources[s.caddSource]++
-  for (const m of ['AD', 'AR_HOM', 'AR_COMPHET', 'XLD'] as const)
-    funnel.add(`cases_${m}`, cases.filter((c) => c.mode === m).length)
+  for (const m of CASE_MODES) funnel.add(`cases_${m}`, cases.filter((c) => c.mode === m).length)
   return { cases, funnel: funnel.counts, caddSources }
 }
