@@ -29,6 +29,7 @@ export const EvidenceGroupSchema = z.object({
   id: IdSchema,
   label: LabelSchema,
   scope: z.union([z.literal('global'), ModeIdSchema]),
+  variantType: z.enum(['snv', 'indel', 'sv', 'cnv', 'str']).optional(),
   rules: z.array(EvidenceRuleSchema).min(1).max(limits.rulesPerGroup)
 })
 

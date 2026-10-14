@@ -28,8 +28,11 @@ export interface EvidenceProblem {
   position?: number
 }
 
-const { limits, variantTypes, referenceRuleSuffix } = SHORTLIST_EVIDENCE_CONFIG
-const EVIDENCE_TYPES: readonly VariantTypeKey[] = variantTypes
+const { limits, variantTypes, structuralTypes, referenceRuleSuffix } = SHORTLIST_EVIDENCE_CONFIG
+
+/** SV/CNV join the scorable types only while SV/CNV evidence scoring is enabled (#581). */
+const evidenceTypes = (): readonly VariantTypeKey[] =>
+  structuralTypes.enabled ? [...variantTypes, ...structuralTypes.types] : variantTypes
 
 /** Dotted key of a path (`groups.0.rules.1.when`), used to look problems up. */
 export const problemKey = (path: ProblemPath): string => path.join('.')
@@ -77,6 +80,17 @@ function groupProblems(rs: EvidenceRuleset): EvidenceProblem[] {
       problems.push({
         path: ['groups', gi, 'scope'],
         message: `scope names mode ${g.scope}, which the ruleset lacks`
+      })
+    }
+    if (g.variantType !== undefined && !structuralTypes.enabled) {
+      problems.push({
+        path: ['groups', gi, 'variantType'],
+        message: 'variant-type scoped groups need SV/CNV evidence scoring, which is disabled'
+      })
+    } else if (g.variantType !== undefined && !evidenceTypes().includes(g.variantType)) {
+      problems.push({
+        path: ['groups', gi, 'variantType'],
+        message: `evidence rules cannot score ${g.variantType} variants`
       })
     }
     g.rules.forEach((r, ri) => {
@@ -150,16 +164,18 @@ export function rulesetProblems(input: unknown): EvidenceProblem[] {
 
 /**
  * Problems of an evidence preset's configuration ([] when fine): SNV/indel
- * scope only, no inheritance-mode or family filter in any merged per-type
+ * scope (plus SV/CNV when `structuralTypes` is enabled), no inheritance-mode or
+ * family filter in any merged per-type
  * Stage-1 filter (modes are scored, not filtered), and a valid ruleset.
  */
 export function evidenceConfigProblems(config: ShortlistConfig): EvidenceProblem[] {
   const problems: EvidenceProblem[] = []
   const scope = config.variantTypeScope ?? []
-  if (scope.length === 0 || scope.some((t) => !EVIDENCE_TYPES.includes(t))) {
+  const allowed = evidenceTypes()
+  if (scope.length === 0 || scope.some((t) => !allowed.includes(t))) {
     problems.push({
       path: ['variantTypeScope'],
-      message: "evidence presets must set variantTypeScope to 'snv' and/or 'indel'"
+      message: `evidence presets must set variantTypeScope to ${allowed.map((t) => `'${t}'`).join(' and/or ')}`
     })
   }
   for (const type of scope) {

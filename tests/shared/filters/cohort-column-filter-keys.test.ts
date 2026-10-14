@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  COHORT_SUMMARY_FILTER_COLUMNS,
   normalizeCohortColumnFilters,
   UnsupportedCohortColumnFilterError
 } from '../../../src/shared/filters/cohort-column-filter-keys'
@@ -55,7 +56,13 @@ describe('normalizeCohortColumnFilters (#528)', () => {
         normalizeCohortColumnFilters({ [col.key]: { operator: '=', value: '1' } })
       ).not.toThrow()
     }
-    for (const col of FILTER_COLUMNS.filter((c) => !isColumnInScope(c, 'cohort'))) {
+    // Shortlist-rule registrations of stored SV columns (sv_type, sv_length; #581)
+    // leave the cohort's own filter on those columns untouched.
+    const ruleOnlyStored = (c: (typeof FILTER_COLUMNS)[number]): boolean =>
+      c.shortlistOnly === true && c.key in COHORT_SUMMARY_FILTER_COLUMNS
+    for (const col of FILTER_COLUMNS.filter(
+      (c) => !isColumnInScope(c, 'cohort') && !ruleOnlyStored(c)
+    )) {
       expect(() =>
         normalizeCohortColumnFilters({ [col.key]: { operator: '=', value: '1' } })
       ).toThrow(UnsupportedCohortColumnFilterError)

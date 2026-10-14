@@ -5,6 +5,7 @@
  */
 
 import { EVIDENCE_MODE_ORDER, type EvidenceModeId } from '../config/shortlist-evidence.config'
+import type { VariantTypeKey } from './shortlist'
 
 /** Inheritance-mode profiles, in their fixed decision-list order. */
 export { EVIDENCE_MODE_ORDER }
@@ -23,6 +24,8 @@ export interface EvidenceGroup {
   label: string
   /** `global` applies under every mode; a mode id only under that mode. */
   scope: 'global' | ModeId
+  /** Only rows of this variant type (SV/CNV evidence scoring, #581); absent = every type. */
+  variantType?: VariantTypeKey
   rules: EvidenceRule[]
 }
 
