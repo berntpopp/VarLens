@@ -19,6 +19,7 @@ import {
 } from '../../../shared/utils/import-field-profile'
 import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
 import { hpoMatchText } from './hpo-match'
+import { trimAlleles } from '../../../shared/utils/trim-alleles'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -195,6 +196,8 @@ export class FieldMapper extends Transform {
         return
       }
 
+      // Minimal alleles (#587), the same as the object-format and VCF imports.
+      Object.assign(mapped, trimAlleles(mapped.pos, mapped.ref, mapped.alt))
       const output: MappedVariantWithTranscripts = mapped
       if (transcripts.length > 0) {
         output._transcripts = transcripts

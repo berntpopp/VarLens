@@ -3,9 +3,10 @@
  *
  * INFO fields VarLens does not map to a column are kept as raw strings in the
  * `variants.info_json` object (`src/main/import/vcf/info-field-registry.ts`):
- * `{"DP":"35","TAGS":"a,b","FLAG":""}`. The header's Type/Number is not
- * persisted, so a value's type is decided per row, the same way on both
- * backends:
+ * `{"DP":"35","TAGS":"a,b","FLAG":""}`. The header's Type/Number is kept only
+ * in the case field dictionary, for autocomplete hints (`case-info-fields.ts`);
+ * the filter does not use it, so a value's type is decided per row, the same
+ * way on both backends:
  *
  * - **missing**: the key is absent or holds the VCF missing value `.`
  *   (`is_null`); a Flag is stored as `''` and counts as present.

@@ -101,6 +101,12 @@ describe('FieldMapper', () => {
       })
     })
 
+    it('trims padded alleles to their minimal anchored form (#587)', async () => {
+      const [result] = await runTransform([createTestRow({ 11: 'ATT', 12: 'AT' })])
+
+      expect(result).toMatchObject({ pos: 12345, ref: 'AT', alt: 'A' })
+    })
+
     it('should handle null values in optional fields', async () => {
       const row = createTestRow({
         46: null, // CADD
