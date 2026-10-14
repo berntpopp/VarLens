@@ -20,10 +20,13 @@
         class="text-caption"
         :aria-label="hpoTermAriaLabel(term)"
       >
-        <template v-if="term.excluded">{{ COPY.excludedPrefix }}</template>
-        <span :class="{ 'text-decoration-line-through': term.excluded }">
-          {{ hpoTermLabel(term) }}
-        </span>
+        <!-- One inline span: a flex chip would trim the space after "no". -->
+        <span
+          >{{ term.excluded ? COPY.excludedPrefix : ''
+          }}<span :class="{ 'text-decoration-line-through': term.excluded }">{{
+            hpoTermLabel(term)
+          }}</span></span
+        >
       </v-chip>
       <v-tooltip v-if="overflowHpoCount > 0" location="bottom">
         <template #activator="{ props: tooltipProps }">

@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { computed } from 'vue'
 import { withSetup, flushPromises } from '../../utils/test-helpers'
 import { createMockApi } from '../../utils/mock-api'
 import { useCaseMetadata } from '@renderer/composables/useCaseMetadata'
@@ -206,6 +207,28 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([serverTerm])
       expect(phenotypeChange.value).toEqual({ caseId })
+    })
+
+    it('re-renders computeds that read the cached HPO terms', async () => {
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue({
+        id: 5,
+        case_id: caseId,
+        hpo_id: 'HP:0001250',
+        hpo_label: 'Seizure',
+        excluded: false,
+        key: false,
+        created_at: 0
+      })
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata())
+      // Same shape as CaseMetadataCard: a computed over the entry, then over its terms.
+      const entry = computed(() => result.getMetadata(caseId))
+      const ids = computed(() => entry.value?.hpoTerms.map((t) => t.hpo_id) ?? [])
+      expect(ids.value).toEqual([])
+      await result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure', { excluded: false, key: false })
+      await flushPromises()
+      expect(ids.value).toEqual(['HP:0001250'])
     })
 
     it('upserts status flags in place and rolls back to the previous flags on failure', async () => {

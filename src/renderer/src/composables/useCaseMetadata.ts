@@ -50,6 +50,14 @@ const loadingStates = shallowRef<Map<number, boolean>>(new Map())
  * and its revert may both run before the next render cycle.
  */
 let _pendingTrigger = false
+/** Replace a case's HPO terms with a new cache entry: same-object writes would not re-render computeds. */
+function setCachedHpoTerms(caseId: number, update: (terms: CaseHpoTerm[]) => CaseHpoTerm[]): void {
+  const entry = metadataCache.value.get(caseId)
+  if (!entry) return
+  metadataCache.value.set(caseId, { ...entry, hpoTerms: update(entry.hpoTerms) })
+  triggerCacheUpdate()
+}
+
 function triggerCacheUpdate(): void {
   if (!_pendingTrigger) {
     _pendingTrigger = true
@@ -401,8 +409,7 @@ export function useCaseMetadata() {
     if (!api) return
     const generation = cacheGeneration
     await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousTerms = current?.hpoTerms ?? []
+      const previousTerms = metadataCache.value.get(caseId)?.hpoTerms ?? []
       const existing = previousTerms.find((t) => t.hpo_id === hpoId)
       // Flags set the whole status (excluded wins over key); without flags a term keeps its own.
       const optimistic: CaseHpoTerm = {
@@ -417,12 +424,9 @@ export function useCaseMetadata() {
         ...(flags ? resolveHpoTermFlags(flags) : {})
       }
 
-      if (current) {
-        current.hpoTerms = existing
-          ? previousTerms.map((t) => (t.hpo_id === hpoId ? optimistic : t))
-          : [...previousTerms, optimistic]
-        triggerCacheUpdate()
-      }
+      setCachedHpoTerms(caseId, (terms) =>
+        existing ? terms.map((t) => (t.hpo_id === hpoId ? optimistic : t)) : [...terms, optimistic]
+      )
 
       try {
         const created = unwrapIpcResult(
@@ -430,20 +434,14 @@ export function useCaseMetadata() {
         )
         if (!isCurrentGeneration(generation)) return
         notifyPhenotypeChanged(caseId)
-        if (current) {
-          current.hpoTerms = current.hpoTerms.map((t) => (t.hpo_id === hpoId ? created : t))
-          triggerCacheUpdate()
-        }
+        setCachedHpoTerms(caseId, (terms) => terms.map((t) => (t.hpo_id === hpoId ? created : t)))
       } catch (error) {
         if (!isCurrentGeneration(generation)) return
         logService.error(
           'Failed to assign HPO term: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
         )
-        if (current) {
-          current.hpoTerms = previousTerms
-          triggerCacheUpdate()
-        }
+        setCachedHpoTerms(caseId, () => previousTerms)
         throw error
       }
     })
@@ -454,12 +452,8 @@ export function useCaseMetadata() {
     if (!api) return
     const generation = cacheGeneration
     await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousTerms = current?.hpoTerms ?? []
-      if (current) {
-        current.hpoTerms = current.hpoTerms.filter((t) => t.hpo_id !== hpoId)
-        triggerCacheUpdate()
-      }
+      const previousTerms = metadataCache.value.get(caseId)?.hpoTerms ?? []
+      setCachedHpoTerms(caseId, (terms) => terms.filter((t) => t.hpo_id !== hpoId))
 
       try {
         unwrapIpcResult(await api.caseMetadata.removeHpoTerm(caseId, hpoId))
@@ -471,10 +465,7 @@ export function useCaseMetadata() {
           'Failed to remove HPO term: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
         )
-        if (current) {
-          current.hpoTerms = previousTerms
-          triggerCacheUpdate()
-        }
+        setCachedHpoTerms(caseId, () => previousTerms)
         throw error
       }
     })

@@ -33,10 +33,13 @@
               @keydown="onChipKeydown($event, term)"
               @click:close="remove(term)"
             >
-              <template v-if="term.excluded">{{ COPY.excludedPrefix }}</template>
-              <span :class="{ 'text-decoration-line-through': term.excluded }">
-                {{ term.hpo_label }}
-              </span>
+              <!-- One inline span: a flex chip would trim the space after "no". -->
+              <span
+                >{{ term.excluded ? COPY.excludedPrefix : ''
+                }}<span :class="{ 'text-decoration-line-through': term.excluded }">{{
+                  term.hpo_label
+                }}</span></span
+              >
               <v-tooltip activator="parent" location="top">
                 {{ term.hpo_id }} - {{ term.hpo_label }} · {{ COPY.chipShortcuts }}
               </v-tooltip>
