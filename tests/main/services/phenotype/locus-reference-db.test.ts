@@ -137,6 +137,11 @@ describe('locus reference build', () => {
     const ref = readLocusReference(path)!
     expect(ref.strLoci).toHaveLength(6)
     expect(ref.dosageGenes.size).toBe(1000)
+    // The fresh Mondo still carries the crosswalk of the kept regions.
+    expect(all(path, 'SELECT mondo FROM mondo_xrefs ORDER BY 1')).toEqual([
+      ['MONDO:0000001'],
+      ['MONDO:0000002']
+    ])
     expect(all(path, "SELECT id FROM diseases WHERE id = 'OMIM:1'")).toEqual([['OMIM:1']])
   })
 

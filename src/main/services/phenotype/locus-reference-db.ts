@@ -139,7 +139,9 @@ function parseSources(
   }
 
   // Mondo maps the MONDO ids of fresh regions and of loci without OMIM/Orphanet ids.
-  const wanted = new Set<string>()
+  // Previous ids too: a fresh Mondo must not drop the crosswalk a later fallback still needs.
+  const previousMondo = previousCopy(input.previousPath, 'mondo')?.rows.get('mondo_xrefs') ?? []
+  const wanted = new Set<string>(previousMondo.map(([m]) => m as string))
   if (errors.clingen === undefined) {
     for (const r of regions) for (const id of [...r.lossDiseases, ...r.gainDiseases]) wanted.add(id)
   }
@@ -155,9 +157,10 @@ function parseSources(
   }
   // Without fresh Mondo the previous crosswalk maps the fresh sources.
   const crosswalk = new Map(
-    (fresh.mondo ?? previousCopy(input.previousPath, 'mondo')?.rows)
-      ?.get('mondo_xrefs')
-      ?.map(([m, ids]) => [m as string, JSON.parse(ids as string) as string[]]) ?? []
+    (fresh.mondo?.get('mondo_xrefs') ?? previousMondo).map(([m, ids]) => [
+      m as string,
+      JSON.parse(ids as string) as string[]
+    ])
   )
   const mapIds = (ids: readonly string[]): string[] => [
     ...new Set(ids.flatMap((id) => (id.startsWith('MONDO:') ? (crosswalk.get(id) ?? []) : [id])))
