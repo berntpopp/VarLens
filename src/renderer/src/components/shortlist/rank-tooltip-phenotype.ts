@@ -27,8 +27,8 @@ export function phenotypeLines(hpo: HpoExplanation): PhenotypeLines {
     (c) => `${c.excludedLabel} excluded (${percent(c.frequency)} in ${hpo.diseaseLabel})`
   )
   // percentile = share of all reference HPO genes scoring strictly lower (ties not counted),
-  // so round down to keep the claim true.
-  const above = Math.floor(hpo.percentile * 100)
+  // so round down to keep the claim true (the epsilon absorbs float error: 0.29 * 100 = 28.99…).
+  const above = Math.floor(hpo.percentile * 100 + 1e-9)
   return {
     title: `Phenotype match ${hpo.score.toFixed(2)} · best: ${hpo.diseaseLabel}`,
     matched: matched.length > 0 ? `✓ matched: ${capped(matched)}` : null,

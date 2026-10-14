@@ -167,6 +167,10 @@ describe('RankScoreTooltip', () => {
       expect(phenotypeLines({ ...hpo, percentile: 0.996 }).rank).toBe(
         'scores above 99 % of HPO genes'
       )
+      // 0.29 * 100 is 28.999… in floating point.
+      expect(phenotypeLines({ ...hpo, percentile: 29 / 100 }).rank).toBe(
+        'scores above 29 % of HPO genes'
+      )
     })
 
     it('omits the block without an explanation', () => {
