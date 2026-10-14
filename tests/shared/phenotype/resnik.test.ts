@@ -192,7 +192,11 @@ describe('scoreAllGenes (symmetric Resnik BMA over the DAG)', () => {
         depth.push(1 + Math.max(...[...ps].map((p) => depth[p])))
       }
       const input: HpoIndexInput = {
-        terms: ids.map((id, i) => ({ id, ic: monotone ? depth[i] + rand() : rand() * 5 })),
+        // Shuffled, so the input order is not already a topological order (as in the DB).
+        terms: ids
+          .map((id, i) => ({ id, ic: monotone ? depth[i] + rand() : rand() * 5, key: rand() }))
+          .sort((a, b) => a.key - b.key)
+          .map(({ id, ic }) => ({ id, ic })),
         edges,
         aliases: [['ALIAS', pick(ids)]],
         geneTerms: Array.from({ length: 8 }, (_, g) =>
