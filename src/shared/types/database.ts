@@ -513,6 +513,10 @@ export interface CaseHpoTerm {
   hpo_id: string
   /** HPO label */
   hpo_label: string
+  /** Looked for and found absent (Phenopackets `excluded`); unlisted terms are not assessed. */
+  excluded: boolean
+  /** Leading finding; never set together with `excluded`. */
+  key: boolean
   /** Unix timestamp in milliseconds */
   created_at: number
 }

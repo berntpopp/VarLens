@@ -1,3 +1,4 @@
+import type { HpoExplanation } from './hpo-profile'
 /**
  * Shared shortlist types for the unified case Shortlist tab.
  *
@@ -98,6 +99,8 @@ export interface ScoredRow {
    * phase set, `possible` otherwise. A cis pair is labelled, not excluded.
    */
   rank_comphet_phase?: CompHetPhase | null
+  /** Evidence presets with case HPO terms and installed HPO data: the phenotype explanation. */
+  rank_hpo?: HpoExplanation | null
 }
 
 /**
