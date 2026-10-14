@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,6 +37,17 @@ afterEach(() => {
 })
 
 describe('build-hpo-similarity-db script', () => {
+  it('runs through a lockfile-pinned TypeScript runner, never an npx download', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    const lock = JSON.parse(readFileSync('package-lock.json', 'utf8')) as {
+      packages: Record<string, { bin?: Record<string, string> }>
+    }
+    expect(pkg.scripts['build:hpo-db']).toBe('jiti scripts/build-hpo-similarity-db.ts')
+    expect(lock.packages['node_modules/jiti']?.bin?.jiti).toBeDefined()
+  })
+
   it('builds the requested tag at --out through the shared update path', async () => {
     const fetch = stubNetwork('v2026-06-01')
     const out = join(dir, 'hpo.db')
