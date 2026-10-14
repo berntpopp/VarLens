@@ -22,11 +22,12 @@ import { migrateSeverityRanks } from './severity-rank-migration'
 import { backupBeforeMigrations, migrateContigNaming } from './contig-naming-migration'
 import { repairSummaryKeys } from './summary-key-repair'
 import { migrateAnnotationBuildKey } from './annotation-build-key-migration'
+import { migrateAlleleTrim } from './allele-trim-migration'
 import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.config'
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 54
+export const LATEST_SQLITE_SCHEMA_VERSION = 57
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -85,6 +86,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 54
  * - 52: variant_annotations keyed by genome build (#577; annotation-build-key-migration.ts)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
  * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
+ * - 57: trim pre-#587 rows to minimal alleles, merging global annotations (#587; mirrors PG 0040)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2125,6 +2127,13 @@ export function runMigrations(db: Database.Database): void {
       markPopulatedSummaryStale(db)
     }
     db.exec('PRAGMA user_version = 54')
+  }
+
+  // v57 (#587, mirrors PG 0040): rows imported before allele trimming get the
+  // minimal alleles an import stores now (allele-trim-migration.ts).
+  if (currentVersion < 57) {
+    migrateAlleleTrim(db)
+    db.exec('PRAGMA user_version = 57')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.
