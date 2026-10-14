@@ -208,6 +208,8 @@ describe('HpoTermSelector', () => {
           await input.trigger('keydown', { key: 'Enter' })
           await w.vm.$nextTick()
           expect(w.emitted('add:term')).toBeUndefined()
+          // Pending search shows as loading, not as "No matching HPO terms".
+          expect(w.findComponent({ name: 'VAutocomplete' }).props('loading')).toBe(true)
         } finally {
           vi.useRealTimers()
         }
