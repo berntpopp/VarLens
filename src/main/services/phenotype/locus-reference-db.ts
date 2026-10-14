@@ -61,7 +61,7 @@ const TABLES: Record<LocusSourceKey, string[]> = {
   mondo: ['mondo_xrefs']
 }
 
-export const LOCUS_SCHEMA = `
+const LOCUS_SCHEMA = `
   CREATE TABLE dosage_genes (hgnc_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, hi INTEGER, ts INTEGER) WITHOUT ROWID;
   CREATE TABLE dosage_regions (isca_id TEXT NOT NULL, build TEXT NOT NULL, chr TEXT NOT NULL, start INTEGER NOT NULL, "end" INTEGER NOT NULL, label TEXT NOT NULL, hi INTEGER, ts INTEGER, loss_diseases TEXT NOT NULL, gain_diseases TEXT NOT NULL, PRIMARY KEY (isca_id, build)) WITHOUT ROWID;
   CREATE TABLE str_loci (id TEXT PRIMARY KEY, json TEXT NOT NULL) WITHOUT ROWID;
