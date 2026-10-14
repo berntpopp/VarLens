@@ -182,7 +182,7 @@ function main(argv: string[]): void {
     .sort()
     .map((f) => parsePhenopacket(JSON.parse(readFileSync(f, 'utf8'))))
     .flatMap((c) => (c === null || !geneIndex.has(c.gene) ? [] : [c]))
-    .filter((_, i, all) => i % Math.ceil(all.length / sample) === 0)
+    .filter((_, i, all) => i % Math.max(1, Math.ceil(all.length / sample)) === 0)
   const foldOf = geneFolds(
     raw.map((c) => c.gene),
     FOLDS,
@@ -207,6 +207,7 @@ function main(argv: string[]): void {
       v2Present: standing(v2(present, {}), causal)
     }
   })
+  if (items.length === 0) throw new Error('no cases')
   console.log(`${items.length} cases`)
 
   const memo = new Map<string, Int32Array>()
