@@ -60,7 +60,7 @@ const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
 POSTGRES_BASE_SORT_COLUMNS.id = 'v.id'
 
 const NUMERIC_VARIANT_FIELDS = new Set(
-  'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
+  'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,ps,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
     ','
   )
 )

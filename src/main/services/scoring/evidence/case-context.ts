@@ -5,6 +5,7 @@
  */
 import { genotypeZygosity, type Zygosity } from '../../../../shared/utils/genotype'
 import { isInPAR } from '../../../../shared/utils/par-regions'
+import { compHetPhase, type CompHetPhase } from '../../../../shared/utils/phasing'
 
 export type { Zygosity }
 export type CaseSex = 'male' | 'female' | null
@@ -23,6 +24,8 @@ export interface LightRow {
   alt: string
   gene_symbol: string | null
   gt_num: string | null
+  /** Phase set id (VCF FORMAT PS); compared only when phasing is considered. */
+  ps?: number | null
 }
 
 export interface DerivedFields {
@@ -35,6 +38,8 @@ export interface DerivedFields {
   partners: number[]
   /** Alias for partners (lazy compound-het partner IDs). */
   readonly compoundHetPartnerVariantIds?: number[]
+  /** Phase of the row against its partners (#586); null unless phasing is considered and it has partners. */
+  readonly comphet_phase?: CompHetPhase | null
 }
 
 export type CaseAlleleLookup = DerivedFields
@@ -94,15 +99,18 @@ export function deriveZygosity(
 }
 
 interface GeneEntry {
-  /** het allele key → id of the first row carrying it */
-  het: Map<string, number>
+  /** het allele key → the first row carrying it */
+  het: Map<string, LightRow>
   all: Set<string>
 }
 
 export class GeneContextBuilder {
   private readonly genes = new Map<string, GeneEntry>()
 
-  constructor(private readonly info: CaseInfo) {}
+  constructor(
+    private readonly info: CaseInfo,
+    private readonly considerPhasing = false
+  ) {}
 
   add(rows: readonly LightRow[]): void {
     for (const row of rows) {
@@ -114,13 +122,12 @@ export class GeneContextBuilder {
       }
       const key = alleleKey(row)
       entry.all.add(key)
-      if (deriveZygosity(row, this.info) === 'het' && !entry.het.has(key))
-        entry.het.set(key, row.id)
+      if (deriveZygosity(row, this.info) === 'het' && !entry.het.has(key)) entry.het.set(key, row)
     }
   }
 
   build(): GeneContext {
-    const { genes, info } = this
+    const { genes, info, considerPhasing } = this
     return {
       info,
       derived(row: LightRow): DerivedFields {
@@ -139,17 +146,20 @@ export class GeneContextBuilder {
             compoundHetPartnerVariantIds: empty
           }
         }
-        let memoPartners: number[] | undefined
-        const computePartners = (): number[] => {
+        let memoPartners: LightRow[] | undefined
+        const partnerRows = (): LightRow[] => {
           if (memoPartners !== undefined) return memoPartners
           if (zygosity !== 'het') return (memoPartners = [])
           const own = alleleKey(row)
-          const result: number[] = []
-          for (const [key, id] of entry.het.entries()) {
-            if (key !== own) result.push(id)
+          const result: LightRow[] = []
+          for (const [key, partner] of entry.het.entries()) {
+            if (key !== own) result.push(partner)
           }
           return (memoPartners = result)
         }
+        let memoIds: number[] | undefined
+        const computePartners = (): number[] =>
+          (memoIds ??= partnerRows().map((partner) => partner.id))
 
         return {
           zygosity,
@@ -160,6 +170,10 @@ export class GeneContextBuilder {
           },
           get compoundHetPartnerVariantIds(): number[] {
             return computePartners()
+          },
+          get comphet_phase(): CompHetPhase | null {
+            const partners = partnerRows()
+            return considerPhasing && partners.length > 0 ? compHetPhase(row, partners) : null
           }
         }
       }

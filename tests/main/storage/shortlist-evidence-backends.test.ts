@@ -16,7 +16,7 @@ import { POSTGRES_MIGRATIONS } from '../../../src/main/storage/postgres/migratio
 import { PostgresMigrationRunner } from '../../../src/main/storage/postgres/migrations/PostgresMigrationRunner'
 import { PostgresExportRepository } from '../../../src/main/storage/postgres/PostgresExportRepository'
 import { PostgresShortlistService } from '../../../src/main/storage/postgres/PostgresShortlistService'
-import type { ShortlistResult } from '../../../src/shared/types/shortlist'
+import type { ShortlistConfig, ShortlistResult } from '../../../src/shared/types/shortlist'
 import {
   COMPHET_INDEL_ID,
   COMPHET_SNV_ID,
@@ -32,7 +32,17 @@ const PG_URL =
 const signature = (r: ShortlistResult): Array<[number, number, string | undefined]> =>
   r.rows.map((row) => [row.id, row.rank_score, row.rank_mode])
 
-function sqliteResult(): ShortlistResult {
+/** The comp-het pair phased in trans (one phase set), and the config that considers phasing. */
+const PHASE_UPDATES: Array<[number, string, number]> = [
+  [COMPHET_SNV_ID, '0|1', 900],
+  [COMPHET_INDEL_ID, '1|0', 900]
+]
+const PHASED_CONFIG: ShortlistConfig = {
+  ...EVIDENCE_CONFIG,
+  baseFilters: { ...EVIDENCE_CONFIG.baseFilters, considerPhasing: true }
+}
+
+function sqliteResult(phased = false): ShortlistResult {
   const db = new Database(':memory:')
   try {
     initializeSchema(db)
@@ -49,15 +59,28 @@ function sqliteResult(): ShortlistResult {
     )
     db.transaction(() => {
       for (const row of evidenceFixtureRows()) insert.run(row)
+      if (phased) {
+        const phase = db.prepare('UPDATE variants SET gt_num = ?, ps = ? WHERE id = ?')
+        for (const [id, gt, ps] of PHASE_UPDATES) phase.run(gt, ps, id)
+      }
     })()
     return createRepositories(db).shortlistService.getShortlist(
-      { caseId: 1, adHocConfig: EVIDENCE_CONFIG },
+      { caseId: 1, adHocConfig: phased ? PHASED_CONFIG : EVIDENCE_CONFIG },
       () => null
     )
   } finally {
     db.close()
   }
 }
+
+describe('evidence shortlist — SQLite phase labels (#586)', () => {
+  it('labels the pair trans with phasing considered, and leaves it unlabelled without', () => {
+    const phased = sqliteResult(true)
+    expect(phased.rows.find((r) => r.id === COMPHET_SNV_ID)?.rank_comphet_phase).toBe('trans')
+    expect(phased.rows.find((r) => r.id === COMPHET_SNV_ID)?.rank_mode).toBe('ar_comphet')
+    expect(sqliteResult().rows.find((r) => r.id === COMPHET_SNV_ID)?.rank_comphet_phase).toBeNull()
+  })
+})
 
 describe.skipIf(!RUN_PG)('evidence shortlist — PostgreSQL', () => {
   let schema: string
@@ -181,5 +204,26 @@ describe.skipIf(!RUN_PG)('evidence shortlist — PostgreSQL', () => {
     const after = await service().getShortlist({ caseId, adHocConfig: EVIDENCE_CONFIG })
     expect(after.rows[0]).toMatchObject({ id: 5, rank_starred_pinned: true })
     expect(after.totalCandidates).toBe(before.totalCandidates + 1)
+  }, 120_000)
+
+  // Runs last: it phases the comp-het pair in the shared schema.
+  it('labels a phased comp-het pair like SQLite (confirmed trans, #586)', async () => {
+    for (const [id, gt, ps] of PHASE_UPDATES) {
+      await pool.query(`UPDATE "${schema}".variants_all SET gt_num = $1, ps = $2 WHERE id = $3`, [
+        gt,
+        ps,
+        id
+      ])
+    }
+    const pg = await service().getShortlist({ caseId, adHocConfig: PHASED_CONFIG })
+    const lite = sqliteResult(true)
+    // The snapshot test above added a GENEA allele and a star on PostgreSQL only: compare the pair.
+    const phases = (r: ShortlistResult): unknown[] =>
+      [COMPHET_SNV_ID, COMPHET_INDEL_ID].map(
+        (id) => r.rows.find((row) => row.id === id)?.rank_comphet_phase
+      )
+    expect(phases(pg)).toEqual(phases(lite))
+    expect(pg.rows.find((r) => r.id === COMPHET_SNV_ID)?.rank_comphet_phase).toBe('trans')
+    expect(pg.rows.find((r) => r.id === COMPHET_INDEL_ID)?.rank_comphet_phase).toBe('trans')
   }, 120_000)
 })

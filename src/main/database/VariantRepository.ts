@@ -27,6 +27,7 @@ interface VariantExtensionFields {
   sv_type?: string | null
   sv_length?: number | null
   caller?: string | null
+  ps?: number | null
   _sv?: SvExtensionRow
   _cnv?: CnvExtensionRow
   _str?: StrExtensionRow
@@ -116,6 +117,7 @@ export class VariantRepository extends BaseRepository {
               sv_type: v.sv_type ?? null,
               sv_length: v.sv_length ?? null,
               caller: v.caller ?? null,
+              ps: v.ps ?? null,
               ...annotationSeverityRanks(v)
             })
           )

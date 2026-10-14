@@ -52,9 +52,9 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
       consequence, gnomad_af, cadd, clinvar, gt_num, func, qual,
       hpo_sim_score, transcript, cdna, aa_change, moi, hpo_match,
       gq, dp, ad_ref, ad_alt, ab, filter, info_json, source_format,
-      variant_type, end_pos, sv_type, sv_length, caller, impact_rank, clinvar_rank)
+      variant_type, end_pos, sv_type, sv_length, caller, impact_rank, clinvar_rank, ps)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertSvStmt = db.prepare(`
@@ -175,7 +175,8 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
         v.caller ?? null,
         // Stored severity ranks of the impact and ClinVar strings (#469).
         impactRank(typeof v.consequence === 'string' ? v.consequence : null),
-        clinvarRankForImport(typeof v.clinvar === 'string' ? v.clinvar : null)
+        clinvarRankForImport(typeof v.clinvar === 'string' ? v.clinvar : null),
+        v.ps ?? null
       )
 
       const variantId = result.lastInsertRowid

@@ -85,7 +85,7 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
     db.exec('BEGIN DEFERRED')
   }
   try {
-    const builder = new GeneContextBuilder(input.info)
+    const builder = new GeneContextBuilder(input.info, config.baseFilters.considerPhasing === true)
     let totalCandidates = 0
     const queryErrors = eachType(filters, (filter) =>
       forEachCandidatePage(source, filter, SHORTLIST_PAGE_SIZE, (page) => {

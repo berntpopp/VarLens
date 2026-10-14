@@ -26,7 +26,7 @@ import { acmgLabelCaseSql, acmgRankCaseSql } from '../../shared/config/severity.
 import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-rebuild'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 54
+export const LATEST_SQLITE_SCHEMA_VERSION = 56
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -85,6 +85,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 54
  * - 52: variant_annotations keyed by genome build (#577; annotation-build-key-migration.ts)
  * - 53: built-in filter presets named by clinical question (#570; mirrors PG 0036)
  * - 54: sv_type / sv_length on the cohort summary (#573; mirrors PG 0037)
+ * - 56: variants.ps, the VCF phase set id (#586; mirrors PG 0039; v55 is reserved for tags)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2125,6 +2126,18 @@ export function runMigrations(db: Database.Database): void {
       markPopulatedSummaryStale(db)
     }
     db.exec('PRAGMA user_version = 54')
+  }
+
+  // v56 (#586, mirrors PG 0039): the VCF FORMAT PS phase set id of each call,
+  // for phase-aware compound-het labels. Rows imported before have none (NULL).
+  if (currentVersion < 56) {
+    const variantColumns = (
+      db.prepare('PRAGMA table_info(variants)').all() as { name: string }[]
+    ).map((c) => c.name)
+    if (variantColumns.length > 0 && !variantColumns.includes('ps')) {
+      db.exec('ALTER TABLE variants ADD COLUMN ps INTEGER')
+    }
+    db.exec('PRAGMA user_version = 56')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

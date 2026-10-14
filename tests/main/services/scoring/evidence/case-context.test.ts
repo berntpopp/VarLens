@@ -122,3 +122,64 @@ describe('GeneContextBuilder', () => {
     })
   })
 })
+
+describe('compound-het phase label (#586)', () => {
+  const info = { build: 'GRCh38', sex: null }
+  const label = (rows: LightRow[], considerPhasing = true): unknown[] => {
+    const builder = new GeneContextBuilder(info, considerPhasing)
+    builder.add(rows)
+    const ctx = builder.build()
+    return rows.map((row) => ctx.derived(row).comphet_phase)
+  }
+
+  it('same phase set, opposite haplotypes: trans', () => {
+    expect(label([r(1, { gt_num: '0|1', ps: 7 }), r(2, { gt_num: '1|0', ps: 7 })])).toEqual([
+      'trans',
+      'trans'
+    ])
+  })
+
+  it('same phase set, same haplotype: cis — labelled, the partners stay', () => {
+    const builder = new GeneContextBuilder(info, true)
+    const rows = [r(1, { gt_num: '0|1', ps: 7 }), r(2, { gt_num: '0|1', ps: 7 })]
+    builder.add(rows)
+    const d = builder.build().derived(rows[0])
+    expect(d.comphet_phase).toBe('cis')
+    expect(d.partners).toEqual([2])
+  })
+
+  it('different, missing or unphased phase sets stay possible', () => {
+    expect(label([r(1, { gt_num: '0|1', ps: 7 }), r(2, { gt_num: '1|0', ps: 8 })])).toEqual([
+      'possible',
+      'possible'
+    ])
+    // A phased genotype without PS is not assumed phased chromosome-wide.
+    expect(label([r(1, { gt_num: '0|1' }), r(2, { gt_num: '1|0' })])).toEqual([
+      'possible',
+      'possible'
+    ])
+    expect(label([r(1, { gt_num: '0/1', ps: 7 }), r(2, { gt_num: '1|0', ps: 7 })])).toEqual([
+      'possible',
+      'possible'
+    ])
+  })
+
+  it('any trans partner wins; cis only when every partner is cis', () => {
+    const rows = [
+      r(1, { gt_num: '0|1', ps: 7 }),
+      r(2, { gt_num: '0|1', ps: 7 }),
+      r(3, { gt_num: '0/1' })
+    ]
+    expect(label(rows)).toEqual(['possible', 'possible', 'possible'])
+    rows.push(r(4, { gt_num: '1|0', ps: 7 }))
+    expect(label(rows)[0]).toBe('trans')
+  })
+
+  it('no label without phasing considered or without partners', () => {
+    expect(label([r(1, { gt_num: '0|1', ps: 7 }), r(2, { gt_num: '1|0', ps: 7 })], false)).toEqual([
+      null,
+      null
+    ])
+    expect(label([r(1, { gt_num: '0|1', ps: 7 })])).toEqual([null])
+  })
+})

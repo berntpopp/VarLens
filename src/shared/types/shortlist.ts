@@ -14,6 +14,7 @@ import type { EvidenceContribution, EvidenceRuleset, ModeId } from './evidence-r
 import type { Variant, SortItem } from './database'
 import type { FilterState } from './filters'
 import type { FilterPreset } from './filter-presets'
+import type { CompHetPhase } from '../utils/phasing'
 
 /** Every value `v-tabs` can hold in the case view. */
 export type VisibleTab = 'shortlist' | 'snv' | 'sv' | 'cnv' | 'str'
@@ -91,6 +92,12 @@ export interface ScoredRow {
   rank_evidence?: EvidenceContribution[]
   /** Evidence presets only: ids of the other het alleles of a possible compound het. */
   rank_partners?: number[]
+  /**
+   * Evidence presets with "consider phasing": the phase of a compound het
+   * against its partners (#586) — `trans` or `cis` when proven by a shared
+   * phase set, `possible` otherwise. A cis pair is labelled, not excluded.
+   */
+  rank_comphet_phase?: CompHetPhase | null
 }
 
 /**

@@ -166,7 +166,7 @@ export class PostgresShortlistService {
 
     return this.inSnapshot(async (client) => {
       const info = await this.caseInfo(client, caseId)
-      const builder = new GeneContextBuilder(info)
+      const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
       const starredVariantIds = await this.loadStarredVariantIds(caseId, client)
       let totalCandidates = 0
       await this.forEachPage(client, queries, async (rows) => {
