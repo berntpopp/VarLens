@@ -8,6 +8,8 @@ import { resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { DatabaseService } from '../../../../src/main/database/DatabaseService'
+import type { VcfHeader } from '../../../../src/main/import/vcf/types'
+import { parseAnnotation } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import { prepareStatements, streamInsertVcf } from '../../../../src/main/workers/import-pipeline'
 
 const GENE_REF = resolve(__dirname, '../../../../resources/gene_reference.db')
@@ -72,6 +74,18 @@ describe('VEP-annotated CNV import', () => {
         func: 'transcript_ablation',
         copy_number: 0
       },
+      // MANE transcript is only upstream (MODIFIER): the HIGH gene wins for a CNV.
+      {
+        pos: 15400000,
+        variant_type: 'cnv',
+        sv_type: 'DUP',
+        end_pos: 15450000,
+        sv_length: 50000,
+        gene_symbol: 'CDRT4',
+        consequence: 'HIGH',
+        func: 'transcript_amplification',
+        copy_number: 3
+      },
       // No CSQ: the gene-reference overlap fallback names it.
       {
         pos: 22990000,
@@ -98,7 +112,39 @@ describe('VEP-annotated CNV import', () => {
     expect(genes.map((g) => [g.pos, g.genes.split(',').sort()])).toEqual([
       [15200000, ['PMP22']],
       [22700000, ['NIPA1', 'NIPA2', 'PDCD6IPP1']],
-      [22800000, ['CYFIP1', 'NIPA1', 'NIPA2']]
+      [22800000, ['CYFIP1', 'NIPA1', 'NIPA2']],
+      [15400000, ['CDRT4', 'TEKT3']]
     ])
+  })
+})
+
+describe('CSQ transcript pick: SNV vs structural', () => {
+  const header = {
+    annotationType: 'csq',
+    csqFields: ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'MANE_SELECT'],
+    rawHeaderLines: []
+  } as unknown as VcfHeader
+  const csq = (allele: string): string =>
+    `${allele}|intron_variant|MODIFIER|GENE1|T1|NM_1.1,${allele}|stop_gained|HIGH|GENE2|T2|`
+
+  it('keeps MANE first for an SNV', () => {
+    const info = new Map([['CSQ', csq('T')]])
+    expect(parseAnnotation(info, header, 'T', 'C').geneSymbol).toBe('GENE1')
+  })
+
+  it('ranks IMPACT above MANE for a symbolic SV/CNV', () => {
+    const info = new Map([
+      ['SVTYPE', 'DEL'],
+      ['CSQ', csq('deletion')]
+    ])
+    expect(parseAnnotation(info, header, '<DEL>', 'N').geneSymbol).toBe('GENE2')
+  })
+
+  it('prefers a named gene among equally severe SV/CNV transcripts', () => {
+    const info = new Map([
+      ['SVTYPE', 'DEL'],
+      ['CSQ', 'deletion|transcript_ablation|HIGH||T0|,deletion|transcript_ablation|HIGH|GENE3|T3|']
+    ])
+    expect(parseAnnotation(info, header, '<DEL>', 'N').geneSymbol).toBe('GENE3')
   })
 })
