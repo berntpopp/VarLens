@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   buildHpoSimilarityDb,
   openHpoGeneScorer,
+  prewarmHpoIndex,
   readHpoDataStatus
 } from '../../../../src/main/services/phenotype/hpo-similarity-db'
 import {
@@ -117,6 +118,14 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([P(T.C)], dbPath)?.score('GENE2')).not.toBeNull()
     writeFileSync(dbPath, 'replaced by something unreadable '.repeat(300))
     expect(openHpoGeneScorer([P(T.C)], dbPath)).toBeNull()
+  })
+
+  it('prewarms the index without throwing on missing or damaged files', () => {
+    expect(prewarmHpoIndex(join(dir, 'missing.db'))).toBe(false)
+    build()
+    expect(prewarmHpoIndex(dbPath)).toBe(true)
+    writeFileSync(dbPath, 'not a database at all, just bytes '.repeat(200))
+    expect(prewarmHpoIndex(dbPath)).toBe(false)
   })
 
   it('has no scorer without patient terms or data', () => {

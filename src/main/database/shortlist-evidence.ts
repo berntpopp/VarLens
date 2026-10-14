@@ -22,7 +22,8 @@ import {
 import {
   getCompiledRuleset,
   scoreEvidencePage,
-  toLightRow
+  toLightRow,
+  withHpoExplanations
 } from '../services/scoring/evidence/rank-page'
 import type { VariantFilter } from '../../shared/types/database'
 import type { ScoredCandidate, ShortlistConfig, VariantTypeKey } from '../../shared/types/shortlist'
@@ -57,7 +58,7 @@ export function toCaseInfo(
   return {
     build: build ?? DEFAULT_PANEL_GENOME_BUILD,
     sex: normalized === 'male' || normalized === 'female' ? normalized : null,
-    ...(hpo != null ? { hpoResnik: (gene: string) => hpo.score(gene) } : {})
+    ...(hpo != null ? { hpo } : {})
   }
 }
 
@@ -106,7 +107,11 @@ export function rankEvidenceSqlite(input: EvidencePassInput): {
         kept = mergeTopScored(kept, scored, limit, config.tieBreakers)
       })
     )
-    return { kept, totalCandidates, queryErrors: pass2Errors }
+    return {
+      kept: withHpoExplanations(kept, input.info),
+      totalCandidates,
+      queryErrors: pass2Errors
+    }
   } finally {
     if (startedTx && db.inTransaction) {
       db.exec('COMMIT')

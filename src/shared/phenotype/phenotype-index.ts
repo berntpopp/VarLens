@@ -53,7 +53,7 @@ export interface PhenotypeIndex {
 
 function groupCsr(
   n: number,
-  pairs: ReadonlyArray<readonly [number, number]>
+  pairs: ReadonlyArray<readonly [number, ...number[]]>
 ): [Int32Array, number[]] {
   const offsets = new Int32Array(n + 1)
   for (const [from] of pairs) offsets[from + 1]++

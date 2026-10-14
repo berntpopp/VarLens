@@ -7,6 +7,7 @@ import { genotypeZygosity, type Zygosity } from '../../../../shared/utils/genoty
 import { isInPAR } from '../../../../shared/utils/par-regions'
 import { compHetPhase, type CompHetPhase } from '../../../../shared/utils/phasing'
 import { trimAlleles } from '../../../../shared/utils/trim-alleles'
+import type { HpoGeneScorer } from '../../phenotype/hpo-similarity-db'
 
 export type { Zygosity }
 export type CaseSex = 'male' | 'female' | null
@@ -14,8 +15,8 @@ export type CaseSex = 'male' | 'female' | null
 export interface CaseInfo {
   build: string
   sex: CaseSex
-  /** Resnik BMA of the case's HPO terms vs a gene (#600); absent → hpo_resnik null. */
-  hpoResnik?: (gene: string) => number | null
+  /** The case's phenotype scorer (#600, spec v2 §3); absent → the hpo_* fields are null. */
+  hpo?: HpoGeneScorer
 }
 
 /** The pass-1 projection of an eligible row. */
@@ -39,8 +40,12 @@ export interface DerivedFields {
   gene_hits: number
   /** IDs of the other het alleles in the gene; empty unless the row is het. */
   partners: number[]
-  /** In-app phenotype similarity of the row's gene; null without HPO terms/data. */
+  /** In-app phenotype score of the row's gene in [0, 1]; null without HPO terms/data. */
   hpo_resnik: number | null
+  /** Id of the gene's best-matching disease; null like hpo_resnik. */
+  hpo_best_disease: string | null
+  /** Excluded case terms contradicted by that disease; null like hpo_resnik. */
+  hpo_conflicts: number | null
   /** Alias for partners (lazy compound-het partner IDs). */
   readonly compoundHetPartnerVariantIds?: number[]
   /** Phase of the row against its partners (#586); null unless phasing is considered and it has partners. */
@@ -124,10 +129,12 @@ export class GeneContextBuilder {
       info,
       derived(row: LightRow): DerivedFields {
         const zygosity = deriveZygosity(row, info)
-        const hpo_resnik =
-          row.gene_symbol === null || row.gene_symbol === ''
-            ? null
-            : (info.hpoResnik?.(row.gene_symbol) ?? null)
+        const gene = row.gene_symbol === null || row.gene_symbol === '' ? null : row.gene_symbol
+        const hpo = {
+          hpo_resnik: gene === null ? null : (info.hpo?.score(gene) ?? null),
+          hpo_best_disease: gene === null ? null : (info.hpo?.bestDisease(gene) ?? null),
+          hpo_conflicts: gene === null ? null : (info.hpo?.conflicts(gene) ?? null)
+        }
         const entry =
           row.gene_symbol === null || row.gene_symbol === ''
             ? undefined
@@ -138,7 +145,7 @@ export class GeneContextBuilder {
             zygosity,
             gene_het_hits: zygosity === 'het' ? 1 : 0,
             gene_hits: 1,
-            hpo_resnik,
+            ...hpo,
             partners: empty,
             compoundHetPartnerVariantIds: empty
           }
@@ -162,7 +169,7 @@ export class GeneContextBuilder {
           zygosity,
           gene_het_hits: entry.het.size,
           gene_hits: entry.all.size,
-          hpo_resnik,
+          ...hpo,
           get partners(): number[] {
             return computePartners()
           },

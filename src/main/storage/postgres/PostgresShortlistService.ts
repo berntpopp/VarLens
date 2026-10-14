@@ -26,7 +26,12 @@ import type {
 } from '../../../shared/types/shortlist'
 import { mergeTopScored, scoreRow } from '../../services/scoring'
 import { GeneContextBuilder } from '../../services/scoring/evidence'
-import { scoreEvidencePage, toLightRow } from '../../services/scoring/evidence/rank-page'
+import {
+  scoreEvidencePage,
+  toLightRow,
+  withHpoExplanations
+} from '../../services/scoring/evidence/rank-page'
+import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
 import { compileEvidenceConfig, toCaseInfo } from '../../database/shortlist-evidence'
 import { openHpoGeneScorer, type HpoGeneScorer } from '../../services/phenotype/hpo-similarity-db'
 import { liftClientQueryTimeout, runOrDestroy } from './long-running-client'
@@ -184,7 +189,7 @@ export class PostgresShortlistService {
         const scored = scoreEvidencePage(candidates, ctx, compiled, config.rankConfig)
         kept = mergeTopScored(kept, scored, config.topN, config.tieBreakers)
       })
-      return { kept, totalCandidates }
+      return { kept: withHpoExplanations(kept, info), totalCandidates }
     })
   }
 
@@ -234,12 +239,13 @@ export class PostgresShortlistService {
     }
   }
 
-  private async caseHpoTerms(client: Queryable, caseId: number): Promise<string[]> {
+  private async caseHpoTerms(client: Queryable, caseId: number): Promise<HpoProfileTerm[]> {
     const result = await client.query<{ hpo_id: string }>(
       `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1 ORDER BY hpo_id`,
       [caseId]
     )
-    return result.rows.map((r) => r.hpo_id)
+    // hpo2: data lane provides flags
+    return result.rows.map((r) => ({ hpoId: r.hpo_id, excluded: false, key: false }))
   }
 
   private async caseInfo(

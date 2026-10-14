@@ -249,6 +249,21 @@ export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
   return loadIndex(path).index
 }
 
+/**
+ * Load and cache the index off the request path (after DB open, worker start
+ * or an HPO install), so a later `openHpoGeneScorer` only scores. Never throws.
+ */
+export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boolean {
+  if (path === null || !existsSync(path)) return false
+  try {
+    return loadIndex(path).index !== null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
+    return false
+  }
+}
+
 /** Score the profile, or reuse one of the last few results for the same profile. */
 function caseScores(key: string, index: PhenotypeIndex, profile: CaseProfile): CaseScores {
   const memoKey = `${key}\0${profile.hash}`
