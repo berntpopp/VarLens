@@ -18,6 +18,7 @@ import { createMockApi } from '../../utils/mock-api'
 import { useCaseMetadata } from '@renderer/composables/useCaseMetadata'
 import type { CohortGroup, CaseHpoTerm, FullCaseMetadata } from '../../../src/shared/types/api'
 import { logService } from '../../../src/renderer/src/services/LogService'
+import { phenotypeChange } from '../../../src/renderer/src/composables/phenotypeChanges'
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({
   logService: {
@@ -199,10 +200,12 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       app = appInstance
       result.metadataCache.value.set(caseId, makeFullMetadata())
 
+      phenotypeChange.value = null
       await result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')
 
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([serverTerm])
+      expect(phenotypeChange.value).toEqual({ caseId })
     })
 
     it('reverts the optimistic push when assignHpoTerm fails (duplicate HPO term)', async () => {
@@ -214,9 +217,11 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
 
       const baselineLength = result.metadataCache.value.get(caseId)?.hpoTerms.length ?? 0
 
+      phenotypeChange.value = null
       await expect(result.assignHpoTerm(caseId, 'HP:0001250', 'Seizure')).rejects.toMatchObject({
         code: 'DB_ERROR'
       })
+      expect(phenotypeChange.value).toBeNull()
 
       const cached = result.metadataCache.value.get(caseId)
       // Reverted back to baseline — no error-shaped object and no orphaned
@@ -291,10 +296,12 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       app = appInstance
       result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [existingTerm] }))
 
+      phenotypeChange.value = null
       await result.removeHpoTerm(caseId, existingTerm.hpo_id)
 
       const cached = result.metadataCache.value.get(caseId)
       expect(cached?.hpoTerms).toEqual([])
+      expect(phenotypeChange.value).toEqual({ caseId })
     })
 
     it('reverts the optimistic removal when removeHpoTerm fails', async () => {

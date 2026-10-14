@@ -3,6 +3,7 @@
     <span class="text-caption text-medium-emphasis">
       HPO data:
       {{ status?.installed === true ? status.version : 'not installed' }}
+      <template v-if="status?.needsUpdate === true">&middot; needs update</template>
       <template v-if="message !== ''">&middot; {{ message }}</template>
     </span>
     <v-btn
@@ -25,6 +26,7 @@ import { useApiService } from '../../composables/useApiService'
 import { useCapabilityStore } from '../../stores/capabilityStore'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
+import { notifyPhenotypeChanged } from '../../composables/phenotypeChanges'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import type { HpoDataStatus } from '../../../../shared/types/hpo-data'
 
@@ -51,6 +53,7 @@ async function update(): Promise<void> {
     const result = unwrapIpcResult(await api.hpoData.update())
     status.value = result.status
     message.value = result.message
+    if (result.success) notifyPhenotypeChanged(null)
   } catch (e) {
     message.value = formatError(e)
   } finally {

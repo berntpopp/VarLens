@@ -38,6 +38,7 @@ vi.mock('../../../src/renderer/src/composables/useFilterPresetStore', () => ({
 // Import under test — AFTER vi.mock call so the mock resolves correctly.
 import { useShortlistQuery } from '../../../src/renderer/src/composables/useShortlistQuery'
 import { useSettingsStore } from '../../../src/renderer/src/stores/settingsStore'
+import { notifyPhenotypeChanged } from '../../../src/renderer/src/composables/phenotypeChanges'
 
 type AnnotationCallback = (ev: AnnotationChangeEvent) => void
 
@@ -190,6 +191,24 @@ describe('useShortlistQuery', () => {
 
     expect(h.shortlistMock).toHaveBeenCalledTimes(1)
     expect(h.shortlistMock).toHaveBeenCalledWith({ caseId: 1, presetId: 1 })
+  })
+
+  it('re-fetches when HPO data is installed or the case HPO terms change', async () => {
+    const h = harness()
+    app = h.app
+    await flushPromises()
+    await flushPromises()
+
+    h.shortlistMock.mockClear()
+    notifyPhenotypeChanged(2)
+    await flushPromises()
+    expect(h.shortlistMock).not.toHaveBeenCalled()
+    notifyPhenotypeChanged(1)
+    await flushPromises()
+    expect(h.shortlistMock).toHaveBeenCalledTimes(1)
+    notifyPhenotypeChanged(null)
+    await flushPromises()
+    expect(h.shortlistMock).toHaveBeenCalledTimes(2)
   })
 
   it('ignores annotation-change events for other cases', async () => {

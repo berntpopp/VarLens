@@ -27,6 +27,7 @@ import type {
 } from '../../../shared/types/api'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
+import { notifyPhenotypeChanged } from './phenotypeChanges'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
 const MAX_METADATA_CACHE_SIZE = 200
@@ -412,6 +413,7 @@ export function useCaseMetadata() {
           await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel)
         )
         if (!isCurrentGeneration(generation)) return
+        notifyPhenotypeChanged(caseId)
         if (current) {
           const index = current.hpoTerms.findIndex((t) => t.hpo_id === hpoId)
           if (index !== -1) {
@@ -449,6 +451,7 @@ export function useCaseMetadata() {
       try {
         unwrapIpcResult(await api.caseMetadata.removeHpoTerm(caseId, hpoId))
         if (!isCurrentGeneration(generation)) return
+        notifyPhenotypeChanged(caseId)
       } catch (error) {
         if (!isCurrentGeneration(generation)) return
         logService.error(
