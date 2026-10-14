@@ -4,9 +4,10 @@
  *   npx jiti scripts/shortlist-sim/phenotype/gene-ranking.ts --run <name> [--diseases N]
  *
  * One simulated profile per sampled HPO disease and noise level; every gene in
- * genes_to_phenotype.txt is scored with the production scorer (`openHpoGeneScorer` on the
- * built hpo_similarity.db) and with reference baselines that live only here. Writes
- * runs/<name>/{cases.json, gene-ranking.md}. Needs `npm run rebuild:node`.
+ * genes_to_phenotype.txt (positive annotations) is scored with the production scorer
+ * (`openHpoGeneScorer` on the built hpo_similarity.db) and an exact-overlap reference baseline.
+ * `--before <run>` adds that earlier run's rows (same seed → same diseases and profiles).
+ * Writes runs/<name>/{cases.json, gene-ranking.md}. Needs `npm run rebuild:node`.
  */
 import Database from 'better-sqlite3-multiple-ciphers'
 import { createHash } from 'node:crypto'
@@ -15,12 +16,10 @@ import { join } from 'node:path'
 import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
 import {
   ancestorClosure,
-  informationContent,
   parseGenesToPhenotype,
   parseHpJson,
   parseHpoaDiseaseTerms
 } from '../../../src/shared/phenotype/hpo-sources'
-import { resnikBestMatchAverage, type HpoOntology } from '../../../src/shared/phenotype/resnik'
 import { assertOutsideRepo, HPO_DB, HPO_RAW_DIR, RUNS_DIR } from '../common/paths'
 import { rng, shuffle } from '../common/rng'
 import {
@@ -96,9 +95,7 @@ function main(argv: string[]): void {
   const src = readVerifiedSources()
   const hp = parseHpJson(src.ontology)
   const ancestors = ancestorClosure(hp)
-  const ic = informationContent(parseHpoaDiseaseTerms(src.annotations), ancestors)
-  const ontology: HpoOntology = { ancestors: (t) => ancestors.get(t), ic: (t) => ic.get(t) ?? 0 }
-  const geneTerms = parseGenesToPhenotype(src.genes)
+  const geneTerms = parseGenesToPhenotype(src.genes, parseHpoaDiseaseTerms(src.annotations))
   const genes = [...geneTerms.keys()].sort()
   const geneIndex = new Map(genes.map((g, i) => [g, i]))
   const termLists = genes.map((g) => [...(geneTerms.get(g) ?? [])])
@@ -126,23 +123,9 @@ function main(argv: string[]): void {
       scorer.close()
       const ms = performance.now() - t0
       const profileSet = new Set(profile)
-      const reverse = Float64Array.from(
-        termLists,
-        (t) => resnikBestMatchAverage(t, profile, ontology) ?? -Infinity
-      )
       const byScorer: Record<ScorerId, Float64Array> = {
         resnik,
-        reverse,
-        symmetric: resnik.map((s, i) => (s + reverse[i]) / 2),
         overlap: Float64Array.from(termLists, (t) => t.filter((x) => profileSet.has(x)).length)
-      }
-      if (di === 0) {
-        // The in-memory ontology must reproduce the DB scorer, or the baselines are not comparable.
-        for (let i = 0; i < n; i++) {
-          const mem = resnikBestMatchAverage(profile, termLists[i], ontology) ?? -Infinity
-          if (Math.abs(mem - resnik[i]) > 1e-9)
-            throw new Error(`DB/in-memory mismatch at ${genes[i]}`)
-        }
       }
       cases.push({
         disease: disease.id,
@@ -159,12 +142,26 @@ function main(argv: string[]): void {
     }
     if ((di + 1) % 100 === 0) console.log(`${di + 1}/${diseases.length} diseases`)
   }
-  const md = renderGeneRanking(cases, {
-    release: src.release,
-    diseases: diseases.length,
-    eligible: all.length,
-    genes: n
-  })
+  const sampled = new Set(diseases.map((d) => d.id))
+  const beforeRun = argv.includes('--before') ? arg('--before') : undefined
+  const before =
+    beforeRun === undefined
+      ? undefined
+      : (
+          JSON.parse(
+            readFileSync(join(RUNS_DIR, beforeRun, 'cases.json'), 'utf8')
+          ) as GeneRankCase[]
+        ).filter((c) => sampled.has(c.disease))
+  const md = renderGeneRanking(
+    cases,
+    {
+      release: src.release,
+      diseases: diseases.length,
+      eligible: all.length,
+      genes: n
+    },
+    before
+  )
   writeFileSync(join(outDir, 'gene-ranking.md'), md)
   writeFileSync(join(outDir, 'cases.json'), JSON.stringify(cases) + '\n')
   console.log(`wrote ${join(outDir, 'gene-ranking.md')}`)

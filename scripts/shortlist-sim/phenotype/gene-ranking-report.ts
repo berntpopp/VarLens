@@ -8,15 +8,9 @@ import {
 import { mean, median, tieAveragedHit, tieAveragedReciprocal } from '../stats/metrics'
 import { NOISE_LEVELS, PROFILE_TERMS, UNKNOWN_FREQUENCY, type NoiseLevelId } from './profiles'
 
-/** resnik = production patient→gene BMA; the others are reference baselines (harness only). */
-export const SCORERS = ['resnik', 'reverse', 'symmetric', 'overlap'] as const
+/** resnik = production `hpo_resnik`; overlap = harness-only reference baseline. */
+export const SCORERS = ['resnik', 'overlap'] as const
 export type ScorerId = (typeof SCORERS)[number]
-const SCORER_LABEL: Record<ScorerId, string> = {
-  resnik: '`hpo_resnik` (patient→gene BMA, production)',
-  reverse: 'gene→patient BMA',
-  symmetric: 'symmetric BMA (mean of both)',
-  overlap: 'exact term overlap count'
-}
 
 export interface Standing {
   /** Genes scored strictly higher than the causal gene. */
@@ -33,7 +27,8 @@ export interface GeneRankCase {
   profileSize: number
   /** Production scorer wall time for all genes (open → score → close). */
   ms: number
-  scorers: Record<ScorerId, Standing>
+  /** ScorerId keys; a `--before` run may carry other (retired) scorers. */
+  scorers: Record<string, Standing>
 }
 
 /** 1-based ranks, ties averaged. */
@@ -72,7 +67,7 @@ const KS = [1, 10, 50, 100] as const
 
 const expectedRank = (s: Standing): number => s.higher + 1 + s.equal / 2
 
-function metrics(cases: GeneRankCase[], scorer: ScorerId): Record<string, Interval> {
+function metrics(cases: GeneRankCase[], scorer: string): Record<string, Interval> {
   const boot = (stat: (c: GeneRankCase[]) => number): Interval =>
     clusterBootstrap(cases, (c) => c.disease, stat, REPS, SEED)
   const st = (c: GeneRankCase): Standing => c.scorers[scorer]
@@ -91,19 +86,39 @@ const pct = (i: Interval): string =>
 const num = (i: Interval, d: number): string =>
   `${i.estimate.toFixed(d)} [${i.lo.toFixed(d)}, ${i.hi.toFixed(d)}]`
 
-function hit10Delta(cases: GeneRankCase[], base: ScorerId): Interval {
-  const v = (s: ScorerId) => (c: GeneRankCase) => ({
+/** One table row: a scorer of one run, restricted to one noise level. */
+interface Row {
+  label: string
+  cases: GeneRankCase[]
+  scorer: string
+}
+
+/** Paired ΔHit@10 a − b over the same diseases (one case per disease and level). */
+function hit10Delta(a: Row, b: Row): Interval {
+  const v = (r: Row) => (c: GeneRankCase) => ({
     disease: c.disease,
-    v: tieAveragedHit(c.scorers[s].higher, c.scorers[s].equal, 10)
+    v: tieAveragedHit(c.scorers[r.scorer].higher, c.scorers[r.scorer].equal, 10)
   })
   return pairedClusterBootstrap(
-    cases.map(v('resnik')),
-    cases.map(v(base)),
+    a.cases.map(v(a)),
+    b.cases.map(v(b)),
     (x) => x.disease,
     (xs) => mean(xs.map((x) => x.v)),
     REPS,
     SEED
   )
+}
+
+function rowLine(r: Row): string {
+  const m = metrics(r.cases, r.scorer)
+  const rho = mean(r.cases.map((c) => c.scorers[r.scorer].rho).filter(Number.isFinite))
+  const hits = KS.map((k) => pct(m[`Hit@${k}`])).join(' | ')
+  return `| ${r.label} | ${hits} | ${num(m['median rank'], 1)} | ${num(m.MRR, 3)} | ${rho.toFixed(2)} |`
+}
+
+function runtime(cases: GeneRankCase[]): string {
+  const ms = cases.map((c) => c.ms).sort((a, b) => a - b)
+  return `median ${quantile(ms, 0.5).toFixed(0)} ms, p95 ${quantile(ms, 0.95).toFixed(0)} ms`
 }
 
 export interface RunInfo {
@@ -113,7 +128,15 @@ export interface RunInfo {
   genes: number
 }
 
-export function renderGeneRanking(cases: GeneRankCase[], info: RunInfo): string {
+/**
+ * Summary of one run; with `before` (an earlier run on the same diseases and profiles) each
+ * level also shows its one-sided `hpo_resnik` and in-memory symmetric reference rows.
+ */
+export function renderGeneRanking(
+  cases: GeneRankCase[],
+  info: RunInfo,
+  before?: GeneRankCase[]
+): string {
   const lines: string[] = [
     '# hpo_resnik gene-ranking benchmark (public data)',
     '',
@@ -132,33 +155,37 @@ export function renderGeneRanking(cases: GeneRankCase[], info: RunInfo): string 
     ''
   ]
   for (const level of Object.keys(NOISE_LEVELS) as NoiseLevelId[]) {
-    const cs = cases.filter((c) => c.level === level)
+    const at = (cs: GeneRankCase[]): GeneRankCase[] => cs.filter((c) => c.level === level)
+    const after: Row = { label: '**after**: `hpo_resnik`', cases: at(cases), scorer: 'resnik' }
+    const overlap: Row = {
+      label: 'exact term overlap (reference)',
+      cases: at(cases),
+      scorer: 'overlap'
+    }
+    const old: Row[] =
+      before === undefined
+        ? []
+        : [
+            { label: 'before: `hpo_resnik` (patient→gene)', cases: at(before), scorer: 'resnik' },
+            { label: 'before: symmetric BMA (harness)', cases: at(before), scorer: 'symmetric' }
+          ]
     lines.push(
-      `## ${level} (${cs.length} cases, median profile ${median(cs.map((c) => c.profileSize))} terms)`,
+      `## ${level} (${after.cases.length} cases, median profile ${median(after.cases.map((c) => c.profileSize))} terms)`,
       '',
       '| Scorer | Hit@1 % | Hit@10 % | Hit@50 % | Hit@100 % | median rank | MRR | ρ(score, annotation count) |',
-      '|---|---|---|---|---|---|---|---|'
-    )
-    for (const s of SCORERS) {
-      const m = metrics(cs, s)
-      const rho = mean(cs.map((c) => c.scorers[s].rho).filter(Number.isFinite))
-      lines.push(
-        `| ${SCORER_LABEL[s]} | ${KS.map((k) => pct(m[`Hit@${k}`])).join(' | ')} | ${num(m['median rank'], 1)} | ${num(m.MRR, 3)} | ${rho.toFixed(2)} |`
-      )
-    }
-    lines.push(
+      '|---|---|---|---|---|---|---|---|',
+      ...[...old, after, overlap].map(rowLine),
       '',
-      'Paired ΔHit@10 (`hpo_resnik` − baseline, pp): ' +
-        SCORERS.filter((s) => s !== 'resnik')
-          .map((s) => `${s} ${pct(hit10Delta(cs, s))}`)
+      'Paired ΔHit@10 of after (pp): ' +
+        [...old.slice(0, 1), overlap]
+          .map((r) => `vs ${r.label} ${pct(hit10Delta(after, r))}`)
           .join('; '),
       ''
     )
   }
-  const ms = cases.map((c) => c.ms).sort((a, b) => a - b)
   lines.push(
-    `Runtime of the production scorer per case (all ${info.genes} genes, open → score → close):`,
-    `median ${quantile(ms, 0.5).toFixed(0)} ms, p95 ${quantile(ms, 0.95).toFixed(0)} ms.`,
+    `Production scorer runtime per case (all genes): ${runtime(cases)}` +
+      (before === undefined ? '.' : `; before ${runtime(before)}.`),
     ''
   )
   return lines.join('\n')
