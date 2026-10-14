@@ -4,6 +4,15 @@
  */
 import type { VcfHeader } from './types'
 
+/** VEP writes a symbolic ALT such as `<DEL>` as its SO class in CSQ `Allele` (Parser/VCF.pm get_SO_term). */
+const VEP_SYMBOLIC_ALLELES: Record<string, string> = {
+  DEL: 'deletion',
+  DUP: 'duplication',
+  INS: 'insertion',
+  INV: 'inversion',
+  CNV: 'copy_number_variation'
+}
+
 /**
  * The CSQ `Allele` spellings that may stand for one ALT, plus the ALT itself.
  * Default VEP (Parser/VCF.pm) trims the first base from REF and every ALT only
@@ -19,6 +28,8 @@ export function csqAlleleSpellings(
   allAlts: string[],
   minimal: boolean
 ): Set<string> {
+  const symbolic = VEP_SYMBOLIC_ALLELES[/^<([A-Z]+)/.exec(altAllele)?.[1] ?? '']
+  if (symbolic !== undefined) return new Set([altAllele, symbolic])
   if (minimal) {
     const spellings = new Set<string>([altAllele])
     if (altAllele.length < ref.length) spellings.add('-')
