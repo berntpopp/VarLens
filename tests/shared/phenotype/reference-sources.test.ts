@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  clingenDate,
   parseClingenGenes,
   parseClingenRegions,
   parseMondoXrefs,
@@ -25,6 +26,11 @@ describe('ClinGen dosage parsers', () => {
       { hgncId: 'HGNC:1', symbol: 'GENE1', hi: 3, ts: 0 },
       { hgncId: 'HGNC:2', symbol: 'GENE2', hi: 30, ts: null }
     ])
+  })
+
+  it('reads the curation date from the header', () => {
+    expect(clingenDate(clingenGenes())).toBe('03 Oct,2026')
+    expect(clingenDate('Gene Symbol\tGene ID\n')).toBeNull()
   })
 
   it('drops genes without an HGNC id', () => {

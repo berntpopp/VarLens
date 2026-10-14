@@ -255,6 +255,41 @@ describe('scoreStr band, motif and gates', () => {
     expect(r?.band).toBe('full')
   })
 
+  it('expands IUPAC codes in the repeat unit (RFC1 AARRG, polyalanine GCN)', () => {
+    const rfc1 = scoreStr(
+      row({ str_repeat_id: 'RFC1', str_alt_copies: '900/850', str_repeat_unit: 'AARRG' }),
+      REF,
+      cs()
+    )
+    expect(rfc1).toMatchObject({ band: 'full', score: 0.77 })
+    const atxn3 = (unit: string) =>
+      scoreStr(
+        row({ str_repeat_id: 'ATXN3', str_alt_copies: '72/24', str_repeat_unit: unit }),
+        REF,
+        cs()
+      )
+    expect(atxn3('CNG')?.band).toBe('full')
+    expect(atxn3('AYG')?.band).toBe('normal')
+  })
+
+  it('a count inside contradictory thresholds (benignMax ≥ pathogenicMin) is never full', () => {
+    // STRchive v2.28.0 CHNG3_MIR7-2: benign max 4, pathogenic min 3.
+    const chng3 = locus({
+      id: 'CHNG3_MIR7-2',
+      gene: 'MIR7-2',
+      chrom: 'chr15',
+      benignMax: 4,
+      pathogenicMin: 3,
+      inheritance: ['AD'],
+      diseases: { full: ['OMIM:140000'] }
+    })
+    const ref = { ...REF, strLoci: [chng3] }
+    const band = (copies: string) =>
+      scoreStr(row({ str_repeat_id: 'CHNG3_MIR7-2', str_alt_copies: copies }), ref, cs())?.band
+    expect(band('3/4')).toBe('normal')
+    expect(band('5/3')).toBe('full')
+  })
+
   it('a Refuted locus gives a null score', () => {
     const r = scoreStr(row({ str_repeat_id: 'XYLT1', str_alt_copies: '500/20' }), REF, cs())
     expect(r).toMatchObject({ score: null, band: 'full' })

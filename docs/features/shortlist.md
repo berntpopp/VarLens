@@ -79,6 +79,10 @@ Hover any row's **Score** badge to see the weighted breakdown: the five componen
 
 ## CNV and STR phenotype scoring
 
+::: warning Not active yet
+This scoring is built but switched off until it passes validation. Until then, CNV and STR rows are not part of the evidence ranking, so the `locus:` line and the fields below stay empty.
+:::
+
 For copy-number variants (CNVs) and short tandem repeats (STRs), the phenotype match comes from the **locus** the call hits. It is not taken from the best of every gene the variant overlaps:
 
 - **CNVs, gene route.** Each overlapped gene is weighted by its dosage sensitivity, for example haploinsufficiency for a deletion. The weights come from the VCF's AnnotSV annotation when present, otherwise from ClinGen. The best gene is then size-corrected against this case's own gene scores, so a CNV spanning 30 genes does not win just by having more chances.

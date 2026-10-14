@@ -11,6 +11,7 @@ import { createHash } from 'crypto'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { HPO_DATA_CONFIG, type HpoAssetKey } from '../../../shared/config/hpo-data.config'
+import { clingenDate } from '../../../shared/phenotype/reference-sources'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import type { HpoBuildRequest, LocusBuildFiles } from './hpo-build-worker-client'
 import { assertUsableHpoDb, readHpoDataStatus } from './hpo-similarity-db'
@@ -258,8 +259,8 @@ async function downloadLocusSources(
       regions[build] = await get(`${CLINGEN.baseUrl}/${name}`, name, null)
     }
     locus.clingen = { genes, regions }
-    // No ClinGen releases: the version is the download date (the file changes daily).
-    return new Date().toISOString().slice(0, 10)
+    // No ClinGen releases: the version is the gene list's curation date, else the download date.
+    return clingenDate(readFileSync(genes, 'utf8')) ?? new Date().toISOString().slice(0, 10)
   })
   for (const key of ['strchive', 'mondo'] as const) {
     await attempt(key, async () => {

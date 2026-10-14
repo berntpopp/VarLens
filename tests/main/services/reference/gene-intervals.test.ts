@@ -1,5 +1,7 @@
 // @vitest-environment node
-import { resolve } from 'node:path'
+import { copyFileSync, mkdtempSync, rmSync, utimesSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadGeneIntervals } from '../../../../src/main/services/reference/gene-intervals'
 
@@ -23,5 +25,19 @@ describe('gene intervals', () => {
     expect(hits.filter((s) => s.coding).length).toBeGreaterThan(20)
     expect(hits.map((s) => s.start)).toEqual([...hits.map((s) => s.start)].sort((a, b) => a - b))
     expect(ix.overlapping('chr16', tbx6.start, tbx6.start)).toContain(tbx6)
+  })
+
+  it('reloads after the file changes (in-app gene reference update)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gene-intervals-'))
+    try {
+      const copy = join(dir, 'gene_reference.db')
+      copyFileSync(GENE_REF, copy)
+      const first = loadGeneIntervals(copy, 'GRCh38')
+      expect(loadGeneIntervals(copy, 'GRCh38')).toBe(first)
+      utimesSync(copy, new Date(), new Date(Date.now() + 60_000))
+      expect(loadGeneIntervals(copy, 'GRCh38')).not.toBe(first)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

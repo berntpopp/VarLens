@@ -409,6 +409,21 @@ locus-clustered bootstrap CIs.
 - STR-1: a catalogue locus whose benign maximum reaches its pathogenic minimum must band such
   calls as normal (or get an override); then STR-1 should be re-run.
 
+**POST-HOC run after the review bug fixes** (not pre-registered; the verdicts above stand). Same
+harness, seeds and data, at `e871d786`; no tunable parameter changed (report, section "POST-HOC").
+
+| # | Pre-registered | Post-hoc |
+|---|---|---|
+| CNV-1 | **FAILED** −3.0 | **FAILED** −3.0 (unchanged) |
+| CNV-2 | **FAILED** −10.7 | **FAILED** −10.7 (unchanged) |
+| CNV-3 to CNV-5 | PASS | PASS (unchanged) |
+| CNV-6 | **FAILED** p95 5.86 ms; load 112.9 ms | **FAILED** p95 5.90 ms; load 24.5 ms (load bar met) |
+| STR-1 | **FAILED** 45 false leads | PASS 0 false leads |
+| STR-2 to STR-4 | PASS | PASS (unchanged) |
+
+Flags stay off: CNV still fails CNV-1/2/6; STR passes all four only post-hoc, so switching it on
+needs a new pre-registered STR run.
+
 ## 11. Decisions (user, 2026-10-14)
 
 1. **Mondo:** download `mondo.obo` at runtime (not a hand-curated crosswalk).

@@ -35,14 +35,21 @@ interface Calibration {
 }
 const calibrations = new WeakMap<PhenotypeIndex, Calibration>()
 
-function sigmaFloors(ix: PhenotypeIndex): Float64Array {
+/**
+ * Gene-linked disease indices, ascending. Both calibrations run over these only, so
+ * admitting region and STR diseases (CNV/STR spec §3) leaves every gene score unchanged.
+ */
+const geneLinked = (ix: PhenotypeIndex): Int32Array =>
+  Int32Array.from(new Set(ix.geneDiseases)).sort()
+
+function sigmaFloors(ix: PhenotypeIndex, diseases: Int32Array): Float64Array {
   const K = HPO_SCORING_CONFIG.nullMaxK
-  const D = ix.diseaseIds.length
+  const D = diseases.length
   const floors = new Float64Array(K)
   if (ix.nullSd === null || D === 0) return floors
   const column = new Float64Array(D)
   for (let k = 0; k < K; k++) {
-    for (let d = 0; d < D; d++) column[d] = ix.nullSd[d * K + k]
+    for (let i = 0; i < D; i++) column[i] = ix.nullSd[diseases[i] * K + k]
     column.sort()
     floors[k] = column[Math.floor(HPO_SCORING_CONFIG.sigmaFloorQuantile * (D - 1))]
   }
@@ -50,14 +57,14 @@ function sigmaFloors(ix: PhenotypeIndex): Float64Array {
 }
 
 /** Per disease, each ancestor-or-self of its annotations gets the highest f below it once. */
-function exclusionBackground(ix: PhenotypeIndex): Float64Array {
+function exclusionBackground(ix: PhenotypeIndex, diseases: Int32Array): Float64Array {
   const { parentOffsets, parents } = ix.hpo
   const V = ix.hpo.ids.length
-  const D = ix.diseaseIds.length
+  const D = diseases.length
   const sum = new Float64Array(V)
   const mark = new Int32Array(V)
   const stack = new Int32Array(V)
-  for (let d = 0; d < D; d++) {
+  for (const d of diseases) {
     const from = ix.diseaseOffsets[d]
     const order = Array.from({ length: ix.diseaseOffsets[d + 1] - from }, (_, i) => from + i)
     order.sort((a, b) => ix.annF[b] - ix.annF[a])
@@ -86,7 +93,8 @@ function exclusionBackground(ix: PhenotypeIndex): Float64Array {
 export function calibrationFor(ix: PhenotypeIndex): Calibration {
   let c = calibrations.get(ix)
   if (c === undefined) {
-    c = { sigmaFloor: sigmaFloors(ix), background: exclusionBackground(ix) }
+    const diseases = geneLinked(ix)
+    c = { sigmaFloor: sigmaFloors(ix, diseases), background: exclusionBackground(ix, diseases) }
     calibrations.set(ix, c)
   }
   return c

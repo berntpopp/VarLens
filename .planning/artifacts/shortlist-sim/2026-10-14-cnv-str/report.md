@@ -225,3 +225,38 @@ n = 69 cases, 66 clusters.
   not only a generator artefact. T1–T4: 0 false leads.
 - **STR numbers are optimistic by construction**: background rows are normal and so null, the causal
   row is usually the only scored one; baseline ignores alleles, so its decoy arms equal `none`.
+
+## POST-HOC run after the review bug fixes (not pre-registered; does not replace the verdicts above)
+
+`run.ts --run cnv-str-2026-10-14-posthoc` at `e871d786` (branch `fix/cnvstr-pt`), once, same harness,
+seeds (20261014 / 20261017), data and HPO DB v6. No dosage weight, Šidák rule or other tunable
+parameter changed. Fixes in the run: CSQ genes must overlap the CNV, per-field AnnotSV/ClinGen dosage,
+IUPAC repeat units, contradictory STR thresholds (a count ≤ benignMax is never `full`), z-mode
+calibration over gene-linked diseases, faster gene-interval index (two array scans, spans built per
+chromosome on first use).
+
+### Criteria (post-hoc)
+
+| # | Result | Value |
+|---|---|---|
+| CNV-1 | **FAILED** | A3 − A0 Hit@10 Δ -3.0 [-7.6, -0.6] pp (bar ≥ −2.0) |
+| CNV-2 | **FAILED** | A3 − A0 Hit@10 Δ -10.7 [-17.7, -3.5] pp, n = 386 (bar ≥ +5.0, lo > 0) |
+| CNV-3 | PASS | A3 − A2 Hit@10 Δ 41.4 [29.0, 53.8] pp, n = 44 (bar ≥ +20) |
+| CNV-4 | PASS | median ρ A3 -0.096 (A0 0.053; bar ≤ 0.25) |
+| CNV-5 | PASS | 0 of 200 profiles differ over 5268 genes (v6: 5268) |
+| CNV-6 | **FAILED** | p95 5.90 ms at 5000 CNVs (median 4.56); index load 24.5 ms |
+| STR-1 | PASS | 0 false leads in 300 trick cases |
+| STR-2 | PASS | new − baseline Hit@1 Δ 27.9 [17.9, 38.3] pp (bar ≥ +5.0, lo > 0) |
+| STR-3 | PASS | clean Δ 23.3 [14.1, 33.2] pp; moderate Δ 27.9 [17.9, 38.3] pp; noisy Δ 59.4 [48.1, 70.7] pp (bar ≥ −1.0 each) |
+| STR-4 | PASS | ORPHA:273 0.880, ORPHA:401901 0.825, ORPHA:98757 0.930 |
+
+CNV: not all pass, flag stays off. STR: all pass post-hoc; flag stays off (see below).
+
+Every other table (CNV real/simulation arms, STR causal arms, T1–T4) is identical to the
+pre-registered run: the harness scores CNVs by interval overlap (no CSQ genes, no AnnotSV INFO) and
+runs in `correction: 'off'`, so only the index load and the T5 trick arm change.
+
+- **STR-1** now passes (T5: 0 false leads; previously 45, all `CHNG3_MIR7-2`). Post-hoc, so it
+  supports a new pre-registered STR run, not a flag flip by itself.
+- **CNV-6** still fails on p95 (5.90 ms, bar 5; host load ≈ 6–9 from parallel agents); the index load
+  meets its bar (24.5 ms vs 50 ms; was 112.9 ms). CNV-1/CNV-2 are unchanged and still fail.
