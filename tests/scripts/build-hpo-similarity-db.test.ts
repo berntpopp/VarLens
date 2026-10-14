@@ -68,6 +68,12 @@ describe('build-hpo-similarity-db script', () => {
     expect(result.status.version).toBe('v2026-06-01')
   })
 
+  it('creates a missing --out directory', async () => {
+    stubNetwork('v2026-09-01')
+    const result = await buildHpoDbCli(['--out', join(dir, 'new', 'sub', 'hpo.db')], {})
+    expect(result.status.installed).toBe(true)
+  })
+
   it('defaults the output to VARLENS_HPO_DB_PATH', async () => {
     stubNetwork('v2026-09-01')
     const out = join(dir, 'env.db')

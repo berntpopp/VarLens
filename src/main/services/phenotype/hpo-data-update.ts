@@ -7,7 +7,7 @@
  */
 import { createHash } from 'crypto'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { HPO_DATA_CONFIG, type HpoAssetKey } from '../../../shared/config/hpo-data.config'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import type { HpoBuildRequest } from './hpo-build-worker-client'
@@ -153,6 +153,7 @@ function isAlive(pid: number): boolean {
  */
 function acquireLock(dbPath: string): () => void {
   const path = `${dbPath}.lock`
+  mkdirSync(dirname(dbPath), { recursive: true })
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       writeFileSync(path, String(process.pid), { flag: 'wx' })
