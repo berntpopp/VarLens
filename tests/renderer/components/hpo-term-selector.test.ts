@@ -39,6 +39,21 @@ describe('HpoTermSelector', () => {
     wrapper.unmount()
   })
 
+  it('drops a debounced search once the query was cleared (after an add)', async () => {
+    window.api = createMockApi()
+    const wrapper = mount(HpoTermSelector, {
+      props: { modelValue: [] },
+      global: { plugins: [createVuetify({ components, directives })] }
+    })
+    const autocomplete = wrapper.findComponent({ name: 'VAutocomplete' })
+    autocomplete.vm.$emit('update:search', 'HP:0001250')
+    await wrapper.vm.$nextTick()
+    autocomplete.vm.$emit('update:search', '')
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(autocomplete.props('items')).toEqual([])
+    wrapper.unmount()
+  })
+
   describe('present / excluded / key states', () => {
     const term = (hpo_id: string, hpo_label: string, flags: Partial<CaseHpoTerm> = {}) =>
       ({

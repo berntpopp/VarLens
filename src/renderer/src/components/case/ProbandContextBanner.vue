@@ -20,13 +20,7 @@
         class="text-caption"
         :aria-label="hpoTermAriaLabel(term)"
       >
-        <!-- One inline span: a flex chip would trim the space after "no". -->
-        <span
-          >{{ term.excluded ? COPY.excludedPrefix : ''
-          }}<span :class="{ 'text-decoration-line-through': term.excluded }">{{
-            hpoTermLabel(term)
-          }}</span></span
-        >
+        <HpoTermText :term="term" />
       </v-chip>
       <v-tooltip v-if="overflowHpoCount > 0" location="bottom">
         <template #activator="{ props: tooltipProps }">
@@ -67,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import HpoTermText from '../HpoTermText.vue'
 import { computed, watch } from 'vue'
 import {
   mdiGenderMale,
@@ -81,7 +76,6 @@ import {
   groupedHpoTermLines,
   hpoTermAriaLabel,
   hpoTermIcon,
-  hpoTermLabel,
   orderHpoTerms
 } from '../../utils/hpo-term-status'
 

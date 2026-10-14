@@ -33,13 +33,7 @@
               :data-testid="`hpo-chip-${term.hpo_id}`"
               @keydown="onChipKeydown($event, term)"
             >
-              <!-- One inline span: a flex chip would trim the space after "no". -->
-              <span
-                >{{ term.excluded ? COPY.excludedPrefix : ''
-                }}<span :class="{ 'text-decoration-line-through': term.excluded }">{{
-                  term.hpo_label
-                }}</span></span
-              >
+              <HpoTermText :term="term" />
               <v-tooltip activator="parent" location="top">
                 {{ term.hpo_id }} - {{ term.hpo_label }} · {{ COPY.chipShortcuts }}
               </v-tooltip>
@@ -131,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import HpoTermText from './HpoTermText.vue'
 import { computed, nextTick, ref, watch, onMounted } from 'vue'
 import {
   mdiClose,
@@ -239,6 +234,8 @@ onMounted(() => {
 
 // Search function for debouncing
 async function performSearch(query: string) {
+  // Stale: the search moved on (e.g. cleared after an add) while this call was debounced.
+  if (query !== searchQuery.value) return
   if (!hpoApiAvailable.value || query.length < 2) {
     searchResults.value = []
     return
@@ -248,6 +245,7 @@ async function performSearch(query: string) {
   searchError.value = ''
   try {
     const terms = await searchBundledTerms(query, 20)
+    if (query !== searchQuery.value) return
     // Filter out already assigned terms
     const assignedIds = new Set(props.modelValue.map((t) => t.hpo_id))
     searchResults.value = terms.filter((t) => !assignedIds.has(t.id))
