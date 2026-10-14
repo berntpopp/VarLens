@@ -2,13 +2,14 @@
  * Evidence-rule ranking in the SQLite shortlist service (spec §3.3–3.4,
  * Review Focus 2 and 4).
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { initializeSchema } from '../../../src/main/database/schema'
 import { runMigrations } from '../../../src/main/database/migrations'
 import { createRepositories } from '../../../src/main/database/createRepositories'
 import { DatabaseError } from '../../../src/main/database/errors'
+import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
 import type { ShortlistService } from '../../../src/main/database/ShortlistService'
 import type { ShortlistConfig } from '../../../src/shared/types/shortlist'
 import {
@@ -19,6 +20,11 @@ import {
   EVIDENCE_RULESET,
   evidenceFixtureRows
 } from '../../fixtures/shortlist/evidence-fixture'
+
+vi.mock('../../../src/main/services/phenotype/hpo-similarity-db', async (original) => ({
+  ...(await original<object>()),
+  openHpoGeneScorer: vi.fn(() => null)
+}))
 
 function seed(db: DatabaseType): void {
   db.prepare(
@@ -56,6 +62,27 @@ describe('ShortlistService — evidence ranking', () => {
     config: ShortlistConfig = EVIDENCE_CONFIG
   ): ReturnType<ShortlistService['getShortlist']> =>
     service.getShortlist({ caseId: 1, adHocConfig: config }, () => null)
+
+  it('opens the HPO scorer only for rulesets that read hpo_resnik', () => {
+    vi.mocked(openHpoGeneScorer).mockClear()
+    run()
+    expect(openHpoGeneScorer).not.toHaveBeenCalled()
+    const ruleset = EVIDENCE_CONFIG.rankConfig.ruleset!
+    const hpoGroup = {
+      id: 'hpo',
+      label: 'HPO',
+      scope: 'global' as const,
+      rules: [{ id: 'hpo', label: 'HPO', when: 'hpo_resnik:>=:2', points: 1 }]
+    }
+    run({
+      ...EVIDENCE_CONFIG,
+      rankConfig: {
+        ...EVIDENCE_CONFIG.rankConfig,
+        ruleset: { ...ruleset, groups: [...ruleset.groups, hpoGroup] }
+      }
+    })
+    expect(openHpoGeneScorer).toHaveBeenCalledTimes(1)
+  })
 
   it('pairs compound-het alleles split across pages and SNV/indel types', () => {
     const { rows } = run()
