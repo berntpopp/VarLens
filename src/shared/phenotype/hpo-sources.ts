@@ -200,18 +200,39 @@ function otherFrequency(frequency: string): HpoaFrequency | null | 'absent' {
  * cells; otherwise the highest frequency-term / percentage / missing value
  * counts. A pair with no positive evidence (NOT, 0 %, "Excluded", pooled 0/n)
  * is a NOT annotation instead. Unknown frequency formats count as missing.
+ * Terms are mapped through `aliases` (alt id → current term) before pooling,
+ * and a row repeating another's evidence (all columns but disease_name and
+ * biocuration equal) counts once.
  */
-export function parseHpoaDiseases(text: string): HpoaDiseases {
+export function parseHpoaDiseases(
+  text: string,
+  aliases: ReadonlyMap<string, string> = new Map()
+): HpoaDiseases {
   const labels = new Map<string, string>()
   const pairs = new Map<string, Map<string, PairEvidence>>()
+  const seen = new Set<string>()
   const cols = ['database_id', 'disease_name', 'qualifier', 'hpo_id', 'aspect', 'frequency']
   for (const row of tsvRows(text, cols)) {
     if (row.aspect !== 'P') continue
+    const term = aliases.get(row.hpo_id) ?? row.hpo_id
+    const evidenceKey = [
+      row.database_id,
+      row.qualifier,
+      term,
+      row.reference,
+      row.evidence,
+      row.onset,
+      row.frequency,
+      row.sex,
+      row.modifier
+    ].join('\t')
+    if (seen.has(evidenceKey)) continue
+    seen.add(evidenceKey)
     if (!labels.has(row.database_id)) labels.set(row.database_id, row.disease_name)
     let byTerm = pairs.get(row.database_id)
     if (byTerm === undefined) pairs.set(row.database_id, (byTerm = new Map()))
-    let ev = byTerm.get(row.hpo_id)
-    if (ev === undefined) byTerm.set(row.hpo_id, (ev = { m: 0, n: 0, other: null, absent: false }))
+    let ev = byTerm.get(term)
+    if (ev === undefined) byTerm.set(term, (ev = { m: 0, n: 0, other: null, absent: false }))
     const fraction = /^(\d+)\/(\d+)$/.exec(row.frequency)
     if (row.qualifier === 'NOT') ev.absent = true
     else if (fraction !== null && Number(fraction[2]) > 0) {

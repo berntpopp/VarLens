@@ -8,6 +8,7 @@ import { explainGene, scoreCase } from '../../../src/shared/phenotype/phenotype-
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
 import { naiveScores } from './naive-phenotype-score'
 import {
+  boundedZ,
   exclusionLr,
   nullParams,
   scoringOptions
@@ -102,11 +103,27 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     expect(scores(input, [P('ALIAS_FEB'), X('SEIZ'), X('FEB')]).d).toBeCloseTo(plain.d, 12)
   })
 
-  it('never lowers a disease matching a broad key term', () => {
+  it('raises a disease whose key-term match beats its average forward match', () => {
     const input = toy({ d: [['SEIZ', 0.9, 0.8]] })
     const plain = scores(input, [P('SEIZ'), P('CAT')])
     const keyed = scores(input, [P('SEIZ', true), P('CAT')])
     expect(keyed.d).toBeGreaterThan(plain.d)
+  })
+
+  it('lowers a disease whose key-term match is below its average (τ = 1; not monotone)', () => {
+    // Review 2026-10-14: broad EYE (IC 1, f 0.35) and specific MICRO (IC 4, f 1), both exact.
+    const ix = buildPhenotypeIndex(
+      toy({
+        d: [
+          ['EYE', 0.35, 0.15],
+          ['MICRO', 1, 0.95]
+        ]
+      })
+    )
+    const plain = scoreCase(ix, [P('EYE'), P('MICRO')], { tau: 1 })!.geneScore[0]
+    const keyed = scoreCase(ix, [P('EYE', true), P('MICRO')], { tau: 1 })!.geneScore[0]
+    expect(plain).toBeCloseTo(0.790636, 6)
+    expect(keyed).toBeCloseTo(0.778719, 6)
   })
 
   it('prunes a present ancestor, handing its key weight to the descendant', () => {
@@ -244,10 +261,54 @@ describe('phenotype score v2: hand-computed toy cases', () => {
         excludedLabel: 'label SIZE',
         diseaseTerm: 'MICRO',
         diseaseLabel: 'label MICRO',
-        frequency: Math.fround(0.8)
+        frequency: Math.fround(0.8),
+        annotationFrequency: Math.fround(0.9),
+        frequencyRecorded: true
       }
     ])
+    expect(e.notConflicts).toEqual([])
     expect(cs.geneConflicts[ix.genes.get('G1')!]).toBe(1)
+  })
+
+  it('explains conflicts with the annotation frequency, never the conservative bound', () => {
+    const oneOfOne = { f: 0.6, fExcl: 0.245274 } // fractionFrequency(1, 1)
+    const ix = buildPhenotypeIndex(
+      toy({
+        fraction: [['MICRO', oneOfOne.f, oneOfOne.fExcl]],
+        unknown: [['MICRO', C.missing.f, C.missing.fExcl]]
+      })
+    )
+    const cs = scoreCase(ix, [P('FACE'), X('MICRO')])!
+    const conflict = (gene: string) => explainGene(ix, cs, ix.genes.get(gene)!).conflicts[0]
+    expect(conflict('G_fraction')).toMatchObject({
+      annotationFrequency: Math.fround(0.6),
+      frequencyRecorded: true
+    })
+    expect(conflict('G_unknown')).toMatchObject({
+      annotationFrequency: Math.fround(C.missing.f),
+      frequencyRecorded: false
+    })
+  })
+
+  it('lists disease NOT annotations contradicting a present term without scoring them', () => {
+    const input = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'SEIZ']])
+    const ix = buildPhenotypeIndex(input)
+    const cs = scoreCase(ix, [P('FEB'), P('HYPO')])!
+    const plain = scoreCase(buildPhenotypeIndex(toy({ d: [['HYPO', 0.9, 0.8]] })), [
+      P('FEB'),
+      P('HYPO')
+    ])!
+    expect(cs.geneScore[0]).toBe(plain.geneScore[0])
+    const e = explainGene(ix, cs, 0)
+    expect(e.conflicts).toEqual([])
+    expect(e.notConflicts).toEqual([
+      {
+        patientTerm: 'FEB',
+        patientLabel: 'label FEB',
+        diseaseTerm: 'SEIZ',
+        diseaseLabel: 'label SEIZ'
+      }
+    ])
   })
 })
 
@@ -275,6 +336,57 @@ describe('background correction helpers', () => {
     for (const m of one.mu) expect(m).toBeGreaterThanOrEqual(0)
     for (const m of one.mu) expect(m).toBeLessThanOrEqual(1)
     for (const s of one.sd) expect(s).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('stored background null', () => {
+  it('refuses a null that misses a disease or a query size', () => {
+    const input = toy({ a: [['FEB', 0.9, 0.8]], b: [['CAT', 0.5, 0.3]] })
+    const col = new Float32Array(C.nullMaxK)
+    expect(() => buildPhenotypeIndex({ ...input, diseaseNull: [['a', col, col]] })).toThrow()
+    const short = new Float32Array(C.nullMaxK - 1)
+    const partial = {
+      ...input,
+      diseaseNull: [['a', col, col] as const, ['b', short, short] as const]
+    }
+    expect(() => buildPhenotypeIndex(partial)).toThrow()
+    const ix = buildPhenotypeIndex({
+      ...input,
+      diseaseNull: [
+        ['a', col, col],
+        ['b', col, col]
+      ]
+    })
+    expect(ix.nullMu).toHaveLength(2 * C.nullMaxK)
+  })
+})
+
+describe('z mode', () => {
+  it('keeps extreme z scores apart in the bounded gene score', () => {
+    expect(boundedZ(791)).toBeGreaterThan(boundedZ(335))
+    expect(boundedZ(1e4)).toBeLessThan(1)
+    expect(boundedZ(-1e4)).toBeGreaterThan(0)
+    expect(boundedZ(0)).toBe(0.5)
+    // μ = σ = 0 (a valid null): σ floors at sigmaMin, so z = S⁺ / 0.001 runs into the hundreds.
+    const input = toy({
+      a: [['FEB', 1, 0.95]],
+      b: [
+        ['FEB', 0.025, 0.01],
+        ['CAT', 1, 0.95]
+      ]
+    })
+    const zero = new Float32Array(C.nullMaxK)
+    input.diseaseNull = [
+      ['a', zero, zero],
+      ['b', zero, zero]
+    ]
+    input.nullParams = nullParams(1)
+    const ix = buildPhenotypeIndex(input)
+    const cs = scoreCase(ix, [P('FEB')], { correction: 'z', tau: 1 })!
+    const [a, b] = [cs.diseaseScore[0], cs.diseaseScore[1]]
+    expect(b).toBeGreaterThan(100)
+    expect(a).toBeGreaterThan(b)
+    expect(cs.geneScore[ix.genes.get('G_a')!]).toBeGreaterThan(cs.geneScore[ix.genes.get('G_b')!])
   })
 })
 
@@ -342,15 +454,13 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         excludeMinFrequency: pick([0, 0, 0.3, 0.8]),
         exclusionMode: pick(['penalty', 'penalty', 'conflictsOnly'] as const)
       })
-      // Random stored null (some diseases without one, some σ = 0) for the options' τ.
+      // Random complete stored null (some σ = 0) for the options' τ.
       const K = C.nullMaxK
-      input.diseaseNull = diseases
-        .filter(() => rand() < 0.9)
-        .map((d) => {
-          const mu = Float32Array.from({ length: K }, () => rand() * 0.9)
-          const sd = Float32Array.from({ length: K }, () => (rand() < 0.1 ? 0 : rand() * 0.3))
-          return [d, mu, sd] as const
-        })
+      input.diseaseNull = diseases.map((d) => {
+        const mu = Float32Array.from({ length: K }, () => rand() * 0.9)
+        const sd = Float32Array.from({ length: K }, () => (rand() < 0.1 ? 0 : rand() * 0.3))
+        return [d, mu, sd] as const
+      })
       input.nullParams = nullParams(options.tau)
       const ix = buildPhenotypeIndex(input)
       const fast = scoreCase(ix, profile, options)
@@ -373,6 +483,9 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         ).toEqual(ref.matched)
         expect(new Set(e.conflicts.map((c) => `${c.excludedTerm}>${c.diseaseTerm}`))).toEqual(
           ref.conflicts
+        )
+        expect(new Set(e.notConflicts.map((c) => `${c.patientTerm}>${c.diseaseTerm}`))).toEqual(
+          ref.notConflicts
         )
         expect(fast!.geneConflicts[g]).toBe(ref.conflicts.size)
         compared++

@@ -51,7 +51,7 @@ Preprocessing:
 
 Per disease d:
 - **Forward, normalised:** r(p, d) = maxₜ sim(p, t)·(1 − α_f + α_f·f(d, t)) / IC(p), in [0, 1]. Fwd(d) = Σ w_p·r(p, d) / Σ w_p.
-  - Normalising by IC(p) avoids the key-term dilution trap: marking a broad term key can never lower the score of a disease that matches it.
+  - Normalising by IC(p) avoids the key-term dilution trap: a broad key term no longer loses weight to its low IC. Fwd(d) is still a weighted average, so marking p key raises S(d) when r(p, d) exceeds Fwd(d) and lowers it when r(p, d) is below (a weaker or lower-frequency match than the disease's other matches). This is intended: a key term the disease explains poorly should count against it. Example at τ = 1 (review 2026-10-14): broad term IC 1 at f 0.35, specific term IC 4 at f 1, both matched exactly; marking the broad term key lowers S(d) from 0.790636 to 0.778719.
 - **Reverse, frequency-weighted with shrinkage:** Rev(d) = Σₜ f(d, t)·(maxₚ sim(p, t) / IC(t)) / (f₀ + Σₜ f(d, t)).
 - S⁺(d) = γ·Fwd(d) + (1 − γ)·Rev(d).
 - **Exclusion load:**

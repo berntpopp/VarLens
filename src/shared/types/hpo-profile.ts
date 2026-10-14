@@ -30,18 +30,32 @@ export interface HpoConflict {
   excludedLabel: string
   diseaseTerm: string
   diseaseLabel: string
-  /** Conservative frequency used for the penalty (0..1). */
+  /** Conservative frequency used for the penalty (0..1); not a disease frequency. */
   frequency: number
+  /** The annotation's frequency (0..1, smoothed); the imputed default when not recorded. */
+  annotationFrequency: number
+  /** False when phenotype.hpoa records no frequency for the annotation. */
+  frequencyRecorded: boolean
+}
+
+/** A present patient term the disease is annotated NOT to have (the NOT term is it or an ancestor). */
+export interface HpoNotConflict {
+  patientTerm: string
+  patientLabel: string
+  diseaseTerm: string
+  diseaseLabel: string
 }
 
 /** Why a gene got its phenotype score: the best of its diseases. */
 export interface HpoExplanation {
   /** Score in [0, 1] (raw, uncalibrated). */
   score: number
-  /** Share of the case's genes with a lower score (0..1); not a probability. */
+  /** Share of reference HPO genes scoring strictly lower for this profile (0..1); no probability. */
   percentile: number
   diseaseId: string
   diseaseLabel: string
   matched: HpoMatch[]
   conflicts: HpoConflict[]
+  /** Listed in every exclusion mode; they lower the score only under 'penalty'. */
+  notConflicts: HpoNotConflict[]
 }

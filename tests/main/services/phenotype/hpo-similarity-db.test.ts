@@ -161,6 +161,33 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([P(T.C)], dbPath, { correction: 'z', tau: 1 })).toBeNull()
   })
 
+  it('needs an update unless a configured correction has a complete null for its τ', () => {
+    const config = HPO_SCORING_CONFIG as { backgroundCorrection: string }
+    const buildNull = (tau: number | null): void =>
+      buildHpoSimilarityDb(
+        { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+        { release: 'v2026-09-01', sha256: {} },
+        dbPath,
+        tau
+      )
+    buildNull(null)
+    expect(readHpoDataStatus(dbPath).needsUpdate).toBe(false)
+    config.backgroundCorrection = 'mean'
+    try {
+      expect(readHpoDataStatus(dbPath).needsUpdate).toBe(true)
+      buildNull(HPO_SCORING_CONFIG.tau === 0 ? 1 : 0)
+      expect(readHpoDataStatus(dbPath).needsUpdate).toBe(true)
+      buildNull(HPO_SCORING_CONFIG.tau)
+      expect(readHpoDataStatus(dbPath).needsUpdate).toBe(false)
+      const db = new Database(dbPath)
+      db.exec('DELETE FROM disease_null WHERE disease = (SELECT MIN(disease) FROM disease_null)')
+      db.close()
+      expect(readHpoDataStatus(dbPath).needsUpdate).toBe(true)
+    } finally {
+      config.backgroundCorrection = 'off'
+    }
+  })
+
   it('prewarms the index without throwing on missing or damaged files', () => {
     expect(prewarmHpoIndex(join(dir, 'missing.db'))).toBe(false)
     build()
@@ -181,6 +208,13 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([T.C], dbPath)?.score('GENE2')).not.toBeNull()
     expect(open).not.toHaveBeenCalled()
     open.mockRestore()
+  })
+
+  it('reuses explanations of a memoised case across scorers', () => {
+    build()
+    const first = openHpoGeneScorer([P(T.C)], dbPath)!.explain('GENE2')
+    expect(first).not.toBeNull()
+    expect(openHpoGeneScorer([P(T.C)], dbPath)!.explain('GENE2')).toBe(first)
   })
 
   it('has no scorer without patient terms or data', () => {

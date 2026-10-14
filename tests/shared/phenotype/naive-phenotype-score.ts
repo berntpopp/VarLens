@@ -18,6 +18,8 @@ export interface NaiveGene {
   best: string
   matched: Set<string>
   conflicts: Set<string>
+  /** `present>NOT term` pairs of the best disease */
+  notConflicts: Set<string>
 }
 
 export function naiveScores(
@@ -167,13 +169,8 @@ export function naiveScores(
     if (diseases.length === 0) continue
     let best = diseases[0]
     for (const d of diseases) if (d.score > best.score) best = d
-    const score = zMode
-      ? 1 /
-        (1 +
-          Math.exp(
-            -(best.score - opts.geneMaxPenalty * Math.sqrt(2 * Math.log(diseases.length))) / 2
-          ))
-      : best.score
+    const half = (best.score - opts.geneMaxPenalty * Math.sqrt(2 * Math.log(diseases.length))) / 2
+    const score = zMode ? 0.5 + (0.5 * half) / (1 + Math.abs(half)) : best.score
     const list = ann.get(best.id) ?? []
     const matched = new Set<string>()
     for (const p of present) {
@@ -195,7 +192,12 @@ export function naiveScores(
         if (anc(a.t).has(e) && exclFreq(a) > top) [top, arg] = [exclFreq(a), a.t]
       if (arg !== null) conflicts.add(`${e}>${arg}`)
     }
-    out.set(gene, { score, diseases, best: best.id, matched, conflicts })
+    const notConflicts = new Set<string>()
+    for (const p of present) {
+      for (const n of nots0.get(best.id) ?? [])
+        if (anc(p.term).has(n)) notConflicts.add(`${p.term}>${n}`)
+    }
+    out.set(gene, { score, diseases, best: best.id, matched, conflicts, notConflicts })
   }
   return out
 }

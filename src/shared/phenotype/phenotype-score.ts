@@ -8,11 +8,17 @@
  * 2. One fused scan over the disease CSR: forward (max over d's terms per
  *    lane), reverse (Σ f·max_l lanes / IC(t), the per-term part precomputed) and the exclusion load
  *    (per-organ-system max of the conservative f_excl, plus NOT annotations).
- * 3. Gene = max over its diseases; the case percentile comes from one sort.
+ * 3. Gene = max over its diseases; the percentile (over all reference HPO genes) comes from one sort.
  * Explanations are rebuilt lazily from the lanes for displayed rows only.
  */
 import { HPO_SCORING_CONFIG, type HpoScoringOptions } from '../config/hpo-scoring.config'
-import type { HpoConflict, HpoExplanation, HpoMatch, HpoProfileTerm } from '../types/hpo-profile'
+import type {
+  HpoConflict,
+  HpoExplanation,
+  HpoMatch,
+  HpoNotConflict,
+  HpoProfileTerm
+} from '../types/hpo-profile'
 import {
   boundedZ,
   calibrationFor,
@@ -403,7 +409,7 @@ export function scoreProfile(
   return result
 }
 
-/** Share of the case's genes scoring strictly lower than `score`. */
+/** Share of the reference HPO genes scoring strictly lower than `score` for this profile. */
 function percentile(sorted: Float64Array, score: number): number {
   let lo = 0
   let hi = sorted.length
@@ -468,15 +474,33 @@ export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoE
       excludedLabel: label(e),
       diseaseTerm: id(ix.annTerm[arg]),
       diseaseLabel: label(ix.annTerm[arg]),
-      frequency: best
+      frequency: best,
+      annotationFrequency: ix.annF[arg],
+      frequencyRecorded: ix.annKnown[arg] === 1
     })
   })
+  const notConflicts: HpoNotConflict[] = []
+  for (const p of present) {
+    const stamp = ++s.stamp
+    markAncestors(ix.hpo, p, s.mark, stamp)
+    for (let j = ix.notOffsets[d]; j < ix.notOffsets[d + 1]; j++) {
+      const n = ix.notTerms[j]
+      if (s.mark[n] !== stamp) continue
+      notConflicts.push({
+        patientTerm: id(p),
+        patientLabel: label(p),
+        diseaseTerm: id(n),
+        diseaseLabel: label(n)
+      })
+    }
+  }
   return {
     score: cs.geneScore[g],
     percentile: percentile(cs.sorted, cs.geneScore[g]),
     diseaseId: ix.diseaseIds[d],
     diseaseLabel: ix.diseaseLabels[d],
     matched,
-    conflicts
+    conflicts,
+    notConflicts
   }
 }

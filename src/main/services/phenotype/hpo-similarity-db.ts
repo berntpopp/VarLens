@@ -68,7 +68,7 @@ export function buildHpoSimilarityDb(
 ): void {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
-  const hpoa = parseHpoaDiseases(sources.annotations)
+  const hpoa = parseHpoaDiseases(sources.annotations, ontology.aliases)
   const positive = new Map([...hpoa.terms].map(([d, map]) => [d, new Set(map.keys())]))
   const ic = informationContent(positive, ancestors)
   const genes = parseGeneDiseases(sources.genes, hpoa.terms)
@@ -76,7 +76,7 @@ export function buildHpoSimilarityDb(
     const term = ontology.aliases.get(raw) ?? raw
     return ancestors.has(term) ? term : null
   }
-  // Gene-linked diseases only; aliases merged onto the current term (higher frequency wins).
+  // Gene-linked diseases only, phenotype-subtree terms only (aliases already pooled by the parser).
   const linked = new Map<string, Map<string, HpoaFrequency>>()
   for (const diseases of genes.values()) {
     for (const d of diseases) {
@@ -193,8 +193,21 @@ function inspect(db: Database.Database): HpoDataStatus {
     geneCount > 0 &&
     count('SELECT COUNT(*) AS c FROM disease_terms') > 0 &&
     count('SELECT COUNT(*) AS c FROM terms WHERE ic > 0') > 0 &&
-    count('SELECT COUNT(*) AS c FROM parents') > 0
+    count('SELECT COUNT(*) AS c FROM parents') > 0 &&
+    nullMatchesConfig(meta.get('null_params'), count)
   return { ...status, needsUpdate: !usable, geneCount }
+}
+
+/** A configured background correction needs a complete null built for the configured τ. */
+function nullMatchesConfig(params: string | undefined, count: (sql: string) => number): boolean {
+  if (HPO_SCORING_CONFIG.backgroundCorrection === 'off') return true
+  const bytes = HPO_SCORING_CONFIG.nullMaxK * 4
+  return (
+    params === nullParams(HPO_SCORING_CONFIG.tau) &&
+    count(
+      `SELECT COUNT(*) AS c FROM disease_null WHERE length(mu) = ${bytes} AND length(sd) = ${bytes}`
+    ) === count('SELECT COUNT(*) AS c FROM diseases')
+  )
 }
 
 /** Installed release; a damaged or wrong-schema file reads as not installed + needs update. */
@@ -238,8 +251,12 @@ export interface HpoGeneScorer {
 
 /** Phenotype index of one DB file, kept per process until the file changes. */
 let cached: { key: string; index: PhenotypeIndex | null } | null = null
-/** Last case results per (index, canonical profile): paging and re-sorting never rescore. */
-const results = new Map<string, CaseScores>()
+/** Last case results per (index, canonical profile): paging never rescores or re-explains. */
+interface Memo {
+  scores: CaseScores
+  explained: Map<number, HpoExplanation>
+}
+const results = new Map<string, Memo>()
 
 const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
 
@@ -318,13 +335,13 @@ function caseScores(
   index: PhenotypeIndex,
   profile: CaseProfile,
   options: Partial<HpoScoringOptions>
-): CaseScores {
+): Memo {
   const memoKey = `${key}\0${JSON.stringify(options)}\0${profile.hash}`
   let hit = results.get(memoKey)
   if (hit !== undefined) {
     results.delete(memoKey)
   } else {
-    hit = scoreProfile(index, profile, options)
+    hit = { scores: scoreProfile(index, profile, options), explained: new Map() }
     if (results.size >= HPO_SCORING_CONFIG.memoisedCases) {
       results.delete(results.keys().next().value as string)
     }
@@ -365,8 +382,7 @@ export function openHpoGeneScorer(
     const index = loaded?.index ?? null
     const profile = index === null ? null : prepareProfile(index, terms)
     if (loaded === null || index === null || profile === null) return null
-    const scores = caseScores(loaded.key, index, profile, options)
-    const explained = new Map<number, HpoExplanation>()
+    const { scores, explained } = caseScores(loaded.key, index, profile, options)
     const { genes } = index
     return {
       score: (symbol) => {

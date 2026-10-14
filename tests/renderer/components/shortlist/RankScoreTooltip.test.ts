@@ -145,7 +145,26 @@ describe('RankScoreTooltip', () => {
           excludedLabel: 'microcephaly',
           diseaseTerm: 'HP:0000252',
           diseaseLabel: 'Microcephaly',
-          frequency: 0.8
+          frequency: 0.3,
+          annotationFrequency: 0.545,
+          frequencyRecorded: true
+        },
+        {
+          excludedTerm: 'HP:0001250',
+          excludedLabel: 'ataxia',
+          diseaseTerm: 'HP:0001250',
+          diseaseLabel: 'Ataxia',
+          frequency: 0.15,
+          annotationFrequency: 0.35,
+          frequencyRecorded: false
+        }
+      ],
+      notConflicts: [
+        {
+          patientTerm: 'HP:0001263',
+          patientLabel: 'delay',
+          diseaseTerm: 'HP:0001263',
+          diseaseLabel: 'Delay'
         }
       ]
     }
@@ -158,7 +177,10 @@ describe('RankScoreTooltip', () => {
       const text = wrapper.get('[data-testid="rank-tooltip-phenotype"]').text()
       expect(text).toContain('best: Dravet syndrome')
       expect(text).toContain('✓ matched: ★ epilepsy · hypotonia · ataxia · +1')
-      expect(text).toContain('⊖ conflicts: microcephaly excluded (80 % in Dravet syndrome)')
+      expect(text).toContain(
+        '⊖ conflicts: microcephaly excluded (55 % in Dravet syndrome) · ' +
+          'ataxia excluded (frequency not recorded) · delay present (absent in Dravet syndrome)'
+      )
       expect(text).toContain('scores above 97 % of HPO genes')
       expect(text.toLowerCase()).not.toContain('probab')
     })
