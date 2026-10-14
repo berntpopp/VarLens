@@ -35,10 +35,15 @@ export const CaseSetCohortsSchema = z.object({
   cohortIds: z.array(z.number().int().positive())
 })
 
+export const HpoTermFlagsSchema = z
+  .object({ excluded: z.boolean().optional(), key: z.boolean().optional() })
+  .strict()
+
 export const HpoTermAssignSchema = z.object({
   caseId: CaseIdSchema,
   hpoId: z.string().min(1),
-  hpoLabel: z.string().min(1)
+  hpoLabel: z.string().min(1),
+  flags: HpoTermFlagsSchema.optional()
 })
 
 export const HpoTermRemoveSchema = z.object({

@@ -13,6 +13,15 @@ import type {
   CaseMetricWithDefinition
 } from './types'
 import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
+import type { HpoTermFlags } from '../../shared/types/hpo-profile'
+import { resolveHpoTermFlags } from '../../shared/utils/hpo-term-flags'
+
+type HpoTermRow = Omit<CaseHpoTerm, 'excluded' | 'key'> & { excluded: number; key: number }
+
+/** SQLite stores the flags as 0/1. */
+function toCaseHpoTerm(row: HpoTermRow): CaseHpoTerm {
+  return { ...row, excluded: row.excluded === 1, key: row.key === 1 }
+}
 
 export class MetadataRepository extends BaseRepository {
   getCaseMetadata(caseId: number): CaseMetadata | null {
@@ -177,24 +186,47 @@ export class MetadataRepository extends BaseRepository {
   }
 
   getCaseHpoTerms(caseId: number): CaseHpoTerm[] {
-    return this.execAll<CaseHpoTerm>(
+    return this.execAll<HpoTermRow>(
       this.kysely
         .selectFrom('case_hpo_terms')
         .selectAll()
         .where('case_id', '=', caseId)
         .orderBy('hpo_id')
-    )
+    ).map(toCaseHpoTerm)
   }
 
-  assignCaseHpoTerm(caseId: number, hpoId: string, hpoLabel: string): CaseHpoTerm {
-    const now = Date.now()
-    return this.execFirst<CaseHpoTerm>(
+  /**
+   * Upsert a case term. With `flags`, the term's status is set to them (a missing
+   * flag is false, excluded wins over key); without, a new term is present and an
+   * existing one keeps its status.
+   */
+  assignCaseHpoTerm(
+    caseId: number,
+    hpoId: string,
+    hpoLabel: string,
+    flags?: HpoTermFlags
+  ): CaseHpoTerm {
+    const resolved = flags === undefined ? undefined : resolveHpoTermFlags(flags)
+    const status =
+      resolved === undefined
+        ? {}
+        : { excluded: Number(resolved.excluded), key: Number(resolved.key) }
+    const row = this.execFirst<HpoTermRow>(
       this.kysely
         .insertInto('case_hpo_terms')
-        .values({ case_id: caseId, hpo_id: hpoId, hpo_label: hpoLabel, created_at: now })
-        .onConflict((oc) => oc.columns(['case_id', 'hpo_id']).doUpdateSet({ hpo_label: hpoLabel }))
+        .values({
+          case_id: caseId,
+          hpo_id: hpoId,
+          hpo_label: hpoLabel,
+          created_at: Date.now(),
+          ...status
+        })
+        .onConflict((oc) =>
+          oc.columns(['case_id', 'hpo_id']).doUpdateSet({ hpo_label: hpoLabel, ...status })
+        )
         .returningAll()
-    ) as CaseHpoTerm
+    ) as HpoTermRow
+    return toCaseHpoTerm(row)
   }
 
   removeCaseHpoTerm(caseId: number, hpoId: string): void {
@@ -206,12 +238,13 @@ export class MetadataRepository extends BaseRepository {
     )
   }
 
-  /** Return all distinct HPO terms assigned to any case, sorted by label. */
+  /** Distinct HPO terms present (not excluded) in any case, sorted by label. */
   getDistinctHpoTerms(): Array<{ hpo_id: string; hpo_label: string }> {
     return this.execAll<{ hpo_id: string; hpo_label: string }>(
       this.kysely
         .selectFrom('case_hpo_terms')
-        .select(['hpo_id', 'hpo_label'])
+        .select(['hpo_id', (eb) => eb.fn.min('hpo_label').as('hpo_label')])
+        .where('excluded', '=', 0)
         .groupBy('hpo_id')
         .orderBy('hpo_label')
     )

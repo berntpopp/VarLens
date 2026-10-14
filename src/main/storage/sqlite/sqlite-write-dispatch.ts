@@ -81,7 +81,7 @@ export async function executeSqliteWriteTask(
       return undefined
 
     case 'case-metadata:assignHpoTerm':
-      return repos.metadata.assignCaseHpoTerm(task.params[0], task.params[1], task.params[2])
+      return repos.metadata.assignCaseHpoTerm(...task.params)
 
     case 'case-metadata:removeHpoTerm':
       repos.metadata.removeCaseHpoTerm(task.params[0], task.params[1])

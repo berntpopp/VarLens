@@ -42,6 +42,7 @@ export class PostgresCasesQueryRepository {
           FROM ${schemaName}."case_hpo_terms" cht_filter
           WHERE cht_filter.case_id = c.id
             AND cht_filter.hpo_id = ANY($${values.length}::text[])
+            AND NOT cht_filter.excluded
         )
       `)
     }

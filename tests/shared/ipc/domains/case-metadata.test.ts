@@ -170,7 +170,7 @@ describe('case-metadata preload domain behavior', () => {
     )
 
     await expect(
-      api.assignHpoTerm(1, 'HP:0001197', 'Abnormal palate morphology')
+      api.assignHpoTerm(1, 'HP:0001197', 'Abnormal palate morphology', { key: true })
     ).resolves.toMatchObject({
       hpo_id: 'HP:0001197'
     })
@@ -243,7 +243,8 @@ describe('case-metadata preload domain behavior', () => {
       'case-metadata:assignHpoTerm',
       1,
       'HP:0001197',
-      'Abnormal palate morphology'
+      'Abnormal palate morphology',
+      { key: true }
     )
     expect(invoke).toHaveBeenNthCalledWith(14, 'case-metadata:removeHpoTerm', 1, 'HP:0001197')
     expect(invoke).toHaveBeenNthCalledWith(15, 'case-metadata:getDataInfo', 1)
