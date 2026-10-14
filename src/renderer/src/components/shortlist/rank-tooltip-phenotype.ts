@@ -8,7 +8,7 @@ export interface PhenotypeLines {
   title: string
   matched: string | null
   conflicts: string | null
-  /** Case-relative rank; deliberately not phrased as a probability. */
+  /** Rank among the reference HPO genes; deliberately not phrased as a probability. */
   rank: string
 }
 
@@ -26,12 +26,13 @@ export function phenotypeLines(hpo: HpoExplanation): PhenotypeLines {
   const conflicts = hpo.conflicts.map(
     (c) => `${c.excludedLabel} excluded (${percent(c.frequency)} in ${hpo.diseaseLabel})`
   )
-  // percentile = share of the case's genes scoring lower; never below "top 1 %".
-  const top = Math.max(1, Math.round((1 - hpo.percentile) * 100))
+  // percentile = share of all reference HPO genes scoring strictly lower (ties not counted),
+  // so round down to keep the claim true.
+  const above = Math.floor(hpo.percentile * 100)
   return {
     title: `Phenotype match ${hpo.score.toFixed(2)} · best: ${hpo.diseaseLabel}`,
     matched: matched.length > 0 ? `✓ matched: ${capped(matched)}` : null,
     conflicts: conflicts.length > 0 ? `⊖ conflicts: ${capped(conflicts)}` : null,
-    rank: `top ${top} % of genes in this case`
+    rank: `scores above ${above} % of HPO genes`
   }
 }
