@@ -50,12 +50,22 @@ const loadingStates = shallowRef<Map<number, boolean>>(new Map())
  * and its revert may both run before the next render cycle.
  */
 let _pendingTrigger = false
-/** Replace a case's HPO terms with a new cache entry: same-object writes would not re-render computeds. */
-function setCachedHpoTerms(caseId: number, update: (terms: CaseHpoTerm[]) => CaseHpoTerm[]): void {
+/**
+ * Write a case's cache entry as a new object: in-place writes keep the entry's identity, so
+ * computeds over `getMetadata()` would not re-render. No-op when the case is not cached.
+ */
+function patchCachedEntry(
+  caseId: number,
+  patch: (entry: FullCaseMetadata) => Partial<FullCaseMetadata>
+): void {
   const entry = metadataCache.value.get(caseId)
   if (!entry) return
-  metadataCache.value.set(caseId, { ...entry, hpoTerms: update(entry.hpoTerms) })
+  metadataCache.value.set(caseId, { ...entry, ...patch(entry) })
   triggerCacheUpdate()
+}
+
+function setCachedHpoTerms(caseId: number, update: (terms: CaseHpoTerm[]) => CaseHpoTerm[]): void {
+  patchCachedEntry(caseId, (entry) => ({ hpoTerms: update(entry.hpoTerms) }))
 }
 
 function triggerCacheUpdate(): void {
@@ -160,182 +170,57 @@ export function useCaseMetadata() {
     return loadingStates.value.get(caseId) ?? false
   }
 
-  // Update affected status with optimistic update
-  async function updateStatus(caseId: number, status: AffectedStatus): Promise<void> {
+  /** Upsert one metadata field, optimistic with rollback to the previous value. */
+  async function upsertMetadataField<K extends 'affected_status' | 'sex' | 'age' | 'date_of_birth'>(
+    caseId: number,
+    field: K,
+    value: CaseMetadata[K],
+    label: string
+  ): Promise<void> {
     if (!api) return
     const generation = cacheGeneration
     await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousStatus = current?.metadata?.affected_status ?? null
-
-      if (current) {
-        current.metadata = {
-          ...current.metadata,
-          case_id: caseId,
-          affected_status: status
-        } as CaseMetadata
-        triggerCacheUpdate()
-      }
+      const previous = metadataCache.value.get(caseId)?.metadata?.[field] ?? null
+      const withValue =
+        (v: CaseMetadata[K] | null) =>
+        (entry: FullCaseMetadata): Partial<FullCaseMetadata> => ({
+          metadata: { ...entry.metadata, case_id: caseId, [field]: v } as CaseMetadata
+        })
+      patchCachedEntry(caseId, withValue(value))
 
       try {
-        const updated = unwrapIpcResult(
-          await api.caseMetadata.upsert(caseId, { affected_status: status })
-        )
+        const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { [field]: value }))
         if (!isCurrentGeneration(generation)) return
-        const cached = metadataCache.value.get(caseId)
-        if (cached) {
-          cached.metadata = updated
-          triggerCacheUpdate()
-        }
+        patchCachedEntry(caseId, () => ({ metadata: updated }))
       } catch (error) {
         if (!isCurrentGeneration(generation)) return
         logService.error(
-          'Failed to update status: ' + formatErrorMessage(error, 'Unknown error'),
+          `Failed to update ${label}: ` + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
         )
-        if (current && current.metadata) {
-          current.metadata.affected_status = previousStatus
-          triggerCacheUpdate()
-        }
+        patchCachedEntry(caseId, (entry) => (entry.metadata ? withValue(previous)(entry) : {}))
         throw error
       }
     })
   }
 
-  // Update sex with optimistic update
-  async function updateSex(caseId: number, sex: CaseSex): Promise<void> {
-    if (!api) return
-    const generation = cacheGeneration
-    await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousSex = current?.metadata?.sex ?? null
-
-      if (current) {
-        current.metadata = {
-          ...current.metadata,
-          case_id: caseId,
-          sex
-        } as CaseMetadata
-        triggerCacheUpdate()
-      }
-
-      try {
-        const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { sex }))
-        if (!isCurrentGeneration(generation)) return
-        const cached = metadataCache.value.get(caseId)
-        if (cached) {
-          cached.metadata = updated
-          triggerCacheUpdate()
-        }
-      } catch (error) {
-        if (!isCurrentGeneration(generation)) return
-        logService.error(
-          'Failed to update sex: ' + formatErrorMessage(error, 'Unknown error'),
-          'case-metadata'
-        )
-        if (current && current.metadata) {
-          current.metadata.sex = previousSex
-          triggerCacheUpdate()
-        }
-        throw error
-      }
-    })
-  }
-
-  // Update age with optimistic update
-  async function updateAge(caseId: number, age: number | null): Promise<void> {
-    if (!api) return
-    const generation = cacheGeneration
-    await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousAge = current?.metadata?.age ?? null
-
-      if (current) {
-        current.metadata = {
-          ...current.metadata,
-          case_id: caseId,
-          age
-        } as CaseMetadata
-        triggerCacheUpdate()
-      }
-
-      try {
-        const updated = unwrapIpcResult(await api.caseMetadata.upsert(caseId, { age }))
-        if (!isCurrentGeneration(generation)) return
-        const cached = metadataCache.value.get(caseId)
-        if (cached) {
-          cached.metadata = updated
-          triggerCacheUpdate()
-        }
-      } catch (error) {
-        if (!isCurrentGeneration(generation)) return
-        logService.error(
-          'Failed to update age: ' + formatErrorMessage(error, 'Unknown error'),
-          'case-metadata'
-        )
-        if (current && current.metadata) {
-          current.metadata.age = previousAge
-          triggerCacheUpdate()
-        }
-        throw error
-      }
-    })
-  }
-
-  // Update date of birth with optimistic update
-  async function updateDob(caseId: number, dateOfBirth: string | null): Promise<void> {
-    if (!api) return
-    const generation = cacheGeneration
-    await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousDob = current?.metadata?.date_of_birth ?? null
-
-      if (current) {
-        current.metadata = {
-          ...current.metadata,
-          case_id: caseId,
-          date_of_birth: dateOfBirth
-        } as CaseMetadata
-        triggerCacheUpdate()
-      }
-
-      try {
-        const updated = unwrapIpcResult(
-          await api.caseMetadata.upsert(caseId, { date_of_birth: dateOfBirth })
-        )
-        if (!isCurrentGeneration(generation)) return
-        const cached = metadataCache.value.get(caseId)
-        if (cached) {
-          cached.metadata = updated
-          triggerCacheUpdate()
-        }
-      } catch (error) {
-        if (!isCurrentGeneration(generation)) return
-        logService.error(
-          'Failed to update date of birth: ' + formatErrorMessage(error, 'Unknown error'),
-          'case-metadata'
-        )
-        if (current && current.metadata) {
-          current.metadata.date_of_birth = previousDob
-          triggerCacheUpdate()
-        }
-        throw error
-      }
-    })
-  }
+  const updateStatus = (caseId: number, status: AffectedStatus): Promise<void> =>
+    upsertMetadataField(caseId, 'affected_status', status, 'status')
+  const updateSex = (caseId: number, sex: CaseSex): Promise<void> =>
+    upsertMetadataField(caseId, 'sex', sex, 'sex')
+  const updateAge = (caseId: number, age: number | null): Promise<void> =>
+    upsertMetadataField(caseId, 'age', age, 'age')
+  const updateDob = (caseId: number, dateOfBirth: string | null): Promise<void> =>
+    upsertMetadataField(caseId, 'date_of_birth', dateOfBirth, 'date of birth')
 
   // Set case cohorts with optimistic update (bulk replace)
   async function setCaseCohorts(caseId: number, cohortIds: number[]): Promise<void> {
     if (!api) return
     const generation = cacheGeneration
     await serializeCaseMutation(caseId, generation, async () => {
-      const current = metadataCache.value.get(caseId)
-      const previousCohorts = current?.cohorts ?? []
+      const previousCohorts = metadataCache.value.get(caseId)?.cohorts ?? []
       const newCohorts = cohortGroupsCache.value.filter((c) => cohortIds.includes(c.id))
-      if (current) {
-        current.cohorts = newCohorts
-        triggerCacheUpdate()
-      }
+      patchCachedEntry(caseId, () => ({ cohorts: newCohorts }))
 
       try {
         unwrapIpcResult(await api.caseMetadata.setCohorts(caseId, cohortIds))
@@ -346,10 +231,7 @@ export function useCaseMetadata() {
           'Failed to set cohorts: ' + formatErrorMessage(error, 'Unknown error'),
           'case-metadata'
         )
-        if (current) {
-          current.cohorts = previousCohorts
-          triggerCacheUpdate()
-        }
+        patchCachedEntry(caseId, () => ({ cohorts: previousCohorts }))
         metadataCache.value.delete(caseId)
         await loadMetadata(caseId)
         throw error
@@ -368,11 +250,7 @@ export function useCaseMetadata() {
       unwrapIpcResult(await api.caseMetadata.assignCohort(caseId, newCohort.id))
       if (!isCurrentGeneration(generation)) return null
 
-      const current = metadataCache.value.get(caseId)
-      if (current) {
-        current.cohorts.push(newCohort)
-        triggerCacheUpdate()
-      }
+      patchCachedEntry(caseId, (entry) => ({ cohorts: [...entry.cohorts, newCohort] }))
 
       return newCohort
     })

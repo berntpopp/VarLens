@@ -184,6 +184,46 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
     })
   })
 
+  describe('re-render after cache writes', () => {
+    it('re-renders computeds over status, sex, age, dob, and cohorts edits', async () => {
+      // The server returns the merged row, like the real upsert.
+      let row = makeFullMetadata().metadata
+      window.api.caseMetadata.upsert = vi.fn().mockImplementation(async (_id, updates: object) => {
+        row = { ...row!, ...updates }
+        return row
+      })
+      window.api.caseMetadata.setCohorts = vi.fn().mockResolvedValue(undefined)
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(1, makeFullMetadata())
+      result.cohortGroupsCache.value = [fakeCohort]
+      // Same shape as CaseMetadataCard: a computed over the entry, then over its fields.
+      const entry = computed(() => result.getMetadata(1))
+      const view = computed(() => ({
+        status: entry.value?.metadata?.affected_status,
+        sex: entry.value?.metadata?.sex,
+        age: entry.value?.metadata?.age,
+        dob: entry.value?.metadata?.date_of_birth,
+        cohorts: entry.value?.cohorts.map((c) => c.id)
+      }))
+      expect(view.value.status).toBeNull()
+
+      await result.updateStatus(1, 'affected')
+      await result.updateSex(1, 'female')
+      await result.updateAge(1, 4)
+      await result.updateDob(1, '2020-01-01')
+      await result.setCaseCohorts(1, [fakeCohort.id])
+      await flushPromises()
+      expect(view.value).toEqual({
+        status: 'affected',
+        sex: 'female',
+        age: 4,
+        dob: '2020-01-01',
+        cohorts: [fakeCohort.id]
+      })
+    })
+  })
+
   describe('assignHpoTerm', () => {
     const caseId = 1
 
