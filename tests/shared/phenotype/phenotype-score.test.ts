@@ -7,6 +7,12 @@ import {
 import { explainGene, scoreCase } from '../../../src/shared/phenotype/phenotype-score'
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
 import { naiveScores } from './naive-phenotype-score'
+import {
+  exclusionLr,
+  nullParams,
+  scoringOptions
+} from '../../../src/shared/phenotype/phenotype-calibration'
+import { computeDiseaseNull } from '../../../src/shared/phenotype/phenotype-null'
 
 const ROOT = 'HP:0000118'
 const P = (hpoId: string, key = false): HpoProfileTerm => ({ hpoId, excluded: false, key })
@@ -68,7 +74,7 @@ function toy(
 function scores(input: PhenotypeIndexInput, profile: HpoProfileTerm[]): Record<string, number> {
   const ix = buildPhenotypeIndex(input)
   const cs = scoreCase(ix, profile)!
-  return Object.fromEntries([...ix.hpo.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
+  return Object.fromEntries([...ix.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
 }
 
 describe('phenotype score v2: hand-computed toy cases', () => {
@@ -80,8 +86,9 @@ describe('phenotype score v2: hand-computed toy cases', () => {
 
   it('penalises only descendants of an excluded term, never siblings', () => {
     const input = toy({ micro: [['MICRO', 0.9, 0.8]], macro: [['MACRO', 0.9, 0.8]] })
-    const plain = scores(input, [P('SEIZ')])
-    const excl = scores(input, [P('SEIZ'), X('MICRO')])
+    const plain = scores(input, [P('FACE')])
+    const excl = scores(input, [P('FACE'), X('MICRO')])
+    expect(plain.macro).toBeGreaterThan(0)
     expect(excl.macro).toBeCloseTo(plain.macro, 12)
     expect(excl.micro).toBeCloseTo(plain.micro * Math.exp(-C.lambda * Math.fround(0.8)), 12)
   })
@@ -113,6 +120,10 @@ describe('phenotype score v2: hand-computed toy cases', () => {
       scores(input, [P('FEB'), P('HYPO')]).d / scores(unaffected, [P('FEB'), P('HYPO')]).d
     expect(ratio).toBeCloseTo(Math.exp(-C.lambda), 12)
     // A NOT on a descendant of the present term does not contradict it.
+    const conflictsOnly = scoreCase(buildPhenotypeIndex(input), [P('FEB'), P('HYPO')], {
+      exclusionMode: 'conflictsOnly'
+    })!
+    expect(conflictsOnly.geneScore[0]).toBeCloseTo(scores(unaffected, [P('FEB'), P('HYPO')]).d, 12)
     const below = toy({ d: [['HYPO', 0.9, 0.8]] }, [['d', 'FEB']])
     expect(scores(below, [P('SEIZ')]).d).toBeCloseTo(scores(unaffected, [P('SEIZ')]).d, 12)
   })
@@ -140,6 +151,32 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     )
   })
 
+  it('penalises only near-obligate known features under the gate; conflictsOnly never penalises', () => {
+    const input = toy({
+      obligate: [['MICRO', 0.95, 0.8]],
+      frequent: [['MICRO', 0.6, 0.4]],
+      unknown: [['MICRO', C.missing.f, C.missing.fExcl]]
+    })
+    const ix = buildPhenotypeIndex(input)
+    const run = (o: Parameters<typeof scoreCase>[2]): Record<string, number> => {
+      const cs = scoreCase(ix, [P('FACE'), X('MICRO')], o)!
+      return Object.fromEntries([...ix.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
+    }
+    const none = run({ exclusionMode: 'conflictsOnly' })
+    for (const v of Object.values(none)) expect(v).toBeGreaterThan(0)
+    const gated = run({ excludeMinFrequency: 0.8 })
+    expect(gated.obligate).toBeCloseTo(none.obligate * Math.exp(-C.lambda * Math.fround(0.8)), 12)
+    expect(gated.frequent).toBeCloseTo(none.frequent, 12)
+    expect(gated.unknown).toBeCloseTo(none.unknown, 12)
+    // A missing frequency never penalises under a gate, even below its 0.35 default.
+    expect(run({ excludeMinFrequency: 0.3 }).unknown).toBeCloseTo(none.unknown, 12)
+    // Ungated (default), the missing-frequency annotation penalises with f_excl 0.15.
+    expect(run({}).unknown).toBeCloseTo(none.unknown * Math.exp(-C.lambda * Math.fround(0.15)), 12)
+    const cs = scoreCase(ix, [P('FACE'), X('MICRO')], { exclusionMode: 'conflictsOnly' })!
+    expect(explainGene(ix, cs, ix.genes.get('G_frequent')!).conflicts).toHaveLength(1)
+    expect(cs.geneConflicts[ix.genes.get('G_unknown')!]).toBe(1)
+  })
+
   it('is inactive without a present term', () => {
     const ix = buildPhenotypeIndex(toy({ d: [['FEB', 0.9, 0.8]] }))
     expect(scoreCase(ix, [X('FEB')])).toBeNull()
@@ -161,7 +198,7 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     ]
     const ix = buildPhenotypeIndex(input)
     const cs = scoreCase(ix, [P('FEB', true), P('HYPO'), X('SIZE')])!
-    const e = explainGene(ix, cs, ix.hpo.genes.get('G1')!)!
+    const e = explainGene(ix, cs, ix.genes.get('G1')!)!
     expect(e).toMatchObject({ diseaseId: 'a', diseaseLabel: 'name a', percentile: 0.5 })
     expect(e.matched).toEqual([
       {
@@ -182,7 +219,34 @@ describe('phenotype score v2: hand-computed toy cases', () => {
         frequency: Math.fround(0.8)
       }
     ])
-    expect(cs.geneConflicts[ix.hpo.genes.get('G1')!]).toBe(1)
+    expect(cs.geneConflicts[ix.genes.get('G1')!]).toBe(1)
+  })
+})
+
+describe('background correction helpers', () => {
+  it('computes the error-tolerant exclusion LR (research values at ε = 0.1)', () => {
+    expect(exclusionLr(0.5, 0, 0.1)).toBeCloseTo(-Math.log(0.55), 12)
+    expect(exclusionLr(0.9, 0, 0.1)).toBeCloseTo(-Math.log(0.19), 12)
+    expect(exclusionLr(1, 0, 0.1)).toBeCloseTo(-Math.log(0.1), 12)
+    expect(exclusionLr(0.1, 0.5, 0.1)).toBe(0)
+  })
+
+  it('builds a deterministic null with μ in [0, 1] for every size', () => {
+    const ix = buildPhenotypeIndex(
+      toy({
+        a: [['FEB', 0.9, 0.8]],
+        b: [
+          ['CAT', 0.5, 0.3],
+          ['HYPO', 1, 0.95]
+        ]
+      })
+    )
+    const one = computeDiseaseNull(ix, 0, 20, 7)
+    expect(computeDiseaseNull(ix, 0, 20, 7)).toEqual(one)
+    expect(one.mu).toHaveLength(2 * C.nullMaxK)
+    for (const m of one.mu) expect(m).toBeGreaterThanOrEqual(0)
+    for (const m of one.mu) expect(m).toBeLessThanOrEqual(1)
+    for (const s of one.sd) expect(s).toBeGreaterThanOrEqual(0)
   })
 })
 
@@ -193,7 +257,7 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
     const int = (n: number): number => Math.floor(rand() * n)
     const pick = <V>(xs: readonly V[]): V => xs[int(xs.length)]
     let compared = 0
-    for (let round = 0; round < 150; round++) {
+    for (let round = 0; round < 300; round++) {
       const n = 4 + int(40)
       const ids = [ROOT, ...Array.from({ length: n }, (_, i) => `T${i}`)]
       const edges: Array<[string, string]> = []
@@ -226,7 +290,8 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         const own = new Set(Array.from({ length: 1 + int(6) }, () => pick(ids.slice(1))))
         for (const t of own) {
           const f = pick(freqs)
-          input.diseaseTerms.push([d, t, f, rand() < 0.2 ? 0 : f * rand()])
+          if (rand() < 0.15) input.diseaseTerms.push([d, t, C.missing.f, C.missing.fExcl])
+          else input.diseaseTerms.push([d, t, f, rand() < 0.2 ? 0 : f * rand()])
         }
         if (rand() < 0.3) input.diseaseNot.push([d, pick(ids)])
       }
@@ -240,16 +305,35 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         excluded: rand() < 0.35,
         key: rand() < 0.3
       }))
+      const options = scoringOptions({
+        correction: pick(['off', 'mean', 'z'] as const),
+        tau: pick([0, 0.5, 1]),
+        geneMaxPenalty: pick([0, 0.5, 1]),
+        lrEpsilon: pick([0.05, 0.1, 0.3]),
+        lambdaZ: pick([0.25, 0.5, 1]),
+        excludeMinFrequency: pick([0, 0, 0.3, 0.8]),
+        exclusionMode: pick(['penalty', 'penalty', 'conflictsOnly'] as const)
+      })
+      // Random stored null (some diseases without one, some σ = 0) for the options' τ.
+      const K = C.nullMaxK
+      input.diseaseNull = diseases
+        .filter(() => rand() < 0.9)
+        .map((d) => {
+          const mu = Float32Array.from({ length: K }, () => rand() * 0.9)
+          const sd = Float32Array.from({ length: K }, () => (rand() < 0.1 ? 0 : rand() * 0.3))
+          return [d, mu, sd] as const
+        })
+      input.nullParams = nullParams(options.tau)
       const ix = buildPhenotypeIndex(input)
-      const fast = scoreCase(ix, profile)
-      const want = naiveScores(input, profile)
+      const fast = scoreCase(ix, profile, options)
+      const want = naiveScores(input, profile, options)
       if (want === null) {
         expect(fast).toBeNull()
         continue
       }
       expect(fast).not.toBeNull()
-      expect(ix.hpo.genes.size).toBe(want.size)
-      for (const [gene, g] of ix.hpo.genes) {
+      expect(ix.genes.size).toBe(want.size)
+      for (const [gene, g] of ix.genes) {
         const ref = want.get(gene)!
         expect(Math.abs(fast!.geneScore[g] - ref.score)).toBeLessThan(1e-12)
         const ranked = [...ref.diseases].sort((a, b) => b.score - a.score)

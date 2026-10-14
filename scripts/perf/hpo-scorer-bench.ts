@@ -1,8 +1,9 @@
 /**
- * Micro-benchmark of the phenotype scorer v2 (spec §3 performance budget)
- * against the sprint-3 gene-level BMA on the same profiles. Not a test.
+ * Micro-benchmark of the phenotype scorer v2 (spec §3 performance budget). Not a test.
+ * The sprint-3 comparison lives in scripts/shortlist-sim/phenotype/sprint3-baseline.ts.
  *
- * Usage: npx jiti scripts/perf/hpo-scorer-bench.ts --db <hpo_similarity.db> [--raw <dir with
+ * Usage: node --expose-gc node_modules/jiti/lib/jiti-cli.mjs scripts/perf/hpo-scorer-bench.ts
+ *   [--correction off|mean|z] [--tau n] --db <hpo_similarity.db> [--raw <dir with
  *   hp.json, phenotype.hpoa, genes_to_phenotype.txt>]   (builds --db from --raw when given)
  * Keep --db outside the repository (private data cache).
  */
@@ -15,11 +16,21 @@ import {
   loadPhenotypeIndex,
   openHpoGeneScorer
 } from '../../src/main/services/phenotype/hpo-similarity-db'
-import { scoreAllGenes } from '../../src/shared/phenotype/resnik'
 import { scoreCase } from '../../src/shared/phenotype/phenotype-score'
 import type { HpoProfileTerm } from '../../src/shared/types/hpo-profile'
+import type { HpoBackgroundCorrection } from '../../src/shared/config/hpo-scoring.config'
 
-const { values } = parseArgs({ options: { db: { type: 'string' }, raw: { type: 'string' } } })
+const { values } = parseArgs({
+  options: {
+    db: { type: 'string' },
+    raw: { type: 'string' },
+    correction: { type: 'string' },
+    tau: { type: 'string' }
+  }
+})
+const correction = (values.correction ?? 'off') as HpoBackgroundCorrection
+const tau = Number(values.tau ?? 0)
+const gc = (globalThis as { gc?: () => void }).gc ?? (() => undefined)
 if (values.db === undefined) throw new Error('--db is required')
 const dbPath = values.db
 
@@ -33,19 +44,22 @@ if (values.raw !== undefined) {
       genes: read('genes_to_phenotype.txt')
     },
     { release: 'bench', sha256: {} },
-    dbPath
+    dbPath,
+    tau
   )
   console.log(`build: ${(performance.now() - t0).toFixed(0)} ms`)
 }
 
+gc()
 const rssBefore = process.memoryUsage().rss
 const t0 = performance.now()
 const ix = loadPhenotypeIndex(dbPath)!
 const loadMs = performance.now() - t0
+gc()
 const rssMb = (process.memoryUsage().rss - rssBefore) / 2 ** 20
 console.log(
   `index: ${ix.hpo.ids.length} terms, ${ix.diseaseIds.length} diseases, ${ix.annTerm.length} annotations, ` +
-    `${ix.hpo.genes.size} genes; load ${loadMs.toFixed(0)} ms, +${rssMb.toFixed(0)} MB RSS`
+    `${ix.genes.size} genes; load ${loadMs.toFixed(0)} ms, +${rssMb.toFixed(0)} MB RSS`
 )
 
 let seed = 42
@@ -76,32 +90,19 @@ const quantile = (xs: number[], q: number): number => {
 }
 
 const RUNS = 60
-console.log('| k⁺ | excluded | v2 median ms | v2 p95 ms | sprint-3 median ms | sprint-3 p95 ms |')
-console.log('|---:|---:|---:|---:|---:|---:|')
+console.log('| k⁺ | excluded | median ms | p95 ms |')
+console.log('|---:|---:|---:|---:|')
 for (const k of [1, 5, 10, 20, 50]) {
   for (const excl of [0, 3, 10]) {
-    const v2: number[] = []
-    const s3: number[] = []
+    const times: number[] = []
     for (let r = 0; r < RUNS + 5; r++) {
       const p = profile(k, excl)
-      let t = performance.now()
-      scoreCase(ix, p)
-      const a = performance.now() - t
-      t = performance.now()
-      scoreAllGenes(
-        ix.hpo,
-        p.filter((x) => !x.excluded).map((x) => x.hpoId)
-      )
-      const b = performance.now() - t
-      if (r >= 5) {
-        v2.push(a)
-        s3.push(b)
-      }
+      const t = performance.now()
+      scoreCase(ix, p, { correction, tau })
+      if (r >= 5) times.push(performance.now() - t)
     }
-    console.log(
-      `| ${k} | ${excl} | ${quantile(v2, 0.5).toFixed(2)} | ${quantile(v2, 0.95).toFixed(2)} | ` +
-        `${quantile(s3, 0.5).toFixed(2)} | ${quantile(s3, 0.95).toFixed(2)} |`
-    )
+    const [median, p95] = [quantile(times, 0.5), quantile(times, 0.95)]
+    console.log(`| ${k} | ${excl} | ${median.toFixed(2)} | ${p95.toFixed(2)} |`)
   }
 }
 
@@ -115,7 +116,7 @@ for (let r = 0; r < 50; r++) {
   hits.push(performance.now() - t)
 }
 const scorer = openHpoGeneScorer(p, dbPath)!
-const genes = [...ix.hpo.genes.keys()].slice(0, 100)
+const genes = [...ix.genes.keys()].slice(0, 100)
 const t = performance.now()
 for (const g of genes) scorer.explain(g)
 console.log(

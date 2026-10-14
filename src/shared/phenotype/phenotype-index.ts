@@ -21,10 +21,13 @@ export interface PhenotypeIndexInput {
   diseaseNot: ReadonlyArray<readonly [string, string]>
   /** [gene symbol, disease] */
   geneDiseases: ReadonlyArray<readonly [string, string]>
+  /** [disease, μ, σ] of S⁺ over random profiles of size 1..nullMaxK; absent → no correction */
+  diseaseNull?: ReadonlyArray<readonly [string, Float32Array, Float32Array]>
+  /** S⁺ parameters the null was built with (`nullParams`) */
+  nullParams?: string
 }
 
 export interface PhenotypeIndex {
-  /** DAG; `hpo.genes` is the gene index, `hpo.geneTerms` the union of its diseases' terms (sprint-3 scorer). */
   hpo: HpoIndex
   termLabels: readonly string[]
   /** sim(t, t) = max float32 IC over Anc(t); the IC used to normalise (0 = uninformative term). */
@@ -40,13 +43,21 @@ export interface PhenotypeIndex {
   annTerm: Int32Array
   annF: Float32Array
   annFExcl: Float32Array
+  /** 1 when the annotation's frequency was recorded (not the configured "missing" default) */
+  annKnown: Uint8Array
   /** forward frequency factor 1 − α_f + α_f·f */
   annFactor: Float32Array
   /** Σ f over the disease's annotations */
   freqSum: Float64Array
   notOffsets: Int32Array
   notTerms: Int32Array
-  /** diseases of gene g (indexed like `hpo.genes`) */
+  /** null μ / σ of S⁺ at [d · nullMaxK + min(k, nullMaxK) − 1]; null when the DB has none */
+  nullMu: Float32Array | null
+  nullSd: Float32Array | null
+  nullParams: string | null
+  /** gene symbol → gene index (genes with ≥1 known disease) */
+  genes: ReadonlyMap<string, number>
+  /** diseases of gene g */
   geneOffsets: Int32Array
   geneDiseases: Int32Array
 }
@@ -96,23 +107,7 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
   const { alphaF } = HPO_SCORING_CONFIG
   const diseaseOrder = [...input.diseases].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   const diseaseIndex = new Map(diseaseOrder.map(([id], i) => [id, i]))
-  // Gene terms (legacy scorer) = union of the gene's diseases' terms; also fixes the gene order.
-  const termsOf = new Map<string, string[]>()
-  for (const [d, t] of input.diseaseTerms) {
-    const list = termsOf.get(d)
-    if (list === undefined) termsOf.set(d, [t])
-    else list.push(t)
-  }
-  const geneTerms: Array<[string, string]> = []
-  for (const [gene, d] of input.geneDiseases) {
-    for (const t of termsOf.get(d) ?? []) geneTerms.push([gene, t])
-  }
-  const hpo = buildHpoIndex({
-    terms: input.terms,
-    edges: input.edges,
-    aliases: input.aliases,
-    geneTerms
-  })
+  const hpo = buildHpoIndex({ terms: input.terms, edges: input.edges, aliases: input.aliases })
   const consts = termConstants(hpo)
   const termOf = (id: string): number | undefined => hpo.index.get(id)
 
@@ -130,6 +125,11 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
   const annF = new Float32Array(A)
   const annFExcl = new Float32Array(A)
   const annFactor = new Float32Array(A)
+  const annKnown = new Uint8Array(A)
+  // ponytail: "missing" is recognised by its exact (f, f_excl) default pair, which no parsed
+  // frequency produces; store a flag in the DB if that ever changes.
+  const missingF = Math.fround(HPO_SCORING_CONFIG.missing.f)
+  const missingFx = Math.fround(HPO_SCORING_CONFIG.missing.fExcl)
   const freqSum = new Float64Array(D)
   annOrder.forEach((src, j) => {
     const [d, t, f, fExcl] = ann[src]
@@ -137,6 +137,7 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
     annF[j] = f
     annFExcl[j] = fExcl
     annFactor[j] = 1 - alphaF + alphaF * annF[j]
+    annKnown[j] = annF[j] === missingF && annFExcl[j] === missingFx ? 0 : 1
     freqSum[d] += annF[j]
   })
 
@@ -149,18 +150,35 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
   const [notOffsets, notOrder] = groupCsr(D, nots)
   const notTerms = Int32Array.from(notOrder, (src) => nots[src][1])
 
-  const seen = new Set<string>()
+  const genes = new Map<string, number>()
+  const seen = new Set<number>()
   const gd: Array<readonly [number, number]> = []
   for (const [gene, d] of input.geneDiseases) {
-    const g = hpo.genes.get(gene)
     const di = diseaseIndex.get(d)
-    if (g === undefined || di === undefined || seen.has(`${g}:${di}`)) continue
-    seen.add(`${g}:${di}`)
+    if (di === undefined) continue
+    let g = genes.get(gene)
+    if (g === undefined) genes.set(gene, (g = genes.size))
+    if (seen.has(g * D + di)) continue
+    seen.add(g * D + di)
     gd.push([g, di])
   }
   gd.sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  const [geneOffsets, gdOrder] = groupCsr(hpo.genes.size, gd)
+  const [geneOffsets, gdOrder] = groupCsr(genes.size, gd)
   const geneDiseases = Int32Array.from(gdOrder, (src) => gd[src][1])
+
+  const K = HPO_SCORING_CONFIG.nullMaxK
+  let nullMu: Float32Array | null = null
+  let nullSd: Float32Array | null = null
+  if (input.diseaseNull !== undefined && input.diseaseNull.length > 0) {
+    nullMu = new Float32Array(D * K)
+    nullSd = new Float32Array(D * K)
+    for (const [d, mu, sd] of input.diseaseNull) {
+      const di = diseaseIndex.get(d)
+      if (di === undefined || mu.length !== K || sd.length !== K) continue
+      nullMu.set(mu, di * K)
+      nullSd.set(sd, di * K)
+    }
+  }
 
   const labelById = new Map(input.terms.map((t) => [t.id, t.label]))
   return {
@@ -174,9 +192,14 @@ export function buildPhenotypeIndex(input: PhenotypeIndexInput): PhenotypeIndex 
     annF,
     annFExcl,
     annFactor,
+    annKnown,
     freqSum,
     notOffsets,
     notTerms,
+    nullMu,
+    nullSd,
+    nullParams: nullMu === null ? null : (input.nullParams ?? null),
+    genes,
     geneOffsets,
     geneDiseases
   }
