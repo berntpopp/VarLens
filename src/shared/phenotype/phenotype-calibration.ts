@@ -108,5 +108,9 @@ export function exclusionLr(f: number, background: number, epsilon: number): num
   return lr > 0 ? lr : 0
 }
 
-/** logistic(S/2): the z-mode score reported in [0, 1]; monotone, so ranks are unchanged. */
-export const boundedZ = (s: number): number => 1 / (1 + Math.exp(-s / 2))
+/**
+ * The z-mode score in (0, 1): ½ + ½·x/(1 + |x|) with x = S/2. Strictly monotone and, unlike a
+ * logistic (exactly 1 in float64 from S ≈ 74), distinct in float64 over the whole reachable |z| ≤ ~10³
+ * (σ ≥ sigmaMin), so ranks are unchanged.
+ */
+export const boundedZ = (s: number): number => 0.5 + (0.5 * (s / 2)) / (1 + Math.abs(s / 2))

@@ -2,7 +2,7 @@
  * Background correction of S⁺ by the disease's score over random profiles (annotation-breadth
  * bias, spec criterion 3). 'mean': S⁺ ← max(0, (S⁺ − μ)/(1 − μ)), exclusions multiplicative.
  * 'z': z⁺ = (S⁺ − μ)/σ, error-tolerant exclusion LRs subtracted, gene max corrected for its
- * disease count; reported through logistic(S/2) so it stays in [0, 1] (ranks unchanged).
+ * disease count; reported through boundedZ (½ + ½·x/(1 + |x|), x = S/2) in (0, 1), ranks unchanged.
  */
 export type HpoBackgroundCorrection = 'off' | 'mean' | 'z'
 

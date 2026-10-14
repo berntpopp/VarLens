@@ -169,13 +169,8 @@ export function naiveScores(
     if (diseases.length === 0) continue
     let best = diseases[0]
     for (const d of diseases) if (d.score > best.score) best = d
-    const score = zMode
-      ? 1 /
-        (1 +
-          Math.exp(
-            -(best.score - opts.geneMaxPenalty * Math.sqrt(2 * Math.log(diseases.length))) / 2
-          ))
-      : best.score
+    const half = (best.score - opts.geneMaxPenalty * Math.sqrt(2 * Math.log(diseases.length))) / 2
+    const score = zMode ? 0.5 + (0.5 * half) / (1 + Math.abs(half)) : best.score
     const list = ann.get(best.id) ?? []
     const matched = new Set<string>()
     for (const p of present) {

@@ -8,6 +8,7 @@ import { explainGene, scoreCase } from '../../../src/shared/phenotype/phenotype-
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
 import { naiveScores } from './naive-phenotype-score'
 import {
+  boundedZ,
   exclusionLr,
   nullParams,
   scoringOptions
@@ -357,6 +358,35 @@ describe('stored background null', () => {
       ]
     })
     expect(ix.nullMu).toHaveLength(2 * C.nullMaxK)
+  })
+})
+
+describe('z mode', () => {
+  it('keeps extreme z scores apart in the bounded gene score', () => {
+    expect(boundedZ(791)).toBeGreaterThan(boundedZ(335))
+    expect(boundedZ(1e4)).toBeLessThan(1)
+    expect(boundedZ(-1e4)).toBeGreaterThan(0)
+    expect(boundedZ(0)).toBe(0.5)
+    // μ = σ = 0 (a valid null): σ floors at sigmaMin, so z = S⁺ / 0.001 runs into the hundreds.
+    const input = toy({
+      a: [['FEB', 1, 0.95]],
+      b: [
+        ['FEB', 0.025, 0.01],
+        ['CAT', 1, 0.95]
+      ]
+    })
+    const zero = new Float32Array(C.nullMaxK)
+    input.diseaseNull = [
+      ['a', zero, zero],
+      ['b', zero, zero]
+    ]
+    input.nullParams = nullParams(1)
+    const ix = buildPhenotypeIndex(input)
+    const cs = scoreCase(ix, [P('FEB')], { correction: 'z', tau: 1 })!
+    const [a, b] = [cs.diseaseScore[0], cs.diseaseScore[1]]
+    expect(b).toBeGreaterThan(100)
+    expect(a).toBeGreaterThan(b)
+    expect(cs.geneScore[ix.genes.get('G_a')!]).toBeGreaterThan(cs.geneScore[ix.genes.get('G_b')!])
   })
 })
 
