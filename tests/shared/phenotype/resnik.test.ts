@@ -148,6 +148,30 @@ describe('HPO source parsing', () => {
     expect(parsed.get(T.F)).toEqual(fractionFrequency(2, 2))
   })
 
+  it('pools fractions once per evidence row and onto the current term of an alt id', () => {
+    const header =
+      'database_id\tdisease_name\tqualifier\thpo_id\treference\tevidence\tonset\tfrequency\tsex\tmodifier\taspect\tbiocuration'
+    const row = (t: string, freq: string, ref: string, onset = '', bio = 'x'): string =>
+      ['D:1', 'n', '', t, ref, 'PCS', onset, freq, '', '', 'P', bio].join('\t')
+    // OMIM:266920 / HP:0003774 in the 2026-09-01 release: one 1/1 row is repeated with
+    // different biocuration only; pooled once, f = 0.425 instead of 0.458824.
+    const parsed = parseHpoaDiseases(
+      [
+        header,
+        row(T.C, '3/11', 'PMID:1'),
+        row(T.C, '2/2', 'PMID:2', 'HP:0003621'),
+        row(T.C, '1/1', 'PMID:3', '', 'a'),
+        row(T.C, '1/1', 'PMID:3', '', 'b'),
+        row('HP:9999999', '1/2', 'PMID:4'),
+        row('HP:9999999', '1/1', 'PMID:3', '', 'c')
+      ].join('\n'),
+      new Map([['HP:9999999', T.C]])
+    ).terms.get('D:1')!
+    expect(parsed.get(T.C)).toEqual(fractionFrequency(7, 16))
+    expect(parsed.has('HP:9999999')).toBe(false)
+    expect(fractionFrequency(6, 14).f).toBeCloseTo(0.425, 12)
+  })
+
   it('smooths fractions and takes the Beta 10th percentile as f_excl (scipy reference values)', () => {
     // scipy.stats.beta.ppf(0.1, m + 0.8, n − m + 1.2)
     const cases: Array<[number, number, number, number]> = [

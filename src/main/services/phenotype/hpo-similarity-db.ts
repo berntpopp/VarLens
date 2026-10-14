@@ -68,7 +68,7 @@ export function buildHpoSimilarityDb(
 ): void {
   const ontology = parseHpJson(sources.ontology)
   const ancestors = phenotypeClosure(ontology)
-  const hpoa = parseHpoaDiseases(sources.annotations)
+  const hpoa = parseHpoaDiseases(sources.annotations, ontology.aliases)
   const positive = new Map([...hpoa.terms].map(([d, map]) => [d, new Set(map.keys())]))
   const ic = informationContent(positive, ancestors)
   const genes = parseGeneDiseases(sources.genes, hpoa.terms)
@@ -76,7 +76,7 @@ export function buildHpoSimilarityDb(
     const term = ontology.aliases.get(raw) ?? raw
     return ancestors.has(term) ? term : null
   }
-  // Gene-linked diseases only; aliases merged onto the current term (higher frequency wins).
+  // Gene-linked diseases only, phenotype-subtree terms only (aliases already pooled by the parser).
   const linked = new Map<string, Map<string, HpoaFrequency>>()
   for (const diseases of genes.values()) {
     for (const d of diseases) {
