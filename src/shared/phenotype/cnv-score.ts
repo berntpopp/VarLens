@@ -9,6 +9,7 @@ import { HPO_LOCUS_SCORING_CONFIG as CFG } from '../config/hpo-locus-scoring.con
 import type { HpoLocusNote } from '../types/hpo-profile'
 import type { DosageRegion, DosageScore, LocusReference } from '../types/locus-reference'
 import { isInPAR } from '../utils/par-regions'
+import { dosageScore, isDosageSensitive as sensitive } from './reference-sources'
 
 export type CnvType = 'del' | 'dup'
 
@@ -108,9 +109,6 @@ export function cnvType(
 export const cnvEnd = (call: CnvCall): number =>
   call.end_pos ?? call.pos + Math.abs(call.sv_length ?? 0)
 
-const sensitive = (s: DosageScore): boolean =>
-  s !== null && s >= CFG.dosageScores.sensitiveMin && s <= 3
-
 /** Dosage weight w(g, c) (§4.1 table). `biallelic`: CN 0, hemizygous loss or another het allele. */
 export function dosageWeight(
   type: CnvType,
@@ -144,7 +142,8 @@ export function regionWeight(cov: number): number {
 
 /**
  * The CNV's gene set (§4): the distinct CSQ genes when present, else the
- * gene-interval overlap of [a, b]. CSQ genes get their span for containment.
+ * gene-interval overlap of [a, b]. CSQ genes get their span for containment;
+ * a CSQ gene whose span misses [a, b] (VEP's up/downstream genes within 5 kb) is dropped.
  */
 export function cnvGeneSet(
   csqGenes: readonly string[] | undefined,
@@ -156,14 +155,9 @@ export function cnvGeneSet(
   if (csqGenes === undefined || csqGenes.length === 0) {
     return lookup.overlapping(chr, a, b).map((span) => ({ symbol: span.symbol, span }))
   }
-  return [...new Set(csqGenes)].map((symbol) => ({ symbol, span: lookup.span(symbol, chr) }))
-}
-
-const DOSAGE_VALUES = new Set<number>([0, 1, 2, 3, 30, 40])
-
-function dosageScore(raw: string | undefined): DosageScore {
-  const n = Number(raw)
-  return raw !== undefined && raw !== '' && DOSAGE_VALUES.has(n) ? (n as DosageScore) : null
+  return [...new Set(csqGenes)]
+    .map((symbol) => ({ symbol, span: lookup.span(symbol, chr) }))
+    .filter(({ span }) => span === undefined || (span.start <= b && span.end >= a))
 }
 
 /**
@@ -180,7 +174,7 @@ export function parseInfoDosage(infoJson: string | null | undefined): Map<string
     if (raw == null) continue
     for (const entry of String(raw).split(/[,|]/)) {
       const [symbol, value] = entry.split(':')
-      const score = dosageScore(value?.trim())
+      const score = dosageScore(value)
       if (symbol === undefined || symbol.trim() === '' || score === null) continue
       const key = symbol.trim().toUpperCase()
       const d = out.get(key) ?? { hi: null, ts: null }
@@ -221,14 +215,19 @@ function geneRoute(
     if (score === null) continue
     const fromInfo = info.get(gene.symbol.toUpperCase())
     const curated = gene.span && ctx.reference.dosageGenes.get(gene.span.hgncId)
-    const dosage = fromInfo ?? curated ?? { hi: null, ts: null }
+    // Per field: AnnotSV may carry HI without TS (or the reverse) for a gene.
+    const dosage: Dosage = {
+      hi: fromInfo?.hi ?? curated?.hi ?? null,
+      ts: fromInfo?.ts ?? curated?.ts ?? null
+    }
     const whole = gene.span !== undefined && a <= gene.span.start && gene.span.end <= b
     const biallelic = cnLoss || ctx.hetHits(gene.symbol) >= 1
     const weight = dosageWeight(type, dosage, whole, biallelic)
     if (weight <= 0) continue
     n++
     if (best === null || weight * score > best.weight * best.score) {
-      const label = dosageLabel(type, dosage, fromInfo ? 'AnnotSV' : clingen)
+      const annotsv = (type === 'del' ? fromInfo?.hi : fromInfo?.ts) != null
+      const label = dosageLabel(type, dosage, annotsv ? 'AnnotSV' : clingen)
       best = { symbol: gene.symbol, weight, score, dosage: label }
     }
   }

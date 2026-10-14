@@ -91,7 +91,7 @@ describe('updateHpoData', () => {
     })
     expect(result.status.sources).toEqual({
       hpo: 'v2026-09-01',
-      clingen: new Date().toISOString().slice(0, 10),
+      clingen: '03 Oct,2026',
       strchive: 'v2.28.0',
       mondo: 'v2026-10-06'
     })

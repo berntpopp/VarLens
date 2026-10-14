@@ -8,7 +8,6 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 import { existsSync, statSync } from 'fs'
 import { HPO_DATA_CONFIG } from '../../../shared/config/hpo-data.config'
-import { HPO_LOCUS_SCORING_CONFIG } from '../../../shared/config/hpo-locus-scoring.config'
 import type {
   DosageGene,
   DosageRegion,
@@ -17,6 +16,7 @@ import type {
   StrLocus
 } from '../../../shared/types/locus-reference'
 import {
+  isDosageSensitive,
   parseClingenGenes,
   parseClingenRegions,
   parseMondoXrefs,
@@ -197,21 +197,16 @@ function parseSources(
   return fresh
 }
 
-const SENSITIVE = (score: unknown): boolean =>
-  typeof score === 'number' &&
-  score >= HPO_LOCUS_SCORING_CONFIG.dosageScores.sensitiveMin &&
-  score < HPO_LOCUS_SCORING_CONFIG.dosageScores.recessive
-
 /** Disease ids of dosage-sensitive regions and of every STR locus, read back from the written tables. */
 function admittedDiseases(db: Database.Database): Set<string> {
   const ids = new Set<string>()
   const regions = db
     .prepare('SELECT hi, ts, loss_diseases, gain_diseases FROM dosage_regions')
     .raw()
-    .all() as Array<[number | null, number | null, string, string]>
+    .all() as Array<[DosageScore, DosageScore, string, string]>
   for (const [hi, ts, loss, gain] of regions) {
-    if (SENSITIVE(hi)) for (const id of JSON.parse(loss) as string[]) ids.add(id)
-    if (SENSITIVE(ts)) for (const id of JSON.parse(gain) as string[]) ids.add(id)
+    if (isDosageSensitive(hi)) for (const id of JSON.parse(loss) as string[]) ids.add(id)
+    if (isDosageSensitive(ts)) for (const id of JSON.parse(gain) as string[]) ids.add(id)
   }
   for (const [json] of db.prepare('SELECT json FROM str_loci').raw().all() as string[][]) {
     const { diseases } = JSON.parse(json) as StrLocus

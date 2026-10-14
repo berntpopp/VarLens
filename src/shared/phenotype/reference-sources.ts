@@ -4,6 +4,7 @@
  * Each throws on a changed format or a file under its row floor, so the
  * caller can keep the previously installed copy of that source.
  */
+import { HPO_LOCUS_SCORING_CONFIG } from '../config/hpo-locus-scoring.config'
 import type {
   DosageGene,
   DosageRegion,
@@ -15,9 +16,19 @@ import type {
 const SCORES = new Set([0, 1, 2, 3, 30, 40])
 
 /** ClinGen score cell: 0–3, 30, 40; anything else ("Not yet evaluated", blank) is null. */
-function dosageScore(cell: string | undefined): DosageScore {
+export function dosageScore(cell: string | undefined): DosageScore {
   const n = Number(cell)
   return cell !== undefined && cell.trim() !== '' && SCORES.has(n) ? (n as DosageScore) : null
+}
+
+/** HI or TS 2–3 (§4.1); 30 (AR) and 40 (unlikely) are not. */
+export const isDosageSensitive = (s: DosageScore): boolean =>
+  s !== null && s >= HPO_LOCUS_SCORING_CONFIG.dosageScores.sensitiveMin && s <= 3
+
+/** The curation date of a ClinGen TSV, its second `#` line (`03 Oct,2026`); null if absent. */
+export function clingenDate(text: string): string | null {
+  const line = text.split(/\r?\n/, 2)[1]
+  return line?.startsWith('#') === true && line.length > 1 ? line.slice(1).trim() : null
 }
 
 const SCORE_COLUMNS = ['Haploinsufficiency Score', 'Triplosensitivity Score'] as const

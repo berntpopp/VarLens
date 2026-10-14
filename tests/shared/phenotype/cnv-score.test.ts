@@ -221,6 +221,16 @@ describe('gene route', () => {
     expect(parseInfoDosage(null).size).toBe(0)
   })
 
+  it('falls back to ClinGen per field: AnnotSV HI only keeps the ClinGen TS', () => {
+    const info = parseInfoDosage(JSON.stringify({ AnnotSV_HI: 'TBX6:1' }))
+    const ts3 = reference([{ ...TBX6_HI3, ts: 3 }], [])
+    const dup = scoreCnv(DUP, one('TBX6', 14), info, ctx({ reference: ts3 }))!
+    expect(dup.score).toBe(0.62)
+    expect(dup.note?.dosage).toBe('TS 3 (ClinGen 2026-10-14)')
+    const del = scoreCnv(DEL, one('TBX6', 14), info, ctx({ reference: ts3 }))!
+    expect(del.note?.dosage).toBe('HI 1 (AnnotSV)')
+  })
+
   it('names the ClinGen dosage source and counts protein-coding genes only', () => {
     const genes = [
       ...one('TBX6', 14),
@@ -296,11 +306,18 @@ describe('gene set: CSQ genes vs interval fallback', () => {
   }
 
   it('uses the distinct CSQ genes, with their spans when known', () => {
-    expect(cnvGeneSet(['B', 'C', 'B', 'X'], lookup, '16', 120, 300)).toEqual([
+    expect(cnvGeneSet(['B', 'B', 'X'], lookup, '16', 120, 300)).toEqual([
       { symbol: 'B', span: spans[1] },
-      { symbol: 'C', span: spans[2] },
       { symbol: 'X', span: undefined }
     ])
+  })
+
+  it('drops a CSQ gene whose span misses the CNV (VEP upstream/downstream gene)', () => {
+    // C (500–600) is within VEP's 5 kb of a 120–300 call but not overlapped.
+    expect(cnvGeneSet(['B', 'C'], lookup, '16', 120, 300)).toEqual([
+      { symbol: 'B', span: spans[1] }
+    ])
+    expect(cnvGeneSet(['C'], lookup, '16', 120, 500)).toEqual([{ symbol: 'C', span: spans[2] }])
   })
 
   it('falls back to interval overlap without CSQ genes', () => {
