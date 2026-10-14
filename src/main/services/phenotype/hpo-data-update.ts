@@ -20,6 +20,8 @@ export interface HpoUpdateDeps {
   isOnline: () => boolean
   dbPath: string
   build: (request: HpoBuildRequest) => Promise<void>
+  /** A specific release instead of the latest (headless build). */
+  tag?: string
 }
 
 interface GithubRelease {
@@ -35,20 +37,34 @@ const ASSET_NAMES = Object.values(HPO_DATA_CONFIG.assets)
 const SHA256 = /^sha256:([0-9a-f]{64})$/
 
 /**
- * Latest release tag + asset digests from the API; the pinned release if the
- * API is unreachable. Only the tag and digests are taken from the response:
+ * Release tag + asset digests from the API (latest, or `wanted`); the pinned
+ * release if the API is unreachable and no other tag was asked for. Only the tag and digests are taken from the response:
  * download URLs are always built from the fixed HPO release base.
  */
-async function resolveRelease(fetch: Fetch): Promise<{ tag: string; digests: ReleaseDigests }> {
-  const latest = await fetch(HPO_DATA_CONFIG.latestReleaseUrl, {
+async function resolveRelease(
+  fetch: Fetch,
+  wanted?: string
+): Promise<{ tag: string; digests: ReleaseDigests }> {
+  if (wanted !== undefined && !HPO_DATA_CONFIG.tagPattern.test(wanted)) {
+    throw new Error(`Invalid HPO release tag: ${wanted}`)
+  }
+  const url =
+    wanted === undefined
+      ? HPO_DATA_CONFIG.latestReleaseUrl
+      : `${HPO_DATA_CONFIG.releaseByTagUrl}/${wanted}`
+  const latest = await fetch(url, {
     headers: { Accept: 'application/vnd.github+json' },
     signal: AbortSignal.timeout(30_000)
   })
     .then(async (r) => (r.ok ? ((await r.json()) as GithubRelease) : null))
     .catch(() => null)
-  if (latest === null) return { ...HPO_DATA_CONFIG.defaultRelease }
+  if (latest === null) {
+    const pinned = HPO_DATA_CONFIG.defaultRelease
+    if (wanted === undefined || wanted === pinned.tag) return { ...pinned }
+    throw new Error(`HPO release ${wanted} could not be resolved`)
+  }
   const tag = latest.tag_name
-  if (typeof tag !== 'string' || !HPO_DATA_CONFIG.tagPattern.test(tag)) {
+  if (typeof tag !== 'string' || !HPO_DATA_CONFIG.tagPattern.test(tag) || (wanted ?? tag) !== tag) {
     throw new Error('HPO release API returned an unexpected tag')
   }
   const digests: ReleaseDigests = {}
@@ -126,7 +142,7 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
   if (!deps.isOnline()) {
     return { success: false, message: 'Offline: HPO data left unchanged.', status: current }
   }
-  const release = await resolveRelease(deps.fetch)
+  const release = await resolveRelease(deps.fetch, deps.tag)
   if (current.installed && current.version === release.tag) {
     return { success: true, message: `HPO data ${release.tag} is up to date.`, status: current }
   }

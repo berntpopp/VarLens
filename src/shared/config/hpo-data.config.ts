@@ -18,6 +18,9 @@ export const HPO_DATA_CONFIG = {
   tagPattern: /^v\d{4}-\d{2}-\d{2}$/,
   latestReleaseUrl:
     'https://api.github.com/repos/obophenotype/human-phenotype-ontology/releases/latest',
+  /** `<url>/<tag>`: a specific release (headless build `--tag`). */
+  releaseByTagUrl:
+    'https://api.github.com/repos/obophenotype/human-phenotype-ontology/releases/tags',
   downloadBaseUrl: 'https://github.com/obophenotype/human-phenotype-ontology/releases/download',
   assets: {
     ontology: 'hp.json',
@@ -25,7 +28,10 @@ export const HPO_DATA_CONFIG = {
     genes: 'genes_to_phenotype.txt'
   },
   dbFileName: 'hpo_similarity.db',
-  /** Overrides the DB location (web server: operator-installed file). */
+  /**
+   * Overrides the DB location (web server: operator-installed file, built with
+   * `npm run build:hpo-db -- [--out <path>] [--tag vYYYY-MM-DD]`).
+   */
   envPath: 'VARLENS_HPO_DB_PATH',
   requestTimeoutMs: 5 * 60 * 1000,
   /** Per-file cap; the v2026-09-01 assets are 21-36 MB. */
