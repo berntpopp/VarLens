@@ -167,6 +167,8 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         return await this.repositories.shortlist.getShortlist(task.params[0])
 
       case 'hpo:prewarm':
+        // ponytail: on desktop Postgres (experimental) this loads the index on the Electron main
+        // thread and freezes the window briefly; move it to a worker if this backend ships.
         prewarmHpoIndex()
         return null
 

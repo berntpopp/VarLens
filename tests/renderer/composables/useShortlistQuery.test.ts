@@ -196,9 +196,27 @@ describe('useShortlistQuery', () => {
   it('re-fetches when HPO data is installed or the case HPO terms change', async () => {
     const h = harness()
     app = h.app
+    const rankConfig = (
+      mockVisiblePresets.value[0].filterJson as unknown as {
+        shortlist: { rankConfig: Record<string, unknown> }
+      }
+    ).shortlist.rankConfig
     await flushPromises()
     await flushPromises()
 
+    h.shortlistMock.mockClear()
+    notifyPhenotypeChanged(1)
+    await flushPromises()
+    // Legacy ranking never reads hpo_resnik: a term edit changes nothing.
+    expect(h.shortlistMock).not.toHaveBeenCalled()
+    notifyPhenotypeChanged(null)
+    await flushPromises()
+    expect(h.shortlistMock).toHaveBeenCalledTimes(1)
+
+    rankConfig.ruleset = {
+      modes: [],
+      groups: [{ rules: [{ when: 'hpo_resnik:>=:2' }] }]
+    }
     h.shortlistMock.mockClear()
     notifyPhenotypeChanged(2)
     await flushPromises()
@@ -206,9 +224,6 @@ describe('useShortlistQuery', () => {
     notifyPhenotypeChanged(1)
     await flushPromises()
     expect(h.shortlistMock).toHaveBeenCalledTimes(1)
-    notifyPhenotypeChanged(null)
-    await flushPromises()
-    expect(h.shortlistMock).toHaveBeenCalledTimes(2)
   })
 
   it('ignores annotation-change events for other cases', async () => {
