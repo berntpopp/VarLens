@@ -167,3 +167,13 @@ The contracts are committed first on the batch branch:
 | bench | `scripts/shortlist-sim/phenotype/**` and its tests, the report under `.planning/artifacts/shortlist-sim/2026-10-14-hpo-v2/` |
 
 Reviews: a ponytail review per lane, then Codex (GPT-6 Astra) and agy (Gemini 4 Argon High) on the merged scorer.
+
+## 7. Outcome (2026-10-14)
+
+- First full simulated run with spec defaults: criteria 1, 2 and 5 passed; 3 and 4 failed (`gene-ranking.md`).
+- External real-patient benchmark (phenopacket-store 0.1.27, 10,178 cases; `external-phenopackets.md`): the exclusion penalty cut Hit@10 from 75.3 % to 38.8 %. In about 87 % of cases with exclusions, the true disease is annotated with at least one excluded term, because authors record absent features of the suspected disease. The simulated E1 arm modelled exclusions as features of mimic diseases, so it was too optimistic.
+- Pre-registered real-data tuning (`external-tuning.md`, protocol committed before any run): all 5 outer folds chose **τ = 1, background correction off, exclusions = conflicts only**.
+  - Non-cited out-of-fold Hit@10: +2.3 pp [−0.1, 5.5] vs v2 present-only, and +16.0 pp [7.7, 22.6] vs sprint 3. PASS.
+- Frozen setting on the simulated criteria (`gene-ranking-frozen.md`): 1, 2, 4 and 5 pass. 3 fails as defined (ρ = 0.63 over all genes), but over the top 100 genes ρ is −0.01, and Hit@10 is flat across annotation-count tertiles. The criterion measured the ordering of irrelevant genes, so it is superseded by the top-100 ρ and the tertile check. Nothing was tuned to pass it.
+- Shipped defaults are in `src/shared/config/hpo-scoring.config.ts`. The penalty and correction modes stay implemented and tested behind config for future evidence.
+- Excluded terms are still recorded and shown in the UI, and conflicts appear in the score explanation; they do not change the score.
