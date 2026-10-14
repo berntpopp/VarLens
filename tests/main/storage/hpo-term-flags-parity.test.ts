@@ -34,7 +34,7 @@ interface Backend {
   terms(caseId: number): Promise<unknown[]>
   distinct(): Promise<unknown[]>
   casesWith(hpoIds: string[]): Promise<string[]>
-  topPhenotypeIds(): Promise<string[]>
+  topPhenotypes(): Promise<unknown[]>
   /** Raw insert bypassing the repository, to probe the CHECK constraint. */
   rawExcludedKey(caseId: number): Promise<unknown>
 }
@@ -60,6 +60,8 @@ async function scenario(b: Backend) {
   await b.assign(bb, 'HP:0000252', 'Microcephaly')
   await b.assign(bb, 'HP:0001250', 'Epileptic seizure', {})
   await b.assign(c, 'HP:0001251', 'Ataxia', { excluded: true })
+  // Ties HP:0000252 on case count; inserted later but sorts first by id.
+  await b.assign(c, 'HP:0000118', 'Phenotypic abnormality')
 
   return {
     plain,
@@ -68,7 +70,7 @@ async function scenario(b: Backend) {
     distinct: await b.distinct(),
     withMicrocephaly: await b.casesWith(['HP:0000252']),
     withAtaxia: await b.casesWith(['HP:0001251']),
-    topPhenotypeIds: (await b.topPhenotypeIds()).sort(),
+    topPhenotypes: await b.topPhenotypes(),
     rawExcludedKey: await b.rawExcludedKey(c).then(
       () => 'accepted',
       () => 'rejected'
@@ -86,11 +88,17 @@ const EXPECTED = {
   // Present terms only; one deterministic label per id (MIN on both backends).
   distinct: [
     { hpo_id: 'HP:0001250', hpo_label: 'Epileptic seizure' },
-    { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly' }
+    { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly' },
+    { hpo_id: 'HP:0000118', hpo_label: 'Phenotypic abnormality' }
   ],
   withMicrocephaly: ['B'],
   withAtaxia: [],
-  topPhenotypeIds: ['HP:0000252', 'HP:0001250', 'HP:0001250'],
+  // One row per id despite label drift; ties broken by id.
+  topPhenotypes: [
+    { hpo_id: 'HP:0001250', hpo_label: 'Epileptic seizure', case_count: 2 },
+    { hpo_id: 'HP:0000118', hpo_label: 'Phenotypic abnormality', case_count: 1 },
+    { hpo_id: 'HP:0000252', hpo_label: 'Microcephaly', case_count: 1 }
+  ],
   rawExcludedKey: 'rejected'
 }
 
@@ -120,8 +128,7 @@ describe('HPO term flags on SQLite', () => {
         cases
           .queryCases({ limit: 50, hpo_ids, sort_by: 'name', sort_order: 'asc' })
           .data.map((r) => r.name),
-      topPhenotypeIds: async () =>
-        overview.getDatabaseOverview().topPhenotypes.map((p) => p.hpo_id),
+      topPhenotypes: async () => overview.getDatabaseOverview().topPhenotypes,
       rawExcludedKey: async (caseId) =>
         db
           .prepare(
@@ -161,8 +168,7 @@ describe.skipIf(!RUN_PG)('HPO term flags on PostgreSQL (parity with SQLite)', ()
           (
             await cases.queryCases({ limit: 50, hpo_ids, sort_by: 'name', sort_order: 'asc' })
           ).data.map((r) => r.name),
-        topPhenotypeIds: async () =>
-          (await overview.getOverview()).topPhenotypes.map((p) => p.hpo_id),
+        topPhenotypes: async () => (await overview.getOverview()).topPhenotypes,
         rawExcludedKey: (caseId) =>
           pool.query(
             `INSERT INTO "${schema}".case_hpo_terms
