@@ -191,7 +191,11 @@ describe('ShortlistService — evidence ranking', () => {
   })
 
   it('ranks identically whether pass 2 reuses the pass-1 rows or re-queries them', () => {
-    const buffered = service.rankCase({ caseId: 1, adHocConfig: EVIDENCE_CONFIG }, () => null, Infinity)
+    const buffered = service.rankCase(
+      { caseId: 1, adHocConfig: EVIDENCE_CONFIG },
+      () => null,
+      Infinity
+    )
     bufferCap.rows = 0
     try {
       const requeried = service.rankCase(

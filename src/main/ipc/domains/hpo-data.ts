@@ -5,10 +5,7 @@ import { apiFetch } from '../../services/api/http-fetch'
 import { networkStatus } from '../../services/network/NetworkStatus'
 import { runHpoBuild } from '../../services/phenotype/hpo-build-worker-client'
 import { updateHpoData } from '../../services/phenotype/hpo-data-update'
-import {
-  prewarmHpoIndexInPool,
-  resolveHpoDbPath
-} from '../../services/phenotype/hpo-similarity-db'
+import { prewarmHpoIndexInPool, resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
 import { getDbPool } from '../dbPoolManager'
 import { getHpoDataStatus } from '../handlers/hpo-data-logic'
 import { mainLogger } from '../../services/MainLogger'
