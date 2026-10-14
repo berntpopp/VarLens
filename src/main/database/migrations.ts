@@ -28,7 +28,7 @@ import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-reb
 import { DEFAULT_TAGS } from '../../shared/config/default-tags.config'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 57
+export const LATEST_SQLITE_SCHEMA_VERSION = 58
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -90,6 +90,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 57
  * - 55: default tags (#125; mirrors PG 0038)
  * - 56: variants.ps, the VCF phase set id (#586; mirrors PG 0039)
  * - 57: trim pre-#587 rows to minimal alleles, merging global annotations (#587; mirrors PG 0040)
+ * - 58: case_hpo_terms.excluded / key, Phenopackets term status (#600; mirrors PG 0041)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2166,6 +2167,20 @@ export function runMigrations(db: Database.Database): void {
   if (currentVersion < 57) {
     migrateAlleleTrim(db)
     db.exec('PRAGMA user_version = 57')
+  }
+
+  // v58 (#600, mirrors PG 0041): an HPO term can be excluded (looked for, absent)
+  // or key (the leading finding), never both. Existing rows stay present, not key.
+  if (currentVersion < 58) {
+    const hpoColumns = (
+      db.prepare('PRAGMA table_info(case_hpo_terms)').all() as { name: string }[]
+    ).map((c) => c.name)
+    if (hpoColumns.length > 0 && !hpoColumns.includes('excluded')) {
+      db.exec(`ALTER TABLE case_hpo_terms ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE case_hpo_terms ADD COLUMN "key" INTEGER NOT NULL DEFAULT 0
+          CHECK (NOT ("key" = 1 AND excluded = 1))`)
+    }
+    db.exec('PRAGMA user_version = 58')
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

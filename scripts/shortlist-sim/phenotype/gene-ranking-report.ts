@@ -1,4 +1,4 @@
-/** Metrics and markdown summary for the public-data hpo_resnik gene-ranking benchmark (#600). */
+/** Metrics, ship criteria and markdown summary of the HPO scoring v2 gene-ranking benchmark (#600). */
 import {
   clusterBootstrap,
   pairedClusterBootstrap,
@@ -6,10 +6,11 @@ import {
   type Interval
 } from '../stats/bootstrap'
 import { mean, median, tieAveragedHit, tieAveragedReciprocal } from '../stats/metrics'
+import { ARM_CONFIG, ARMS, type ArmId } from './arms'
 import { NOISE_LEVELS, PROFILE_TERMS, UNKNOWN_FREQUENCY, type NoiseLevelId } from './profiles'
 
-/** resnik = production `hpo_resnik`; overlap = harness-only reference baseline. */
-export const SCORERS = ['resnik', 'overlap'] as const
+/** v2 = scorer under test (`openHpoGeneScorer`); sprint3 = frozen baseline (present terms only). */
+export const SCORERS = ['v2', 'sprint3'] as const
 export type ScorerId = (typeof SCORERS)[number]
 
 export interface Standing {
@@ -17,19 +18,46 @@ export interface Standing {
   higher: number
   /** Other genes tied with it. */
   equal: number
-  /** Spearman ρ of all gene scores vs gene annotation counts, this case. */
+  /** Spearman ρ of all gene scores vs gene annotation (term) counts, this case. */
   rho: number
+  /** Spearman ρ of all gene scores vs gene disease counts, this case. */
+  rhoDiseases: number
 }
 
 export interface GeneRankCase {
   disease: string
   level: NoiseLevelId
-  profileSize: number
-  /** Production scorer wall time for all genes (open → score). */
+  arm: ArmId
+  /** Gene-grouped fold of the causal gene (connected gene–disease component). */
+  fold: number
+  /** OMIM/ORPHA diseases of the causal gene. */
+  geneDiseases: number
+  present: number
+  excluded: number
+  keys: number
+  /** E2: a true frequent feature was excluded / a noise term was marked key. */
+  falseExclusion: boolean
+  noiseKey: boolean
+  /** Scorer-under-test wall time for all genes (open → score). */
   ms: number
-  /** ScorerId keys; a `--before` run may carry other (retired) scorers. */
-  scorers: Record<string, Standing>
+  scorers: Record<ScorerId, Standing>
 }
+
+/** Pre-registered ship criteria (spec §5); proportions, not percentage points. */
+export const SHIP = {
+  /** 1: E1 moderate + noisy ΔHit@10 vs sprint 3, and its CI lower bound. */
+  e1MinDelta: 0.03,
+  e1MinLower: 0.01,
+  /** 2: E0 clean Hit@10 ≥ the sprint-3 run's one-sided 92.4 % − 1 pp; moderate/noisy Δ ≥ −0.5 pp. */
+  e0CleanMin: 0.924 - 0.01,
+  e0MinDelta: -0.005,
+  /** 3: mean per-case ρ(score, gene term count), every arm × level. */
+  maxRho: 0.4,
+  /** 4: Hit@50 drop E1 → E2, every level. */
+  maxE2Drop: 0.02,
+  /** 5: p95 per-case latency for all genes. */
+  maxP95Ms: 8
+} as const
 
 /** 1-based ranks, ties averaged. */
 export function averageRanks(xs: Float64Array): Float64Array {
@@ -64,61 +92,163 @@ export function spearman(xs: Float64Array, yRanks: Float64Array): number {
 const REPS = 2000
 const SEED = 20261015
 const KS = [1, 10, 50, 100] as const
+/** Causal genes with ≥ 2 diseases count as pleiotropic: every gene falls in one of two bins. */
+const PLEIOTROPIC_MIN = 2
 
-const expectedRank = (s: Standing): number => s.higher + 1 + s.equal / 2
+type Stat = (cs: GeneRankCase[], s: ScorerId) => number
+const hit =
+  (k: number): Stat =>
+  (cs, s) =>
+    mean(cs.map((c) => tieAveragedHit(c.scorers[s].higher, c.scorers[s].equal, k)))
+const mrr: Stat = (cs, s) =>
+  mean(cs.map((c) => tieAveragedReciprocal(c.scorers[s].higher, c.scorers[s].equal)))
+const medianRank: Stat = (cs, s) =>
+  median(cs.map((c) => c.scorers[s].higher + 1 + c.scorers[s].equal / 2))
+const meanRho =
+  (key: 'rho' | 'rhoDiseases'): Stat =>
+  (cs, s) =>
+    mean(cs.map((c) => c.scorers[s][key]).filter(Number.isFinite))
 
-function metrics(cases: GeneRankCase[], scorer: string): Record<string, Interval> {
-  const boot = (stat: (c: GeneRankCase[]) => number): Interval =>
-    clusterBootstrap(cases, (c) => c.disease, stat, REPS, SEED)
-  const st = (c: GeneRankCase): Standing => c.scorers[scorer]
-  const out: Record<string, Interval> = {}
-  for (const k of KS)
-    out[`Hit@${k}`] = boot((cs) =>
-      mean(cs.map((c) => tieAveragedHit(st(c).higher, st(c).equal, k)))
-    )
-  out['median rank'] = boot((cs) => median(cs.map((c) => expectedRank(st(c)))))
-  out.MRR = boot((cs) => mean(cs.map((c) => tieAveragedReciprocal(st(c).higher, st(c).equal))))
-  return out
+const boot = (cs: GeneRankCase[], s: ScorerId, stat: Stat): Interval =>
+  clusterBootstrap(
+    cs,
+    (c) => c.disease,
+    (x) => stat(x, s),
+    REPS,
+    SEED
+  )
+
+/** Paired stat(a) − stat(b) over the same diseases, disease-clustered. */
+export function pairedDelta(
+  a: GeneRankCase[],
+  sa: ScorerId,
+  b: GeneRankCase[],
+  sb: ScorerId,
+  stat: Stat
+): Interval {
+  const tag = (cs: GeneRankCase[], s: ScorerId) => cs.map((c) => ({ c, s }))
+  return pairedClusterBootstrap(
+    tag(a, sa),
+    tag(b, sb),
+    (x) => x.c.disease,
+    (xs) =>
+      xs.length === 0
+        ? Number.NaN
+        : stat(
+            xs.map((x) => x.c),
+            xs[0].s
+          ),
+    REPS,
+    SEED
+  )
 }
 
 const pct = (i: Interval): string =>
   `${(100 * i.estimate).toFixed(1)} [${(100 * i.lo).toFixed(1)}, ${(100 * i.hi).toFixed(1)}]`
 const num = (i: Interval, d: number): string =>
   `${i.estimate.toFixed(d)} [${i.lo.toFixed(d)}, ${i.hi.toFixed(d)}]`
+const p = (x: number): string => (100 * x).toFixed(1)
 
-/** One table row: a scorer of one run, restricted to one noise level. */
-interface Row {
-  label: string
-  cases: GeneRankCase[]
-  scorer: string
-}
-
-/** Paired ΔHit@10 a − b over the same diseases (one case per disease and level). */
-function hit10Delta(a: Row, b: Row): Interval {
-  const v = (r: Row) => (c: GeneRankCase) => ({
-    disease: c.disease,
-    v: tieAveragedHit(c.scorers[r.scorer].higher, c.scorers[r.scorer].equal, 10)
-  })
-  return pairedClusterBootstrap(
-    a.cases.map(v(a)),
-    b.cases.map(v(b)),
-    (x) => x.disease,
-    (xs) => mean(xs.map((x) => x.v)),
-    REPS,
-    SEED
+const at = (cs: GeneRankCase[], level: NoiseLevelId, arm: ArmId): GeneRankCase[] =>
+  cs.filter((c) => c.level === level && c.arm === arm)
+const levels = (): NoiseLevelId[] => Object.keys(NOISE_LEVELS) as NoiseLevelId[]
+const p95 = (cases: GeneRankCase[]): number =>
+  quantile(
+    cases.map((c) => c.ms).sort((a, b) => a - b),
+    0.95
   )
+
+export interface ShipCheck {
+  criterion: string
+  value: string
+  threshold: string
+  pass: boolean
 }
 
-function rowLine(r: Row): string {
-  const m = metrics(r.cases, r.scorer)
-  const rho = mean(r.cases.map((c) => c.scorers[r.scorer].rho).filter(Number.isFinite))
-  const hits = KS.map((k) => pct(m[`Hit@${k}`])).join(' | ')
-  return `| ${r.label} | ${hits} | ${num(m['median rank'], 1)} | ${num(m.MRR, 3)} | ${rho.toFixed(2)} |`
+export function shipChecks(cases: GeneRankCase[]): ShipCheck[] {
+  const checks: ShipCheck[] = []
+  for (const level of ['moderate', 'noisy'] as const) {
+    const cs = at(cases, level, 'E1')
+    const d = pairedDelta(cs, 'v2', cs, 'sprint3', hit(10))
+    checks.push({
+      criterion: `1. E1 ${level}: ΔHit@10 vs sprint 3 (pp)`,
+      value: pct(d),
+      threshold: `≥ ${p(SHIP.e1MinDelta)}, CI lo > ${p(SHIP.e1MinLower)}`,
+      pass: d.estimate >= SHIP.e1MinDelta && d.lo > SHIP.e1MinLower
+    })
+  }
+  const clean = hit(10)(at(cases, 'clean', 'E0'), 'v2')
+  checks.push({
+    criterion: '2. E0 clean: Hit@10 (%)',
+    value: p(clean),
+    threshold: `≥ ${p(SHIP.e0CleanMin)}`,
+    pass: clean >= SHIP.e0CleanMin
+  })
+  for (const level of ['moderate', 'noisy'] as const) {
+    const cs = at(cases, level, 'E0')
+    const d = pairedDelta(cs, 'v2', cs, 'sprint3', hit(10))
+    checks.push({
+      criterion: `2. E0 ${level}: ΔHit@10 vs sprint 3 (pp)`,
+      value: pct(d),
+      threshold: `≥ ${p(SHIP.e0MinDelta)} (point estimate)`,
+      pass: d.estimate >= SHIP.e0MinDelta
+    })
+  }
+  const rhos = ARMS.flatMap((arm) => levels().map((l) => meanRho('rho')(at(cases, l, arm), 'v2')))
+  const maxRho = Math.max(...rhos)
+  checks.push({
+    criterion: '3. ρ(score, gene term count), worst arm × level',
+    value: maxRho.toFixed(2),
+    threshold: `≤ ${SHIP.maxRho}`,
+    pass: maxRho <= SHIP.maxRho
+  })
+  for (const level of levels()) {
+    const d = pairedDelta(at(cases, level, 'E1'), 'v2', at(cases, level, 'E2'), 'v2', hit(50))
+    checks.push({
+      criterion: `4. ${level}: Hit@50 drop E1 → E2 (pp)`,
+      value: pct(d),
+      threshold: `≤ ${p(SHIP.maxE2Drop)} (point estimate)`,
+      pass: d.estimate <= SHIP.maxE2Drop
+    })
+  }
+  const lat = p95(cases)
+  checks.push({
+    criterion: '5. p95 latency per case, all genes (ms)',
+    value: lat.toFixed(1),
+    threshold: `≤ ${SHIP.maxP95Ms}`,
+    pass: lat <= SHIP.maxP95Ms
+  })
+  return checks
 }
 
-function runtime(cases: GeneRankCase[]): string {
-  const ms = cases.map((c) => c.ms).sort((a, b) => a - b)
-  return `median ${quantile(ms, 0.5).toFixed(0)} ms, p95 ${quantile(ms, 0.95).toFixed(0)} ms`
+function stratum(cases: GeneRankCase[], level: NoiseLevelId, arm: ArmId): string[] {
+  const cs = at(cases, level, arm)
+  const row = (s: ScorerId, label: string): string => {
+    const hits = KS.map((k) => pct(boot(cs, s, hit(k)))).join(' | ')
+    const rhos = `${meanRho('rho')(cs, s).toFixed(2)} | ${meanRho('rhoDiseases')(cs, s).toFixed(2)}`
+    return `| ${label} | ${hits} | ${num(boot(cs, s, medianRank), 1)} | ${num(boot(cs, s, mrr), 3)} | ${rhos} |`
+  }
+  const delta = (stat: Stat): string => pct(pairedDelta(cs, 'v2', cs, 'sprint3', stat))
+  const pleio = (s: ScorerId): string => {
+    const single = cs.filter((c) => c.geneDiseases < PLEIOTROPIC_MIN)
+    const multi = cs.filter((c) => c.geneDiseases >= PLEIOTROPIC_MIN)
+    return `${s} ${p(hit(10)(single, s))} (n ${single.length}) vs ${p(hit(10)(multi, s))} (n ${multi.length})`
+  }
+  return [
+    `### ${level} × ${arm} (${cs.length} cases; median ${median(cs.map((c) => c.present))} present, ` +
+      `${median(cs.map((c) => c.excluded))} excluded, ${median(cs.map((c) => c.keys))} key)`,
+    '',
+    '| Scorer | Hit@1 % | Hit@10 % | Hit@50 % | Hit@100 % | median rank | MRR | ρ(score, terms) | ρ(score, diseases) |',
+    '|---|---|---|---|---|---|---|---|---|',
+    row('v2', '**v2** (under test)'),
+    row('sprint3', 'sprint 3 (frozen baseline)'),
+    '',
+    `Paired Δ v2 − sprint 3: Hit@1 ${delta(hit(1))}; Hit@10 ${delta(hit(10))}; ` +
+      `Hit@50 ${delta(hit(50))} pp; MRR ${num(pairedDelta(cs, 'v2', cs, 'sprint3', mrr), 3)}.`,
+    `Hit@10 single-disease vs pleiotropic (≥ ${PLEIOTROPIC_MIN} diseases) causal genes, %: ` +
+      `${pleio('v2')}; ${pleio('sprint3')}.`,
+    ''
+  ]
 }
 
 export interface RunInfo {
@@ -126,66 +256,60 @@ export interface RunInfo {
   diseases: number
   eligible: number
   genes: number
+  /** Genes per fold. */
+  foldGenes: number[]
 }
 
-/**
- * Summary of one run; with `before` (an earlier run on the same diseases and profiles) each
- * level also shows its one-sided `hpo_resnik` and in-memory symmetric reference rows.
- */
-export function renderGeneRanking(
-  cases: GeneRankCase[],
-  info: RunInfo,
-  before?: GeneRankCase[]
-): string {
+export function renderGeneRanking(cases: GeneRankCase[], info: RunInfo): string {
+  const e2 = cases.filter((c) => c.arm === 'E2')
+  const noisyE2 = e2.filter((c) => c.level === ARM_CONFIG.noiseKeyLevel)
+  const casesPerFold = info.foldGenes.map(
+    (_, f) => cases.filter((c) => c.fold === f && c.arm === 'E0' && c.level === 'clean').length
+  )
+  const checks = shipChecks(cases)
   const lines: string[] = [
-    '# hpo_resnik gene-ranking benchmark (public data)',
+    '# HPO phenotype scoring v2: gene-ranking benchmark (public data)',
     '',
     `HPO release ${info.release}; ${info.diseases} of ${info.eligible} eligible OMIM/ORPHA diseases`,
-    `(seeded sample), every one of ${info.genes} genes in genes_to_phenotype.txt ranked per case.`,
-    `Profiles: ${PROFILE_TERMS} frequency-weighted true terms (unknown frequency = ${UNKNOWN_FREQUENCY}),`,
-    'the same true terms in every stratum; causal gene drawn uniformly from the disease genes.',
-    'Ranks are tie-averaged; intervals are 95 % percentile bootstrap over diseases',
-    `(${REPS} replicates).`,
+    `(seeded sample, same seed and diseases as the sprint-3 run), every one of ${info.genes} genes`,
+    `ranked per case. Profiles: ${PROFILE_TERMS} frequency-weighted true terms (unknown frequency =`,
+    `${UNKNOWN_FREQUENCY}); noise levels as in sprint 3, crossed with arms E0/E1/E2 (spec §5):`,
+    `E1 excludes ${ARM_CONFIG.exclusionCounts.join('–')} features with f ≥ ${ARM_CONFIG.mimicMinFrequency}`,
+    `of the ${ARM_CONFIG.mimics} most similar other diseases (sprint-3 scorer on the true terms, the`,
+    `causal gene's diseases excluded) outside the true disease's ancestor closure, and marks`,
+    `${ARM_CONFIG.keyCounts.join('–')} true terms with the highest f·IC key; E2 adds one excluded true`,
+    `feature with f ∈ [${ARM_CONFIG.falseExclusionMin}, ${ARM_CONFIG.falseExclusionMax}] and, in`,
+    `${100 * ARM_CONFIG.noiseKeyShare} % of ${ARM_CONFIG.noiseKeyLevel} cases, a noise term marked key.`,
+    `E2 composition: false exclusion in ${e2.filter((c) => c.falseExclusion).length}/${e2.length} cases,`,
+    `noise key in ${noisyE2.filter((c) => c.noiseKey).length}/${noisyE2.length} ${ARM_CONFIG.noiseKeyLevel} cases.`,
+    'The sprint-3 baseline is the frozen scorer (scripts/shortlist-sim/phenotype/sprint3-baseline.ts)',
+    'on the builder-v2 DB; it sees the present terms only, which are identical across arms.',
+    `Ranks are tie-averaged; intervals are 95 % percentile bootstrap over diseases (${REPS} replicates).`,
     '',
-    '| Noise level | imprecision | steps up | noise terms |',
+    `Folds: ${info.foldGenes.length} gene-grouped folds over connected gene–disease components;`,
+    `genes per fold ${info.foldGenes.join(' / ')}, sampled diseases per fold ${casesPerFold.join(' / ')}.`,
+    '**No tuning in this run:** the spec defaults are evaluated on all folds, so every number here is',
+    'out-of-sample with respect to parameter fitting.',
+    '',
+    '## Ship criteria (spec §5)',
+    '',
+    '| Criterion | Value | Threshold | Result |',
     '|---|---|---|---|',
-    ...Object.entries(NOISE_LEVELS).map(
-      ([id, l]) => `| ${id} | ${l.imprecision} | ${l.steps} | ${l.noise} |`
+    ...checks.map(
+      (c) => `| ${c.criterion} | ${c.value} | ${c.threshold} | ${c.pass ? 'PASS' : 'FAIL'} |`
     ),
+    '',
+    `**Verdict: ${checks.every((c) => c.pass) ? 'SHIP' : 'NO SHIP'}.**`,
     ''
   ]
-  for (const level of Object.keys(NOISE_LEVELS) as NoiseLevelId[]) {
-    const at = (cs: GeneRankCase[]): GeneRankCase[] => cs.filter((c) => c.level === level)
-    const after: Row = { label: '**after**: `hpo_resnik`', cases: at(cases), scorer: 'resnik' }
-    const overlap: Row = {
-      label: 'exact term overlap (reference)',
-      cases: at(cases),
-      scorer: 'overlap'
-    }
-    const old: Row[] =
-      before === undefined
-        ? []
-        : [
-            { label: 'before: `hpo_resnik` (patient→gene)', cases: at(before), scorer: 'resnik' },
-            { label: 'before: symmetric BMA (harness)', cases: at(before), scorer: 'symmetric' }
-          ]
-    lines.push(
-      `## ${level} (${after.cases.length} cases, median profile ${median(after.cases.map((c) => c.profileSize))} terms)`,
-      '',
-      '| Scorer | Hit@1 % | Hit@10 % | Hit@50 % | Hit@100 % | median rank | MRR | ρ(score, annotation count) |',
-      '|---|---|---|---|---|---|---|---|',
-      ...[...old, after, overlap].map(rowLine),
-      '',
-      'Paired ΔHit@10 of after (pp): ' +
-        [...old.slice(0, 1), overlap]
-          .map((r) => `vs ${r.label} ${pct(hit10Delta(after, r))}`)
-          .join('; '),
-      ''
-    )
+  for (const level of levels()) {
+    lines.push(`## ${level}`, '')
+    for (const arm of ARMS) lines.push(...stratum(cases, level, arm))
   }
+  const ms = cases.map((c) => c.ms).sort((a, b) => a - b)
   lines.push(
-    `Production scorer runtime per case (all genes): ${runtime(cases)}` +
-      (before === undefined ? '.' : `; before ${runtime(before)}.`),
+    `Scorer-under-test runtime per case (all genes): median ${quantile(ms, 0.5).toFixed(1)} ms, ` +
+      `p95 ${quantile(ms, 0.95).toFixed(1)} ms (the first case includes the index load).`,
     ''
   )
   return lines.join('\n')
