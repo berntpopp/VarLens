@@ -402,17 +402,19 @@ export function useCaseMetadata() {
     await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
       const previousTerms = current?.hpoTerms ?? []
-      const excluded = flags?.excluded ?? false
+      const existing = previousTerms.find((t) => t.hpo_id === hpoId)
+      // Flags set the whole status (missing = false); without flags a term keeps its status.
+      const excluded = flags ? flags.excluded === true : (existing?.excluded ?? false)
       const optimistic: CaseHpoTerm = {
         id: 0,
         case_id: caseId,
         created_at: Date.now(),
-        ...previousTerms.find((t) => t.hpo_id === hpoId),
+        ...existing,
         hpo_id: hpoId,
         hpo_label: hpoLabel,
         excluded,
         // An excluded term can never be key (the repository enforces it too).
-        key: !excluded && (flags?.key ?? false)
+        key: flags ? !excluded && flags.key === true : (existing?.key ?? false)
       }
 
       if (current) {

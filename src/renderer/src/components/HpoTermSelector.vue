@@ -270,11 +270,14 @@ function handleTermSelected(term: HpoSearchResult | null) {
   if (term) {
     emit('add:term', { hpoId: term.id, hpoLabel: term.name, excluded: addAsExcluded, key: false })
     addAsExcluded = false
-    // Clear selection and search after adding
+    // Clear after adding; the autocomplete writes the picked title into the search
+    // right after this emit, so the search is cleared on the next tick.
     selectedTerm.value = null
-    searchQuery.value = ''
     searchResults.value = []
-    refocusInput()
+    void nextTick(() => {
+      searchQuery.value = ''
+      searchField.value?.focus()
+    })
   }
 }
 </script>
