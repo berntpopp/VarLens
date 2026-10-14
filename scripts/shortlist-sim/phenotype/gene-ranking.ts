@@ -16,11 +16,13 @@ import {
   HPO_SCORING_CONFIG,
   type HpoScoringOptions
 } from '../../../src/shared/config/hpo-scoring.config'
+import { scoringOptions } from '../../../src/shared/phenotype/phenotype-calibration'
 import type { HpoProfileTerm } from '../../../src/shared/types/hpo-profile'
 import { hpoDbForTau } from '../common/paths'
 import { rng, shuffle } from '../common/rng'
 import { readVerifiedSources, runArgs, SEED, setupBench } from './bench-setup'
 import { renderGeneRanking, type GeneRankCase } from './gene-ranking-report'
+import { formatOverrides } from './tuning'
 
 /** The scorer under test (v2, production), given the full profile incl. excluded and key terms. */
 function openCandidate(
@@ -62,7 +64,14 @@ function main(argv: string[]): void {
     diseases: diseases.length,
     eligible: all.length,
     genes: genes.length,
-    foldGenes
+    foldGenes,
+    tuning:
+      `**Scorer options (resolved):** ${formatOverrides({ ...scoringOptions(options) })}. ` +
+      (Object.keys(options).length === 0
+        ? 'Source: the shipped defaults in src/shared/config/hpo-scoring.config.ts (τ, correction\n' +
+          'and exclusion mode chosen by the real-data tuning, external-tuning.md).'
+        : `Source: \`--options\` ${JSON.stringify(options)} over the shipped config defaults.`) +
+      '\nNothing is fitted on these simulated cases, so every number here is out-of-sample.'
   })
   writeFileSync(join(outDir, 'gene-ranking.md'), md)
   writeFileSync(join(outDir, 'cases.json'), JSON.stringify(cases) + '\n')

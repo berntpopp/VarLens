@@ -297,7 +297,7 @@ export interface RunInfo {
   genes: number
   /** Genes per fold. */
   foldGenes: number[]
-  /** How parameters were set; default: spec defaults, no tuning. */
+  /** Resolved scorer options and their provenance; default: spec defaults, no tuning. */
   tuning?: string
 }
 
