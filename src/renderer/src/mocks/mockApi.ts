@@ -9,6 +9,7 @@
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
+import { mockHpoDataApi } from './hpoDataMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
 import {
   addMockCarrier,
@@ -1230,5 +1231,6 @@ export const mockApi: WindowAPI = {
     cancel: async () => ({ requested: false }),
     onChanged: () => () => {}
   },
-  referenceServices: mockReferenceServicesApi
+  referenceServices: mockReferenceServicesApi,
+  hpoData: mockHpoDataApi
 }
