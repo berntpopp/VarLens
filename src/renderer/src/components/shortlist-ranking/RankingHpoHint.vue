@@ -12,13 +12,14 @@
 </template>
 
 <script setup lang="ts">
-// hpo_resnik silently stays null without HPO data (#600): say so where rules are written.
+// HPO-derived columns silently stay null without HPO data (#600): say so where rules are written.
 import { computed, onMounted, ref } from 'vue'
 import { useApiService } from '../../composables/useApiService'
 import { logService } from '../../services/LogService'
 import { formatError } from '../../utils/ipc-result'
 import { SHORTLIST_RANKING_EDITOR as COPY } from '../../config/shortlistRankingEditor'
 import { compileRule } from '../../../../shared/dsl/evaluate'
+import { HPO_DERIVED_COLUMNS } from '../../../../shared/dsl/column-registry'
 import { unwrapIpcResult } from '../../../../shared/types/errors'
 import type { EvidenceRuleset } from '../../../../shared/types/evidence-ruleset'
 import type { HpoDataStatus } from '../../../../shared/types/hpo-data'
@@ -35,7 +36,7 @@ const usesHpo = computed(() =>
   ].some((text) => {
     if (text === null) return false
     const result = compileRule(text)
-    return result.ok && result.columns.has('hpo_resnik')
+    return result.ok && HPO_DERIVED_COLUMNS.some((c) => result.columns.has(c))
   })
 )
 
