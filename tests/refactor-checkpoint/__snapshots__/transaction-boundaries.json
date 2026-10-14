@@ -3,6 +3,11 @@
   "capturedAt": "2026-05-04",
   "entries": [
     {
+      "file": "src/main/database/allele-trim-migration.ts",
+      "callerFunction": "migrateAlleleTrim",
+      "assignedTo": null
+    },
+    {
       "file": "src/main/database/annotation-build-key-migration.ts",
       "callerFunction": "migrateAnnotationBuildKey",
       "assignedTo": null
@@ -115,6 +120,11 @@
     {
       "file": "src/main/services/auth/auth-writes.ts",
       "callerFunction": "setRole",
+      "assignedTo": null
+    },
+    {
+      "file": "src/main/services/phenotype/hpo-similarity-db.ts",
+      "callerFunction": "buildHpoSimilarityDb",
       "assignedTo": null
     },
     {
