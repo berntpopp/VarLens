@@ -68,7 +68,7 @@ function toy(
 function scores(input: PhenotypeIndexInput, profile: HpoProfileTerm[]): Record<string, number> {
   const ix = buildPhenotypeIndex(input)
   const cs = scoreCase(ix, profile)!
-  return Object.fromEntries([...ix.hpo.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
+  return Object.fromEntries([...ix.genes].map(([g, i]) => [g.slice(2), cs.geneScore[i]]))
 }
 
 describe('phenotype score v2: hand-computed toy cases', () => {
@@ -161,7 +161,7 @@ describe('phenotype score v2: hand-computed toy cases', () => {
     ]
     const ix = buildPhenotypeIndex(input)
     const cs = scoreCase(ix, [P('FEB', true), P('HYPO'), X('SIZE')])!
-    const e = explainGene(ix, cs, ix.hpo.genes.get('G1')!)!
+    const e = explainGene(ix, cs, ix.genes.get('G1')!)!
     expect(e).toMatchObject({ diseaseId: 'a', diseaseLabel: 'name a', percentile: 0.5 })
     expect(e.matched).toEqual([
       {
@@ -182,7 +182,7 @@ describe('phenotype score v2: hand-computed toy cases', () => {
         frequency: Math.fround(0.8)
       }
     ])
-    expect(cs.geneConflicts[ix.hpo.genes.get('G1')!]).toBe(1)
+    expect(cs.geneConflicts[ix.genes.get('G1')!]).toBe(1)
   })
 })
 
@@ -248,8 +248,8 @@ describe('phenotype score v2 equals the naive reference (seeded fuzz)', () => {
         continue
       }
       expect(fast).not.toBeNull()
-      expect(ix.hpo.genes.size).toBe(want.size)
-      for (const [gene, g] of ix.hpo.genes) {
+      expect(ix.genes.size).toBe(want.size)
+      for (const [gene, g] of ix.genes) {
         const ref = want.get(gene)!
         expect(Math.abs(fast!.geneScore[g] - ref.score)).toBeLessThan(1e-12)
         const ranked = [...ref.diseases].sort((a, b) => b.score - a.score)

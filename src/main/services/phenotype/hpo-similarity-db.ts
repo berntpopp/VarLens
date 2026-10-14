@@ -214,8 +214,14 @@ const results = new Map<string, CaseScores>()
 
 const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
 
-function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } {
-  const stat = statSync(path)
+/**
+ * One stat per call is the cache check: the file is replaced by another
+ * thread (desktop update) or by an operator (web), so mtime/size is the only
+ * signal every reader sees. Null key when the file is missing.
+ */
+function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } | null {
+  const stat = statSync(path, { throwIfNoEntry: false })
+  if (stat === undefined) return null
   const key = `${path}\0${stat.mtimeMs}\0${stat.size}`
   if (cached?.key === key) return cached
   results.clear()
@@ -246,7 +252,7 @@ function loadIndex(path: string): { key: string; index: PhenotypeIndex | null } 
 
 /** The process-cached index of `path` (null when it needs an update); throws on an unreadable file. */
 export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
-  return loadIndex(path).index
+  return loadIndex(path)?.index ?? null
 }
 
 /**
@@ -254,9 +260,9 @@ export function loadPhenotypeIndex(path: string): PhenotypeIndex | null {
  * or an HPO install), so a later `openHpoGeneScorer` only scores. Never throws.
  */
 export function prewarmHpoIndex(path: string | null = resolveHpoDbPath()): boolean {
-  if (path === null || !existsSync(path)) return false
+  if (path === null) return false
   try {
-    return loadIndex(path).index !== null
+    return (loadIndex(path)?.index ?? null) !== null
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
@@ -291,27 +297,34 @@ export function openHpoGeneScorer(
   terms: readonly HpoProfileTerm[],
   path: string | null = resolveHpoDbPath()
 ): HpoGeneScorer | null {
-  if (terms.length === 0 || path === null || !existsSync(path)) return null
+  if (terms.length === 0 || path === null) return null
   try {
-    const { key, index } = loadIndex(path)
+    const loaded = loadIndex(path)
+    const index = loaded?.index ?? null
     const profile = index === null ? null : prepareProfile(index, terms)
-    if (index === null || profile === null) return null
-    const scores = caseScores(key, index, profile)
-    const explained = new Map<number, HpoExplanation | null>()
-    const gene = (symbol: string): number => {
-      const g = index.hpo.genes.get(symbol)
-      return g === undefined || scores.geneBest[g] < 0 ? -1 : g
-    }
+    if (loaded === null || index === null || profile === null) return null
+    const scores = caseScores(loaded.key, index, profile)
+    const explained = new Map<number, HpoExplanation>()
+    const { genes } = index
     return {
-      score: (symbol) => (gene(symbol) < 0 ? null : scores.geneScore[gene(symbol)]),
-      bestDisease: (symbol) =>
-        gene(symbol) < 0 ? null : index.diseaseIds[scores.geneBest[gene(symbol)]],
-      conflicts: (symbol) => (gene(symbol) < 0 ? null : scores.geneConflicts[gene(symbol)]),
+      score: (symbol) => {
+        const g = genes.get(symbol)
+        return g === undefined ? null : scores.geneScore[g]
+      },
+      bestDisease: (symbol) => {
+        const g = genes.get(symbol)
+        return g === undefined ? null : index.diseaseIds[scores.geneBest[g]]
+      },
+      conflicts: (symbol) => {
+        const g = genes.get(symbol)
+        return g === undefined ? null : scores.geneConflicts[g]
+      },
       explain(symbol) {
-        const g = gene(symbol)
-        if (g < 0) return null
-        if (!explained.has(g)) explained.set(g, explainGene(index, scores, g))
-        return explained.get(g) ?? null
+        const g = genes.get(symbol)
+        if (g === undefined) return null
+        let e = explained.get(g)
+        if (e === undefined) explained.set(g, (e = explainGene(index, scores, g)))
+        return e
       }
     }
   } catch (error) {

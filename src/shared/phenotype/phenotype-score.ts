@@ -30,7 +30,7 @@ export interface CaseProfile {
 
 export interface CaseScores {
   profile: CaseProfile
-  /** indexed like `ix.hpo.genes`; -1 best disease = gene without diseases */
+  /** indexed like `ix.genes` (every gene has ≥1 disease) */
   geneScore: Float64Array
   geneBest: Int32Array
   /** excluded terms contradicted by the best disease */
@@ -211,7 +211,7 @@ export function scoreCase(ix: PhenotypeIndex, terms: readonly HpoProfileTerm[]):
 export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScores {
   const { f0, gamma, lambda, eMax } = HPO_SCORING_CONFIG
   const s = scratchFor(ix)
-  const G = ix.hpo.genes.size
+  const G = ix.genes.size
   const result: CaseScores = {
     profile,
     geneScore: new Float64Array(G),
@@ -299,9 +299,9 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
         arg = d
       }
     }
-    result.geneScore[g] = arg < 0 ? 0 : best
+    result.geneScore[g] = best
     result.geneBest[g] = arg
-    result.geneConflicts[g] = arg < 0 ? 0 : diseaseConflicts[arg]
+    result.geneConflicts[g] = diseaseConflicts[arg]
   }
   result.sorted = result.geneScore.slice().sort()
   return result
@@ -319,10 +319,9 @@ function percentile(sorted: Float64Array, score: number): number {
   return sorted.length === 0 ? 0 : lo / sorted.length
 }
 
-/** Best disease, matched pairs and conflicts of gene g; null when g has no disease. */
-export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation | null {
+/** Best disease, matched pairs and conflicts of gene g. */
+export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation {
   const d = cs.geneBest[g]
-  if (d < 0) return null
   const s = scratchFor(ix)
   if (s.owner !== cs) fillLanes(ix, s, cs.profile, cs)
   const { present, key, excluded } = cs.profile
