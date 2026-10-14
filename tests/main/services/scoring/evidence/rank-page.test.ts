@@ -60,4 +60,32 @@ describe('rank-page', () => {
       expect(r.rank_evidence?.reduce((s, c) => s + c.points, 0)).toBe(r.rank_score)
     }
   })
+
+  it('rules can use the in-app hpo_resnik; it is null without HPO data (#600)', () => {
+    const ruleset = structuredClone(EVIDENCE_RULESET)
+    ruleset.groups.push({
+      id: 'pheno',
+      label: 'Phenotype',
+      scope: 'global',
+      rules: [{ id: 'resnik', label: 'Resnik ≥ 2', when: 'hpo_resnik:>=:2', points: 7 }]
+    })
+    const rows = [
+      candidate({ id: 1, chr: '1', pos: 1, ref: 'A', alt: 'G', gene_symbol: 'FIT', gt_num: '0/1' }),
+      candidate({ id: 2, chr: '1', pos: 2, ref: 'A', alt: 'G', gene_symbol: 'MISS', gt_num: '0/1' })
+    ]
+    const rank = { weights: { impact: 1, pathogenicity: 1, rarity: 1, clinvar: 1, phenotype: 0 } }
+    const score = (info: Parameters<typeof GeneContextBuilder>[0]) => {
+      const builder = new GeneContextBuilder(info)
+      builder.add(rows.map(toLightRow))
+      return scoreEvidencePage(rows, builder.build(), getCompiledRuleset(ruleset), rank)
+    }
+    const hpoResnik = (gene: string): number | null => (gene === 'FIT' ? 2.5 : 0.4)
+    const withHpo = score({ build: 'GRCh38', sex: null, hpoResnik })
+    expect(withHpo.map((r) => r.rank_evidence?.some((c) => c.id === 'resnik'))).toEqual([
+      true,
+      false
+    ])
+    const without = score({ build: 'GRCh38', sex: null })
+    expect(without.every((r) => r.rank_evidence?.every((c) => c.id !== 'resnik'))).toBe(true)
+  })
 })

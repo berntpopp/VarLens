@@ -22,6 +22,7 @@ import { registerExportDomain } from './domains/export'
 import { registerFilterPresetsDomain } from './domains/filter-presets'
 import { registerGeneListsDomain } from './domains/gene-lists'
 import { registerGeneRefDomain } from './domains/gene-ref'
+import { registerHpoDataDomain } from './domains/hpo-data'
 import { registerGnomadDomain } from './domains/gnomad'
 import { registerHpoDomain } from './domains/hpo'
 import { registerReferenceServicesDomain } from './domains/reference-services'
@@ -92,6 +93,7 @@ export function registerIpcHandlers(): void {
   registerGeneRefDomain(ipcMain)
   registerGnomadDomain(ipcMain)
   registerHpoDomain(ipcMain)
+  registerHpoDataDomain(ipcMain)
   registerImportDomain(ipcMain)
   registerJobsHandlers()
   registerMyvariantDomain(ipcMain)

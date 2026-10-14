@@ -84,6 +84,13 @@ export const geneRefManifest = {
   update: desktopOnly('geneRefUpdate', GENE_REF_UX)
 } satisfies DomainManifest<'geneRef'>
 
+const HPO_DATA_UX = 'Hidden: the server operator installs HPO data (env VARLENS_HPO_DB_PATH).'
+
+export const hpoDataManifest = {
+  status: sharedRead(),
+  update: desktopOnly('hpoDataUpdate', HPO_DATA_UX)
+} satisfies DomainManifest<'hpoData'>
+
 export const panelsManifest = {
   list: sharedRead(),
   get: sharedRead(),

@@ -59,6 +59,7 @@ import { buildExportDownloadOverrides } from './routes/export-download'
 import { buildGnomadOverrides } from './routes/gnomad'
 import { buildGeneListOverrides } from './routes/gene-lists'
 import { buildGeneRefOverrides } from './routes/gene-ref'
+import { buildHpoDataOverrides } from './routes/hpo-data'
 import { buildHpoOverrides } from './routes/hpo'
 import { buildImportOverrides } from './routes/import'
 import { buildJobOverrides } from './routes/jobs'
@@ -269,6 +270,7 @@ function buildOverrides(): Record<string, OverrideHandler> {
     ...buildGeneRefOverrides(),
     ...buildGnomadOverrides(),
     ...buildHpoOverrides(),
+    ...buildHpoDataOverrides(),
     ...buildImportOverrides(),
     ...buildJobOverrides(),
     ...buildMyVariantOverrides(),

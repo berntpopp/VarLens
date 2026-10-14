@@ -14,6 +14,8 @@ export type CaseSex = 'male' | 'female' | null
 export interface CaseInfo {
   build: string
   sex: CaseSex
+  /** Resnik BMA of the case's HPO terms vs a gene (#600); absent → hpo_resnik null. */
+  hpoResnik?: (gene: string) => number | null
 }
 
 /** The pass-1 projection of an eligible row. */
@@ -37,6 +39,8 @@ export interface DerivedFields {
   gene_hits: number
   /** IDs of the other het alleles in the gene; empty unless the row is het. */
   partners: number[]
+  /** In-app phenotype similarity of the row's gene; null without HPO terms/data. */
+  hpo_resnik: number | null
   /** Alias for partners (lazy compound-het partner IDs). */
   readonly compoundHetPartnerVariantIds?: number[]
   /** Phase of the row against its partners (#586); null unless phasing is considered and it has partners. */
@@ -120,6 +124,10 @@ export class GeneContextBuilder {
       info,
       derived(row: LightRow): DerivedFields {
         const zygosity = deriveZygosity(row, info)
+        const hpo_resnik =
+          row.gene_symbol === null || row.gene_symbol === ''
+            ? null
+            : (info.hpoResnik?.(row.gene_symbol) ?? null)
         const entry =
           row.gene_symbol === null || row.gene_symbol === ''
             ? undefined
@@ -130,6 +138,7 @@ export class GeneContextBuilder {
             zygosity,
             gene_het_hits: zygosity === 'het' ? 1 : 0,
             gene_hits: 1,
+            hpo_resnik,
             partners: empty,
             compoundHetPartnerVariantIds: empty
           }
@@ -153,6 +162,7 @@ export class GeneContextBuilder {
           zygosity,
           gene_het_hits: entry.het.size,
           gene_hits: entry.all.size,
+          hpo_resnik,
           get partners(): number[] {
             return computePartners()
           },

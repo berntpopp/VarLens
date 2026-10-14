@@ -62,6 +62,11 @@ export const CAPABILITY_FEATURES = {
     unavailableInWeb:
       'The gene reference is part of the server installation and cannot be updated here.'
   },
+  hpoDataUpdate: {
+    label: 'HPO data updates',
+    unavailableInWeb:
+      'HPO data is installed by the server operator (VARLENS_HPO_DB_PATH) and cannot be updated here.'
+  },
   cohortAssociation: {
     label: 'cohort association tests',
     unavailableInWeb: 'Association tests are not available here.'
