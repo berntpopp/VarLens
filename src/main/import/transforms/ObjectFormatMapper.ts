@@ -6,6 +6,7 @@ import { setRecordBytes } from '../bounded-batcher'
 import { OBJECT_FORMAT_COLUMNS } from '../../../shared/config/import-fields.config'
 import { FieldProfileResolver, jsonValueText } from '../../../shared/utils/import-field-profile'
 import { hpoMatchText } from './hpo-match'
+import { trimAlleles } from '../../../shared/utils/trim-alleles'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -207,6 +208,8 @@ export class ObjectFormatMapper extends Transform {
         return
       }
 
+      // Minimal alleles (#587), so a padded spelling matches the VCF import's.
+      Object.assign(mapped, trimAlleles(mapped.pos, mapped.ref, mapped.alt))
       if (recordBytes !== undefined) setRecordBytes(mapped, recordBytes)
       this.push(mapped as MappedVariantWithTranscripts)
       callback()

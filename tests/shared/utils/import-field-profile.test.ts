@@ -109,6 +109,25 @@ describe('FieldProfileResolver across the files of one case', () => {
     // A new INFO field may not take a key the case already uses.
     expect(resolver.resolve('INFO', 'AF_2').key).toBe('AF_2_2')
   })
+
+  it('adopts entries with header Type/Number and stores them for described fields (#538)', () => {
+    const resolver = new FieldProfileResolver(ALL)
+    resolver.adopt({ DP_X: { source: 'INFO:DP', type: 'Integer', number: '1' } })
+    resolver.describe('INFO', 'DP', 'Integer', '1')
+    resolver.describe('INFO', 'AC', 'Integer', 'A')
+    resolver.seed('INFO', ['DP', 'AC'])
+    expect(resolver.resolve('INFO', 'DP').key).toBe('DP_X')
+    info(resolver, (r) => {
+      r.set('INFO', 'DP', '35')
+      r.set('INFO', 'AC', '1')
+      r.set('CSQ', 'BIOTYPE', 'protein_coding')
+    })
+    expect(resolver.dictionary()).toEqual({
+      AC: { source: 'INFO:AC', type: 'Integer', number: 'A' },
+      BIOTYPE: { source: 'CSQ:BIOTYPE' },
+      DP_X: { source: 'INFO:DP', type: 'Integer', number: '1' }
+    })
+  })
 })
 
 describe('VCF INFO evidence aliases', () => {
@@ -194,10 +213,11 @@ describe('FieldRecord', () => {
       SpliceAI_pred_DS_DG: '0.62'
     })
     expect(resolver.dictionary()).toMatchObject({
-      REVEL: 'CSQ:REVEL_score',
-      SPLICEAI_MAX:
-        'max(CSQ:SpliceAI_pred_DS_AG, CSQ:SpliceAI_pred_DS_AL, CSQ:SpliceAI_pred_DS_DG)',
-      SpliceAI_pred_DS_DG: 'CSQ:SpliceAI_pred_DS_DG'
+      REVEL: { source: 'CSQ:REVEL_score' },
+      SPLICEAI_MAX: {
+        source: 'max(CSQ:SpliceAI_pred_DS_AG, CSQ:SpliceAI_pred_DS_AL, CSQ:SpliceAI_pred_DS_DG)'
+      },
+      SpliceAI_pred_DS_DG: { source: 'CSQ:SpliceAI_pred_DS_DG' }
     })
   })
 

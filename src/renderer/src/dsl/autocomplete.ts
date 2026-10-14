@@ -8,7 +8,7 @@
 
 import { mdiFilterVariant } from '@mdi/js'
 import { INFO_FIELD_PREFIX } from '../../../shared/filters/info-field-filter'
-import type { CaseInfoField } from '../../../shared/utils/case-info-fields'
+import { infoFieldLimitation, type CaseInfoField } from '../../../shared/utils/case-info-fields'
 import {
   COHORT_ONLY_COLUMNS,
   INFO_FIELD_OPERATORS,
@@ -77,22 +77,29 @@ function infoFieldsMatching(partial: string, infoFields: readonly CaseInfoField[
         `${INFO_FIELD_PREFIX}${key}`.toLowerCase().startsWith(lower) ||
         key.toLowerCase().startsWith(lower)
     )
-    .map(({ key, source }) => ({
-      value: `${INFO_FIELD_PREFIX}${key}`,
-      label: `${INFO_FIELD_PREFIX}${key}`,
-      description: source,
+    .map((field) => ({
+      value: `${INFO_FIELD_PREFIX}${field.key}`,
+      label: `${INFO_FIELD_PREFIX}${field.key}`,
+      description: [field.source, infoFieldLimitation(field)].filter(Boolean).join(' · '),
       category: 'column',
       typeBadge: 'info'
     }))
 }
 
-/** Why an `info.<KEY>` filter cannot match on this case; null when it can or nothing is known. */
+/** Why an `info.<KEY>` filter cannot match (or compare) on this case; null when it can or nothing is known. */
 function unavailableInfoHint(
   name: string,
   infoFields: readonly CaseInfoField[]
 ): Suggestion | null {
   const key = name.slice(INFO_FIELD_PREFIX.length)
-  if (infoFields.length === 0 || infoFields.some((f) => f.key === key)) return null
+  if (infoFields.length === 0) return null
+  const field = infoFields.find((f) => f.key === key)
+  if (field !== undefined) {
+    const limitation = infoFieldLimitation(field)
+    return limitation === null
+      ? null
+      : { value: '', label: `${key}: ${limitation}`, category: 'hint', description: field.source }
+  }
   return {
     value: '',
     label: `${key} is not an imported field of this case: only is:null matches`,

@@ -9,6 +9,7 @@
  * order, so callers seed header fields first (INFO before CSQ, header order).
  */
 import { isValidInfoKey } from '../filters/info-field-filter'
+import { fieldDictionaryEntry, type FieldDictionaryEntry } from './case-info-fields'
 import {
   CANONICAL_EVIDENCE_FIELDS,
   DEFAULT_IMPORT_FIELD_PROFILE,
@@ -115,6 +116,8 @@ export class FieldProfileResolver {
   private distinctFields = 0
   private nameChars = 0
   private readonly used = new Map<string, Set<string>>()
+  /** VCF header Type/Number by source label, for the dictionary. */
+  private readonly headerDefs = new Map<string, { type: string; number: string }>()
 
   constructor(readonly profile: ImportFieldProfile = DEFAULT_IMPORT_FIELD_PROFILE) {}
 
@@ -123,12 +126,19 @@ export class FieldProfileResolver {
     for (const name of names) this.resolve(origin, name)
   }
 
+  /** Record a source field's VCF header Type/Number (#538), stored with its dictionary entry. */
+  describe(origin: FieldOrigin, name: string, type: string, number: string): void {
+    this.headerDefs.set(sourceLabel(origin, name), { type, number })
+  }
+
   /**
    * Keep the keys an earlier file of the same case assigned (its stored field
    * dictionary), so one key means one source field across the whole case.
    */
-  adopt(dictionary: Record<string, string> | null): void {
-    for (const [key, source] of Object.entries(dictionary ?? {})) {
+  adopt(dictionary: Record<string, unknown> | null): void {
+    for (const [key, value] of Object.entries(dictionary ?? {})) {
+      const source = fieldDictionaryEntry(value)?.source
+      if (source === undefined) continue
       const match = SOURCE_LABEL_RE.exec(source)
       if (match === null || CANONICAL_KEYS.has(key) || this.taken.has(key)) continue
       const origin = match[1] as FieldOrigin
@@ -215,13 +225,15 @@ export class FieldProfileResolver {
     return new FieldRecord(this)
   }
 
-  /** Stored key → original source (`CSQ:REVEL_score`), for keys any record wrote; null when none. */
-  dictionary(): Record<string, string> | null {
+  /** Stored key → original source (`CSQ:REVEL_score`) and header Type/Number; null when no record wrote a key. */
+  dictionary(): Record<string, FieldDictionaryEntry> | null {
     if (this.used.size === 0) return null
-    const entries = [...this.used].map(([key, sources]): [string, string] => {
+    const entries = [...this.used].map(([key, sources]): [string, FieldDictionaryEntry] => {
       const list = [...sources].join(', ')
       const canonical = CANONICAL_EVIDENCE_FIELDS.find((f) => f.key === key)
-      return [key, canonical?.combine === 'max' && sources.size > 1 ? `max(${list})` : list]
+      const source = canonical?.combine === 'max' && sources.size > 1 ? `max(${list})` : list
+      const def = sources.size === 1 ? this.headerDefs.get(list) : undefined
+      return [key, def === undefined ? { source } : { source, ...def }]
     })
     return Object.fromEntries(entries.sort(([a], [b]) => a.localeCompare(b)))
   }

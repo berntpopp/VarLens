@@ -51,7 +51,8 @@ describe('Postgres migration definitions', () => {
       '0035',
       '0036',
       '0037',
-      '0039'
+      '0039',
+      '0040'
     ])
     expect(POSTGRES_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'create_cases',
@@ -91,7 +92,8 @@ describe('Postgres migration definitions', () => {
       'annotation_genome_build',
       'clinical_question_presets',
       'summary_sv_facts',
-      'variant_phase_set'
+      'variant_phase_set',
+      'allele_trim'
     ])
 
     for (const migration of POSTGRES_MIGRATIONS) {

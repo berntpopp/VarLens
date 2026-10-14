@@ -276,7 +276,7 @@ export function prepareStatements(db: DatabaseType, inInsertTransaction?: () => 
         caseId: number,
         fileName: string,
         format: string,
-        fieldDictionary: Record<string, string> | null = null
+        fieldDictionary: Record<string, unknown> | null = null
       ) => {
         if (insertDataInfoStmt) {
           const now = Date.now()

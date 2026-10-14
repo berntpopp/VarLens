@@ -136,7 +136,7 @@ export interface PostgresJsonImportRequest {
   genomeBuild: string
   importFileType: PostgresJsonImportFileType
   /** Read after the variants are written: stored info key → original source field. */
-  fieldDictionary?: () => Record<string, string> | null
+  fieldDictionary?: () => Record<string, unknown> | null
 }
 
 export interface PostgresJsonImportBatchResult {

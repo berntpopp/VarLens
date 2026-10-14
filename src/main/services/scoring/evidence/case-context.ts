@@ -6,6 +6,7 @@
 import { genotypeZygosity, type Zygosity } from '../../../../shared/utils/genotype'
 import { isInPAR } from '../../../../shared/utils/par-regions'
 import { compHetPhase, type CompHetPhase } from '../../../../shared/utils/phasing'
+import { trimAlleles } from '../../../../shared/utils/trim-alleles'
 
 export type { Zygosity }
 export type CaseSex = 'male' | 'female' | null
@@ -56,25 +57,12 @@ const bareChr = (chr: string): string => chr.replace(/^chr/i, '').toUpperCase()
 /**
  * Allele identity shared by the app and the simulation harness (spec §4.3):
  * chr without prefix, upper-case alleles, common suffix then common prefix
- * trimmed to the minimal representation, one base kept on each side. There is
+ * trimmed to the minimal representation ({@link trimAlleles}). There is
  * no reference at import, so repeat-shifted indels are not left-aligned and
  * keep distinct keys.
  */
 export function alleleKey(row: Pick<LightRow, 'chr' | 'pos' | 'ref' | 'alt'>): string {
-  let ref = row.ref.toUpperCase()
-  let alt = row.alt.toUpperCase()
-  let pos = row.pos
-  while (ref.length > 1 && alt.length > 1 && ref[ref.length - 1] === alt[alt.length - 1]) {
-    ref = ref.slice(0, -1)
-    alt = alt.slice(0, -1)
-  }
-  let start = 0
-  while (ref.length - start > 1 && alt.length - start > 1 && ref[start] === alt[start]) start++
-  if (start > 0) {
-    ref = ref.slice(start)
-    alt = alt.slice(start)
-    pos += start
-  }
+  const { pos, ref, alt } = trimAlleles(row.pos, row.ref.toUpperCase(), row.alt.toUpperCase())
   return `${bareChr(row.chr)}:${pos}:${ref}:${alt}`
 }
 

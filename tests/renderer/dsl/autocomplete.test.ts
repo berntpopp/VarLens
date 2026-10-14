@@ -124,6 +124,23 @@ describe('getAutocompleteSuggestions — case info.<KEY> fields (#596, #538)', (
     expect(hint.label).toMatch(/CADD_RAW is not an imported field of this case/)
   })
 
+  it('marks Flag and list fields as not comparable, with the reason', () => {
+    const typed = [
+      { key: 'DB', source: 'INFO:DB', type: 'Flag', number: '0' },
+      { key: 'AC', source: 'INFO:AC', type: 'Integer', number: 'A' },
+      { key: 'DP', source: 'INFO:DP', type: 'Integer', number: '1' }
+    ]
+    const [db] = getAutocompleteSuggestions('info.DB', [], 'case', typed)
+    expect(db.description).toMatch(/^INFO:DB · Flag field/)
+    const [hint] = getAutocompleteSuggestions('info.AC:', [], 'case', typed)
+    expect(hint).toMatchObject({
+      category: 'hint',
+      label: expect.stringMatching(/AC: List field \(Number=A\)/)
+    })
+    const dp = getAutocompleteSuggestions('info.DP:', [], 'case', typed)
+    expect(dp.some((s) => s.category === 'hint')).toBe(false)
+  })
+
   it('stays silent about unknown keys when the case has no field dictionary', () => {
     const suggestions = getAutocompleteSuggestions('info.DP:', [], 'case', [])
     expect(suggestions.some((s) => s.category === 'hint')).toBe(false)

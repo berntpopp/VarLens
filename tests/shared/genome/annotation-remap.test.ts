@@ -53,7 +53,8 @@ describe('mergeGlobalAnnotations', () => {
       starred: 1,
       acmg_classification: 'Pathogenic',
       acmg_evidence: '{}',
-      discardedAcmg: 'Benign'
+      discardedAcmg: 'Benign',
+      discardedEvidence: null
     })
   })
 
