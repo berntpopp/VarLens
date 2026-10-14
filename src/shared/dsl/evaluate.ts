@@ -36,7 +36,9 @@ export const RULE_LIMITS = {
   maxDepth: limits.ruleDepth,
   maxNodes: limits.ruleNodes
 } as const
-export type CompileResult = { ok: true; predicate: RowPredicate } | { ok: false; errors: string[] }
+export type CompileResult =
+  | { ok: true; predicate: RowPredicate; /** registry keys the rule reads */ columns: Set<string> }
+  | { ok: false; errors: string[] }
 
 const finite = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null
@@ -151,6 +153,7 @@ interface AstShape {
   nodes: number
   depth: number
   problems: string[]
+  columns: Set<string>
 }
 
 /** Size, depth and the references a rule may not hold (presets, non-row fields). */
@@ -160,9 +163,10 @@ function inspect(node: DslNode, depth: number, acc: AstShape): void {
   if (node.type === 'preset') acc.problems.push('@preset references are not allowed in rules')
   if (node.type === 'rule' && !node.column.startsWith(INFO_FIELD_PREFIX)) {
     // The parser also admits cohort and SV/CNV/STR extension keys; rules score SNV/indel rows.
-    if (findColumn(node.column) === undefined) {
+    const def = findColumn(node.column)
+    if (def === undefined)
       acc.problems.push(`'${node.column}' is not a field of a case variant row`)
-    }
+    else acc.columns.add(def.key)
   }
   if (node.type === 'group') for (const c of node.children) inspect(c, depth + 1, acc)
 }
@@ -176,7 +180,7 @@ export function compileRule(input: string): CompileResult {
   if (!parsed.isDsl || parsed.ast === null) {
     return { ok: false, errors: ['Rule must be a filter expression (column:operator:value)'] }
   }
-  const shape: AstShape = { nodes: 0, depth: 0, problems: [] }
+  const shape: AstShape = { nodes: 0, depth: 0, problems: [], columns: new Set() }
   inspect(parsed.ast, 1, shape)
   if (shape.nodes > RULE_LIMITS.maxNodes || shape.depth > RULE_LIMITS.maxDepth) {
     shape.problems.push(
@@ -184,5 +188,5 @@ export function compileRule(input: string): CompileResult {
     )
   }
   if (shape.problems.length > 0) return { ok: false, errors: [...new Set(shape.problems)] }
-  return { ok: true, predicate: build(parsed.ast) }
+  return { ok: true, predicate: build(parsed.ast), columns: shape.columns }
 }

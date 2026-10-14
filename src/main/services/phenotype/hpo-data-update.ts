@@ -6,12 +6,12 @@
  * installed data untouched.
  */
 import { createHash } from 'crypto'
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
 import { HPO_DATA_CONFIG, type HpoAssetKey } from '../../../shared/config/hpo-data.config'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import type { HpoBuildRequest } from './hpo-build-worker-client'
-import { readHpoDataStatus } from './hpo-similarity-db'
+import { assertUsableHpoDb, readHpoDataStatus } from './hpo-similarity-db'
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -137,16 +137,67 @@ export async function replaceFile(
   }
 }
 
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * Interprocess lock on one destination (app and headless CLI share the
+ * `.download` / `.tmp` staging paths). A lock whose PID is gone is taken over.
+ * ponytail: PID-only liveness; a reused PID keeps a stale lock until it is removed by hand.
+ */
+function acquireLock(dbPath: string): () => void {
+  const path = `${dbPath}.lock`
+  mkdirSync(dirname(dbPath), { recursive: true })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(path, String(process.pid), { flag: 'wx' })
+      return () => rmSync(path, { force: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      const pid = Number(readFileSync(path, 'utf8'))
+      if (Number.isInteger(pid) && pid > 0 && isAlive(pid)) {
+        throw new Error(`An HPO data update is already running (PID ${pid}, ${path})`, {
+          cause: error
+        })
+      }
+      rmSync(path, { force: true })
+    }
+  }
+  throw new Error(`Could not lock ${path}`)
+}
+
 export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateResult> {
   const current = readHpoDataStatus(deps.dbPath)
   if (!deps.isOnline()) {
     return { success: false, message: 'Offline: HPO data left unchanged.', status: current }
   }
   const release = await resolveRelease(deps.fetch, deps.tag)
-  if (current.installed && current.version === release.tag) {
+  if (current.installed && !current.needsUpdate && current.version === release.tag) {
     return { success: true, message: `HPO data ${release.tag} is up to date.`, status: current }
   }
+  // Tags are vYYYY-MM-DD, so string order is release order; only an explicit tag downgrades.
+  if (deps.tag === undefined && current.version !== null && current.version > release.tag) {
+    const message = `Installed HPO data ${current.version} is newer than ${release.tag}; left unchanged.`
+    return { success: true, message, status: current }
+  }
+  const unlock = acquireLock(deps.dbPath)
+  try {
+    return await install(deps, release)
+  } finally {
+    unlock()
+  }
+}
 
+async function install(
+  deps: HpoUpdateDeps,
+  release: { tag: string; digests: ReleaseDigests }
+): Promise<HpoDataUpdateResult> {
   // Fixed name, cleared first: a crash mid-download leaves no orphaned ~80 MB dirs behind.
   const tmpDir = `${deps.dbPath}.download`
   rmSync(tmpDir, { recursive: true, force: true })
@@ -167,6 +218,7 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
       )
     }
     await deps.build({ files, meta: { release: release.tag, sha256 }, outPath })
+    assertUsableHpoDb(outPath)
     await replaceFile(outPath, deps.dbPath)
   } finally {
     rmSync(tmpDir, { recursive: true, force: true })

@@ -271,7 +271,7 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
   },
   {
     key: 'hpo_resnik',
-    label: 'HPO Resnik similarity (derived)',
+    label: 'HPO Resnik similarity (raw, uncalibrated)',
     aliases: [],
     type: 'numeric',
     operators: NUMERIC_OPERATORS,

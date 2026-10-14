@@ -166,7 +166,9 @@ export class PostgresShortlistService {
     if (queryErrors.length > 0) throwShortlistQueryErrors(queryErrors, 'postgres shortlist')
 
     return this.inSnapshot(async (client) => {
-      const hpo = openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
+      const hpo = compiled.usesHpoResnik
+        ? openHpoGeneScorer(await this.caseHpoTerms(client, caseId))
+        : null
       try {
         const info = await this.caseInfo(client, caseId, hpo)
         const builder = new GeneContextBuilder(info, config.baseFilters.considerPhasing === true)
@@ -238,7 +240,7 @@ export class PostgresShortlistService {
 
   private async caseHpoTerms(client: Queryable, caseId: number): Promise<string[]> {
     const result = await client.query<{ hpo_id: string }>(
-      `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1`,
+      `SELECT hpo_id FROM ${this.schemaName}."case_hpo_terms" WHERE case_id = $1 ORDER BY hpo_id`,
       [caseId]
     )
     return result.rows.map((r) => r.hpo_id)

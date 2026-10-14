@@ -21,6 +21,7 @@ import RankingModesSection from './RankingModesSection.vue'
 import RankingGroupCard from './RankingGroupCard.vue'
 import RankingPreview from './RankingPreview.vue'
 import RankingLegacySummary from './RankingLegacySummary.vue'
+import RankingHpoHint from './RankingHpoHint.vue'
 import {
   RankingEditorKey,
   RULESET_PATH,
@@ -238,6 +239,7 @@ async function jumpTo(problem: EvidenceProblem): Promise<void> {
                 {{ COPY.sections.groups }}
               </h3>
               <p class="ranking-section__help">{{ COPY.sections.groupsHelp }}</p>
+              <RankingHpoHint :ruleset="draft.config.rankConfig.ruleset" />
               <v-expansion-panels v-model="openGroups" multiple variant="accordion" class="groups">
                 <RankingGroupCard
                   v-for="(group, gi) in draft.config.rankConfig.ruleset.groups"

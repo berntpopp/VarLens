@@ -47,12 +47,15 @@ export interface CompiledRuleset {
   /** In the fixed decision-list order, fallback last. */
   modes: CompiledMode[]
   groups: CompiledGroup[]
+  /** Some mode or rule reads `hpo_resnik`: only then is the HPO scorer loaded. */
+  usesHpoResnik: boolean
 }
 
-function compileText(text: string): RowPredicate {
+function compileText(text: string, columns: Set<string>): RowPredicate {
   const result = compileRule(text)
   // rulesetProblems has compiled every condition already
   if (!result.ok) throw new EvidenceRulesetError(result.errors)
+  for (const c of result.columns) columns.add(c)
   return result.predicate
 }
 
@@ -62,9 +65,10 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
   if (problems.length > 0) {
     throw new EvidenceRulesetError(problems.map((p) => describeProblem(p, input)))
   }
+  const columns = new Set<string>()
   const modes = input.modes.map((profile) => ({
     profile,
-    test: profile.when === null ? null : compileText(profile.when)
+    test: profile.when === null ? null : compileText(profile.when, columns)
   }))
   const groups = input.groups.map((g) => ({
     id: g.id,
@@ -75,10 +79,10 @@ export function compileRuleset(input: EvidenceRuleset): CompiledRuleset {
       id: r.id,
       label: r.label,
       points: r.points,
-      test: compileText(r.when)
+      test: compileText(r.when, columns)
     }))
   }))
-  return { source: input, modes, groups }
+  return { source: input, modes, groups, usesHpoResnik: columns.has('hpo_resnik') }
 }
 
 /** Problems of an evidence preset's configuration as text ([] when fine); see `evidenceConfigProblems`. */

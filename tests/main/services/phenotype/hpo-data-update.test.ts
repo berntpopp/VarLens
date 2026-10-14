@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'fs'
+import Database from 'better-sqlite3-multiple-ciphers'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,6 +65,60 @@ describe('updateHpoData', () => {
     const result = await updateHpoData(deps(fetch))
     expect(result.message).toMatch(/up to date/)
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('repairs a damaged installed file', async () => {
+    writeFileSync(dbPath, 'garbage '.repeat(500))
+    const result = await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    expect(result.status).toMatchObject({ installed: true, needsUpdate: false })
+  })
+
+  it('rebuilds the same release when the installed DB came from an older builder', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    const db = new Database(dbPath)
+    db.prepare("UPDATE meta SET value = '1' WHERE key = 'builder_version'").run()
+    db.close()
+    const result = await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    expect(result.message).toMatch(/installed/)
+    expect(result.status.needsUpdate).toBe(false)
+  })
+
+  it('refuses to publish an incomplete build and keeps the installed data', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    const empty = async ({ outPath }: { outPath: string }): Promise<void> => {
+      const db = new Database(outPath)
+      db.exec('CREATE TABLE meta (key TEXT, value TEXT); CREATE TABLE terms (id TEXT, ic REAL);')
+      db.exec('CREATE TABLE gene_terms (gene_symbol TEXT); CREATE TABLE ancestors (term TEXT)')
+      db.close()
+    }
+    await expect(
+      updateHpoData({ ...deps(releaseFetch('v2026-10-01')), build: empty as never })
+    ).rejects.toThrow(/incomplete database/)
+    expect(readHpoDataStatus(dbPath).version).toBe('v2026-09-01')
+    expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
+  })
+
+  it('keeps a newer installed release when the API falls back to the pinned one', async () => {
+    await updateHpoData(deps(releaseFetch('v2026-10-01')))
+    const fetch = vi.fn(async () => new Response('', { status: 403 }))
+    const result = await updateHpoData(deps(fetch as never))
+    expect(result.message).toMatch(/newer/)
+    expect(result.status.version).toBe('v2026-10-01')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to run while another live process holds the destination lock', async () => {
+    writeFileSync(`${dbPath}.lock`, String(process.pid))
+    await expect(updateHpoData(deps(releaseFetch('v2026-09-01')))).rejects.toThrow(
+      /already running/
+    )
+    expect(existsSync(dbPath)).toBe(false)
+  })
+
+  it('takes over a stale lock and releases it afterwards', async () => {
+    writeFileSync(`${dbPath}.lock`, '2147483646')
+    await updateHpoData(deps(releaseFetch('v2026-09-01')))
+    expect(readdirSync(dir)).toEqual(['hpo_similarity.db'])
   })
 
   it('rejects a checksum mismatch and keeps the installed data', async () => {

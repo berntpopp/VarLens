@@ -33,6 +33,7 @@ import { ref, shallowRef, markRaw, watch, onBeforeUnmount, type Ref } from 'vue'
 import { useFilterPresetStore } from './useFilterPresetStore'
 import { useApiService } from './useApiService'
 import { useSettingsStore } from '../stores/settingsStore'
+import { phenotypeChange } from './phenotypeChanges'
 import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { ShortlistResult } from '../../../shared/types/shortlist'
@@ -135,6 +136,13 @@ export function useShortlistQuery(caseId: Ref<number>) {
       result.value = null
     }
     void fetch()
+  })
+
+  // hpo_resnik inputs changed: HPO data installed, or this case's HPO terms edited.
+  watch(phenotypeChange, (change) => {
+    if (change !== null && (change.caseId === null || change.caseId === caseId.value)) {
+      void fetch()
+    }
   })
 
   // Auto-select the default ranking (Settings → Shortlist ranking), else the

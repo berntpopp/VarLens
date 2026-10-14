@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,6 +37,17 @@ afterEach(() => {
 })
 
 describe('build-hpo-similarity-db script', () => {
+  it('runs through a lockfile-pinned TypeScript runner, never an npx download', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    const lock = JSON.parse(readFileSync('package-lock.json', 'utf8')) as {
+      packages: Record<string, { bin?: Record<string, string> }>
+    }
+    expect(pkg.scripts['build:hpo-db']).toBe('jiti scripts/build-hpo-similarity-db.ts')
+    expect(lock.packages['node_modules/jiti']?.bin?.jiti).toBeDefined()
+  })
+
   it('builds the requested tag at --out through the shared update path', async () => {
     const fetch = stubNetwork('v2026-06-01')
     const out = join(dir, 'hpo.db')
@@ -46,6 +57,21 @@ describe('build-hpo-similarity-db script', () => {
       `${HPO_DATA_CONFIG.releaseByTagUrl}/v2026-06-01`,
       expect.anything()
     )
+  })
+
+  it('downgrades only on an explicit --tag', async () => {
+    const out = join(dir, 'hpo.db')
+    stubNetwork('v2026-10-01')
+    await buildHpoDbCli(['--out', out], {})
+    stubNetwork('v2026-06-01')
+    const result = await buildHpoDbCli(['--out', out, '--tag', 'v2026-06-01'], {})
+    expect(result.status.version).toBe('v2026-06-01')
+  })
+
+  it('creates a missing --out directory', async () => {
+    stubNetwork('v2026-09-01')
+    const result = await buildHpoDbCli(['--out', join(dir, 'new', 'sub', 'hpo.db')], {})
+    expect(result.status.installed).toBe(true)
   })
 
   it('defaults the output to VARLENS_HPO_DB_PATH', async () => {
