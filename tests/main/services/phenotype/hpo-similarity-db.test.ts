@@ -78,6 +78,13 @@ describe('hpo_similarity.db', () => {
     expect(openHpoGeneScorer([T.INH], dbPath)).toBeNull()
   })
 
+  it('reloads the cached index when the file is replaced', () => {
+    build()
+    expect(openHpoGeneScorer([T.C], dbPath)?.score('GENE2')).not.toBeNull()
+    writeFileSync(dbPath, 'replaced by something unreadable '.repeat(300))
+    expect(openHpoGeneScorer([T.C], dbPath)).toBeNull()
+  })
+
   it('has no scorer without patient terms or data', () => {
     build()
     expect(openHpoGeneScorer([], dbPath)).toBeNull()

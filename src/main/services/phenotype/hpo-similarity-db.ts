@@ -1,12 +1,13 @@
 /**
  * `hpo_similarity.db`: unencrypted, read-only reference data for the in-app
  * Resnik score (#600), like gene_reference.db. Built by `buildHpoSimilarityDb`
- * from the HPO release files; read per shortlist run (open → score → close),
- * so an update's atomic rename is picked up without a reopen hook. Safe in
- * worker threads and the web server: no Electron imports.
+ * from the HPO release files; loaded into a typed-array index once per process
+ * and reloaded when the file's mtime/size change, so an update's atomic rename
+ * is picked up without a reopen hook (no handle stays open). Safe in worker
+ * threads and the web server: no Electron imports.
  */
 import Database from 'better-sqlite3-multiple-ciphers'
-import { existsSync, rmSync } from 'fs'
+import { existsSync, rmSync, statSync } from 'fs'
 import { HPO_DATA_CONFIG } from '../../../shared/config/hpo-data.config'
 import type { HpoDataStatus } from '../../../shared/types/hpo-data'
 import {
@@ -16,7 +17,7 @@ import {
   parseHpoaDiseaseTerms,
   phenotypeClosure
 } from '../../../shared/phenotype/hpo-sources'
-import { symmetricBestMatchAverage } from '../../../shared/phenotype/resnik'
+import { buildHpoIndex, scoreAllGenes, type HpoIndex } from '../../../shared/phenotype/resnik'
 import { mainLogger } from '../MainLogger'
 
 /** Desktop main sets the env var to userData at startup; workers inherit it. */
@@ -53,22 +54,21 @@ export function buildHpoSimilarityDb(
   try {
     db.exec(`
       CREATE TABLE terms (id TEXT PRIMARY KEY, label TEXT NOT NULL, ic REAL NOT NULL) WITHOUT ROWID;
-      CREATE TABLE ancestors (term TEXT NOT NULL, anc TEXT NOT NULL, PRIMARY KEY (term, anc)) WITHOUT ROWID;
-      CREATE INDEX ancestors_by_anc ON ancestors (anc, term);
+      CREATE TABLE parents (term TEXT NOT NULL, parent TEXT NOT NULL, PRIMARY KEY (term, parent)) WITHOUT ROWID;
       CREATE TABLE aliases (alias TEXT PRIMARY KEY, term TEXT NOT NULL) WITHOUT ROWID;
       CREATE TABLE gene_terms (gene_symbol TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY (gene_symbol, term)) WITHOUT ROWID;
       CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
     `)
     const insertTerm = db.prepare('INSERT INTO terms VALUES (?, ?, ?)')
-    const insertAnc = db.prepare('INSERT INTO ancestors VALUES (?, ?)')
+    const insertParent = db.prepare('INSERT INTO parents VALUES (?, ?)')
     const insertAlias = db.prepare('INSERT INTO aliases VALUES (?, ?)')
     const insertGene = db.prepare('INSERT OR IGNORE INTO gene_terms VALUES (?, ?)')
     const insertMeta = db.prepare('INSERT INTO meta VALUES (?, ?)')
     db.transaction(() => {
       for (const [id, label] of ontology.labels) insertTerm.run(id, label, ic.get(id) ?? 0)
-      for (const [term, list] of ancestors) {
-        if (ontology.aliases.has(term)) continue
-        for (const anc of list) insertAnc.run(term, anc)
+      for (const [term, list] of ontology.parents) {
+        if (!ancestors.has(term)) continue
+        for (const parent of list) if (ancestors.has(parent)) insertParent.run(term, parent)
       }
       for (const [alias, term] of ontology.aliases) insertAlias.run(alias, term)
       for (const [gene, terms] of genes) {
@@ -115,7 +115,7 @@ function inspect(db: Database.Database): HpoDataStatus {
     current &&
     geneCount > 0 &&
     count('SELECT COUNT(*) AS c FROM terms WHERE ic > 0') > 0 &&
-    count('SELECT COUNT(*) AS c FROM ancestors') > 0
+    count('SELECT COUNT(*) AS c FROM parents') > 0
   return {
     installed: true,
     needsUpdate: !usable,
@@ -160,95 +160,64 @@ export interface HpoGeneScorer {
   close(): void
 }
 
-/**
- * The case profile resolved once: canonical, deduplicated phenotype terms and,
- * per term, Resnik sim to every term sharing an informative ancestor with it
- * (absent = 0). Genes are then scored from memory, one term read per gene.
- */
-function loadScorer(db: Database.Database, patientTerms: readonly string[]): HpoGeneScorer | null {
-  const aliasStmt = db.prepare('SELECT term FROM aliases WHERE alias = ?').pluck()
-  const ancStmt = db.prepare(
-    'SELECT anc, ic FROM ancestors JOIN terms ON terms.id = anc WHERE term = ?'
-  )
-  const profile = new Map<string, Map<string, number>>()
-  const informative = new Map<string, number>()
-  const ancestorsOf = new Map<string, string[]>()
-  for (const raw of patientTerms) {
-    const term = (aliasStmt.get(raw) as string | undefined) ?? raw
-    if (profile.has(term)) continue
-    const rows = ancStmt.all(term) as Array<{ anc: string; ic: number }>
-    if (rows.length === 0) continue // unknown or outside Phenotypic abnormality
-    profile.set(term, new Map())
-    const own = rows.filter((r) => r.ic > 0)
-    ancestorsOf.set(
-      term,
-      own.map((r) => r.anc)
-    )
-    for (const r of own) informative.set(r.anc, r.ic)
-  }
-  if (profile.size === 0) return null
-  const below = db.prepare(
-    'SELECT term, anc FROM ancestors WHERE anc IN (SELECT value FROM json_each(?))'
-  )
-  const reached = new Map<string, string[]>()
-  for (const { term, anc } of below.all(JSON.stringify([...informative.keys()])) as Array<{
-    term: string
-    anc: string
-  }>) {
-    const list = reached.get(anc)
-    if (list === undefined) reached.set(anc, [term])
-    else list.push(term)
-  }
-  for (const [term, sims] of profile) {
-    for (const anc of ancestorsOf.get(term) ?? []) {
-      const ic = informative.get(anc) ?? 0
-      for (const other of reached.get(anc) ?? []) {
-        if (ic > (sims.get(other) ?? 0)) sims.set(other, ic)
-      }
+/** Phenotype-subtree index of one DB file, kept per process until the file changes. */
+let cached: { key: string; index: HpoIndex | null } | null = null
+
+function loadIndex(path: string): HpoIndex | null {
+  const stat = statSync(path)
+  const key = `${path}\0${stat.mtimeMs}\0${stat.size}`
+  if (cached?.key === key) return cached.index
+  const db = new Database(path, { readonly: true, fileMustExist: true })
+  try {
+    if (inspect(db).needsUpdate) {
+      mainLogger.warn(`HPO data at ${path} needs an update; hpo_resnik stays null`, 'hpo-data')
+      cached = { key, index: null }
+      return null
     }
-  }
-  const patient = [...profile.keys()]
-  const geneStmt = db.prepare('SELECT term FROM gene_terms WHERE gene_symbol = ?').pluck()
-  const scores = new Map<string, number | null>()
-  return {
-    score(gene) {
-      let s = scores.get(gene)
-      if (s === undefined) {
-        s = symmetricBestMatchAverage(
-          patient,
-          geneStmt.all(gene) as string[],
-          (p, g) => profile.get(p)?.get(g) ?? 0
-        )
-        scores.set(gene, s)
-      }
-      return s
-    },
-    close: () => db.close()
+    // Terms with an entry in `parents` or the subtree root are the phenotype subtree.
+    const index = buildHpoIndex({
+      terms: db
+        .prepare(`SELECT id, ic FROM terms WHERE id = ? OR id IN (SELECT term FROM parents)`)
+        .all(HPO_DATA_CONFIG.phenotypeRoot) as Array<{ id: string; ic: number }>,
+      edges: db.prepare('SELECT term, parent FROM parents').raw().all() as Array<[string, string]>,
+      aliases: db.prepare('SELECT alias, term FROM aliases').raw().all() as Array<[string, string]>,
+      geneTerms: db.prepare('SELECT gene_symbol, term FROM gene_terms').raw().all() as Array<
+        [string, string]
+      >
+    })
+    cached = { key, index }
+    return index
+  } finally {
+    db.close()
   }
 }
 
 /**
  * Scorer for one case's HPO terms, or null when there are no phenotype terms
- * or no usable HPO data (the ranking then has `hpo_resnik` null). A damaged DB
- * is logged, never thrown: rankings must not break on reference data.
+ * or no usable HPO data (the ranking then has `hpo_resnik` null). All genes are
+ * scored up front from the in-memory index; the DB is read once per process
+ * (again only after an update replaces the file). A damaged DB is logged,
+ * never thrown: rankings must not break on reference data.
  */
 export function openHpoGeneScorer(
   patientTerms: readonly string[],
   path: string | null = resolveHpoDbPath()
 ): HpoGeneScorer | null {
-  if (patientTerms.length === 0) return null
-  let db: Database.Database | null = null
+  if (patientTerms.length === 0 || path === null || !existsSync(path)) return null
   try {
-    db = openReadonly(path)
-    const scorer = db === null ? null : loadScorer(db, patientTerms)
-    if (scorer === null) db?.close()
-    return scorer
+    const index = loadIndex(path)
+    const scores = index === null ? null : scoreAllGenes(index, patientTerms)
+    if (index === null || scores === null) return null
+    return {
+      score(gene) {
+        const g = index.genes.get(gene)
+        return g === undefined ? null : scores[g]
+      },
+      close: () => undefined
+    }
   } catch (error) {
-    db?.close()
-    mainLogger.warn(
-      `HPO similarity unavailable: ${error instanceof Error ? error.message : String(error)}`,
-      'hpo-data'
-    )
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
     return null
   }
 }
