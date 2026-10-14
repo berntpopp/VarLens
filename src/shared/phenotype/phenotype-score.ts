@@ -11,8 +11,16 @@
  * 3. Gene = max over its diseases; the case percentile comes from one sort.
  * Explanations are rebuilt lazily from the lanes for displayed rows only.
  */
-import { HPO_SCORING_CONFIG } from '../config/hpo-scoring.config'
+import { HPO_SCORING_CONFIG, type HpoScoringOptions } from '../config/hpo-scoring.config'
 import type { HpoConflict, HpoExplanation, HpoMatch, HpoProfileTerm } from '../types/hpo-profile'
+import {
+  boundedZ,
+  calibrationFor,
+  exclusionLr,
+  nullColumns,
+  nullParams,
+  scoringOptions
+} from './phenotype-calibration'
 import type { PhenotypeIndex } from './phenotype-index'
 import { markAncestors } from './resnik'
 
@@ -30,13 +38,16 @@ export interface CaseProfile {
 
 export interface CaseScores {
   profile: CaseProfile
-  /** indexed like `ix.hpo.genes`; -1 best disease = gene without diseases */
+  options: HpoScoringOptions
+  /** in [0, 1]; indexed like `ix.genes` (every gene has ≥1 disease) */
   geneScore: Float64Array
   geneBest: Int32Array
   /** excluded terms contradicted by the best disease */
   geneConflicts: Int32Array
-  /** S(d) per disease, indexed like `ix.diseaseIds` */
+  /** S(d) per disease, indexed like `ix.diseaseIds` (z mode: z scale, unbounded) */
   diseaseScore: Float64Array
+  /** S⁺(d) before background correction and exclusion load (the null builder's input) */
+  diseasePlus: Float64Array
   /** geneScore ascending, for the percentile */
   sorted: Float64Array
 }
@@ -56,6 +67,7 @@ interface Scratch {
   laneMax: Float64Array
   laneW: Float64Array
   conflict: Float64Array
+  penal: Float64Array
   sysMax: Float64Array
   diseaseConflicts: Int32Array
 }
@@ -77,6 +89,7 @@ function scratchFor(ix: PhenotypeIndex): Scratch {
       laneMax: new Float64Array(0),
       laneW: new Float64Array(0),
       conflict: new Float64Array(0),
+      penal: new Float64Array(0),
       sysMax: new Float64Array(32),
       diseaseConflicts: new Int32Array(D)
     }
@@ -203,21 +216,61 @@ function fillLanes(
 }
 
 /** Score every gene; null without a present term. */
-export function scoreCase(ix: PhenotypeIndex, terms: readonly HpoProfileTerm[]): CaseScores | null {
+export function scoreCase(
+  ix: PhenotypeIndex,
+  terms: readonly HpoProfileTerm[],
+  options: Partial<HpoScoringOptions> = {}
+): CaseScores | null {
   const profile = prepareProfile(ix, terms)
-  return profile === null ? null : scoreProfile(ix, profile)
+  return profile === null ? null : scoreProfile(ix, profile, options)
 }
 
-export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScores {
-  const { f0, gamma, lambda, eMax } = HPO_SCORING_CONFIG
+/** Interpolated null μ / σ (σ floored) at the case's effective size; null when mode is 'off'. */
+function caseNull(ix: PhenotypeIndex, profile: CaseProfile, opts: HpoScoringOptions) {
+  if (opts.correction === 'off') return null
+  if (ix.nullMu === null || ix.nullSd === null || ix.nullParams !== nullParams(opts.tau)) {
+    throw new Error(
+      `HPO background null (${ix.nullParams ?? 'none'}) does not match ${nullParams(opts.tau)}`
+    )
+  }
+  let w1 = 0
+  let w2 = 0
+  for (const w of profile.weight) {
+    w1 += w
+    w2 += w * w
+  }
+  const { lo, hi, frac } = nullColumns((w1 * w1) / w2)
+  // σ floors are only read in z mode; 'mean' skips the one-time calibration.
+  const floor = opts.correction === 'z' ? calibrationFor(ix).sigmaFloor : new Float64Array(hi + 1)
+  return {
+    mu: ix.nullMu,
+    sd: ix.nullSd,
+    lo,
+    hi,
+    frac,
+    floor: Math.max(HPO_SCORING_CONFIG.sigmaMin, floor[lo] + frac * (floor[hi] - floor[lo]))
+  }
+}
+
+export function scoreProfile(
+  ix: PhenotypeIndex,
+  profile: CaseProfile,
+  overrides: Partial<HpoScoringOptions> = {}
+): CaseScores {
+  const { f0, gamma, lambda, eMax, nullMaxK: NK, lrCap } = HPO_SCORING_CONFIG
+  const opts = scoringOptions(overrides)
+  const zMode = opts.correction === 'z'
+  const nul = caseNull(ix, profile, opts)
   const s = scratchFor(ix)
-  const G = ix.hpo.genes.size
+  const G = ix.genes.size
   const result: CaseScores = {
     profile,
+    options: opts,
     geneScore: new Float64Array(G),
     geneBest: new Int32Array(G),
     geneConflicts: new Int32Array(G),
     diseaseScore: new Float64Array(ix.diseaseIds.length),
+    diseasePlus: new Float64Array(ix.diseaseIds.length),
     sorted: new Float64Array(0)
   }
   fillLanes(ix, s, profile, result)
@@ -225,16 +278,30 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
   const K = profile.excluded.length
   const chunks = (K + 31) >>> 5
   const { lanes, reverse, masks, mark, union, sysMax, diseaseConflicts } = s
-  const { diseaseScore } = result
+  const { diseaseScore, diseasePlus } = result
   const laneMax = (s.laneMax = grow(s.laneMax, k, (n) => new Float64Array(n)))
   const laneW = (s.laneW = grow(s.laneW, k, (n) => new Float64Array(n)))
   const conflict = (s.conflict = grow(s.conflict, K, (n) => new Float64Array(n)))
+  const penal = (s.penal = grow(s.penal, K, (n) => new Float64Array(n)))
   conflict.fill(0, 0, K)
+  penal.fill(0, 0, K)
+  // Conflicts are always listed; only gated ones (f_d(e) ≥ minF, known f) add to the load.
+  const penalise = opts.exclusionMode === 'penalty'
+  const minF = opts.excludeMinFrequency
+  // C1: forward weight w·IC^τ (τ = 0: key weights only); r = laneMax / IC(p).
   let wSum = 0
-  for (let l = 0; l < k; l++) wSum += profile.weight[l]
-  for (let l = 0; l < k; l++) laneW[l] = (profile.weight[l] * ix.invIc[profile.present[l]]) / wSum
+  for (let l = 0; l < k; l++) {
+    const p = profile.present[l]
+    laneW[l] = profile.weight[l] * Math.pow(ix.selfIc[p], opts.tau)
+    wSum += laneW[l]
+  }
+  for (let l = 0; l < k; l++) laneW[l] *= ix.invIc[profile.present[l]] / wSum
   const exclSys = Uint32Array.from(profile.excluded, (e) => ix.systems[e])
-  const { diseaseOffsets, annTerm, annF, annFExcl, annFactor, freqSum } = ix
+  const background = zMode ? calibrationFor(ix).background : null
+  const exclB = Float64Array.from(profile.excluded, (e) => background?.[e] ?? 0)
+  // The penalty reads the point frequency in z mode (LR), the conservative f_excl otherwise.
+  const exclFreq = zMode ? ix.annF : ix.annFExcl
+  const { diseaseOffsets, annTerm, annF, annFactor, annKnown, freqSum } = ix
   const { notOffsets, notTerms } = ix
   const D = ix.diseaseIds.length
   for (let d = 0; d < D; d++) {
@@ -256,7 +323,10 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
           const low = m & -m
           const idx = (c << 5) + 31 - Math.clz32(low)
           m ^= low
-          if (annFExcl[j] > conflict[idx]) conflict[idx] = annFExcl[j]
+          if (exclFreq[j] > conflict[idx]) conflict[idx] = exclFreq[j]
+          if (penalise && (minF === 0 || (annKnown[j] === 1 && annF[j] >= minF))) {
+            if (exclFreq[j] > penal[idx]) penal[idx] = exclFreq[j]
+          }
           hit = true
         }
       }
@@ -267,13 +337,15 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
     let conflicts = 0
     if (hit) {
       for (let idx = 0; idx < K; idx++) {
-        const c = conflict[idx]
-        if (c <= 0) continue
+        const c = penal[idx]
+        if (conflict[idx] > 0) conflicts++
         conflict[idx] = 0
-        conflicts++
+        penal[idx] = 0
+        if (c <= 0) continue
+        const v = zMode ? exclusionLr(c, exclB[idx], opts.lrEpsilon) : c
         for (let sm = exclSys[idx]; sm !== 0; sm &= sm - 1) {
           const bit = 31 - Math.clz32(sm & -sm)
-          if (c > sysMax[bit]) sysMax[bit] = c
+          if (v > sysMax[bit]) sysMax[bit] = v
         }
       }
       for (let b = 0; b < 32; b++) {
@@ -281,16 +353,32 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
         sysMax[b] = 0
       }
     }
-    for (let j = notOffsets[d]; j < notOffsets[d + 1]; j++)
-      if (mark[notTerms[j]] === union) load += 1
-    if (load > eMax) load = eMax
+    let nots = 0
+    for (let j = notOffsets[d]; j < notOffsets[d + 1]; j++) if (mark[notTerms[j]] === union) nots++
     const plus = gamma * fwd + (1 - gamma) * (rev / (f0 + freqSum[d]))
-    diseaseScore[d] = load > 0 ? plus * Math.exp(-lambda * load) : plus
+    diseasePlus[d] = plus
     diseaseConflicts[d] = conflicts
+    if (nul === null) {
+      load = Math.min(eMax, load + nots)
+      diseaseScore[d] = load > 0 ? plus * Math.exp(-lambda * load) : plus
+      continue
+    }
+    const lo = d * NK + nul.lo
+    const hi = d * NK + nul.hi
+    const mu = nul.mu[lo] + nul.frac * (nul.mu[hi] - nul.mu[lo])
+    if (zMode) {
+      const sd = nul.sd[lo] + nul.frac * (nul.sd[hi] - nul.sd[lo])
+      load = Math.min(lrCap, load + nots * lrCap)
+      diseaseScore[d] = (plus - mu) / Math.max(sd, nul.floor) - opts.lambdaZ * load
+    } else {
+      const corrected = mu < 1 ? Math.max(0, (plus - mu) / (1 - mu)) : 0
+      load = Math.min(eMax, load + nots)
+      diseaseScore[d] = load > 0 ? corrected * Math.exp(-lambda * load) : corrected
+    }
   }
   const { geneOffsets, geneDiseases } = ix
   for (let g = 0; g < G; g++) {
-    let best = -1
+    let best = -Infinity
     let arg = -1
     for (let i = geneOffsets[g]; i < geneOffsets[g + 1]; i++) {
       const d = geneDiseases[i]
@@ -299,9 +387,13 @@ export function scoreProfile(ix: PhenotypeIndex, profile: CaseProfile): CaseScor
         arg = d
       }
     }
-    result.geneScore[g] = arg < 0 ? 0 : best
+    if (zMode) {
+      const n = geneOffsets[g + 1] - geneOffsets[g]
+      best = boundedZ(best - opts.geneMaxPenalty * Math.sqrt(2 * Math.log(n)))
+    }
+    result.geneScore[g] = best
     result.geneBest[g] = arg
-    result.geneConflicts[g] = arg < 0 ? 0 : diseaseConflicts[arg]
+    result.geneConflicts[g] = diseaseConflicts[arg]
   }
   result.sorted = result.geneScore.slice().sort()
   return result
@@ -319,10 +411,9 @@ function percentile(sorted: Float64Array, score: number): number {
   return sorted.length === 0 ? 0 : lo / sorted.length
 }
 
-/** Best disease, matched pairs and conflicts of gene g; null when g has no disease. */
-export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation | null {
+/** Best disease, matched pairs and conflicts of gene g. */
+export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoExplanation {
   const d = cs.geneBest[g]
-  if (d < 0) return null
   const s = scratchFor(ix)
   if (s.owner !== cs) fillLanes(ix, s, cs.profile, cs)
   const { present, key, excluded } = cs.profile
@@ -355,14 +446,15 @@ export function explainGene(ix: PhenotypeIndex, cs: CaseScores, g: number): HpoE
     })
   }
   matched.sort((a, b) => Number(b.key) - Number(a.key))
+  const exclFreq = cs.options.correction === 'z' ? ix.annF : ix.annFExcl
   const conflicts: HpoConflict[] = []
   excluded.forEach((e, j) => {
     let best = 0
     let arg = -1
     for (let a = from; a < to; a++) {
       const bit = (s.masks[ix.annTerm[a] * chunks + (j >>> 5)] >>> (j & 31)) & 1
-      if (bit === 1 && ix.annFExcl[a] > best) {
-        best = ix.annFExcl[a]
+      if (bit === 1 && exclFreq[a] > best) {
+        best = exclFreq[a]
         arg = a
       }
     }
