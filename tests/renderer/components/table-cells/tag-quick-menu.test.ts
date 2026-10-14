@@ -83,6 +83,11 @@ describe('row tag dots', () => {
     const { wrapper, button } = await mountRow({ id: 10, case_id: 1, tag_ids: [2] }, 'case')
     expect(wrapper.findAll('.tag-dot')).toHaveLength(1)
     expect(button().attributes('aria-label')).toBe('Tags: Pathogenic candidate — change tags')
+    // A settled write reads the row back, so the fake server keeps the assignments.
+    const server = new Set([2])
+    api.assignVariantTag.mockImplementation(async (_c, _v, id: number) => void server.add(id))
+    api.removeVariantTag.mockImplementation(async (_c, _v, id: number) => void server.delete(id))
+    api.getVariantTags.mockImplementation(async () => TAGS.filter((t) => server.has(t.id)))
 
     await button().trigger('click')
     await flushPromises()
@@ -129,6 +134,30 @@ describe('row tag dots', () => {
     await flushPromises()
     expect(wrapper.findAll('.tag-dot')).toHaveLength(0)
     expect(button().attributes('aria-label')).toBe('Add tag')
+    wrapper.unmount()
+  })
+
+  it('shows the server tags when the first of two overlapping writes fails', async () => {
+    let failFirst!: (e: Error) => void
+    let finishSecond!: () => void
+    api.assignVariantTag
+      .mockReturnValueOnce(new Promise((_, reject) => (failFirst = reject)))
+      .mockReturnValueOnce(new Promise<void>((resolve) => (finishSecond = resolve)))
+    // What the database holds once the second write (Benign/artifact) landed.
+    api.getVariantTags.mockResolvedValue([TAGS[0], TAGS[1]])
+    const { wrapper, button } = await mountRow({ id: 14, case_id: 1, tag_ids: [2] }, 'case')
+    await button().trigger('click')
+    await flushPromises()
+    menuItems()[2].click() // Reported: will fail
+    menuItems()[0].click() // Benign/artifact: will succeed
+    await flushPromises()
+    failFirst(new Error('offline'))
+    await flushPromises()
+    finishSecond()
+    await flushPromises()
+    expect(button().attributes('aria-label')).toBe(
+      'Tags: Benign/artifact, Pathogenic candidate — change tags'
+    )
     wrapper.unmount()
   })
 
