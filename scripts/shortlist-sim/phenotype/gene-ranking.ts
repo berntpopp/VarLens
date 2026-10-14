@@ -9,8 +9,6 @@
  * `--before <run>` adds that earlier run's rows (same seed → same diseases and profiles).
  * Writes runs/<name>/{cases.json, gene-ranking.md}. Needs `npm run rebuild:node`.
  */
-import Database from 'better-sqlite3-multiple-ciphers'
-import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { openHpoGeneScorer } from '../../../src/main/services/phenotype/hpo-similarity-db'
@@ -20,7 +18,7 @@ import {
   parseHpJson,
   parseHpoaDiseaseTerms
 } from '../../../src/shared/phenotype/hpo-sources'
-import { assertOutsideRepo, HPO_DB, HPO_RAW_DIR, RUNS_DIR } from '../common/paths'
+import { assertOutsideRepo, HPO_DB, RUNS_DIR } from '../common/paths'
 import { rng, shuffle } from '../common/rng'
 import {
   averageRanks,
@@ -30,6 +28,7 @@ import {
   type GeneRankCase,
   type ScorerId
 } from './gene-ranking-report'
+import { readVerifiedSources } from './hpo-files'
 import {
   diseaseSeed,
   generateProfile,
@@ -42,35 +41,6 @@ import {
 const SEED = 20261014
 /** Diseases sampled: ~15 min under heavy.sh (it blocks other lanes); Hit@10 CIs stay ≈ ±3 pp. */
 const DEFAULT_DISEASES = 1000
-
-/** Raw release files, refused unless they are the bytes the DB was built from. */
-function readVerifiedSources(): {
-  ontology: string
-  annotations: string
-  genes: string
-  release: string
-} {
-  const db = new Database(HPO_DB, { readonly: true, fileMustExist: true })
-  const meta = new Map(
-    (db.prepare('SELECT key, value FROM meta').all() as Array<{ key: string; value: string }>).map(
-      (r) => [r.key, r.value]
-    )
-  )
-  db.close()
-  const digests = JSON.parse(meta.get('sources_sha256') ?? '{}') as Record<string, string>
-  const read = (name: string): string => {
-    const bytes = readFileSync(join(HPO_RAW_DIR, name))
-    if (createHash('sha256').update(bytes).digest('hex') !== digests[name])
-      throw new Error(`${name} in ${HPO_RAW_DIR} is not the release ${HPO_DB} was built from`)
-    return bytes.toString('utf8')
-  }
-  return {
-    ontology: read('hp.json'),
-    annotations: read('phenotype.hpoa'),
-    genes: read('genes_to_phenotype.txt'),
-    release: meta.get('hpo_version') ?? 'unknown'
-  }
-}
 
 /** Causal-gene standing: genes scored strictly higher, and other genes tied with it. */
 function standing(scores: Float64Array, causal: number): { higher: number; equal: number } {

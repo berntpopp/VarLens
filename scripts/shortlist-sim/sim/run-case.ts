@@ -97,6 +97,43 @@ export function rankAll(
   return { rows: res.rows, total: res.totalCandidates }
 }
 
+/** Every scorer on the spiked case (inside `withSpikes`), with the wall time of each ranking. */
+export function rankScorers(
+  bg: BackgroundDb,
+  c: SimCase,
+  ids: SpikedIds,
+  scorers: readonly ScorerDef[],
+  fold: number
+): CaseResult[] {
+  const scenario: ScenarioId = bg.scenario
+  const snvOnly = c.causal.every((s) => alleleClassOf(s.row.ref, s.row.alt) === 'snv')
+  return scorers
+    .filter((s) => runsIn(s, scenario))
+    .map((s): CaseResult => {
+      const t0 = performance.now()
+      const { rows, total } = rankAll(bg, s.config(fold))
+      const ms = performance.now() - t0
+      const alleles = ids.causal.map((id) => alleleRank(rows, id))
+      return {
+        caseId: c.id,
+        scorer: s.id,
+        scenario,
+        fold,
+        mode: c.mode,
+        consequenceClass: c.consequenceClass,
+        bg: c.bg,
+        gene: c.gene,
+        newSince2024: c.newSince2024,
+        snvOnly,
+        alleles,
+        decoysTop10: rows.slice(0, 10).filter((r) => ids.decoys.has(r.id)).length,
+        eligible: total,
+        causalEligible: alleles.map((a) => a.rank !== null),
+        ms
+      }
+    })
+}
+
 export function runCase(
   bg: BackgroundDb,
   c: SimCase,
@@ -104,30 +141,5 @@ export function runCase(
   fold: number,
   rnd: () => number
 ): CaseResult[] {
-  const scenario: ScenarioId = bg.scenario
-  const snvOnly = c.causal.every((s) => alleleClassOf(s.row.ref, s.row.alt) === 'snv')
-  return withSpikes(bg, c, rnd, (ids) =>
-    scorers
-      .filter((s) => runsIn(s, scenario))
-      .map((s): CaseResult => {
-        const { rows, total } = rankAll(bg, s.config(fold))
-        const alleles = ids.causal.map((id) => alleleRank(rows, id))
-        return {
-          caseId: c.id,
-          scorer: s.id,
-          scenario,
-          fold,
-          mode: c.mode,
-          consequenceClass: c.consequenceClass,
-          bg: c.bg,
-          gene: c.gene,
-          newSince2024: c.newSince2024,
-          snvOnly,
-          alleles,
-          decoysTop10: rows.slice(0, 10).filter((r) => ids.decoys.has(r.id)).length,
-          eligible: total,
-          causalEligible: alleles.map((a) => a.rank !== null)
-        }
-      })
-  )
+  return withSpikes(bg, c, rnd, (ids) => rankScorers(bg, c, ids, scorers, fold))
 }
