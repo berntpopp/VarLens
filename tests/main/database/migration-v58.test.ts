@@ -42,6 +42,26 @@ describe('migration v58: case_hpo_terms flags', () => {
     )
     db.close()
   })
+
+  it('recovers a partial v58 (excluded added, key missing)', () => {
+    const db = new Database(':memory:')
+    initializeSchema(db)
+    runMigrations(db)
+    db.exec(`ALTER TABLE case_hpo_terms DROP COLUMN "key"; PRAGMA user_version = 57;`)
+    runMigrations(db)
+    const cols = (db.prepare('PRAGMA table_info(case_hpo_terms)').all() as { name: string }[]).map(
+      (c) => c.name
+    )
+    expect(cols).toEqual(expect.arrayContaining(['excluded', 'key']))
+    db.exec(`INSERT INTO cases (id, name, file_path, file_size, variant_count, created_at)
+        VALUES (1, 'c', '/c', 1, 1, 0);
+      INSERT INTO case_hpo_terms (case_id, hpo_id, hpo_label, created_at)
+        VALUES (1, 'HP:0001250', 'Seizure', 0)`)
+    expect(() => db.exec(`UPDATE case_hpo_terms SET excluded = 1, "key" = 1`)).toThrow(
+      /CHECK constraint/
+    )
+    db.close()
+  })
 })
 
 describe.skipIf(!RUN_PG)('migration 0041: case_hpo_terms flags on PostgreSQL', () => {

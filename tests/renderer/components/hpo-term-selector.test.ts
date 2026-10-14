@@ -150,5 +150,63 @@ describe('HpoTermSelector', () => {
         autocomplete.attributes('placeholder') ?? w.find('input').attributes('placeholder')
       ).toContain('Shift+Enter excluded')
     })
+
+    it('a Shift+Enter that picks nothing does not outlive a clear', async () => {
+      const w = mountSelector()
+      const autocomplete = w.findComponent({ name: 'VAutocomplete' })
+      await autocomplete.trigger('keydown', { key: 'Enter', shiftKey: true })
+      autocomplete.vm.$emit('update:modelValue', null)
+      autocomplete.vm.$emit('update:modelValue', { id: 'HP:0004322', name: 'Short stature' })
+      expect(w.emitted('add:term')).toEqual([
+        [{ hpoId: 'HP:0004322', hpoLabel: 'Short stature', excluded: false, key: false }]
+      ])
+    })
+
+    describe('with real input events', () => {
+      async function typeQuery(w: VueWrapper, query: string) {
+        await w.vm.$nextTick() // the input enables once mounted
+        const input = w.get('input')
+        ;(input.element as HTMLInputElement).focus()
+        await input.setValue(query)
+        await vi.waitFor(
+          () =>
+            expect(
+              (w.findComponent({ name: 'VAutocomplete' }).props('items') as unknown[]).length
+            ).toBeGreaterThan(0),
+          { timeout: 3000 }
+        )
+        return input
+      }
+      const added = (w: VueWrapper) =>
+        (w.emitted('add:term') ?? []).map(([t]) => t as { excluded: boolean })
+
+      it('Shift+Tab after typing moves focus without adding a term', async () => {
+        const w = mountSelector()
+        const input = await typeQuery(w, 'Short stature')
+        await input.trigger('keydown', { key: 'Tab', shiftKey: true })
+        await input.trigger('keydown', { key: 'Tab' })
+        expect(w.emitted('add:term')).toBeUndefined()
+      })
+
+      it.each([
+        [false, false],
+        [true, true]
+      ])('Enter with shift=%s adds excluded=%s', async (shiftKey, excluded) => {
+        const w = mountSelector()
+        const input = await typeQuery(w, 'Short stature')
+        await input.trigger('keydown', { key: 'Enter', shiftKey })
+        await vi.waitFor(() => expect(added(w)).toHaveLength(1))
+        expect(added(w)[0].excluded).toBe(excluded)
+      })
+
+      it('an uppercase query (Shift held while typing) still adds present', async () => {
+        const w = mountSelector()
+        const input = await typeQuery(w, 'Short stature')
+        await input.trigger('keydown', { key: 'S', shiftKey: true })
+        await input.trigger('keydown', { key: 'Enter' })
+        await vi.waitFor(() => expect(added(w)).toHaveLength(1))
+        expect(added(w)[0].excluded).toBe(false)
+      })
+    })
   })
 })

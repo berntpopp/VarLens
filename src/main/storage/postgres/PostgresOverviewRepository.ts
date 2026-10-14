@@ -100,11 +100,11 @@ export class PostgresOverviewRepository {
       ),
       this.pool.query<Row>(
         `
-          SELECT hpo_id, hpo_label, COUNT(DISTINCT case_id)::int AS case_count
+          SELECT hpo_id, MIN(hpo_label) AS hpo_label, COUNT(DISTINCT case_id)::int AS case_count
           FROM ${this.table('case_hpo_terms')}
           WHERE NOT excluded
-          GROUP BY hpo_id, hpo_label
-          ORDER BY case_count DESC
+          GROUP BY hpo_id
+          ORDER BY case_count DESC, hpo_id ASC
           LIMIT 25
         `
       )

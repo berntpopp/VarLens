@@ -36,9 +36,11 @@ async function shown(when: string, current: HpoDataStatus): Promise<boolean> {
 }
 
 describe('RankingHpoHint', () => {
-  it('warns when a rule reads hpo_resnik and HPO data is missing or outdated', async () => {
+  it('warns when a rule reads an HPO-derived column and HPO data is missing or outdated', async () => {
     expect(await shown('hpo_resnik:>=:2', status(false))).toBe(true)
     expect(await shown('cadd:>:1 OR hpo_resnik:>=:2', status(true, true))).toBe(true)
+    expect(await shown('hpo_conflicts:>=:1', status(false))).toBe(true)
+    expect(await shown('hpo_best_disease:~:OMIM', status(false))).toBe(true)
   })
 
   it('stays quiet when the data is current or no rule reads hpo_resnik', async () => {

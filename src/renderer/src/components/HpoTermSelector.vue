@@ -204,7 +204,13 @@ function onChipKeydown(event: KeyboardEvent, term: CaseHpoTerm): void {
 /** Shift on the Enter / click that picks a suggestion adds the term as excluded. */
 let addAsExcluded = false
 function rememberShift(event: KeyboardEvent | MouseEvent): void {
-  addAsExcluded = event.shiftKey
+  if (!(event instanceof KeyboardEvent)) {
+    addAsExcluded = event.shiftKey
+    return
+  }
+  addAsExcluded = event.key === 'Enter' && event.shiftKey
+  // Tab only moves focus: kept from VAutocomplete, whose auto-select-first would pick a term.
+  if (event.key === 'Tab') event.stopPropagation()
 }
 
 // The bundled term list: works offline, on desktop and web alike.
@@ -268,9 +274,10 @@ watch(searchQuery, (query) => {
 })
 
 function handleTermSelected(term: HpoSearchResult | null) {
+  const excluded = addAsExcluded
+  addAsExcluded = false
   if (term) {
-    emit('add:term', { hpoId: term.id, hpoLabel: term.name, excluded: addAsExcluded, key: false })
-    addAsExcluded = false
+    emit('add:term', { hpoId: term.id, hpoLabel: term.name, excluded, key: false })
     // Clear after adding; the autocomplete writes the picked title into the search
     // right after this emit, so the search is cleared on the next tick.
     selectedTerm.value = null

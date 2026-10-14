@@ -15,6 +15,7 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import RankScoreTooltip from '../../../../src/renderer/src/components/shortlist/RankScoreTooltip.vue'
+import { phenotypeLines } from '../../../../src/renderer/src/components/shortlist/rank-tooltip-phenotype'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -149,7 +150,7 @@ describe('RankScoreTooltip', () => {
       ]
     }
 
-    it('shows best disease, key-first matches capped at 3, conflicts, and a case-relative rank', () => {
+    it('shows best disease, key-first matches capped at 3, conflicts, and a reference-gene rank', () => {
       const wrapper = mount(RankScoreTooltip, {
         props: { score: 3, components: componentsFixture, pinned: null, evidence: [], hpo },
         global: { plugins: [vuetify] }
@@ -158,8 +159,18 @@ describe('RankScoreTooltip', () => {
       expect(text).toContain('best: Dravet syndrome')
       expect(text).toContain('✓ matched: ★ epilepsy · hypotonia · ataxia · +1')
       expect(text).toContain('⊖ conflicts: microcephaly excluded (80 % in Dravet syndrome)')
-      expect(text).toContain('top 3 % of genes in this case')
+      expect(text).toContain('scores above 97 % of HPO genes')
       expect(text.toLowerCase()).not.toContain('probab')
+    })
+
+    it('rounds the rank down so a near-top tie never claims 100 %', () => {
+      expect(phenotypeLines({ ...hpo, percentile: 0.996 }).rank).toBe(
+        'scores above 99 % of HPO genes'
+      )
+      // 0.29 * 100 is 28.999… in floating point.
+      expect(phenotypeLines({ ...hpo, percentile: 29 / 100 }).rank).toBe(
+        'scores above 29 % of HPO genes'
+      )
     })
 
     it('omits the block without an explanation', () => {

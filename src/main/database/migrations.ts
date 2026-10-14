@@ -2175,12 +2175,18 @@ export function runMigrations(db: Database.Database): void {
     const hpoColumns = (
       db.prepare('PRAGMA table_info(case_hpo_terms)').all() as { name: string }[]
     ).map((c) => c.name)
-    if (hpoColumns.length > 0 && !hpoColumns.includes('excluded')) {
-      db.exec(`ALTER TABLE case_hpo_terms ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0;
-        ALTER TABLE case_hpo_terms ADD COLUMN "key" INTEGER NOT NULL DEFAULT 0
+    // One transaction, each column checked on its own: a crash between the two
+    // ALTERs must not leave "key" missing behind a bumped version.
+    db.transaction(() => {
+      if (hpoColumns.length > 0 && !hpoColumns.includes('excluded')) {
+        db.exec('ALTER TABLE case_hpo_terms ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0')
+      }
+      if (hpoColumns.length > 0 && !hpoColumns.includes('key')) {
+        db.exec(`ALTER TABLE case_hpo_terms ADD COLUMN "key" INTEGER NOT NULL DEFAULT 0
           CHECK (NOT ("key" = 1 AND excluded = 1))`)
-    }
-    db.exec('PRAGMA user_version = 58')
+      }
+      db.exec('PRAGMA user_version = 58')
+    })()
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.
