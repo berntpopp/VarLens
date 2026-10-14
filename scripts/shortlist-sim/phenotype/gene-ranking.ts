@@ -180,7 +180,8 @@ function setup(src: ReturnType<typeof readVerifiedSources>) {
           present: terms.filter((t) => !t.excluded).length,
           excluded: terms.filter((t) => t.excluded).length,
           keys: terms.filter((t) => t.key).length,
-          falseExclusion: arm === 'E2' && draw.falseExclusion !== null,
+          falseExclusion:
+            arm === 'E2' && terms.some((t) => t.excluded && t.hpoId === draw.falseExclusion),
           noiseKey: arm === 'E2' && terms.some((t) => t.key && sampled.noise.includes(t.hpoId)),
           ms,
           scorers: { v2: rate(v2, causal), sprint3: baseline }
