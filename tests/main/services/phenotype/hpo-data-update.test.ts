@@ -23,8 +23,8 @@ function releaseFetch(tag: string, digests: Record<string, string> = {}) {
         tag_name: tag,
         assets: Object.keys(FILES).map((name) => ({
           name,
-          browser_download_url: `https://dl/${tag}/${name}`,
-          digest: digests[name] ?? `sha256:${sha(FILES[name])}`
+          browser_download_url: `https://evil.example/${name}`,
+          digest: name in digests ? digests[name] : `sha256:${sha(FILES[name])}`
         }))
       })
     }
@@ -91,16 +91,50 @@ describe('updateHpoData', () => {
     expect(readdirSync(dir)).toEqual([])
   })
 
-  it('falls back to the pinned tag without digests when the API is unavailable', async () => {
+  it('falls back to the pinned release and its pinned digests when the API is unavailable', async () => {
     const fetch = vi.fn(async (url: string) => {
       if (url === HPO_DATA_CONFIG.latestReleaseUrl) return new Response('', { status: 403 })
       return new Response(FILES[url.split('/').pop() ?? ''])
     })
-    const result = await updateHpoData(deps(fetch as never))
-    expect(result.status.version).toBe(HPO_DATA_CONFIG.defaultTag)
+    // The toy files do not match the pinned real-release digests: fail closed.
+    await expect(updateHpoData(deps(fetch as never))).rejects.toThrow(
+      /Checksum mismatch for hp.json/
+    )
     expect(fetch).toHaveBeenCalledWith(
-      `${HPO_DATA_CONFIG.downloadBaseUrl}/${HPO_DATA_CONFIG.defaultTag}/hp.json`,
+      `${HPO_DATA_CONFIG.downloadBaseUrl}/${HPO_DATA_CONFIG.defaultRelease.tag}/hp.json`,
       expect.anything()
     )
+    expect(readdirSync(dir)).toEqual([])
+  })
+
+  it('downloads only from the fixed release base, never an API-supplied URL', async () => {
+    const fetch = releaseFetch('v2026-09-01')
+    await updateHpoData(deps(fetch))
+    const urls = fetch.mock.calls.map(([url]) => url).slice(1)
+    expect(urls).toEqual(
+      Object.keys(FILES).map((name) => `${HPO_DATA_CONFIG.downloadBaseUrl}/v2026-09-01/${name}`)
+    )
+  })
+
+  it.each([
+    ['an unexpected tag', '../../evil', {}],
+    ['a missing digest', 'v2026-10-01', { 'hp.json': '' }]
+  ])('refuses a release with %s', async (_label, tag, digests) => {
+    await expect(updateHpoData(deps(releaseFetch(tag, digests)))).rejects.toThrow(
+      /unexpected tag|lacks a sha256 digest/
+    )
+    expect(readdirSync(dir)).toEqual([])
+  })
+
+  it('refuses a download larger than the cap', async () => {
+    const fetch = releaseFetch('v2026-09-01')
+    const real = fetch.getMockImplementation()!
+    fetch.mockImplementation(async (url: string) => {
+      if (!url.endsWith('/hp.json')) return real(url)
+      const big = String(HPO_DATA_CONFIG.maxDownloadBytes + 1)
+      return new Response('x', { headers: { 'content-length': big } })
+    })
+    await expect(updateHpoData(deps(fetch))).rejects.toThrow(/refused/)
+    expect(readdirSync(dir)).toEqual([])
   })
 })

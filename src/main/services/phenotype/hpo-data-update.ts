@@ -1,7 +1,7 @@
 /**
  * Download + install of the HPO release files behind `hpo_resnik` (#600).
  * Files land in a temp dir next to the DB, are checked against the GitHub
- * asset `digest` when the API supplies one (fail closed), preprocessed into
+ * asset `digest` (or the pinned digests; no digest → refused), preprocessed into
  * `<db>.tmp` and atomically renamed over the DB. Any failure leaves the
  * installed data untouched.
  */
@@ -22,64 +22,78 @@ export interface HpoUpdateDeps {
   build: (request: HpoBuildRequest) => Promise<void>
 }
 
-interface ReleaseAsset {
-  url: string
-  /** `sha256:<hex>` when GitHub reports it. */
-  digest?: string
+interface GithubRelease {
+  tag_name?: unknown
+  assets?: Array<{ name: string; digest?: string | null }>
 }
 
-interface GithubRelease {
-  tag_name?: string
-  assets?: Array<{ name: string; browser_download_url: string; digest?: string | null }>
-}
+/** asset file name → expected sha256 hex; every asset must have one (fail closed). */
+type ReleaseDigests = Record<string, string>
 
 const ASSET_KEYS = Object.keys(HPO_DATA_CONFIG.assets) as HpoAssetKey[]
+const ASSET_NAMES = Object.values(HPO_DATA_CONFIG.assets)
+const SHA256 = /^sha256:([0-9a-f]{64})$/
 
-/** Latest release from the API; the pinned tag (no digests) if the API is unreachable. */
-async function resolveRelease(
-  fetch: Fetch
-): Promise<{ tag: string; assets: Record<HpoAssetKey, ReleaseAsset> }> {
+/**
+ * Latest release tag + asset digests from the API; the pinned release if the
+ * API is unreachable. Only the tag and digests are taken from the response:
+ * download URLs are always built from the fixed HPO release base.
+ */
+async function resolveRelease(fetch: Fetch): Promise<{ tag: string; digests: ReleaseDigests }> {
   const latest = await fetch(HPO_DATA_CONFIG.latestReleaseUrl, {
     headers: { Accept: 'application/vnd.github+json' },
     signal: AbortSignal.timeout(30_000)
   })
     .then(async (r) => (r.ok ? ((await r.json()) as GithubRelease) : null))
     .catch(() => null)
-  if (latest?.tag_name !== undefined && latest.assets !== undefined) {
-    const byName = new Map(latest.assets.map((a) => [a.name, a]))
-    const assets = {} as Record<HpoAssetKey, ReleaseAsset>
-    for (const key of ASSET_KEYS) {
-      const asset = byName.get(HPO_DATA_CONFIG.assets[key])
-      if (asset === undefined)
-        throw new Error(`HPO release ${latest.tag_name} lacks ${HPO_DATA_CONFIG.assets[key]}`)
-      assets[key] = { url: asset.browser_download_url, digest: asset.digest ?? undefined }
-    }
-    return { tag: latest.tag_name, assets }
+  if (latest === null) return { ...HPO_DATA_CONFIG.defaultRelease }
+  const tag = latest.tag_name
+  if (typeof tag !== 'string' || !HPO_DATA_CONFIG.tagPattern.test(tag)) {
+    throw new Error('HPO release API returned an unexpected tag')
   }
-  const tag = HPO_DATA_CONFIG.defaultTag
-  const assets = {} as Record<HpoAssetKey, ReleaseAsset>
-  for (const key of ASSET_KEYS) {
-    assets[key] = {
-      url: `${HPO_DATA_CONFIG.downloadBaseUrl}/${tag}/${HPO_DATA_CONFIG.assets[key]}`
-    }
+  const digests: ReleaseDigests = {}
+  for (const name of ASSET_NAMES) {
+    const digest = SHA256.exec(latest.assets?.find((a) => a.name === name)?.digest ?? '')?.[1]
+    if (digest === undefined)
+      throw new Error(`HPO release ${tag} lacks a sha256 digest for ${name}`)
+    digests[name] = digest
   }
-  return { tag, assets }
+  return { tag, digests }
+}
+
+/** Response body, refused once it exceeds `maxDownloadBytes`. */
+async function readCapped(response: Response, name: string): Promise<Buffer> {
+  const max = HPO_DATA_CONFIG.maxDownloadBytes
+  if (Number(response.headers.get('content-length') ?? 0) > max || response.body === null) {
+    throw new Error(`Download of ${name} refused: missing body or larger than ${max} bytes`)
+  }
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+    total += chunk.byteLength
+    if (total > max) throw new Error(`Download of ${name} exceeds ${max} bytes`)
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
 }
 
 async function download(
   fetch: Fetch,
+  tag: string,
   name: string,
-  asset: ReleaseAsset,
+  expectedSha256: string,
   path: string
 ): Promise<string> {
-  const response = await fetch(asset.url, {
+  const response = await fetch(`${HPO_DATA_CONFIG.downloadBaseUrl}/${tag}/${name}`, {
     signal: AbortSignal.timeout(HPO_DATA_CONFIG.requestTimeoutMs)
   })
   if (!response.ok) throw new Error(`Download of ${name} failed: HTTP ${response.status}`)
-  const bytes = Buffer.from(await response.arrayBuffer())
+  const bytes = await readCapped(response, name)
   const sha256 = createHash('sha256').update(bytes).digest('hex')
-  if (asset.digest !== undefined && asset.digest !== `sha256:${sha256}`) {
-    throw new Error(`Checksum mismatch for ${name}: expected ${asset.digest}, got sha256:${sha256}`)
+  if (sha256 !== expectedSha256) {
+    throw new Error(
+      `Checksum mismatch for ${name}: expected sha256:${expectedSha256}, got sha256:${sha256}`
+    )
   }
   writeFileSync(path, bytes)
   return sha256
@@ -103,7 +117,13 @@ export async function updateHpoData(deps: HpoUpdateDeps): Promise<HpoDataUpdateR
     for (const key of ASSET_KEYS) {
       const name = HPO_DATA_CONFIG.assets[key]
       files[key] = join(tmpDir, name)
-      sha256[name] = await download(deps.fetch, name, release.assets[key], files[key])
+      sha256[name] = await download(
+        deps.fetch,
+        release.tag,
+        name,
+        release.digests[name],
+        files[key]
+      )
     }
     await deps.build({ files, meta: { release: release.tag, sha256 }, outPath })
     renameSync(outPath, deps.dbPath)
