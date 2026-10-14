@@ -829,11 +829,13 @@ export const mockApi: WindowAPI = {
     removeCohort: async () => {},
     setCohorts: async () => {},
     getHpoTerms: async () => [],
-    assignHpoTerm: async (caseId, hpoId, hpoLabel) => ({
+    assignHpoTerm: async (caseId, hpoId, hpoLabel, flags) => ({
       id: 1,
       case_id: caseId,
       hpo_id: hpoId,
       hpo_label: hpoLabel,
+      excluded: flags?.excluded ?? false,
+      key: !(flags?.excluded ?? false) && (flags?.key ?? false),
       created_at: Date.now()
     }),
     removeHpoTerm: async () => {},

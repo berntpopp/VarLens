@@ -208,6 +208,46 @@ describe('useCaseMetadata write cluster — IpcResult unwrapping', () => {
       expect(phenotypeChange.value).toEqual({ caseId })
     })
 
+    it('upserts status flags in place and rolls back to the previous flags on failure', async () => {
+      const present: CaseHpoTerm = {
+        id: 7,
+        case_id: caseId,
+        hpo_id: 'HP:0000252',
+        hpo_label: 'Microcephaly',
+        excluded: false,
+        key: true,
+        created_at: 1_700_000_000_000
+      }
+      const pending = deferred<unknown>()
+      window.api.caseMetadata.assignHpoTerm = vi.fn().mockReturnValue(pending.promise)
+
+      const [result, appInstance] = withSetup(() => useCaseMetadata())
+      app = appInstance
+      result.metadataCache.value.set(caseId, makeFullMetadata({ hpoTerms: [present] }))
+
+      phenotypeChange.value = null
+      // key requested together with excluded: the optimistic row drops key, like the repository.
+      const call = result.assignHpoTerm(caseId, present.hpo_id, present.hpo_label, {
+        excluded: true,
+        key: true
+      })
+      await flushPromises()
+      expect(window.api.caseMetadata.assignHpoTerm).toHaveBeenCalledWith(
+        caseId,
+        present.hpo_id,
+        present.hpo_label,
+        { excluded: true, key: true }
+      )
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([
+        { ...present, excluded: true, key: false }
+      ])
+
+      pending.resolve(fakeSerializableError)
+      await expect(call).rejects.toMatchObject({ code: 'DB_ERROR' })
+      expect(result.metadataCache.value.get(caseId)?.hpoTerms).toEqual([present])
+      expect(phenotypeChange.value).toBeNull()
+    })
+
     it('reverts the optimistic push when assignHpoTerm fails (duplicate HPO term)', async () => {
       window.api.caseMetadata.assignHpoTerm = vi.fn().mockResolvedValue(fakeSerializableError)
 

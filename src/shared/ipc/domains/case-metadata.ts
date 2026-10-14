@@ -9,6 +9,7 @@ import type {
   CaseExternalId
 } from '../../types/api'
 import type { IpcResult } from '../../types/errors'
+import type { HpoTermFlags } from '../../types/hpo-profile'
 
 export interface CaseMetadataDomainContract {
   get: (caseId: number) => Promise<IpcResult<CaseMetadata | null>>
@@ -29,7 +30,9 @@ export interface CaseMetadataDomainContract {
   assignHpoTerm: (
     caseId: number,
     hpoId: string,
-    hpoLabel: string
+    hpoLabel: string,
+    // hpo2: optional flags added by the ui lane; the data lane forwards them in preload/handler.
+    flags?: HpoTermFlags
   ) => Promise<IpcResult<CaseHpoTerm>>
   removeHpoTerm: (caseId: number, hpoId: string) => Promise<IpcResult<void>>
   getDataInfo: (caseId: number) => Promise<IpcResult<CaseDataInfo | null>>

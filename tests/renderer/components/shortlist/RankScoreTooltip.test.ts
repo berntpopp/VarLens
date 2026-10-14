@@ -122,4 +122,52 @@ describe('RankScoreTooltip', () => {
       expect(withPhase('possible')).toContain('Possible compound heterozygous')
     })
   })
+
+  describe('phenotype block (rank_hpo)', () => {
+    const match = (label: string, key = false) => ({
+      patientTerm: 'HP:1',
+      patientLabel: label,
+      diseaseTerm: 'HP:1',
+      diseaseLabel: label,
+      key,
+      frequency: 0.5
+    })
+    const hpo = {
+      score: 0.62,
+      percentile: 0.97,
+      diseaseId: 'OMIM:607208',
+      diseaseLabel: 'Dravet syndrome',
+      matched: [match('hypotonia'), match('epilepsy', true), match('ataxia'), match('ID')],
+      conflicts: [
+        {
+          excludedTerm: 'HP:0000252',
+          excludedLabel: 'microcephaly',
+          diseaseTerm: 'HP:0000252',
+          diseaseLabel: 'Microcephaly',
+          frequency: 0.8
+        }
+      ]
+    }
+
+    it('shows best disease, key-first matches capped at 3, conflicts, and a case-relative rank', () => {
+      const wrapper = mount(RankScoreTooltip, {
+        props: { score: 3, components: componentsFixture, pinned: null, evidence: [], hpo },
+        global: { plugins: [vuetify] }
+      })
+      const text = wrapper.get('[data-testid="rank-tooltip-phenotype"]').text()
+      expect(text).toContain('best: Dravet syndrome')
+      expect(text).toContain('✓ matched: ★ epilepsy · hypotonia · ataxia · +1')
+      expect(text).toContain('⊖ conflicts: microcephaly excluded (80 % in Dravet syndrome)')
+      expect(text).toContain('top 3 % of genes in this case')
+      expect(text.toLowerCase()).not.toContain('probab')
+    })
+
+    it('omits the block without an explanation', () => {
+      const wrapper = mount(RankScoreTooltip, {
+        props: { score: 3, components: componentsFixture, pinned: null, evidence: [] },
+        global: { plugins: [vuetify] }
+      })
+      expect(wrapper.find('[data-testid="rank-tooltip-phenotype"]').exists()).toBe(false)
+    })
+  })
 })

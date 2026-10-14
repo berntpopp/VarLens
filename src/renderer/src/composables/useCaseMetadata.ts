@@ -28,6 +28,7 @@ import type {
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { notifyPhenotypeChanged } from './phenotypeChanges'
+import type { HpoTermFlags } from '../../../shared/types/hpo-profile'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
 const MAX_METADATA_CACHE_SIZE = 200
@@ -389,37 +390,47 @@ export function useCaseMetadata() {
     return newCohort
   }
 
-  // Assign HPO term to case with optimistic update
-  async function assignHpoTerm(caseId: number, hpoId: string, hpoLabel: string): Promise<void> {
+  // Assign (upsert) an HPO term with its status flags, optimistic with rollback.
+  async function assignHpoTerm(
+    caseId: number,
+    hpoId: string,
+    hpoLabel: string,
+    flags?: HpoTermFlags
+  ): Promise<void> {
     if (!api) return
     const generation = cacheGeneration
     await serializeCaseMutation(caseId, generation, async () => {
       const current = metadataCache.value.get(caseId)
-      const newTerm: CaseHpoTerm = {
+      const previousTerms = current?.hpoTerms ?? []
+      const excluded = flags?.excluded ?? false
+      const optimistic: CaseHpoTerm = {
         id: 0,
         case_id: caseId,
+        created_at: Date.now(),
+        ...previousTerms.find((t) => t.hpo_id === hpoId),
         hpo_id: hpoId,
         hpo_label: hpoLabel,
-        created_at: Date.now()
+        excluded,
+        // An excluded term can never be key (the repository enforces it too).
+        key: !excluded && (flags?.key ?? false)
       }
 
       if (current) {
-        current.hpoTerms.push(newTerm)
+        current.hpoTerms = previousTerms.some((t) => t.hpo_id === hpoId)
+          ? previousTerms.map((t) => (t.hpo_id === hpoId ? optimistic : t))
+          : [...previousTerms, optimistic]
         triggerCacheUpdate()
       }
 
       try {
         const created = unwrapIpcResult(
-          await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel)
+          await api.caseMetadata.assignHpoTerm(caseId, hpoId, hpoLabel, flags)
         )
         if (!isCurrentGeneration(generation)) return
         notifyPhenotypeChanged(caseId)
         if (current) {
-          const index = current.hpoTerms.findIndex((t) => t.hpo_id === hpoId)
-          if (index !== -1) {
-            current.hpoTerms[index] = created
-            triggerCacheUpdate()
-          }
+          current.hpoTerms = current.hpoTerms.map((t) => (t.hpo_id === hpoId ? created : t))
+          triggerCacheUpdate()
         }
       } catch (error) {
         if (!isCurrentGeneration(generation)) return
@@ -428,7 +439,7 @@ export function useCaseMetadata() {
           'case-metadata'
         )
         if (current) {
-          current.hpoTerms = current.hpoTerms.filter((t) => t.hpo_id !== hpoId)
+          current.hpoTerms = previousTerms
           triggerCacheUpdate()
         }
         throw error

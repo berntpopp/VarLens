@@ -14,6 +14,9 @@ export interface RowHoverTarget {
   rowId: Ref<string | null>
   onMouseover: (event: MouseEvent) => void
   onMouseout: (event: MouseEvent) => void
+  /** Keyboard: a focused trigger opens at once, losing focus closes. */
+  onFocusin: (event: FocusEvent) => void
+  onFocusout: (event: FocusEvent) => void
   close: () => void
 }
 
@@ -63,7 +66,20 @@ export function useRowHoverTarget(attribute: string, openDelayMs = 400): RowHove
     close()
   }
 
+  function onFocusin(event: FocusEvent): void {
+    const trigger = triggerOf(event.target)
+    if (trigger === null) return
+    clearTimer()
+    element.value = trigger
+    rowId.value = trigger.getAttribute(attribute)
+    open.value = true
+  }
+
+  function onFocusout(event: FocusEvent): void {
+    if (triggerOf(event.target) !== null) close()
+  }
+
   onBeforeUnmount(clearTimer)
 
-  return { open, element, rowId, onMouseover, onMouseout, close }
+  return { open, element, rowId, onMouseover, onMouseout, onFocusin, onFocusout, close }
 }

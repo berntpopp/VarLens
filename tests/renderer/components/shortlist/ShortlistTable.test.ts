@@ -11,7 +11,7 @@
  * Plan: .planning/plans/2026-04-11-unified-shortlist-plan.md (Task 1.D)
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -95,6 +95,39 @@ describe('ShortlistTable', () => {
     })
     expect(wrapper.find('[data-rank-tip="1"]').text()).toBe('+12.5')
     expect(wrapper.find('[data-rank-tip="2"]').text()).toBe('0.73')
+  })
+
+  it('opens the score tooltip, with the phenotype block, when the score cell gets focus', async () => {
+    const wrapper = mount(ShortlistTable, {
+      props: {
+        rows: [
+          row({
+            rank_evidence: [],
+            rank_hpo: {
+              score: 0.5,
+              percentile: 0.9,
+              diseaseId: 'OMIM:1',
+              diseaseLabel: 'Dravet syndrome',
+              matched: [],
+              conflicts: []
+            }
+          })
+        ]
+      },
+      attachTo: document.body,
+      global: { plugins: [vuetify] }
+    })
+    const cell = wrapper.get('[data-rank-tip="1"]')
+    expect(cell.attributes('tabindex')).toBe('0')
+    await cell.trigger('focusin')
+    await vi.waitFor(() =>
+      expect(
+        document.body.querySelector('[data-testid="rank-tooltip-phenotype"]')?.textContent
+      ).toContain('Dravet syndrome')
+    )
+    await cell.trigger('keydown', { key: 'Escape' })
+    await cell.trigger('focusout')
+    wrapper.unmount()
   })
 
   it('renders the merged Links column as keyboard-reachable anchors (case/cohort parity)', () => {

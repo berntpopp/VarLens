@@ -1,24 +1,73 @@
 <template>
   <div>
-    <!-- Display assigned terms as chips -->
-    <div v-if="modelValue.length > 0" class="d-flex flex-wrap ga-1 mb-2">
-      <v-chip
-        v-for="term in modelValue"
-        :key="term.hpo_id"
-        closable
-        size="small"
-        color="info"
-        variant="tonal"
-        :disabled="disabled"
-        @click:close="$emit('remove:term', term.hpo_id)"
+    <!-- Assigned terms: present and excluded rows (spec 2026-10-14 §4) -->
+    <template v-if="modelValue.length > 0">
+      <div
+        v-for="group in groups"
+        :key="group.name"
+        role="group"
+        :aria-label="group.label"
+        class="d-flex flex-wrap align-center ga-1 mb-2"
+        :data-testid="`hpo-group-${group.name}`"
       >
-        {{ term.hpo_label }}
-        <v-tooltip activator="parent" location="top">
-          {{ term.hpo_id }} - {{ term.hpo_label }}
-        </v-tooltip>
-      </v-chip>
-    </div>
-    <div v-else class="text-muted text-body-medium mb-2">No phenotype terms assigned</div>
+        <span class="hpo-group-label text-caption text-medium-emphasis">{{ group.title }}</span>
+        <v-menu
+          v-for="term in group.terms"
+          :key="term.hpo_id"
+          location="bottom start"
+          :disabled="disabled"
+        >
+          <template #activator="{ props: menuProps }">
+            <v-chip
+              v-bind="menuProps"
+              closable
+              size="small"
+              :color="term.excluded ? 'error' : 'info'"
+              variant="tonal"
+              :prepend-icon="hpoTermIcon(term)"
+              :class="{ 'font-weight-bold': term.key }"
+              :disabled="disabled"
+              :aria-label="hpoTermAriaLabel(term)"
+              aria-keyshortcuts="x k Delete"
+              :data-testid="`hpo-chip-${term.hpo_id}`"
+              @keydown="onChipKeydown($event, term)"
+              @click:close="remove(term)"
+            >
+              <template v-if="term.excluded">{{ COPY.excludedPrefix }}</template>
+              <span :class="{ 'text-decoration-line-through': term.excluded }">
+                {{ term.hpo_label }}
+              </span>
+              <v-tooltip activator="parent" location="top">
+                {{ term.hpo_id }} - {{ term.hpo_label }} · {{ COPY.chipShortcuts }}
+              </v-tooltip>
+            </v-chip>
+          </template>
+          <v-list density="compact" :aria-label="COPY.menuLabel(term.hpo_label)">
+            <v-list-item
+              :active="!term.excluded"
+              :prepend-icon="mdiPlusCircleOutline"
+              :title="COPY.present"
+              @click="update(term, { excluded: false, key: term.key })"
+            />
+            <v-list-item
+              :active="term.excluded"
+              :prepend-icon="mdiMinusCircleOutline"
+              :title="COPY.excludedMenu"
+              @click="update(term, { excluded: true, key: false })"
+            />
+            <v-list-item
+              :active="term.key"
+              :disabled="term.excluded"
+              :prepend-icon="term.key ? mdiStar : mdiStarOutline"
+              :title="COPY.key"
+              @click="update(term, { excluded: false, key: !term.key })"
+            />
+            <v-list-item :prepend-icon="mdiClose" :title="COPY.remove" @click="remove(term)" />
+          </v-list>
+        </v-menu>
+      </div>
+    </template>
+    <div v-else class="text-muted text-body-medium mb-2">{{ COPY.empty }}</div>
 
     <!-- Capability off (e.g. the document has not loaded): say so instead of "No matching terms" -->
     <div
@@ -33,6 +82,7 @@
     <!-- Autocomplete for adding new terms -->
     <v-autocomplete
       v-else
+      ref="searchField"
       v-model="selectedTerm"
       v-model:search="searchQuery"
       :items="searchResults"
@@ -44,12 +94,15 @@
       variant="outlined"
       hide-details
       clearable
+      auto-select-first
       :disabled="disabled || !hpoApiAvailable"
       label="Search HPO terms"
-      placeholder="Type a term or HPO ID"
+      :placeholder="COPY.placeholder"
+      aria-keyshortcuts="Enter Shift+Enter"
       :list-props="HPO_LIST_PROPS"
       data-testid="hpo-term-search"
       no-filter
+      @keydown.capture="rememberShift"
       @update:model-value="handleTermSelected"
     >
       <template #item="{ item, props: itemProps }">
@@ -75,11 +128,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, nextTick, ref, watch, onMounted } from 'vue'
+import {
+  mdiClose,
+  mdiMinusCircleOutline,
+  mdiPlusCircleOutline,
+  mdiStar,
+  mdiStarOutline
+} from '@mdi/js'
 import { useDebounce } from '../composables/useDebounce'
 import { useHpoBundled } from '../composables/useHpoBundled'
 import type { CaseHpoTerm } from '../../../shared/types/api'
 import { runtimeFeatureUnavailableReason } from '../utils/runtime-features'
+import { hpoTermAriaLabel, hpoTermIcon, type HpoTermChange } from '../utils/hpo-term-status'
+import { HPO_TERM_COPY as COPY } from '../config/hpoTermCopy'
 
 interface HpoSearchResult {
   id: string
@@ -92,15 +154,71 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'add:term': [term: { hpoId: string; hpoLabel: string }]
+  'add:term': [term: HpoTermChange]
+  'update:term': [term: HpoTermChange]
   'remove:term': [hpoId: string]
 }>()
+
+const groups = computed(() =>
+  [
+    {
+      name: 'present',
+      title: COPY.present,
+      label: COPY.presentGroup,
+      terms: props.modelValue.filter((t) => !t.excluded)
+    },
+    {
+      name: 'excluded',
+      title: COPY.excluded,
+      label: COPY.excludedGroup,
+      terms: props.modelValue.filter((t) => t.excluded)
+    }
+  ].filter((g) => g.terms.length > 0)
+)
+
+const searchField = ref<{ focus: () => void } | null>(null)
+/** Focus goes back to the search input after every change (the chip may re-render). */
+function refocusInput(): void {
+  void nextTick(() => searchField.value?.focus())
+}
+
+function update(term: CaseHpoTerm, flags: { excluded: boolean; key: boolean }): void {
+  if (flags.excluded !== term.excluded || flags.key !== term.key)
+    emit('update:term', { hpoId: term.hpo_id, hpoLabel: term.hpo_label, ...flags })
+  refocusInput()
+}
+
+function remove(term: CaseHpoTerm): void {
+  emit('remove:term', term.hpo_id)
+  refocusInput()
+}
+
+function onChipKeydown(event: KeyboardEvent, term: CaseHpoTerm): void {
+  if (props.disabled === true || event.ctrlKey || event.metaKey || event.altKey) return
+  const key = event.key.toLowerCase()
+  if (key === 'x') update(term, { excluded: !term.excluded, key: false })
+  else if (key === 'k' && !term.excluded) update(term, { excluded: false, key: !term.key })
+  else if (event.key === 'Delete' || event.key === 'Backspace') remove(term)
+  else return
+  event.preventDefault()
+}
+
+/** Shift on the Enter / click that picks a suggestion adds the term as excluded. */
+let addAsExcluded = false
+function rememberShift(event: KeyboardEvent | MouseEvent): void {
+  addAsExcluded = event.shiftKey
+}
 
 // The bundled term list: works offline, on desktop and web alike.
 const { search: searchBundledTerms, loadError } = useHpoBundled()
 
 /** Name the suggestion listbox and make its scroll region keyboard-reachable (axe). */
-const HPO_LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Matching HPO terms', tabindex: 0 }
+const HPO_LIST_PROPS: Record<string, unknown> = {
+  'aria-label': 'Matching HPO terms',
+  tabindex: 0,
+  // List items turn Enter into a click that keeps shiftKey, so one capture covers both.
+  onClickCapture: (event: MouseEvent) => rememberShift(event)
+}
 
 const searchQuery = ref('')
 const searchResults = ref<HpoSearchResult[]>([])
@@ -150,11 +268,19 @@ watch(searchQuery, (query) => {
 
 function handleTermSelected(term: HpoSearchResult | null) {
   if (term) {
-    emit('add:term', { hpoId: term.id, hpoLabel: term.name })
+    emit('add:term', { hpoId: term.id, hpoLabel: term.name, excluded: addAsExcluded, key: false })
+    addAsExcluded = false
     // Clear selection and search after adding
     selectedTerm.value = null
     searchQuery.value = ''
     searchResults.value = []
+    refocusInput()
   }
 }
 </script>
+
+<style scoped>
+.hpo-group-label {
+  min-width: 4.5rem;
+}
+</style>
