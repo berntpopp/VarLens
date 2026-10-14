@@ -29,6 +29,7 @@ import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
 import { notifyPhenotypeChanged } from './phenotypeChanges'
 import type { HpoTermFlags } from '../../../shared/types/hpo-profile'
+import { resolveHpoTermFlags } from '../../../shared/utils/hpo-term-flags'
 
 /** Maximum cached case metadata entries — evicts oldest on overflow */
 const MAX_METADATA_CACHE_SIZE = 200
@@ -403,22 +404,21 @@ export function useCaseMetadata() {
       const current = metadataCache.value.get(caseId)
       const previousTerms = current?.hpoTerms ?? []
       const existing = previousTerms.find((t) => t.hpo_id === hpoId)
-      // Flags set the whole status (missing = false); without flags a term keeps its status.
-      const excluded = flags ? flags.excluded === true : (existing?.excluded ?? false)
+      // Flags set the whole status (excluded wins over key); without flags a term keeps its own.
       const optimistic: CaseHpoTerm = {
         id: 0,
         case_id: caseId,
         created_at: Date.now(),
+        excluded: false,
+        key: false,
         ...existing,
         hpo_id: hpoId,
         hpo_label: hpoLabel,
-        excluded,
-        // An excluded term can never be key (the repository enforces it too).
-        key: flags ? !excluded && flags.key === true : (existing?.key ?? false)
+        ...(flags ? resolveHpoTermFlags(flags) : {})
       }
 
       if (current) {
-        current.hpoTerms = previousTerms.some((t) => t.hpo_id === hpoId)
+        current.hpoTerms = existing
           ? previousTerms.map((t) => (t.hpo_id === hpoId ? optimistic : t))
           : [...previousTerms, optimistic]
         triggerCacheUpdate()
