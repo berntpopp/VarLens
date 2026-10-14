@@ -107,11 +107,12 @@ const typeCounts = ref<Record<string, number>>({})
  * IPC round-trip finished. Drives the deferred FilterToolbar mount.
  */
 const typeCountsLoaded = computed(() => Object.keys(typeCounts.value).length > 0)
+const typeCountsSettled = ref(false)
 
 /**
- * Pass-9 #3 (Sprint A A3): deferred FilterToolbar mount. Flips true the
- * first time type counts have loaded AND we are not sitting on the
- * Shortlist tab — i.e. a per-type table is actually showing. Once true
+ * Pass-9 #3 (Sprint A A3): deferred FilterToolbar mount. Flips true once the
+ * type counts settled (loaded or failed: the toolbar owns `?f=`/`?q=`, which
+ * the table waits for) and a per-type tab, not Shortlist, shows. Once true
  * it never resets, so the user can toggle freely between a per-type tab
  * and Shortlist without remounting the FilterToolbar (which would re-run
  * its `loadFilterOptions` IPC). The outer per-type region stays on
@@ -120,7 +121,7 @@ const typeCountsLoaded = computed(() => Object.keys(typeCounts.value).length > 0
 const firstActivated = ref(false)
 
 watch(
-  [typeCountsLoaded, selectedVariantType],
+  [typeCountsSettled, selectedVariantType],
   ([loaded, type]) => {
     if (loaded && type !== 'shortlist' && !firstActivated.value) {
       firstActivated.value = true
@@ -156,6 +157,7 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
     return
   } finally {
     countsLoading.value = false
+    typeCountsSettled.value = true
   }
 
   // Default-selection rule: if the user hasn't explicitly picked a tab
