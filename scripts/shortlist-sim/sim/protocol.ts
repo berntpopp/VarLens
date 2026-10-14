@@ -1,7 +1,10 @@
 /** Protocol helpers: canonical JSON identity, fold tuning, the phenotype-enrichment gene set. */
+import { readFileSync } from 'node:fs'
+import { compileRuleset } from '../../../src/main/services/scoring/evidence'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
 import { tuneRuleset, type TuneInput, type TuneResult } from '../stats/tune'
 import type { BackgroundInfo } from './background-db'
+import type { TemplateId, TunedByTemplate } from './templates'
 
 /** Sorted keys, no whitespace, `sha256` field dropped (spec §11.6). */
 export function canonicalJson(value: unknown): string {
@@ -46,6 +49,32 @@ export function tuneFolds(
     bootstrap: { reps: opts.reps, seed: opts.seed }
   })
   return { perFold, refit }
+}
+
+/** A pre-registered ruleset for a frozen rerun (#584); throws listing every validation problem. */
+export function loadFrozenRuleset(file: string): EvidenceRuleset {
+  const ruleset = JSON.parse(readFileSync(file, 'utf8')) as EvidenceRuleset
+  compileRuleset(ruleset) // the production ruleset validation (rulesetProblems)
+  return ruleset
+}
+
+/**
+ * Fold rulesets per template: a frozen ruleset unchanged in every fold (`tune` never runs), or
+ * the result of `tune` (Phase A assignment + fold tuning).
+ */
+export async function foldRulesets(
+  frozen: EvidenceRuleset | undefined,
+  template: TemplateId,
+  k: number,
+  tune: () => Promise<Record<TemplateId, FoldTuning>>
+): Promise<{ tunedBy: TunedByTemplate; tunings?: Record<TemplateId, FoldTuning> }> {
+  if (frozen !== undefined)
+    return { tunedBy: { [template]: Array<EvidenceRuleset>(k).fill(frozen) } }
+  const tunings = await tune()
+  const tunedBy = Object.fromEntries(
+    Object.entries(tunings).map(([tid, t]) => [tid, t.perFold])
+  ) as TunedByTemplate
+  return { tunedBy, tunings }
 }
 
 /** Genes in the background's top decile of `hpo_sim_score` (> 0), for `pheno_enriched`. */
