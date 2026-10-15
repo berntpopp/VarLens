@@ -19,6 +19,7 @@ import { triggerStartupRebuildIfNeeded as triggerFromIndex } from '../../src/mai
 import { triggerStartupRebuildIfNeeded } from '../../src/main/ipc/handlers/cohort-logic'
 import { exportCohort } from '../../src/main/ipc/handlers/export-logic'
 import { DatabaseManager } from '../../src/main/services/DatabaseManager'
+import { listActiveDatabaseWork } from '../../src/main/services/jobs/database-activity'
 import { RecentDatabasesService } from '../../src/main/services/RecentDatabasesService'
 import { COHORT_SUMMARY_REFRESHING_MESSAGE } from '../../src/shared/errors/cohort-summary-refreshing'
 import {
@@ -66,9 +67,13 @@ describe('automatic start with a summary flagged stale by migration v42', () => 
   })
 
   afterEach(async () => {
+    // The summary is fresh before the rebuild worker leaves the process-wide
+    // registry; closing in that gap made the next test's open fail with
+    // "work is in progress" (#646).
+    await vi.waitFor(() => expect(listActiveDatabaseWork()).toEqual([]), { timeout: 20_000 })
     await manager.close()
     rmSync(dir, { recursive: true, force: true })
-  })
+  }, 30_000)
 
   /** A v41 default database: its summary predates the het class of `1/.`. */
   function seedV41Default(key?: string): void {
