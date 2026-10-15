@@ -25,7 +25,7 @@ import type { CompHetPhase } from '../../../../shared/utils/phasing'
 import type { EvidenceContribution } from '../../../../shared/types/evidence-ruleset'
 import type { HpoExplanation } from '../../../../shared/types/hpo-profile'
 import { formatPoints, formatRankScore } from '../../utils/formatters'
-import { phenotypeLines } from './rank-tooltip-phenotype'
+import PhenotypeExplanation from './PhenotypeExplanation.vue'
 
 const props = defineProps<{
   score: number
@@ -37,8 +37,6 @@ const props = defineProps<{
   /** Phenotype explanation (`rank_hpo`) for evidence presets with case HPO terms. */
   hpo?: HpoExplanation | null
 }>()
-
-const phenotype = computed(() => (props.hpo != null ? phenotypeLines(props.hpo) : null))
 
 interface Row {
   label: string
@@ -97,14 +95,10 @@ function pinLabel(): string {
         {{ partnerCount === 1 ? 'variant' : 'variants' }})
       </div>
     </template>
-    <template v-if="phenotype !== null">
+    <template v-if="hpo != null">
       <v-divider class="my-1" />
       <div class="rank-tooltip__note" data-testid="rank-tooltip-phenotype">
-        <div class="font-weight-bold">{{ phenotype.title }}</div>
-        <div v-if="phenotype.matched !== null">{{ phenotype.matched }}</div>
-        <div v-if="phenotype.conflicts !== null">{{ phenotype.conflicts }}</div>
-        <div v-if="phenotype.locus !== null">{{ phenotype.locus }}</div>
-        <div>{{ phenotype.rank }}</div>
+        <PhenotypeExplanation :hpo="hpo" />
       </div>
     </template>
     <template v-if="pinned !== null">

@@ -175,6 +175,7 @@ import { isWebRuntime } from '../utils/runtime-mode'
 import { usePermissions } from '../composables/usePermissions'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
 import { useCapabilityStore } from '../stores/capabilityStore'
+import { withPhenotypeDefault } from './variant-table/usePhenotypeColumn'
 import { useAutoHiddenColumns, useResponsiveLayout } from '../composables/useResponsiveLayout'
 import { useApiService } from '../composables/useApiService'
 import {
@@ -609,7 +610,10 @@ const orderedColumns = computed(() => {
 })
 
 // Same responsive default as VariantTable's useVariantColumns (same columns and widths → same result)
-const { isVisible: isColumnShown } = useAutoHiddenColumns(() => props.columns ?? [], columnPrefs)
+const { isVisible: isColumnShown } = useAutoHiddenColumns(
+  () => props.columns ?? [],
+  withPhenotypeDefault(columnPrefs, () => props.caseId)
+)
 const visibleColumnKeys = computed(() =>
   orderedColumns.value.filter((h) => isColumnShown(h.key)).map((h) => h.key)
 )

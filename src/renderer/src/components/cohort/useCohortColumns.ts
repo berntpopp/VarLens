@@ -27,6 +27,7 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'Carriers', key: 'carrier_count', sortable: true, align: 'end' },
   { title: CARRIER_FREQUENCY_COPY.column, key: 'cohort_frequency', sortable: true, align: 'end' },
   { title: 'Het / Hom', key: 'het_count', sortable: true },
+  { title: 'Best phenotype match (carriers)', key: 'phenotype_score', sortable: true },
   { title: 'Consequence', key: 'func', sortable: true },
   { title: 'Transcript', key: 'transcript', sortable: true },
   { title: 'cDNA', key: 'cdna', sortable: true },

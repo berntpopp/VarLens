@@ -23,6 +23,8 @@ export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   cadd: 11,
   cadd_phred: 11,
   annotations: 12,
+  // Case table: shown by default only with HPO terms (usePhenotypeColumn.ts).
+  phenotype_score: 12,
   func: 13,
   gt_num: 14,
   aa_change: 15,

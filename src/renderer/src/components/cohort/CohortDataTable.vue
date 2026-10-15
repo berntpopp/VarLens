@@ -161,6 +161,10 @@
         }}
       </template>
 
+      <template #[`item.phenotype_score`]="{ item }">
+        <PhenotypeScoreCell :case-id="null" :row="item" />
+      </template>
+
       <!-- Het / Hom combined column -->
       <template #[`item.het_count`]="{ item }">
         <span :title="COHORT_ZYGOSITY_HELP">
@@ -252,6 +256,7 @@ import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import TableSkeletonRows from '../table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import VariantColumnHeader from '../variant-table/VariantColumnHeader.vue'
+import PhenotypeScoreCell from '../variant-table/PhenotypeScoreCell.vue'
 import { useColumnFilters } from '../../composables/useColumnFilters'
 import { useColumnFilterMeta } from '../../composables/useColumnFilterMeta'
 import type {

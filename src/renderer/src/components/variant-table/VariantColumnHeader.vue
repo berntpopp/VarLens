@@ -16,6 +16,14 @@
       @keydown.space.prevent.stop="toggleSort(headerColumn)"
     >
       <span class="header-title">{{ headerColumn.title }}</span>
+      <v-progress-circular
+        v-if="busy"
+        indeterminate
+        size="12"
+        width="2"
+        class="ml-1 flex-shrink-0"
+        aria-label="Updating"
+      />
       <span v-if="help" :id="helpId" class="visually-hidden">{{ help }}</span>
       <span v-if="isSorted(headerColumn)" class="sort-indicator ml-1">
         <v-icon size="x-small" :icon="getSortIcon(headerColumn)" />
@@ -133,6 +141,8 @@ interface Props {
   columnMeta?: ColumnFilterMeta
   /** Auto-detected or overridden filter mode */
   filterMode?: ColumnFilterMode
+  /** The column's values are being recomputed (phenotype scores after a term change) */
+  busy?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {

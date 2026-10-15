@@ -134,7 +134,7 @@ describe('DslSearchBar', () => {
     expect(activeOptionText(wrapper)).toContain('AND')
     await press(wrapper, 'Enter')
     expect(el.value).toBe('gnomad_af:<:0.01 AND ')
-    await press(wrapper, 'ArrowDown', 7) // gnomad_af cadd qual hpo_sim_score pos gene_symbol consequence
+    await press(wrapper, 'ArrowDown', 8) // gnomad_af cadd qual hpo_sim_score phenotype_score pos gene_symbol consequence
     expect(activeOptionText(wrapper)).toContain('consequence')
     await press(wrapper, 'Enter')
     await press(wrapper, 'ArrowDown')
