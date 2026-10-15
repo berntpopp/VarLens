@@ -625,7 +625,9 @@ defineExpose({
   toggleColumnsDrawer: () => (columnsDrawerOpen.value = !columnsDrawerOpen.value),
   handleClearAll,
   handleClearFilter,
-  activeFilters: mergedActiveFilters
+  activeFilters: mergedActiveFilters,
+  visiblePresets,
+  togglePreset: handlePresetToggle
 })
 </script>
 

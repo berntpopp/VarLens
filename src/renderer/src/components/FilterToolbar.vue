@@ -695,7 +695,9 @@ defineExpose({
   handleClearAll,
   handleClearFilter,
   activeFilters: mergedActiveFiltersList,
-  filterOptions
+  filterOptions,
+  visiblePresets,
+  togglePreset: handlePresetToggle
 })
 
 // Load filter options and presets on mount

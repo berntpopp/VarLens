@@ -157,6 +157,15 @@ export interface Variant {
   /** Stored HPO phenotype score of the gene for the case's terms and its best disease (page reads) */
   phenotype_score?: number | null
   phenotype_disease?: string | null
+  /** VCF FORMAT PS phase set identifier (v56 / 0039) */
+  ps?: number | null
+  /** Phase-aware compound-het relation on case page reads (#630) */
+  comphet_phase?: 'trans' | 'cis' | 'possible' | null
+  /** Per-member genotypes for the active analysis group on case page reads (#628) */
+  family_calls?: Record<
+    number,
+    { role: string; gt_num: string | null; gq: number | null; dp: number | null }
+  >
 }
 
 /**
@@ -217,6 +226,11 @@ export interface VariantFilter {
   analysis_group_id?: number
   /** Whether to consider phasing for compound het */
   consider_phasing?: boolean
+  /** Optional de novo quality thresholds (#626) */
+  de_novo_min_gq?: number
+  de_novo_min_dp?: number
+  de_novo_min_ab?: number
+  de_novo_max_parent_ab?: number
   /** Filter by variant type discriminator: snv, indel, sv, cnv, str. If 'snv', includes both 'snv' and 'indel'. */
   variant_type?: string
   /** Match `variant_type` exactly: 'snv' then excludes 'indel' (shortlist scores each type separately). */
