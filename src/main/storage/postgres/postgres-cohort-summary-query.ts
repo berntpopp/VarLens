@@ -36,25 +36,10 @@ import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/s
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
  *
- * Mirrors `PostgresCohortRepository.buildQueryParts`, but maps every predicate
- * to alias `cvs` for the materialised `cohort_variant_summary` table. Because
- * carrier_count / het_count / hom_count are stored columns on
- * `cohort_variant_summary`, the predicates that the live builder pushes into
- * `HAVING` (over a `GROUP BY`) become plain `WHERE` predicates here — there is
- * no grouping in the summary path.
- *
- * Cohort frequency is NOT stored: it is carriers over the number of visible
- * cases of the row's genome build, derived at read time (see
- * `SUMMARY_FREQUENCY_SQL`). Storing it meant rewriting every summary row on
- * every import and every case deletion.
- *
- * Extension-table predicates (`sv.*`, `cnv.*`, `str.*`) are not stored in the
- * summary: they are an `EXISTS` over the visible carrier rows of the summary
- * row and their extension table, as on SQLite (`buildExtensionExistsClauses`).
- * The annotation shown and filtered is the summary row's representative in
- * every case (#469), so the page, the extension-filtered page and the export
- * agree. The builder needs the schema for that; without one it reports the
- * predicate set as unavailable.
+ * Mirrors `PostgresCohortRepository.buildQueryParts` over alias `cvs` for
+ * `cohort_variant_summary`. Carrier counts are stored columns; cohort frequency
+ * is derived at read time (`SUMMARY_FREQUENCY_SQL`), and extension predicates
+ * (`sv.*`, `cnv.*`, `str.*`) use `EXISTS` over visible carrier rows.
  */
 
 export interface SummaryQueryParts {
@@ -521,6 +506,13 @@ export function buildSummaryQueryParts(
   if (isNonEmptyArray(params.acmg_classifications)) {
     whereParts.push(
       `cvs.acmg_best IN (${params.acmg_classifications.map((value) => addParam(value)).join(', ')})`
+    )
+  }
+
+  if (params.unreviewed_hot === true) {
+    const pfx = schema !== undefined ? `"${schema.replace(/"/g, '""')}".` : ''
+    whereParts.push(
+      `((cvs.impact_rank = 4 OR cvs.consequence = 'HIGH' OR cvs.clinvar_rank IN (13, 14, 15) OR cvs.clinvar IN ('Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic')) AND cvs.acmg_best IS NULL AND COALESCE(cvs.has_star, false) = false AND COALESCE(cvs.has_comment, false) = false AND (cvs.chr, cvs.pos, cvs.ref, cvs.alt, cvs.variant_type, cvs.genome_build) NOT IN (SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build FROM ${pfx}"variant_tags" vt JOIN ${pfx}"variants" v ON v.id = vt.variant_id JOIN ${pfx}"cases" c ON c.id = vt.case_id WHERE c.import_status = 'ready'))`
     )
   }
 

@@ -28,9 +28,12 @@ import {
 import { FieldProfileResolver } from '../../../shared/utils/import-field-profile'
 import {
   isTrimmableVariantType,
-  trimAlleles,
+  leftAlignAlleles,
   trimmedVariantType
 } from '../../../shared/utils/trim-alleles'
+import type { ContigReferenceLookup } from './FastaIndexedReader'
+
+export type { ContigReferenceLookup }
 
 const MAX_VCF_EXPANDED_RECORD_BYTES = 64 * 1024 * 1024
 const MAX_VCF_ALLELE_EXPANSION_WORK = 1_000_000
@@ -55,6 +58,7 @@ function parseIntOrNull(val: string | undefined): number | null {
  * @param registry - INFO field mappings
  * @param callerName - Detected caller name (null if unknown)
  * @param fields - The file's field profile, seeded with {@link seedVcfFields}
+ * @param referenceLookup - Optional per-contig reference window lookup for repeat left-alignment
  * @returns Array of mapped variants (may be empty)
  */
 export function mapVcfRecord(
@@ -63,7 +67,8 @@ export function mapVcfRecord(
   sampleName: string,
   registry: InfoFieldMapping[],
   callerName: string | null = null,
-  fields: FieldProfileResolver = seedVcfFields(new FieldProfileResolver(), header, registry)
+  fields: FieldProfileResolver = seedVcfFields(new FieldProfileResolver(), header, registry),
+  referenceLookup: ContigReferenceLookup | null = null
 ): VcfMappedVariant[] {
   const results: VcfMappedVariant[] = []
   const selectedValues = record.samples.get(sampleName)
@@ -171,7 +176,7 @@ export function mapVcfRecord(
     // SV/CNV/STR records keep theirs: their identity is the locus (POS..END).
     const recordType = detectVariantType(rec.ref, altAllele, rec.info, callerName)
     const { pos, ref, alt } = isTrimmableVariantType(recordType)
-      ? trimAlleles(rec.pos, rec.ref, altAllele)
+      ? leftAlignAlleles(rec.pos, rec.ref, altAllele, referenceLookup?.(rec.chrom))
       : { pos: rec.pos, ref: rec.ref, alt: altAllele }
     const mapped: VcfMappedVariant = {
       chr: rec.chrom,

@@ -117,8 +117,10 @@ describe('validateEvidenceConfig', () => {
     ...o
   })
 
-  it('accepts snv/indel scope without inheritance filters', () => {
-    expect(validateEvidenceConfig(cfg({ variantTypeScope: ['snv', 'indel'] }))).toEqual([])
+  it('accepts snv/indel/sv/cnv/str scope without inheritance filters', () => {
+    expect(
+      validateEvidenceConfig(cfg({ variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str'] }))
+    ).toEqual([])
     expect(
       validateEvidenceConfig(
         cfg({ variantTypeScope: ['snv'], baseFilters: { inheritanceModes: [] } })
@@ -126,8 +128,7 @@ describe('validateEvidenceConfig', () => {
     ).toEqual([])
   })
 
-  it('rejects sv scope, missing scope, inheritance modes, analysis group', () => {
-    expect(validateEvidenceConfig(cfg({ variantTypeScope: ['snv', 'sv'] }))).not.toEqual([])
+  it('rejects missing scope, inheritance modes, analysis group', () => {
     expect(validateEvidenceConfig(cfg({}))).not.toEqual([])
     expect(validateEvidenceConfig(cfg({ variantTypeScope: [] }))).not.toEqual([])
     expect(

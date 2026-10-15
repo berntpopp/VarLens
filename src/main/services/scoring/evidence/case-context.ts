@@ -44,6 +44,7 @@ export interface LightRow {
   variant_type?: string | null
   end_pos?: number | null
   sv_type?: string | null
+  sv_length?: number | null
   cnv_copy_number?: number | null
   str_alt_copies?: string | null
   str_status?: string | null
@@ -68,7 +69,7 @@ export interface DerivedFields {
   hpo_conflicts: number | null
   /** Gene symbol, ISCA region id or STRchive id the score came from; null like hpo_resnik. */
   hpo_best_locus: string | null
-  /** CNV rows: protein-coding genes overlapped; null on other types. */
+  /** CNV/DEL/DUP SV rows: protein-coding genes overlapped; null on other types. */
   cnv_gene_count: number | null
   /** STR rows: catalogue band; null on other types or off-catalogue. */
   str_band: StrBand | null
@@ -87,7 +88,7 @@ export interface GeneContext {
   derived(row: LightRow): DerivedFields
   /** Distinct het alleles of the gene in the case (pass 1); the CNV HI 30 and STR AR second hit. */
   hetHits(gene: string): number
-  /** Locus fields and note of a CNV/STR row (memoised per row id); null for other types. */
+  /** Locus fields and note of a CNV/SV/STR row (memoised per row id); null for other types or non-dosage SVs. */
   locus(row: LightRow): LocusResult | null
 }
 
@@ -125,7 +126,7 @@ export function deriveZygosity(
   return zygosity
 }
 
-/** SNV/indel/SV rows: the row gene's score; `hpo_best_locus` is the gene, null like the score. */
+/** SNV/indel and balanced/insertion SV rows: the row gene's score; `hpo_best_locus` is the gene, null like the score. */
 function geneHpo(gene: string | null, info: CaseInfo): LocusFields {
   const hpo_resnik = gene === null ? null : (info.hpo?.score(gene) ?? null)
   return {
@@ -146,7 +147,7 @@ interface GeneEntry {
 
 export class GeneContextBuilder {
   private readonly genes = new Map<string, GeneEntry>()
-  /** Pass-1 CNV row ids (their CSQ genes are read in one batch). */
+  /** Pass-1 CNV and SV row ids (their CSQ genes are read in one batch). */
   readonly cnvIds: number[] = []
   /** STR rows join their gene in `build`, once their band is known. */
   private readonly strRows: LightRow[] = []
@@ -158,7 +159,7 @@ export class GeneContextBuilder {
 
   add(rows: readonly LightRow[]): void {
     for (const row of rows) {
-      if (row.variant_type === 'cnv') this.cnvIds.push(row.id)
+      if (row.variant_type === 'cnv' || row.variant_type === 'sv') this.cnvIds.push(row.id)
       if (row.variant_type === 'str') this.strRows.push(row)
       else this.addAllele(row)
     }
@@ -176,7 +177,7 @@ export class GeneContextBuilder {
     if (deriveZygosity(row, this.info) === 'het' && !entry.het.has(key)) entry.het.set(key, row)
   }
 
-  /** True when pass 1 saw a CNV or STR row, so the backend loads {@link LocusInputs}. */
+  /** True when pass 1 saw a CNV, SV or STR row, so the backend loads {@link LocusInputs}. */
   get needsLocus(): boolean {
     return this.strRows.length > 0 || this.cnvIds.length > 0
   }
@@ -196,13 +197,13 @@ export class GeneContextBuilder {
       if (!isLocusRow(row)) return null
       let hit = memo.get(row.id)
       if (hit === undefined) {
-        // Other het alleles only: a het CNV is counted under its own gene in pass 1.
+        // Other het alleles only: a het CNV/SV is counted under its own gene in pass 1.
         const own = genes.get(row.gene_symbol ?? '')?.het.has(alleleKey(row)) === true
         const other = (gene: string): number =>
           hetHits(gene) - (own && gene === row.gene_symbol ? 1 : 0)
         memo.set(row.id, (hit = scoreLocusRow(row, info, locusInputs, other)))
       }
-      return hit
+      return row.variant_type === 'sv' && hit.fields.cnv_gene_count === null ? null : hit
     }
     return {
       info,

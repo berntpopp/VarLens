@@ -11,6 +11,7 @@ export const FILTER_DEFAULTS: Readonly<FilterState> = Object.freeze({
   minCarriers: null,
   starredOnly: false,
   hasCommentOnly: false,
+  unreviewedHotOnly: false,
   acmgClassifications: [],
   tagIds: [],
   annotationScope: 'case',

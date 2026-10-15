@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 406" width="720" height="406" role="img" aria-labelledby="t d">
+<title id="t">Rank CDF, primary scenario</title><desc id="d">Cumulative share of cases found within each rank for 8 scorers (first 8 of 20; all are in the tables).</desc><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;font-variant-numeric:tabular-nums}
+.grid,.axis{stroke-width:1}.title{font-size:14px;font-weight:600}.ci{stroke-width:1.5}
+.line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}.hit{fill:none;stroke:transparent;stroke-width:12}
+.bg{fill:#fcfcfb}text{fill:#52514e}.title{fill:#0b0b0b}.muted{fill:#898781}.grid{stroke:#e1e0d9}.axis{stroke:#c3c2b7}.ci{stroke:#52514e}.s1{stroke:#2a78d6}.f1{fill:#2a78d6}.s2{stroke:#eb6834}.f2{fill:#eb6834}.s3{stroke:#1baf7a}.f3{fill:#1baf7a}.s4{stroke:#eda100}.f4{fill:#eda100}.s5{stroke:#e87ba4}.f5{fill:#e87ba4}.s6{stroke:#008300}.f6{fill:#008300}.s7{stroke:#6250d6}.f7{fill:#6250d6}.s8{stroke:#e34948}.f8{fill:#e34948}
+@media (prefers-color-scheme:dark){.bg{fill:#1a1a19}text{fill:#c3c2b7}.title{fill:#f0efec}.muted{fill:#898781}.grid{stroke:#2c2c2a}.axis{stroke:#383835}.ci{stroke:#c3c2b7}.s1{stroke:#3987e5}.f1{fill:#3987e5}.s2{stroke:#d95926}.f2{fill:#d95926}.s3{stroke:#199e70}.f3{fill:#199e70}.s4{stroke:#c98500}.f4{fill:#c98500}.s5{stroke:#d55181}.f5{fill:#d55181}.s6{stroke:#008300}.f6{fill:#008300}.s7{stroke:#9085e9}.f7{fill:#9085e9}.s8{stroke:#e66767}.f8{fill:#e66767}}
+</style>
+<rect class="bg" width="720" height="406" rx="8"/>
+<text class="title" x="16" y="24">Rank CDF, primary scenario</text>
+<line class="grid" x1="56" x2="696" y1="362" y2="362"/>
+<text x="48" y="366" text-anchor="end">0%</text>
+<line class="grid" x1="56" x2="696" y1="297" y2="297"/>
+<text x="48" y="301" text-anchor="end">25%</text>
+<line class="grid" x1="56" x2="696" y1="232" y2="232"/>
+<text x="48" y="236" text-anchor="end">50%</text>
+<line class="grid" x1="56" x2="696" y1="167" y2="167"/>
+<text x="48" y="171" text-anchor="end">75%</text>
+<line class="grid" x1="56" x2="696" y1="102" y2="102"/>
+<text x="48" y="106" text-anchor="end">100%</text>
+<text x="56" y="380" text-anchor="middle">1</text>
+<text x="120.22" y="380" text-anchor="middle">2</text>
+<text x="205.11" y="380" text-anchor="middle">5</text>
+<text x="269.33" y="380" text-anchor="middle">10</text>
+<text x="333.55" y="380" text-anchor="middle">20</text>
+<text x="418.45" y="380" text-anchor="middle">50</text>
+<text x="482.67" y="380" text-anchor="middle">100</text>
+<text x="546.89" y="380" text-anchor="middle">200</text>
+<text x="631.78" y="380" text-anchor="middle">500</text>
+<text x="696" y="380" text-anchor="middle">1000</text>
+<line class="axis" x1="56" x2="696" y1="362" y2="362"/>
+<text class="muted" x="376" y="398" text-anchor="middle">Case rank (log scale; compound het = worse allele)</text>
+<line class="line s1" x1="16" x2="32" y1="40" y2="40"/>
+<text x="38" y="44">Tier 1 candidates</text>
+<g><title>Tier 1 candidates: ≤1 35.0 %, ≤2 50.0 %, ≤3 61.6 %, ≤5 72.2 %, ≤10 84.9 %, ≤20 98.4 %, ≤30 98.8 %, ≤50 98.8 %, ≤100 98.8 %, ≤200 98.8 %, ≤500 98.8 %, ≤1000 98.8 %</title><path class="line s1" d="M56,271.13L120.22,231.93L157.79,201.92L205.11,174.2L269.33,141.34L333.55,106.13L371.12,105.14L418.45,104.99L482.67,104.99L546.89,104.99L631.78,104.99L696,104.99"/><path class="hit" d="M56,271.13L120.22,231.93L157.79,201.92L205.11,174.2L269.33,141.34L333.55,106.13L371.12,105.14L418.45,104.99L482.67,104.99L546.89,104.99L631.78,104.99L696,104.99"/></g>
+<line class="line s2" x1="246" x2="262" y1="40" y2="40"/>
+<text x="268" y="44">All rare damaging</text>
+<g><title>All rare damaging: ≤1 35.0 %, ≤2 49.9 %, ≤3 54.6 %, ≤5 67.3 %, ≤10 71.4 %, ≤20 77.5 %, ≤30 77.8 %, ≤50 77.8 %, ≤100 77.8 %, ≤200 77.8 %, ≤500 77.8 %, ≤1000 77.8 %</title><path class="line s2" d="M56,271.06L120.22,232.29L157.79,219.96L205.11,187.1L269.33,176.34L333.55,160.37L371.12,159.66L418.45,159.66L482.67,159.66L546.89,159.66L631.78,159.66L696,159.66"/><path class="hit" d="M56,271.06L120.22,232.29L157.79,219.96L205.11,187.1L269.33,176.34L333.55,160.37L371.12,159.66L418.45,159.66L482.67,159.66L546.89,159.66L631.78,159.66L696,159.66"/></g>
+<line class="line s3" x1="476" x2="492" y1="40" y2="40"/>
+<text x="498" y="44">CADD descending</text>
+<g><title>CADD descending: ≤1 29.7 %, ≤2 41.0 %, ≤3 47.2 %, ≤5 58.8 %, ≤10 68.6 %, ≤20 72.3 %, ≤30 77.5 %, ≤50 78.9 %, ≤100 89.7 %, ≤200 100.0 %, ≤500 100.0 %, ≤1000 100.0 %</title><path class="line s3" d="M56,284.67L120.22,255.52L157.79,239.2L205.11,209.19L269.33,183.61L333.55,173.98L371.12,160.51L418.45,156.95L482.67,128.73L546.89,102L631.78,102L696,102"/><path class="hit" d="M56,284.67L120.22,255.52L157.79,239.2L205.11,209.19L269.33,183.61L333.55,173.98L371.12,160.51L418.45,156.95L482.67,128.73L546.89,102L631.78,102L696,102"/></g>
+<line class="line s4" x1="16" x2="32" y1="58" y2="58"/>
+<text x="38" y="62">AF ascending</text>
+<g><title>AF ascending: ≤1 17.0 %, ≤2 23.3 %, ≤3 29.3 %, ≤5 31.3 %, ≤10 33.4 %, ≤20 33.4 %, ≤30 33.4 %, ≤50 48.5 %, ≤100 85.5 %, ≤200 100.0 %, ≤500 100.0 %, ≤1000 100.0 %</title><path class="line s4" d="M56,317.88L120.22,301.42L157.79,285.81L205.11,280.68L269.33,275.26L333.55,275.12L371.12,275.05L418.45,235.78L482.67,139.77L546.89,102L631.78,102L696,102"/><path class="hit" d="M56,317.88L120.22,301.42L157.79,285.81L205.11,280.68L269.33,275.26L333.55,275.12L371.12,275.05L418.45,235.78L482.67,139.77L546.89,102L631.78,102L696,102"/></g>
+<line class="line s5" x1="246" x2="262" y1="58" y2="58"/>
+<text x="268" y="62">Evidence, hand-set points</text>
+<g><title>Evidence, hand-set points: ≤1 50.0 %, ≤2 73.8 %, ≤3 82.0 %, ≤5 90.0 %, ≤10 94.0 %, ≤20 98.5 %, ≤30 98.8 %, ≤50 99.6 %, ≤100 100.0 %, ≤200 100.0 %, ≤500 100.0 %, ≤1000 100.0 %</title><path class="line s5" d="M56,231.93L120.22,169.99L157.79,148.75L205.11,127.87L269.33,117.68L333.55,105.92L371.12,105.06L418.45,102.93L482.67,102.07L546.89,102L631.78,102L696,102"/><path class="hit" d="M56,231.93L120.22,169.99L157.79,148.75L205.11,127.87L269.33,117.68L333.55,105.92L371.12,105.06L418.45,102.93L482.67,102.07L546.89,102L631.78,102L696,102"/></g>
+<line class="line s6" x1="476" x2="492" y1="58" y2="58"/>
+<text x="498" y="62">Evidence, tuned points</text>
+<g><title>Evidence, tuned points: ≤1 51.5 %, ≤2 78.6 %, ≤3 87.8 %, ≤5 95.2 %, ≤10 99.0 %, ≤20 99.4 %, ≤30 99.5 %, ≤50 99.8 %, ≤100 100.0 %, ≤200 100.0 %, ≤500 100.0 %, ≤1000 100.0 %</title><path class="line s6" d="M56,228.15L120.22,157.59L157.79,133.72L205.11,114.54L269.33,104.49L333.55,103.57L371.12,103.21L418.45,102.5L482.67,102L546.89,102L631.78,102L696,102"/><path class="hit" d="M56,228.15L120.22,157.59L157.79,133.72L205.11,114.54L269.33,104.49L333.55,103.57L371.12,103.21L418.45,102.5L482.67,102L546.89,102L631.78,102L696,102"/></g>
+<line class="line s7" x1="16" x2="32" y1="76" y2="76"/>
+<text x="38" y="80">Tier 1 scoring, evidence gate</text>
+<g><title>Tier 1 scoring, evidence gate: ≤1 35.1 %, ≤2 49.9 %, ≤3 58.1 %, ≤5 72.4 %, ≤10 79.7 %, ≤20 97.0 %, ≤30 99.5 %, ≤50 99.8 %, ≤100 99.9 %, ≤200 100.0 %, ≤500 100.0 %, ≤1000 100.0 %</title><path class="line s7" d="M56,270.63L120.22,232.36L157.79,211.05L205.11,173.77L269.33,154.88L333.55,109.77L371.12,103.21L418.45,102.57L482.67,102.14L546.89,102L631.78,102L696,102"/><path class="hit" d="M56,270.63L120.22,232.36L157.79,211.05L205.11,173.77L269.33,154.88L333.55,109.77L371.12,103.21L418.45,102.57L482.67,102.14L546.89,102L631.78,102L696,102"/></g>
+<line class="line s8" x1="246" x2="262" y1="76" y2="76"/>
+<text x="268" y="80">Tuned evidence, Tier 1 gate</text>
+<g><title>Tuned evidence, Tier 1 gate: ≤1 61.6 %, ≤2 83.9 %, ≤3 91.3 %, ≤5 96.5 %, ≤10 98.6 %, ≤20 98.8 %, ≤30 98.8 %, ≤50 98.8 %, ≤100 98.8 %, ≤200 98.8 %, ≤500 98.8 %, ≤1000 98.8 %</title><path class="line s8" d="M56,201.78L120.22,143.91L157.79,124.52L205.11,111.05L269.33,105.71L333.55,105.06L371.12,104.99L418.45,104.99L482.67,104.99L546.89,104.99L631.78,104.99L696,104.99"/><path class="hit" d="M56,201.78L120.22,143.91L157.79,124.52L205.11,111.05L269.33,105.71L333.55,105.06L371.12,104.99L418.45,104.99L482.67,104.99L546.89,104.99L631.78,104.99L696,104.99"/></g></svg>

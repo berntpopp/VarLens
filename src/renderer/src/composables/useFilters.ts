@@ -201,6 +201,7 @@ export function createFilters(): UseFiltersReturn {
     filters.value.minCarriers = null
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
+    filters.value.unreviewedHotOnly = false
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
     filters.value.inheritanceModes = []
@@ -244,6 +245,9 @@ export function createFilters(): UseFiltersReturn {
         break
       case 'impact':
         selectedImpactPresets.value = []
+        break
+      case 'unreviewedHot':
+        filters.value.unreviewedHotOnly = false
         break
     }
   }

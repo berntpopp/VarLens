@@ -165,6 +165,9 @@ export function buildActiveFiltersList(
   if (filters.hasCommentOnly) {
     list.push({ id: 'comments', label: 'Comments', value: 'only' })
   }
+  if (filters.unreviewedHotOnly === true) {
+    list.push({ id: 'unreviewedHot', label: 'Alert', value: 'Unreviewed hot' })
+  }
   if (filters.acmgClassifications.length > 0) {
     list.push({ id: 'acmg', label: 'ACMG', value: filters.acmgClassifications.join(', ') })
   }

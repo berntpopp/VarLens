@@ -60,6 +60,8 @@ export interface CohortQueryParams {
   starred_only?: boolean
   /** Show only variants with comments (global annotations) */
   has_comment?: boolean
+  /** Show only unreviewed hot variants */
+  unreviewed_hot?: boolean
   /** Filter by ACMG classifications (global annotations) */
   acmg_classifications?: string[]
   /** Per-column typed filters from table header inputs */
@@ -304,6 +306,9 @@ export function useCohortData(): UseCohortDataReturn {
     }
     if (params.has_comment === true) {
       ipcParams.has_comment = true
+    }
+    if (params.unreviewed_hot === true) {
+      ipcParams.unreviewed_hot = true
     }
     if (params.acmg_classifications !== undefined && params.acmg_classifications.length > 0) {
       ipcParams.acmg_classifications = [...params.acmg_classifications]

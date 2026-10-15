@@ -24,6 +24,7 @@ interface FilterFields {
   clinvars: string[]
   starredOnly: boolean
   hasCommentOnly: boolean
+  unreviewedHotOnly?: boolean
   acmgClassifications: string[]
   minCarriers?: number | null
 }
@@ -68,6 +69,7 @@ export function applyPresetStateToFilters({
   filters.value.clinvars = []
   filters.value.starredOnly = false
   filters.value.hasCommentOnly = false
+  filters.value.unreviewedHotOnly = false
   filters.value.acmgClassifications = []
 
   if (includeCohortFields === true) {
@@ -90,6 +92,8 @@ export function applyPresetStateToFilters({
   if (presetState.starredOnly !== undefined) filters.value.starredOnly = presetState.starredOnly
   if (presetState.hasCommentOnly !== undefined)
     filters.value.hasCommentOnly = presetState.hasCommentOnly
+  if (presetState.unreviewedHotOnly !== undefined)
+    filters.value.unreviewedHotOnly = presetState.unreviewedHotOnly
   if (presetState.acmgClassifications !== undefined)
     filters.value.acmgClassifications = presetState.acmgClassifications
 
@@ -132,6 +136,7 @@ export function buildPresetFilterJson(
   }
   if (filters.starredOnly === true) json.starredOnly = true
   if (filters.hasCommentOnly === true) json.hasCommentOnly = true
+  if (filters.unreviewedHotOnly === true) json.unreviewedHotOnly = true
   const consequences = [...new Set([...(filters.consequences ?? []), ...impactPresets])]
   if (consequences.length > 0) json.consequences = consequences
   for (const key of ['funcs', 'clinvars', 'acmgClassifications'] as const) {
@@ -172,6 +177,11 @@ export function isPresetDiverged({
   if (fj.minCadd !== undefined && filters.minCadd !== fj.minCadd) return true
   if (fj.starredOnly !== undefined && filters.starredOnly !== fj.starredOnly) return true
   if (fj.hasCommentOnly !== undefined && filters.hasCommentOnly !== fj.hasCommentOnly) return true
+  if (
+    fj.unreviewedHotOnly !== undefined &&
+    Boolean(filters.unreviewedHotOnly) !== fj.unreviewedHotOnly
+  )
+    return true
 
   if (fj.consequences !== undefined) {
     const current = consequencesValue ?? filters.consequences

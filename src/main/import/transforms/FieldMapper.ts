@@ -19,7 +19,8 @@ import {
 } from '../../../shared/utils/import-field-profile'
 import { IMPORT_MESSAGES } from '../../../shared/config/import.config'
 import { hpoMatchText } from './hpo-match'
-import { trimAlleles } from '../../../shared/utils/trim-alleles'
+import { leftAlignAlleles } from '../../../shared/utils/trim-alleles'
+import type { ContigReferenceLookup } from '../vcf/FastaIndexedReader'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -61,6 +62,8 @@ interface FieldMapperOptions {
   onSkip?: (reason: string) => void
   /** Number of header columns; a row of any other length would shift every later value. */
   columnCount?: number
+  /** Optional per-contig reference window lookup for repeat left-alignment (#587). */
+  referenceLookup?: ContigReferenceLookup | null
 }
 
 export class FieldMapper extends Transform {
@@ -72,6 +75,7 @@ export class FieldMapper extends Transform {
   private readonly profileColumns: ProfileColumn[]
   private readonly columnCount?: number
   private readonly hpoMatchLabel: (code: unknown) => unknown
+  private readonly referenceLookup: ContigReferenceLookup | null
 
   constructor(options: FieldMapperOptions) {
     super({ objectMode: true })
@@ -85,6 +89,7 @@ export class FieldMapper extends Transform {
     this.hpoMatchLabel = dictionaryLabel(
       options.header?.[this.cols.HPO_MATCH]?.dataDictionary ?? null
     )
+    this.referenceLookup = options.referenceLookup ?? null
     this.fields.seed(
       'JSON',
       this.profileColumns.filter((c) => !c.deriveOnly).map((c) => c.name)
@@ -197,7 +202,10 @@ export class FieldMapper extends Transform {
       }
 
       // Minimal alleles (#587), the same as the object-format and VCF imports.
-      Object.assign(mapped, trimAlleles(mapped.pos, mapped.ref, mapped.alt))
+      Object.assign(
+        mapped,
+        leftAlignAlleles(mapped.pos, mapped.ref, mapped.alt, this.referenceLookup?.(mapped.chr))
+      )
       const output: MappedVariantWithTranscripts = mapped
       if (transcripts.length > 0) {
         output._transcripts = transcripts
@@ -418,7 +426,8 @@ export function createFieldMapper(
   takeRecordBytes?: () => number,
   onSkip?: (reason: string) => void,
   columnCount?: number,
-  profile?: { header: ColumnarHeaderItem[]; fields: FieldProfileResolver }
+  profile?: { header: ColumnarHeaderItem[]; fields: FieldProfileResolver },
+  referenceLookup?: ContigReferenceLookup | null
 ): FieldMapper {
   return new FieldMapper({
     dictionaries,
@@ -427,6 +436,7 @@ export function createFieldMapper(
     onSkip,
     columnCount,
     header: profile?.header,
-    fields: profile?.fields
+    fields: profile?.fields,
+    referenceLookup
   })
 }

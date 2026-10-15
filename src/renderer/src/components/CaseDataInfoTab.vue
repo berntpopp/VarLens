@@ -128,6 +128,7 @@ import { mdiChip, mdiFileImportOutline, mdiNoteTextOutline } from '@mdi/js'
 import { logService } from '../services/LogService'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 import { unwrapIpcResult } from '../../../shared/types/errors'
+import { isInternalCaseExternalIdType } from '../../../shared/filters/case-filter-snapshot'
 import { caseDataInfoQuery } from '../queries/case-data-info'
 import { queryApi } from '../queries/gate'
 import { refetchAfterWrite } from '../queries/invalidation'
@@ -155,8 +156,12 @@ const DEFAULT_PLATFORMS = ['Exome', 'Genome', 'Targeted Panel']
 const { data: loaded, isPending: loading } = useQuery(() => caseDataInfoQuery(props.caseId))
 
 const dataInfo = computed(() => loaded.value?.dataInfo ?? null)
-const externalIds = computed(() => loaded.value?.externalIds ?? [])
-const idTypeSuggestions = computed(() => loaded.value?.idTypes ?? [])
+const externalIds = computed(() =>
+  (loaded.value?.externalIds ?? []).filter((item) => !isInternalCaseExternalIdType(item.id_type))
+)
+const idTypeSuggestions = computed(() =>
+  (loaded.value?.idTypes ?? []).filter((idType) => !isInternalCaseExternalIdType(idType))
+)
 const platformSuggestions = computed(() =>
   [...new Set([...DEFAULT_PLATFORMS, ...(loaded.value?.platforms ?? [])])].sort()
 )

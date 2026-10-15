@@ -71,12 +71,12 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
 
   /**
    * SV/CNV/STR evidence scoring (#581, #582, #642), one flag per type: an enabled
-   * type may be scoped by presets and named by rule groups. CNV and STR passed
-   * the pre-registered validation criteria; SV remains off until calibrated.
+   * type may be scoped by presets and named by rule groups. All three structural
+   * types passed the pre-registered validation criteria.
    */
   structuralTypes: {
     types: ['sv', 'cnv', 'str'] as const,
-    enabled: { sv: false, cnv: true, str: true } as Record<'sv' | 'cnv' | 'str', boolean>
+    enabled: { sv: true, cnv: true, str: true } as Record<'sv' | 'cnv' | 'str', boolean>
   },
 
   /**

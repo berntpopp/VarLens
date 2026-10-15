@@ -189,6 +189,12 @@ export class CohortService {
       paramsArray.push(...base.params)
     }
 
+    if (params.unreviewed_hot === true) {
+      whereConditions.push(
+        `((cvs.impact_rank = 4 OR cvs.consequence = 'HIGH' OR cvs.clinvar_rank IN (13, 14, 15) OR cvs.clinvar IN ('Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic')) AND cvs.acmg_best IS NULL AND COALESCE(cvs.has_star, 0) = 0 AND COALESCE(cvs.has_comment, 0) = 0 AND (cvs.chr, cvs.pos, cvs.ref, cvs.alt, cvs.variant_type, cvs.genome_build) NOT IN (SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build FROM variant_tags vt JOIN variants v ON v.id = vt.variant_id JOIN cases c ON c.id = vt.case_id WHERE COALESCE(c.import_status, 'ready') = 'ready'))`
+      )
+    }
+
     if (columnFilters !== undefined) {
       const ext = buildExtensionExistsClauses(columnFilters, 'cvs')
       if (ext.whereClause !== '') {

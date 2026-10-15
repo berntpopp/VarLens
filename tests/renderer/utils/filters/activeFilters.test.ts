@@ -75,6 +75,31 @@ describe('buildActiveFiltersList', () => {
     expect(result).toContainEqual({ id: 'starred', label: 'Starred', value: 'only' })
   })
 
+  it('includes unreviewedHot filter chip when unreviewedHotOnly is true (#149)', () => {
+    const result = buildActiveFiltersList(makeDefaultFilters({ unreviewedHotOnly: true }))
+    expect(result).toContainEqual({ id: 'unreviewedHot', label: 'Alert', value: 'Unreviewed hot' })
+  })
+
+  it('omits unreviewedHot filter chip when unreviewedHotOnly is false (#149)', () => {
+    const result = buildActiveFiltersList(makeDefaultFilters({ unreviewedHotOnly: false }))
+    expect(result.find((f) => f.id === 'unreviewedHot')).toBeUndefined()
+  })
+
+  it('clears unreviewedHotOnly and serializes unreviewed_hot via createFilters (#149)', async () => {
+    const { createFilters } = await import('../../../../src/renderer/src/composables/useFilters')
+    const f = createFilters()
+    f.filters.value.unreviewedHotOnly = true
+    expect(f.activeFiltersList.value).toContainEqual({
+      id: 'unreviewedHot',
+      label: 'Alert',
+      value: 'Unreviewed hot'
+    })
+    expect(f.getIpcParams().unreviewed_hot).toBe(true)
+    f.clearFilter('unreviewedHot')
+    expect(f.filters.value.unreviewedHotOnly).toBe(false)
+    expect(f.activeFiltersList.value.find((c) => c.id === 'unreviewedHot')).toBeUndefined()
+  })
+
   it('includes ACMG filter', () => {
     const result = buildActiveFiltersList(
       makeDefaultFilters({ acmgClassifications: ['Pathogenic', 'Likely pathogenic'] })

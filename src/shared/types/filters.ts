@@ -50,6 +50,8 @@ export interface FilterState {
   starredOnly: boolean
   /** Show only variants with comments */
   hasCommentOnly: boolean
+  /** Cohort alert filter: HIGH impact or ClinVar P/LP missing ACMG, star, comment, and tags (#149) */
+  unreviewedHotOnly?: boolean
   /** Filter by ACMG classifications */
   acmgClassifications: string[]
   /** Filter by tag IDs */
@@ -99,6 +101,7 @@ export interface FilterIpcParams {
   carrier_count_min?: number
   starred_only?: boolean
   has_comment?: boolean
+  unreviewed_hot?: boolean
   acmg_classifications?: string[]
   active_panel_ids?: number[]
   panel_padding_bp?: number
