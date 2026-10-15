@@ -96,13 +96,29 @@ describe('PostgresCohortRepository', () => {
           }
         ]
       })
+      // The page's phenotype lookup: the best carrier score of the row.
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            chr: '1',
+            pos: '123',
+            ref: 'A',
+            alt: 'G',
+            variant_type: 'snv',
+            genome_build: 'GRCh38',
+            score: 0.75
+          }
+        ]
+      })
     const repository = new PostgresCohortRepository({ query } as never, 'public')
 
     const result = await repository.queryVariants({ limit: 25, offset: 50 })
 
-    expect(query).toHaveBeenCalledTimes(4)
+    expect(query).toHaveBeenCalledTimes(5)
     expect(callText(query.mock.calls[3])).toContain('FROM "public"."variant_tags" vt')
     expect(callParams(query.mock.calls[3])).toEqual([[123]])
+    expect(callText(query.mock.calls[4])).toContain('"public"."case_phenotype_scores" ps')
+    expect(callParams(query.mock.calls[4])).toEqual([['1'], [123]])
     expect(normalizeSql(query.mock.calls[0][0] as string)).toBe(
       'SELECT COUNT(*)::bigint AS total_cases FROM "public"."cases"'
     )
@@ -135,7 +151,8 @@ describe('PostgresCohortRepository', () => {
           end_pos: null,
           sv_type: null,
           sv_length: null,
-          tag_ids: [7]
+          tag_ids: [7],
+          phenotype_score: 0.75
         }
       ]
     })

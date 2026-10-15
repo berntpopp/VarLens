@@ -189,11 +189,17 @@ describe('PostgreSQL clinical variant filters', () => {
     await repo.queryVariants({ case_id: 1, active_panel_ids: [3, 4], panel_padding_bp: 2500 }, 25)
 
     expect(lookup).toHaveBeenCalledWith([3, 4], 'GRCh37', 2500)
-    const filterSql = calls.filter((sql) => sql.includes('FROM "public"."variants" v')).join('\n')
+    // The variant queries (not the page's phenotype-score lookup by variant id).
+    const filterSql = calls
+      .filter((sql) => sql.includes('FROM "public"."variants" v') && !sql.includes('variant_id,'))
+      .join('\n')
     expect(filterSql).toContain('(v.chr = $2 AND v.pos <= $4 AND COALESCE(v.end_pos, v.pos) >= $3)')
     // The gene-symbol fallback is gone: it ignored padding and genome build.
     expect(filterSql).not.toContain('case_active_panels')
-    expect(filterSql).not.toContain('gene_symbol')
+    // (The phenotype-score join matches on gene_symbol; no filter does.)
+    expect(filterSql.replace(/LEFT JOIN [^\n]*case_phenotype_scores[^\n]*/g, '')).not.toContain(
+      'gene_symbol'
+    )
   })
 
   it('fails the query when panel regions cannot be resolved, never widening or narrowing it', async () => {
