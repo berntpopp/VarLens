@@ -260,6 +260,7 @@ const buildCohortQueryParams = (): Omit<
   carrier_count_max: activeMaxCarriers(filters.value.maxCarriers) ?? undefined,
   starred_only: filters.value.starredOnly || undefined,
   has_comment: filters.value.hasCommentOnly || undefined,
+  unreviewed_hot: filters.value.unreviewedHotOnly === true ? true : undefined,
   acmg_classifications:
     filters.value.acmgClassifications.length > 0
       ? [...filters.value.acmgClassifications]
@@ -290,6 +291,7 @@ const hasAnnotationBackedFilters = computed(
   () =>
     filters.value.starredOnly === true ||
     filters.value.hasCommentOnly === true ||
+    filters.value.unreviewedHotOnly === true ||
     filters.value.acmgClassifications.length > 0
 )
 

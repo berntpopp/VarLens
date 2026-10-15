@@ -17,7 +17,6 @@
     @export="handleExport"
   >
     <template #filters>
-      <!-- DSL search bar (same component as variant table) -->
       <DslSearchBar
         ref="searchFieldRef"
         :raw-input="dslInput"
@@ -32,7 +31,6 @@
         @select-suggestion="applySuggestion"
       />
 
-      <!-- Star toggle -->
       <IconButton
         label="Starred variants only"
         :tooltip="
@@ -47,7 +45,6 @@
         @click="filters.starredOnly = !filters.starredOnly"
       />
 
-      <!-- Comment toggle -->
       <IconButton
         label="Commented variants only"
         :tooltip="
@@ -62,7 +59,16 @@
         @click="filters.hasCommentOnly = !filters.hasCommentOnly"
       />
 
-      <!-- ACMG classification chips -->
+      <IconButton
+        label="Unreviewed hot variants only"
+        tooltip="Show only unreviewed hot variants (HIGH impact or ClinVar P/LP without ACMG, star, comment, or tag)"
+        :pressed="Boolean(filters.unreviewedHotOnly)"
+        :color="filters.unreviewedHotOnly ? 'error' : undefined"
+        :variant="filters.unreviewedHotOnly ? 'flat' : 'text'"
+        :icon="mdiFireAlert"
+        @click="filters.unreviewedHotOnly = !filters.unreviewedHotOnly"
+      />
+
       <v-chip-group v-model="filters.acmgClassifications" multiple class="flex-nowrap">
         <v-chip
           v-for="cls in acmgFilterOptions"
@@ -77,13 +83,10 @@
         </v-chip>
       </v-chip-group>
 
-      <!-- Extension column filter narrowing chip (SV only / CNV only / STR only) -->
       <FilterTypeNarrowingChip
         :column-filters="filters.columnFilters"
         @clear-filter="handleClearTypeFilter"
       />
-
-      <!-- Impact preset chips moved to filter drawer only -->
     </template>
 
     <template #preset-bar>
@@ -149,7 +152,13 @@ import type { ColumnFiltersParam } from '../../../../shared/types/column-filters
 import type { CohortFilterDrawerState } from './cohortFilterDrawerTypes'
 import FilterTypeNarrowingChip from '../filters/FilterTypeNarrowingChip.vue'
 import { buildColumnFilterChips } from '../../utils/filters/activeFilters'
-import { mdiCommentText, mdiCommentTextOutline, mdiStar, mdiStarOutline } from '@mdi/js'
+import {
+  mdiCommentText,
+  mdiCommentTextOutline,
+  mdiFireAlert,
+  mdiStar,
+  mdiStarOutline
+} from '@mdi/js'
 import {
   ACMG_FILTER_OPTIONS,
   applyPresetStateToFilters,
@@ -172,7 +181,6 @@ interface Props {
   visibleColumns: string[]
   exporting: boolean
   hasSort?: boolean
-  /** Per-column active filter chips from CohortDataTable */
   columnActiveFilters?: ActiveFilter[]
 }
 
@@ -205,7 +213,6 @@ const emit = defineEmits<{
   'reset-columns': []
 }>()
 
-// Access filter state from composable
 const {
   filters,
   searchTerm,
@@ -220,7 +227,6 @@ const {
   clearFilter
 } = useFilters()
 
-// Preset store
 const {
   presets: allPresets,
   visiblePresets,
@@ -235,14 +241,12 @@ const {
   deletePreset: deletePresetStore
 } = useFilterPresetStore('cohort')
 
-// Dialog state
 const showSavePresetDialog = ref(false)
 const showManagePresetsDialog = ref(false)
 const savingPreset = ref(false)
 const savePresetError = ref<string | null>(null)
 let applyingPresets = false
 
-// Preset toggle handler — applies merged preset filters
 async function handlePresetToggle(presetId: number): Promise<void> {
   if (!(await canUseOrWarn('workflow.filterPresets'))) return
   togglePreset(presetId)
@@ -267,7 +271,6 @@ function applyActivePresets(): void {
   })
 }
 
-// Auto-deactivate presets when user manually changes filter values
 const presetDivergenceKey = computed(() =>
   JSON.stringify([filters.value, selectedImpactPresets.value])
 )
@@ -321,57 +324,43 @@ async function handleDeletePreset(id: number): Promise<void> {
   await deletePresetStore(id)
 }
 
-// Drawer state
 const columnsDrawerOpen = ref(false)
 const filterDrawerOpen = ref(false)
-
-// ACMG filter options (shared constant)
 const acmgFilterOptions = ACMG_FILTER_OPTIONS
 
-// Impact presets
 const impactPresets = [
   { label: 'HIGH', value: 'HIGH', color: 'error' },
   { label: 'MOD', value: 'MODERATE', color: 'warning' },
   { label: 'LOW', value: 'LOW', color: 'info' }
 ]
 
-// gnomAD AF presets
 const afPresets = [
   { label: '1%', value: 0.01 },
   { label: '0.1%', value: 0.001 },
   { label: '0.01%', value: 0.0001 }
 ]
 
-// CADD presets
 const caddPresets = [
   { label: '15', value: 15 },
   { label: '20', value: 20 },
   { label: '25', value: 25 }
 ]
 
-// Merged active filters: regular filters + column filters
 const mergedActiveFilters = computed<ActiveFilter[]>(() => [
   ...activeFiltersList.value,
   ...(props.columnActiveFilters ?? []),
   ...buildColumnFilterChips(dslColumnFilters.value, 'dsl')
 ])
 
-// Merged has-active check (includes column filters + DSL filters)
 const mergedHasActiveFilters = computed(
   () =>
     hasActiveFilters.value || (props.columnActiveFilters ?? []).length > 0 || hasDslFilters.value
 )
 
-// Filter count reflects actual filters (DSL chips included), not sort
 const activeFilterCount = computed(() => mergedActiveFilters.value.length)
-
-// Gene autocomplete state
 const geneSymbolSuggestions = ref<string[]>([])
 const loadingGeneSuggestions = ref(false)
 
-/**
- * Check whether a specific filter group has active filters.
- */
 const isFilterGroupActive = (groupId: string): boolean => {
   switch (groupId) {
     case 'search':
@@ -402,12 +391,15 @@ const isFilterGroupActive = (groupId: string): boolean => {
       return filters.value.starredOnly
     case 'comments':
       return filters.value.hasCommentOnly
+    case 'unreviewedHot':
+      return Boolean(filters.value.unreviewedHotOnly)
     case 'acmg':
       return filters.value.acmgClassifications.length > 0
     case 'annotations':
       return (
         filters.value.starredOnly ||
         filters.value.hasCommentOnly ||
+        Boolean(filters.value.unreviewedHotOnly) ||
         filters.value.acmgClassifications.length > 0
       )
     default:

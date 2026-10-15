@@ -22,10 +22,6 @@ export function igvLocus(v: IntervalSource & { chr: string }): string {
     : `${v.chr}:${interval.start}-${interval.end}`
 }
 
-export function igvGotoUrl(locus: string): string {
-  return `${IGV_BATCH_ORIGIN}/goto?locus=${encodeURIComponent(locus)}`
-}
-
 /** IGV's genome id (hg38, hg19) for a known build; null when the build is unknown. */
 export function igvGenomeId(build: string | null | undefined): string | null {
   const id = normalizeBuild(build)
@@ -34,20 +30,59 @@ export function igvGenomeId(build: string | null | undefined): string | null {
   return builds.find((b) => b.id === id)?.links?.ucscDb ?? null
 }
 
-/**
- * Send the locus to IGV. Resolves true when IGV's port answered, false when
- * nothing listens (refused or timed out). `no-cors`: IGV sends no CORS
- * headers, so the answer is opaque, but a refused connection still throws.
- */
-export async function sendToIgv(locus: string): Promise<boolean> {
+export function igvGotoUrl(locus: string, genomeBuild?: string | null): string {
+  const genome = igvGenomeId(genomeBuild)
+  const base = `${IGV_BATCH_ORIGIN}/goto?locus=${encodeURIComponent(locus)}`
+  return genome === null ? base : `${base}&genome=${encodeURIComponent(genome)}`
+}
+
+export function igvLoadUrl(
+  fileOrUrl: string,
+  locus?: string | null,
+  genomeBuild?: string | null
+): string {
+  let url = `${IGV_BATCH_ORIGIN}/load?file=${encodeURIComponent(fileOrUrl)}`
+  const trimmedLocus = locus?.trim()
+  if (trimmedLocus !== undefined && trimmedLocus !== '') {
+    url += `&locus=${encodeURIComponent(trimmedLocus)}`
+  }
+  const genome = igvGenomeId(genomeBuild)
+  if (genome !== null) {
+    url += `&genome=${encodeURIComponent(genome)}`
+  }
+  return url
+}
+
+async function requestIgvBatch(url: string): Promise<boolean> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), IGV_TIMEOUT_MS)
   try {
-    await fetch(igvGotoUrl(locus), { mode: 'no-cors', signal: controller.signal })
+    await fetch(url, { mode: 'no-cors', signal: controller.signal })
     return true
   } catch {
     return false
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Send the locus to IGV. Resolves true when IGV's port answered, false when
+ * nothing listens (refused or timed out). `no-cors`: IGV sends no CORS
+ * headers, so the answer is opaque, but a refused connection still throws.
+ */
+export async function sendToIgv(locus: string, genomeBuild?: string | null): Promise<boolean> {
+  return requestIgvBatch(igvGotoUrl(locus, genomeBuild))
+}
+
+/**
+ * Load a local BAM/CRAM/VCF track (or URL) in IGV Desktop via its batch HTTP listener,
+ * optionally jumping to a locus and verifying/switching the active genome build.
+ */
+export async function loadInIgv(
+  fileOrUrl: string,
+  locus?: string | null,
+  genomeBuild?: string | null
+): Promise<boolean> {
+  return requestIgvBatch(igvLoadUrl(fileOrUrl, locus, genomeBuild))
 }

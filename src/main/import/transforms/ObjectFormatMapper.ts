@@ -6,7 +6,8 @@ import { setRecordBytes } from '../bounded-batcher'
 import { OBJECT_FORMAT_COLUMNS } from '../../../shared/config/import-fields.config'
 import { FieldProfileResolver, jsonValueText } from '../../../shared/utils/import-field-profile'
 import { hpoMatchText } from './hpo-match'
-import { trimAlleles } from '../../../shared/utils/trim-alleles'
+import { leftAlignAlleles } from '../../../shared/utils/trim-alleles'
+import type { ContigReferenceLookup } from '../vcf/FastaIndexedReader'
 
 type MappedVariant = Omit<Variant, 'id' | 'case_id'>
 
@@ -93,11 +94,13 @@ export class ObjectFormatMapper extends Transform {
    * @param takeRecordBytes source size of the next input record, if tracked
    * @param onSkip told about every record dropped for a missing required field
    * @param fields decides where properties without a column go (default: keep all)
+   * @param referenceLookup optional per-contig reference window lookup for repeat left-alignment
    */
   constructor(
     private readonly takeRecordBytes?: () => number,
     private readonly onSkip?: (reason: string) => void,
-    private readonly fields: FieldProfileResolver = new FieldProfileResolver()
+    private readonly fields: FieldProfileResolver = new FieldProfileResolver(),
+    private readonly referenceLookup: ContigReferenceLookup | null = null
   ) {
     super({ objectMode: true })
   }
@@ -209,7 +212,10 @@ export class ObjectFormatMapper extends Transform {
       }
 
       // Minimal alleles (#587), so a padded spelling matches the VCF import's.
-      Object.assign(mapped, trimAlleles(mapped.pos, mapped.ref, mapped.alt))
+      Object.assign(
+        mapped,
+        leftAlignAlleles(mapped.pos, mapped.ref, mapped.alt, this.referenceLookup?.(mapped.chr))
+      )
       if (recordBytes !== undefined) setRecordBytes(mapped, recordBytes)
       this.push(mapped as MappedVariantWithTranscripts)
       callback()
@@ -222,7 +228,8 @@ export class ObjectFormatMapper extends Transform {
 export function createObjectFormatMapper(
   takeRecordBytes?: () => number,
   onSkip?: (reason: string) => void,
-  fields?: FieldProfileResolver
+  fields?: FieldProfileResolver,
+  referenceLookup?: ContigReferenceLookup | null
 ): ObjectFormatMapper {
-  return new ObjectFormatMapper(takeRecordBytes, onSkip, fields)
+  return new ObjectFormatMapper(takeRecordBytes, onSkip, fields, referenceLookup ?? null)
 }

@@ -220,13 +220,10 @@ describe('ShortlistService — evidence ranking', () => {
     expect(attempt).toThrow(/Shortlist preset "Broken evidence".*nope/)
   })
 
-  it('rejects an evidence configuration that scopes SVs', () => {
-    expect(() => run({ ...EVIDENCE_CONFIG, variantTypeScope: ['snv', 'sv'] })).toThrow(
-      /variantTypeScope/
-    )
-    expect(() => run({ ...EVIDENCE_CONFIG, variantTypeScope: ['snv', 'sv'] })).toThrow(
-      DatabaseError
-    )
+  it('accepts an evidence configuration that scopes SVs and rejects an empty scope', () => {
+    expect(() => run({ ...EVIDENCE_CONFIG, variantTypeScope: ['snv', 'sv'] })).not.toThrow()
+    expect(() => run({ ...EVIDENCE_CONFIG, variantTypeScope: [] })).toThrow(/variantTypeScope/)
+    expect(() => run({ ...EVIDENCE_CONFIG, variantTypeScope: [] })).toThrow(DatabaseError)
   })
 
   it('rankCase(…, Infinity) ranks every candidate and agrees with getShortlist', () => {

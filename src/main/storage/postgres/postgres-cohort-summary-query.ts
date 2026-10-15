@@ -28,7 +28,10 @@ import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { singleFrequencyDenominator } from '../../../shared/sql/carrier-frequency'
 import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
-import { cohortInfoExistsClauses } from '../../../shared/sql/cohort-info-filter-sql'
+import {
+  cohortInfoExistsClauses,
+  cohortUnreviewedHotClause
+} from '../../../shared/sql/cohort-info-filter-sql'
 import { infoFieldKey } from '../../../shared/filters/info-field-filter'
 import { SUMMARY_FREQUENCY_SQL } from './postgres-carrier-frequency-sql'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
@@ -36,25 +39,10 @@ import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/s
 /**
  * Summary read-side query builder (Sprint A PR-3 C4).
  *
- * Mirrors `PostgresCohortRepository.buildQueryParts`, but maps every predicate
- * to alias `cvs` for the materialised `cohort_variant_summary` table. Because
- * carrier_count / het_count / hom_count are stored columns on
- * `cohort_variant_summary`, the predicates that the live builder pushes into
- * `HAVING` (over a `GROUP BY`) become plain `WHERE` predicates here — there is
- * no grouping in the summary path.
- *
- * Cohort frequency is NOT stored: it is carriers over the number of visible
- * cases of the row's genome build, derived at read time (see
- * `SUMMARY_FREQUENCY_SQL`). Storing it meant rewriting every summary row on
- * every import and every case deletion.
- *
- * Extension-table predicates (`sv.*`, `cnv.*`, `str.*`) are not stored in the
- * summary: they are an `EXISTS` over the visible carrier rows of the summary
- * row and their extension table, as on SQLite (`buildExtensionExistsClauses`).
- * The annotation shown and filtered is the summary row's representative in
- * every case (#469), so the page, the extension-filtered page and the export
- * agree. The builder needs the schema for that; without one it reports the
- * predicate set as unavailable.
+ * Mirrors `PostgresCohortRepository.buildQueryParts` over alias `cvs` for
+ * `cohort_variant_summary`. Carrier counts are stored columns; cohort frequency
+ * is derived at read time (`SUMMARY_FREQUENCY_SQL`), and extension predicates
+ * (`sv.*`, `cnv.*`, `str.*`) use `EXISTS` over visible carrier rows.
  */
 
 export interface SummaryQueryParts {
@@ -522,6 +510,11 @@ export function buildSummaryQueryParts(
     whereParts.push(
       `cvs.acmg_best IN (${params.acmg_classifications.map((value) => addParam(value)).join(', ')})`
     )
+  }
+
+  if (params.unreviewed_hot === true) {
+    const pfx = schema !== undefined ? `"${schema.replace(/"/g, '""')}".` : ''
+    whereParts.push(cohortUnreviewedHotClause('cvs', 'postgres', pfx))
   }
 
   // Per-column typed filters → stored cvs columns (aggregates become plain

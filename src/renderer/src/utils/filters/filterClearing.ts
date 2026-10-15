@@ -24,6 +24,7 @@ export type FilterId =
   | 'carriers'
   | 'starred'
   | 'comments'
+  | 'unreviewedHot'
   | 'acmg'
   | 'panels'
   | 'internal-frequency'
@@ -67,6 +68,8 @@ export function clearFilter(filterId: FilterId): Partial<FilterState> {
       return { starredOnly: FILTER_DEFAULTS.starredOnly }
     case 'comments':
       return { hasCommentOnly: FILTER_DEFAULTS.hasCommentOnly }
+    case 'unreviewedHot':
+      return { unreviewedHotOnly: FILTER_DEFAULTS.unreviewedHotOnly }
     case 'acmg':
       return { acmgClassifications: [...FILTER_DEFAULTS.acmgClassifications] }
     case 'panels':
@@ -117,6 +120,7 @@ export function clearAllFilters(): FilterState {
     minCarriers: FILTER_DEFAULTS.minCarriers,
     starredOnly: FILTER_DEFAULTS.starredOnly,
     hasCommentOnly: FILTER_DEFAULTS.hasCommentOnly,
+    unreviewedHotOnly: FILTER_DEFAULTS.unreviewedHotOnly,
     acmgClassifications: [...FILTER_DEFAULTS.acmgClassifications],
     tagIds: [...FILTER_DEFAULTS.tagIds],
     annotationScope: FILTER_DEFAULTS.annotationScope,

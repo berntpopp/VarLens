@@ -1017,6 +1017,84 @@ describe('CohortService', () => {
       const result2 = cohortService.getCohortVariants({})
       expect(result2.total_count).toBe(2)
     })
+
+    it('filters unreviewed_hot to HIGH impact or ClinVar P/LP variants without ACMG, star, comment, or tag (#149)', () => {
+      const caseId = insertCase('Hot Case')
+      // Hot via HIGH impact
+      insertVariant(caseId, '1', 100, 'A', 'G', { gene_symbol: 'BRCA1', consequence: 'HIGH' })
+      // Hot via ClinVar Pathogenic
+      insertVariant(caseId, '1', 200, 'C', 'T', {
+        gene_symbol: 'TP53',
+        consequence: 'MODERATE',
+        clinvar: 'Pathogenic'
+      })
+      // Hot via ClinVar Likely_pathogenic
+      insertVariant(caseId, '1', 300, 'G', 'A', {
+        gene_symbol: 'PTEN',
+        consequence: 'MODERATE',
+        clinvar: 'Likely_pathogenic'
+      })
+      // Not hot (MODERATE + Benign)
+      insertVariant(caseId, '1', 400, 'T', 'C', {
+        gene_symbol: 'APC',
+        consequence: 'MODERATE',
+        clinvar: 'Benign'
+      })
+      summaryService.rebuild()
+
+      // All 3 hot variants returned initially
+      const initial = cohortService.getCohortVariants({ unreviewed_hot: true })
+      expect(initial.total_count).toBe(3)
+      expect(initial.data.map((v) => v.gene_symbol).sort()).toEqual(['BRCA1', 'PTEN', 'TP53'])
+
+      // Star BRCA1 -> excluded
+      db.prepare(
+        `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, starred, created_at, updated_at)
+         VALUES ('1', 100, 'A', 'G', 'GRCh38', 1, 0, 0)`
+      ).run()
+      const afterStar = cohortService.getCohortVariants({ unreviewed_hot: true })
+      expect(afterStar.data.map((v) => v.gene_symbol).sort()).toEqual(['PTEN', 'TP53'])
+
+      // Classify TP53 ACMG -> excluded
+      db.prepare(
+        `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, acmg_classification, created_at, updated_at)
+         VALUES ('1', 200, 'C', 'T', 'GRCh38', 'Pathogenic', 0, 0)`
+      ).run()
+      const afterAcmg = cohortService.getCohortVariants({ unreviewed_hot: true })
+      expect(afterAcmg.data.map((v) => v.gene_symbol)).toEqual(['PTEN'])
+
+      // Tag PTEN -> excluded
+      const tagId = db
+        .prepare("INSERT INTO tags (name, color, created_at) VALUES ('Review', '#ff0000', 0)")
+        .run().lastInsertRowid as number
+      const ptenVariantId = (
+        db.prepare('SELECT id FROM variants WHERE case_id = ? AND pos = 300').get(caseId) as {
+          id: number
+        }
+      ).id
+      db.prepare(
+        'INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at) VALUES (?, ?, ?, 0)'
+      ).run(caseId, ptenVariantId, tagId)
+
+      const afterTag = cohortService.getCohortVariants({ unreviewed_hot: true })
+      expect(afterTag.total_count).toBe(0)
+      expect(afterTag.data).toEqual([])
+    })
+
+    it('excludes hot variants once commented (#149)', () => {
+      const caseId = insertCase('Commented Hot Case')
+      insertVariant(caseId, '1', 100, 'A', 'G', { gene_symbol: 'BRCA2', consequence: 'HIGH' })
+      summaryService.rebuild()
+
+      expect(cohortService.getCohortVariants({ unreviewed_hot: true }).total_count).toBe(1)
+
+      db.prepare(
+        `INSERT INTO variant_annotations (chr, pos, ref, alt, genome_build, global_comment, created_at, updated_at)
+         VALUES ('1', 100, 'A', 'G', 'GRCh38', 'Reviewed negative', 0, 0)`
+      ).run()
+
+      expect(cohortService.getCohortVariants({ unreviewed_hot: true }).total_count).toBe(0)
+    })
   })
 
   describe('CohortService — extension filter via EXISTS (Path 2)', () => {

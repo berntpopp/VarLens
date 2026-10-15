@@ -241,7 +241,7 @@ describe('useShortlistRankingEditor — edits and validation', () => {
   it('reports gate problems from the IPC schema', async () => {
     const e = await editor(3)
     e.draft.value!.config.topN = 0
-    e.draft.value!.config.variantTypeScope = ['snv', 'sv']
+    e.draft.value!.config.variantTypeScope = []
     expect(at(e, 'topN')).toHaveLength(1)
     expect(at(e, 'variantTypeScope')).toHaveLength(1)
   })

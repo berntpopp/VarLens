@@ -85,19 +85,17 @@ describe('evidenceConfigProblems / describeProblem', () => {
     rs.groups[0].rules[0].when = 'nope:=:1'
     const problems = evidenceConfigProblems(config(rs))
     expect(problems.map((p) => problemKey(p.path))).toEqual([
-      'variantTypeScope',
       'rankConfig.ruleset.groups.0.rules.0.when'
     ])
-    expect(describeProblem(problems[1], rs)).toMatch(/^rule af_missing: /)
+    expect(describeProblem(problems[0], rs)).toMatch(/^rule af_missing: /)
   })
 })
 
-// #581, #582, #642: CNV and STR are enabled by default; SV stays behind its flag.
+// #581, #582, #642: SV, CNV and STR are enabled by default; each can be gated off.
 describe('variant-type scoped groups', () => {
   const flags = SHORTLIST_EVIDENCE_CONFIG.structuralTypes.enabled
   afterEach(() => {
-    flags.sv = false
-    flags.cnv = flags.str = true
+    flags.sv = flags.cnv = flags.str = true
   })
   const svRuleset = (): EvidenceRuleset => {
     const rs = clone()
@@ -122,15 +120,10 @@ describe('variant-type scoped groups', () => {
     }
   })
 
-  it('accepts CNV and STR by default while rejecting SV', () => {
-    expect(flags).toEqual({ sv: false, cnv: true, str: true })
-    expect(keys(svRuleset())).toEqual([
-      'groups.' + VARVIS_EVIDENCE_TEMPLATE.groups.length + '.variantType'
-    ])
-    expect(evidenceConfigProblems(svConfig(svRuleset())).map((p) => problemKey(p.path))).toEqual([
-      'variantTypeScope',
-      `rankConfig.ruleset.groups.${VARVIS_EVIDENCE_TEMPLATE.groups.length}.variantType`
-    ])
+  it('accepts SV, CNV and STR by default', () => {
+    expect(flags).toEqual({ sv: true, cnv: true, str: true })
+    expect(rulesetProblems(svRuleset())).toEqual([])
+    expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
     const cnvStr = svRuleset()
     cnvStr.groups[cnvStr.groups.length - 1].variantType = 'cnv'
     expect(rulesetProblems(cnvStr)).toEqual([])
@@ -139,15 +132,20 @@ describe('variant-type scoped groups', () => {
     expect(
       evidenceConfigProblems({
         ...svConfig(cnvStr),
-        variantTypeScope: ['snv', 'indel', 'cnv', 'str']
+        variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str']
       })
     ).toEqual([])
   })
 
-  it('accepts SV when its flag is turned on', () => {
-    flags.sv = true
-    expect(rulesetProblems(svRuleset())).toEqual([])
-    expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
+  it('rejects SV when its flag is turned off', () => {
+    flags.sv = false
+    expect(keys(svRuleset())).toEqual([
+      'groups.' + VARVIS_EVIDENCE_TEMPLATE.groups.length + '.variantType'
+    ])
+    expect(evidenceConfigProblems(svConfig(svRuleset())).map((p) => problemKey(p.path))).toEqual([
+      'variantTypeScope',
+      `rankConfig.ruleset.groups.${VARVIS_EVIDENCE_TEMPLATE.groups.length}.variantType`
+    ])
   })
 
   it('gates each structural type independently when toggled off', () => {

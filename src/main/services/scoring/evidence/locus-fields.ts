@@ -44,7 +44,7 @@ export interface LocusResult {
 }
 
 export const isLocusRow = (row: Pick<LightRow, 'variant_type'>): boolean =>
-  row.variant_type === 'cnv' || row.variant_type === 'str'
+  row.variant_type === 'cnv' || row.variant_type === 'str' || row.variant_type === 'sv'
 
 const NO_GENES: GeneSpanLookup = { overlapping: () => [], span: () => undefined }
 const BANDS: readonly StrBand[] = ['normal', 'intermediate', 'premutation', 'full']
@@ -84,7 +84,7 @@ function diseaseConflicts(info: CaseInfo, disease: string | null): number | null
 }
 
 /**
- * The locus fields of one CNV or STR row. `otherHetHits(gene)` counts the het
+ * The locus fields of one CNV, SV or STR row. `otherHetHits(gene)` counts the het
  * alleles of the gene other than the row itself (the STR second hit).
  */
 export function scoreLocusRow(
@@ -111,7 +111,14 @@ export function scoreLocusRow(
     return { fields, note: s.note }
   }
   const genes = inputs?.genes ?? NO_GENES
-  const set = cnvGeneSet(inputs?.cnvGenes.get(row.id), genes, row.chr, row.pos, cnvEnd(row))
+  const rawSet = cnvGeneSet(inputs?.cnvGenes.get(row.id), genes, row.chr, row.pos, cnvEnd(row))
+  const set =
+    rawSet.length === 0 &&
+    row.variant_type === 'sv' &&
+    row.gene_symbol !== null &&
+    row.gene_symbol !== ''
+      ? [{ symbol: row.gene_symbol, span: genes.span(row.gene_symbol, row.chr) }]
+      : rawSet
   const c = scoreCnv(row, set, {
     build: info.build,
     sex: info.sex,

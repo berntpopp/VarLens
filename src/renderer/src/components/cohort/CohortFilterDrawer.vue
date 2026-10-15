@@ -494,17 +494,12 @@ const {
   onClearTypeFilter
 } = state
 
-// Scope for extension column filters (cohort view spans all cases)
 const columnFilterScope = computed(() => ({ caseIds: cohortCaseIds.value }))
-
-// Active/summary state for the extension columns expansion panel
 const extensionColumnsActive = computed(() => Object.keys(columnFilters.value).length > 0)
 const extensionColumnsSummary = computed(() => {
   const count = Object.keys(columnFilters.value).length
   return count > 0 ? `${count} filter${count === 1 ? '' : 's'}` : ''
 })
-
-// Value summaries for collapsed panel previews
 const searchSummary = computed(() => searchTerm.value || '')
 const geneSummary = computed(() => filters.value.geneSymbol || '')
 
@@ -527,6 +522,7 @@ const annotationsSummary = computed(() => {
   const parts: string[] = []
   if (filters.value.starredOnly) parts.push('Starred')
   if (filters.value.hasCommentOnly) parts.push('Comments')
+  if (filters.value.unreviewedHotOnly === true) parts.push('Unreviewed hot')
   if (filters.value.acmgClassifications.length > 0) {
     parts.push(`ACMG: ${filters.value.acmgClassifications.length}`)
   }

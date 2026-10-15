@@ -35,6 +35,7 @@ export interface CohortFilterDrawerState {
     maxCarriers: number | null
     starredOnly: boolean
     hasCommentOnly: boolean
+    unreviewedHotOnly?: boolean
     acmgClassifications: string[]
     activePanelIds: number[]
     panelPaddingBp: number

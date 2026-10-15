@@ -38,6 +38,7 @@ export function toLightRow(row: LightRow): LightRow {
     variant_type: row.variant_type,
     end_pos: row.end_pos ?? null,
     sv_type: row.sv_type ?? null,
+    sv_length: row.sv_length ?? null,
     cnv_copy_number: row.cnv_copy_number ?? null,
     str_alt_copies: row.str_alt_copies ?? null,
     str_status: row.str_status ?? null,

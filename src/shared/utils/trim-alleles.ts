@@ -1,19 +1,24 @@
 /**
- * Trim-only allele normalisation (#587): strip the common suffix, then the
- * common prefix, keeping one base on each side so an indel keeps its VCF
- * anchor base; `pos` moves by the prefix removed. `ATT>AT` becomes `AT>A`,
- * `ACG>ATG` becomes `C>T` at pos+1. Comparison is exact (callers upper-case
- * when they need case-insensitive identity).
- *
- * ponytail: no reference sequence here, so repeat-shifted indels are not
- * left-aligned (`CA>C` at 100 and `AA>A` at 101 in `CAA` stay distinct);
- * that needs a reference FASTA.
+ * Allele normalisation (#587):
+ * - `trimAlleles`: strip common suffix, then common prefix, keeping one anchor base.
+ * - `leftAlignAlleles`: Tan et al. (2015) reference-aware repeat-shift left-alignment
+ *   plus prefix/suffix trimming when an indexed reference window lookup is supplied,
+ *   falling back to `trimAlleles` when no reference window is available.
  */
 export interface TrimmedAlleles {
   pos: number
   ref: string
   alt: string
 }
+
+/**
+ * Returns the upper-case reference bases for `[start1Based, end1BasedInclusive]`,
+ * or `null` if the contig/interval is unavailable.
+ */
+export type ReferenceWindowLookup = (
+  start1Based: number,
+  end1BasedInclusive: number
+) => string | null
 
 /** Symbolic (`<DEL>`), breakend (`A[chr2:1[`), spanning (`*`) or missing (`.`) ALT. */
 function isSymbolic(allele: string): boolean {
@@ -50,6 +55,73 @@ export function trimAlleles(pos: number, ref: string, alt: string): TrimmedAllel
     ref: ref.slice(start, ref.length - end),
     alt: alt.slice(start, alt.length - end)
   }
+}
+
+/**
+ * Tan et al. (2015) unified variant normalization (`leftAlignAlleles`):
+ * 1. While the last base of `ref` and `alt` match, strip the last base; if
+ *    either allele becomes empty and `pos > 1`, prepend the preceding reference
+ *    base (`pos - 1`) to both alleles and continue shifting left.
+ * 2. Trim any common prefix while keeping at least 1 base in both `ref` and `alt`.
+ *
+ * Falls back to `trimAlleles` when `fetchWindow` is omitted, returns `null`, or
+ * encounters a non-ACGT ambiguous base during left-shifting.
+ */
+export function leftAlignAlleles(
+  pos: number,
+  ref: string,
+  alt: string,
+  fetchWindow?: ReferenceWindowLookup | null
+): TrimmedAlleles {
+  if (fetchWindow == null || isSymbolic(alt) || isSymbolic(ref) || ref === alt) {
+    return trimAlleles(pos, ref, alt)
+  }
+  // Single-base substitutions cannot left-shift.
+  if (ref.length === 1 && alt.length === 1) return { pos, ref, alt }
+
+  let curPos = pos
+  let curRef = ref
+  let curAlt = alt
+  let winStart = 0
+  let winSeq = ''
+
+  const prevBase = (at1Based: number): string | null => {
+    if (at1Based < 1) return null
+    if (winSeq === '' || at1Based < winStart || at1Based >= winStart + winSeq.length) {
+      const chunkStart = Math.max(1, at1Based - 63)
+      const fetched = fetchWindow(chunkStart, at1Based)
+      if (fetched == null || fetched.length !== at1Based - chunkStart + 1) return null
+      winStart = chunkStart
+      winSeq = fetched.toUpperCase()
+    }
+    const base = winSeq[at1Based - winStart]
+    return base === 'A' || base === 'C' || base === 'G' || base === 'T' ? base : null
+  }
+
+  for (;;) {
+    while (
+      curRef.length > 1 &&
+      curAlt.length > 1 &&
+      curRef[curRef.length - 1].toUpperCase() === curAlt[curAlt.length - 1].toUpperCase()
+    ) {
+      curRef = curRef.slice(0, -1)
+      curAlt = curAlt.slice(0, -1)
+    }
+    if (
+      (curRef.length === 1 || curAlt.length === 1) &&
+      curRef[curRef.length - 1].toUpperCase() === curAlt[curAlt.length - 1].toUpperCase()
+    ) {
+      const base = prevBase(curPos - 1)
+      if (base === null) break
+      curPos -= 1
+      curRef = base + curRef.slice(0, -1)
+      curAlt = base + curAlt.slice(0, -1)
+      continue
+    }
+    break
+  }
+
+  return trimAlleles(curPos, curRef, curAlt)
 }
 
 /**

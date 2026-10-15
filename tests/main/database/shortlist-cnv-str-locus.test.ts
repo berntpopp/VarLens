@@ -9,7 +9,7 @@
  * VARLENS_RUN_POSTGRES_E2E=1 (VARLENS_PG_URL).
  */
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -128,11 +128,31 @@ const RULESET: EvidenceRuleset = {
         { id: 'full', label: 'Full', when: 'str_band:=:full', points: 4 },
         { id: 'normal', label: 'Normal', when: 'str_band:=:normal', points: -1 }
       ]
+    },
+    {
+      id: 'sv_rules',
+      label: 'SV rules',
+      scope: 'global',
+      variantType: 'sv',
+      rules: [
+        {
+          id: 'sv_del_multi',
+          label: 'Multi-gene DEL',
+          when: 'sv_type:=:DEL AND sv_length:>=:1000 AND cnv_gene_count:>=:2',
+          points: 3
+        },
+        {
+          id: 'sv_inv',
+          label: 'Inversion',
+          when: 'sv_type:=:INV AND sv_length:>=:1000',
+          points: 1
+        }
+      ]
     }
   ]
 }
 const CONFIG: ShortlistConfig = {
-  variantTypeScope: ['cnv', 'str'],
+  variantTypeScope: ['sv', 'cnv', 'str'],
   baseFilters: {},
   topN: 50,
   rankConfig: {
@@ -140,7 +160,20 @@ const CONFIG: ShortlistConfig = {
     ruleset: RULESET
   }
 }
-const FILES = ['synthetic-cnv-vep.vcf', 'synthetic-str.vcf'] as const
+const SV_VCF = [
+  '##fileformat=VCFv4.2',
+  '##contig=<ID=chr15,length=101991189>',
+  '##contig=<ID=chr17,length=83257441>',
+  '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">',
+  '##INFO=<ID=END,Number=1,Type=Integer,Description="End position">',
+  '##INFO=<ID=SVLEN,Number=.,Type=Integer,Description="SV length">',
+  '##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE">',
+  '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+  '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE1',
+  'chr15\t22700000\tsv_del_1\tN\t<DEL>\t99\tPASS\tSVTYPE=DEL;END=22850000;SVLEN=150000;CSQ=deletion|transcript_ablation|HIGH|NIPA1|ENSG00000128739|Transcript|ENST00000249502|protein_coding,deletion|transcript_ablation|HIGH|NIPA2|ENSG00000140157|Transcript|ENST00000267712|protein_coding\tGT\t0/1',
+  'chr17\t15229779\tsv_inv_1\tN\t<INV>\t99\tPASS\tSVTYPE=INV;END=15265357;SVLEN=35578;CSQ=inversion|transcript_amplification|HIGH|PMP22|ENSG00000109099|Transcript|ENST00000226253|protein_coding\tGT\t0/1'
+].join('\n')
+const FILES = ['synthetic-cnv-vep.vcf', 'synthetic-str.vcf', 'synthetic-sv-vep.vcf'] as const
 const TERMS = [T.C, T.D, T.E]
 
 /** Backend-independent view of a ranked row (ids differ between backends). */
@@ -155,12 +188,15 @@ const rowAt = (r: ShortlistResult, pos: number, gt?: string) =>
   r.rows.find((row) => row.pos === pos && (gt === undefined || row.gt_num === gt))
 
 let dir: string
+const vcfPath = (file: (typeof FILES)[number]): string =>
+  file === 'synthetic-sv-vep.vcf' ? join(dir, file) : resolve(VCF_DIR, file)
 const lite = new Map<string, ShortlistResult>()
 const enabled = SHORTLIST_EVIDENCE_CONFIG.structuralTypes.enabled
 const saved = { ...enabled }
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'cnv-str-locus-'))
+  writeFileSync(join(dir, 'synthetic-sv-vep.vcf'), SV_VCF)
   const hpoPath = join(dir, 'hpo_similarity.db')
   const warnings = buildHpoSimilarityDb(
     {
@@ -185,13 +221,13 @@ beforeAll(async () => {
   )
   expect(warnings).toEqual([])
   process.env[HPO_DATA_CONFIG.envPath] = hpoPath
-  Object.assign(enabled, { cnv: true, str: true })
+  Object.assign(enabled, { sv: true, cnv: true, str: true })
 
   const svc = new DatabaseService(':memory:')
   const geneRef = new GeneReferenceDb(new Database(GENE_REF, { readonly: true }))
   try {
     for (const file of FILES) {
-      const path = resolve(VCF_DIR, file)
+      const path = vcfPath(file)
       const caseId = svc.cases.createCase(file, path, 1)
       svc.database.prepare("UPDATE cases SET genome_build = 'GRCh38' WHERE id = ?").run(caseId)
       // prettier-ignore
@@ -256,6 +292,29 @@ describe('CNV/STR locus fields — SQLite end to end', () => {
     expect(rowAt(str, 92071010)?.rank_hpo).toBeNull()
     expect(rowAt(str, 149390803)?.rank_evidence?.map((c) => c.id)).toEqual(['fallback'])
   })
+
+  it('scores DEL/DUP SVs via scoreCnv and falls back to gene HPO for balanced SVs', () => {
+    const sv = lite.get('synthetic-sv-vep.vcf')!
+    const del = rowAt(sv, 22700000)!
+    expect(del.rank_evidence?.map((c) => c.id)).toEqual([
+      'fallback',
+      'pheno',
+      'locus',
+      'sv_del_multi'
+    ])
+    expect(del.rank_hpo?.diseaseId).toBe('OMIM:4')
+    expect(del.rank_hpo?.locus).toEqual({
+      kind: 'gene',
+      id: 'NIPA2',
+      label: 'NIPA2',
+      diseaseGenes: 2,
+      genes: 2
+    })
+    const inv = rowAt(sv, 15229779)!
+    expect(inv.rank_evidence?.map((c) => c.id)).toEqual(['fallback', 'pheno', 'locus', 'sv_inv'])
+    expect(inv.rank_hpo?.diseaseId).toBe('OMIM:3')
+    expect(inv.rank_hpo?.locus).toBeUndefined()
+  })
 })
 
 describe.skipIf(!RUN_PG)('CNV/STR locus fields — PostgreSQL parity', () => {
@@ -297,7 +356,7 @@ describe.skipIf(!RUN_PG)('CNV/STR locus fields — PostgreSQL parity', () => {
           schema,
           mode: 'single-file',
           caseName: file,
-          filePath: resolve(VCF_DIR, file),
+          filePath: vcfPath(file),
           vcfOptions: { genomeBuild: 'GRCh38' },
           batchSize: 10_000
         },

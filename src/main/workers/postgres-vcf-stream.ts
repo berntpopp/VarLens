@@ -10,6 +10,7 @@ import {
   type ImportFilters
 } from '../import/vcf/import-filters'
 import { mapVcfRecord, seedVcfFields } from '../import/vcf/VcfMapper'
+import { openConfiguredFastaReader } from '../import/vcf/FastaIndexedReader'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { VcfHeaderBudget } from '../import/vcf/vcf-header-limits'
 import { assertGenomeBuildMatches, parseVcfHeaderFromLines } from '../import/vcf/vcf-header-parser'
@@ -52,6 +53,9 @@ export async function* streamMappedVcfRows(
   let activeSample = ''
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
+  const fastaReader = openConfiguredFastaReader()
+  const referenceLookup =
+    fastaReader !== null ? (chr: string) => fastaReader.windowForContig(chr) : null
 
   try {
     for await (const line of lines) {
@@ -86,7 +90,8 @@ export async function* streamMappedVcfRows(
           activeSample,
           DEFAULT_INFO_FIELD_MAPPINGS,
           callerName,
-          fields
+          fields,
+          referenceLookup
         )
         for (const variant of mapped) {
           if (!passesPostMappingFilters(variant, filters)) continue
@@ -112,6 +117,7 @@ export async function* streamMappedVcfRows(
         appendedTo !== undefined
       )
   } finally {
+    fastaReader?.close()
     lines.close()
     stream.destroy()
   }

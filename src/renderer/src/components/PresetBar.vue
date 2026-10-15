@@ -46,6 +46,9 @@
       size="x-small"
       @click="emit('manage')"
     />
+
+    <!-- Per-case saved filter snapshot controls (#124, active in Case View) -->
+    <CaseFilterSnapshotControls />
   </div>
 </template>
 
@@ -53,6 +56,7 @@
 import type { FilterPreset } from '../../../shared/types/filter-presets'
 import { mdiAccount, mdiCogOutline, mdiContentSaveOutline } from '@mdi/js'
 import IconButton from './common/IconButton.vue'
+import CaseFilterSnapshotControls from './CaseFilterSnapshotControls.vue'
 
 defineProps<{
   visiblePresets: FilterPreset[]

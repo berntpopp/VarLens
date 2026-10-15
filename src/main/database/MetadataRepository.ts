@@ -21,6 +21,13 @@ import {
   type CasePhenotypeProfile
 } from '../services/phenotype/case-phenotype-scores'
 import type { GenePhenotypeScore } from '../services/phenotype/hpo-similarity-db'
+import {
+  CASE_FILTER_RESTORE_ID_TYPE,
+  CASE_FILTER_SNAPSHOT_ID_TYPE,
+  formatCaseFilterAuditPayload,
+  isInternalCaseExternalIdType,
+  parseCaseFilterSnapshot
+} from '../../shared/filters/case-filter-snapshot'
 
 type HpoTermRow = Omit<CaseHpoTerm, 'excluded' | 'key'> & { excluded: number; key: number }
 
@@ -55,31 +62,24 @@ export class MetadataRepository extends BaseRepository {
       const existing = this.execFirst<CaseMetadata>(
         this.kysely.selectFrom('case_metadata').selectAll().where('case_id', '=', caseId)
       )
-
       if (existing === undefined) {
+        const insertVals: Record<string, string | number | null> = {
+          case_id: caseId,
+          created_at: now,
+          updated_at: now
+        }
+        for (const field of fields) insertVals[field] = updates[field] ?? null
         return this.execFirst<CaseMetadata>(
           this.kysely
             .insertInto('case_metadata')
-            .values({
-              case_id: caseId,
-              affected_status: updates.affected_status ?? null,
-              sex: updates.sex ?? null,
-              notes: updates.notes ?? null,
-              age: updates.age ?? null,
-              date_of_birth: updates.date_of_birth ?? null,
-              created_at: now,
-              updated_at: now
-            })
+            .values(insertVals as never)
             .returningAll()
         ) as CaseMetadata
       }
-
       // Build dynamic update object from explicitly provided fields
       const updateObj: Record<string, string | number | null> = { updated_at: now }
       for (const field of fields) {
-        if (field in updates) {
-          updateObj[field] = updates[field] ?? null
-        }
+        if (field in updates) updateObj[field] = updates[field] ?? null
       }
       return this.execFirst<CaseMetadata>(
         this.kysely
@@ -374,26 +374,17 @@ export class MetadataRepository extends BaseRepository {
     value: { numeric_value?: number | null; text_value?: string | null; date_value?: string | null }
   ): CaseMetric {
     const now = Date.now()
+    const setVals = {
+      numeric_value: value.numeric_value ?? null,
+      text_value: value.text_value ?? null,
+      date_value: value.date_value ?? null,
+      updated_at: now
+    }
     return this.execFirst<CaseMetric>(
       this.kysely
         .insertInto('case_metrics')
-        .values({
-          case_id: caseId,
-          metric_id: metricId,
-          numeric_value: value.numeric_value ?? null,
-          text_value: value.text_value ?? null,
-          date_value: value.date_value ?? null,
-          created_at: now,
-          updated_at: now
-        })
-        .onConflict((oc) =>
-          oc.columns(['case_id', 'metric_id']).doUpdateSet({
-            numeric_value: value.numeric_value ?? null,
-            text_value: value.text_value ?? null,
-            date_value: value.date_value ?? null,
-            updated_at: now
-          })
-        )
+        .values({ case_id: caseId, metric_id: metricId, created_at: now, ...setVals })
+        .onConflict((oc) => oc.columns(['case_id', 'metric_id']).doUpdateSet(setVals))
         .returningAll()
     ) as CaseMetric
   }
@@ -427,35 +418,9 @@ export class MetadataRepository extends BaseRepository {
   ): CaseDataInfo {
     return this.runTransaction(() => {
       const now = Date.now()
-
       const existing = this.execFirst<CaseDataInfo>(
         this.kysely.selectFrom('case_data_info').selectAll().where('case_id', '=', caseId)
       )
-
-      if (existing === undefined) {
-        return this.execFirst<CaseDataInfo>(
-          this.kysely
-            .insertInto('case_data_info')
-            .values({
-              case_id: caseId,
-              import_file_name: updates.import_file_name ?? null,
-              import_file_type: updates.import_file_type ?? null,
-              platform: updates.platform ?? null,
-              platform_details: updates.platform_details ?? null,
-              af_filter: updates.af_filter ?? null,
-              gene_list_filter: updates.gene_list_filter ?? null,
-              region_filter: updates.region_filter ?? null,
-              quality_filter: updates.quality_filter ?? null,
-              data_notes: updates.data_notes ?? null,
-              gene_list_id: updates.gene_list_id ?? null,
-              region_file_id: updates.region_file_id ?? null,
-              created_at: now,
-              updated_at: now
-            })
-            .returningAll()
-        ) as CaseDataInfo
-      }
-
       // Build dynamic update object from explicitly provided fields
       const allFields = [
         'import_file_name',
@@ -470,11 +435,23 @@ export class MetadataRepository extends BaseRepository {
         'gene_list_id',
         'region_file_id'
       ] as const
+      if (existing === undefined) {
+        const insertVals: Record<string, string | number | null> = {
+          case_id: caseId,
+          created_at: now,
+          updated_at: now
+        }
+        for (const field of allFields) insertVals[field] = updates[field] ?? null
+        return this.execFirst<CaseDataInfo>(
+          this.kysely
+            .insertInto('case_data_info')
+            .values(insertVals as never)
+            .returningAll()
+        ) as CaseDataInfo
+      }
       const updateObj: Record<string, string | number | null> = { updated_at: now }
       for (const field of allFields) {
-        if (field in updates) {
-          updateObj[field] = updates[field] ?? null
-        }
+        if (field in updates) updateObj[field] = updates[field] ?? null
       }
       return this.execFirst<CaseDataInfo>(
         this.kysely
@@ -501,22 +478,71 @@ export class MetadataRepository extends BaseRepository {
   }
 
   upsertCaseExternalId(caseId: number, idType: string, idValue: string): CaseExternalId {
-    const now = Date.now()
-    return this.execFirst<CaseExternalId>(
-      this.kysely
-        .insertInto('case_external_ids')
-        .values({ case_id: caseId, id_type: idType, id_value: idValue, created_at: now })
-        .onConflict((oc) => oc.columns(['case_id', 'id_type']).doUpdateSet({ id_value: idValue }))
-        .returningAll()
-    ) as CaseExternalId
+    return this.runTransaction(() => {
+      const now = Date.now()
+      if (idType === CASE_FILTER_RESTORE_ID_TYPE) {
+        this.execRun(
+          this.kysely
+            .deleteFrom('case_external_ids')
+            .where('case_id', '=', caseId)
+            .where('id_type', '=', CASE_FILTER_RESTORE_ID_TYPE)
+        )
+        const stamp = parseCaseFilterSnapshot(idValue)?.stamp
+        this.appendFilterSnapshotAudit(
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_restore', stamp),
+          now
+        )
+        return { id: 0, case_id: caseId, id_type: idType, id_value: idValue, created_at: now }
+      }
+      const row = this.execFirst<CaseExternalId>(
+        this.kysely
+          .insertInto('case_external_ids')
+          .values({ case_id: caseId, id_type: idType, id_value: idValue, created_at: now })
+          .onConflict((oc) => oc.columns(['case_id', 'id_type']).doUpdateSet({ id_value: idValue }))
+          .returningAll()
+      ) as CaseExternalId
+      if (idType === CASE_FILTER_SNAPSHOT_ID_TYPE) {
+        const stamp = parseCaseFilterSnapshot(idValue)?.stamp
+        this.appendFilterSnapshotAudit(
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_save', stamp),
+          now
+        )
+      }
+      return row
+    })
   }
 
   deleteCaseExternalId(caseId: number, idType: string): void {
+    this.runTransaction(() => {
+      this.execRun(
+        this.kysely
+          .deleteFrom('case_external_ids')
+          .where('case_id', '=', caseId)
+          .where('id_type', '=', idType)
+      )
+      if (idType === CASE_FILTER_SNAPSHOT_ID_TYPE) {
+        this.appendFilterSnapshotAudit(
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_clear', null, 'snapshot_cleared'),
+          Date.now()
+        )
+      }
+    })
+  }
+
+  private appendFilterSnapshotAudit(caseId: number, newValue: string, timestamp: number): void {
     this.execRun(
-      this.kysely
-        .deleteFrom('case_external_ids')
-        .where('case_id', '=', caseId)
-        .where('id_type', '=', idType)
+      this.kysely.insertInto('audit_log').values({
+        timestamp,
+        action_type: 'api_write',
+        entity_type: 'case_variant_annotation',
+        entity_key: `case:${caseId}:filter_snapshot`,
+        old_value: null,
+        new_value: newValue,
+        user_name: null
+      })
     )
   }
 
@@ -538,7 +564,7 @@ export class MetadataRepository extends BaseRepository {
     const rows = this.execAll<{ id_type: string }>(
       this.kysely.selectFrom('case_external_ids').select('id_type').distinct().orderBy('id_type')
     )
-    return rows.map((r) => r.id_type)
+    return rows.map((r) => r.id_type).filter((idType) => !isInternalCaseExternalIdType(idType))
   }
 
   /**

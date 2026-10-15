@@ -201,6 +201,7 @@ export function createFilters(): UseFiltersReturn {
     filters.value.minCarriers = null
     filters.value.starredOnly = false
     filters.value.hasCommentOnly = false
+    filters.value.unreviewedHotOnly = false
     filters.value.activePanelIds = []
     filters.value.panelPaddingBp = 5000
     filters.value.inheritanceModes = []

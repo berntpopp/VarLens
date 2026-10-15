@@ -70,6 +70,9 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
   if (plainState.hasCommentOnly) {
     params.has_comment = true
   }
+  if (plainState.unreviewedHotOnly === true) {
+    params.unreviewed_hot = true
+  }
   if ((plainState.acmgClassifications?.length ?? 0) > 0) {
     params.acmg_classifications = [...plainState.acmgClassifications]
   }

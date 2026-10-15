@@ -140,6 +140,7 @@ export const CohortSearchParamsSchema = z.object({
   // Annotation filters
   starred_only: z.boolean().optional(),
   has_comment: z.boolean().optional(),
+  unreviewed_hot: z.boolean().optional(),
   acmg_classifications: nullishStringArray(),
 
   // Per-column typed filters (operator + value)
@@ -758,6 +759,7 @@ export const FilterStateSchema = z.object({
   minCarriers: z.number().int().nonnegative().nullable(),
   starredOnly: z.boolean(),
   hasCommentOnly: z.boolean(),
+  unreviewedHotOnly: z.boolean().optional(),
   maxCarriers: z.number().int().positive().nullable(),
   acmgClassifications: z.array(z.string()),
   tagIds: z.array(z.number().int().positive()),

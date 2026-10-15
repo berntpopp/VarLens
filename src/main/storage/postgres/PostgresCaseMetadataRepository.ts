@@ -16,6 +16,13 @@ import {
   type CasePhenotypeProfile
 } from '../../services/phenotype/case-phenotype-scores'
 import type { GenePhenotypeScore } from '../../services/phenotype/hpo-similarity-db'
+import {
+  CASE_FILTER_RESTORE_ID_TYPE,
+  CASE_FILTER_SNAPSHOT_ID_TYPE,
+  formatCaseFilterAuditPayload,
+  isInternalCaseExternalIdType,
+  parseCaseFilterSnapshot
+} from '../../../shared/filters/case-filter-snapshot'
 
 type Queryable = Pick<Pool, 'query' | 'connect'>
 type Row = Record<string, unknown>
@@ -354,22 +361,80 @@ export class PostgresCaseMetadataRepository {
   }
 
   async upsertCaseExternalId(caseId: number, idType: string, idValue: string): Promise<unknown> {
-    const result = await this.pool.query<Row>(
-      `
-        INSERT INTO ${this.table('case_external_ids')} (case_id, id_type, id_value, created_at)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (case_id, id_type) DO UPDATE SET id_value = EXCLUDED.id_value
-        RETURNING *
-      `,
-      [caseId, idType, idValue, Date.now()]
-    )
-    return firstNormalized(result)
+    return await withTransaction(this.pool, async (client) => {
+      const now = Date.now()
+      if (idType === CASE_FILTER_RESTORE_ID_TYPE) {
+        await client.query(
+          `DELETE FROM ${this.table('case_external_ids')} WHERE case_id = $1 AND id_type = $2`,
+          [caseId, CASE_FILTER_RESTORE_ID_TYPE]
+        )
+        const stamp = parseCaseFilterSnapshot(idValue)?.stamp
+        await this.appendFilterSnapshotAudit(
+          client,
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_restore', stamp),
+          now
+        )
+        return { id: 0, case_id: caseId, id_type: idType, id_value: idValue, created_at: now }
+      }
+      const result = await client.query<Row>(
+        `
+          INSERT INTO ${this.table('case_external_ids')} (case_id, id_type, id_value, created_at)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (case_id, id_type) DO UPDATE SET id_value = EXCLUDED.id_value
+          RETURNING *
+        `,
+        [caseId, idType, idValue, now]
+      )
+      if (idType === CASE_FILTER_SNAPSHOT_ID_TYPE) {
+        const stamp = parseCaseFilterSnapshot(idValue)?.stamp
+        await this.appendFilterSnapshotAudit(
+          client,
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_save', stamp),
+          now
+        )
+      }
+      return firstNormalized(result)
+    })
   }
 
   async deleteCaseExternalId(caseId: number, idType: string): Promise<void> {
-    await this.pool.query(
-      `DELETE FROM ${this.table('case_external_ids')} WHERE case_id = $1 AND id_type = $2`,
-      [caseId, idType]
+    await withTransaction(this.pool, async (client) => {
+      await client.query(
+        `DELETE FROM ${this.table('case_external_ids')} WHERE case_id = $1 AND id_type = $2`,
+        [caseId, idType]
+      )
+      if (idType === CASE_FILTER_SNAPSHOT_ID_TYPE) {
+        await this.appendFilterSnapshotAudit(
+          client,
+          caseId,
+          formatCaseFilterAuditPayload('filter_snapshot_clear', null, 'snapshot_cleared'),
+          Date.now()
+        )
+      }
+    })
+  }
+
+  private async appendFilterSnapshotAudit(
+    client: Pick<Pool, 'query'>,
+    caseId: number,
+    newValue: string,
+    timestamp: number
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO ${this.table('audit_log')} (
+          timestamp,
+          action_type,
+          entity_type,
+          entity_key,
+          old_value,
+          new_value
+        )
+        VALUES ($1, 'api_write', 'case_variant_annotation', $2, NULL, $3)
+      `,
+      [timestamp, `case:${caseId}:filter_snapshot`, newValue]
     )
   }
 
@@ -441,7 +506,9 @@ export class PostgresCaseMetadataRepository {
       `,
       []
     )
-    return result.rows.map((row) => row.id_type)
+    return result.rows
+      .map((row) => row.id_type)
+      .filter((idType) => !isInternalCaseExternalIdType(idType))
   }
 
   async getFullCaseMetadata(caseId: number): Promise<FullCaseMetadataResult> {

@@ -212,6 +212,8 @@ export interface CohortSearchParams {
   starred_only?: boolean
   /** Show only variants with comments (global annotations) */
   has_comment?: boolean
+  /** Show only unreviewed hot variants: (HIGH or ClinVar P/LP) missing ACMG, star, comment, and tags (#149) */
+  unreviewed_hot?: boolean
   /** Filter by ACMG classifications (global annotations) */
   acmg_classifications?: string[]
   /** Per-column typed filters (key = column name, value = operator + value) */

@@ -30,7 +30,10 @@ import { booleanSearchSql } from '../../shared/utils/boolean-search'
 import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
-import { cohortInfoExistsClauses } from '../../shared/sql/cohort-info-filter-sql'
+import {
+  cohortInfoExistsClauses,
+  cohortUnreviewedHotClause
+} from '../../shared/sql/cohort-info-filter-sql'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
@@ -187,6 +190,10 @@ export class CohortService {
     if (base.sql !== '') {
       whereConditions.push(base.sql)
       paramsArray.push(...base.params)
+    }
+
+    if (params.unreviewed_hot === true) {
+      whereConditions.push(cohortUnreviewedHotClause('cvs', 'sqlite'))
     }
 
     if (columnFilters !== undefined) {

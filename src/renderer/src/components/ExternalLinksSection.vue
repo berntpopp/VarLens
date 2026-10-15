@@ -231,7 +231,7 @@ async function jumpToLocalIgv(): Promise<void> {
   igvLoading.value = true
   const locus = igvTargetLocus.value
   try {
-    const sent = await sendToIgv(locus)
+    const sent = await sendToIgv(locus, props.genomeBuild)
     igvStatus.value = sent ? 'sent' : 'failed'
     igvSentLocus.value = locus
     if (sent) logService.info(`Broadcast locus ${locus} to local IGV`, 'links')
