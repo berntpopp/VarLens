@@ -210,6 +210,11 @@ const MIGRATION_FILES: readonly MigrationFile[] = [
     version: '0041',
     name: 'case_hpo_term_flags',
     fileName: '0041_case_hpo_term_flags.sql'
+  },
+  {
+    version: '0042',
+    name: 'case_phenotype_scores',
+    fileName: '0042_case_phenotype_scores.sql'
   }
 ]
 

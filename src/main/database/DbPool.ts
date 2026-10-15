@@ -50,7 +50,12 @@ interface DbPoolInitOptions {
  * Tasks that run on one dedicated worker, so exactly one HPO index copy exists
  * (~145 MB) and an update refreshes it there; concurrent shortlists queue.
  */
-const SCORER_TASKS: ReadonlySet<DbTaskType> = new Set(['variants:shortlist', 'hpo:prewarm'])
+const SCORER_TASKS: ReadonlySet<DbTaskType> = new Set([
+  'variants:shortlist',
+  'hpo:prewarm',
+  'hpo:caseScores',
+  'hpo:explainGene'
+])
 
 type PiscinaConstructor = new (opts: DbPoolInitOptions) => PiscinaInstance
 

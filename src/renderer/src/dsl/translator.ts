@@ -79,8 +79,9 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
     backendOp === 'is_null' || backendOp === 'not_null'
       ? { operator: backendOp, value: '' }
       : { operator: backendOp, value: value ?? '' }
-  if (findColumn(column)?.type === 'numeric' && ['<', '>', '<=', '>='].includes(operator)) {
-    filter.includeEmpty = true
+  const def = findColumn(column)
+  if (def?.type === 'numeric' && ['<', '>', '<=', '>='].includes(operator)) {
+    filter.includeEmpty = def.rangeExcludesEmpty !== true
   }
   // Each build stores its own contig spelling: `chr:1` means chr1 or 1.
   // ponytail: `chr != 1` stays a single-spelling comparison (no NOT IN operator).

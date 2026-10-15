@@ -73,6 +73,8 @@ export interface CohortVariant extends CohortVariantIdentity {
   sv_length?: number | null
   /** Tags any carrier case gave this variant (set by table page reads, #125) */
   tag_ids?: number[]
+  /** Best stored HPO phenotype score over the carriers (each by its own terms) */
+  phenotype_score?: number | null
 }
 
 /**

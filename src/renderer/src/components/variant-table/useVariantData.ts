@@ -99,6 +99,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     error: loadError,
     loadPage: loadVariants,
     invalidateAndReload,
+    reloadCurrentPage,
     resetSort,
     resetState
   } = useOffsetPagination<Variant>({
@@ -284,6 +285,7 @@ export function useVariantData(options: UseVariantDataOptions) {
 
     // Methods
     loadVariants,
+    reloadCurrentPage,
     buildQueryFilters,
     resetSort,
     getRowProps,

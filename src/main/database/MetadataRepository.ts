@@ -15,6 +15,12 @@ import type {
 import { DatabaseError, NotFoundError, UniqueConstraintError } from './errors'
 import type { HpoTermFlags } from '../../shared/types/hpo-profile'
 import { resolveHpoTermFlags } from '../../shared/utils/hpo-term-flags'
+import {
+  readSqlitePhenotypeProfiles,
+  replaceSqlitePhenotypeScores,
+  type CasePhenotypeProfile
+} from '../services/phenotype/case-phenotype-scores'
+import type { GenePhenotypeScore } from '../services/phenotype/hpo-similarity-db'
 
 type HpoTermRow = Omit<CaseHpoTerm, 'excluded' | 'key'> & { excluded: number; key: number }
 
@@ -183,6 +189,20 @@ export class MetadataRepository extends BaseRepository {
         )
       }
     })
+  }
+
+  /** HPO profiles next to their stored phenotype-score state; null: every case. */
+  getPhenotypeProfiles(caseId: number | null): CasePhenotypeProfile[] {
+    return readSqlitePhenotypeProfiles(this.db, caseId)
+  }
+
+  replacePhenotypeScores(
+    caseId: number,
+    hash: string | null,
+    dataKey: string | null,
+    rows: GenePhenotypeScore[]
+  ): void {
+    replaceSqlitePhenotypeScores(this.db, caseId, hash, dataKey, rows)
   }
 
   getCaseHpoTerms(caseId: number): CaseHpoTerm[] {

@@ -53,12 +53,14 @@ import {
 } from './postgres-variant-order'
 import type { VariantPageRequest, VariantPageResult } from '../../../shared/types/variant-paging'
 import { attachCaseTagIds, caseTagIdsSql } from '../../../shared/sql/variant-tag-ids-sql'
+import { attachCasePhenotype, casePhenotypePageSql } from '../../../shared/sql/phenotype-score-sql'
 
 // The column definitions' SQL: `sv_length` sorts unsigned, as displayed.
 const POSTGRES_BASE_SORT_COLUMNS: Record<string, string> = Object.fromEntries(
   Object.keys(BASE_SORTABLE_COLUMNS).map((k) => [k, POSTGRES_VARIANT_COLUMN_DEFINITIONS[k].sql])
 )
 POSTGRES_BASE_SORT_COLUMNS.id = 'v.id'
+POSTGRES_BASE_SORT_COLUMNS.phenotype_score = POSTGRES_VARIANT_COLUMN_DEFINITIONS.phenotype_score.sql
 
 const NUMERIC_VARIANT_FIELDS = new Set(
   'id,case_id,pos,end_pos,sv_length,dp,ad_ref,ad_alt,ps,internal_af,_sv_support,_sv_dr,_sv_dv,_sv_vaf,_sv_is_precise,_sv_stdev_len,_sv_stdev_pos,_cnv_copy_number,_cnv_gq,_cnv_ho_ref,_cnv_ho_alt,_str_ref_copies,_str_normal_max,_str_pathologic_min'.split(
@@ -246,7 +248,11 @@ export function buildPostgresVariantQueryParts(
     addWhere(`v.alt = ${addParam(filter.alt)}`)
   }
 
-  const joins = [totalsJoin]
+  // Stored phenotype score (`ps.score`) for sorts and filters; unused, the planner drops the join.
+  const joins = [
+    totalsJoin,
+    `LEFT JOIN ${schemaName}."case_phenotype_scores" ps ON ps.case_id = v.case_id AND ps.gene_symbol = v.gene_symbol`
+  ]
   const projections = [`v.*`, `${internalAfExpression} AS internal_af`]
 
   if (filter.variant_type === 'sv' || hasPostgresColumnFilterPrefix(filter, 'sv.')) {
@@ -491,6 +497,11 @@ export class PostgresVariantReadRepository {
       const tagSql = caseTagIdsSql('postgres', (table) => `${this.schemaName}."${table}"`)
       const ids = data.map((v) => v.id)
       attachCaseTagIds(data, (await this.pool.query(tagSql, [filter.case_id, ids])).rows)
+      const phenotypeSql = casePhenotypePageSql(
+        'postgres',
+        (table) => `${this.schemaName}."${table}"`
+      )
+      attachCasePhenotype(data, (await this.pool.query(phenotypeSql, [filter.case_id, ids])).rows)
     }
 
     return {

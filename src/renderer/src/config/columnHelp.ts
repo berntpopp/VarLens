@@ -55,6 +55,10 @@ export const COLUMN_HELP: Readonly<Record<string, string>> = {
     'exception list). The overall AF can be lower, so check grpmax. PM2 applies at Supporting ' +
     'strength only (SVI 2020). Empty = no value in the annotation, not proof of absence: check coverage.',
   cadd: CADD_HELP,
+  phenotype_score:
+    'HPO phenotype match of the gene (0–1) and its best-matching disease, for the case’s HPO ' +
+    'terms; in the cohort the best carrier, each by its own terms. Updated when terms or HPO ' +
+    'data change. A ranking aid, not a diagnosis. Empty = no score (gene without HPO diseases).',
   cadd_phred: CADD_HELP,
   // OMIM (omim.org) MIM number supplied by the import file.
   omim_mim_number: 'OMIM MIM number linked to the variant’s gene, from the imported file.',

@@ -39,6 +39,10 @@ export interface FilterColumnDef {
    * counts). Only shortlist rules may use them; no filter bar can.
    */
   shortlistOnly?: true
+  /** Stored per-view fields (the phenotype column) that shortlist rows do not carry. */
+  viewOnly?: true
+  /** A range keeps rows without a value only when asked (default: kept, e.g. an unannotated AF). */
+  rangeExcludesEmpty?: true
 }
 
 /**
@@ -104,6 +108,21 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
       { value: 0.1, label: '0.1' },
       { value: 0.3, label: '0.3' },
       { value: 0.5, label: '0.5' }
+    ]
+  },
+  {
+    // Stored HPO phenotype score of the gene (case: own terms; cohort: best carrier).
+    key: 'phenotype_score',
+    label: 'Phenotype match',
+    aliases: ['phenotype', 'pheno'],
+    type: 'numeric',
+    operators: NUMERIC_OPERATORS,
+    viewOnly: true,
+    rangeExcludesEmpty: true,
+    commonValues: [
+      { value: 0.3, label: '0.3' },
+      { value: 0.5, label: '0.5' },
+      { value: 0.7, label: '0.7' }
     ]
   },
   {
@@ -425,6 +444,7 @@ export function getCommonValues(nameOrAlias: string): CommonValue[] {
  */
 export function isColumnInScope(col: FilterColumnDef, scope: FilterScope): boolean {
   if (col.shortlistOnly === true) return scope === 'shortlist'
+  if (col.viewOnly === true && scope === 'shortlist') return false
   return scope !== 'cohort' || col.caseOnly !== true
 }
 

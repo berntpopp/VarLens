@@ -207,6 +207,7 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'gene-ref:info': read(),
   'gene-ref:assemblies': read(),
   'hpo-data:status': read(),
+  'hpo-data:explainGene': read(),
 
   // ── presets / analysis groups / transcripts ─────────────────────────────
   'presets:list': read(),

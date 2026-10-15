@@ -22,7 +22,8 @@ export const COLUMN_FILTER_OVERRIDES: Record<
   gnomad_af: { forceMode: 'numeric' },
   cadd: { forceMode: 'numeric' },
   qual: { forceMode: 'numeric' },
-  hpo_sim_score: { forceMode: 'numeric' }
+  hpo_sim_score: { forceMode: 'numeric' },
+  phenotype_score: { forceMode: 'numeric' }
 }
 
 /**

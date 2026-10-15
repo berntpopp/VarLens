@@ -8,7 +8,11 @@ import { updateHpoData } from '../../services/phenotype/hpo-data-update'
 import { resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
 import { getDatabaseManager } from '../../database'
 import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
-import { getHpoDataStatus } from '../handlers/hpo-data-logic'
+import {
+  explainHpoGene,
+  getHpoDataStatus,
+  HpoExplainGeneArgsSchema
+} from '../handlers/hpo-data-logic'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
 
@@ -16,6 +20,15 @@ let updating: Promise<HpoDataUpdateResult> | null = null
 
 export function registerHpoDataDomain(ipcMain: IpcMain): void {
   ipcMain.handle(HPO_DATA_CHANNELS.status, async () => wrapHandler(async () => getHpoDataStatus()))
+
+  ipcMain.handle(HPO_DATA_CHANNELS.explainGene, async (_event, ...args: unknown[]) =>
+    wrapHandler(async () =>
+      explainHpoGene(
+        getDatabaseManager().getCurrentSession(),
+        ...HpoExplainGeneArgsSchema.parse(args)
+      )
+    )
+  )
 
   ipcMain.handle(HPO_DATA_CHANNELS.update, async () =>
     wrapHandler(async () => {

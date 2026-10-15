@@ -57,6 +57,7 @@ const COLUMN_LABELS: Record<string, string> = {
   cohort_frequency: CARRIER_FREQUENCY_COPY.chip,
   het_count: 'Het',
   hom_count: 'Hom',
+  phenotype_score: 'Phenotype',
   ref: 'Ref',
   alt: 'Alt',
   internal_af: CARRIER_FREQUENCY_COPY.chip

@@ -1,5 +1,9 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
-import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
+import {
+  explainCaseGene,
+  prewarmHpoIndex,
+  scoreAllGenes
+} from '../../services/phenotype/hpo-similarity-db'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
 import type { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
@@ -71,6 +75,7 @@ interface PostgresReadExecutorRepositories {
     | 'getCohortGroupByName'
     | 'getCaseCohorts'
     | 'getCaseHpoTerms'
+    | 'getPhenotypeProfiles'
     | 'getCaseDataInfo'
     | 'listCaseExternalIds'
     | 'getDistinctHpoTerms'
@@ -171,6 +176,24 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         // thread and freezes the window briefly; move it to a worker if this backend ships.
         prewarmHpoIndex()
         return null
+
+      // ponytail: in-process like the shortlist's scorer: the web server scores here
+      // (~0.1-1 s per case, once per profile); desktop Postgres blocks its main thread.
+      case 'hpo:caseScores':
+        return scoreAllGenes(task.params[0])
+
+      case 'hpo:explainGene':
+        return explainCaseGene(
+          (await this.repositories.caseMetadata.getCaseHpoTerms(task.params[0])) as Array<{
+            hpo_id: string
+            excluded: unknown
+            key: unknown
+          }>,
+          task.params[1]
+        )
+
+      case 'phenotype:profiles':
+        return await this.repositories.caseMetadata.getPhenotypeProfiles(task.params[0])
 
       case 'variants:columnMeta':
         return await this.repositories.variants.getColumnMeta(task.params[0], task.params[1])

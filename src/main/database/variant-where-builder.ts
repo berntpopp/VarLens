@@ -16,6 +16,7 @@ import {
   NUMERIC_COLUMN_FILTER_KEYS
 } from '../../shared/filters/column-filter-validation'
 import { COHORT_FREQUENCY_KEY, COHORT_FREQUENCY_SQL } from './cohort-frequency-sql'
+import { cohortPhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../shared/sql/phenotype-score-sql'
 import { escapeLikePattern } from './search/search-clause-emitter'
 
 export interface BuildBaseWhereContext {
@@ -241,7 +242,9 @@ function translateColumnFilter(
   const col =
     scope === 'cohort-listing' && column === COHORT_FREQUENCY_KEY
       ? COHORT_FREQUENCY_SQL
-      : comparedColumnSql(column, `${baseAlias}.${column}`)
+      : scope === 'cohort-listing' && column === PHENOTYPE_SCORE_KEY
+        ? cohortPhenotypeScoreSql(baseAlias, 'sqlite')
+        : comparedColumnSql(column, `${baseAlias}.${column}`)
   const { operator, value, includeEmpty } = filter
   const nullBranch = includeEmpty !== false
 

@@ -390,6 +390,46 @@ function caseScores(
   return hit
 }
 
+/** Identity of the installed HPO data (mtime + size, as `loadIndex` keys it); null when absent. */
+export function hpoDataKey(path: string | null = resolveHpoDbPath()): string | null {
+  const stat = path === null ? undefined : statSync(path, { throwIfNoEntry: false })
+  return stat === undefined ? null : `${stat.mtimeMs}:${stat.size}`
+}
+
+/** One stored phenotype score: a gene of the HPO index and its best disease's label. */
+export interface GenePhenotypeScore {
+  gene: string
+  score: number
+  disease: string
+}
+
+/**
+ * Score every HPO gene for one case profile, for `case_phenotype_scores`.
+ * Empty without a present term or usable HPO data; never throws (as openHpoGeneScorer).
+ */
+export function scoreAllGenes(
+  terms: readonly HpoProfileTerm[],
+  path: string | null = resolveHpoDbPath()
+): GenePhenotypeScore[] {
+  if (terms.length === 0 || path === null) return []
+  try {
+    const loaded = loadIndex(path)
+    const index = loaded?.index ?? null
+    const profile = index === null ? null : prepareProfile(index, terms)
+    if (loaded === null || index === null || profile === null) return []
+    const { scores } = caseScores(loaded.key, index, profile, {})
+    return [...index.genes].map(([gene, g]) => ({
+      gene,
+      score: scores.geneScore[g],
+      disease: index.diseaseLabels[scores.geneBest[g]]
+    }))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
+    return []
+  }
+}
+
 /**
  * Prewarm in a read worker, where the desktop ranks; only with HPO data
  * installed, so opening a database without it spawns no worker.
@@ -466,4 +506,17 @@ export function openHpoGeneScorer(
     mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
     return null
   }
+}
+
+/** One gene's explanation for a case's stored term rows (the phenotype column tooltip). */
+export function explainCaseGene(
+  termRows: ReadonlyArray<{ hpo_id: string; excluded: unknown; key: unknown }>,
+  gene: string
+): HpoExplanation | null {
+  const terms = termRows.map((t) => ({
+    hpoId: t.hpo_id,
+    excluded: Boolean(t.excluded),
+    key: Boolean(t.key)
+  }))
+  return openHpoGeneScorer(terms)?.explain(gene) ?? null
 }

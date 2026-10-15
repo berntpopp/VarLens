@@ -50,6 +50,7 @@
           :current-filter="getFilter(col.key)"
           :column-meta="columnMetaMap[col.key]"
           :filter-mode="columnFilterModes[col.key] ?? 'text-suggest'"
+          :busy="col.key === phenotype.PHENOTYPE_COLUMN_KEY && phenotypeRefreshing"
           @apply-filter="(f) => setColumnFilter(col.key, f)"
           @clear-filter="clearColumnFilter(col.key)"
         />
@@ -152,18 +153,15 @@
         <ConsequenceCell :consequence="value" />
       </template>
 
-      <!-- GT (handle null) -->
       <template #[`item.gt_num`]="{ value }">
         <template v-if="value !== null && value !== undefined">{{ value }}</template>
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- Func (handle null) with human-readable formatting -->
       <template #[`item.func`]="{ value }">
         <ConsequenceCell :consequence="value" />
       </template>
 
-      <!-- Qual score (handle null/undefined/non-number) -->
       <template #[`item.qual`]="{ value }">
         <template v-if="value !== null && value !== undefined && typeof value === 'number'">{{
           value.toFixed(1)
@@ -171,7 +169,6 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- Transcript (handle null, truncate long IDs) -->
       <template #[`item.transcript`]="{ value }">
         <span
           v-if="value"
@@ -183,17 +180,14 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <!-- cDNA (handle null) -->
-      <template #[`item.cdna`]="{ value }">
+      <template v-for="key in ['cdna', 'aa_change']" :key="key" #[`item.${key}`]="{ value }">
         <HgvsCell :value="value" />
       </template>
 
-      <!-- AA Change (handle null) -->
-      <template #[`item.aa_change`]="{ value }">
-        <HgvsCell :value="value" />
+      <template #[`item.phenotype_score`]="{ item }">
+        <PhenotypeScoreCell :case-id="caseId" :row="item" />
       </template>
 
-      <!-- HPO Sim Score (handle null/undefined/non-number) -->
       <template #[`item.hpo_sim_score`]="{ value }">
         <template v-if="value !== null && value !== undefined && typeof value === 'number'">{{
           value.toFixed(2)
@@ -285,6 +279,8 @@ import QueryErrorAlert from './table-state/QueryErrorAlert.vue'
 import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../composables/useTableLoadingState'
 import { useVariantColumns } from './variant-table/columns'
+import PhenotypeScoreCell from './variant-table/PhenotypeScoreCell.vue'
+import * as phenotype from './variant-table/usePhenotypeColumn'
 import { useVariantData } from './variant-table/useVariantData'
 import FilterEmptyState from './filters/FilterEmptyState.vue'
 import { useApiService } from '../composables/useApiService'
@@ -400,7 +396,12 @@ const { buildOmimEntryUrl, openExternalLink } = useVariantLinks()
 // Column preferences and column definitions — swap columns on variant type change
 const { prefs } = useColumnPreferences('variant-table')
 const variantTypeRef = toRef(props, 'variantType')
-const { headers, visibleHeaders, filterableColumns } = useVariantColumns(prefs, variantTypeRef)
+const caseIdGetter = () => props.caseId
+const { headers, visibleHeaders, filterableColumns } = useVariantColumns(
+  prefs,
+  variantTypeRef,
+  caseIdGetter
+)
 
 // Data loading and state
 const {
@@ -415,6 +416,7 @@ const {
   itemsPerPageOptions,
   selectedVariantId,
   loadVariants,
+  reloadCurrentPage,
   buildQueryFilters,
   resetSort,
   getRowProps,
@@ -435,6 +437,7 @@ const {
   onCountsUpdate: (counts) => emit('update:counts', counts),
   onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
 })
+const phenotypeRefreshing = phenotype.usePhenotypeRefresh(caseIdGetter, reloadCurrentPage)
 
 // Page size incl. "Auto (fit)": as many rows as fit the visible table body
 const tableContainerRef = ref<HTMLElement | null>(null)

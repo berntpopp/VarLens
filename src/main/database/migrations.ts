@@ -28,7 +28,7 @@ import { RECOUNT_UNIQUE_VARIANTS_SQL } from '../../shared/sql/cohort-summary-reb
 import { DEFAULT_TAGS } from '../../shared/config/default-tags.config'
 
 /** Schema version a fully migrated SQLite database reports in PRAGMA user_version. */
-export const LATEST_SQLITE_SCHEMA_VERSION = 58
+export const LATEST_SQLITE_SCHEMA_VERSION = 59
 
 /**
  * Run schema migrations based on PRAGMA user_version
@@ -91,6 +91,7 @@ export const LATEST_SQLITE_SCHEMA_VERSION = 58
  * - 56: variants.ps, the VCF phase set id (#586; mirrors PG 0039)
  * - 57: trim pre-#587 rows to minimal alleles, merging global annotations (#587; mirrors PG 0040)
  * - 58: case_hpo_terms.excluded / key, Phenopackets term status (#600; mirrors PG 0041)
+ * - 59: case_phenotype_scores / case_phenotype_state, stored phenotype column (#600; mirrors PG 0042)
  *
  * @param db - better-sqlite3-multiple-ciphers Database instance
  */
@@ -2187,6 +2188,27 @@ export function runMigrations(db: Database.Database): void {
       }
       db.exec('PRAGMA user_version = 58')
     })()
+  }
+
+  // v59 (#600, mirrors PG 0042): per-case gene phenotype scores, computed once per
+  // HPO profile and HPO data key (case-phenotype-scores.ts); reads only join them.
+  if (currentVersion < 59) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS case_phenotype_scores (
+        case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+        gene_symbol TEXT NOT NULL,
+        score REAL NOT NULL,
+        best_disease TEXT,
+        PRIMARY KEY (case_id, gene_symbol)
+      ) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS case_phenotype_state (
+        case_id INTEGER PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+        profile_hash TEXT NOT NULL,
+        hpo_data_key TEXT,
+        computed_at INTEGER NOT NULL
+      );
+      PRAGMA user_version = 59;
+    `)
   }
 
   // Not a version: derived summary keys that drifted on real data are restored on every open.

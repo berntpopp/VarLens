@@ -16,6 +16,9 @@ export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   clinvar: 5,
   ref: 6,
   alt: 7,
+  // Shown by default only with HPO terms (usePhenotypeColumn.ts); then it is the case's
+  // leading signal, kept right after the core columns.
+  phenotype_score: 7.5,
   // Cohort-only: carriers and cohort frequency outrank gnomAD AF (product decision 2026-10-12)
   carrier_count: 8,
   cohort_frequency: 9,

@@ -44,6 +44,9 @@ const EXEMPT_TABLES = new Set([
   'case_variant_annotations',
   // Owned by its case (chromosome-name migration v47: case build to confirm)
   'contig_build_review',
+  // Derived per-case cache (v59): recomputed from case_hpo_terms + HPO data, never user-written
+  'case_phenotype_scores',
+  'case_phenotype_state',
   // Variant detail extensions (owned by parent variant row)
   'variant_transcripts',
   'variant_sv',

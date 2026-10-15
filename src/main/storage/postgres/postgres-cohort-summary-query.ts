@@ -15,6 +15,10 @@ import type { ColumnFilter } from '../../../shared/types/column-filters'
 import type { CohortSearchParams } from '../../../shared/types/cohort'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
 import {
+  cohortPhenotypeScoreSql,
+  PHENOTYPE_SCORE_KEY
+} from '../../../shared/sql/phenotype-score-sql'
+import {
   HGVS_TOKEN,
   hgvsSearchSql,
   normalizePostgresColumnFilterValue
@@ -191,7 +195,8 @@ const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   transcript: 'cvs.transcript',
   end_pos: 'cvs.end_pos',
   sv_type: 'cvs.sv_type',
-  sv_length: 'cvs.sv_length'
+  sv_length: 'cvs.sv_length',
+  phenotype_score: 'phenotype_score' // resolved with the schema in buildSummaryQueryParts
 }
 
 /**
@@ -216,7 +221,8 @@ const NUMERIC_COLUMN_FILTERS = new Set<string>([
   'het_count',
   'hom_count',
   'end_pos',
-  'sv_length'
+  'sv_length',
+  PHENOTYPE_SCORE_KEY
 ])
 
 /** Extension-table column keys (sv.*, cnv.*, str.*) from the variant registry. */
@@ -408,6 +414,15 @@ export function buildSummaryQueryParts(
   const whereParts: string[] = []
   const values: unknown[] = []
   let needsBuildTotals = false
+  // The carriers' best stored phenotype score; the probe needs the schema's tables.
+  const phenotypeSql = (): string => {
+    if (schema === undefined) throw new UnsupportedCohortColumnFilterError([PHENOTYPE_SCORE_KEY])
+    return cohortPhenotypeScoreSql(
+      'cvs',
+      'postgres',
+      (t) => `"${schema.replace(/"/g, '""')}"."${t}"`
+    )
+  }
   const addParam = (value: unknown): string => {
     values.push(value)
     return `$${values.length}`
@@ -514,7 +529,8 @@ export function buildSummaryQueryParts(
       const filter = params.column_filters[column]
       if (filter === undefined) continue
       if (EXTENSION_COLUMN_KEYS.has(column)) continue // EXISTS probes below
-      const expression = SUMMARY_COLUMN_FILTER_SQL[column]
+      const expression =
+        column === PHENOTYPE_SCORE_KEY ? phenotypeSql() : SUMMARY_COLUMN_FILTER_SQL[column]
       // Never drop a filter: an unknown key must fail, not widen the result.
       if (expression === undefined) throw new UnsupportedCohortColumnFilterError([column])
       const condition = buildColumnFilterCondition(column, expression, filter, addParam)
@@ -553,10 +569,12 @@ export function buildSummaryQueryParts(
   // One genome build and one type selection mean one denominator, so the
   // indexed carrier count orders the rows exactly as the frequency would.
   const sortColumn =
-    sortKey === 'cohort_frequency' &&
-    singleFrequencyDenominator(params.genome_build, params.variant_type)
-      ? 'cvs.carrier_count'
-      : SUMMARY_SORT_COLUMNS[sortKey]
+    sortKey === PHENOTYPE_SCORE_KEY
+      ? phenotypeSql()
+      : sortKey === 'cohort_frequency' &&
+          singleFrequencyDenominator(params.genome_build, params.variant_type)
+        ? 'cvs.carrier_count'
+        : SUMMARY_SORT_COLUMNS[sortKey]
   const orderBy = keyset
     ? cohortKeysetOrderByClause('cvs', 'postgres')
     : cohortOrderByClause(sortKey, sortColumn, direction, 'cvs', 'postgres')

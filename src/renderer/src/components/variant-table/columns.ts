@@ -7,6 +7,7 @@ import { cnvHeaders } from './cnv-columns'
 import { strHeaders } from './str-columns'
 import { withFixedWidth } from './column-widths'
 import { useAutoHiddenColumns } from '../../composables/useResponsiveLayout'
+import { withPhenotypeDefault } from './usePhenotypeColumn'
 
 export interface ColumnDef {
   title: string
@@ -68,6 +69,7 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'ClinVar', key: 'clinvar', sortable: true },
   { title: 'gnomAD AF', key: 'gnomad_af', sortable: true, align: 'end' },
   { title: 'CADD', key: 'cadd', sortable: true, align: 'end' },
+  { title: 'Phenotype', key: 'phenotype_score', sortable: true },
   { title: 'Consequence', key: 'func', sortable: true },
   { title: 'OMIM', key: 'omim_mim_number', sortable: true, width: '100px' },
   { title: 'Transcript', key: 'transcript', sortable: true },
@@ -108,8 +110,11 @@ export function linksColumn(linkCount: number): ColumnDef[] {
  */
 export function useVariantColumns(
   prefs: ReturnType<typeof useColumnPreferences>['prefs'],
-  variantType?: Ref<string> | ComputedRef<string>
+  variantType?: Ref<string> | ComputedRef<string>,
+  /** The case, for the Phenotype column's default (usePhenotypeColumn.ts) */
+  caseId?: () => number
 ) {
+  if (caseId !== undefined) prefs = withPhenotypeDefault(prefs, caseId)
   const linksStore = useExternalLinksStore()
 
   /** All headers including the merged Links column (SNV/Indel view only). */

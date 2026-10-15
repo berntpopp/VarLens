@@ -31,6 +31,8 @@ export const POSTGRES_VARIANT_COLUMN_DEFINITIONS: Record<string, PostgresVariant
     // Unsigned, as displayed (unsigned-columns.ts).
     sv_length: { key: 'sv_length', sql: 'ABS(v.sv_length)', kind: 'numeric' },
     caller: { key: 'caller', sql: 'v.caller', kind: 'categorical' },
+    // Stored phenotype score, joined as `ps` by the case variant query.
+    phenotype_score: { key: 'phenotype_score', sql: 'ps.score', kind: 'numeric' },
     'sv.sv_is_precise': { key: 'sv.sv_is_precise', sql: 'sv.sv_is_precise', kind: 'categorical' },
     'sv.support': { key: 'sv.support', sql: 'sv.support', kind: 'numeric' },
     'sv.pe_support': { key: 'sv.pe_support', sql: 'sv.pe_support', kind: 'numeric' },

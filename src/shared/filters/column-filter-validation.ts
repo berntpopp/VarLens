@@ -29,6 +29,8 @@ export const NUMERIC_COLUMN_FILTER_KEYS: ReadonlySet<string> = new Set([
   'hpo_sim_score',
   'end_pos',
   'sv_length',
+  // case_phenotype_scores (case view; best carrier score in the cohort view)
+  'phenotype_score',
   // cohort view
   'cadd_phred',
   'carrier_count',

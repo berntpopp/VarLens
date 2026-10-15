@@ -88,7 +88,8 @@ const HPO_DATA_UX = 'Hidden: the server operator installs HPO data (env VARLENS_
 
 export const hpoDataManifest = {
   status: sharedRead(),
-  update: desktopOnly('hpoDataUpdate', HPO_DATA_UX)
+  update: desktopOnly('hpoDataUpdate', HPO_DATA_UX),
+  explainGene: sharedRead()
 } satisfies DomainManifest<'hpoData'>
 
 export const panelsManifest = {

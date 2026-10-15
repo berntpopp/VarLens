@@ -4,6 +4,7 @@ import { HPO_DATA_CHANNELS, type HpoDataApi } from '../../shared/ipc/domains/hpo
 export function createHpoDataApi(): HpoDataApi {
   return {
     status: () => ipcRenderer.invoke(HPO_DATA_CHANNELS.status),
-    update: () => ipcRenderer.invoke(HPO_DATA_CHANNELS.update)
+    update: () => ipcRenderer.invoke(HPO_DATA_CHANNELS.update),
+    explainGene: (caseId, gene) => ipcRenderer.invoke(HPO_DATA_CHANNELS.explainGene, caseId, gene)
   }
 }
