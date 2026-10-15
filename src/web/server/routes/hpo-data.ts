@@ -1,5 +1,7 @@
-import { getHpoDataStatus } from '../../../main/ipc/handlers/hpo-data-logic'
-import { HpoExplainGeneArgsSchema } from '../../../shared/ipc/domains/hpo-data'
+import {
+  getHpoDataStatus,
+  HpoExplainGeneArgsSchema
+} from '../../../main/ipc/handlers/hpo-data-logic'
 import type { OverrideHandler } from './types'
 
 /**

@@ -1,5 +1,4 @@
 import type { IpcResult } from '../../types/errors'
-import { z } from 'zod'
 import type { HpoDataStatus, HpoDataUpdateResult } from '../../types/hpo-data'
 import type { HpoExplanation } from '../../types/hpo-profile'
 
@@ -18,9 +17,3 @@ export const HPO_DATA_CHANNELS = {
   update: 'hpo-data:update',
   explainGene: 'hpo-data:explainGene'
 } as const
-
-/** Arguments of `explainGene`, validated on both transports. */
-export const HpoExplainGeneArgsSchema = z.tuple([
-  z.number().int().positive(),
-  z.string().min(1).max(64)
-])
