@@ -36,12 +36,15 @@ function arm(): void {
 }
 </script>
 
+<!-- An empty data-tooltip opts out of the app-wide truncated-cell tooltip: the explanation
+     tooltip already carries the full disease label. -->
 <template>
   <EmptyPlaceholder v-if="row.phenotype_score == null" />
   <span
     v-else
     class="phenotype-cell"
     :tabindex="caseId === null ? undefined : 0"
+    :data-tooltip="caseId === null ? undefined : ''"
     @mouseenter="arm"
     @focusin="arm"
   >

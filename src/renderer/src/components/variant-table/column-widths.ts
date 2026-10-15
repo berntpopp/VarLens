@@ -46,7 +46,7 @@ export const COLUMN_WIDTHS_REM: Readonly<Record<string, number>> = {
   qual: 6.75,
   clinvar: 10.5,
   hpo_sim_score: 9,
-  phenotype_score: 13, // "0.65" + truncated best disease
+  phenotype_score: 11, // "0.65" + truncated best disease
   hpo_match: 14,
   moi: 6.25,
   carrier_count: 8,
