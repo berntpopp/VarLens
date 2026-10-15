@@ -25,6 +25,7 @@ import {
   CASE_FILTER_RESTORE_ID_TYPE,
   CASE_FILTER_SNAPSHOT_ID_TYPE,
   formatCaseFilterAuditPayload,
+  isInternalCaseExternalIdType,
   parseCaseFilterSnapshot
 } from '../../shared/filters/case-filter-snapshot'
 
@@ -561,14 +562,9 @@ export class MetadataRepository extends BaseRepository {
   /** Get all distinct external ID types across all cases */
   getDistinctExternalIdTypes(): string[] {
     const rows = this.execAll<{ id_type: string }>(
-      this.kysely
-        .selectFrom('case_external_ids')
-        .select('id_type')
-        .distinct()
-        .where('id_type', 'not like', '_varlens_%')
-        .orderBy('id_type')
+      this.kysely.selectFrom('case_external_ids').select('id_type').distinct().orderBy('id_type')
     )
-    return rows.map((r) => r.id_type)
+    return rows.map((r) => r.id_type).filter((idType) => !isInternalCaseExternalIdType(idType))
   }
 
   /**

@@ -113,6 +113,7 @@ export function useFilterPresetStore(scope: PresetScope = 'case') {
       if (fj.minCarriers !== undefined) merged.minCarriers = fj.minCarriers
       if (fj.starredOnly !== undefined) merged.starredOnly = fj.starredOnly
       if (fj.hasCommentOnly !== undefined) merged.hasCommentOnly = fj.hasCommentOnly
+      if (fj.unreviewedHotOnly !== undefined) merged.unreviewedHotOnly = fj.unreviewedHotOnly
 
       // Array fields: concatenate and deduplicate
       if (fj.consequences !== undefined && fj.consequences.length > 0) {

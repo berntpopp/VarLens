@@ -22,6 +22,7 @@ import {
   type VcfSelectedSampleColumn
 } from '../import/vcf/vcf-line-parser'
 import { mapVcfRecord, seedVcfFields } from '../import/vcf/VcfMapper'
+import { openConfiguredFastaReader } from '../import/vcf/FastaIndexedReader'
 import { FieldProfileResolver } from '../../shared/utils/import-field-profile'
 import { detectCaller } from '../import/vcf/caller-detector'
 import {
@@ -413,6 +414,9 @@ export async function streamInsertVcf(
   let activeSample = ''
   let activeSampleColumn: VcfSelectedSampleColumn | null = null
   let callerName: string | null = null
+  const fastaReader = openConfiguredFastaReader()
+  const referenceLookup =
+    fastaReader !== null ? (chr: string) => fastaReader.windowForContig(chr) : null
   const batch = createInsertBatcher(stmts, caseId, batchSize, onProgress, limits)
 
   try {
@@ -454,7 +458,8 @@ export async function streamInsertVcf(
           activeSample,
           DEFAULT_INFO_FIELD_MAPPINGS,
           callerName,
-          fields
+          fields,
+          referenceLookup
         )
 
         // Every variant split from one line is charged the whole line: each
@@ -480,6 +485,7 @@ export async function streamInsertVcf(
         vcfSelectedSamples?.[0]
       )
   } finally {
+    fastaReader?.close()
     // Flush remaining items
     if (!isCancelledFn()) batch.flush()
     // Ensure stream resources are released

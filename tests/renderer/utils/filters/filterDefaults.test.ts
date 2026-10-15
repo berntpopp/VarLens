@@ -32,6 +32,7 @@ describe('FILTER_DEFAULTS', () => {
   it('has false for boolean filters', () => {
     expect(FILTER_DEFAULTS.starredOnly).toBe(false)
     expect(FILTER_DEFAULTS.hasCommentOnly).toBe(false)
+    expect(FILTER_DEFAULTS.unreviewedHotOnly).toBe(false)
     expect(FILTER_DEFAULTS.considerPhasing).toBe(false)
   })
 
@@ -55,6 +56,7 @@ describe('FILTER_DEFAULTS', () => {
       'minCarriers',
       'starredOnly',
       'hasCommentOnly',
+      'unreviewedHotOnly',
       'acmgClassifications',
       'tagIds',
       'annotationScope',

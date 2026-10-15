@@ -159,9 +159,7 @@ const dataInfo = computed(() => loaded.value?.dataInfo ?? null)
 const externalIds = computed(() =>
   (loaded.value?.externalIds ?? []).filter((item) => !isInternalCaseExternalIdType(item.id_type))
 )
-const idTypeSuggestions = computed(() =>
-  (loaded.value?.idTypes ?? []).filter((idType) => !isInternalCaseExternalIdType(idType))
-)
+const idTypeSuggestions = computed(() => loaded.value?.idTypes ?? [])
 const platformSuggestions = computed(() =>
   [...new Set([...DEFAULT_PLATFORMS, ...(loaded.value?.platforms ?? [])])].sort()
 )

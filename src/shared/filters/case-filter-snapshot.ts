@@ -20,21 +20,13 @@ export interface CaseFilterSnapshotStamp {
   variant_count: number
 }
 
-export interface CaseFilterSnapshotSortItem {
-  key: string
-  order: 'asc' | 'desc'
-}
-
 export interface CaseFilterSnapshotPayload {
   v: 1
   saved_at: number
   stamp: CaseFilterSnapshotStamp
   filters?: Partial<FilterState>
+  impact?: string[]
   searchQuery?: string
-  sortBy?: CaseFilterSnapshotSortItem[]
-  f?: Partial<FilterState>
-  q?: string
-  sort?: CaseFilterSnapshotSortItem[]
 }
 
 export function serializeCaseFilterSnapshot(payload: CaseFilterSnapshotPayload): string {

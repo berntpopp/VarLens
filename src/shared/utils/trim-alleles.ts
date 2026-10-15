@@ -100,22 +100,23 @@ export function leftAlignAlleles(
 
   for (;;) {
     while (
-      curRef.length > 0 &&
-      curAlt.length > 0 &&
+      curRef.length > 1 &&
+      curAlt.length > 1 &&
       curRef[curRef.length - 1].toUpperCase() === curAlt[curAlt.length - 1].toUpperCase()
     ) {
       curRef = curRef.slice(0, -1)
       curAlt = curAlt.slice(0, -1)
     }
-    if (curRef.length === 0 || curAlt.length === 0) {
+    if (
+      (curRef.length === 1 || curAlt.length === 1) &&
+      curRef[curRef.length - 1].toUpperCase() === curAlt[curAlt.length - 1].toUpperCase()
+    ) {
       const base = prevBase(curPos - 1)
-      if (base === null) return trimAlleles(pos, ref, alt)
+      if (base === null) break
       curPos -= 1
-      curRef = base + curRef
-      curAlt = base + curAlt
-      if (curRef[curRef.length - 1].toUpperCase() === curAlt[curAlt.length - 1].toUpperCase()) {
-        continue
-      }
+      curRef = base + curRef.slice(0, -1)
+      curAlt = base + curAlt.slice(0, -1)
+      continue
     }
     break
   }

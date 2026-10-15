@@ -22,22 +22,6 @@ export function igvLocus(v: IntervalSource & { chr: string }): string {
     : `${v.chr}:${interval.start}-${interval.end}`
 }
 
-export function formatIgvLocus(
-  chrOrVariant: string | (IntervalSource & { chr: string }),
-  pos?: number,
-  endPos?: number | null
-): string {
-  if (typeof chrOrVariant !== 'string') {
-    return igvLocus(chrOrVariant)
-  }
-  const cleanChr = chrOrVariant.trim()
-  if (pos === undefined || !Number.isFinite(pos)) return cleanChr
-  if (endPos !== undefined && endPos !== null && Number.isFinite(endPos) && endPos > pos) {
-    return `${cleanChr}:${pos}-${endPos}`
-  }
-  return `${cleanChr}:${pos}-${pos}`
-}
-
 /** IGV's genome id (hg38, hg19) for a known build; null when the build is unknown. */
 export function igvGenomeId(build: string | null | undefined): string | null {
   const id = normalizeBuild(build)
@@ -46,35 +30,8 @@ export function igvGenomeId(build: string | null | undefined): string | null {
   return builds.find((b) => b.id === id)?.links?.ucscDb ?? null
 }
 
-/**
- * Normalize a genome build identifier into IGV Desktop's genome token
- * (`hg38`, `hg19`, `hs1`, or the trimmed non-empty build string).
- */
-export function normalizeIgvGenomeBuild(genomeBuild?: string | null): string | null {
-  if (genomeBuild === null || genomeBuild === undefined) return null
-  const trimmed = genomeBuild.trim()
-  if (trimmed === '') return null
-  const lower = trimmed.toLowerCase()
-  if (lower === 'grch38' || lower === 'hg38' || lower === 'b38' || lower.startsWith('grch38.')) {
-    return 'hg38'
-  }
-  if (
-    lower === 'grch37' ||
-    lower === 'hg19' ||
-    lower === 'b37' ||
-    lower === 'hs37d5' ||
-    lower.startsWith('grch37.')
-  ) {
-    return 'hg19'
-  }
-  if (lower === 't2t-chm13' || lower === 'chm13' || lower === 'hs1' || lower.startsWith('chm13v')) {
-    return 'hs1'
-  }
-  return igvGenomeId(trimmed) ?? trimmed
-}
-
 export function igvGotoUrl(locus: string, genomeBuild?: string | null): string {
-  const genome = normalizeIgvGenomeBuild(genomeBuild)
+  const genome = igvGenomeId(genomeBuild)
   const base = `${IGV_BATCH_ORIGIN}/goto?locus=${encodeURIComponent(locus)}`
   return genome === null ? base : `${base}&genome=${encodeURIComponent(genome)}`
 }
@@ -89,7 +46,7 @@ export function igvLoadUrl(
   if (trimmedLocus !== undefined && trimmedLocus !== '') {
     url += `&locus=${encodeURIComponent(trimmedLocus)}`
   }
-  const genome = normalizeIgvGenomeBuild(genomeBuild)
+  const genome = igvGenomeId(genomeBuild)
   if (genome !== null) {
     url += `&genome=${encodeURIComponent(genome)}`
   }

@@ -79,7 +79,7 @@ describe('ExternalLinksSection Local IGV', () => {
 
   it('jumps to a point variant and names the genome IGV must show', async () => {
     const w = await jump(snv, 'GRCh38')
-    expect(sentUrl()).toBe('http://localhost:60151/goto?locus=chr1%3A100-100')
+    expect(sentUrl()).toBe('http://localhost:60151/goto?locus=chr1%3A100-100&genome=hg38')
     expect(w.find('[data-testid="igv-sent"]').text()).toBe(
       `${IGV_COPY.sent('chr1:100-100')} ${IGV_COPY.genome('hg38')}`
     )
@@ -87,12 +87,13 @@ describe('ExternalLinksSection Local IGV', () => {
 
   it('jumps to the whole interval of a deletion', async () => {
     await jump(deletion, 'GRCh37')
-    expect(sentUrl()).toBe('http://localhost:60151/goto?locus=chr7%3A1000-5000')
+    expect(sentUrl()).toBe('http://localhost:60151/goto?locus=chr7%3A1000-5000&genome=hg19')
     expect(wrapper!.text()).toContain(IGV_COPY.genome('hg19'))
   })
 
   it('says so when the build is unknown', async () => {
     const w = await jump(deletion, null)
+    expect(sentUrl()).toBe('http://localhost:60151/goto?locus=chr7%3A1000-5000')
     expect(w.find('[data-testid="igv-sent"]').text()).toContain(IGV_COPY.unknownBuild)
   })
 

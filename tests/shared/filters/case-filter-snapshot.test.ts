@@ -22,7 +22,7 @@ describe('case-filter-snapshot', () => {
     expect(isInternalCaseExternalIdType('OMIM')).toBe(false)
   })
 
-  it('round-trips serializeCaseFilterSnapshot and parseCaseFilterSnapshot', () => {
+  it('round-trips serializeCaseFilterSnapshot and parseCaseFilterSnapshot with full FilterState fields', () => {
     const stamp: CaseFilterSnapshotStamp = {
       genome_build: 'GRCh38',
       hpo_data_key: 'hpo-2026-01',
@@ -35,10 +35,15 @@ describe('case-filter-snapshot', () => {
       filters: {
         geneSymbol: 'BRCA1',
         maxInternalAf: 0.01,
-        consequences: ['missense_variant']
+        consequences: ['missense_variant'],
+        tagIds: [1, 3],
+        activePanelIds: [7],
+        panelPaddingBp: 10000,
+        inheritanceModes: ['autosomal_recessive'],
+        columnFilters: { cadd: { operator: '>=', value: 25 } }
       },
-      searchQuery: 'BRCA1',
-      sortBy: [{ key: 'cadd', order: 'desc' }]
+      impact: ['HIGH', 'MODERATE'],
+      searchQuery: 'BRCA1'
     }
     const raw = serializeCaseFilterSnapshot(payload)
     const parsed = parseCaseFilterSnapshot(raw)

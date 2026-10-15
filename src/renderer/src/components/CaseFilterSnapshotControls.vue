@@ -109,10 +109,8 @@ import { mdiAlertOutline, mdiBookmarkPlusOutline, mdiHistory, mdiRestore } from 
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
 import { unwrapIpcResult } from '../../../shared/types/errors'
-import {
-  applyPresetStateToFilters,
-  buildPresetFilterJson
-} from '../utils/filters/presetApplication'
+import { createFilterState } from '../../../shared/filters/filterDefaults'
+import { decodeFilterSnapshot, encodeFilterSnapshot } from '../utils/url-state/view-query'
 import {
   CASE_FILTER_RESTORE_ID_TYPE,
   CASE_FILTER_SNAPSHOT_ID_TYPE,
@@ -138,12 +136,10 @@ const savedAtLabel = computed(() => {
   return new Date(savedSnapshot.value.saved_at).toLocaleString()
 })
 
-async function buildCurrentStamp(caseId: number): Promise<CaseFilterSnapshotStamp> {
-  let genomeBuild = 'GRCh38'
-  let variantCount = 0
-  let hpoDataKey = 'none'
-  if (!api)
-    return { genome_build: genomeBuild, hpo_data_key: hpoDataKey, variant_count: variantCount }
+async function buildCurrentStamp(caseId: number): Promise<CaseFilterSnapshotStamp | null> {
+  if (!api) return null
+  let genomeBuild: string | null = null
+  let variantCount: number | null = null
   try {
     const casesList = unwrapIpcResult(await api.cases.list())
     const found = casesList.find((c) => c.id === caseId)
@@ -156,7 +152,10 @@ async function buildCurrentStamp(caseId: number): Promise<CaseFilterSnapshotStam
     }
   } catch (e) {
     logService.warn(`Failed to read case stamp: ${String(e)}`, 'filters')
+    return null
   }
+  if (genomeBuild === null || variantCount === null) return null
+  let hpoDataKey = 'none'
   try {
     const status = unwrapIpcResult(await api.hpoData.status())
     hpoDataKey = status.version ?? (status.installed ? 'installed' : 'none')
@@ -174,9 +173,11 @@ async function loadSavedSnapshot(caseId: number): Promise<void> {
   }
   try {
     const list = unwrapIpcResult(await api.caseMetadata.listExternalIds(caseId))
+    if (drawerState !== undefined && drawerState.caseId.value !== caseId) return
     const row = list.find((item) => item.id_type === CASE_FILTER_SNAPSHOT_ID_TYPE)
     savedSnapshot.value = parseCaseFilterSnapshot(row?.id_value)
   } catch (e) {
+    if (drawerState !== undefined && drawerState.caseId.value !== caseId) return
     logService.warn(`Failed to load case filter snapshot: ${String(e)}`, 'filters')
     savedSnapshot.value = null
   }
@@ -197,21 +198,29 @@ async function handleSaveSnapshot(): Promise<void> {
   const caseId = drawerState.caseId.value
   saving.value = true
   try {
-    const stamp = await buildCurrentStamp(caseId)
-    const filterJson = buildPresetFilterJson(
+    const stamp = (await buildCurrentStamp(caseId)) ?? {
+      genome_build: 'GRCh38',
+      hpo_data_key: 'none',
+      variant_count: 0
+    }
+    const encoded = encodeFilterSnapshot(
       drawerState.filters.value,
       drawerState.selectedImpactPresets.value
     )
+    const { state: filterDiff, impact } = decodeFilterSnapshot(encoded)
     const searchQuery = drawerState.dslInput?.value ?? drawerState.filters.value.searchQuery
     const payload: CaseFilterSnapshotPayload = {
       v: 1,
       saved_at: Date.now(),
       stamp,
-      filters: filterJson,
+      filters: filterDiff,
+      ...(impact.length > 0 ? { impact } : {}),
       searchQuery
     }
     const raw = serializeCaseFilterSnapshot(payload)
-    await api.caseMetadata.upsertExternalId(caseId, CASE_FILTER_SNAPSHOT_ID_TYPE, raw)
+    unwrapIpcResult(
+      await api.caseMetadata.upsertExternalId(caseId, CASE_FILTER_SNAPSHOT_ID_TYPE, raw)
+    )
     savedSnapshot.value = payload
     driftWarnings.value = []
   } catch (e) {
@@ -227,22 +236,24 @@ async function handleRestoreSnapshot(): Promise<void> {
   restoring.value = true
   try {
     const snap = savedSnapshot.value
-    const presetState = snap.filters ?? snap.f ?? {}
-    applyPresetStateToFilters({
-      filters: drawerState.filters,
-      presetState
-    })
-    const query = snap.searchQuery ?? snap.q ?? ''
+    const query = snap.searchQuery ?? ''
+    drawerState.filters.value = {
+      ...createFilterState(),
+      ...(snap.filters ?? {}),
+      searchQuery: query
+    }
+    drawerState.selectedImpactPresets.value = [...(snap.impact ?? [])]
     if (drawerState.dslInput) {
       drawerState.dslInput.value = query
       drawerState.onDslApply?.()
-    } else {
-      drawerState.filters.value.searchQuery = query
     }
     const raw = serializeCaseFilterSnapshot(snap)
-    await api.caseMetadata.upsertExternalId(caseId, CASE_FILTER_RESTORE_ID_TYPE, raw)
+    unwrapIpcResult(
+      await api.caseMetadata.upsertExternalId(caseId, CASE_FILTER_RESTORE_ID_TYPE, raw)
+    )
     const currentStamp = await buildCurrentStamp(caseId)
-    driftWarnings.value = diffCaseFilterSnapshotStamps(snap.stamp, currentStamp)
+    driftWarnings.value =
+      currentStamp !== null ? diffCaseFilterSnapshotStamps(snap.stamp, currentStamp) : []
   } catch (e) {
     logService.warn(`Failed to restore case filter snapshot: ${String(e)}`, 'filters')
   } finally {
@@ -258,9 +269,11 @@ async function handleResetDefaults(deleteSnapshot: boolean): Promise<void> {
   driftWarnings.value = []
   if (deleteSnapshot && api && savedSnapshot.value !== null) {
     try {
-      await api.caseMetadata.deleteExternalId(
-        drawerState.caseId.value,
-        CASE_FILTER_SNAPSHOT_ID_TYPE
+      unwrapIpcResult(
+        await api.caseMetadata.deleteExternalId(
+          drawerState.caseId.value,
+          CASE_FILTER_SNAPSHOT_ID_TYPE
+        )
       )
       savedSnapshot.value = null
     } catch (e) {

@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  formatIgvLocus,
   IGV_BATCH_ORIGIN,
+  igvGenomeId,
   igvGotoUrl,
   igvLoadUrl,
   igvLocus,
   loadInIgv,
-  normalizeIgvGenomeBuild,
   sendToIgv
 } from '../../../src/renderer/src/utils/igv-desktop'
 
@@ -16,10 +15,8 @@ afterEach(() => {
 })
 
 describe('igv-desktop (#93)', () => {
-  describe('formatIgvLocus & igvLocus', () => {
+  describe('igvLocus & igvGenomeId', () => {
     it('formats point variants and SV/CNV intervals', () => {
-      expect(formatIgvLocus('chr1', 12345)).toBe('chr1:12345-12345')
-      expect(formatIgvLocus('chr1', 12345, 12500)).toBe('chr1:12345-12500')
       expect(
         igvLocus({
           chr: 'chr7',
@@ -31,7 +28,7 @@ describe('igv-desktop (#93)', () => {
         })
       ).toBe('chr7:140753336-140753336')
       expect(
-        formatIgvLocus({
+        igvLocus({
           chr: 'chr7',
           pos: 1000,
           ref: 'N',
@@ -41,34 +38,30 @@ describe('igv-desktop (#93)', () => {
         })
       ).toBe('chr7:1000-5000')
     })
-  })
 
-  describe('normalizeIgvGenomeBuild', () => {
     it.each([
       ['GRCh38', 'hg38'],
       ['hg38', 'hg38'],
-      ['GRCh38.p14', 'hg38'],
       ['GRCh37', 'hg19'],
-      ['hg19', 'hg19'],
-      ['hs37d5', 'hg19'],
-      ['T2T-CHM13', 'hs1'],
-      ['hs1', 'hs1'],
-      ['mm10', 'mm10']
-    ])('normalizes %s to %s', (input, expected) => {
-      expect(normalizeIgvGenomeBuild(input)).toBe(expected)
+      ['hg19', 'hg19']
+    ])('maps %s to %s', (input, expected) => {
+      expect(igvGenomeId(input)).toBe(expected)
     })
 
-    it('returns null for empty, whitespace, null, or undefined builds', () => {
-      expect(normalizeIgvGenomeBuild(null)).toBeNull()
-      expect(normalizeIgvGenomeBuild(undefined)).toBeNull()
-      expect(normalizeIgvGenomeBuild('')).toBeNull()
-      expect(normalizeIgvGenomeBuild('   ')).toBeNull()
+    it('returns null for unknown, empty, or null builds', () => {
+      expect(igvGenomeId(null)).toBeNull()
+      expect(igvGenomeId(undefined)).toBeNull()
+      expect(igvGenomeId('')).toBeNull()
+      expect(igvGenomeId('mm10')).toBeNull()
     })
   })
 
   describe('igvGotoUrl', () => {
-    it('builds goto URL without genome parameter when genomeBuild is omitted', () => {
+    it('builds goto URL without genome parameter when genomeBuild is omitted or unknown', () => {
       expect(igvGotoUrl('chr1:100-100')).toBe(`${IGV_BATCH_ORIGIN}/goto?locus=chr1%3A100-100`)
+      expect(igvGotoUrl('chr1:100-100', 'unknown')).toBe(
+        `${IGV_BATCH_ORIGIN}/goto?locus=chr1%3A100-100`
+      )
     })
 
     it('appends normalized genome parameter when genomeBuild is provided', () => {

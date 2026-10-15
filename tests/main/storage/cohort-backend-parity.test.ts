@@ -1172,6 +1172,12 @@ describe.skipIf(!RUN)('cohort backend-parity — Sprint A C7 / Gate 9', () => {
     expect(pgKeys).toContain('7:1000:N:<CNV>')
     expect(pgKeys.sort()).toEqual(sqliteKeys.sort())
   }, 120_000)
+
+  it('unreviewed_hot returns identical hot untagged/unclassified rows on SQLite and PG (#149)', async () => {
+    const sqliteHot = sqliteCohortRows({ unreviewed_hot: true }).map(variantKey).sort()
+    const pgHot = (await pgCohortRows({ unreviewed_hot: true })).map(variantKey).sort()
+    expect(pgHot).toEqual(sqliteHot)
+  }, 120_000)
 })
 
 describe.skipIf(RUN)('cohort backend-parity — Sprint A C7 / Gate 9 (skipped)', () => {

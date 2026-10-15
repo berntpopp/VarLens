@@ -95,9 +95,15 @@ describe('buildActiveFiltersList', () => {
       value: 'Unreviewed hot'
     })
     expect(f.getIpcParams().unreviewed_hot).toBe(true)
+    const { applyPresetStateToFilters, buildPresetFilterJson } =
+      await import('../../../../src/renderer/src/utils/filters/presetApplication')
+    const presetJson = buildPresetFilterJson(f.filters.value, [])
+    expect(presetJson.unreviewedHotOnly).toBe(true)
     f.clearFilter('unreviewedHot')
     expect(f.filters.value.unreviewedHotOnly).toBe(false)
     expect(f.activeFiltersList.value.find((c) => c.id === 'unreviewedHot')).toBeUndefined()
+    applyPresetStateToFilters({ filters: f.filters, presetState: presetJson })
+    expect(f.filters.value.unreviewedHotOnly).toBe(true)
   })
 
   it('includes ACMG filter', () => {

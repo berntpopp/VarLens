@@ -20,6 +20,7 @@ import {
   CASE_FILTER_RESTORE_ID_TYPE,
   CASE_FILTER_SNAPSHOT_ID_TYPE,
   formatCaseFilterAuditPayload,
+  isInternalCaseExternalIdType,
   parseCaseFilterSnapshot
 } from '../../../shared/filters/case-filter-snapshot'
 
@@ -501,12 +502,13 @@ export class PostgresCaseMetadataRepository {
       `
         SELECT DISTINCT id_type
         FROM ${this.table('case_external_ids')}
-        WHERE id_type NOT LIKE '_varlens_%'
         ORDER BY id_type
       `,
       []
     )
-    return result.rows.map((row) => row.id_type)
+    return result.rows
+      .map((row) => row.id_type)
+      .filter((idType) => !isInternalCaseExternalIdType(idType))
   }
 
   async getFullCaseMetadata(caseId: number): Promise<FullCaseMetadataResult> {

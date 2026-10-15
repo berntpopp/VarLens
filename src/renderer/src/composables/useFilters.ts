@@ -246,9 +246,6 @@ export function createFilters(): UseFiltersReturn {
       case 'impact':
         selectedImpactPresets.value = []
         break
-      case 'unreviewedHot':
-        filters.value.unreviewedHotOnly = false
-        break
     }
   }
 

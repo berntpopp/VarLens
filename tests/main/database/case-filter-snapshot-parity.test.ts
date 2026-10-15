@@ -105,9 +105,10 @@ describe.skipIf(!runPostgresE2E)('case-filter-snapshot parity (PostgreSQL)', () 
 
   beforeEach(async () => {
     const connectionString =
+      process.env.VARLENS_PG_URL ??
       process.env.VARLENS_TEST_POSTGRES_URL ??
       process.env.DATABASE_URL ??
-      'postgresql://varlens:varlens@localhost:5432/varlens'
+      'postgres://varlens:varlens_dev_password@127.0.0.1:55432/varlens_dev'
     pool = new Pool({ connectionString })
     schema = `test_snapshot_${Date.now()}_${Math.floor(Math.random() * 10000)}`
     await pool.query(`CREATE SCHEMA "${schema}"`)

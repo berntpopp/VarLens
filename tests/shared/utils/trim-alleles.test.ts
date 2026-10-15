@@ -163,7 +163,7 @@ describe('leftAlignAlleles (#587)', () => {
       alt: 'A'
     })
 
-    // Contig start (pos = 1): cannot shift left past position 1
+    // Contig start (pos = 1): shifts to position 1 and stops without discarding valid shifts
     const startWindow = windowFrom('CAAAT', 1)
     expect(leftAlignAlleles(1, 'CA', 'C', startWindow)).toEqual({
       pos: 1,
@@ -175,11 +175,27 @@ describe('leftAlignAlleles (#587)', () => {
       ref: 'CA',
       alt: 'C'
     })
+    const pos1RepeatWindow = windowFrom('AAAT', 1)
+    expect(leftAlignAlleles(2, 'AA', 'A', pos1RepeatWindow)).toEqual({
+      pos: 1,
+      ref: 'AA',
+      alt: 'A'
+    })
+    expect(leftAlignAlleles(3, 'AA', 'A', pos1RepeatWindow)).toEqual({
+      pos: 1,
+      ref: 'AA',
+      alt: 'A'
+    })
 
-    // Ambiguous N base falls back to trimAlleles
+    // Ambiguous N base at 100 stops further shifting while keeping valid shift from 102 -> 101
     const nWindow = windowFrom('CNAAAT', 99)
+    expect(leftAlignAlleles(101, 'AA', 'A', nWindow)).toEqual({
+      pos: 101,
+      ref: 'AA',
+      alt: 'A'
+    })
     expect(leftAlignAlleles(102, 'AA', 'A', nWindow)).toEqual({
-      pos: 102,
+      pos: 101,
       ref: 'AA',
       alt: 'A'
     })

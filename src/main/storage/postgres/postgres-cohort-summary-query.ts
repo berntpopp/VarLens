@@ -28,7 +28,10 @@ import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { singleFrequencyDenominator } from '../../../shared/sql/carrier-frequency'
 import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
-import { cohortInfoExistsClauses } from '../../../shared/sql/cohort-info-filter-sql'
+import {
+  cohortInfoExistsClauses,
+  cohortUnreviewedHotClause
+} from '../../../shared/sql/cohort-info-filter-sql'
 import { infoFieldKey } from '../../../shared/filters/info-field-filter'
 import { SUMMARY_FREQUENCY_SQL } from './postgres-carrier-frequency-sql'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
@@ -511,9 +514,7 @@ export function buildSummaryQueryParts(
 
   if (params.unreviewed_hot === true) {
     const pfx = schema !== undefined ? `"${schema.replace(/"/g, '""')}".` : ''
-    whereParts.push(
-      `((cvs.impact_rank = 4 OR cvs.consequence = 'HIGH' OR cvs.clinvar_rank IN (13, 14, 15) OR cvs.clinvar IN ('Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic')) AND cvs.acmg_best IS NULL AND COALESCE(cvs.has_star, false) = false AND COALESCE(cvs.has_comment, false) = false AND (cvs.chr, cvs.pos, cvs.ref, cvs.alt, cvs.variant_type, cvs.genome_build) NOT IN (SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build FROM ${pfx}"variant_tags" vt JOIN ${pfx}"variants" v ON v.id = vt.variant_id JOIN ${pfx}"cases" c ON c.id = vt.case_id WHERE c.import_status = 'ready'))`
-    )
+    whereParts.push(cohortUnreviewedHotClause('cvs', 'postgres', pfx))
   }
 
   // Per-column typed filters → stored cvs columns (aggregates become plain

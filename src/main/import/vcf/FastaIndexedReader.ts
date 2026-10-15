@@ -68,13 +68,7 @@ export class FastaIndexedReader {
   }
 
   private resolveEntry(chr: string): FaiEntry | undefined {
-    const direct = this.entries.get(chr)
-    if (direct !== undefined) return direct
-    const upper = chr.trim().toUpperCase()
-    const byUpper = this.entries.get(upper)
-    if (byUpper !== undefined) return byUpper
-    const bare = upper.startsWith('CHR') ? upper.slice(3) : upper
-    return this.entries.get(bare) ?? this.entries.get(`CHR${bare}`)
+    return this.entries.get(chr) ?? this.entries.get(chr.trim().toUpperCase())
   }
 
   /**
@@ -129,4 +123,16 @@ export class FastaIndexedReader {
       this.fd = null
     }
   }
+}
+
+/**
+ * Open an indexed reference FASTA reader when `fastaPath` or `VARLENS_REFERENCE_FASTA`
+ * points to an existing `.fa`/`.fasta` with a sidecar `.fai` index; otherwise `null`.
+ */
+export function openConfiguredFastaReader(fastaPath?: string | null): FastaIndexedReader | null {
+  const target = (fastaPath ?? process.env.VARLENS_REFERENCE_FASTA ?? '').trim()
+  if (target === '') return null
+  const faiPath = `${target}.fai`
+  if (!fs.existsSync(target) || !fs.existsSync(faiPath)) return null
+  return new FastaIndexedReader(target, faiPath)
 }

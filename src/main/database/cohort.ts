@@ -30,7 +30,10 @@ import { booleanSearchSql } from '../../shared/utils/boolean-search'
 import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
-import { cohortInfoExistsClauses } from '../../shared/sql/cohort-info-filter-sql'
+import {
+  cohortInfoExistsClauses,
+  cohortUnreviewedHotClause
+} from '../../shared/sql/cohort-info-filter-sql'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
@@ -190,9 +193,7 @@ export class CohortService {
     }
 
     if (params.unreviewed_hot === true) {
-      whereConditions.push(
-        `((cvs.impact_rank = 4 OR cvs.consequence = 'HIGH' OR cvs.clinvar_rank IN (13, 14, 15) OR cvs.clinvar IN ('Pathogenic', 'Likely_pathogenic', 'Pathogenic/Likely_pathogenic')) AND cvs.acmg_best IS NULL AND COALESCE(cvs.has_star, 0) = 0 AND COALESCE(cvs.has_comment, 0) = 0 AND (cvs.chr, cvs.pos, cvs.ref, cvs.alt, cvs.variant_type, cvs.genome_build) NOT IN (SELECT v.chr, v.pos, v.ref, v.alt, v.variant_type, c.genome_build FROM variant_tags vt JOIN variants v ON v.id = vt.variant_id JOIN cases c ON c.id = vt.case_id WHERE COALESCE(c.import_status, 'ready') = 'ready'))`
-      )
+      whereConditions.push(cohortUnreviewedHotClause('cvs', 'sqlite'))
     }
 
     if (columnFilters !== undefined) {
