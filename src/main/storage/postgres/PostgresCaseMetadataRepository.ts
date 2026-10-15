@@ -10,6 +10,12 @@ import type { HpoTermFlags } from '../../../shared/types/hpo-profile'
 import { resolveHpoTermFlags } from '../../../shared/utils/hpo-term-flags'
 import { quoteIdentifier } from './identifiers'
 import { withTransaction } from './transaction'
+import {
+  readPostgresPhenotypeProfiles,
+  replacePostgresPhenotypeScores,
+  type CasePhenotypeProfile
+} from '../../services/phenotype/case-phenotype-scores'
+import type { GenePhenotypeScore } from '../../services/phenotype/hpo-similarity-db'
 
 type Queryable = Pick<Pool, 'query' | 'connect'>
 type Row = Record<string, unknown>
@@ -210,6 +216,27 @@ export class PostgresCaseMetadataRepository {
         [caseId, cohortIds]
       )
     })
+  }
+
+  /** HPO profiles next to their stored phenotype-score state; null: every case. */
+  async getPhenotypeProfiles(caseId: number | null): Promise<CasePhenotypeProfile[]> {
+    return await readPostgresPhenotypeProfiles(this.pool, (name) => this.table(name), caseId)
+  }
+
+  async replacePhenotypeScores(
+    caseId: number,
+    hash: string | null,
+    dataKey: string | null,
+    rows: GenePhenotypeScore[]
+  ): Promise<void> {
+    await replacePostgresPhenotypeScores(
+      this.pool,
+      (name) => this.table(name),
+      caseId,
+      hash,
+      dataKey,
+      rows
+    )
   }
 
   async getCaseHpoTerms(caseId: number): Promise<unknown[]> {

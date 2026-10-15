@@ -16,7 +16,12 @@ import type { VariantFilter } from '../database/types'
 import { convertBigInts } from '../utils/convertBigInts'
 import { toTransportableWorkerError } from '../database/worker-error-codec'
 import { threadId } from 'worker_threads'
-import { prewarmHpoIndex } from '../services/phenotype/hpo-similarity-db'
+import {
+  explainCaseGene,
+  prewarmHpoIndex,
+  scoreAllGenes
+} from '../services/phenotype/hpo-similarity-db'
+import type { HpoProfileTerm } from '../../shared/types/hpo-profile'
 import {
   resolvePanelIntervalsInPlace,
   type PanelAwareFilter
@@ -263,6 +268,15 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
       case 'hpo:prewarm':
         prewarmHpoIndex()
         return threadId // lets tests check every scorer task lands on one worker
+
+      case 'hpo:caseScores':
+        return scoreAllGenes(params[0] as HpoProfileTerm[])
+
+      case 'hpo:explainGene':
+        return explainCaseGene(
+          repos.metadata.getCaseHpoTerms(params[0] as number),
+          params[1] as string
+        )
 
       default:
         throw new Error(`Unknown db-worker task type: ${type}`)

@@ -10,6 +10,7 @@ import type {
 } from '../ipc/handlers/annotations-logic'
 import type { AuditQueryParams } from './audit-log-types'
 import type { GetShortlistParams } from '../database/ShortlistService'
+import type { HpoProfileTerm } from '../../shared/types/hpo-profile'
 
 export type { AvailableBuild } from '../../shared/types/database'
 
@@ -58,6 +59,12 @@ export type StorageReadTask =
   | { type: 'variants:shortlist'; params: [params: GetShortlistParams] }
   /** Load the HPO index in the process that scores shortlists, off the request path. */
   | { type: 'hpo:prewarm'; params: [] }
+  /** Every HPO gene's score for one profile (scorer worker on desktop SQLite). */
+  | { type: 'hpo:caseScores'; params: [terms: HpoProfileTerm[]] }
+  /** The phenotype explanation of one gene for a case's current terms. */
+  | { type: 'hpo:explainGene'; params: [caseId: number, gene: string] }
+  /** HPO terms and stored phenotype-score state of one case, or of every case (null). */
+  | { type: 'phenotype:profiles'; params: [caseId: number | null] }
   | {
       type: 'variants:columnMeta'
       params: [scope: { caseId: number } | { caseIds: number[] }, columnKey: string]

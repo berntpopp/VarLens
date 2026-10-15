@@ -17,5 +17,6 @@ export const mockHpoDataApi: HpoDataApi = {
     success: false,
     message: 'HPO data updates are not available in mock mode.',
     status: NO_HPO_DATA
-  })
+  }),
+  explainGene: async () => null
 }

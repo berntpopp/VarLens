@@ -64,6 +64,8 @@ export type DbTaskType =
   | 'association:build'
   // HPO similarity index (loaded ahead of the first hpo_resnik ranking, #631)
   | 'hpo:prewarm'
+  | 'hpo:caseScores'
+  | 'hpo:explainGene'
 
 export interface DbTask {
   /** IPC-style channel name — must be a valid DbTaskType */

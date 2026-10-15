@@ -38,6 +38,7 @@ import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-v
 import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
 import { attachCaseTagIds, caseTagIdsSql, idListParam } from '../../shared/sql/variant-tag-ids-sql'
+import { attachCasePhenotype, casePhenotypePageSql } from '../../shared/sql/phenotype-score-sql'
 import { VariantSearchService } from './VariantSearchService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
@@ -321,6 +322,8 @@ export class VariantRepository extends BaseRepository {
         )
         const hits = this.db.prepare(caseTagIdsSql('sqlite')).all(filter.case_id, ids)
         attachCaseTagIds(data, hits as Array<{ variant_id: number; tag_id: number }>)
+        const scores = this.db.prepare(casePhenotypePageSql('sqlite')).all(filter.case_id, ids)
+        attachCasePhenotype(data, scores as Parameters<typeof attachCasePhenotype>[1])
       }
 
       let unfiltered_count: number | undefined

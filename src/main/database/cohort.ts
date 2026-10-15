@@ -43,6 +43,12 @@ import {
 } from '../../shared/sql/variant-tag-ids-sql'
 import { planSqliteCohortKeyset, SQLITE_KEYSET_EXTRA_COLUMNS } from './cohort-keyset-page'
 import {
+  attachCohortPhenotype,
+  cohortPhenotypePageParams,
+  cohortPhenotypePageSql,
+  PHENOTYPE_SCORE_KEY
+} from '../../shared/sql/phenotype-score-sql'
+import {
   COHORT_BUILD_TOTALS_JOIN,
   COHORT_FREQUENCY_SQL,
   COHORT_SUMMARY_WITH_FREQUENCY_FROM,
@@ -55,7 +61,7 @@ const SORTABLE_COLUMNS: Record<string, string> = {
   carrier_count: 'carrier_count', cohort_frequency: 'cohort_frequency', het_count: 'het_count',
   hom_count: 'hom_count', consequence: 'consequence', func: 'func', clinvar: 'clinvar',
   gnomad_af: 'gnomad_af', cadd_phred: 'cadd', transcript: 'transcript', end_pos: 'end_pos',
-  sv_type: 'sv_type', sv_length: 'sv_length'
+  sv_type: 'sv_type', sv_length: 'sv_length', phenotype_score: 'phenotype_score'
 }
 
 // prettier-ignore
@@ -216,9 +222,7 @@ export class CohortService {
     return { whereClause, paramsArray, needsBuildTotals: base.needsBuildTotals }
   }
 
-  /**
-   * Get aggregated cohort variants from pre-computed summary table
-   */
+  /** Aggregated cohort variants from the pre-computed summary table. */
   getCohortVariants(params: CohortSearchParams): CohortPaginatedResult {
     const limit = params.limit ?? 50
     const offset = params.offset ?? 0
@@ -328,6 +332,10 @@ export class CohortService {
       const positions = idListParam('sqlite', pagePositions(results))
       const hits = this.getStatement(cohortTagIdsSql('sqlite')).all(positions)
       attachCohortTagIds(results, hits as Parameters<typeof attachCohortTagIds>[1])
+      const scores = this.getStatement(cohortPhenotypePageSql('sqlite')).all(
+        ...cohortPhenotypePageParams('sqlite', results)
+      )
+      attachCohortPhenotype(results, scores as Parameters<typeof attachCohortPhenotype>[1])
     }
     const paging = keyset?.finalize(results as unknown as Array<Record<string, unknown>>, limit)
 
@@ -499,11 +507,11 @@ export class CohortService {
     }
 
     const DISTINCT_THRESHOLD = 50
-    // The frequency is derived, so the metadata reads through the build totals.
-    const entries = Object.entries(SORTABLE_COLUMNS).map(([key, sqlCol]): [string, string] => [
-      key,
-      cohortSortExpression(key, sqlCol)
-    ])
+    // The frequency is derived, so the metadata reads through the build totals; the
+    // phenotype score is a per-row probe of carriers, too slow to aggregate over the summary.
+    const entries = Object.entries(SORTABLE_COLUMNS)
+      .filter(([key]) => key !== PHENOTYPE_SCORE_KEY)
+      .map(([key, sqlCol]): [string, string] => [key, cohortSortExpression(key, sqlCol)])
 
     // Single-pass aggregate: compute COUNT(DISTINCT), MIN, MAX for all columns at once
     const selectParts = entries.map(([key, sqlCol]) => {

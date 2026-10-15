@@ -1,7 +1,11 @@
 import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import { getGeneReferenceDb } from '../../database/geneReferenceLoader'
-import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
+import {
+  explainCaseGene,
+  prewarmHpoIndex,
+  scoreAllGenes
+} from '../../services/phenotype/hpo-similarity-db'
 import { panelStatusGenomeBuild } from '../../../shared/filters/panel-intervals'
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
 
@@ -198,6 +202,22 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         if (this.dbPool !== null) return await this.dbPool.run({ type: task.type, params: [] })
         prewarmHpoIndex()
         return null
+
+      // Scoring and explaining stay off the main thread: the scorer worker holds the index.
+      case 'hpo:caseScores':
+        if (this.dbPool !== null) return await this.dbPool.run(task)
+        return scoreAllGenes(task.params[0])
+
+      case 'hpo:explainGene':
+        if (this.dbPool !== null) return await this.dbPool.run(task)
+        return explainCaseGene(
+          this.databaseService.metadata.getCaseHpoTerms(task.params[0]),
+          task.params[1]
+        )
+
+      case 'phenotype:profiles':
+        // Main thread on purpose: two indexed reads of small tables, on every table query.
+        return this.databaseService.metadata.getPhenotypeProfiles(task.params[0])
 
       case 'variants:columnMeta':
         if (this.dbPool !== null)

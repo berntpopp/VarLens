@@ -38,6 +38,11 @@ import {
 } from '../../../shared/filters/cohort-column-filter-keys'
 import { cohortCarriersSql } from '../../../shared/sql/cohort-call-sql'
 import {
+  attachCohortPhenotype,
+  cohortPhenotypePageParams,
+  cohortPhenotypePageSql
+} from '../../../shared/sql/phenotype-score-sql'
+import {
   attachCohortTagIds,
   cohortTagIdsSql,
   pagePositions
@@ -183,6 +188,11 @@ export class PostgresCohortRepository {
       const tagSql = cohortTagIdsSql('postgres', (table) => this.tbl(table))
       const hits = await this.pool.query(tagSql, [pagePositions(summaryResult.data)])
       attachCohortTagIds(summaryResult.data, hits.rows)
+      const scores = await this.pool.query(
+        cohortPhenotypePageSql('postgres', (table) => this.tbl(table)),
+        cohortPhenotypePageParams('postgres', summaryResult.data)
+      )
+      attachCohortPhenotype(summaryResult.data, scores.rows)
     }
     return summaryResult
   }

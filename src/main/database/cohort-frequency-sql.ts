@@ -17,6 +17,7 @@ import {
   singleFrequencyDenominator,
   type CarrierFrequencyRelations
 } from '../../shared/sql/carrier-frequency'
+import { cohortPhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../shared/sql/phenotype-score-sql'
 
 /** The cases (and their rows) the SQLite carrier frequency counts: published ones. */
 export const SQLITE_CARRIER_FREQUENCY_RELATIONS: CarrierFrequencyRelations = {
@@ -56,7 +57,7 @@ export const COHORT_SUMMARY_WITH_FREQUENCY_FROM = `cohort_variant_summary ${COHO
 
 /**
  * SQL to sort, aggregate or list a cohort column by: the stored column, or the
- * read-time expression for the frequency. With one genome build and one
+ * read-time expression for the frequency or the carriers' phenotype score. With one genome build and one
  * variant-type selection there is one denominator, so the indexed carrier
  * count orders the rows exactly as the frequency would (and needs no
  * arithmetic per row).
@@ -67,6 +68,7 @@ export function cohortSortExpression(
   genomeBuild?: string,
   variantType?: string
 ): string {
+  if (key === PHENOTYPE_SCORE_KEY) return cohortPhenotypeScoreSql(COHORT_SUMMARY_ALIAS, 'sqlite')
   if (key !== COHORT_FREQUENCY_KEY) return column
   return singleFrequencyDenominator(genomeBuild, variantType)
     ? 'carrier_count'

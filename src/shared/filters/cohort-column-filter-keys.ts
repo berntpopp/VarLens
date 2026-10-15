@@ -37,7 +37,9 @@ export const COHORT_SUMMARY_FILTER_COLUMNS: Readonly<Record<string, string>> = {
   hom_count: 'hom_count',
   end_pos: 'end_pos',
   sv_type: 'sv_type',
-  sv_length: 'sv_length'
+  sv_length: 'sv_length',
+  /** Best stored score over the carriers; each backend maps it to its probe. */
+  phenotype_score: 'phenotype_score'
 }
 
 /** Accepted alternative spellings → canonical cohort key. */

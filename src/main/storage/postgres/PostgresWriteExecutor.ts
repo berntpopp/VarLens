@@ -23,6 +23,7 @@ type PostgresCaseMetadataWriter = Pick<
   | 'setCaseCohorts'
   | 'assignCaseHpoTerm'
   | 'removeCaseHpoTerm'
+  | 'replacePhenotypeScores'
   | 'upsertCaseDataInfo'
   | 'upsertCaseExternalId'
   | 'deleteCaseExternalId'
@@ -105,6 +106,9 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
 
   async execute(task: StorageWriteTask): Promise<unknown> {
     switch (task.type) {
+      case 'phenotype:replaceScores':
+        return await this.caseMetadata.replacePhenotypeScores(...task.params)
+
       case 'cases:delete': {
         const [caseId, successor] = task.params
         if (successor === undefined) return await this.caseLifecycle.deleteCase(caseId)

@@ -4,6 +4,7 @@ import {
   type ExtensionTypeKey
 } from '../variant-extension-registry'
 import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
+import { casePhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../../shared/sql/phenotype-score-sql'
 
 /**
  * Columns living on the `variants` table that are sortable and eligible for
@@ -64,6 +65,9 @@ export const SORTABLE_COLUMNS = BASE_SORTABLE_COLUMNS
 export function resolveSortColumn(
   sortKey: string
 ): { sql: string; isExtension: boolean; extensionType?: ExtensionTypeKey } | null {
+  if (sortKey === PHENOTYPE_SCORE_KEY) {
+    return { sql: casePhenotypeScoreSql('variants'), isExtension: false }
+  }
   if (BASE_SORTABLE_COLUMNS[sortKey] !== undefined) {
     return {
       sql: comparedColumnSql(sortKey, `variants.${BASE_SORTABLE_COLUMNS[sortKey]}`),

@@ -21,9 +21,7 @@ export interface CaseWithCohorts extends Case {
   sex?: CaseSex | null
 }
 
-/**
- * CaseSearchParams - Pagination, sorting, and filtering for case queries
- */
+/** CaseSearchParams - Pagination, sorting, and filtering for case queries */
 export interface CaseSearchParams {
   limit: number
   offset?: number
@@ -48,9 +46,7 @@ export interface AvailableBuild {
  * Property names use snake_case to match SQLite column naming conventions.
  */
 
-/**
- * Case entity - represents an imported VCF file and its metadata
- */
+/** Case entity - represents an imported VCF file and its metadata */
 export interface Case {
   /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
@@ -81,9 +77,7 @@ export interface CaseImportFile {
   imported_at: number
 }
 
-/**
- * Variant entity - represents a single genomic variant
- */
+/** Variant entity - represents a single genomic variant */
 export interface Variant {
   /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
@@ -160,6 +154,9 @@ export interface Variant {
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null
   tag_ids?: number[] // tags of this case's row, set by table page reads (#125)
+  /** Stored HPO phenotype score of the gene for the case's terms and its best disease (page reads) */
+  phenotype_score?: number | null
+  phenotype_disease?: string | null
 }
 
 /**

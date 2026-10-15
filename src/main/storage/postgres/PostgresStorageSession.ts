@@ -29,6 +29,7 @@ import { PostgresVariantReadRepository } from './PostgresVariantReadRepository'
 import type { StorageImportExecutor } from '../import-executor'
 import type { StorageReadExecutor } from '../read-executor'
 import { PostgresWriteExecutor } from './PostgresWriteExecutor'
+import { withPhenotypeScores } from '../phenotype-score-executor'
 import {
   buildPostgresClientConfig,
   buildPostgresConnectionLabel,
@@ -180,26 +181,6 @@ export class PostgresStorageSession implements StorageSession {
       rows: exportRows
     })
     const buildReviews = new PostgresBuildReviewRepository(options.pool, options.config.schema)
-    this.readExecutor = new PostgresReadExecutor({
-      casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
-      availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema),
-      buildReviews,
-      overview: new PostgresOverviewRepository(options.pool, options.config.schema),
-      export: exportRows,
-      cohort,
-      tags,
-      annotations,
-      commentsMetrics,
-      panels,
-      panelStatus: new PostgresPanelIntervalResolver(options.pool, options.config.schema),
-      filterPresets,
-      shortlist,
-      analysisGroups,
-      audit,
-      transcripts,
-      caseMetadata,
-      variants
-    })
     this.writeExecutor = new PostgresWriteExecutor(caseMetadata, this.caseLifecycle, {
       tags,
       annotations,
@@ -211,6 +192,29 @@ export class PostgresStorageSession implements StorageSession {
       buildReviews,
       transcripts
     })
+    this.readExecutor = withPhenotypeScores(
+      new PostgresReadExecutor({
+        casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
+        availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema),
+        buildReviews,
+        overview: new PostgresOverviewRepository(options.pool, options.config.schema),
+        export: exportRows,
+        cohort,
+        tags,
+        annotations,
+        commentsMetrics,
+        panels,
+        panelStatus: new PostgresPanelIntervalResolver(options.pool, options.config.schema),
+        filterPresets,
+        shortlist,
+        analysisGroups,
+        audit,
+        transcripts,
+        caseMetadata,
+        variants
+      }),
+      this.writeExecutor
+    )
     this.importExecutor = new PostgresImportExecutor({
       schema: options.config.schema,
       // buildPostgresClientConfig always sets connectionString = config.url (a string),

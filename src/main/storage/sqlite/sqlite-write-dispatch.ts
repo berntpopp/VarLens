@@ -46,6 +46,10 @@ export async function executeSqliteWriteTask(
   task: StorageWriteTask
 ): Promise<unknown> {
   switch (task.type) {
+    case 'phenotype:replaceScores':
+      repos.metadata.replacePhenotypeScores(...task.params)
+      return undefined
+
     case 'cases:delete':
       // Only the session batch import replaces a case; SQLite imports through its worker.
       if (task.params[1]) throw new Error('cases:delete with a successor needs PostgreSQL')

@@ -1,5 +1,5 @@
 import type { IpcMain } from 'electron'
-import { HPO_DATA_CHANNELS } from '../../../shared/ipc/domains/hpo-data'
+import { HPO_DATA_CHANNELS, HpoExplainGeneArgsSchema } from '../../../shared/ipc/domains/hpo-data'
 import type { HpoDataUpdateResult } from '../../../shared/types/hpo-data'
 import { apiFetch } from '../../services/api/http-fetch'
 import { networkStatus } from '../../services/network/NetworkStatus'
@@ -16,6 +16,15 @@ let updating: Promise<HpoDataUpdateResult> | null = null
 
 export function registerHpoDataDomain(ipcMain: IpcMain): void {
   ipcMain.handle(HPO_DATA_CHANNELS.status, async () => wrapHandler(async () => getHpoDataStatus()))
+
+  ipcMain.handle(HPO_DATA_CHANNELS.explainGene, async (_event, ...args: unknown[]) =>
+    wrapHandler(async () =>
+      getDatabaseManager()
+        .getCurrentSession()
+        .getReadExecutor()
+        .execute({ type: 'hpo:explainGene', params: HpoExplainGeneArgsSchema.parse(args) })
+    )
+  )
 
   ipcMain.handle(HPO_DATA_CHANNELS.update, async () =>
     wrapHandler(async () => {

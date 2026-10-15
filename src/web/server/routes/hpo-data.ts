@@ -1,4 +1,5 @@
 import { getHpoDataStatus } from '../../../main/ipc/handlers/hpo-data-logic'
+import { HpoExplainGeneArgsSchema } from '../../../shared/ipc/domains/hpo-data'
 import type { OverrideHandler } from './types'
 
 /**
@@ -11,6 +12,18 @@ export function buildHpoDataOverrides(): Record<string, OverrideHandler> {
     'hpo-data:status': {
       handle() {
         return getHpoDataStatus()
+      }
+    },
+    'hpo-data:explainGene': {
+      async handle(args, _request, reply, { session }) {
+        const parsed = HpoExplainGeneArgsSchema.safeParse(args)
+        if (!parsed.success) {
+          reply.code(400)
+          return { error: 'invalid-params', message: 'Expected a case id and a gene symbol' }
+        }
+        return await session
+          .getReadExecutor()
+          .execute({ type: 'hpo:explainGene', params: parsed.data })
       }
     }
   }

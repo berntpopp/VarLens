@@ -21,8 +21,19 @@ import type {
 import type { AuditAppendParams } from './audit-log-types'
 import type { TranscriptInsertRow } from '../../shared/types/transcript'
 import type { BuildReviewChoice } from '../../shared/types/build-review'
+import type { GenePhenotypeScore } from '../services/phenotype/hpo-similarity-db'
 
 export type StorageWriteTask =
+  /** Replace a case's stored phenotype scores (case-phenotype-scores.ts); null hash clears. */
+  | {
+      type: 'phenotype:replaceScores'
+      params: [
+        caseId: number,
+        profileHash: string | null,
+        hpoDataKey: string | null,
+        rows: GenePhenotypeScore[]
+      ]
+    }
   | {
       type: 'cases:delete'
       /** `successor`: a published case that takes the deleted one's name in the same transaction. */
