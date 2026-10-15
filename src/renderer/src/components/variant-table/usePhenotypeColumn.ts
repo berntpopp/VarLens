@@ -11,8 +11,9 @@ import type { ColumnPreferences } from '../../composables/useColumnPreferences'
 import { useCaseMetadata } from '../../composables/useCaseMetadata'
 import { phenotypeChange } from '../../composables/phenotypeChanges'
 import { useApiService } from '../../composables/useApiService'
+import { PHENOTYPE_SCORE_KEY as PHENOTYPE_COLUMN_KEY } from '../../../../shared/sql/phenotype-score-sql'
 
-export const PHENOTYPE_COLUMN_KEY = 'phenotype_score'
+export { PHENOTYPE_SCORE_KEY as PHENOTYPE_COLUMN_KEY } from '../../../../shared/sql/phenotype-score-sql'
 
 /** `prefs` with the column hidden unless the case has a present term; an explicit choice wins. */
 export function withPhenotypeDefault(

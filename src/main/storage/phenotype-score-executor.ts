@@ -5,7 +5,10 @@
  * scores) it compares each case's HPO profile and the installed HPO data key
  * with the stored state and rescores only stale cases: in the scorer worker
  * on desktop SQLite, written by the writer. Current cases cost one small read;
- * the query itself only joins stored values.
+ * the query itself only joins stored values. A case query waits for its case;
+ * a cohort query never waits (after an HPO update every case is stale, which
+ * on a large web cohort takes minutes): it starts one background pass and
+ * reads what is stored.
  */
 import { mainLogger } from '../services/MainLogger'
 import { hpoDataKey as currentHpoDataKey } from '../services/phenotype/hpo-similarity-db'
@@ -32,6 +35,7 @@ export function withPhenotypeScores(
 ): StorageReadExecutor {
   // Concurrent reads of one case share its rescore instead of scoring twice.
   const pending = new Map<number, Promise<void>>()
+  let cohortPass: Promise<void> | null = null
 
   async function rescore(profile: CasePhenotypeProfile, key: string | null): Promise<void> {
     const hash = profileHash(profile.terms)
@@ -68,17 +72,22 @@ export function withPhenotypeScores(
     )
   }
 
+  // A failed rescore leaves the old values (or none) visible; the table must still load.
+  const ensureLogged = (caseId: number | null): Promise<void> =>
+    ensure(caseId).catch((error: unknown) =>
+      mainLogger.warn(
+        `Phenotype scores not refreshed: ${error instanceof Error ? error.message : String(error)}`,
+        'phenotype-scores'
+      )
+    )
+
   return {
     async execute(task) {
       const scope = scoreScope(task)
-      if (scope !== undefined) {
-        // A failed rescore leaves the old values (or none) visible; the table must still load.
-        await ensure(scope).catch((error: unknown) =>
-          mainLogger.warn(
-            `Phenotype scores not refreshed: ${error instanceof Error ? error.message : String(error)}`,
-            'phenotype-scores'
-          )
-        )
+      if (scope === null) {
+        cohortPass ??= ensureLogged(null).finally(() => (cohortPass = null))
+      } else if (scope !== undefined) {
+        await ensureLogged(scope)
       }
       return read.execute(task)
     }

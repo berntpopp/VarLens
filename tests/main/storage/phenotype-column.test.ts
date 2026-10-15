@@ -134,6 +134,13 @@ async function scenario(backend: Backend) {
   const filtered = await query({
     column_filters: { phenotype_score: { operator: '>=', value: 0.5, includeEmpty: false } }
   })
+  // The cohort read does not wait: it starts B's rescore in the background. A case
+  // read of B joins that same rescore, so the next cohort read sees B's scores.
+  await cohort()
+  await read.execute({
+    type: 'variants:query',
+    params: [{ case_id: b }, 1, 0, undefined, true, false]
+  })
   const cohortRows = await cohort()
   const callsAfterReads = calls()
 
@@ -337,4 +344,41 @@ describe.skipIf(!RUN_PG)('phenotype column on PostgreSQL', () => {
       await pool.end()
     }
   }, 120_000)
+})
+
+describe('phenotype score executor', () => {
+  const profile = { caseId: 1, terms: [{ hpoId: 'HP:1', excluded: false, key: false }] }
+  /** A read executor whose stale case 1 scores via `score` and whose queries return 'rows'. */
+  const fakeRead = (score: () => Promise<unknown>): StorageReadExecutor => ({
+    execute: async (task) =>
+      task.type === 'phenotype:profiles'
+        ? [{ ...profile, profileHash: null, dataKey: null }]
+        : task.type === 'hpo:caseScores'
+          ? score()
+          : 'rows'
+  })
+  const write: StorageWriteExecutor = { execute: async () => undefined }
+
+  it('a cohort read never waits for rescoring', async () => {
+    const read = withPhenotypeScores(
+      fakeRead(() => new Promise(() => undefined)),
+      write
+    )
+    const cohortTask = { type: 'cohort:query', params: [{}] } as const
+    expect(await read.execute(cohortTask as never)).toBe('rows')
+  })
+
+  it('a failed rescore still returns the case rows', async () => {
+    const failing: StorageWriteExecutor = {
+      execute: async () => {
+        throw new Error('disk full')
+      }
+    }
+    const read = withPhenotypeScores(
+      fakeRead(async () => []),
+      failing
+    )
+    const task = { type: 'variants:query', params: [{ case_id: 1 }, 50, 0] } as const
+    expect(await read.execute(task as never)).toBe('rows')
+  })
 })

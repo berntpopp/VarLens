@@ -106,6 +106,7 @@ import type {
 } from '../../../../shared/types/column-filters'
 import { clinvarDisplayText } from '../../../../shared/config/severity.config'
 import { COLUMN_HELP } from '../../config/columnHelp'
+import { findColumn } from '../../../../shared/dsl/column-registry'
 import NumericColumnFilter from './NumericColumnFilter.vue'
 import CategoricalColumnFilter from './CategoricalColumnFilter.vue'
 import TextSuggestColumnFilter from './TextSuggestColumnFilter.vue'
@@ -204,7 +205,8 @@ const numericInitialIncludeEmpty = computed<boolean>(() => {
   if (props.currentFilter && props.filterMode === 'numeric') {
     return props.currentFilter.includeEmpty !== false
   }
-  return true
+  // A column whose empty value means "no score" (phenotype) starts without it, like the DSL.
+  return findColumn(props.headerColumn.key)?.rangeExcludesEmpty !== true
 })
 
 const categoricalInitialSelected = computed<string[]>(() => {
