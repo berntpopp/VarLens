@@ -443,6 +443,15 @@ export class PostgresVariantReadRepository {
         (skipCount === true ? data.length < limit : data.length >= totalCount)
       const phasingGenes =
         filter.consider_phasing === true ? compHetPartnerGenes(data, filter, allOnFirstPage) : []
+      const partnerParts =
+        phasingGenes !== null && phasingGenes.length > 0
+          ? buildPostgresVariantQueryParts(
+              { ...filter, inheritance_modes: undefined },
+              this.schemaName,
+              undefined,
+              totals
+            )
+          : null
       const [tagResult, phenoResult, famResult, partnerResult] = await Promise.all([
         this.pool.query(caseTagIdsSql('postgres', table), [filter.case_id, ids]),
         this.pool.query(casePhenotypePageSql('postgres', table), [filter.case_id, ids]),
@@ -453,10 +462,10 @@ export class PostgresVariantReadRepository {
               ids
             ])
           : Promise.resolve(null),
-        phasingGenes !== null && phasingGenes.length > 0
+        partnerParts !== null && phasingGenes !== null
           ? this.pool.query(
-              `SELECT chr, pos, ref, alt, gene_symbol, gt_num, ps FROM ${this.schemaName}."variants" WHERE case_id = $1 AND gene_symbol = ANY($2::text[])`,
-              [filter.case_id, phasingGenes]
+              `SELECT v.chr, v.pos, v.ref, v.alt, v.gene_symbol, v.gt_num, v.ps ${partnerParts.fromAndWhereSql} AND v.gene_symbol = ANY($${partnerParts.params.length + 1}::text[])`,
+              [...partnerParts.params, phasingGenes]
             )
           : Promise.resolve(null)
       ])

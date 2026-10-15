@@ -334,8 +334,9 @@ const handleCaseSelected = async (
   const leave = appState.confirmPanelLeave() // null without a draft: no tick lost
   if (leave !== null && !(await leave)) {
     // Cancel: the list already highlights the case that was not opened.
-    restoredCaseId = selectedCaseId.value
-    caseListRef.value?.selectCase(selectedCaseId.value)
+    if (caseListRef.value?.selectCase(selectedCaseId.value) !== false) {
+      restoredCaseId = selectedCaseId.value
+    }
     return
   }
   selectCase({ caseId, caseName, variantCount, createdAt })

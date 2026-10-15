@@ -82,10 +82,14 @@ function load(path: string, build: string): GeneIntervals {
   const ensure = (): void => {
     if (genes !== undefined) return
     const db = new DatabaseSync(path, { readOnly: true })
+    let loadedGenes: GeneRow[]
     let coords: CoordRow[]
     try {
       // Two plain scans joined in JS: the SQL join costs ~40 ms in per-row index lookups.
-      genes = rows(db, "SELECT hgnc_id, symbol, locus_group = 'protein-coding gene' FROM genes")
+      loadedGenes = rows(
+        db,
+        "SELECT hgnc_id, symbol, locus_group = 'protein-coding gene' FROM genes"
+      )
       coords = rows(
         db,
         'SELECT chromosome, start_pos, end_pos, hgnc_id FROM gene_coordinates WHERE assembly = ?',
@@ -95,13 +99,14 @@ function load(path: string, build: string): GeneIntervals {
       db.close()
     }
     byHgnc = new Map()
-    for (const gene of genes) byHgnc.set(gene[0], gene)
+    for (const gene of loadedGenes) byHgnc.set(gene[0], gene)
     coordsByChr = new Map()
     for (const row of coords) {
       const list = coordsByChr.get(row[0])
       if (list === undefined) coordsByChr.set(row[0], [row])
       else list.push(row)
     }
+    genes = loadedGenes
   }
   const allSymbols = (): Map<string, string> => {
     ensure()

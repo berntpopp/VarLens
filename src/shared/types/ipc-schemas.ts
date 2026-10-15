@@ -214,6 +214,7 @@ const nullishUnitNumber = () =>
 const nullishNonNegNumber = () =>
   z
     .number()
+    .int()
     .nonnegative()
     .nullish()
     .transform((val) => val ?? undefined)
@@ -767,6 +768,10 @@ export const FilterStateSchema = z.object({
   inheritanceModes: z.array(z.string()),
   analysisGroupId: z.number().int().positive().nullable(),
   considerPhasing: z.boolean(),
+  deNovoMinGq: z.number().int().nonnegative().nullable().optional(),
+  deNovoMinDp: z.number().int().nonnegative().nullable().optional(),
+  deNovoMinAb: z.number().min(0).max(1).nullable().optional(),
+  deNovoMaxParentAb: z.number().min(0).max(1).nullable().optional(),
   columnFilters: z.record(z.string(), ColumnFilterSchema),
   /**
    * Shortlist configuration, present only on presets with `kind='shortlist'`.

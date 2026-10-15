@@ -473,17 +473,21 @@ const { data: cohortInfoFieldsData } = useQuery(() => ({
     'info-fields',
     [...cohortCaseIds.value].sort((a, b) => a - b).join(',')
   ] as const,
-  query: async () =>
-    mergeCohortInfoFields(
-      await Promise.all(
-        cohortCaseIds.value.map(
+  query: async () => {
+    const settled = await Promise.allSettled(
+      cohortCaseIds.value
+        .slice(0, 50)
+        .map(
           async (id) => unwrapIpcResult(await api!.caseMetadata.getDataInfo(id))?.field_dictionary
         )
-      )
-    ),
+    )
+    return mergeCohortInfoFields(
+      settled.map((r) => (r.status === 'fulfilled' ? r.value : undefined))
+    )
+  },
+  staleTime: Infinity,
   enabled: api?.caseMetadata?.getDataInfo !== undefined && cohortCaseIds.value.length > 0
 }))
-const cohortInfoFields = computed(() => cohortInfoFieldsData.value ?? [])
 
 // DSL search integration — same composable as variant table (DRY)
 const {
@@ -502,7 +506,7 @@ const {
   urlRoute: 'cohort',
   scope: 'cohort',
   presets: () => allPresets.value,
-  infoFields: () => cohortInfoFields.value,
+  infoFields: () => cohortInfoFieldsData.value ?? [],
   searchQueryRef: searchTerm,
   emitFilters: emitFilterChange,
   clearConflictingDrawerFields: (columnFilters) => {

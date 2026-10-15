@@ -116,6 +116,8 @@ export function attachCohortPhenotype(
     const carriers = hit?.carriers === undefined ? 0 : Number(hit.carriers)
     if (carriers > 0) {
       row.phenotype_disease = `${carriers} ${carriers === 1 ? 'carrier' : 'carriers'} scored`
+    } else if ('phenotype_disease' in row) {
+      row.phenotype_disease = null
     }
   }
 }

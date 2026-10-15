@@ -167,7 +167,7 @@ export function useMolstarViewer(
         setTimeout(() => restoreBgColor(), 300)
         // Delay highlighting slightly to ensure the visual API is fully initialized
         // after the loadComplete event fires
-        setTimeout(() => void highlightVariants(), 500)
+        setTimeout(() => void highlightVariants(true), 500)
         logService.info('3D structure loaded successfully', 'MolstarViewer')
       } else {
         loading.value = false
@@ -325,7 +325,7 @@ export function useMolstarViewer(
     return activeSource?.source === 'alphafold' || structureInfo.value?.alphafold != null
   }
 
-  async function highlightVariants(): Promise<void> {
+  async function highlightVariants(focusHighlighted = false): Promise<void> {
     if (!viewerInstance) return
 
     const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
@@ -335,7 +335,7 @@ export function useMolstarViewer(
     // Build selection data for user variants.
     // In ball-and-stick mode (or for the active highlighted variant): sideChain=true
     // triggers pdbe-molstar to add a ball-and-stick StructureComponent; representationColor
-    // colors the sticks, and focus=true zooms to the active case variant on load.
+    // colors the sticks, and focus=true zooms to the active case variant on initial load.
     const selections: SelectionDataItem[] = variantsToHighlight.map((v) => {
       const color = hexToRgb(v.color)
       const isHighlighted = v.highlighted === true
@@ -345,7 +345,7 @@ export function useMolstarViewer(
         start_residue_number: v.proteinPosition,
         end_residue_number: v.proteinPosition,
         color,
-        focus: isHighlighted,
+        focus: isHighlighted && focusHighlighted,
         sideChain: showSideChain,
         ...(showSideChain ? { representationColor: color } : {})
       }

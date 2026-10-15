@@ -143,15 +143,13 @@ export function attachCaseCompHetPhase(
   }
 }
 
-export const CASE_GENE_PARTNERS_SQL =
-  'SELECT chr, pos, ref, alt, gene_symbol, gt_num, ps FROM variants WHERE case_id = ? AND gene_symbol IN (SELECT value FROM json_each(?))'
-
 /**
- * Distinct gene symbols needing a partner query on page reads (#630), or `null`
- * when every candidate compound-het partner is already in `pageRows`.
+ * Distinct gene symbols of heterozygous rows needing a partner query on page
+ * reads (#630), or `null` when every candidate compound-het partner is already
+ * in `pageRows`.
  */
 export function compHetPartnerGenes(
-  pageRows: readonly { gene_symbol: string | null }[],
+  pageRows: readonly { gene_symbol: string | null; gt_num: string | null }[],
   filter: { inheritance_modes?: string[] },
   allOnFirstPage: boolean
 ): string[] | null {
@@ -163,6 +161,11 @@ export function compHetPartnerGenes(
     return null
   }
   return [
-    ...new Set(pageRows.map((v) => v.gene_symbol).filter((g): g is string => g != null && g !== ''))
+    ...new Set(
+      pageRows
+        .filter((v) => genotypeZygosity(v.gt_num) === 'het')
+        .map((v) => v.gene_symbol)
+        .filter((g): g is string => g != null && g !== '')
+    )
   ]
 }

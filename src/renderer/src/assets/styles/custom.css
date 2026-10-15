@@ -143,9 +143,9 @@ html::-webkit-scrollbar-thumb {
   box-shadow: 0 0 0 3px color-mix(in srgb, rgb(var(--v-theme-primary)) 15%, transparent) !important;
 }
 
-.v-field .v-field__input:focus-visible,
-.v-field input:focus-visible,
-.v-field textarea:focus-visible {
+.v-field--variant-outlined .v-field__input:focus-visible,
+.v-field--variant-outlined input:focus-visible,
+.v-field--variant-outlined textarea:focus-visible {
   outline: none !important;
 }
 

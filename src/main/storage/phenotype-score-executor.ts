@@ -33,8 +33,8 @@ export function withPhenotypeScores(
   write: StorageWriteExecutor,
   dataKey: () => string | null = currentHpoDataKey
 ): StorageReadExecutor {
-  // Concurrent reads of one case share its rescore instead of scoring twice.
-  const pending = new Map<number, Promise<void>>()
+  // Concurrent reads of one case and profile share its rescore instead of scoring twice.
+  const pending = new Map<string, Promise<void>>()
   let cohortPass: Promise<void> | null = null
 
   async function rescore(profile: CasePhenotypeProfile, key: string | null): Promise<void> {
@@ -62,10 +62,11 @@ export function withPhenotypeScores(
       profiles
         .filter((profile) => !isCurrent(profile, key))
         .map((profile) => {
-          let job = pending.get(profile.caseId)
+          const pendingKey = `${profile.caseId}:${profileHash(profile.terms) ?? ''}:${key ?? ''}`
+          let job = pending.get(pendingKey)
           if (job === undefined) {
-            job = rescore(profile, key).finally(() => pending.delete(profile.caseId))
-            pending.set(profile.caseId, job)
+            job = rescore(profile, key).finally(() => pending.delete(pendingKey))
+            pending.set(pendingKey, job)
           }
           return job
         })

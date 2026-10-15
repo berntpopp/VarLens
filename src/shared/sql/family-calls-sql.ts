@@ -34,7 +34,7 @@ export function familyCallsPageSql(dialect: SqlDialect, table: Table = plain): s
   const p2 = dialect === 'postgres' ? '$2' : '?'
   const idPred =
     dialect === 'postgres' ? '= ANY($3::bigint[])' : 'IN (SELECT value FROM json_each(?))'
-  return `SELECT p.id AS variant_id, agm.case_id AS member_case_id, agm.role AS role,
+  return `SELECT p.id AS variant_id, agm.case_id AS member_case_id, MIN(agm.role) AS role,
            ${resolvedGtSql('m.gt_num', dialect)} AS gt_num,
            MAX(m.gq) AS gq, MAX(m.dp) AS dp
     FROM ${table('variants')} p
@@ -44,7 +44,7 @@ export function familyCallsPageSql(dialect: SqlDialect, table: Table = plain): s
       ON m.case_id = agm.case_id
      AND m.chr = p.chr AND m.pos = p.pos AND m.ref = p.ref AND m.alt = p.alt
     WHERE p.case_id = ${p2} AND p.id ${idPred}
-    GROUP BY p.id, agm.case_id, agm.role`
+    GROUP BY p.id, agm.case_id`
 }
 
 /**

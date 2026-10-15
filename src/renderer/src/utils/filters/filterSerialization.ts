@@ -101,33 +101,21 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
   if (plainState.considerPhasing) {
     params.consider_phasing = true
   }
-  if (
-    typeof plainState.deNovoMinGq === 'number' &&
-    Number.isNaN(plainState.deNovoMinGq) === false &&
-    plainState.deNovoMinGq >= 0
-  ) {
-    params.de_novo_min_gq = plainState.deNovoMinGq
-  }
-  if (
-    typeof plainState.deNovoMinDp === 'number' &&
-    Number.isNaN(plainState.deNovoMinDp) === false &&
-    plainState.deNovoMinDp >= 0
-  ) {
-    params.de_novo_min_dp = plainState.deNovoMinDp
-  }
-  if (
-    typeof plainState.deNovoMinAb === 'number' &&
-    Number.isNaN(plainState.deNovoMinAb) === false &&
-    plainState.deNovoMinAb >= 0
-  ) {
-    params.de_novo_min_ab = plainState.deNovoMinAb
-  }
-  if (
-    typeof plainState.deNovoMaxParentAb === 'number' &&
-    Number.isNaN(plainState.deNovoMaxParentAb) === false &&
-    plainState.deNovoMaxParentAb >= 0
-  ) {
-    params.de_novo_max_parent_ab = plainState.deNovoMaxParentAb
+  if (plainState.inheritanceModes?.includes('de_novo')) {
+    const fin = (v: number | null | undefined, max = Infinity, int = false): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max
+        ? int
+          ? Math.trunc(v)
+          : v
+        : undefined
+    const minGq = fin(plainState.deNovoMinGq, Infinity, true)
+    const minDp = fin(plainState.deNovoMinDp, Infinity, true)
+    const minAb = fin(plainState.deNovoMinAb, 1)
+    const maxParentAb = fin(plainState.deNovoMaxParentAb, 1)
+    if (minGq !== undefined) params.de_novo_min_gq = minGq
+    if (minDp !== undefined) params.de_novo_min_dp = minDp
+    if (minAb !== undefined) params.de_novo_min_ab = minAb
+    if (maxParentAb !== undefined) params.de_novo_max_parent_ab = maxParentAb
   }
 
   if (plainState.columnFilters !== undefined && Object.keys(plainState.columnFilters).length > 0) {

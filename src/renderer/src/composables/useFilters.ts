@@ -206,6 +206,10 @@ export function createFilters(): UseFiltersReturn {
     filters.value.inheritanceModes = []
     filters.value.analysisGroupId = null
     filters.value.considerPhasing = false
+    filters.value.deNovoMinGq = null
+    filters.value.deNovoMinDp = null
+    filters.value.deNovoMinAb = null
+    filters.value.deNovoMaxParentAb = null
     filters.value.columnFilters = {}
     selectedImpactPresets.value = []
     selectedAfPreset.value = null

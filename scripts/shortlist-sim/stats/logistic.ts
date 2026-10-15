@@ -82,6 +82,7 @@ export function fitLogisticPoints(
   opts: { id?: string; lambda?: number } = {}
 ): TuneResult {
   const lambda = opts.lambda ?? 1
+  if (!(lambda > 0)) throw new Error('fitLogisticPoints requires lambda > 0')
   const cells = cellsOf(template)
   const a = new Array<number>(cells.length).fill(0)
   const b = new Array<number>(cells.length).fill(0)

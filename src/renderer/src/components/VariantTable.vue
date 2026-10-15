@@ -177,23 +177,25 @@
         #[`item._member_${member.case_id}`]="{ item }"
       >
         <span
+          v-if="item.family_calls?.[member.case_id]?.gt_num != null"
           :title="formatFamilyCallMeta(item.family_calls?.[member.case_id])"
           data-testid="family-member-call"
         >
           <v-chip
             size="x-small"
-            :color="zygosityColor(item.family_calls?.[member.case_id]?.gt_num ?? '0/0')"
+            :color="zygosityColor(item.family_calls[member.case_id].gt_num!)"
             label
           >
-            {{ item.family_calls?.[member.case_id]?.gt_num ?? '0/0' }}
+            {{ item.family_calls[member.case_id].gt_num }}
           </v-chip>
           <span
-            v-if="formatFamilyCallMeta(item.family_calls?.[member.case_id])"
+            v-if="formatFamilyCallMeta(item.family_calls[member.case_id])"
             class="text-caption text-medium-emphasis ml-1"
           >
-            {{ formatFamilyCallMeta(item.family_calls?.[member.case_id]) }}
+            {{ formatFamilyCallMeta(item.family_calls[member.case_id]) }}
           </span>
         </span>
+        <EmptyPlaceholder v-else />
       </template>
 
       <template #[`item.func`]="{ value }">

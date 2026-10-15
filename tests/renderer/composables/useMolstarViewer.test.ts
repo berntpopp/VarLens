@@ -178,12 +178,14 @@ describe('useMolstarViewer AlphaFold pLDDT & highlighted residue focus (#578)', 
     const btn = document.createElement('button')
     btn.setAttribute('title', 'Toggle Spin')
     host.appendChild(btn)
-    viewers[0].emitLoadComplete(true)
-    expect(btn.getAttribute('aria-label')).toBe('Toggle Spin')
-
-    // Trigger immediate re-highlight via variants watcher
-    variantsRef.value = [...variantsRef.value]
-    await settle()
+    vi.useFakeTimers()
+    try {
+      viewers[0].emitLoadComplete(true)
+      expect(btn.getAttribute('aria-label')).toBe('Toggle Spin')
+      await vi.advanceTimersByTimeAsync(500)
+    } finally {
+      vi.useRealTimers()
+    }
 
     expect(viewers[0].visual.select).toHaveBeenCalledWith({
       data: [
@@ -206,6 +208,18 @@ describe('useMolstarViewer AlphaFold pLDDT & highlighted residue focus (#578)', 
         }
       ]
     })
+
+    // Subsequent re-highlight (or resetView) keeps the camera whole-protein (focus: false)
+    viewers[0].visual.select.mockClear()
+    variantsRef.value = [...variantsRef.value]
+    await settle()
+    expect(viewers[0].visual.select).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ start_residue_number: 248, focus: false, sideChain: true })
+        ])
+      })
+    )
   })
 
   it('passes nonSelectedColor on non-AlphaFold PDB structures', async () => {

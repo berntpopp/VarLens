@@ -18,6 +18,7 @@ interface BuildPARs {
 export const PAR_REGIONS: {
   GRCh38: BuildPARs
   GRCh37: BuildPARs
+  'T2T-CHM13': BuildPARs
   [build: string]: BuildPARs | undefined
 } = {
   GRCh38: {
@@ -38,6 +39,16 @@ export const PAR_REGIONS: {
     Y: [
       { start: 10_001, end: 2_649_520 },
       { start: 59_034_050, end: 59_363_566 }
+    ]
+  },
+  'T2T-CHM13': {
+    X: [
+      { start: 1, end: 2_394_410 },
+      { start: 153_925_834, end: 154_259_566 }
+    ],
+    Y: [
+      { start: 1, end: 2_458_320 },
+      { start: 62_122_809, end: 62_460_029 }
     ]
   }
 }

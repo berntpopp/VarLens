@@ -99,6 +99,31 @@ describe('VCF phase set import (#586)', () => {
         'GENEC:possible',
         'GENEC:possible'
       ])
+
+      // Regression: a filtered-out common variant in trans must not flip a cis pair to trans on paginated reads
+      service.database
+        .prepare(
+          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, gt_num, ps, gnomad_af)
+           VALUES (?, 'chr1', 1500, 'A', 'G', 'GENEA', '0|1', 1000, 0.001)`
+        )
+        .run(caseId)
+      service.database
+        .prepare(
+          'UPDATE variants SET gnomad_af = 0.5 WHERE case_id = ? AND gene_symbol = ? AND pos = ?'
+        )
+        .run(caseId, 'GENEA', 2000)
+      const filteredPage = service.variants.getVariants(
+        {
+          case_id: caseId,
+          gnomad_af_max: 0.01,
+          consider_phasing: true
+        },
+        1,
+        0
+      )
+      expect(filteredPage.data).toHaveLength(1)
+      expect(filteredPage.data[0].gene_symbol).toBe('GENEA')
+      expect(filteredPage.data[0].comphet_phase).toBe('cis')
     } finally {
       service.close()
     }

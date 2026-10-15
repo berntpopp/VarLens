@@ -109,7 +109,10 @@ export function useFamilyMembers(
       try {
         const group = unwrapIpcResult(await api.analysisGroups.get(groupId))
         if (groupIdGetter() !== groupId || caseIdGetter() !== currentCaseId) return
-        familyMembers.value = (group?.members ?? []).filter((m) => m.case_id !== currentCaseId)
+        const members = group?.members ?? []
+        familyMembers.value = members.some((m) => m.case_id === currentCaseId)
+          ? members.filter((m) => m.case_id !== currentCaseId)
+          : []
       } catch {
         familyMembers.value = []
       }
@@ -165,9 +168,9 @@ export function useVariantColumns(
   /** All headers including the merged Links column (SNV/Indel view only). */
   const headers: ComputedRef<ColumnDef[]> = computed(() => {
     const type = variantType?.value ?? 'snv'
+    // Type-specific views (SV/CNV/STR) have curated columns and no link-outs or exact-coordinate family joins
+    if (type !== 'snv') return getHeadersForType(type)
     const typeHeaders = spliceAfterGt(getHeadersForType(type), memberCols.value)
-    // Type-specific views (SV/CNV/STR) have curated columns and no link-outs
-    if (type !== 'snv') return typeHeaders
     return [...typeHeaders, ...linksColumn(linksStore.virtualLinks.length)]
   })
 

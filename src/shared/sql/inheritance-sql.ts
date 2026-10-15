@@ -51,10 +51,10 @@ export interface TrioSqlContext {
 }
 
 export interface DeNovoQualityThresholds {
-  minGq?: number | string
-  minDp?: number | string
-  minProbandAb?: number | string
-  maxParentAb?: number | string
+  minGq?: string
+  minDp?: string
+  minProbandAb?: string
+  maxParentAb?: string
 }
 
 /** A row of the group's `role` parent at the variant of row `p` whose genotype meets `condition`. */
@@ -88,7 +88,7 @@ function parXExclusionSql(row: string, regions: readonly { start: number; end: n
 /** Row `row` is on chrX outside the genome build's pseudoautosomal regions (PAR1/PAR2). */
 export function nonParXSql(row: string, cases: string): string {
   const buildSql = `(SELECT c.genome_build FROM ${cases} c WHERE c.id = ${row}.case_id)`
-  return `(${row}.chr IN ('X', 'chrX') AND CASE WHEN ${buildSql} = 'GRCh37' THEN ${parXExclusionSql(row, PAR_REGIONS.GRCh37.X)} ELSE ${parXExclusionSql(row, PAR_REGIONS.GRCh38.X)} END)`
+  return `(${row}.chr IN ('X', 'chrX') AND CASE WHEN ${buildSql} = 'GRCh37' THEN ${parXExclusionSql(row, PAR_REGIONS.GRCh37.X)} WHEN ${buildSql} = 'T2T-CHM13' THEN ${parXExclusionSql(row, PAR_REGIONS['T2T-CHM13'].X)} ELSE ${parXExclusionSql(row, PAR_REGIONS.GRCh38.X)} END)`
 }
 
 /**
@@ -179,16 +179,17 @@ export function autosomalRecessiveSql(ctx: TrioSqlContext, row: string): string 
 }
 
 /**
- * Autosomal dominant (#627): autosomal het in the proband, at least one other
- * affected group member exists, every other affected group member carries the
- * variant, and every unaffected group member is reference/uncalled.
+ * Autosomal dominant (#627): autosomal (or pseudoautosomal chrX) het in the
+ * proband, at least one other affected group member exists, every other
+ * affected group member carries the variant, and every unaffected group member
+ * is reference/uncalled.
  */
 export function autosomalDominantSql(ctx: TrioSqlContext, row: string): string {
   const memberRank = memberRankSql(ctx, row)
   return `(
           ${row}.gt_num IN ${HET_GT_SQL}
           AND ${row}.case_id = ${ctx.caseParam}
-          AND ${chrRankSql(`${row}.chr`)} NOT IN (${NON_AUTOSOME_RANKS})
+          AND (${chrRankSql(`${row}.chr`)} NOT IN (${NON_AUTOSOME_RANKS}) OR (${row}.chr IN ('X', 'chrX') AND NOT ${nonParXSql(row, ctx.cases)}))
           AND EXISTS (
             SELECT 1 FROM ${ctx.members} agm
             WHERE agm.group_id = ${ctx.groupParam}
@@ -213,16 +214,16 @@ export function autosomalDominantSql(ctx: TrioSqlContext, row: string): string {
 }
 
 /**
- * X-linked recessive (#627): non-PAR chrX, male hemizygous or female hom in
- * the proband, mother (if in group) is het carrier, and unaffected father (if
- * in group) is reference/uncalled.
+ * X-linked recessive (#627): non-PAR chrX, hemizygous (`1`) or homozygous
+ * (`1/1`) in the proband, mother (if in group) is het carrier, and unaffected
+ * father (if in group) is reference/uncalled.
  */
 export function xRecessiveSql(ctx: TrioSqlContext, row: string): string {
   const memberRank = memberRankSql(ctx, row)
   return `(
           ${nonParXSql(row, ctx.cases)}
           AND ${row}.case_id = ${ctx.caseParam}
-          AND (${xHemizygousSql(row, ctx.caseMetadata, true)} OR ${row}.gt_num IN ${HOM_GT_SQL})
+          AND (${row}.gt_num IN ${HEMI_GT_SQL} OR ${row}.gt_num IN ${HOM_GT_SQL})
           AND NOT EXISTS (
             SELECT 1 FROM ${ctx.members} agm
             WHERE agm.group_id = ${ctx.groupParam} AND agm.role = 'mother'
@@ -239,8 +240,9 @@ export function xRecessiveSql(ctx: TrioSqlContext, row: string): string {
 
 /**
  * X-linked dominant (#627): non-PAR chrX, het or male hemizygous in the
- * proband, every other affected group member carries the variant, and every
- * unaffected group member is reference/uncalled.
+ * proband, at least one other affected group member exists, every other
+ * affected group member carries the variant, and every unaffected group member
+ * is reference/uncalled.
  */
 export function xDominantSql(ctx: TrioSqlContext, row: string): string {
   const memberRank = memberRankSql(ctx, row)
@@ -248,6 +250,12 @@ export function xDominantSql(ctx: TrioSqlContext, row: string): string {
           ${nonParXSql(row, ctx.cases)}
           AND ${row}.case_id = ${ctx.caseParam}
           AND (${row}.gt_num IN ${HET_GT_SQL} OR ${xHemizygousSql(row, ctx.caseMetadata, true)})
+          AND EXISTS (
+            SELECT 1 FROM ${ctx.members} agm
+            WHERE agm.group_id = ${ctx.groupParam}
+              AND agm.case_id <> ${row}.case_id
+              AND agm.affected_status = 'affected'
+          )
           AND NOT EXISTS (
             SELECT 1 FROM ${ctx.members} agm
             WHERE agm.group_id = ${ctx.groupParam}

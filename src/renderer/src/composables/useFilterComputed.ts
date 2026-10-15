@@ -363,6 +363,10 @@ export function useFilterComputed(options: UseFilterComputedOptions): UseFilterC
         filters.value.inheritanceModes = []
         filters.value.analysisGroupId = null
         filters.value.considerPhasing = false
+        filters.value.deNovoMinGq = null
+        filters.value.deNovoMinDp = null
+        filters.value.deNovoMinAb = null
+        filters.value.deNovoMaxParentAb = null
         break
     }
   }

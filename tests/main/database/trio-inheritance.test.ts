@@ -612,6 +612,30 @@ describe('Trio inheritance filters', () => {
       expect(result.data.map((v) => v.pos).sort((a, b) => a - b)).toEqual([
         5_000_000, 6_000_000, 7_000_000
       ])
+
+      // Standard trio in groupId has father and mother both unaffected -> XLD matches no row
+      const noAffectedRelative = service.variants.getVariants(
+        {
+          case_id: probandId,
+          inheritance_modes: ['x_dominant'],
+          analysis_group_id: groupId
+        },
+        50,
+        0
+      )
+      expect(noAffectedRelative.data).toHaveLength(0)
+
+      // Pseudoautosomal chrX (pos 100,000 in PAR1) segregates under autosomal_dominant
+      const parAd = service.variants.getVariants(
+        {
+          case_id: probandId,
+          inheritance_modes: ['autosomal_dominant'],
+          analysis_group_id: xldGroup
+        },
+        50,
+        0
+      )
+      expect(parAd.data.map((v) => `${v.chr}:${v.pos}`).sort()).toEqual(['1:5000000', 'X:100000'])
     })
   })
 

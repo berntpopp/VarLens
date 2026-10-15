@@ -42,7 +42,6 @@ import { attachCasePhenotype, casePhenotypePageSql } from '../../shared/sql/phen
 import { attachFamilyCalls, familyCallsPageSql } from '../../shared/sql/family-calls-sql'
 import {
   attachCaseCompHetPhase,
-  CASE_GENE_PARTNERS_SQL,
   compHetPartnerGenes,
   type CompHetCandidateRow
 } from '../../shared/utils/phasing'
@@ -331,10 +330,21 @@ export class VariantRepository extends BaseRepository {
               ? data
               : genes.length === 0
                 ? []
-                : (this.getStatement(CASE_GENE_PARTNERS_SQL).all(
-                    filter.case_id,
-                    JSON.stringify(genes)
-                  ) as CompHetCandidateRow[])
+                : this.execAll<CompHetCandidateRow>(
+                    this.filterBuilder
+                      .build({ ...filter, inheritance_modes: undefined })
+                      .clearSelect()
+                      .select([
+                        'variants.chr',
+                        'variants.pos',
+                        'variants.ref',
+                        'variants.alt',
+                        'variants.gene_symbol',
+                        'variants.gt_num',
+                        'variants.ps'
+                      ])
+                      .where('variants.gene_symbol', 'in', genes)
+                  )
           attachCaseCompHetPhase(data, partners)
         }
       }

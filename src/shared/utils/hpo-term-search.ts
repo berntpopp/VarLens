@@ -25,9 +25,37 @@ export interface HpoSearchHit extends HpoTermEntry {
 export const HPO_MIN_QUERY_LENGTH = 2
 export const HPO_DEFAULT_MAX_RESULTS = 20
 
-function matchTerm(term: HpoTermEntry, q: string): { tier: number; hit: HpoSearchHit } | null {
-  const id = term.id.toLowerCase()
-  const name = term.name.toLowerCase()
+interface IndexedHpoTerm {
+  term: HpoTermEntry
+  id: string
+  name: string
+  synonyms: readonly string[]
+  rawSynonyms: readonly string[]
+}
+
+const indexCache = new WeakMap<readonly HpoTermEntry[], readonly IndexedHpoTerm[]>()
+const collator = new Intl.Collator('en')
+
+function getIndexedTerms(terms: readonly HpoTermEntry[]): readonly IndexedHpoTerm[] {
+  let cached = indexCache.get(terms)
+  if (cached === undefined) {
+    cached = terms.map((term) => {
+      const rawSynonyms = term.synonyms ?? []
+      return {
+        term,
+        id: term.id.toLowerCase(),
+        name: term.name.toLowerCase(),
+        synonyms: rawSynonyms.map((s) => s.toLowerCase()),
+        rawSynonyms
+      }
+    })
+    indexCache.set(terms, cached)
+  }
+  return cached
+}
+
+function matchTerm(entry: IndexedHpoTerm, q: string): { tier: number; hit: HpoSearchHit } | null {
+  const { term, id, name, synonyms, rawSynonyms } = entry
   const base: HpoSearchHit = { id: term.id, name: term.name }
   if (id === q) return { tier: 0, hit: base }
   if (id.startsWith(q)) return { tier: 1, hit: base }
@@ -35,8 +63,9 @@ function matchTerm(term: HpoTermEntry, q: string): { tier: number; hit: HpoSearc
 
   let prefixSynonym: string | undefined
   let substringSynonym: string | undefined
-  for (const syn of term.synonyms ?? []) {
-    const low = syn.toLowerCase()
+  for (let i = 0; i < synonyms.length; i++) {
+    const low = synonyms[i]
+    const syn = rawSynonyms[i]
     if (low === q) return { tier: 3, hit: { ...base, matchedSynonym: syn } }
     if (prefixSynonym === undefined && low.startsWith(q)) prefixSynonym = syn
     else if (substringSynonym === undefined && low.includes(q)) substringSynonym = syn
@@ -66,9 +95,10 @@ export function searchHpoTerms(
   const normalized = query.toLowerCase().trim()
   if (normalized.length < HPO_MIN_QUERY_LENGTH || maxResults <= 0) return []
 
+  const indexed = getIndexedTerms(terms)
   const results: Array<{ tier: number; hit: HpoSearchHit }> = []
-  for (const term of terms) {
-    const matched = matchTerm(term, normalized)
+  for (const entry of indexed) {
+    const matched = matchTerm(entry, normalized)
     if (matched !== null) results.push(matched)
   }
 
@@ -76,7 +106,7 @@ export function searchHpoTerms(
   return results
     .sort((a, b) => {
       const diff = a.tier - b.tier
-      return diff !== 0 ? diff : a.hit.name.localeCompare(b.hit.name)
+      return diff !== 0 ? diff : collator.compare(a.hit.name, b.hit.name)
     })
     .slice(0, maxResults)
     .map((r) => r.hit)

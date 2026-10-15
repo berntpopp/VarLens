@@ -64,8 +64,8 @@ const VariantFilterOpenApiSchema = z.object({
     .optional(),
   analysis_group_id: z.number().int().positive().nullable().optional(),
   consider_phasing: z.boolean().nullable().optional(),
-  de_novo_min_gq: z.number().nonnegative().nullable().optional(),
-  de_novo_min_dp: z.number().nonnegative().nullable().optional(),
+  de_novo_min_gq: z.number().int().nonnegative().nullable().optional(),
+  de_novo_min_dp: z.number().int().nonnegative().nullable().optional(),
   de_novo_min_ab: z.number().min(0).max(1).nullable().optional(),
   de_novo_max_parent_ab: z.number().min(0).max(1).nullable().optional(),
   variant_type: z.enum(['snv', 'indel', 'sv', 'cnv', 'str']).nullable().optional()
