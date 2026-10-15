@@ -14,6 +14,11 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 import { defaultPasswordProvider } from '../../../src/main/auth/providers/argon2-provider'
+import {
+  profileHash,
+  replacePostgresPhenotypeScores
+} from '../../../src/main/services/phenotype/case-phenotype-scores'
+import { hpoDataKey } from '../../../src/main/services/phenotype/hpo-similarity-db'
 import { Pool } from 'pg'
 
 export const GATE_CASE_NAMES = ['gate-case-a', 'gate-case-b', 'gate-case-c'] as const
@@ -127,7 +132,12 @@ async function login(baseURL: string, password: string): Promise<{ name: string;
   return { name: pair.slice(0, eq), value: pair.slice(eq + 1) }
 }
 
-async function seedCases(baseURL: string, cookie: string): Promise<GateServerState['cases']> {
+async function seedCases(
+  baseURL: string,
+  cookie: string,
+  pgUrl: string,
+  schema: string
+): Promise<GateServerState['cases']> {
   const fixture = readFileSync(FIXTURE_PATH)
   const cases: GateServerState['cases'] = []
   for (const caseName of GATE_CASE_NAMES) {
@@ -151,6 +161,24 @@ async function seedCases(baseURL: string, cookie: string): Promise<GateServerSta
       variantCount: number
     }
     cases.push({ caseId: result.caseId, caseName, variantCount: result.variantCount })
+  }
+  await rpc({ baseURL }, cookie, 'case-metadata/assignHpoTerm', [
+    cases[0].caseId,
+    'HP:0001250',
+    'Seizure'
+  ])
+  const pool = new Pool({ connectionString: pgUrl })
+  try {
+    await replacePostgresPhenotypeScores(
+      pool,
+      (name) => `"${schema.replace(/"/g, '')}"."${name}"`,
+      cases[0].caseId,
+      profileHash([{ hpoId: 'HP:0001250', excluded: false, key: false }]),
+      hpoDataKey(),
+      [{ gene: 'BRCA1', score: 0.72, disease: 'Hereditary breast and ovarian cancer' }]
+    )
+  } finally {
+    await pool.end()
   }
   return cases
 }
@@ -198,7 +226,7 @@ export async function startGateServer(): Promise<GateServerState> {
     await waitForHealthy(baseURL, child)
     const sessionCookie = await login(baseURL, password)
     const cookieHeader = `${sessionCookie.name}=${sessionCookie.value}`
-    const cases = await seedCases(baseURL, cookieHeader)
+    const cases = await seedCases(baseURL, cookieHeader, pgUrl, schema)
     child.unref()
     return {
       baseURL,

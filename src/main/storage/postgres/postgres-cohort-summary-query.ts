@@ -28,6 +28,8 @@ import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
 import { singleFrequencyDenominator } from '../../../shared/sql/carrier-frequency'
 import { carrierRowSql } from '../../../shared/sql/genotype-dosage'
+import { cohortInfoExistsClauses } from '../../../shared/sql/cohort-info-filter-sql'
+import { infoFieldKey } from '../../../shared/filters/info-field-filter'
 import { SUMMARY_FREQUENCY_SQL } from './postgres-carrier-frequency-sql'
 import { cohortKeysetOrderByClause, isCohortKeysetSort } from '../../../shared/sql/cohort-keyset'
 
@@ -528,7 +530,7 @@ export function buildSummaryQueryParts(
     for (const column of Object.keys(params.column_filters)) {
       const filter = params.column_filters[column]
       if (filter === undefined) continue
-      if (EXTENSION_COLUMN_KEYS.has(column)) continue // EXISTS probes below
+      if (EXTENSION_COLUMN_KEYS.has(column) || infoFieldKey(column) !== null) continue // EXISTS probes below
       const expression =
         column === PHENOTYPE_SCORE_KEY ? phenotypeSql() : SUMMARY_COLUMN_FILTER_SQL[column]
       // Never drop a filter: an unknown key must fail, not widen the result.
@@ -541,6 +543,15 @@ export function buildSummaryQueryParts(
   }
 
   if (schema !== undefined) whereParts.push(...extensionExistsConditions(params, schema, addParam))
+  whereParts.push(
+    ...cohortInfoExistsClauses(
+      params.column_filters,
+      'cvs',
+      'postgres',
+      (v) => addParam(v),
+      schema !== undefined ? `"${schema.replace(/"/g, '""')}".` : ''
+    )
+  )
 
   // Aggregate predicates (HAVING → WHERE over stored counts).
   // 0 means "no frequency filter" and rows without a frequency are kept — the

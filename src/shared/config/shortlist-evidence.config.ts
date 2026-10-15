@@ -63,21 +63,20 @@ export const SHORTLIST_EVIDENCE_CONFIG = {
     rulesetIdChars: 64
   },
 
-  /** Points are signed half-steps; the tuned ruleset is clipped to ±8. */
-  points: { min: -20, max: 20, step: 0.5, tunedClip: 8 },
+  /** Points are signed half-steps; the marginal tuned ruleset is clipped to ±8, logistic up to 24. */
+  points: { min: -20, max: 24, step: 0.5, tunedClip: 8 },
 
   /** Evidence scores have their own unit, so only these types may be mixed. */
   variantTypes: ['snv', 'indel'] as const,
 
   /**
-   * SV/CNV/STR evidence scoring (#581, #582), one flag per type: an enabled
-   * type may be scoped by presets and named by rule groups. All off until the
-   * CNV/STR spec §7 criteria pass; the legacy 0-1 scorers keep ranking them and
-   * no mixed-type order ships. Any flip is a separate, user-approved commit.
+   * SV/CNV/STR evidence scoring (#581, #582, #642), one flag per type: an enabled
+   * type may be scoped by presets and named by rule groups. CNV and STR passed
+   * the pre-registered validation criteria; SV remains off until calibrated.
    */
   structuralTypes: {
     types: ['sv', 'cnv', 'str'] as const,
-    enabled: { sv: false, cnv: false, str: false } as Record<'sv' | 'cnv' | 'str', boolean>
+    enabled: { sv: false, cnv: true, str: true } as Record<'sv' | 'cnv' | 'str', boolean>
   },
 
   /**

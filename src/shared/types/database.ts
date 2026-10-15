@@ -48,17 +48,11 @@ export interface AvailableBuild {
 
 /** Case entity - represents an imported VCF file and its metadata */
 export interface Case {
-  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
-  /** Unique case name */
   name: string
-  /** Original import file path */
   file_path: string
-  /** File size in bytes */
   file_size: number
-  /** Count of variants for this case */
   variant_count: number
-  /** Unix timestamp in milliseconds */
   created_at: number
   /** Genome build (GRCh37 or GRCh38), defaults to GRCh38 */
   genome_build: string
@@ -79,77 +73,46 @@ export interface CaseImportFile {
 
 /** Variant entity - represents a single genomic variant */
 export interface Variant {
-  /** SQLite INTEGER PRIMARY KEY AUTOINCREMENT */
   id: number
-  /** Foreign key to cases table */
   case_id: number
-  /** Chromosome (e.g., "1", "X", "MT") */
   chr: string
-  /** Genomic position */
   pos: number
-  /** Reference allele */
   ref: string
-  /** Alternate allele */
   alt: string
-  /** Gene symbol, nullable */
   gene_symbol: string | null
-  /** OMIM MIM number for the gene, nullable */
   omim_mim_number: string | null
-  /** Variant consequence, nullable */
   consequence: string | null
-  /** gnomAD allele frequency, nullable */
   gnomad_af: number | null
-  /** CADD score, nullable */
   cadd: number | null
-  /** ClinVar classification, nullable */
   clinvar: string | null
   /** Severity rank of `consequence` (impact), 0 = unknown (shared/config/severity.config.ts) */
   impact_rank?: number
   /** Severity rank of `clinvar`, 0 = unknown (shared/config/severity.config.ts) */
   clinvar_rank?: number
-  /** Genotype (e.g., "0/1", "1/1"), nullable */
   gt_num: string | null
-  /** Functional annotation, nullable */
   func: string | null
-  /** Quality score, nullable */
   qual: number | null
-  /** HPO similarity score, nullable */
   hpo_sim_score: number | null
-  /** Transcript ID, nullable */
   transcript: string | null
-  /** cDNA change notation, nullable */
   cdna: string | null
-  /** Amino acid change notation, nullable */
   aa_change: string | null
-  /** Mode of inheritance, nullable */
   moi: string | null
   /** Patient HPO terms matching the gene (`HP:… label; …`), JSON imports only */
   hpo_match?: string | null
-  /** Genotype quality (VCF GQ), nullable */
   gq: number | null
-  /** Read depth (VCF DP), nullable */
   dp: number | null
-  /** Reference allele depth (VCF AD[0]), nullable */
   ad_ref: number | null
-  /** Alternate allele depth (VCF AD[1]), nullable */
   ad_alt: number | null
-  /** Allele balance (ad_alt / dp), nullable */
   ab: number | null
-  /** VCF FILTER field, nullable */
   filter: string | null
-  /** Unmapped INFO fields as JSON, nullable */
   info_json: string | null
-  /** Import source format (e.g., 'vcf', 'tsv'), nullable */
   source_format: string | null
   /** Variant type discriminator: snv, indel, sv, cnv, str */
   variant_type?: string
-  /** End position for SV/CNV/STR */
   end_pos?: number | null
   /** SV type: DEL, DUP, INV, INS, BND */
   sv_type?: string | null
-  /** SV length (SVLEN) */
   sv_length?: number | null
-  /** Detected caller name */
   caller?: string | null
   /** Internal allele frequency across all cases (computed, not stored on variants table) */
   internal_af?: number | null

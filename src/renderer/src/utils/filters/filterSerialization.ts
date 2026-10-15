@@ -101,6 +101,34 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
   if (plainState.considerPhasing) {
     params.consider_phasing = true
   }
+  if (
+    typeof plainState.deNovoMinGq === 'number' &&
+    Number.isNaN(plainState.deNovoMinGq) === false &&
+    plainState.deNovoMinGq >= 0
+  ) {
+    params.de_novo_min_gq = plainState.deNovoMinGq
+  }
+  if (
+    typeof plainState.deNovoMinDp === 'number' &&
+    Number.isNaN(plainState.deNovoMinDp) === false &&
+    plainState.deNovoMinDp >= 0
+  ) {
+    params.de_novo_min_dp = plainState.deNovoMinDp
+  }
+  if (
+    typeof plainState.deNovoMinAb === 'number' &&
+    Number.isNaN(plainState.deNovoMinAb) === false &&
+    plainState.deNovoMinAb >= 0
+  ) {
+    params.de_novo_min_ab = plainState.deNovoMinAb
+  }
+  if (
+    typeof plainState.deNovoMaxParentAb === 'number' &&
+    Number.isNaN(plainState.deNovoMaxParentAb) === false &&
+    plainState.deNovoMaxParentAb >= 0
+  ) {
+    params.de_novo_max_parent_ab = plainState.deNovoMaxParentAb
+  }
 
   if (plainState.columnFilters !== undefined && Object.keys(plainState.columnFilters).length > 0) {
     // Already plain JS (stripped above); reuse the helper for an isolated copy.
@@ -161,6 +189,18 @@ export function buildVariantFilterFromState(
   }
   if (ipcParams.consider_phasing !== undefined) {
     variantFilter.consider_phasing = ipcParams.consider_phasing
+  }
+  if (ipcParams.de_novo_min_gq !== undefined) {
+    variantFilter.de_novo_min_gq = ipcParams.de_novo_min_gq
+  }
+  if (ipcParams.de_novo_min_dp !== undefined) {
+    variantFilter.de_novo_min_dp = ipcParams.de_novo_min_dp
+  }
+  if (ipcParams.de_novo_min_ab !== undefined) {
+    variantFilter.de_novo_min_ab = ipcParams.de_novo_min_ab
+  }
+  if (ipcParams.de_novo_max_parent_ab !== undefined) {
+    variantFilter.de_novo_max_parent_ab = ipcParams.de_novo_max_parent_ab
   }
   if (ipcParams.column_filters !== undefined) {
     variantFilter.column_filters = ipcParams.column_filters

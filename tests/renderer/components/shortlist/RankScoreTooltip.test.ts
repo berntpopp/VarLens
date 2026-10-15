@@ -232,11 +232,10 @@ describe('RankScoreTooltip', () => {
         )
       })
 
-      it('CNV gene route names the driving gene, dosage source and size correction', () => {
+      it('CNV gene route names the driving gene and HPO gene count', () => {
         expect(phenotypeLines({ ...hpo, locus: gene }).locus).toBe(
-          'locus: TBX6 · HI 3 (AnnotSV) · best of 9 HPO genes of 27 overlapped, size-corrected'
+          'locus: TBX6 · best of 9 HPO genes of 27 overlapped'
         )
-        // One HPO gene: the Šidák step is the identity, so no size-correction claim.
         expect(
           phenotypeLines({
             ...hpo,

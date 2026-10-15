@@ -116,12 +116,16 @@ async function scenario(backend: Backend) {
     })) as { data: Variant[] }
     return result.data.map((v) => [v.gene_symbol, v.phenotype_score ?? null])
   }
-  const cohort = async (): Promise<Array<[string, number | null]>> => {
+  const cohort = async (): Promise<Array<[string, number | null, string | null]>> => {
     const result = (await read.execute({
       type: 'cohort:query',
       params: [{ limit: 50, offset: 0, sort_by: 'phenotype_score', sort_order: 'desc' }]
-    })) as { data: CohortVariant[] }
-    return result.data.map((v) => [`${v.chr}:${v.pos}`, v.phenotype_score ?? null])
+    })) as { data: Array<CohortVariant & { phenotype_disease?: string | null }> }
+    return result.data.map((v) => [
+      `${v.chr}:${v.pos}`,
+      v.phenotype_score ?? null,
+      v.phenotype_disease ?? null
+    ])
   }
   const desc: SortItem[] = [{ key: 'phenotype_score', order: 'desc' }]
 
@@ -211,12 +215,14 @@ beforeAll(() => {
     filtered: ranked.filter(([, s]) => s >= 0.5),
     // Genomic order first: equal scores keep it (the backends' tiebreaker).
     cohortRows: [
-      ['1:100', Math.max(g1, scoreB.score('GENE1')!)],
-      ['2:200', g2],
-      ['2:250', scoreB.score('GENE2')!],
-      ['3:300', null],
-      ['4:400', null]
-    ].sort((x, y) => Number(y[1] ?? -1) - Number(x[1] ?? -1)) as Array<[string, number | null]>,
+      ['1:100', Math.max(g1, scoreB.score('GENE1')!), '2 carriers scored'],
+      ['2:200', g2, '1 carrier scored'],
+      ['2:250', scoreB.score('GENE2')!, '1 carrier scored'],
+      ['3:300', null, null],
+      ['4:400', null, null]
+    ].sort((x, y) => Number(y[1] ?? -1) - Number(x[1] ?? -1)) as Array<
+      [string, number | null, string | null]
+    >,
     callsAfterReads: 2, // one per case: case A for the table, case B for the cohort
     callsAfterTermChange: 3,
     // Both cases are stale now, but only A is read: A is rescored once, B waits for its read.
@@ -380,5 +386,27 @@ describe('phenotype score executor', () => {
     )
     const task = { type: 'variants:query', params: [{ case_id: 1 }, 50, 0] } as const
     expect(await read.execute(task as never)).toBe('rows')
+  })
+
+  it('skips scoring when no HPO database is installed and the case was never scored', async () => {
+    let scoreCalls = 0
+    let writeCalls = 0
+    const read = withPhenotypeScores(
+      fakeRead(async () => {
+        scoreCalls++
+        return []
+      }),
+      {
+        execute: async () => {
+          writeCalls++
+          return undefined
+        }
+      },
+      () => null
+    )
+    const task = { type: 'variants:query', params: [{ case_id: 1 }, 50, 0] } as const
+    expect(await read.execute(task as never)).toBe('rows')
+    expect(scoreCalls).toBe(0)
+    expect(writeCalls).toBe(0)
   })
 })

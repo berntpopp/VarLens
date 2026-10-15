@@ -31,7 +31,6 @@ import {
   explainDisease,
   explainGene,
   prepareProfile,
-  sidak,
   scoreProfile,
   type CaseProfile,
   type CaseScores
@@ -272,8 +271,6 @@ export interface HpoGeneScorer {
    * `score` (default S(d)) is the locus score a CNV/STR row ranked with.
    */
   explainDisease(id: string, score?: number): HpoExplanation | null
-  /** Šidák mapping of a gene score onto the best of n genes of this case; sidak(s, 1) === s. */
-  sidak(score: number, n: number): number
 }
 
 /** Disease id → index position, built once per loaded index. */
@@ -498,8 +495,7 @@ export function openHpoGeneScorer(
       explainDisease(id, score) {
         const d = diseaseIndexOf(index).get(id)
         return d === undefined ? null : explainDisease(index, scores, d, score)
-      },
-      sidak: (score, n) => sidak(scores, score, n)
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

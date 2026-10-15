@@ -58,6 +58,19 @@ describe('web hpo:search (bundled ontology)', () => {
     expect(body.terms[0]).toEqual({ id: 'HP:0001250', name: 'Seizure' })
   })
 
+  test('matches HPO synonyms such as "hearing loss" -> HP:0000365 Hearing impairment', async () => {
+    const { result } = await search(['hearing loss', 5])
+    const body = result as {
+      success: true
+      terms: Array<{ id: string; name: string; matchedSynonym?: string }>
+    }
+    expect(body.terms[0]).toEqual({
+      id: 'HP:0000365',
+      name: 'Hearing impairment',
+      matchedSynonym: 'Hearing loss'
+    })
+  })
+
   test('queries shorter than two characters return no terms', async () => {
     const { result } = await search(['a'])
     expect(result).toEqual({ success: true, terms: [] })

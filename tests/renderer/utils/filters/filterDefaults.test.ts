@@ -65,6 +65,10 @@ describe('FILTER_DEFAULTS', () => {
       'inheritanceModes',
       'analysisGroupId',
       'considerPhasing',
+      'deNovoMinGq',
+      'deNovoMinDp',
+      'deNovoMinAb',
+      'deNovoMaxParentAb',
       'columnFilters'
     ].sort()
     expect(Object.keys(FILTER_DEFAULTS).sort()).toEqual(expectedKeys)

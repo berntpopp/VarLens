@@ -36,9 +36,9 @@ describe('DSL info.<KEY> fields (#538)', () => {
     expect(translate(input)).toEqual({ error: expect.stringContaining(message) })
   })
 
-  it('rejects info fields in the cohort view', () => {
+  it('accepts info fields in the cohort view (#639)', () => {
     expect(translate('info.DP:=:1', 'cohort')).toEqual({
-      error: expect.stringContaining('cannot filter the cohort view')
+      'info.DP': { operator: '=', value: '1' }
     })
   })
 

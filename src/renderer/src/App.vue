@@ -101,6 +101,7 @@
       v-if="commandPaletteMounted"
       v-model="showCommandPalette"
       :actions="shortcutActions"
+      :extra-commands="paletteExtraCommands"
     />
     <ProteinViewHost v-if="proteinViewMounted" />
 
@@ -109,7 +110,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, provide, defineAsyncComponent, toRef } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  provide,
+  defineAsyncComponent,
+  toRef
+} from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import AppToolbar from './components/AppToolbar.vue'
@@ -127,9 +137,13 @@ import BackgroundJobsPanel from './components/jobs/BackgroundJobsPanel.vue'
 import type AppDialogHostType from './components/AppDialogHost.vue'
 import { usePanelResize } from './composables/usePanelResize'
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts'
-import { filterShortcutCallbacks } from './composables/useFilterShortcutDispatch'
+import {
+  buildPaletteExtraCommands,
+  filterShortcutCallbacks
+} from './composables/useFilterShortcutDispatch'
 import type { ShortcutActions } from './config/keyboardShortcuts'
 import { useDatabaseStore } from './stores/databaseStore'
+import { useSettingsStore } from './stores/settingsStore'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { useCaseMetadata } from './composables/useCaseMetadata'
 import { useCaseDeletion } from './composables/useCaseDeletion'
@@ -439,6 +453,8 @@ const handleDatabaseError = (message: string): void => {
   dialogHostRef.value?.showSnackbar(message, 'error')
 }
 
+const settingsStore = useSettingsStore()
+
 /** App-wide shortcut actions: bound to their keys and listed by the command palette. */
 const shortcutActions = {
   disclaimer: () => dialogHostRef.value?.showDisclaimer(),
@@ -455,6 +471,21 @@ const shortcutActions = {
   import: openImportDialog
 } satisfies ShortcutActions
 useKeyboardShortcuts(shortcutActions)
+
+const paletteExtraCommands = computed(() =>
+  buildPaletteExtraCommands({
+    appState,
+    cases: caseListRef.value?.cases ?? [],
+    onShowPreferences: () => dialogHostRef.value?.showPreferences(),
+    onToggleTheme: () => {
+      const isDark =
+        document.documentElement.dataset.theme === 'dark' ||
+        settingsStore.themePreference === 'dark'
+      settingsStore.themePreference = isDark ? 'light' : 'dark'
+    },
+    onSelectCase: handleCaseSelected
+  })
+)
 
 const perfModeEnabled = api?.perf?.isEnabled?.() === true
 

@@ -38,7 +38,7 @@ export function withPhenotypeScores(
   let cohortPass: Promise<void> | null = null
 
   async function rescore(profile: CasePhenotypeProfile, key: string | null): Promise<void> {
-    const hash = profileHash(profile.terms)
+    const hash = key === null ? null : profileHash(profile.terms)
     const rows =
       hash === null
         ? []

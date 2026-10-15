@@ -27,6 +27,16 @@ describe('gene intervals', () => {
     expect(ix.overlapping('chr16', tbx6.start, tbx6.start)).toContain(tbx6)
   })
 
+  it('handles huge upstream spans (maxEnds binary search) both inside and downstream', () => {
+    // RBFOX1 on chr16 spans ~2.47 Mb (5.24–7.71 Mb) and contains nested shorter genes/ncRNAs.
+    const rbfox1 = ix.span('RBFOX1', 'chr16')!
+    expect(rbfox1.end - rbfox1.start).toBeGreaterThan(2_000_000)
+    const inside = ix.overlapping('chr16', rbfox1.end - 1_000, rbfox1.end)
+    expect(inside).toContain(rbfox1)
+    const downstream = ix.overlapping('chr16', rbfox1.end + 1, rbfox1.end + 10_000)
+    expect(downstream).not.toContain(rbfox1)
+  })
+
   it('reloads after the file changes (in-app gene reference update)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'gene-intervals-'))
     try {

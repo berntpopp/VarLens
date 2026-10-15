@@ -209,7 +209,7 @@ class Parser {
       const afterValue = this.tokens[this.pos + 1]
       if (afterValue === undefined || afterValue.type !== 'colon') {
         this.advance()
-        const colDef = findColumn(colToken.value)
+        const colDef = findColumn(colToken.value) ?? findCohortOnlyColumn(colToken.value)
         const supportsLike = colDef?.operators.includes('~' as DslOperator) ?? false
         const defaultOp: DslOperator = colDef?.type === 'numeric' || !supportsLike ? '=' : '~'
         return this.buildRule(colToken, defaultOp, afterColon.value, afterColon)
@@ -268,14 +268,10 @@ class Parser {
       return null
     }
     if (colToken.value.toLowerCase().startsWith(INFO_FIELD_PREFIX)) {
-      if (this.scope === 'cohort') {
-        return fail(
-          `'${colToken.value}' is a per-case INFO field and cannot filter the cohort view`
-        )
-      }
       return buildInfoRule(colToken, operator, raw, valueToken, fail)
     }
-    const found = findColumn(colToken.value)
+    const cohortCol = findCohortOnlyColumn(colToken.value)
+    const found = findColumn(colToken.value) ?? cohortCol
     // A shortlist-only registration of a stored column (sv_length) keeps its plain filter path elsewhere
     const colDef =
       found?.shortlistOnly === true &&
@@ -292,7 +288,7 @@ class Parser {
           : `'${colToken.value}' is a per-case field and cannot filter the cohort view`
       )
     }
-    if (this.scope !== 'cohort' && COHORT_ONLY_COLUMNS.some((c) => c.key === column)) {
+    if (this.scope !== 'cohort' && cohortCol !== undefined) {
       return fail(`'${colToken.value}' is a cohort field and cannot filter a single case`)
     }
     const numeric = colDef ? colDef.type === 'numeric' : NUMERIC_COLUMN_FILTER_KEYS.has(column)
@@ -325,8 +321,15 @@ class Parser {
   }
 }
 
+function findCohortOnlyColumn(nameOrAlias: string) {
+  const lower = nameOrAlias.toLowerCase()
+  return COHORT_ONLY_COLUMNS.find(
+    (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
+  )
+}
+
 /**
- * `info.<KEY>` (#538): a custom VCF INFO value, case view only. The key keeps
+ * `info.<KEY>` (#538, #639): a custom VCF INFO value. The key keeps
  * its case (VCF IDs are case-sensitive); `=`/`!=`/`~` values stay text — the
  * backend compares numerically only where both sides are numbers.
  */

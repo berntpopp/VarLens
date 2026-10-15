@@ -95,7 +95,7 @@ describe('hpo_similarity.db', () => {
     expect(scorer?.explain('UNKNOWN')).toBeNull()
   })
 
-  it('scores and explains listed diseases, and maps n = 1 through sidak unchanged', () => {
+  it('scores and explains listed diseases', () => {
     build()
     const scorer = openHpoGeneScorer([P(T.C), P(T.E)], dbPath)!
     // GENE2's diseases are OMIM:3 and OMIM:4; its score is their max.
@@ -107,9 +107,6 @@ describe('hpo_similarity.db', () => {
     expect(scorer.scoreDiseases([])).toBeNull()
     expect(scorer.explainDisease('OMIM:4')).toEqual(scorer.explain('GENE2'))
     expect(scorer.explainDisease('UNKNOWN')).toBeNull()
-    for (const gene of ['GENE1', 'GENE2', 'GENE3']) {
-      expect(scorer.sidak(scorer.score(gene)!, 1)).toBe(scorer.score(gene))
-    }
   })
 
   it('canonicalises, deduplicates and drops non-phenotype case terms before scoring', () => {

@@ -139,6 +139,7 @@ vi.mock('../../../../src/renderer/src/components/variant-table/useVariantRowView
 }))
 
 vi.mock('../../../../src/renderer/src/components/variant-table/columns', () => ({
+  useFamilyMembers: () => ref([]),
   useVariantColumns: () => ({
     headers: computed(() => []),
     visibleHeaders: computed(() => []),

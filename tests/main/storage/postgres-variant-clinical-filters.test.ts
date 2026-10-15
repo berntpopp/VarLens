@@ -267,7 +267,7 @@ describe('PostgreSQL clinical variant filters', () => {
     expect(sql).toContain('agm_f.role =')
     expect(sql).toContain('agm_m.role =')
     expect(sql).toContain('f.chr = p.chr')
-    expect(sql).toContain('m.alt = p.alt')
+    expect(sql).toContain('f.alt = p.alt')
     expect(paramsByCall[0]).toContain(9)
   })
 

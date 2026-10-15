@@ -79,6 +79,60 @@ export function caseInfoFields(fieldDictionary: string | null | undefined): Case
     .sort((a, b) => a.key.localeCompare(b.key))
 }
 
+function mergeInfoTypes(types: Set<string>): string | undefined {
+  if (types.size === 0) return undefined
+  if (types.size === 1) return [...types][0]
+  if (types.size === 2 && types.has('Integer') && types.has('Float')) return 'Float'
+  return 'String'
+}
+
+/**
+ * Union of per-case `field_dictionary` JSON strings across the cohort (#639).
+ * Merges compatible VCF header types (marking conflicting types as `String`)
+ * and appends ` · in k of N cases` to `source` when a key appears in fewer than
+ * all cohort cases.
+ */
+export function mergeCohortInfoFields(
+  dictionaries: ReadonlyArray<string | null | undefined>
+): CaseInfoField[] {
+  const totalCases = dictionaries.length
+  if (totalCases === 0) return []
+  const byKey = new Map<
+    string,
+    { sources: Set<string>; types: Set<string>; numbers: Set<string>; count: number }
+  >()
+  for (const raw of dictionaries) {
+    for (const field of caseInfoFields(raw)) {
+      let acc = byKey.get(field.key)
+      if (acc === undefined) {
+        acc = { sources: new Set(), types: new Set(), numbers: new Set(), count: 0 }
+        byKey.set(field.key, acc)
+      }
+      acc.sources.add(field.source)
+      if (field.type !== undefined) acc.types.add(field.type)
+      if (field.number !== undefined) acc.numbers.add(field.number)
+      acc.count++
+    }
+  }
+  return [...byKey.entries()]
+    .map(([key, acc]): CaseInfoField => {
+      const baseSource = [...acc.sources].join(', ')
+      const source =
+        acc.count < totalCases
+          ? `${baseSource} · in ${acc.count} of ${totalCases} cases`
+          : baseSource
+      const type = mergeInfoTypes(acc.types)
+      const number = acc.numbers.size === 1 ? [...acc.numbers][0] : undefined
+      return {
+        key,
+        source,
+        ...(type !== undefined ? { type } : {}),
+        ...(number !== undefined ? { number } : {})
+      }
+    })
+    .sort((a, b) => a.key.localeCompare(b.key))
+}
+
 /** The key/value pairs of one variant's `info_json`, in stored order; [] when none. */
 export function infoJsonEntries(infoJson: string | null | undefined): [string, string][] {
   const parsed = parseObject(infoJson)

@@ -607,7 +607,7 @@ const selectCase = (caseId: number | null): boolean => {
   return true
 }
 
-defineExpose({ refreshCases, softRefreshCases, selectCase })
+defineExpose({ refreshCases, softRefreshCases, selectCase, cases })
 
 // Load filter dropdown data on mount
 loadCohortGroups()

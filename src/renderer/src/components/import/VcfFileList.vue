@@ -11,10 +11,14 @@
 
         <!-- File name & path -->
         <div class="flex-grow-1 min-width-0">
-          <div class="text-body-2 font-weight-medium text-truncate" :title="file.filePath">
+          <div
+            class="text-body-2 font-weight-medium text-truncate"
+            :title="directoryName(file.filePath) ? file.filePath : fileName(file.filePath)"
+          >
             {{ fileName(file.filePath) }}
           </div>
           <div
+            v-if="directoryName(file.filePath)"
             class="text-caption text-medium-emphasis text-truncate"
             :title="directoryName(file.filePath)"
           >
@@ -153,9 +157,10 @@ function fileName(filePath: string): string {
 }
 
 function directoryName(filePath: string): string {
+  if (!/^(?:\/|\\|[A-Za-z]:[\\/])/.test(filePath)) return ''
   const normalized = filePath.replace(/\\/g, '/')
   const idx = normalized.lastIndexOf('/')
-  return idx === -1 ? '' : normalized.slice(0, idx)
+  return idx <= 0 ? '' : normalized.slice(0, idx)
 }
 
 function formatCount(count: number): string {

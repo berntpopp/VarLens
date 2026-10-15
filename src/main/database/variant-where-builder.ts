@@ -15,6 +15,7 @@ import {
   assertValidColumnFilterValues,
   NUMERIC_COLUMN_FILTER_KEYS
 } from '../../shared/filters/column-filter-validation'
+import { infoFieldKey } from '../../shared/filters/info-field-filter'
 import { COHORT_FREQUENCY_KEY, COHORT_FREQUENCY_SQL } from './cohort-frequency-sql'
 import { cohortPhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../shared/sql/phenotype-score-sql'
 import { escapeLikePattern } from './search/search-clause-emitter'
@@ -61,7 +62,9 @@ export function buildBaseWhere(
 ): BuildBaseWhereResult {
   // Same value/column-type check as every other builder on both backends (#447).
   assertValidColumnFilterValues(filters.column_filters)
-  assertNoInfoFieldFilters(filters.column_filters) // no builder here evaluates info.* (#538)
+  if (ctx.scope === 'cohort-burden') {
+    assertNoInfoFieldFilters(filters.column_filters) // burden queries do not evaluate info.* (#538)
+  }
   const conditions: string[] = []
   const params: (string | number)[] = []
   const { baseAlias, scope } = ctx
@@ -177,7 +180,8 @@ export function buildBaseWhere(
   // Bare-key column_filters (skip extension dotted keys — per-path helpers handle those)
   if (filters.column_filters !== undefined) {
     for (const [key, filter] of Object.entries(filters.column_filters)) {
-      if (isExtensionColumnKey(key)) continue
+      if (isExtensionColumnKey(key) || (isCohortSummaryScope && infoFieldKey(key) !== null))
+        continue
       const clause = translateColumnFilter(key, filter, baseAlias, params, scope)
       if (clause === null) continue
       conditions.push(clause)

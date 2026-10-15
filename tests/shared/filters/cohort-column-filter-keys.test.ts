@@ -12,19 +12,40 @@ import {
 } from '../../../src/renderer/src/dsl/column-registry'
 
 describe('normalizeCohortColumnFilters (#528)', () => {
-  it('maps the DSL CADD key to the cohort column and keeps canonical keys', () => {
+  it('maps the DSL CADD and ACMG keys to the cohort columns and keeps canonical/info keys', () => {
     expect(
       normalizeCohortColumnFilters({
         cadd: { operator: '>=', value: 20 },
+        acmg: { operator: '=', value: 'Pathogenic' },
         cdna: { operator: 'like', value: 'c.1' },
         aa_change: { operator: '=', value: 'p.M1fs' },
-        'cnv.copy_number': { operator: '>', value: 2 }
+        'cnv.copy_number': { operator: '>', value: 2 },
+        'info.DP': { operator: '>', value: 50 }
       })
     ).toEqual({
       cadd_phred: { operator: '>=', value: 20 },
+      acmg_best: { operator: '=', value: 'Pathogenic' },
       cdna: { operator: 'like', value: 'c.1' },
       aa_change: { operator: '=', value: 'p.M1fs' },
-      'cnv.copy_number': { operator: '>', value: 2 }
+      'cnv.copy_number': { operator: '>', value: 2 },
+      'info.DP': { operator: '>', value: 50 }
+    })
+  })
+
+  it('accepts acmg_best:is:null and acmg_best:=:Pathogenic directly', () => {
+    expect(
+      normalizeCohortColumnFilters({
+        acmg_best: { operator: 'is_null', value: '' }
+      })
+    ).toEqual({
+      acmg_best: { operator: 'is_null', value: '' }
+    })
+    expect(
+      normalizeCohortColumnFilters({
+        acmg_best: { operator: '=', value: 'Pathogenic' }
+      })
+    ).toEqual({
+      acmg_best: { operator: '=', value: 'Pathogenic' }
     })
   })
 

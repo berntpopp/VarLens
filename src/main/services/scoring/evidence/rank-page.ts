@@ -43,8 +43,7 @@ export function toLightRow(row: LightRow): LightRow {
     str_status: row.str_status ?? null,
     str_repeat_id: row.str_repeat_id ?? null,
     str_variant_catalog_id: row.str_variant_catalog_id ?? null,
-    str_repeat_unit: row.str_repeat_unit ?? null,
-    info_json: row.info_json ?? null
+    str_repeat_unit: row.str_repeat_unit ?? null
   }
 }
 

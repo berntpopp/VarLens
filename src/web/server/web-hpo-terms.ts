@@ -44,7 +44,13 @@ export function loadWebHpoTerms(): HpoTermEntry[] {
   if (cache?.path === path) return cache.terms
   const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown
   if (!Array.isArray(parsed)) throw new Error(`HPO term list at ${path} is not an array`)
-  const terms = parsed.filter(isTermEntry).map((row) => ({ id: row.id, name: row.name }))
+  const terms = parsed.filter(isTermEntry).map((row) => ({
+    id: row.id,
+    name: row.name,
+    ...(Array.isArray(row.synonyms)
+      ? { synonyms: row.synonyms.filter((s): s is string => typeof s === 'string') }
+      : {})
+  }))
   if (terms.length === 0) throw new Error(`HPO term list at ${path} is empty`)
   cache = { path, terms }
   return terms

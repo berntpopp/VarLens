@@ -79,19 +79,15 @@ Hover any row's **Score** badge to see the weighted breakdown: the five componen
 
 ## CNV and STR phenotype scoring
 
-::: warning Not active yet
-This scoring is built but switched off until it passes validation. Until then, CNV and STR rows are not part of the evidence ranking, so the `locus:` line and the fields below stay empty.
-:::
+For copy-number variants (CNVs) and short tandem repeats (STRs), the phenotype match comes from the **locus** the call hits:
 
-For copy-number variants (CNVs) and short tandem repeats (STRs), the phenotype match comes from the **locus** the call hits. It is not taken from the best of every gene the variant overlaps:
-
-- **CNVs, gene route.** Each overlapped gene is weighted by its dosage sensitivity, for example haploinsufficiency for a deletion. The weights come from the VCF's AnnotSV annotation when present, otherwise from ClinGen. The best gene is then size-corrected against this case's own gene scores, so a CNV spanning 30 genes does not win just by having more chances.
-- **CNVs, region route.** A CNV that covers a ClinGen dosage-sensitive region (for example 16p11.2 BP4–BP5) is scored against that region's syndrome, scaled by how much of the region it covers. The higher of the two routes is used.
+- **CNVs, gene route.** The CNV is scored by the best HPO similarity score among the indexed disease genes it overlaps (`max S(g)`).
+- **CNVs, region route.** A CNV that covers a ClinGen dosage-sensitive region (for example 16p11.2 BP4–BP5) is scored against that region's syndrome, scaled by how much of the region it covers and its ClinGen dosage sensitivity (HI for deletions, TS for duplications). The higher of the gene route and region route is used.
 - **STRs.** The call is matched to its STRchive locus. Its repeat size gives a band (normal, intermediate, premutation or full), and the score covers only the diseases of that band. A normal band, a recessive locus with only one expanded allele, or a refuted locus gives no score.
 
-Hover the **Score** to see a `locus:` line under the phenotype block. For a region it shows the region, the dosage score and its source, the coverage, and how many of the overlapped genes are HPO genes (genes with HPO disease annotations). For a gene it shows the driving gene and its dosage source. For an STR it shows the gene, motif, repeat copies, band, inheritance and typical onset. The rank line still compares the score with all HPO genes. It is a ranking aid, not a likelihood of pathogenicity.
+Hover the **Score** to see a `locus:` line under the phenotype block. For a region it shows the region, the dosage score and its source, the coverage, and how many of the overlapped genes are HPO genes (genes with HPO disease annotations). For a gene it shows the driving gene and how many HPO/coding genes the CNV overlaps. For an STR it shows the gene, motif, repeat copies, band, inheritance and typical onset. The rank line still compares the score with all HPO genes. It is a ranking aid, not a likelihood of pathogenicity.
 
-The results are available as [filter language](./filtering.md) fields in custom rankings: `hpo_best_locus` (gene, region or STR id), `cnv_gene_count` (protein-coding genes the CNV overlaps) and `str_band`. The built-in rankings do not use them yet.
+The results are available as [filter language](./filtering.md) fields in custom rankings: `hpo_best_locus` (gene, region or STR id), `cnv_gene_count` (protein-coding genes the CNV overlaps) and `str_band` (with `variantTypeScope` including `cnv` and/or `str`).
 
 ### Data sources
 

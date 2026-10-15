@@ -15,7 +15,11 @@ interface BuildPARs {
   Y: Region[]
 }
 
-const PAR_REGIONS: Record<string, BuildPARs> = {
+export const PAR_REGIONS: {
+  GRCh38: BuildPARs
+  GRCh37: BuildPARs
+  [build: string]: BuildPARs | undefined
+} = {
   GRCh38: {
     X: [
       { start: 10_001, end: 2_781_479 },

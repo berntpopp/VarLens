@@ -217,15 +217,14 @@ afterAll(() => {
 describe('CNV/STR locus fields — SQLite end to end', () => {
   it('scores CNVs on their CSQ gene set with the locus note in the tooltip', () => {
     const cnv = lite.get('synthetic-cnv-vep.vcf')!
-    // CN 1 over NIPA1 (HI 3) and NIPA2 (HI 30, one allele): NIPA1 at full weight; PDCD6IPP1 is a pseudogene.
+    // CN 1 over NIPA1 and NIPA2: NIPA2 (OMIM:4, higher score) wins over NIPA1 (OMIM:2); PDCD6IPP1 is a pseudogene.
     const del = rowAt(cnv, 22700000)!
     expect(del.rank_evidence?.map((c) => c.id)).toEqual(['fallback', 'pheno', 'locus', 'genes2'])
-    expect(del.rank_hpo?.diseaseId).toBe('OMIM:2')
+    expect(del.rank_hpo?.diseaseId).toBe('OMIM:4')
     expect(del.rank_hpo?.locus).toEqual({
       kind: 'gene',
-      id: 'NIPA1',
-      label: 'NIPA1',
-      dosage: 'HI 3 (ClinGen 2026-10-14)',
+      id: 'NIPA2',
+      label: 'NIPA2',
       diseaseGenes: 2,
       genes: 2
     })

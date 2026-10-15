@@ -72,6 +72,37 @@ describe('VCF phase set import (#586)', () => {
       service.close()
     }
   })
+
+  it('attaches comphet_phase on case page reads when consider_phasing is true (#630)', async () => {
+    const { service, caseId } = await importSqlite()
+    try {
+      const page = service.variants.getVariants(
+        {
+          case_id: caseId,
+          inheritance_modes: ['candidate_compound_het'],
+          consider_phasing: true
+        },
+        50,
+        0
+      )
+      const byGene = Object.fromEntries(page.data.map((r) => [r.gene_symbol, r.comphet_phase]))
+      expect(byGene).toEqual({
+        GENEA: 'trans',
+        GENEB: 'trans',
+        GENEC: 'possible'
+      })
+      expect(page.data.map((r) => `${r.gene_symbol}:${r.comphet_phase}`)).toEqual([
+        'GENEA:trans',
+        'GENEA:trans',
+        'GENEB:trans',
+        'GENEB:trans',
+        'GENEC:possible',
+        'GENEC:possible'
+      ])
+    } finally {
+      service.close()
+    }
+  })
 })
 
 describe.skipIf(!RUN_PG)('VCF phase set import on PostgreSQL (#586)', () => {

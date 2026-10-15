@@ -17,14 +17,16 @@ import { CHECK_PROFILES, latency, loadInputs, snvInvariance } from './cnv-checks
 import { renderReport } from './report'
 import { runStrBench } from './str-bench'
 
-const REPORT = join(REPO_ROOT, '.planning/artifacts/shortlist-sim/2026-10-14-cnv-str/report.md')
+const REPORT = join(REPO_ROOT, '.planning/artifacts/shortlist-sim/2026-10-15-cnv-str/report.md')
 
 async function main(argv: string[]): Promise<void> {
-  const run = argv[argv.indexOf('--run') + 1]
-  if (!argv.includes('--run') || !/^[\w.-]+$/.test(run ?? ''))
-    throw new Error('--run <name> is required')
+  const run = argv.includes('--run') ? argv[argv.indexOf('--run') + 1] : 'cnv-str-2026-10-15'
+  if (!/^[\w.-]+$/.test(run ?? '')) throw new Error('--run <name> is invalid')
   const outDir = assertOutsideRepo(join(RUNS_DIR, run))
   mkdirSync(outDir, { recursive: true })
+  mkdirSync(join(REPO_ROOT, '.planning/artifacts/shortlist-sim/2026-10-15-cnv-str'), {
+    recursive: true
+  })
 
   const inputs = loadInputs() // first: the cold index load is CNV-6
   const cnv = await runCnvBench(inputs, outDir)

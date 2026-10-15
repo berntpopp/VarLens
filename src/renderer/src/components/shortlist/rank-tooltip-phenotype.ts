@@ -41,12 +41,7 @@ function locusParts(n: HpoLocusNote): Array<string | false | null | undefined> {
         genes
       ]
     case 'gene':
-      // Šidák with n = 1 is the identity, so only a multi-gene CNV is size-corrected.
-      return [
-        n.label,
-        n.dosage,
-        genes !== null && `best of ${genes}${(n.diseaseGenes ?? 0) > 1 ? ', size-corrected' : ''}`
-      ]
+      return [n.label, genes !== null && `best of ${genes}`]
     case 'str':
       return [
         [n.label, n.motif, n.copies].filter(Boolean).join(' '),

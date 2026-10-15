@@ -92,14 +92,12 @@ describe('evidenceConfigProblems / describeProblem', () => {
   })
 })
 
-// #581, #582: SV/CNV/STR evidence scoring stays behind one flag per type (all off by default).
+// #581, #582, #642: CNV and STR are enabled by default; SV stays behind its flag.
 describe('variant-type scoped groups', () => {
   const flags = SHORTLIST_EVIDENCE_CONFIG.structuralTypes.enabled
-  const enable = (...types: Array<keyof typeof flags>): void => {
-    for (const t of types.length > 0 ? types : (['sv', 'cnv'] as const)) flags[t] = true
-  }
   afterEach(() => {
-    flags.sv = flags.cnv = flags.str = false
+    flags.sv = false
+    flags.cnv = flags.str = true
   })
   const svRuleset = (): EvidenceRuleset => {
     const rs = clone()
@@ -124,7 +122,8 @@ describe('variant-type scoped groups', () => {
     }
   })
 
-  it('rejects a type-scoped group and SV/CNV scope while the flag is off (default)', () => {
+  it('accepts CNV and STR by default while rejecting SV', () => {
+    expect(flags).toEqual({ sv: false, cnv: true, str: true })
     expect(keys(svRuleset())).toEqual([
       'groups.' + VARVIS_EVIDENCE_TEMPLATE.groups.length + '.variantType'
     ])
@@ -132,26 +131,27 @@ describe('variant-type scoped groups', () => {
       'variantTypeScope',
       `rankConfig.ruleset.groups.${VARVIS_EVIDENCE_TEMPLATE.groups.length}.variantType`
     ])
+    const cnvStr = svRuleset()
+    cnvStr.groups[cnvStr.groups.length - 1].variantType = 'cnv'
+    expect(rulesetProblems(cnvStr)).toEqual([])
+    cnvStr.groups[cnvStr.groups.length - 1].variantType = 'str'
+    expect(rulesetProblems(cnvStr)).toEqual([])
+    expect(
+      evidenceConfigProblems({
+        ...svConfig(cnvStr),
+        variantTypeScope: ['snv', 'indel', 'cnv', 'str']
+      })
+    ).toEqual([])
   })
 
-  it('accepts them when the flag is on', () => {
-    enable()
+  it('accepts SV when its flag is turned on', () => {
+    flags.sv = true
     expect(rulesetProblems(svRuleset())).toEqual([])
     expect(evidenceConfigProblems(svConfig(svRuleset()))).toEqual([])
   })
 
-  it('enables each type on its own', () => {
-    enable('str')
-    const rs = svRuleset()
-    expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
-      `groups.${rs.groups.length - 1}.variantType`
-    ])
-    rs.groups[rs.groups.length - 1].variantType = 'str'
-    expect(rulesetProblems(rs)).toEqual([])
-  })
-
-  it('keeps rejecting STR while only SV/CNV are enabled', () => {
-    enable()
+  it('gates each structural type independently when toggled off', () => {
+    flags.str = false
     const rs = svRuleset()
     rs.groups[rs.groups.length - 1].variantType = 'str'
     expect(rulesetProblems(rs).map((p) => problemKey(p.path))).toEqual([
@@ -164,5 +164,13 @@ describe('variant-type scoped groups', () => {
     expect(evidenceConfigProblems(config).map((p) => problemKey(p.path))).toEqual([
       'variantTypeScope'
     ])
+  })
+
+  it('accepts points up to +24 (#640)', () => {
+    const rs = clone()
+    rs.groups[0].rules[0].points = 24
+    expect(rulesetProblems(rs)).toEqual([])
+    rs.groups[0].rules[0].points = 24.5
+    expect(keys(rs)).toContain('groups.0.rules.0.points')
   })
 })

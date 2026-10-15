@@ -62,7 +62,10 @@ function fieldsMatching(partial: string, scope: SuggestionScope): FilterColumnDe
   if (scope === 'case') return getColumnSuggestions(partial)
   const lower = partial.toLowerCase()
   const cohortOnly = COHORT_ONLY_COLUMNS.filter(
-    (col) => col.key.startsWith(lower) || col.label.toLowerCase().startsWith(lower)
+    (col) =>
+      col.key.startsWith(lower) ||
+      col.label.toLowerCase().startsWith(lower) ||
+      col.aliases.some((a) => a.toLowerCase().startsWith(lower))
   )
   return [...getColumnSuggestions(partial, scope), ...cohortOnly]
 }
@@ -113,8 +116,11 @@ const isInfoColumn = (name: string): boolean => name.toLowerCase().startsWith(IN
 function resolveField(name: string, scope: SuggestionScope): FilterColumnDef | undefined {
   const col = findColumn(name)
   if (col) return isColumnInScope(col, scope) ? col : undefined
+  const lower = name.toLowerCase()
   return scope === 'cohort'
-    ? COHORT_ONLY_COLUMNS.find((c) => c.key === name.toLowerCase())
+    ? COHORT_ONLY_COLUMNS.find(
+        (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
+      )
     : undefined
 }
 
@@ -220,7 +226,7 @@ function detectState(input: string): ParsedContext {
  * @param input - Current text in the search bar
  * @param presetNames - Available preset names (from preset store)
  * @param scope - The view being filtered; only its fields are offered
- * @param infoFields - The open case's `info.<KEY>` fields (case view only)
+ * @param infoFields - The open case's (or cohort's) `info.<KEY>` fields
  * @returns Suggestions sorted by relevance. Every in-scope field is listed so a
  *   query can be built by picking alone; other lists stop at MAX_SUGGESTIONS.
  */
@@ -231,9 +237,9 @@ export function getAutocompleteSuggestions(
   infoFields: readonly CaseInfoField[] = []
 ): Suggestion[] {
   const ctx = detectState(input)
-  const caseInfo = scope === 'case' ? infoFields : []
+  const caseInfo = scope !== 'shortlist' ? infoFields : []
   const column = ctx.column ?? ''
-  if (scope === 'case' && isInfoColumn(column)) {
+  if (scope !== 'shortlist' && isInfoColumn(column)) {
     // The parser takes the prefix in any case; the key keeps its case.
     return infoSuggestions(
       ctx,

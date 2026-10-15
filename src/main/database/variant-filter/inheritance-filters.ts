@@ -1,18 +1,18 @@
 import { sql, type RawBuilder } from 'kysely'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
+import { HET_GT_SQL, HOM_GT_SQL } from '../../../shared/sql/genotype-dosage'
 import {
-  HET_GT_SQL,
-  HET_OR_HEMI_GT_SQL,
-  HOM_GT_SQL,
-  notReferenceGtSql
-} from '../../../shared/sql/genotype-dosage'
-import {
+  autosomalDominantSql,
   autosomalRecessiveSql,
   candidateCompoundHetSql,
   compoundHetPairIdsSql,
+  deNovoSql,
   QUALIFYING_ROW_COLUMNS,
+  xDominantSql,
   xHemizygousSql,
+  xRecessiveSql,
+  type DeNovoQualityThresholds,
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
 import { isTrioMode } from '../../../shared/types/inheritance'
@@ -20,25 +20,40 @@ import { isTrioMode } from '../../../shared/types/inheritance'
 // The shared genotype classes (src/shared/utils/genotype.ts), inlined as literals.
 const HET = sql.raw(HET_GT_SQL)
 const HOM = sql.raw(HOM_GT_SQL)
-const HET_OR_HEMI = sql.raw(HET_OR_HEMI_GT_SQL)
-const MALE_X_HEMIZYGOUS = sql.raw(xHemizygousSql('variants', 'case_metadata', true))
-const PARENT_NOT_REFERENCE = sql.raw(notReferenceGtSql('f.gt_num'))
 
 const CASE_MARK = '@case@'
 const GROUP_MARK = '@group@'
 const QUALIFYING_MARK = '@qualifying@'
+const DN_MIN_GQ_MARK = '@dn_min_gq@'
+const DN_MIN_DP_MARK = '@dn_min_dp@'
+const DN_MIN_AB_MARK = '@dn_min_ab@'
+const DN_MAX_PARENT_AB_MARK = '@dn_max_parent_ab@'
+const MARK_SPLIT = /(@case@|@group@|@dn_min_gq@|@dn_min_dp@|@dn_min_ab@|@dn_max_parent_ab@)/
+
 const TRIO_CONTEXT: TrioSqlContext = {
   variants: 'variants',
   members: 'analysis_group_members',
+  cases: 'cases',
+  caseMetadata: 'case_metadata',
   caseParam: CASE_MARK,
   groupParam: GROUP_MARK
 }
 
-/** Shared SQL text with its case and group markers bound as parameters. */
-function bound(text: string, caseId: number, groupId: number): SqlCondition {
-  const parts = text.split(/(@case@|@group@)/).map((part) => {
+/** Shared SQL text with its case, group, and quality markers bound as parameters. */
+function bound(
+  text: string,
+  caseId: number,
+  groupId: number,
+  filter?: VariantFilter
+): SqlCondition {
+  const parts = text.split(MARK_SPLIT).map((part) => {
     if (part === CASE_MARK) return sql`${caseId}`
-    return part === GROUP_MARK ? sql`${groupId}` : sql.raw(part)
+    if (part === GROUP_MARK) return sql`${groupId}`
+    if (part === DN_MIN_GQ_MARK) return sql`${filter?.de_novo_min_gq}`
+    if (part === DN_MIN_DP_MARK) return sql`${filter?.de_novo_min_dp}`
+    if (part === DN_MIN_AB_MARK) return sql`${filter?.de_novo_min_ab}`
+    if (part === DN_MAX_PARENT_AB_MARK) return sql`${filter?.de_novo_max_parent_ab}`
+    return sql.raw(part)
   })
   return sql.join(parts, sql.raw(''))
 }
@@ -92,31 +107,14 @@ function buildSoloConditions(modes: string[], qualifying: VariantQueryBuilder): 
 }
 
 /** One copy in the proband; neither parent has a row there other than an explicit reference call. */
-function deNovoCondition(cid: number, gid: number): SqlCondition {
-  // A male chrX call written diploid (1/1) is one copy too.
-  return sql`(
-            (variants.gt_num IN ${HET_OR_HEMI} OR ${MALE_X_HEMIZYGOUS})
-            AND variants.id NOT IN (
-              SELECT p.id FROM variants p
-              INNER JOIN analysis_group_members agm_f
-                ON agm_f.group_id = ${gid} AND agm_f.role = 'father'
-              INNER JOIN variants f
-                ON f.case_id = agm_f.case_id
-                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND ${PARENT_NOT_REFERENCE}
-              WHERE p.case_id = ${cid}
-            )
-            AND variants.id NOT IN (
-              SELECT p.id FROM variants p
-              INNER JOIN analysis_group_members agm_m
-                ON agm_m.group_id = ${gid} AND agm_m.role = 'mother'
-              INNER JOIN variants f
-                ON f.case_id = agm_m.case_id
-                AND f.chr = p.chr AND f.pos = p.pos AND f.ref = p.ref AND f.alt = p.alt
-                AND ${PARENT_NOT_REFERENCE}
-              WHERE p.case_id = ${cid}
-            )
-          )`
+function deNovoCondition(filter: VariantFilter, gid: number): SqlCondition {
+  const thresholds: DeNovoQualityThresholds = {
+    minGq: filter.de_novo_min_gq !== undefined ? DN_MIN_GQ_MARK : undefined,
+    minDp: filter.de_novo_min_dp !== undefined ? DN_MIN_DP_MARK : undefined,
+    minProbandAb: filter.de_novo_min_ab !== undefined ? DN_MIN_AB_MARK : undefined,
+    maxParentAb: filter.de_novo_max_parent_ab !== undefined ? DN_MAX_PARENT_AB_MARK : undefined
+  }
+  return bound(deNovoSql(TRIO_CONTEXT, 'variants', thresholds), filter.case_id, gid, filter)
 }
 
 /** Proband hom and every parent of the group a het carrier (inheritance-sql.ts). */
@@ -129,14 +127,28 @@ function compoundHetCondition(cid: number, gid: number): SqlCondition {
   return sql`(variants.id IN (${bound(compoundHetPairIdsSql(TRIO_CONTEXT), cid, gid)}))`
 }
 
-/** Trio modes — require an analysis group (father/mother members). */
-function buildTrioConditions(modes: string[], caseId: number, groupId: number): SqlCondition[] {
+/** Trio modes — require an analysis group (father/mother/relative members). */
+function buildTrioConditions(
+  modes: string[],
+  filter: VariantFilter,
+  groupId: number
+): SqlCondition[] {
+  const caseId = filter.case_id
   const conditions: SqlCondition[] = []
-  if (modes.includes('de_novo')) conditions.push(deNovoCondition(caseId, groupId))
+  if (modes.includes('de_novo')) conditions.push(deNovoCondition(filter, groupId))
   if (modes.includes('autosomal_recessive')) {
     conditions.push(autosomalRecessiveCondition(caseId, groupId))
   }
   if (modes.includes('compound_het')) conditions.push(compoundHetCondition(caseId, groupId))
+  if (modes.includes('autosomal_dominant')) {
+    conditions.push(bound(autosomalDominantSql(TRIO_CONTEXT, 'variants'), caseId, groupId))
+  }
+  if (modes.includes('x_recessive')) {
+    conditions.push(bound(xRecessiveSql(TRIO_CONTEXT, 'variants'), caseId, groupId))
+  }
+  if (modes.includes('x_dominant')) {
+    conditions.push(bound(xDominantSql(TRIO_CONTEXT, 'variants'), caseId, groupId))
+  }
   return conditions
 }
 
@@ -170,7 +182,7 @@ export function applyInheritanceFilters(
   const groupId = filter.analysis_group_id ?? null
   const conditions = buildSoloConditions(modes, query)
   if (groupId !== null) {
-    conditions.push(...buildTrioConditions(modes, filter.case_id, groupId))
+    conditions.push(...buildTrioConditions(modes, filter, groupId))
   } else if (modes.some(isTrioMode)) {
     conditions.push(sql`FALSE`)
   }

@@ -39,7 +39,7 @@ import {
 } from './str-sim'
 import { caseMetrics, type CaseMetrics } from './summary'
 
-export const STR_SEED = 20261014
+export const STR_SEED = 20261015
 const SALT = { profile: 0x5701, sex: 0x5702, genotype: 0x5703, decoy: 0x5704, trick: 0x5705 }
 const TRICK_SEEDS = 20
 const LEVELS = Object.keys(NOISE_LEVELS) as NoiseLevelId[]

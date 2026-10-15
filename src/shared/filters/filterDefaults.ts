@@ -21,6 +21,10 @@ export const FILTER_DEFAULTS: Readonly<FilterState> = Object.freeze({
   inheritanceModes: [],
   analysisGroupId: null,
   considerPhasing: false,
+  deNovoMinGq: null,
+  deNovoMinDp: null,
+  deNovoMinAb: null,
+  deNovoMaxParentAb: null,
   columnFilters: {}
 })
 

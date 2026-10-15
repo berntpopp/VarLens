@@ -95,8 +95,12 @@ describe('PhenotypeScoreCell', () => {
     expect(explainGene).toHaveBeenCalledTimes(2)
   })
 
-  it('has no explanation in the cohort view', async () => {
-    const wrapper = mountCell({ gene_symbol: 'SCN1A', phenotype_score: 0.65 }, null)
+  it('has no explanation in the cohort view and renders the carrier count hint', async () => {
+    const wrapper = mountCell(
+      { gene_symbol: 'SCN1A', phenotype_score: 0.65, phenotype_disease: '2 carriers scored' },
+      null
+    )
+    expect(wrapper.get('.phenotype-cell__disease').text()).toBe('2 carriers scored')
     await wrapper.get('.phenotype-cell').trigger('mouseenter')
     expect(explainGene).not.toHaveBeenCalled()
   })
@@ -109,7 +113,7 @@ describe('phenotype column registry and default visibility', () => {
       sortable: true
     })
     expect(cohortHeaders.find((h) => h.key === 'phenotype_score')).toMatchObject({
-      title: 'Best phenotype match (carriers)',
+      title: 'Phenotype',
       sortable: true
     })
   })

@@ -81,8 +81,6 @@ const REJECTED: Array<[string, ColumnFiltersParam, string]> = [
   ['empty key', f({ 'info.': { operator: 'is_null', value: '' } }), 'not a valid INFO field']
 ]
 
-const COHORT_ERROR = 'INFO field filters (info.DP) are only available in the case view'
-
 const positions = (rows: Array<{ pos: unknown }>): number[] =>
   rows.map((r) => Number(r.pos)).sort((a, b) => a - b)
 
@@ -127,12 +125,11 @@ describe('info.<KEY> case filters — SQLite (#538)', () => {
     )
   })
 
-  it('rejects info.* in the cohort view', () => {
-    expect(() =>
-      sqlite.cohort.getCohortVariants({
-        column_filters: { 'info.DP': { operator: '=', value: '0' } }
-      })
-    ).toThrow(COHORT_ERROR)
+  it('filters info.* in the cohort view (#639)', () => {
+    const res = sqlite.cohort.getCohortVariants({
+      column_filters: { 'info.DP': { operator: '=', value: '0' } }
+    })
+    expect(positions(res.data)).toEqual([100, 800])
   })
 })
 
@@ -195,11 +192,10 @@ describe.skipIf(!RUN_PG)('info.<KEY> case filters — PostgreSQL (#538)', () => 
     60_000
   )
 
-  it('rejects info.* in the cohort view', async () => {
-    await expect(
-      new PostgresCohortRepository(pool, schema).queryVariants({
-        column_filters: { 'info.DP': { operator: '=', value: '0' } }
-      })
-    ).rejects.toThrow(COHORT_ERROR)
+  it('accepts info.* in the cohort view (#639)', async () => {
+    const res = await new PostgresCohortRepository(pool, schema).queryVariants({
+      column_filters: { 'info.DP': { operator: '=', value: '0' } }
+    })
+    expect(Array.isArray(res.data)).toBe(true)
   }, 60_000)
 })

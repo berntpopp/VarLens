@@ -40,7 +40,7 @@ import { loadCnvCases, type Build } from './cnv-phenopackets'
 import { clinvarCases, hpoaDiseases, regionCases, type SimCnvCase } from './cnv-sim'
 import { caseMetrics, type CaseMetrics, type Standing } from './summary'
 
-export const SEED = 20261014
+export const SEED = 20261015
 const SALT_PROFILE = 0x9f01
 export const PHENOPACKET_DIR = join(DATA_DIR, 'external/phenopacket-store/0.1.27/extracted')
 export const BACKGROUND_VCF: Record<Build, string> = {
@@ -141,11 +141,11 @@ export async function runCnvBench(
     bgs[build] = raw[build].map((b) => ({
       sample: b.sample,
       large: b.large,
-      cnvs: b.calls.map((c) => prepareCnv(c, lookups[build], reference))
+      cnvs: b.calls.map((c) => prepareCnv(c, lookups[build]))
     }))
   }
   const prep = (build: Build, c: Parameters<typeof prepareCnv>[0]): PreparedCnv =>
-    prepareCnv(c, lookups[build], reference)
+    prepareCnv(c, lookups[build])
 
   const { cases: realCases, svFiles } = loadCnvCases(PHENOPACKET_DIR, lookups)
   const profiles: HpoProfileTerm[][] = []

@@ -30,6 +30,7 @@ import { booleanSearchSql } from '../../shared/utils/boolean-search'
 import { emitTerm } from './search/cohort-search-emitter'
 import { buildBaseWhere, type BaseFilterInput } from './variant-where-builder'
 import { buildExtensionExistsClauses } from './variant-extension-registry'
+import { cohortInfoExistsClauses } from '../../shared/sql/cohort-info-filter-sql'
 import { cohortOrderByClause } from '../../shared/sql/chromosome-order'
 import { cohortCarriersSql } from '../../shared/sql/cohort-call-sql'
 import { readUniqueVariantCount } from './cohort-unique-variant-count'
@@ -105,17 +106,12 @@ export class CohortService {
     this.statementCache = new Map()
   }
 
-  /**
-   * Get or create a cached prepared statement
-   */
   private getStatement(sql: string): Statement {
     let stmt = this.statementCache.get(sql)
     if (stmt === undefined) {
       if (this.statementCache.size >= CohortService.MAX_STATEMENT_CACHE_SIZE) {
         const oldestKey = this.statementCache.keys().next().value
-        if (oldestKey !== undefined) {
-          this.statementCache.delete(oldestKey)
-        }
+        if (oldestKey !== undefined) this.statementCache.delete(oldestKey)
       }
       stmt = this.db.prepare(sql)
       this.statementCache.set(sql, stmt)
@@ -123,10 +119,7 @@ export class CohortService {
     return stmt
   }
 
-  /**
-   * Build the WHERE clause and bound parameters for a cohort search.
-   * Extracted so that count-only and export paths can reuse the same logic.
-   */
+  /** Build the WHERE clause and bound parameters for a cohort search. */
   private buildWhereClause(params: CohortSearchParams): {
     whereClause: string
     paramsArray: (string | number)[]
@@ -135,12 +128,10 @@ export class CohortService {
     const whereConditions: string[] = []
     const paramsArray: (string | number)[] = []
 
-    // Search term handling with LIKE-based strategy
     if (params.search_term !== undefined && params.search_term !== '') {
-      const term = params.search_term.trim()
       whereConditions.push(
         booleanSearchSql(
-          term,
+          params.search_term.trim(),
           (t) => emitTerm(t, paramsArray),
           (e) =>
             mainLogger.warn(
@@ -152,19 +143,14 @@ export class CohortService {
       )
     }
 
-    // Panel interval filter (region-based, cohort-specific — not in buildBaseWhere)
     if (params.panel_intervals && params.panel_intervals.length > 0) {
       paramsArray.push(JSON.stringify(intervalsForAllSpellings(params.panel_intervals)))
       whereConditions.push(COHORT_PANEL_INTERVAL_CONDITION)
     }
 
-    // Validate against the caller's keys (before remapping, and covering the
-    // dotted extension keys) so the error matches the PostgreSQL cohort path.
     assertValidColumnFilterValues(params.column_filters)
 
-    // Canonicalise aliases (DSL `cadd` -> `cadd_phred`) and reject keys the
-    // summary cannot filter (#528), then map bare keys to their stored
-    // cohort_variant_summary column: buildBaseWhere emits ${baseAlias}.${column}.
+    // Canonicalise aliases (`cadd` -> `cadd_phred`, `acmg` -> `acmg_best`) and map bare keys to cvs columns.
     const columnFilters = normalizeCohortColumnFilters(params.column_filters)
     let remappedColumnFilters: ColumnFiltersParam | undefined
     if (columnFilters !== undefined) {
@@ -175,11 +161,7 @@ export class CohortService {
       }
     }
 
-    // Delegate base-field + bare-key column_filters translation to the
-    // shared helper. Preserve the legacy > 0 / >= 0 guards on gnomad_af_max
-    // and cadd_min at the call site — buildBaseWhere does not apply these
-    // because they are caller-specific legacy semantics. Tests rely on
-    // gnomad_af_max=0 being treated as a no-op.
+    // Preserve legacy > 0 / >= 0 guards on gnomad_af_max and cadd_min (gnomad_af_max=0 is a no-op).
     const baseInput: BaseFilterInput = {
       gnomad_af_max:
         params.gnomad_af_max !== undefined && params.gnomad_af_max > 0
@@ -207,15 +189,20 @@ export class CohortService {
       paramsArray.push(...base.params)
     }
 
-    // Extension filter via EXISTS subquery (cvs has no variant_id, so we
-    // correlate on chr/pos/ref/alt/variant_type back to variants + extension).
-    // Dotted extension keys ('cnv.copy_number') are kept by the normaliser.
     if (columnFilters !== undefined) {
       const ext = buildExtensionExistsClauses(columnFilters, 'cvs')
       if (ext.whereClause !== '') {
         whereConditions.push(ext.whereClause)
         paramsArray.push(...ext.params)
       }
+      whereConditions.push(
+        ...cohortInfoExistsClauses(
+          columnFilters,
+          'cvs',
+          'sqlite',
+          (v) => (paramsArray.push(v), '?')
+        )
+      )
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''

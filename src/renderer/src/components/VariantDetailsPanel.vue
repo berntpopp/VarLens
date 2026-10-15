@@ -116,6 +116,9 @@
               <v-chip
                 v-for="cls in ACMG_CLASSIFICATIONS"
                 :key="cls"
+                role="button"
+                :aria-pressed="currentQuickClassification === cls"
+                :aria-label="cls"
                 :color="currentQuickClassification === cls ? ACMG_COLORS[cls] : undefined"
                 :variant="currentQuickClassification === cls ? 'flat' : 'outlined'"
                 size="small"

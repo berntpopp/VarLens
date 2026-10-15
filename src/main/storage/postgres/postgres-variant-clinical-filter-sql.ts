@@ -1,16 +1,16 @@
 import { intervalsForAllSpellings } from '../../../shared/utils/contig'
+import { HET_GT_SQL as HET, HOM_GT_SQL as HOM } from '../../../shared/sql/genotype-dosage'
 import {
-  HET_GT_SQL as HET,
-  HET_OR_HEMI_GT_SQL as HET_OR_HEMI,
-  HOM_GT_SQL as HOM,
-  notReferenceGtSql
-} from '../../../shared/sql/genotype-dosage'
-import {
+  autosomalDominantSql,
   autosomalRecessiveSql,
   candidateCompoundHetSql,
   compoundHetPairIdsSql,
+  deNovoSql,
   QUALIFYING_ROW_COLUMNS,
+  xDominantSql,
   xHemizygousSql,
+  xRecessiveSql,
+  type DeNovoQualityThresholds,
   type TrioSqlContext
 } from '../../../shared/sql/inheritance-sql'
 import type { VariantFilter } from '../../../shared/types/database'
@@ -196,7 +196,15 @@ function addInheritanceFilters(
   if (wantsTrio && filter.analysis_group_id != null) {
     const caseParam = addParam(filter.case_id)
     const groupParam = addParam(filter.analysis_group_id)
-    addTrioInheritanceFilters(modes, conditions, schemaName, caseParam, groupParam)
+    addTrioInheritanceFilters(
+      filter,
+      modes,
+      conditions,
+      schemaName,
+      addParam,
+      caseParam,
+      groupParam
+    )
   } else if (wantsTrio) {
     conditions.push('FALSE')
   }
@@ -207,57 +215,41 @@ function addInheritanceFilters(
 }
 
 function addTrioInheritanceFilters(
+  filter: VariantFilter,
   modes: string[],
   conditions: string[],
   schemaName: string,
+  addParam: (value: unknown) => string,
   caseParam: string,
   groupParam: string
 ): void {
-  if (modes.includes('de_novo')) {
-    // A male chrX call written diploid (1/1) is one copy too.
-    conditions.push(`(
-            (v.gt_num IN ${HET_OR_HEMI} OR ${xHemizygousSql('v', `${schemaName}."case_metadata"`, true)})
-            AND v.id NOT IN (
-              SELECT p.id
-              FROM ${schemaName}."variants" p
-              INNER JOIN ${schemaName}."analysis_group_members" agm_f
-                ON agm_f.group_id = ${groupParam}
-               AND agm_f.role = 'father'
-              INNER JOIN ${schemaName}."variants" f
-                ON f.case_id = agm_f.case_id
-               AND f.chr = p.chr
-               AND f.pos = p.pos
-               AND f.ref = p.ref
-               AND f.alt = p.alt
-               AND ${notReferenceGtSql('f.gt_num')}
-              WHERE p.case_id = ${caseParam}
-            )
-            AND v.id NOT IN (
-              SELECT p.id
-              FROM ${schemaName}."variants" p
-              INNER JOIN ${schemaName}."analysis_group_members" agm_m
-                ON agm_m.group_id = ${groupParam}
-               AND agm_m.role = 'mother'
-              INNER JOIN ${schemaName}."variants" m
-                ON m.case_id = agm_m.case_id
-               AND m.chr = p.chr
-               AND m.pos = p.pos
-               AND m.ref = p.ref
-               AND m.alt = p.alt
-               AND ${notReferenceGtSql('m.gt_num')}
-              WHERE p.case_id = ${caseParam}
-            )
-          )`)
-  }
-
   const trio: TrioSqlContext = {
     variants: `${schemaName}."variants"`,
     members: `${schemaName}."analysis_group_members"`,
+    cases: `${schemaName}."cases"`,
+    caseMetadata: `${schemaName}."case_metadata"`,
     caseParam,
     groupParam
+  }
+
+  if (modes.includes('de_novo')) {
+    const thresholds: DeNovoQualityThresholds = {
+      minGq: filter.de_novo_min_gq !== undefined ? addParam(filter.de_novo_min_gq) : undefined,
+      minDp: filter.de_novo_min_dp !== undefined ? addParam(filter.de_novo_min_dp) : undefined,
+      minProbandAb:
+        filter.de_novo_min_ab !== undefined ? addParam(filter.de_novo_min_ab) : undefined,
+      maxParentAb:
+        filter.de_novo_max_parent_ab !== undefined
+          ? addParam(filter.de_novo_max_parent_ab)
+          : undefined
+    }
+    conditions.push(deNovoSql(trio, 'v', thresholds))
   }
   if (modes.includes('autosomal_recessive')) conditions.push(autosomalRecessiveSql(trio, 'v'))
   if (modes.includes('compound_het')) {
     conditions.push(`(v.id IN (${compoundHetPairIdsSql(trio)}))`)
   }
+  if (modes.includes('autosomal_dominant')) conditions.push(autosomalDominantSql(trio, 'v'))
+  if (modes.includes('x_recessive')) conditions.push(xRecessiveSql(trio, 'v'))
+  if (modes.includes('x_dominant')) conditions.push(xDominantSql(trio, 'v'))
 }

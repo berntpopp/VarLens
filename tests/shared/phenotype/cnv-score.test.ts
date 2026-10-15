@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   cnvGeneSet,
   cnvType,
-  dosageWeight,
-  parseInfoDosage,
   regionWeight,
   scoreCnv,
   type CnvCall,
@@ -13,27 +11,11 @@ import {
   type GeneSpan,
   type GeneSpanLookup
 } from '../../../src/shared/phenotype/cnv-score'
-import { sidak, type CaseScores } from '../../../src/shared/phenotype/phenotype-score'
 import type {
   DosageGene,
   DosageRegion,
   LocusReference
 } from '../../../src/shared/types/locus-reference'
-
-// Spec §4.4: G = 5,000 genes; 40 score ≥ 0.62 (TBX6 is the lowest of them); upper-tail rank 349 is 0.41.
-const G = 5000
-const sorted = new Float64Array(G)
-for (let i = 0; i < G; i++) {
-  sorted[i] =
-    i >= 4960
-      ? 0.62 + (i - 4960) * 0.009
-      : i === 4651
-        ? 0.41
-        : i < 4651
-          ? (0.4 * i) / 4651
-          : 0.42 + (0.19 * (i - 4652)) / 308
-}
-const cs = { sorted } as unknown as CaseScores
 
 const span = (symbol: string, start: number, end: number, n: number): GeneSpan => ({
   chr: '16',
@@ -65,8 +47,7 @@ function scorer(scores: Record<string, number> = INDEXED): CnvPhenotypeScorer {
         if (s !== undefined && (best === null || s > best.score)) best = { score: s, disease: id }
       }
       return best
-    },
-    sidak: (s, n) => sidak(cs, s, n)
+    }
   }
 }
 
@@ -99,7 +80,6 @@ function ctx(over: Partial<CnvScoreContext> = {}): CnvScoreContext {
     sex: 'female',
     reference: reference([TBX6_HI3]),
     scorer: scorer(),
-    hetHits: () => 0,
     ...over
   }
 }
@@ -112,31 +92,6 @@ const DEL: CnvCall = {
   cnv_copy_number: 1
 }
 const DUP: CnvCall = { ...DEL, sv_type: 'DUP', cnv_copy_number: 3 }
-const NO_INFO = new Map()
-
-describe('dosage weight (spec §4.1 table)', () => {
-  const d = (hi: number | null, ts: number | null = null) => ({ hi, ts }) as never
-  it.each([
-    ['DEL HI 3', 'del', d(3), true, false, 1],
-    ['DEL HI 2', 'del', d(2), true, false, 1],
-    ['DEL HI unknown', 'del', d(null), true, false, 0.6],
-    ['DEL HI 0', 'del', d(0), true, false, 0.6],
-    ['DEL HI 1', 'del', d(1), true, false, 0.6],
-    ['DEL HI 30', 'del', d(30), true, false, 0.3],
-    ['DEL HI 30, second hit', 'del', d(30), true, true, 1],
-    ['DEL HI 40', 'del', d(40), true, false, 0.1],
-    ['DUP whole, TS 3', 'dup', d(null, 3), true, false, 1],
-    ['DUP whole, TS 2', 'dup', d(null, 2), true, false, 1],
-    ['DUP whole, TS unknown', 'dup', d(3, null), true, false, 0.3],
-    ['DUP whole, TS 1', 'dup', d(null, 1), true, false, 0.3],
-    ['DUP whole, TS 40', 'dup', d(null, 40), true, false, 0.1],
-    ['DUP partial, HI 3', 'dup', d(3, 3), false, false, 0.5],
-    ['DUP partial, HI unknown', 'dup', d(null, 3), false, false, 0.3],
-    ['DUP partial, HI 40', 'dup', d(40), false, false, 0.05]
-  ] as const)('%s', (_, type, dosage, whole, biallelic, w) => {
-    expect(dosageWeight(type, dosage, whole, biallelic)).toBeCloseTo(w, 12)
-  })
-})
 
 describe('region coverage v(cov) (spec §4.2)', () => {
   it.each([
@@ -167,106 +122,90 @@ describe('CNV type', () => {
   })
   it.each(['INV', 'BND', 'INS'])('%s gives null', (sv_type) => {
     expect(cnvType({ ...base, sv_type, cnv_copy_number: 1 }, ctx())).toBeNull()
-    expect(scoreCnv({ ...base, sv_type }, GENES, NO_INFO, ctx())).toBeNull()
+    expect(scoreCnv({ ...base, sv_type }, GENES, ctx())).toBeNull()
   })
 })
 
-describe('gene route', () => {
+describe('gene route (#642: plain best overlapped gene)', () => {
   const one = (symbol: string, n: number): CnvGene[] => [
     { symbol, span: span(symbol, 29_700_000, 29_710_000, n) }
   ]
 
-  it('a single-gene DEL with w = 1 equals the SNV score, for every gene score', () => {
+  it('a single-gene CNV equals the SNV score for every gene score', () => {
     const genes = one('TBX6', 14)
-    for (const s of new Set(sorted)) {
+    for (const s of [0, 0.25, 0.41, 0.62, 0.99]) {
       const r = scoreCnv(
         DEL,
         genes,
-        NO_INFO,
         ctx({ scorer: scorer({ TBX6: s }), reference: reference([TBX6_HI3], []) })
       )
       expect(r?.score).toBe(s)
     }
   })
 
-  it('a whole-gene DUP of an HI 3 / TS-unknown gene ranks below the same DEL', () => {
-    const c = ctx({ reference: reference([TBX6_HI3], []) })
-    const del = scoreCnv(DEL, one('TBX6', 14), NO_INFO, c)!
-    const dup = scoreCnv(DUP, one('TBX6', 14), NO_INFO, c)!
-    expect(del.score).toBe(0.62)
-    expect(dup.score).toBeCloseTo(0.3 * 0.62, 12)
-    expect(dup.score!).toBeLessThan(del.score!)
+  it('picks the highest-scoring overlapped gene and breaks ties by input order', () => {
+    const genes: CnvGene[] = [
+      { symbol: 'A', span: span('A', 100, 200, 1) },
+      { symbol: 'B', span: span('B', 300, 400, 2) }
+    ]
+    const tied = scoreCnv(
+      DEL,
+      genes,
+      ctx({ scorer: scorer({ A: 0.7, B: 0.7 }), reference: reference([], []) })
+    )!
+    expect(tied).toMatchObject({ score: 0.7, bestLocus: 'A', bestDisease: 'OMIM:A', geneCount: 2 })
+    const bWins = scoreCnv(
+      DEL,
+      genes,
+      ctx({ scorer: scorer({ A: 0.7, B: 0.8 }), reference: reference([], []) })
+    )!
+    expect(bWins).toMatchObject({ score: 0.8, bestLocus: 'B', bestDisease: 'OMIM:B', geneCount: 2 })
   })
 
-  it('HI 30: 0.3 without a second hit, 1.0 with CN 0 or another het allele', () => {
-    const ar = reference([{ ...TBX6_HI3, hi: 30 }], [])
-    const genes = one('TBX6', 14)
-    expect(scoreCnv(DEL, genes, NO_INFO, ctx({ reference: ar }))!.score).toBeCloseTo(0.3 * 0.62, 12)
-    expect(
-      scoreCnv({ ...DEL, cnv_copy_number: 0 }, genes, NO_INFO, ctx({ reference: ar }))!.score
-    ).toBe(0.62)
-    expect(scoreCnv(DEL, genes, NO_INFO, ctx({ reference: ar, hetHits: () => 1 }))!.score).toBe(
-      0.62
-    )
-  })
-
-  it('INFO HI/TS (AnnotSV) overrides ClinGen', () => {
-    const info = parseInfoDosage(
-      JSON.stringify({ AnnotSV_HI: 'TBX6:40,OTHER:3', AnnotSV_TS: 'TBX6:3' })
-    )
-    expect(info.get('TBX6')).toEqual({ hi: 40, ts: 3 })
-    const r = scoreCnv(DEL, one('TBX6', 14), info, ctx({ reference: reference([TBX6_HI3], []) }))!
-    expect(r.score).toBeCloseTo(0.1 * 0.62, 12)
-    expect(r.note?.dosage).toBe('HI 40 (AnnotSV)')
-    expect(parseInfoDosage(null).size).toBe(0)
-  })
-
-  it('falls back to ClinGen per field: AnnotSV HI only keeps the ClinGen TS', () => {
-    const info = parseInfoDosage(JSON.stringify({ AnnotSV_HI: 'TBX6:1' }))
-    const ts3 = reference([{ ...TBX6_HI3, ts: 3 }], [])
-    const dup = scoreCnv(DUP, one('TBX6', 14), info, ctx({ reference: ts3 }))!
-    expect(dup.score).toBe(0.62)
-    expect(dup.note?.dosage).toBe('TS 3 (ClinGen 2026-10-14)')
-    const del = scoreCnv(DEL, one('TBX6', 14), info, ctx({ reference: ts3 }))!
-    expect(del.note?.dosage).toBe('HI 1 (AnnotSV)')
-  })
-
-  it('names the ClinGen dosage source and counts protein-coding genes only', () => {
+  it('counts protein-coding genes only and omits dosage from the gene note', () => {
     const genes = [
       ...one('TBX6', 14),
       { symbol: 'LNC1', span: { ...span('LNC1', 1, 2, 99), coding: false } }
     ]
-    const r = scoreCnv(DEL, genes, NO_INFO, ctx({ reference: reference([TBX6_HI3], []) }))!
+    const r = scoreCnv(DEL, genes, ctx({ reference: reference([TBX6_HI3], []) }))!
     expect(r).toMatchObject({ bestLocus: 'TBX6', bestDisease: 'OMIM:TBX6', geneCount: 1 })
-    expect(r.note).toMatchObject({
+    expect(r.note).toEqual({
       kind: 'gene',
-      dosage: 'HI 3 (ClinGen 2026-10-14)',
+      id: 'TBX6',
+      label: 'TBX6',
       diseaseGenes: 1,
       genes: 1
     })
   })
 
-  it('keeps the gene count but nulls the score without HPO data or locus tables', () => {
-    expect(scoreCnv(DEL, GENES, NO_INFO, ctx({ scorer: null }))).toMatchObject({
+  it('fast-paths empty genes and regions, and keeps geneCount without HPO data or locus tables', () => {
+    expect(scoreCnv(DEL, [], ctx({ reference: reference([], []) }))).toEqual({
+      score: null,
+      bestDisease: null,
+      bestLocus: null,
+      geneCount: 0,
+      note: null
+    })
+    expect(scoreCnv(DEL, GENES, ctx({ scorer: null }))).toMatchObject({
       score: null,
       geneCount: 27
     })
-    expect(scoreCnv(DEL, GENES, NO_INFO, ctx({ reference: null }))).toMatchObject({
+    expect(scoreCnv(DEL, GENES, ctx({ reference: null }))).toMatchObject({
       score: null,
       geneCount: 27
     })
   })
 })
 
-describe('16p11.2 worked example (spec §4.4)', () => {
-  it('the gene route is Šidák-corrected: 0.62 → 0.41 over 9 indexed genes', () => {
-    const r = scoreCnv(DEL, GENES, NO_INFO, ctx({ reference: reference([TBX6_HI3], []) }))!
-    expect(r).toMatchObject({ score: 0.41, bestLocus: 'TBX6', geneCount: 27 })
-    expect(r.note).toMatchObject({ diseaseGenes: 9, genes: 27 })
+describe('16p11.2 worked example (spec §4.4, #642)', () => {
+  it('the gene route takes the best overlapped gene over 9 indexed genes', () => {
+    const r = scoreCnv(DEL, GENES, ctx({ reference: reference([TBX6_HI3], []) }))!
+    expect(r).toMatchObject({ score: 0.62, bestLocus: 'TBX6', geneCount: 27 })
+    expect(r.note).toMatchObject({ kind: 'gene', diseaseGenes: 9, genes: 27 })
   })
 
-  it('the region beats the gene', () => {
-    const r = scoreCnv(DEL, GENES, NO_INFO, ctx())!
+  it('the region beats the gene when S_region > S_gene', () => {
+    const r = scoreCnv(DEL, GENES, ctx())!
     expect(r).toMatchObject({
       score: 0.71,
       bestDisease: 'OMIM:611913',
@@ -282,19 +221,18 @@ describe('16p11.2 worked example (spec §4.4)', () => {
     })
   })
 
-  it('the same interval duplicated ranks below the deletion', () => {
-    const del = scoreCnv(DEL, GENES, NO_INFO, ctx())!
-    const dup = scoreCnv(DUP, GENES, NO_INFO, ctx())!
-    // every gene TS unknown → w = 0.3; the gain disease scores 0.1 on a deletion-shaped profile
-    expect(dup.score).toBeCloseTo(0.3 * 0.41, 12)
+  it('the same interval duplicated uses the gene route when gain disease scores lower', () => {
+    const del = scoreCnv(DEL, GENES, ctx())!
+    const dup = scoreCnv(DUP, GENES, ctx())!
+    expect(dup.score).toBe(0.62)
     expect(dup.bestLocus).toBe('TBX6')
     expect(dup.score!).toBeLessThan(del.score!)
   })
 
   it('a region in the other build or below 30 % coverage is ignored', () => {
-    expect(scoreCnv(DEL, GENES, NO_INFO, ctx({ build: 'GRCh37' }))!.bestLocus).toBe('TBX6')
+    expect(scoreCnv(DEL, GENES, ctx({ build: 'GRCh37' }))!.bestLocus).toBe('TBX6')
     const small = { ...DEL, pos: 29_638_676, end_pos: 29_638_676 + 150_000 }
-    expect(scoreCnv(small, GENES, NO_INFO, ctx())!.note?.kind).toBe('gene')
+    expect(scoreCnv(small, GENES, ctx())!.note?.kind).toBe('gene')
   })
 })
 
@@ -328,12 +266,6 @@ describe('gene set: CSQ genes vs interval fallback', () => {
     expect(cnvGeneSet(undefined, lookup, '16', 120, 300)).toEqual(want)
     expect(cnvGeneSet([], lookup, '16', 120, 300)).toEqual(want)
   })
-
-  it('a CSQ gene without a span counts as partially covered (DUP)', () => {
-    const genes: CnvGene[] = [{ symbol: 'TBX6' }]
-    const c = ctx({ reference: reference([], []) })
-    expect(scoreCnv(DUP, genes, NO_INFO, c)!.score).toBeCloseTo(0.5 * 0.6 * 0.62, 12)
-  })
 })
 
 describe('region index', () => {
@@ -342,7 +274,7 @@ describe('region index', () => {
       { ...REGION, iscaId: 'ISCA-0', end: REGION.start },
       { ...REGION, iscaId: 'ISCA-40', hi: 40 as const }
     ]
-    const r = scoreCnv(DEL, GENES, NO_INFO, ctx({ reference: reference([TBX6_HI3], regions) }))!
+    const r = scoreCnv(DEL, GENES, ctx({ reference: reference([TBX6_HI3], regions) }))!
     expect(r.bestLocus).toBe('TBX6')
   })
 })

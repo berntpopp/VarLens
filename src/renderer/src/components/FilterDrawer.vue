@@ -477,12 +477,69 @@
               </v-tooltip>
             </v-chip>
           </div>
+          <div
+            v-if="filters.inheritanceModes.includes('de_novo')"
+            class="de-novo-quality-grid mb-2"
+          >
+            <v-text-field
+              v-model.number="filters.deNovoMinGq"
+              label="Min GQ"
+              placeholder="20"
+              type="number"
+              min="0"
+              step="1"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+            <v-text-field
+              v-model.number="filters.deNovoMinDp"
+              label="Min DP"
+              placeholder="10"
+              type="number"
+              min="0"
+              step="1"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+            <v-text-field
+              v-model.number="filters.deNovoMinAb"
+              label="Min Proband AB"
+              placeholder="0.20"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+            <v-text-field
+              v-model.number="filters.deNovoMaxParentAb"
+              label="Max Parent AB"
+              placeholder="0.02"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+            />
+          </div>
           <v-switch
             v-if="filters.inheritanceModes.some((m: string) => m.includes('compound'))"
             v-model="filters.considerPhasing"
             label="Consider phased variants"
             density="compact"
-            hide-details
+            color="primary"
+            hint="Labels pairs cis/trans from VCF FORMAT PS (case view only)"
+            persistent-hint
             class="mt-1 mb-2"
           />
         </v-expansion-panel-text>
@@ -779,5 +836,11 @@ const inheritanceSummary = computed(() => {
 
 .preset-drawer-section {
   background: color-mix(in srgb, rgb(var(--v-theme-surface)) 95%, rgb(var(--v-theme-primary)));
+}
+
+.de-novo-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 </style>

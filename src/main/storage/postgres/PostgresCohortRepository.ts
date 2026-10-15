@@ -32,6 +32,7 @@ import {
   type PanelIntervalLookup
 } from './postgres-panel-interval-resolver'
 import { assertValidColumnFilterValues } from '../../../shared/filters/column-filter-validation'
+import { infoFieldKey } from '../../../shared/filters/info-field-filter'
 import {
   normalizeCohortColumnFilters,
   COHORT_SUMMARY_FILTER_COLUMNS
@@ -186,12 +187,14 @@ export class PostgresCohortRepository {
     }
     if (summaryResult.data.length > 0) {
       const tagSql = cohortTagIdsSql('postgres', (table) => this.tbl(table))
-      const hits = await this.pool.query(tagSql, [pagePositions(summaryResult.data)])
+      const [hits, scores] = await Promise.all([
+        this.pool.query(tagSql, [pagePositions(summaryResult.data)]),
+        this.pool.query(
+          cohortPhenotypePageSql('postgres', (table) => this.tbl(table)),
+          cohortPhenotypePageParams('postgres', summaryResult.data)
+        )
+      ])
       attachCohortTagIds(summaryResult.data, hits.rows)
-      const scores = await this.pool.query(
-        cohortPhenotypePageSql('postgres', (table) => this.tbl(table)),
-        cohortPhenotypePageParams('postgres', summaryResult.data)
-      )
       attachCohortPhenotype(summaryResult.data, scores.rows)
     }
     return summaryResult
@@ -441,7 +444,7 @@ export class PostgresCohortRepository {
     const columnFilters = normalizeCohortColumnFilters(params.column_filters) ?? {}
 
     const unsupportedColumns = Object.keys(columnFilters).filter(
-      (column) => !SUPPORTED_COLUMN_FILTERS.has(column)
+      (column) => !SUPPORTED_COLUMN_FILTERS.has(column) && infoFieldKey(column) === null
     )
     if (unsupportedColumns.length > 0) {
       throw new Error(

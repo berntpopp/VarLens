@@ -18,12 +18,16 @@ describe('clearFilter', () => {
   // --- Inheritance clearing ---
 
   describe('inheritance', () => {
-    it('returns all three inheritance fields reset to defaults', () => {
+    it('returns all inheritance fields reset to defaults', () => {
       const result = clearFilter('inheritance')
       expect(result).toEqual({
         inheritanceModes: [],
         analysisGroupId: null,
-        considerPhasing: false
+        considerPhasing: false,
+        deNovoMinGq: null,
+        deNovoMinDp: null,
+        deNovoMinAb: null,
+        deNovoMaxParentAb: null
       })
     })
 

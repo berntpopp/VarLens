@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { SOLO_MODES, TRIO_MODES } from '../../types/inheritance'
 import {
   CaseIdSchema,
   ColumnMetaPayloadSchema,
@@ -58,21 +59,15 @@ const VariantFilterOpenApiSchema = z.object({
   active_panel_ids: z.array(z.number().int().positive()).nullable().optional(),
   panel_padding_bp: z.number().int().nonnegative().max(1000000).nullable().optional(),
   inheritance_modes: z
-    .array(
-      z.enum([
-        'homozygous',
-        'heterozygous',
-        'x_hemizygous',
-        'candidate_compound_het',
-        'de_novo',
-        'autosomal_recessive',
-        'compound_het'
-      ])
-    )
+    .array(z.enum([...SOLO_MODES, ...TRIO_MODES] as [string, ...string[]]))
     .nullable()
     .optional(),
   analysis_group_id: z.number().int().positive().nullable().optional(),
   consider_phasing: z.boolean().nullable().optional(),
+  de_novo_min_gq: z.number().nonnegative().nullable().optional(),
+  de_novo_min_dp: z.number().nonnegative().nullable().optional(),
+  de_novo_min_ab: z.number().min(0).max(1).nullable().optional(),
+  de_novo_max_parent_ab: z.number().min(0).max(1).nullable().optional(),
   variant_type: z.enum(['snv', 'indel', 'sv', 'cnv', 'str']).nullable().optional()
 })
 

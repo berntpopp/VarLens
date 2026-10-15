@@ -34,9 +34,9 @@ export function profileHash(terms: readonly HpoProfileTerm[]): string | null {
 /** Stored scores are current: no terms and nothing stored, or the same profile and HPO data. */
 export function isCurrent(profile: CasePhenotypeProfile, dataKey: string | null): boolean {
   const hash = profileHash(profile.terms)
-  return hash === null
-    ? profile.profileHash === null
-    : profile.profileHash === hash && profile.dataKey === dataKey
+  if (hash === null) return profile.profileHash === null
+  if (dataKey === null) return profile.profileHash === null || profile.dataKey === null
+  return profile.profileHash === hash && profile.dataKey === dataKey
 }
 
 interface TermRow {

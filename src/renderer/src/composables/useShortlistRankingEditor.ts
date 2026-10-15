@@ -178,6 +178,7 @@ export function useShortlistRankingEditor() {
     if (legacy.baseFilters.maxGnomadAf != null) gate.maxGnomadAf = legacy.baseFilters.maxGnomadAf
     if ((legacy.baseFilters.consequences?.length ?? 0) > 0)
       gate.consequences = [...(legacy.baseFilters.consequences ?? [])]
+    if (legacy.baseFilters.considerPhasing === true) gate.considerPhasing = true
     const config = evidenceShortlistConfig(VARVIS_EVIDENCE_TEMPLATE, {
       baseFilters: gate,
       pinStarredTop: legacy.rankConfig.pinStarredTop
