@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { Pool, PoolClient } from 'pg'
+import { EventEmitter } from 'node:events'
+import pg, { type Pool, type PoolClient } from 'pg'
 import {
   wrapPoolForCounters,
   getCounters,
@@ -64,5 +65,33 @@ describe('wrapPoolForCounters — Sprint A PR-2 B3', () => {
     const c = getCounters()
     expect(c.unnamed).toBe(0)
     expect(Object.keys(c.named).length).toBe(0)
+  })
+})
+
+describe('wrapPoolForCounters — shutdown with a client checked out', () => {
+  /** In-memory stand-in for pg.Client: connects and ends at once. */
+  class FakeClient extends EventEmitter {
+    _queryable = true
+    _ending = false
+    connect(cb: (err?: Error) => void): void {
+      setImmediate(() => cb())
+    }
+    end(cb?: () => void): void {
+      this._ending = true
+      setImmediate(() => cb?.())
+    }
+  }
+
+  it('end() resolves once a client checked out before it is released', async () => {
+    const real = new pg.Pool({ Client: FakeClient as unknown as typeof pg.Client })
+    const wrapped = wrapPoolForCounters(real)
+    const client = await wrapped.connect()
+    const ended = wrapped.end()
+    client.release()
+    const outcome = await Promise.race([
+      ended.then(() => 'ended'),
+      new Promise((resolve) => setTimeout(() => resolve('hung'), 1000))
+    ])
+    expect(outcome).toBe('ended')
   })
 })
