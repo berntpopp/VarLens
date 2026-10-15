@@ -37,21 +37,35 @@ function increment(arg: unknown): void {
  * after migrations avoids polluting counters with one-off DDL traffic.
  */
 export function wrapPoolForCounters(pool: Pool): Pool {
-  const proxiedPool: Pool = Object.create(pool)
-  proxiedPool.query = ((arg: unknown, values?: unknown) => {
+  const query = ((arg: unknown, values?: unknown) => {
     increment(arg)
     return (pool.query as (...a: unknown[]) => Promise<unknown>)(arg, values)
   }) as Pool['query']
 
-  proxiedPool.connect = (async (...args: unknown[]) => {
+  const connect = (async (...args: unknown[]) => {
     const client = await (pool.connect as (...a: unknown[]) => Promise<PoolClient>)(...args)
-    const proxiedClient: PoolClient = Object.create(client)
-    proxiedClient.query = ((arg: unknown, vs?: unknown) => {
+    const clientQuery = ((arg: unknown, vs?: unknown) => {
       increment(arg)
       return (client.query as (...a: unknown[]) => Promise<unknown>)(arg, vs)
     }) as PoolClient['query']
-    return proxiedClient
+    return delegate(client, { query: clientQuery })
   }) as Pool['connect']
 
-  return proxiedPool
+  return delegate(pool, { query, connect })
+}
+
+/**
+ * `target` with `overrides`. Every other member runs on `target` itself: a
+ * wrapper built with Object.create would let pg-pool keep its state (`ending`,
+ * `_clients`) on the wrapper, so `end()` never saw a client released after it
+ * and hung forever.
+ */
+function delegate<T extends object>(target: T, overrides: Partial<T>): T {
+  return new Proxy(target, {
+    get(t, prop) {
+      if (Object.prototype.hasOwnProperty.call(overrides, prop)) return overrides[prop as keyof T]
+      const value: unknown = Reflect.get(t, prop, t)
+      return typeof value === 'function' ? value.bind(t) : value
+    }
+  })
 }
