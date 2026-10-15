@@ -8,7 +8,11 @@ import { updateHpoData } from '../../services/phenotype/hpo-data-update'
 import { resolveHpoDbPath } from '../../services/phenotype/hpo-similarity-db'
 import { getDatabaseManager } from '../../database'
 import { tryResolveGeneRefDbPath } from '../../database/geneReferenceLoader'
-import { getHpoDataStatus, HpoExplainGeneArgsSchema } from '../handlers/hpo-data-logic'
+import {
+  explainHpoGene,
+  getHpoDataStatus,
+  HpoExplainGeneArgsSchema
+} from '../handlers/hpo-data-logic'
 import { mainLogger } from '../../services/MainLogger'
 import { wrapHandler } from '../errorHandler'
 
@@ -19,10 +23,10 @@ export function registerHpoDataDomain(ipcMain: IpcMain): void {
 
   ipcMain.handle(HPO_DATA_CHANNELS.explainGene, async (_event, ...args: unknown[]) =>
     wrapHandler(async () =>
-      getDatabaseManager()
-        .getCurrentSession()
-        .getReadExecutor()
-        .execute({ type: 'hpo:explainGene', params: HpoExplainGeneArgsSchema.parse(args) })
+      explainHpoGene(
+        getDatabaseManager().getCurrentSession(),
+        ...HpoExplainGeneArgsSchema.parse(args)
+      )
     )
   )
 

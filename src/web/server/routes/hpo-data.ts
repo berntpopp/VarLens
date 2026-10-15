@@ -1,4 +1,5 @@
 import {
+  explainHpoGene,
   getHpoDataStatus,
   HpoExplainGeneArgsSchema
 } from '../../../main/ipc/handlers/hpo-data-logic'
@@ -23,9 +24,7 @@ export function buildHpoDataOverrides(): Record<string, OverrideHandler> {
           reply.code(400)
           return { error: 'invalid-params', message: 'Expected a case id and a gene symbol' }
         }
-        return await session
-          .getReadExecutor()
-          .execute({ type: 'hpo:explainGene', params: parsed.data })
+        return await explainHpoGene(session, ...parsed.data)
       }
     }
   }
