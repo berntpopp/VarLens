@@ -21,7 +21,7 @@
 
 import { computed } from 'vue'
 import type { RankComponents } from '../../../../shared/types/shortlist'
-import type { CompHetPhase } from '../../../../shared/utils/phasing'
+import { COMPHET_PHASE_LABELS, type CompHetPhase } from '../../../../shared/utils/phasing'
 import type { EvidenceContribution } from '../../../../shared/types/evidence-ruleset'
 import type { HpoExplanation } from '../../../../shared/types/hpo-profile'
 import { formatPoints, formatRankScore } from '../../utils/formatters'
@@ -65,12 +65,6 @@ const scoreLine = computed(() =>
 )
 
 const partnerCount = computed(() => props.partners?.length ?? 0)
-
-const COMPHET_PHASE_LABELS: Record<CompHetPhase, string> = {
-  trans: 'Confirmed compound heterozygous, in trans by phase set',
-  cis: 'In cis by phase set (same haplotype), not compound heterozygous',
-  possible: 'Possible compound heterozygous'
-}
 const compHetLabel = computed(() => COMPHET_PHASE_LABELS[props.phase ?? 'possible'])
 
 function pinLabel(): string {

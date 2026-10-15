@@ -61,7 +61,7 @@ export function buildBaseWhere(
 ): BuildBaseWhereResult {
   // Same value/column-type check as every other builder on both backends (#447).
   assertValidColumnFilterValues(filters.column_filters)
-  assertNoInfoFieldFilters(filters.column_filters) // no builder here evaluates info.* (#538)
+  assertNoInfoFieldFilters(filters.column_filters) // info.* is translated by per-scope helpers (#538, #639)
   const conditions: string[] = []
   const params: (string | number)[] = []
   const { baseAlias, scope } = ctx

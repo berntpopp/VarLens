@@ -52,11 +52,11 @@ export function latency(
   const cnvs = shuffle(pool, rng(diseaseSeed('latency', seed))).slice(0, LATENCY_CNVS)
   const run = (terms: HpoProfileTerm[]): number => {
     const scorer = openHpoGeneScorer(terms, HPO_DB_V6)
-    const ctx = { build: 'GRCh38', sex: null, reference, scorer, hetHits: () => 0 }
+    const ctx = { build: 'GRCh38', sex: null, reference, scorer }
     const t0 = performance.now()
     for (const c of cnvs) {
       const call = { chr: c.chr, pos: c.start, end_pos: c.end, sv_type: c.type.toUpperCase() }
-      scoreCnv(call, cnvGeneSet(undefined, lookup, c.chr, c.start, c.end), new Map(), ctx)
+      scoreCnv(call, cnvGeneSet(undefined, lookup, c.chr, c.start, c.end), ctx)
     }
     return performance.now() - t0
   }

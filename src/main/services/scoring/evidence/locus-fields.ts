@@ -8,7 +8,6 @@ import { HPO_LOCUS_SCORING_CONFIG } from '../../../../shared/config/hpo-locus-sc
 import {
   cnvEnd,
   cnvGeneSet,
-  parseInfoDosage,
   scoreCnv,
   type GeneSpanLookup
 } from '../../../../shared/phenotype/cnv-score'
@@ -86,7 +85,7 @@ function diseaseConflicts(info: CaseInfo, disease: string | null): number | null
 
 /**
  * The locus fields of one CNV or STR row. `otherHetHits(gene)` counts the het
- * alleles of the gene other than the row itself (the CNV/STR second hit).
+ * alleles of the gene other than the row itself (the STR second hit).
  */
 export function scoreLocusRow(
   row: LightRow,
@@ -113,12 +112,11 @@ export function scoreLocusRow(
   }
   const genes = inputs?.genes ?? NO_GENES
   const set = cnvGeneSet(inputs?.cnvGenes.get(row.id), genes, row.chr, row.pos, cnvEnd(row))
-  const c = scoreCnv(row, set, parseInfoDosage(row.info_json), {
+  const c = scoreCnv(row, set, {
     build: info.build,
     sex: info.sex,
     reference,
-    scorer: info.hpo ?? null,
-    hetHits: otherHetHits
+    scorer: info.hpo ?? null
   })
   if (c === null) return NONE
   const fields: LocusFields = {

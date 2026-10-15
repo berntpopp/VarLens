@@ -70,6 +70,11 @@ export interface FilterState {
   analysisGroupId: number | null
   /** Consider phasing information for compound het */
   considerPhasing: boolean
+  /** Optional de novo quality thresholds (#626) */
+  deNovoMinGq?: number | null
+  deNovoMinDp?: number | null
+  deNovoMinAb?: number | null
+  deNovoMaxParentAb?: number | null
   /** Column filters for extension tables and base columns via flexible map */
   columnFilters: ColumnFiltersParam
   /**
@@ -102,5 +107,9 @@ export interface FilterIpcParams {
   inheritance_modes?: string[]
   analysis_group_id?: number
   consider_phasing?: boolean
+  de_novo_min_gq?: number
+  de_novo_min_dp?: number
+  de_novo_min_ab?: number
+  de_novo_max_parent_ab?: number
   column_filters?: ColumnFiltersParam
 }

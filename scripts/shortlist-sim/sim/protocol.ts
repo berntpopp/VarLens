@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { compileRuleset } from '../../../src/main/services/scoring/evidence'
 import type { EvidenceRuleset } from '../../../src/shared/types/evidence-ruleset'
+import { fitLogisticPoints } from '../stats/logistic'
 import { tuneRuleset, type TuneInput, type TuneResult } from '../stats/tune'
 import type { BackgroundInfo } from './background-db'
 import type { TemplateId, TunedByTemplate } from './templates'
@@ -48,6 +49,29 @@ export function tuneFolds(
   const refit = tuneRuleset(opts.template, input, () => true, disabledGroups, {
     id: opts.id,
     bootstrap: { reps: opts.reps, seed: opts.seed }
+  })
+  return { perFold, refit }
+}
+
+/** One ruleset per test fold and the all-fold refit via L2-regularized joint logistic regression (#640). */
+export function tuneLogisticFolds(
+  input: TuneInput,
+  folds: Map<string, number>,
+  k: number,
+  disabledGroups: string[],
+  opts: { template: EvidenceRuleset; id: string; lambda?: number }
+): FoldTuning {
+  const perFold = Array.from(
+    { length: k },
+    (_, f) =>
+      fitLogisticPoints(opts.template, input, (g) => folds.get(g) !== f, disabledGroups, {
+        id: `${opts.id}-fold${f}`,
+        lambda: opts.lambda
+      }).ruleset
+  )
+  const refit = fitLogisticPoints(opts.template, input, () => true, disabledGroups, {
+    id: opts.id,
+    lambda: opts.lambda
   })
   return { perFold, refit }
 }

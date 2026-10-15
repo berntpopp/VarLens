@@ -86,7 +86,7 @@ describe('compileRuleset', () => {
         ...base,
         modes: [...base.modes, { id: 'ad', label: 'ad', when: 'zygosity:=:het', points: 0 }]
       }, // fallback not last
-      { ...base, groups: [group([rule('a', 21)])] }, // |points| > 20
+      { ...base, groups: [group([rule('a', 25)])] }, // |points| > 24
       { ...base, groups: [group([rule('a', 1.25)])] }, // not a 0.5 step
       { ...base, groups: [group([rule('a', 1)], 'ad')] }, // scope names an absent mode
       { ...base, groups: [group([rule('a', 1, 'qual:>:30 AND @preset')])] }

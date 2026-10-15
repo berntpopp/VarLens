@@ -114,7 +114,7 @@
       <div
         v-if="filters.bedPath !== undefined && filters.bedPath !== ''"
         class="text-body-2 flex-grow-1 text-truncate"
-        :title="filters.bedPath"
+        :title="fileTitle(filters.bedPath)"
       >
         {{ fileName(filters.bedPath) }}
       </div>
@@ -228,6 +228,10 @@ function fileName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
   const idx = normalized.lastIndexOf('/')
   return idx === -1 ? normalized : normalized.slice(idx + 1)
+}
+
+function fileTitle(filePath: string): string {
+  return /^(?:\/|\\|[A-Za-z]:[\\/])/.test(filePath) ? filePath : fileName(filePath)
 }
 
 async function browseBed(): Promise<void> {

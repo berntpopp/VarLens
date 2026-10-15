@@ -132,12 +132,21 @@ html::-webkit-scrollbar-thumb {
 .v-btn:focus-visible {
   outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
   outline-offset: 2px !important;
-  box-shadow: 0 0 0 4px color-mix(in srgb, rgb(var(--v-theme-primary)) 20%, transparent) !important;
+  box-shadow: 0 0 0 4px
+    color-mix(in srgb, var(--vl-focus, rgb(var(--v-theme-primary))) 20%, transparent) !important;
 }
 
-/* Focus ring for text inputs */
+/* Focus ring for text inputs: .v-field--focused provides the notched outline
+   and outer box-shadow ring, so suppress the inner input's duplicate outline
+   that would slice through the floating label. */
 .v-field--focused {
   box-shadow: 0 0 0 3px color-mix(in srgb, rgb(var(--v-theme-primary)) 15%, transparent) !important;
+}
+
+.v-field--variant-outlined .v-field__input:focus-visible,
+.v-field--variant-outlined input:focus-visible,
+.v-field--variant-outlined textarea:focus-visible {
+  outline: none !important;
 }
 
 /* Focus ring for chips */
@@ -146,10 +155,19 @@ html::-webkit-scrollbar-thumb {
   outline-offset: 1px !important;
 }
 
+/* Inset focus ring for elements inside overflow: hidden/auto containers */
+.v-btn-group .v-btn:focus-visible,
+.v-slide-group .v-btn:focus-visible,
+.v-list-item:focus-visible,
+.v-expansion-panel-title:focus-visible {
+  outline-offset: -2px !important;
+  box-shadow: none !important;
+}
+
 /* Focus ring for table rows (keyboard navigation) */
 .v-data-table tbody tr:focus-visible {
   outline: 2px solid var(--vl-focus, rgb(var(--v-theme-primary))) !important;
-  outline-offset: 2px !important;
+  outline-offset: -2px !important;
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 8%, transparent) !important;
 }
 

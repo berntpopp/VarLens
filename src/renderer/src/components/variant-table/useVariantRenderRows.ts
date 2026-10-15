@@ -34,6 +34,8 @@ export function buildVariantRenderRows(
     const cached = cache.get(key)
 
     if (cached) {
+      cached.comphet_phase = undefined
+      cached.family_calls = undefined
       Object.assign(cached, variant)
       cached.render = render
       nextCache.set(key, cached)

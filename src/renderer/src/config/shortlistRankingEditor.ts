@@ -48,6 +48,8 @@ export const SHORTLIST_RANKING_EDITOR = {
     impacts: 'Impact',
     variantTypes: 'Types',
     topN: 'Show top',
+    considerPhasing: 'Consider phased variants',
+    considerPhasingHint: 'Labels compound-het pairs cis or trans when VCF FORMAT PS is present.',
     label: 'Label',
     condition: 'Condition',
     points: 'Points',

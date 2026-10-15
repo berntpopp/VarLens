@@ -69,6 +69,10 @@ export function toShortlistVariantFilter(
     inheritance_modes: filters.inheritanceModes,
     analysis_group_id: filters.analysisGroupId ?? undefined,
     consider_phasing: filters.considerPhasing,
+    de_novo_min_gq: filters.deNovoMinGq ?? undefined,
+    de_novo_min_dp: filters.deNovoMinDp ?? undefined,
+    de_novo_min_ab: filters.deNovoMinAb ?? undefined,
+    de_novo_max_parent_ab: filters.deNovoMaxParentAb ?? undefined,
     column_filters: filters.columnFilters
   }
 }

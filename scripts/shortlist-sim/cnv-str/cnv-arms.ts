@@ -1,11 +1,11 @@
 /**
- * Ablation arms of the CNV benchmark (spec §7.1): A0 naive max-gene, A1 + dosage weights,
- * A2 + Šidák (the shipped gene route), A3 the shipped `scoreCnv`, and the SvAnna-style sum.
- * Gene sets come from the interval fallback; sex and copy number are unknown; no second hits.
+ * Ablation arms of the CNV benchmark (spec §7.1, #642): A0 plain max-gene (the shipped gene
+ * route), `region` the ClinGen region route alone, A3 the shipped `scoreCnv = max(S_gene, S_region)`,
+ * and the SvAnna-style additive sum. Gene sets come from the interval fallback; sex and copy
+ * number are unknown.
  */
 import {
   cnvGeneSet,
-  dosageWeight,
   scoreCnv,
   type CnvGene,
   type CnvPhenotypeScorer,
@@ -14,7 +14,7 @@ import {
 } from '../../../src/shared/phenotype/cnv-score'
 import type { LocusReference } from '../../../src/shared/types/locus-reference'
 
-export const CNV_ARMS = ['A0', 'A1', 'A2', 'A3', 'sum'] as const
+export const CNV_ARMS = ['A0', 'region', 'A3', 'sum'] as const
 export type CnvArm = (typeof CNV_ARMS)[number]
 
 export interface CnvInterval {
@@ -24,17 +24,16 @@ export interface CnvInterval {
   type: CnvType
 }
 
-/** Profile-independent part of one CNV: its genes and their dosage weights. */
+/** Profile-independent part of one CNV: its call and overlapped genes. */
 export interface PreparedCnv {
   call: { chr: string; pos: number; end_pos: number; sv_type: string }
   genes: CnvGene[]
-  weights: number[]
 }
 
 export interface ArmEnv {
   build: string
   reference: LocusReference
-  /** The same reference without regions: A2 is `scoreCnv`'s gene route alone. */
+  /** The same reference without regions: A0 is `scoreCnv`'s gene route alone. */
   noRegions: LocusReference
 }
 
@@ -42,48 +41,31 @@ export function armEnv(build: string, reference: LocusReference): ArmEnv {
   return { build, reference, noRegions: { ...reference, dosageRegions: [] } }
 }
 
-export function prepareCnv(
-  c: CnvInterval,
-  lookup: GeneSpanLookup,
-  ref: LocusReference
-): PreparedCnv {
+export function prepareCnv(c: CnvInterval, lookup: GeneSpanLookup): PreparedCnv {
   const genes = cnvGeneSet(undefined, lookup, c.chr, c.start, c.end)
-  const weights = genes.map((g) => {
-    const curated = g.span && ref.dosageGenes.get(g.span.hgncId)
-    const whole = g.span !== undefined && c.start <= g.span.start && g.span.end <= c.end
-    return dosageWeight(c.type, curated ?? { hi: null, ts: null }, whole, false)
-  })
   const call = { chr: c.chr, pos: c.start, end_pos: c.end, sv_type: c.type.toUpperCase() }
-  return { call, genes, weights }
+  return { call, genes }
 }
 
-const NO_INFO = new Map()
-const noHits = (): number => 0
-
-/** Every arm's score (null: no indexed gene and no region) and n_c (indexed genes with w > 0). */
+/** Every arm's score (null: no indexed gene and no region) and n_c (indexed HPO genes). */
 export function scoreArms(
   p: PreparedCnv,
   scorer: CnvPhenotypeScorer,
   env: ArmEnv
 ): { scores: Record<CnvArm, number | null>; n: number } {
-  let a0: number | null = null
-  let a1: number | null = null
   let sum: number | null = null
   let n = 0
-  p.genes.forEach((g, i) => {
+  for (const g of p.genes) {
     const s = scorer.score(g.symbol)
-    if (s === null) return
-    a0 = Math.max(a0 ?? s, s)
-    const w = p.weights[i]
-    if (w <= 0) return
+    if (s === null) continue
     n++
-    a1 = Math.max(a1 ?? w * s, w * s)
-    sum = (sum ?? 0) + w * Math.exp(s)
-  })
-  const ctx = { build: env.build, sex: null, scorer, hetHits: noHits }
-  const a2 = scoreCnv(p.call, p.genes, NO_INFO, { ...ctx, reference: env.noRegions })?.score ?? null
-  const a3 = scoreCnv(p.call, p.genes, NO_INFO, { ...ctx, reference: env.reference })?.score ?? null
-  return { scores: { A0: a0, A1: a1, A2: a2, A3: a3, sum }, n }
+    sum = (sum ?? 0) + Math.exp(s)
+  }
+  const ctx = { build: env.build, sex: null, scorer }
+  const a0 = scoreCnv(p.call, p.genes, { ...ctx, reference: env.noRegions })?.score ?? null
+  const region = scoreCnv(p.call, [], { ...ctx, reference: env.reference })?.score ?? null
+  const a3 = scoreCnv(p.call, p.genes, { ...ctx, reference: env.reference })?.score ?? null
+  return { scores: { A0: a0, region, A3: a3, sum }, n }
 }
 
 /** Causal standing among background scores: nulls rank below every score and tie each other. */

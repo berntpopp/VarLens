@@ -41,4 +41,43 @@ describe('searchHpoTerms', () => {
     expect(searchHpoTerms(TERMS, '  ')).toEqual([])
     expect(searchHpoTerms(TERMS, 'seizure', 0)).toEqual([])
   })
+
+  it('matches synonyms across exact, prefix, and substring tiers and attaches matchedSynonym', () => {
+    const terms = [
+      {
+        id: 'HP:0000365',
+        name: 'Hearing impairment',
+        synonyms: ['Deafness', 'Hearing loss', 'Hypoacusis']
+      },
+      {
+        id: 'HP:0000407',
+        name: 'Sensorineural hearing impairment',
+        synonyms: ['Sensorineural hearing loss']
+      },
+      {
+        id: 'HP:0008619',
+        name: 'Bilateral sensorineural hearing impairment'
+      }
+    ]
+    const hits = searchHpoTerms(terms, 'hearing loss')
+    expect(hits).toEqual([
+      { id: 'HP:0000365', name: 'Hearing impairment', matchedSynonym: 'Hearing loss' },
+      {
+        id: 'HP:0000407',
+        name: 'Sensorineural hearing impairment',
+        matchedSynonym: 'Sensorineural hearing loss'
+      }
+    ])
+    // Primary label match does not attach matchedSynonym when label tier wins over synonym tier.
+    expect(searchHpoTerms(terms, 'hearing impairment')[0]).toEqual({
+      id: 'HP:0000365',
+      name: 'Hearing impairment'
+    })
+    // Synonym prefix (tier 5) ranks ahead of primary label substring (tier 6).
+    expect(searchHpoTerms(terms, 'deaf')[0]).toEqual({
+      id: 'HP:0000365',
+      name: 'Hearing impairment',
+      matchedSynonym: 'Deafness'
+    })
+  })
 })

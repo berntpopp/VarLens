@@ -55,57 +55,38 @@ const S: Record<string, number> = { A: 0.5, B: 0.8, C: 0.2 }
 const scorer: CnvPhenotypeScorer = {
   score: (g) => S[g] ?? null,
   bestDisease: (g) => (g in S ? `OMIM:${g}` : null),
-  scoreDiseases: (ids) => (ids.includes('OMIM:9') ? { score: 0.9, disease: 'OMIM:9' } : null),
-  sidak: (s, n) => s / n // fixture only: monotone in n
+  scoreDiseases: (ids) => (ids.includes('OMIM:9') ? { score: 0.9, disease: 'OMIM:9' } : null)
 }
 const env = armEnv('GRCh38', reference)
 const del = (start: number, end: number) => ({ chr: '1', start, end, type: 'del' as const })
 
 describe('CNV arms', () => {
   it('A0 is the naive max over the indexed genes', () => {
-    const { scores, n } = scoreArms(prepareCnv(del(50, 650), lookup, reference), scorer, env)
+    const { scores, n } = scoreArms(prepareCnv(del(50, 650), lookup), scorer, env)
     expect(scores.A0).toBe(0.8)
     expect(n).toBe(3)
   })
 
-  it('A1 weights, A2 adds Šidák, A3 adds regions, sum is Σ w·e^S', () => {
-    const { scores } = scoreArms(prepareCnv(del(50, 650), lookup, reference), scorer, env)
-    // A: HI 3 → w 1; B, C: unknown → 0.6.
-    expect(scores.A1).toBeCloseTo(Math.max(0.5, 0.6 * 0.8, 0.6 * 0.2))
-    expect(scores.A2).toBeCloseTo(1 * (0.5 / 3))
-    expect(scores.A3).toBeCloseTo(scores.A2!)
-    expect(scores.sum).toBeCloseTo(Math.exp(0.5) + 0.6 * Math.exp(0.8) + 0.6 * Math.exp(0.2))
-    const region = scoreArms(prepareCnv(del(900, 2100), lookup, reference), scorer, env).scores
-    expect(region.A2).toBeNull()
+  it('region scores ClinGen regions only, A3 is max(A0, region), sum is Σ e^S', () => {
+    const { scores } = scoreArms(prepareCnv(del(50, 650), lookup), scorer, env)
+    expect(scores.region).toBeNull()
+    expect(scores.A3).toBeCloseTo(scores.A0!)
+    expect(scores.sum).toBeCloseTo(Math.exp(0.5) + Math.exp(0.8) + Math.exp(0.2))
+    const region = scoreArms(prepareCnv(del(900, 2100), lookup), scorer, env).scores
+    expect(region.A0).toBeNull()
+    expect(region.region).toBeCloseTo(0.9)
     expect(region.A3).toBeCloseTo(0.9)
   })
 
-  it('ranks three fixture cases: the region case wins only in A3', () => {
-    const bg = [{ sample: 's', large: false, cnvs: [prepareCnv(del(250, 450), lookup, reference)] }]
-    const regionCase = rankProfile(
-      [prepareCnv(del(900, 2100), lookup, reference)],
-      bg,
-      scorer,
-      env,
-      false
-    )
+  it('ranks three fixture cases: the region case wins in A3 and region, not A0', () => {
+    const bg = [{ sample: 's', large: false, cnvs: [prepareCnv(del(250, 450), lookup)] }]
+    const regionCase = rankProfile([prepareCnv(del(900, 2100), lookup)], bg, scorer, env, false)
     expect(regionCase[0].standing.A3).toEqual({ higher: 0, equal: 0 })
-    expect(regionCase[0].standing.A2).toEqual({ higher: 1, equal: 0 })
-    const geneCase = rankProfile(
-      [prepareCnv(del(50, 250), lookup, reference)],
-      bg,
-      scorer,
-      env,
-      false
-    )
+    expect(regionCase[0].standing.region).toEqual({ higher: 0, equal: 0 })
+    expect(regionCase[0].standing.A0).toEqual({ higher: 1, equal: 0 })
+    const geneCase = rankProfile([prepareCnv(del(50, 250), lookup)], bg, scorer, env, false)
     expect(geneCase[0].standing.A0).toEqual({ higher: 1, equal: 0 }) // B 0.8 beats A 0.5
-    const empty = rankProfile(
-      [prepareCnv(del(5000, 6000), lookup, reference)],
-      bg,
-      null,
-      env,
-      false
-    )
+    const empty = rankProfile([prepareCnv(del(5000, 6000), lookup)], bg, null, env, false)
     expect(empty[0].standing.A3).toEqual({ higher: 0, equal: 1 }) // no scorer: all null, tied
   })
 

@@ -25,7 +25,11 @@
         <template #item="{ props: itemProps, item }">
           <v-list-item v-bind="itemProps">
             <template #append>
-              <kbd class="text-caption text-medium-emphasis ms-4">{{ item.key }}</kbd>
+              <kbd
+                v-if="item.key"
+                class="command-palette-key text-caption text-medium-emphasis ms-4"
+                >{{ item.key }}</kbd
+              >
             </template>
           </v-list-item>
         </template>
@@ -37,7 +41,7 @@
 <script setup lang="ts">
 /**
  * Ctrl/Cmd+K command palette: every listed shortcut that has a wired action,
- * shown with its key. Same list as KeyboardShortcutsDialog, same actions as the bindings.
+ * shown with its key, plus dynamic shell commands (view switch, presets, cases, preferences, theme).
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { mdiMagnify } from '@mdi/js'
@@ -48,7 +52,17 @@ import {
   type ShortcutId
 } from '../config/keyboardShortcuts'
 
-const props = defineProps<{ actions: ShortcutActions }>()
+export interface PaletteExtraCommand {
+  id: string
+  description: string
+  key?: string
+  action: () => void
+}
+
+const props = defineProps<{
+  actions: ShortcutActions
+  extraCommands?: ReadonlyArray<PaletteExtraCommand>
+}>()
 const model = defineModel<boolean>({ default: false })
 const menuOpen = ref(false)
 // Named, focusable listbox: axe flags an unnamed list and a scrollable region keyboards cannot
@@ -60,14 +74,19 @@ const LIST_PROPS: Record<string, unknown> = { 'aria-label': 'Commands', tabindex
 const inputRef = ref<{ focus: () => void } | null>(null)
 
 const ids = Object.keys(SHORTCUTS) as ShortcutId[]
-const entries = computed(() =>
-  SHORTCUT_GROUPS.flatMap((group) => group.shortcuts).flatMap((shortcut) => {
+const entries = computed(() => [
+  ...SHORTCUT_GROUPS.flatMap((group) => group.shortcuts).flatMap((shortcut) => {
     const id = ids.find((candidate) => SHORTCUTS[candidate] === shortcut)
     return id !== undefined && id !== 'palette' && props.actions[id] !== undefined
       ? [{ id, ...shortcut }]
       : []
-  })
-)
+  }),
+  ...(props.extraCommands ?? []).map((cmd) => ({
+    id: cmd.id,
+    description: cmd.description,
+    key: cmd.key ?? ''
+  }))
+])
 
 // The dialog has no activator, so return focus to where the user was by hand.
 let returnFocusTo: HTMLElement | null = null
@@ -86,11 +105,16 @@ watch(
   { immediate: true }
 )
 
-async function run(id: ShortcutId | null): Promise<void> {
+async function run(id: string | null): Promise<void> {
   if (id === null) return
   model.value = false
   // After focus returned, so actions that move focus (search) keep it.
   await nextTick()
-  props.actions[id]?.()
+  const shortcutAction = props.actions[id as ShortcutId]
+  if (shortcutAction !== undefined) {
+    shortcutAction()
+    return
+  }
+  props.extraCommands?.find((cmd) => cmd.id === id)?.action()
 }
 </script>

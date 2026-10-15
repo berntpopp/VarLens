@@ -82,7 +82,11 @@ export function clearFilter(filterId: FilterId): Partial<FilterState> {
       return {
         inheritanceModes: [...FILTER_DEFAULTS.inheritanceModes],
         analysisGroupId: FILTER_DEFAULTS.analysisGroupId,
-        considerPhasing: FILTER_DEFAULTS.considerPhasing
+        considerPhasing: FILTER_DEFAULTS.considerPhasing,
+        deNovoMinGq: FILTER_DEFAULTS.deNovoMinGq,
+        deNovoMinDp: FILTER_DEFAULTS.deNovoMinDp,
+        deNovoMinAb: FILTER_DEFAULTS.deNovoMinAb,
+        deNovoMaxParentAb: FILTER_DEFAULTS.deNovoMaxParentAb
       }
     default:
       return {}
@@ -123,6 +127,10 @@ export function clearAllFilters(): FilterState {
     inheritanceModes: [...FILTER_DEFAULTS.inheritanceModes],
     analysisGroupId: FILTER_DEFAULTS.analysisGroupId,
     considerPhasing: FILTER_DEFAULTS.considerPhasing,
+    deNovoMinGq: FILTER_DEFAULTS.deNovoMinGq,
+    deNovoMinDp: FILTER_DEFAULTS.deNovoMinDp,
+    deNovoMinAb: FILTER_DEFAULTS.deNovoMinAb,
+    deNovoMaxParentAb: FILTER_DEFAULTS.deNovoMaxParentAb,
     columnFilters: { ...FILTER_DEFAULTS.columnFilters }
   }
 }

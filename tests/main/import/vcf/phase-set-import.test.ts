@@ -72,6 +72,62 @@ describe('VCF phase set import (#586)', () => {
       service.close()
     }
   })
+
+  it('attaches comphet_phase on case page reads when consider_phasing is true (#630)', async () => {
+    const { service, caseId } = await importSqlite()
+    try {
+      const page = service.variants.getVariants(
+        {
+          case_id: caseId,
+          inheritance_modes: ['candidate_compound_het'],
+          consider_phasing: true
+        },
+        50,
+        0
+      )
+      const byGene = Object.fromEntries(page.data.map((r) => [r.gene_symbol, r.comphet_phase]))
+      expect(byGene).toEqual({
+        GENEA: 'trans',
+        GENEB: 'trans',
+        GENEC: 'possible'
+      })
+      expect(page.data.map((r) => `${r.gene_symbol}:${r.comphet_phase}`)).toEqual([
+        'GENEA:trans',
+        'GENEA:trans',
+        'GENEB:trans',
+        'GENEB:trans',
+        'GENEC:possible',
+        'GENEC:possible'
+      ])
+
+      // Regression: a filtered-out common variant in trans must not flip a cis pair to trans on paginated reads
+      service.database
+        .prepare(
+          `INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol, gt_num, ps, gnomad_af)
+           VALUES (?, 'chr1', 1500, 'A', 'G', 'GENEA', '0|1', 1000, 0.001)`
+        )
+        .run(caseId)
+      service.database
+        .prepare(
+          'UPDATE variants SET gnomad_af = 0.5 WHERE case_id = ? AND gene_symbol = ? AND pos = ?'
+        )
+        .run(caseId, 'GENEA', 2000)
+      const filteredPage = service.variants.getVariants(
+        {
+          case_id: caseId,
+          gnomad_af_max: 0.01,
+          consider_phasing: true
+        },
+        1,
+        0
+      )
+      expect(filteredPage.data).toHaveLength(1)
+      expect(filteredPage.data[0].gene_symbol).toBe('GENEA')
+      expect(filteredPage.data[0].comphet_phase).toBe('cis')
+    } finally {
+      service.close()
+    }
+  })
 })
 
 describe.skipIf(!RUN_PG)('VCF phase set import on PostgreSQL (#586)', () => {

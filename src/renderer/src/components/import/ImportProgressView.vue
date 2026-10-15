@@ -51,7 +51,7 @@
 
         <!-- File name -->
         <div class="flex-grow-1 min-width-0">
-          <div class="text-body-2 text-truncate" :title="file.filePath">
+          <div class="text-body-2 text-truncate" :title="fileTitle(file.filePath)">
             {{ fileName(file.filePath) }}
           </div>
           <div
@@ -149,6 +149,10 @@ function fileName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
   const idx = normalized.lastIndexOf('/')
   return idx === -1 ? normalized : normalized.slice(idx + 1)
+}
+
+function fileTitle(filePath: string): string {
+  return /^(?:\/|\\|[A-Za-z]:[\\/])/.test(filePath) ? filePath : fileName(filePath)
 }
 </script>
 

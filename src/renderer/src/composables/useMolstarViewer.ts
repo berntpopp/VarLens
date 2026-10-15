@@ -22,6 +22,7 @@ import {
 } from '../../../shared/utils/protein-utils'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
+import { isWebRuntime } from '../utils/runtime-mode'
 
 /**
  * Check if WebGL is available in the current environment.
@@ -141,6 +142,15 @@ export function useMolstarViewer(
     }
   }
 
+  function labelMolstarButtons(): void {
+    molstarRef.value
+      ?.querySelectorAll<HTMLButtonElement>('button[title]:not([aria-label])')
+      .forEach((btn) => {
+        const title = btn.getAttribute('title')
+        if (title !== null && title !== '') btn.setAttribute('aria-label', title)
+      })
+  }
+
   function attachViewer(viewer: MolstarViewerInstance): void {
     viewerInstance = markRaw(viewer) as MolstarViewerInstance
     // Subscribe to load complete
@@ -150,13 +160,14 @@ export function useMolstarViewer(
         loading.value = false
         structureLoaded.value = true
         error.value = null
+        labelMolstarButtons()
         // Restore background color after every load (including representation changes
         // that use fullLoad=true, which resets the canvas bg to black)
         restoreBgColor()
         setTimeout(() => restoreBgColor(), 300)
         // Delay highlighting slightly to ensure the visual API is fully initialized
         // after the loadComplete event fires
-        setTimeout(() => void highlightVariants(), 500)
+        setTimeout(() => void highlightVariants(true), 500)
         logService.info('3D structure loaded successfully', 'MolstarViewer')
       } else {
         loading.value = false
@@ -246,7 +257,9 @@ export function useMolstarViewer(
       loading.value = false
       error.value =
         '3D viewer requires WebGL which is not available. ' +
-        'Try updating your GPU drivers, or launch VarLens with the --disable-gpu flag.'
+        (isWebRuntime()
+          ? 'Try enabling hardware acceleration in your browser or updating your GPU drivers.'
+          : 'Try updating your GPU drivers, or launch VarLens with the --disable-gpu flag.')
       logService.error(
         'WebGL is not available — canvas.getContext() returned null for both webgl2 and webgl',
         'MolstarViewer'
@@ -284,7 +297,9 @@ export function useMolstarViewer(
       loading.value = false
       error.value =
         '3D viewer component failed to load. ' +
-        'Try restarting the application. If the problem persists, try launching with --disable-gpu flag.'
+        (isWebRuntime()
+          ? 'Try reloading the page.'
+          : 'Try restarting the application. If the problem persists, try launching with --disable-gpu flag.')
       logService.error(
         `pdbe-molstar init failed: ${formatError(err)} ` +
           `(webgl=${webglContext}, userAgent=${navigator.userAgent})`,
@@ -305,7 +320,12 @@ export function useMolstarViewer(
    * (on top of the existing cartoon). The `representationColor` is set to the
    * variant color so the sticks are visually distinct from the gray background.
    */
-  async function highlightVariants(): Promise<void> {
+  function isAlphaFoldStructure(): boolean {
+    const activeSource = structureInfo.value?.alphafold ?? structureInfo.value?.pdb
+    return activeSource?.source === 'alphafold' || structureInfo.value?.alphafold != null
+  }
+
+  async function highlightVariants(focusHighlighted = false): Promise<void> {
     if (!viewerInstance) return
 
     const variantsToHighlight = variants.value.filter((v) => v.proteinPosition > 0)
@@ -313,19 +333,21 @@ export function useMolstarViewer(
     const useBallAndStick = variantStyle.value === 'ball-and-stick'
 
     // Build selection data for user variants.
-    // In ball-and-stick mode: sideChain=true triggers pdbe-molstar to add a
-    // ball-and-stick StructureComponent; representationColor colors the sticks.
-    // In colored mode: only overpaint (coloring) is applied to the main representation.
+    // In ball-and-stick mode (or for the active highlighted variant): sideChain=true
+    // triggers pdbe-molstar to add a ball-and-stick StructureComponent; representationColor
+    // colors the sticks, and focus=true zooms to the active case variant on initial load.
     const selections: SelectionDataItem[] = variantsToHighlight.map((v) => {
       const color = hexToRgb(v.color)
+      const isHighlighted = v.highlighted === true
+      const showSideChain = useBallAndStick || isHighlighted
       return {
         struct_asym_id: 'A',
         start_residue_number: v.proteinPosition,
         end_residue_number: v.proteinPosition,
         color,
-        focus: false,
-        sideChain: useBallAndStick,
-        ...(useBallAndStick ? { representationColor: color } : {})
+        focus: isHighlighted && focusHighlighted,
+        sideChain: showSideChain,
+        ...(showSideChain ? { representationColor: color } : {})
       }
     })
 
@@ -361,7 +383,7 @@ export function useMolstarViewer(
     try {
       await viewerInstance.visual.select({
         data: selections,
-        nonSelectedColor: { r: 220, g: 220, b: 220 }
+        ...(isAlphaFoldStructure() ? {} : { nonSelectedColor: { r: 220, g: 220, b: 220 } })
       })
     } catch (err) {
       logService.error(`Failed to highlight variants: ${formatError(err)}`, 'MolstarViewer')
@@ -394,7 +416,7 @@ export function useMolstarViewer(
             representationColor: color
           }
         ],
-        nonSelectedColor: { r: 220, g: 220, b: 220 }
+        ...(isAlphaFoldStructure() ? {} : { nonSelectedColor: { r: 220, g: 220, b: 220 } })
       })
     } catch (err) {
       logService.error(`Failed to focus residue ${position}: ${formatError(err)}`, 'MolstarViewer')

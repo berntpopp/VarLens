@@ -87,7 +87,7 @@
               <tr v-for="file in result.files" :key="file.filePath">
                 <td
                   class="text-body-2 text-truncate"
-                  :title="file.filePath"
+                  :title="fileTitle(file.filePath)"
                   style="max-width: 260px"
                 >
                   {{ fileName(file.filePath) }}
@@ -264,6 +264,10 @@ function fileName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
   const idx = normalized.lastIndexOf('/')
   return idx === -1 ? normalized : normalized.slice(idx + 1)
+}
+
+function fileTitle(filePath: string): string {
+  return /^(?:\/|\\|[A-Za-z]:[\\/])/.test(filePath) ? filePath : fileName(filePath)
 }
 
 function callerOf(filePath: string): string {

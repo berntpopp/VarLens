@@ -11,7 +11,7 @@ const { readOnly } = editor
 const config = computed(() => editor.draft.value!.config)
 const filters = computed(() => config.value.baseFilters)
 
-const GATE_KEYS = new Set(['maxGnomadAf', 'consequences'])
+const GATE_KEYS = new Set(['maxGnomadAf', 'consequences', 'considerPhasing'])
 const typeItems: readonly VariantTypeKey[] = SHORTLIST_EVIDENCE_CONFIG.variantTypes
 
 const maxAf = computed({
@@ -24,6 +24,13 @@ const consequences = computed({
   get: () => filters.value.consequences ?? [],
   set: (v: string[]) => {
     filters.value.consequences = v
+  }
+})
+const considerPhasing = computed({
+  get: () => filters.value.considerPhasing === true,
+  set: (v: boolean | null) => {
+    if (v === true) filters.value.considerPhasing = true
+    else delete filters.value.considerPhasing
   }
 })
 const types = computed({
@@ -129,6 +136,16 @@ const otherMessages = computed(() =>
         </v-chip-group>
       </div>
     </div>
+    <v-switch
+      v-model="considerPhasing"
+      :label="COPY.fields.considerPhasing"
+      :hint="COPY.fields.considerPhasingHint"
+      persistent-hint
+      :readonly="readOnly"
+      density="compact"
+      color="primary"
+      data-testid="ranking-consider-phasing"
+    />
     <div
       v-for="message in [
         ...editor.messagesAt('variantTypeScope'),

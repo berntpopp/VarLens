@@ -153,8 +153,48 @@
         <ConsequenceCell :consequence="value" />
       </template>
 
-      <template #[`item.gt_num`]="{ value }">
-        <template v-if="value !== null && value !== undefined">{{ value }}</template>
+      <template #[`item.gt_num`]="{ item, value }">
+        <template v-if="value !== null && value !== undefined">
+          <v-chip size="x-small" :color="zygosityColor(value)" label>{{ value }}</v-chip>
+          <v-chip
+            v-if="item.comphet_phase"
+            size="x-small"
+            label
+            :color="COMPHET_PHASE_COLORS[item.comphet_phase]"
+            :title="COMPHET_PHASE_LABELS[item.comphet_phase]"
+            class="ml-1"
+            data-testid="comphet-phase-chip"
+          >
+            {{ item.comphet_phase }}
+          </v-chip>
+        </template>
+        <EmptyPlaceholder v-else />
+      </template>
+
+      <template
+        v-for="member in familyMembers"
+        :key="`member-${member.case_id}`"
+        #[`item._member_${member.case_id}`]="{ item }"
+      >
+        <span
+          v-if="item.family_calls?.[member.case_id]?.gt_num != null"
+          :title="formatFamilyCallMeta(item.family_calls?.[member.case_id])"
+          data-testid="family-member-call"
+        >
+          <v-chip
+            size="x-small"
+            :color="zygosityColor(item.family_calls[member.case_id].gt_num!)"
+            label
+          >
+            {{ item.family_calls[member.case_id].gt_num }}
+          </v-chip>
+          <span
+            v-if="formatFamilyCallMeta(item.family_calls[member.case_id])"
+            class="text-caption text-medium-emphasis ml-1"
+          >
+            {{ formatFamilyCallMeta(item.family_calls[member.case_id]) }}
+          </span>
+        </span>
         <EmptyPlaceholder v-else />
       </template>
 
@@ -251,6 +291,7 @@ import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../sha
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
+import { COMPHET_PHASE_COLORS, COMPHET_PHASE_LABELS } from '../../../shared/utils/phasing'
 import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
@@ -278,7 +319,12 @@ import SummaryStaleNotice from './table-state/SummaryStaleNotice.vue'
 import QueryErrorAlert from './table-state/QueryErrorAlert.vue'
 import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
 import { useTableLoadingState } from '../composables/useTableLoadingState'
-import { useVariantColumns } from './variant-table/columns'
+import {
+  formatFamilyCallMeta,
+  useFamilyMembers,
+  useVariantColumns,
+  zygosityColor
+} from './variant-table/columns'
 import PhenotypeScoreCell from './variant-table/PhenotypeScoreCell.vue'
 import * as phenotype from './variant-table/usePhenotypeColumn'
 import { useVariantData } from './variant-table/useVariantData'
@@ -314,20 +360,10 @@ interface Props {
   caseId: number
   filters: Omit<VariantFilter, 'case_id'>
   annotationScope?: AnnotationScope
-  /** Per-column metadata from useFilterState (avoids duplicate IPC call) */
   columnMeta?: ColumnFilterMeta[]
-  /** Variant type discriminator — drives column set selection (snv, sv, cnv, str) */
   variantType?: string
-  /**
-   * Whether this VariantTable instance is currently interactive.
-   * When `false`, global keyboard shortcuts registered by this component
-   * (ArrowUp/Down, Enter, Escape, s, c, a) are suppressed so a hidden
-   * VariantTable held alive via `v-show` (e.g. while the Shortlist tab is
-   * active in CaseView) does not steal keystrokes from the visible panel.
-   * Default `true` preserves existing behavior for every existing caller.
-   */
+  /** When `false`, global keyboard shortcuts registered by this component are suppressed. */
   interactive?: boolean
-  /** Active filter clauses, listed in the empty state (#568). */
   activeFilters?: ActiveFilter[]
 }
 
@@ -349,58 +385,29 @@ const emit = defineEmits<{
 }>()
 
 const viewActive = ref(true)
-// One shared ACMG quick-classify menu for all rows (not a v-menu per row)
 const acmgQuickMenu = provideAcmgQuickMenu()
 const tagQuickMenu = provideTagQuickMenu()
 const tableWorkActive = computed(() => props.interactive && viewActive.value)
 const { api } = useApiService()
-const appState = inject(AppStateKey, null) // null without a provider (isolated unit tests)
+const appState = inject(AppStateKey, null)
 let cleanupAnnotationChanged: (() => void) | null = null
 
-// Annotations
-const {
-  getAcmgEvidence,
-  toggleStar,
-  getGlobalComment,
-  getPerCaseComment,
-  upsertGlobalComment,
-  upsertPerCaseComment,
-  getAnnotations,
-  toggleGlobalStar,
-  getGlobalAcmgEvidence
-} = useAnnotations()
-// ACMG writes go through the undo-snackbar wrappers (same signatures)
-const acmg = useAcmgUndo()
-const { setAcmgClassification, setAcmgClassificationWithEvidence } = acmg
-const { setGlobalAcmgClassification, setGlobalAcmgClassificationWithEvidence } = acmg
+const caseIdGetter = () => props.caseId
+const familyMembers = useFamilyMembers(() => props.filters.analysis_group_id, caseIdGetter, api)
 
-// Bundle annotation actions for dialog subcomponent
-const annotationActions = {
-  getAcmgEvidence,
-  toggleStar,
-  setAcmgClassification,
-  setAcmgClassificationWithEvidence,
-  upsertGlobalComment,
-  upsertPerCaseComment,
-  getAnnotations,
-  getGlobalComment,
-  getPerCaseComment,
-  toggleGlobalStar,
-  setGlobalAcmgClassification,
-  setGlobalAcmgClassificationWithEvidence,
-  getGlobalAcmgEvidence
-}
+// Bundle annotation actions (with ACMG undo wrappers) for dialog subcomponent
+const annotationActions = { ...useAnnotations(), ...useAcmgUndo() }
 
 const { buildOmimEntryUrl, openExternalLink } = useVariantLinks()
 
 // Column preferences and column definitions — swap columns on variant type change
 const { prefs } = useColumnPreferences('variant-table')
 const variantTypeRef = toRef(props, 'variantType')
-const caseIdGetter = () => props.caseId
 const { headers, visibleHeaders, filterableColumns } = useVariantColumns(
   prefs,
   variantTypeRef,
-  caseIdGetter
+  caseIdGetter,
+  familyMembers
 )
 
 // Data loading and state
@@ -561,31 +568,23 @@ onDeactivated(() => {
 const lastKeyboardMoveAtMs = ref<number | null>(null)
 const pendingScrollBehavior = ref<ScrollBehavior>('smooth')
 
-onKeyStroke(
-  'ArrowDown',
-  (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    e.preventDefault()
-    const now = performance.now()
-    pendingScrollBehavior.value = getAdaptiveRowScrollBehavior(lastKeyboardMoveAtMs.value, now)
-    lastKeyboardMoveAtMs.value = now
-    moveDown()
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'ArrowUp',
-  (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    e.preventDefault()
-    const now = performance.now()
-    pendingScrollBehavior.value = getAdaptiveRowScrollBehavior(lastKeyboardMoveAtMs.value, now)
-    lastKeyboardMoveAtMs.value = now
-    moveUp()
-  },
-  { dedupe: true }
-)
+for (const [key, move] of [
+  ['ArrowDown', moveDown],
+  ['ArrowUp', moveUp]
+] as const) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (!props.interactive || !viewActive.value || isInputFocused()) return
+      e.preventDefault()
+      const now = performance.now()
+      pendingScrollBehavior.value = getAdaptiveRowScrollBehavior(lastKeyboardMoveAtMs.value, now)
+      lastKeyboardMoveAtMs.value = now
+      move()
+    },
+    { dedupe: true }
+  )
+}
 
 onKeyStroke(
   SHORTCUTS.openDetails.key,

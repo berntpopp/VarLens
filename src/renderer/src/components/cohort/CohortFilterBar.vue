@@ -133,6 +133,8 @@ import { useFilterEmitScheduler } from '../../composables/useFilterEmitScheduler
 import { useFilterPresetStore } from '../../composables/useFilterPresetStore'
 import { useQuery } from '@pinia/colada'
 import { caseIdsQuery } from '../../queries/cases'
+import { queryKeys } from '../../queries/keys'
+import { mergeCohortInfoFields } from '../../../../shared/utils/case-info-fields'
 import SlimFilterToolbar from '../SlimFilterToolbar.vue'
 import DslSearchBar from '../DslSearchBar.vue'
 import { useDslFilterIntegration } from '../../composables/useDslFilterIntegration'
@@ -459,6 +461,34 @@ watch(cohortFilterKey, onStateChange)
 watch(selectedImpactPresets, () => emitFilterChange())
 watch([selectedAfPreset, selectedCaddPreset], () => emitFilterChange())
 
+// Every case id in the database: the scope of the extension column metadata,
+// type-presence queries in the cohort drawer, and cohort INFO autocomplete.
+const { data: caseIds } = useQuery(caseIdsQuery)
+const cohortCaseIds = computed(() => caseIds.value ?? [])
+
+const { data: cohortInfoFieldsData } = useQuery(() => ({
+  key: [
+    ...queryKeys.root(),
+    'cohort',
+    'info-fields',
+    [...cohortCaseIds.value].sort((a, b) => a - b).join(',')
+  ] as const,
+  query: async () => {
+    const settled = await Promise.allSettled(
+      cohortCaseIds.value
+        .slice(0, 50)
+        .map(
+          async (id) => unwrapIpcResult(await api!.caseMetadata.getDataInfo(id))?.field_dictionary
+        )
+    )
+    return mergeCohortInfoFields(
+      settled.map((r) => (r.status === 'fulfilled' ? r.value : undefined))
+    )
+  },
+  staleTime: Infinity,
+  enabled: api?.caseMetadata?.getDataInfo !== undefined && cohortCaseIds.value.length > 0
+}))
+
 // DSL search integration — same composable as variant table (DRY)
 const {
   dslInput,
@@ -476,6 +506,7 @@ const {
   urlRoute: 'cohort',
   scope: 'cohort',
   presets: () => allPresets.value,
+  infoFields: () => cohortInfoFieldsData.value ?? [],
   searchQueryRef: searchTerm,
   emitFilters: emitFilterChange,
   clearConflictingDrawerFields: (columnFilters) => {
@@ -487,26 +518,14 @@ const {
   }
 })
 
-/**
- * Clear all extension column filters for a given variant type (sv/cnv/str).
- * Strips every key matching `${typeKey}.*` from filters.columnFilters so the
- * cohort query drops the corresponding WHERE clauses on next emission.
- */
+/** Clear all extension column filters (`${typeKey}.*`) for a given variant type (sv/cnv/str). */
 function handleClearTypeFilter(typeKey: string): void {
   const next: ColumnFiltersParam = { ...filters.value.columnFilters }
   for (const key of Object.keys(next)) {
-    if (key.startsWith(`${typeKey}.`)) {
-      delete next[key]
-    }
+    if (key.startsWith(`${typeKey}.`)) delete next[key]
   }
   filters.value.columnFilters = next
 }
-
-// Every case id in the database: the scope of the extension column metadata
-// and type-presence queries in the cohort drawer. A query, so it is refetched
-// with them when cases are imported or deleted.
-const { data: caseIds } = useQuery(caseIdsQuery)
-const cohortCaseIds = computed(() => caseIds.value ?? [])
 
 // Provide shared filter state for CohortFilterDrawer (via provide/inject)
 provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
@@ -530,8 +549,6 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   clearAllFilters,
   clearFilter,
   searchGeneSymbols,
-
-  // Preset store integration
   visiblePresets,
   isPresetActive,
   onPresetToggle: handlePresetToggle,
@@ -542,8 +559,6 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
     showManagePresetsDialog.value = true
   },
   hasActiveFiltersForSave: mergedHasActiveFilters,
-
-  // DSL search state
   dslInput,
   dslSuggestions,
   isDslMode,
@@ -553,10 +568,6 @@ provide<CohortFilterDrawerState>('cohortFilterDrawerState', {
   onDslClear: handleDslClear,
   onDslSuggestionSelect: applySuggestion,
   dslColumnFilters,
-
-  // Extension column filters (Task 12) — cohort scope spans all loaded cases.
-  // The drawer reads via `columnFilters.value` and writes via
-  // `onColumnFiltersUpdate`, so a read-only computed ref is sufficient.
   columnFilters: computed(() => filters.value.columnFilters),
   cohortCaseIds,
   onColumnFiltersUpdate: (value) => {
@@ -577,47 +588,30 @@ const handleClearFilter = (filterId: string) => {
   if (filterId.startsWith('dsl:')) {
     removeDslCondition(filterId.slice(4))
   } else if (filterId.startsWith('col:')) {
-    const columnKey = filterId.slice(4)
-    emit('clear-column-filter', columnKey)
+    emit('clear-column-filter', filterId.slice(4))
   } else {
     clearFilter(filterId)
     emit('clear-filter', filterId)
   }
 }
 
-const handleToggleColumn = (key: string) => {
-  emit('toggle-column', key)
-}
-
-const handleReorderColumns = (keys: string[]) => {
-  emit('reorder-columns', keys)
-}
-
-const handleResetColumns = () => {
-  emit('reset-columns')
-}
-
+const handleToggleColumn = (key: string) => emit('toggle-column', key)
+const handleReorderColumns = (keys: string[]) => emit('reorder-columns', keys)
+const handleResetColumns = () => emit('reset-columns')
 const { writeBlockedReason } = usePermissions()
+const handleExport = (format?: ExportFormat) => emit('export', format)
 
-const handleExport = (format?: ExportFormat) => {
-  emit('export', format)
-}
-
-// Load presets on mount
 onMounted(async () => {
   const presetReason = await getCurrentUnsupportedReason('workflow.filterPresets')
   if (presetReason !== null) {
     warnUnsupported(presetReason)
     return
   }
-
   await loadPresets()
 })
 
 const searchFieldRef = ref<InstanceType<typeof DslSearchBar> | null>(null)
 
-// dslColumnFilters: merged into CohortTable's query. The rest are the same
-// shortcut commands FilterToolbar exposes (App dispatches to the visible view).
 defineExpose({
   dslColumnFilters,
   focusSearch: () => searchFieldRef.value?.focus(),
@@ -625,7 +619,9 @@ defineExpose({
   toggleColumnsDrawer: () => (columnsDrawerOpen.value = !columnsDrawerOpen.value),
   handleClearAll,
   handleClearFilter,
-  activeFilters: mergedActiveFilters
+  activeFilters: mergedActiveFilters,
+  visiblePresets,
+  togglePreset: handlePresetToggle
 })
 </script>
 

@@ -1,15 +1,14 @@
 /**
- * CNV phenotype score (CNV/STR spec §4), pure: no Electron, no DB, so the
+ * CNV phenotype score (CNV/STR spec §4, #642), pure: no Electron, no DB, so the
  * benchmark imports it directly. S_cnv = max(S_gene, S_region):
- * - gene route: dosage-weighted best gene, Šidák-corrected for the number of
- *   indexed genes the CNV hits (§4.1);
+ * - gene route: plain best overlapped gene max_{g in G(c)} S(g) (§4.1, #642);
  * - region route: ClinGen regions the CNV contains, scored by their diseases (§4.2).
  */
 import { HPO_LOCUS_SCORING_CONFIG as CFG } from '../config/hpo-locus-scoring.config'
 import type { HpoLocusNote } from '../types/hpo-profile'
-import type { DosageRegion, DosageScore, LocusReference } from '../types/locus-reference'
+import type { DosageRegion, LocusReference } from '../types/locus-reference'
 import { isInPAR } from '../utils/par-regions'
-import { dosageScore, isDosageSensitive as sensitive } from './reference-sources'
+import { isDosageSensitive as sensitive } from './reference-sources'
 
 export type CnvType = 'del' | 'dup'
 
@@ -52,7 +51,6 @@ export interface CnvPhenotypeScorer {
   score(gene: string): number | null
   bestDisease(gene: string): string | null
   scoreDiseases(ids: readonly string[]): { score: number; disease: string } | null
-  sidak(score: number, n: number): number
 }
 
 export interface CnvScoreContext {
@@ -62,13 +60,6 @@ export interface CnvScoreContext {
   reference: LocusReference | null
   /** Null without HPO terms or data. */
   scorer: CnvPhenotypeScorer | null
-  /** Distinct het alleles of the gene in the case (pass 1). */
-  hetHits(gene: string): number
-}
-
-export interface Dosage {
-  hi: DosageScore
-  ts: DosageScore
 }
 
 export interface CnvScore {
@@ -109,30 +100,6 @@ export function cnvType(
 export const cnvEnd = (call: CnvCall): number =>
   call.end_pos ?? call.pos + Math.abs(call.sv_length ?? 0)
 
-/** Dosage weight w(g, c) (§4.1 table). `biallelic`: CN 0, hemizygous loss or another het allele. */
-export function dosageWeight(
-  type: CnvType,
-  dosage: Dosage,
-  wholeGene: boolean,
-  biallelic: boolean
-): number {
-  const del = CFG.dosageWeights.del
-  const wDel = sensitive(dosage.hi)
-    ? del.sensitive
-    : dosage.hi === CFG.dosageScores.recessive
-      ? biallelic
-        ? del.recessiveBiallelic
-        : del.recessive
-      : dosage.hi === CFG.dosageScores.unlikely
-        ? del.unlikely
-        : del.unknown
-  if (type === 'del') return wDel
-  if (!wholeGene) return CFG.dosageWeights.dupPartialFactor * wDel
-  const dup = CFG.dosageWeights.dup
-  if (sensitive(dosage.ts)) return dup.sensitive
-  return dosage.ts === CFG.dosageScores.unlikely ? dup.unlikely : dup.unknown
-}
-
 /** v(cov) (§4.2): 1 at ≥ full, linear from min to full, 0 below min. */
 export function regionWeight(cov: number): number {
   const { full, min } = CFG.regionCoverage
@@ -160,79 +127,29 @@ export function cnvGeneSet(
     .filter(({ span }) => span === undefined || (span.start <= b && span.end >= a))
 }
 
-/**
- * HI/TS per gene from the row's `info_json` (AnnotSV, varlens-annotation-workflows#3),
- * keyed by upper-case symbol.
- * ponytail: assumes `SYMBOL:score` entries joined by `,` or `|`; fix with the config keys once #3 fixes its format.
- */
-export function parseInfoDosage(infoJson: string | null | undefined): Map<string, Dosage> {
-  const out = new Map<string, Dosage>()
-  if (infoJson == null || infoJson === '') return out
-  const info = JSON.parse(infoJson) as Record<string, unknown>
-  for (const field of ['hi', 'ts'] as const) {
-    const raw = info[CFG.annotsvInfoKeys[field]]
-    if (raw == null) continue
-    for (const entry of String(raw).split(/[,|]/)) {
-      const [symbol, value] = entry.split(':')
-      const score = dosageScore(value)
-      if (symbol === undefined || symbol.trim() === '' || score === null) continue
-      const key = symbol.trim().toUpperCase()
-      const d = out.get(key) ?? { hi: null, ts: null }
-      d[field] = score
-      out.set(key, d)
-    }
-  }
-  return out
-}
-
 interface GeneHit {
   symbol: string
-  weight: number
   score: number
-  dosage: string | undefined
-}
-
-function dosageLabel(type: CnvType, d: Dosage, source: string): string | undefined {
-  const [name, value] = type === 'del' ? ['HI', d.hi] : ['TS', d.ts]
-  return value === null ? undefined : `${name} ${value} (${source})`
 }
 
 function geneRoute(
-  call: CnvCall,
-  type: CnvType,
   genes: readonly CnvGene[],
-  info: ReadonlyMap<string, Dosage>,
-  ctx: CnvScoreContext & { reference: LocusReference; scorer: CnvPhenotypeScorer }
+  scorer: CnvPhenotypeScorer
 ): { best: GeneHit; n: number } | null {
-  const a = call.pos
-  const b = cnvEnd(call)
-  const cnLoss = call.cnv_copy_number === 0 || referenceCopyNumber(call, ctx) === 1
-  const clingen = `ClinGen ${ctx.reference.sources.clingen ?? ''}`.trim()
   let best: GeneHit | null = null
   let n = 0
   for (const gene of genes) {
-    const score = ctx.scorer.score(gene.symbol)
+    const score = scorer.score(gene.symbol)
     if (score === null) continue
-    const fromInfo = info.get(gene.symbol.toUpperCase())
-    const curated = gene.span && ctx.reference.dosageGenes.get(gene.span.hgncId)
-    // Per field: AnnotSV may carry HI without TS (or the reverse) for a gene.
-    const dosage: Dosage = {
-      hi: fromInfo?.hi ?? curated?.hi ?? null,
-      ts: fromInfo?.ts ?? curated?.ts ?? null
-    }
-    const whole = gene.span !== undefined && a <= gene.span.start && gene.span.end <= b
-    const biallelic = cnLoss || ctx.hetHits(gene.symbol) >= 1
-    const weight = dosageWeight(type, dosage, whole, biallelic)
-    if (weight <= 0) continue
     n++
-    if (best === null || weight * score > best.weight * best.score) {
-      const annotsv = (type === 'del' ? fromInfo?.hi : fromInfo?.ts) != null
-      const label = dosageLabel(type, dosage, annotsv ? 'AnnotSV' : clingen)
-      best = { symbol: gene.symbol, weight, score, dosage: label }
+    if (best === null || score > best.score) {
+      best = { symbol: gene.symbol, score }
     }
   }
   return best === null ? null : { best, n }
 }
+
+const NO_REGIONS: readonly DosageRegion[] = []
 
 /** Dosage-sensitive regions per `build\0chr\0type`, built once per reference (5,000 CNVs per case). */
 const regionCache = new WeakMap<LocusReference, Map<string, DosageRegion[]>>()
@@ -250,24 +167,24 @@ function sensitiveRegions(ref: LocusReference, build: string, chr: string, type:
     }
     regionCache.set(ref, byKey)
   }
-  return byKey.get(`${build}\0${chr}\0${type}`) ?? []
+  return byKey.get(`${build}\0${chr}\0${type}`) ?? NO_REGIONS
 }
 
 function regionRoute(
   call: CnvCall,
   type: CnvType,
-  ctx: CnvScoreContext & { reference: LocusReference; scorer: CnvPhenotypeScorer }
+  regions: readonly DosageRegion[],
+  scorer: CnvPhenotypeScorer
 ): { region: DosageRegion; cov: number; score: number; disease: string } | null {
-  const chr = bareChr(call.chr)
   const a = call.pos
   const b = cnvEnd(call)
   let best: { region: DosageRegion; cov: number; score: number; disease: string } | null = null
-  for (const region of sensitiveRegions(ctx.reference, ctx.build, chr, type)) {
+  for (const region of regions) {
     const cov =
       Math.max(0, Math.min(b, region.end) - Math.max(a, region.start)) / (region.end - region.start)
     const v = regionWeight(cov)
     if (v === 0) continue
-    const hit = ctx.scorer.scoreDiseases(type === 'del' ? region.lossDiseases : region.gainDiseases)
+    const hit = scorer.scoreDiseases(type === 'del' ? region.lossDiseases : region.gainDiseases)
     if (hit !== null && (best === null || v * hit.score > best.score)) {
       best = { region, cov, score: v * hit.score, disease: hit.disease }
     }
@@ -282,19 +199,26 @@ function regionRoute(
 export function scoreCnv(
   call: CnvCall,
   genes: readonly CnvGene[],
-  info: ReadonlyMap<string, Dosage>,
   ctx: CnvScoreContext
 ): CnvScore | null {
   const type = cnvType(call, ctx)
   if (type === null) return null
-  const geneCount = new Set(genes.filter((g) => g.span?.coding === true).map((g) => g.symbol)).size
-  const empty: CnvScore = { score: null, bestDisease: null, bestLocus: null, geneCount, note: null }
+  let codingCount = 0
+  for (const g of genes) if (g.span?.coding === true) codingCount++
+  const empty: CnvScore = {
+    score: null,
+    bestDisease: null,
+    bestLocus: null,
+    geneCount: codingCount,
+    note: null
+  }
   const { reference, scorer } = ctx
   if (reference === null || scorer === null) return empty
-  const full = { ...ctx, reference, scorer }
-  const gene = geneRoute(call, type, genes, info, full)
-  const region = regionRoute(call, type, full)
-  const geneScore = gene === null ? -1 : gene.best.weight * scorer.sidak(gene.best.score, gene.n)
+  const regions = sensitiveRegions(reference, ctx.build, bareChr(call.chr), type)
+  if (genes.length === 0 && regions.length === 0) return empty
+  const gene = genes.length === 0 ? null : geneRoute(genes, scorer)
+  const region = regions.length === 0 ? null : regionRoute(call, type, regions, scorer)
+  const geneScore = gene === null ? -1 : gene.best.score
   if (region !== null && region.score > geneScore) {
     const { region: r, cov } = region
     const dosage = type === 'del' ? r.hi : r.ts
@@ -303,7 +227,7 @@ export function scoreCnv(
       score: region.score,
       bestDisease: region.disease,
       bestLocus: r.iscaId,
-      geneCount,
+      geneCount: codingCount,
       note: {
         kind: 'region',
         id: r.iscaId,
@@ -311,7 +235,7 @@ export function scoreCnv(
         dosage: `${type === 'del' ? 'HI' : 'TS'} ${dosage} (${clingen})`,
         coverage: cov,
         diseaseGenes: gene?.n ?? 0,
-        genes: geneCount
+        genes: codingCount
       }
     }
   }
@@ -321,14 +245,13 @@ export function scoreCnv(
     score: geneScore,
     bestDisease: scorer.bestDisease(best.symbol),
     bestLocus: best.symbol,
-    geneCount,
+    geneCount: codingCount,
     note: {
       kind: 'gene',
       id: best.symbol,
       label: best.symbol,
-      dosage: best.dosage,
       diseaseGenes: n,
-      genes: geneCount
+      genes: codingCount
     }
   }
 }

@@ -106,7 +106,8 @@
       <template #item="{ item, props: itemProps }">
         <v-list-item v-bind="itemProps">
           <template #subtitle>
-            {{ item.id }}{{ item.assigned ? ` · ${COPY.assigned}` : '' }}
+            {{ item.id }}{{ item.matchedSynonym ? ' · ' + item.matchedSynonym : ''
+            }}{{ item.assigned ? ' · ' + COPY.assigned : '' }}
           </template>
         </v-list-item>
       </template>
@@ -145,6 +146,7 @@ import { HPO_TERM_COPY as COPY } from '../config/hpoTermCopy'
 interface HpoSearchResult {
   id: string
   name: string
+  matchedSynonym?: string
 }
 /** A search hit, marked when the case already has the term. */
 type HpoSuggestion = HpoSearchResult & { assigned: boolean }

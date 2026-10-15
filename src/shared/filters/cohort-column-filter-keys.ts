@@ -11,7 +11,7 @@
  */
 import type { ColumnFiltersParam } from '../types/column-filters'
 import { resolveExtensionColumnKey } from '../types/variant-extension-registry-data'
-import { assertNoInfoFieldFilters } from './column-filter-validation'
+import { infoFieldKey } from './info-field-filter'
 
 /**
  * Canonical cohort column-filter key → stored `cohort_variant_summary` column.
@@ -38,6 +38,7 @@ export const COHORT_SUMMARY_FILTER_COLUMNS: Readonly<Record<string, string>> = {
   end_pos: 'end_pos',
   sv_type: 'sv_type',
   sv_length: 'sv_length',
+  acmg_best: 'acmg_best',
   /** Best stored score over the carriers; each backend maps it to its probe. */
   phenotype_score: 'phenotype_score'
 }
@@ -45,7 +46,8 @@ export const COHORT_SUMMARY_FILTER_COLUMNS: Readonly<Record<string, string>> = {
 /** Accepted alternative spellings → canonical cohort key. */
 const COHORT_FILTER_KEY_ALIASES: Readonly<Record<string, string>> = {
   // The DSL / case-view key for CADD.
-  cadd: 'cadd_phred'
+  cadd: 'cadd_phred',
+  acmg: 'acmg_best'
 }
 
 // Own keys only: request keys such as `constructor` must not match Object.prototype.
@@ -66,8 +68,8 @@ export class UnsupportedCohortColumnFilterError extends Error {
 
 /**
  * Rename aliases to their canonical cohort key and verify every key is
- * filterable on the cohort view (a summary column or a known extension
- * column such as `cnv.copy_number`).
+ * filterable on the cohort view (a summary column, a known extension
+ * column such as `cnv.copy_number`, or an `info.<KEY>` carrier filter).
  *
  * @throws {UnsupportedCohortColumnFilterError} naming every unsupported key —
  *   a case-only field (`qual`, `gt_num`, `hpo_sim_score`, `moi`) is never
@@ -77,14 +79,14 @@ export function normalizeCohortColumnFilters(
   filters: ColumnFiltersParam | undefined
 ): ColumnFiltersParam | undefined {
   if (filters === undefined) return undefined
-  assertNoInfoFieldFilters(filters)
   const normalized: ColumnFiltersParam = {}
   const unsupported: string[] = []
   for (const [key, filter] of Object.entries(filters)) {
     const canonical = canonicalCohortFilterKey(key)
     if (
       hasOwn(COHORT_SUMMARY_FILTER_COLUMNS, canonical) ||
-      resolveExtensionColumnKey(canonical) !== null
+      resolveExtensionColumnKey(canonical) !== null ||
+      infoFieldKey(canonical) !== null
     ) {
       if (hasOwn(normalized, canonical)) {
         throw new Error(`Conflicting cohort column filters for "${canonical}"`)

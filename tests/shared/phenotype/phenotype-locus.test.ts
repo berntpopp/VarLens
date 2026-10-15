@@ -8,8 +8,7 @@ import { HPO_SCORING_CONFIG } from '../../../src/shared/config/hpo-scoring.confi
 import {
   explainDisease,
   explainGene,
-  scoreCase,
-  sidak
+  scoreCase
 } from '../../../src/shared/phenotype/phenotype-score'
 
 // Seeded random index (CNV/STR spec §4.1, §6.1): many genes, so ties and ranks are exercised.
@@ -57,20 +56,6 @@ describe('locus scoring contracts', () => {
     // One JSON line per gene keeps the snapshot readable.
     const lines = [...ix.genes.values()].map((g) => JSON.stringify(explainGene(ix, cs, g)))
     expect(lines).toMatchSnapshot()
-  })
-
-  it('sidak(s, 1) === s for every gene, and never rises with n', () => {
-    for (const g of ix.genes.values()) {
-      const s = cs.geneScore[g]
-      expect(sidak(cs, s, 1)).toBe(s)
-      let last = s
-      for (const n of [2, 5, 27, 500]) {
-        const v = sidak(cs, s, n)
-        expect(v).toBeLessThanOrEqual(last)
-        last = v
-      }
-    }
-    expect(sidak(cs, cs.sorted[cs.sorted.length - 1], 1e6)).toBe(cs.sorted[0])
   })
 
   it('explainDisease explains a gene-less disease and equals explainGene for a best disease', () => {

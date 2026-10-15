@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import type { CaseRepository } from './CaseRepository'
-import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import type { Kysely } from 'kysely'
 import type { VarlensDatabase } from '../../shared/types/database-schema'
 import type { Variant, VariantFilter, PaginatedResult, SortItem } from './types'
@@ -39,6 +39,12 @@ import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuil
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
 import { attachCaseTagIds, caseTagIdsSql, idListParam } from '../../shared/sql/variant-tag-ids-sql'
 import { attachCasePhenotype, casePhenotypePageSql } from '../../shared/sql/phenotype-score-sql'
+import { attachFamilyCalls, familyCallsPageSql } from '../../shared/sql/family-calls-sql'
+import {
+  attachCaseCompHetPhase,
+  compHetPartnerGenes,
+  type CompHetCandidateRow
+} from '../../shared/utils/phasing'
 import { VariantSearchService } from './VariantSearchService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
@@ -48,16 +54,31 @@ const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
 const COMPUTED_COLUMNS = new Set(['internal_af'])
 
 export class VariantRepository extends BaseRepository {
+  private static readonly MAX_STATEMENT_CACHE_SIZE = 50
   private cases: CaseRepository
   private readonly filterBuilder: VariantFilterBuilder
   private readonly searchService: VariantSearchService
   private ftsSnapshot: TriggerSnapshot = {}
+  private readonly statementCache = new Map<string, Statement>()
 
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
     super(db, kysely)
     this.cases = cases
     this.searchService = new VariantSearchService(db, kysely)
     this.filterBuilder = new VariantFilterBuilder(db, kysely, this.searchService)
+  }
+
+  private getStatement(sql: string): Statement {
+    let stmt = this.statementCache.get(sql)
+    if (stmt === undefined) {
+      if (this.statementCache.size >= VariantRepository.MAX_STATEMENT_CACHE_SIZE) {
+        const oldestKey = this.statementCache.keys().next().value
+        if (oldestKey !== undefined) this.statementCache.delete(oldestKey)
+      }
+      stmt = this.db.prepare(sql)
+      this.statementCache.set(sql, stmt)
+    }
+    return stmt
   }
 
   /**
@@ -144,27 +165,17 @@ export class VariantRepository extends BaseRepository {
             }
           }
 
-          // Insert extension table row if present
           if (v._sv !== undefined) {
             this.execRun(
-              this.kysely.insertInto('variant_sv').values({
-                variant_id: variantId,
-                ...v._sv
-              })
+              this.kysely.insertInto('variant_sv').values({ variant_id: variantId, ...v._sv })
             )
           } else if (v._cnv !== undefined) {
             this.execRun(
-              this.kysely.insertInto('variant_cnv').values({
-                variant_id: variantId,
-                ...v._cnv
-              })
+              this.kysely.insertInto('variant_cnv').values({ variant_id: variantId, ...v._cnv })
             )
           } else if (v._str !== undefined) {
             this.execRun(
-              this.kysely.insertInto('variant_str').values({
-                variant_id: variantId,
-                ...v._str
-              })
+              this.kysely.insertInto('variant_str').values({ variant_id: variantId, ...v._str })
             )
           }
         }
@@ -182,7 +193,6 @@ export class VariantRepository extends BaseRepository {
    * `finishBulkInsert()`.
    */
   finishBulkInsertNoCount(): void {
-    // Always rebuild FTS and restore triggers, even if a step fails
     try {
       rebuildAllFtsIndexes(this.db)
     } catch (error) {
@@ -196,14 +206,12 @@ export class VariantRepository extends BaseRepository {
       mainLogger.error(`Failed to recreate FTS triggers: ${error}`, 'VariantRepository')
     }
 
-    // Update query planner statistics after bulk import
     try {
       this.db.exec('ANALYZE')
     } catch (error) {
       mainLogger.error(`Failed to run ANALYZE: ${error}`, 'VariantRepository')
     }
 
-    // Optimize FTS5 index after bulk import
     try {
       this.db.exec("INSERT INTO variants_fts(variants_fts) VALUES('optimize')")
     } catch (error) {
@@ -223,10 +231,6 @@ export class VariantRepository extends BaseRepository {
   /**
    * Convenience method: drop FTS triggers, insert all variants in batches,
    * then rebuild FTS and restore triggers in a single call.
-   *
-   * For large imports with multiple logical batches, prefer calling
-   * `beginBulkInsert()`, then `insertBatch()` per batch, then `finishBulkInsert()`
-   * so that FTS is rebuilt only once.
    */
   insertVariantsBatch(
     caseId: number,
@@ -234,15 +238,12 @@ export class VariantRepository extends BaseRepository {
       VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[]
   ): number {
     this.cases.getCase(caseId)
-
     this.beginBulkInsert()
-
     try {
       this.insertBatch(variants, caseId)
     } finally {
       this.finishBulkInsert(caseId, variants.length)
     }
-
     return variants.length
   }
 
@@ -256,13 +257,7 @@ export class VariantRepository extends BaseRepository {
     return result?.count ?? 0
   }
 
-  /**
-   * Get variant counts grouped by variant_type for a case.
-   * Used for variant type tab badges in the case view.
-   *
-   * Returns a map like: { snv: 1234, indel: 56, sv: 12, cnv: 3, str: 7 }
-   * Missing types are not included in the returned record.
-   */
+  /** Get variant counts grouped by variant_type for a case. */
   getVariantTypeCounts(caseId: number): Record<string, number> {
     const rows = this.execAll<{ variant_type: string; count: number }>(
       this.kysely
@@ -295,10 +290,7 @@ export class VariantRepository extends BaseRepository {
       let total_count = 0
 
       if (skipCount !== true) {
-        // Build count query using Kysely — avoids brittle string replacement
-        const countQuery = this.filterBuilder.build(filter)
-        const compiled = countQuery.compile()
-        // Wrap the filtered query in a COUNT to handle complex WHERE clauses
+        const compiled = this.filterBuilder.build(filter).compile()
         const countSql = `SELECT count(*) as count FROM (${compiled.sql})`
         const countResult = this.db.prepare(countSql).get(...compiled.parameters) as {
           count: number
@@ -306,9 +298,6 @@ export class VariantRepository extends BaseRepository {
         total_count = countResult.count
       }
 
-      // Data query with sort + pagination.
-      // Pass sortBy into build() so extension sort keys (e.g. 'sv.support')
-      // trigger the required LEFT JOIN before applySort references the alias.
       const dataQuery = this.filterBuilder.build(filter, { sortBy })
       const sortedQuery = this.filterBuilder
         .applySort(dataQuery, sortBy)
@@ -320,10 +309,44 @@ export class VariantRepository extends BaseRepository {
           'sqlite',
           data.map((v) => v.id)
         )
-        const hits = this.db.prepare(caseTagIdsSql('sqlite')).all(filter.case_id, ids)
+        const hits = this.getStatement(caseTagIdsSql('sqlite')).all(filter.case_id, ids)
         attachCaseTagIds(data, hits as Array<{ variant_id: number; tag_id: number }>)
-        const scores = this.db.prepare(casePhenotypePageSql('sqlite')).all(filter.case_id, ids)
+        const scores = this.getStatement(casePhenotypePageSql('sqlite')).all(filter.case_id, ids)
         attachCasePhenotype(data, scores as Parameters<typeof attachCasePhenotype>[1])
+        if (filter.analysis_group_id !== undefined) {
+          const famHits = this.getStatement(familyCallsPageSql('sqlite')).all(
+            filter.analysis_group_id,
+            filter.case_id,
+            ids
+          )
+          attachFamilyCalls(data, famHits as Parameters<typeof attachFamilyCalls>[1])
+        }
+        if (filter.consider_phasing === true) {
+          const allInPage =
+            offset === 0 && (skipCount === true ? data.length < limit : data.length >= total_count)
+          const genes = compHetPartnerGenes(data, filter, allInPage)
+          const partners =
+            genes === null
+              ? data
+              : genes.length === 0
+                ? []
+                : this.execAll<CompHetCandidateRow>(
+                    this.filterBuilder
+                      .build({ ...filter, inheritance_modes: undefined })
+                      .clearSelect()
+                      .select([
+                        'variants.chr',
+                        'variants.pos',
+                        'variants.ref',
+                        'variants.alt',
+                        'variants.gene_symbol',
+                        'variants.gt_num',
+                        'variants.ps'
+                      ])
+                      .where('variants.gene_symbol', 'in', genes)
+                  )
+          attachCaseCompHetPhase(data, partners)
+        }
       }
 
       let unfiltered_count: number | undefined
@@ -361,7 +384,6 @@ export class VariantRepository extends BaseRepository {
   getAllVariantsForExport(filter: VariantFilter): Variant[] {
     const useTempTable = this.filterBuilder.preparePanelIntervals(filter)
     try {
-      // Natural genomic order (1..22, X, Y, MT, then pos) — same as the table.
       const query = this.filterBuilder.applySort(this.filterBuilder.build(filter))
       return this.execAll<Variant>(query)
     } finally {
@@ -369,31 +391,16 @@ export class VariantRepository extends BaseRepository {
     }
   }
 
-  /**
-   * Count variants matching export filter without loading data.
-   * Used to enforce hard limit before spawning export worker.
-   */
+  /** Count variants matching export filter without loading data. */
   getExportCount(filter: VariantFilter): number {
-    const useTempTable = this.filterBuilder.preparePanelIntervals(filter)
-    try {
-      const compiled = this.filterBuilder.build(filter).compile()
-      const countSql = `SELECT count(*) as count FROM (${compiled.sql})`
-      const result = this.db.prepare(countSql).get(...compiled.parameters) as { count: number }
-      return result.count
-    } finally {
-      if (useTempTable) this.filterBuilder.cleanupPanelIntervalsTable()
-    }
+    return this.getFilteredCount(filter)
   }
 
-  /**
-   * Return the count of variants matching a filter without fetching any data rows.
-   * Useful for count-only checks (e.g. enforcing limits before an operation).
-   */
+  /** Return the count of variants matching a filter without fetching any data rows. */
   getFilteredCount(filter: VariantFilter): number {
     const useTempTable = this.filterBuilder.preparePanelIntervals(filter)
     try {
-      const countQuery = this.filterBuilder.build(filter)
-      const compiled = countQuery.compile()
+      const compiled = this.filterBuilder.build(filter).compile()
       const countSql = `SELECT count(*) as count FROM (${compiled.sql})`
       const countResult = this.db.prepare(countSql).get(...compiled.parameters) as {
         count: number

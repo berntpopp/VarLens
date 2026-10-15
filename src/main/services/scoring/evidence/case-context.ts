@@ -50,8 +50,6 @@ export interface LightRow {
   str_repeat_id?: string | null
   str_variant_catalog_id?: string | null
   str_repeat_unit?: string | null
-  /** CNV rows: AnnotSV HI/TS per gene (CNV/STR spec §4.1). */
-  info_json?: string | null
 }
 
 export interface DerivedFields {

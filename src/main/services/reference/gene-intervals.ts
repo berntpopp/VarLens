@@ -22,23 +22,22 @@ function chrKey(chr: string): string {
   return key === 'M' ? 'MT' : key
 }
 
-/** First index whose start is at or after `pos`. */
-function lowerBound(starts: Float64Array, pos: number): number {
+/** First index whose value is at or after `pos`. */
+function lowerBound(values: Float64Array, pos: number): number {
   let lo = 0
-  let hi = starts.length
+  let hi = values.length
   while (lo < hi) {
     const mid = (lo + hi) >>> 1
-    if (starts[mid] < pos) lo = mid + 1
+    if (values[mid] < pos) lo = mid + 1
     else hi = mid
   }
   return lo
 }
 
-/** Spans of one chromosome ordered by start; `starts` mirrors them for the binary search. */
+/** Spans of one chromosome ordered by start; `maxEnds[i]` is `max_{j<=i} spans[j].end`. */
 interface Chromosome {
   spans: GeneSpan[]
-  starts: Float64Array
-  maxSpan: number
+  maxEnds: Float64Array
   /** approved symbol and HGNC id → its span on this chromosome */
   bySymbol: Map<string, GeneSpan>
 }
@@ -64,51 +63,68 @@ function chromosome(coords: readonly CoordRow[], genes: Map<string, GeneRow>): C
     bySymbol.set(gene[1], span).set(hgncId, span)
   }
   spans.sort((x, y) => x.start - y.start)
-  const starts = Float64Array.from(spans, (s) => s.start)
-  const maxSpan = spans.reduce((m, s) => Math.max(m, s.end - s.start), 0)
-  return { spans, starts, maxSpan, bySymbol }
+  let maxEnd = 0
+  const maxEnds = Float64Array.from(spans, (s) => (maxEnd = Math.max(maxEnd, s.end)))
+  return { spans, maxEnds, bySymbol }
 }
 
 function load(path: string, build: string): GeneIntervals {
-  const db = new DatabaseSync(path, { readOnly: true })
-  let genes: GeneRow[]
-  let coords: CoordRow[]
+  const probe = new DatabaseSync(path, { readOnly: true })
   try {
-    // Two plain scans joined in JS: the SQL join costs ~40 ms in per-row index lookups.
-    genes = rows(db, "SELECT hgnc_id, symbol, locus_group = 'protein-coding gene' FROM genes")
-    coords = rows(
-      db,
-      'SELECT chromosome, start_pos, end_pos, hgnc_id FROM gene_coordinates WHERE assembly = ?',
-      build
-    )
+    probe.prepare('SELECT 1 FROM genes LIMIT 1').get()
   } finally {
-    db.close()
+    probe.close()
   }
-  const byHgnc = new Map<string, GeneRow>()
-  for (const gene of genes) byHgnc.set(gene[0], gene)
-  // Built on first use: the import fallback and case-insensitive span lookups need it, CNV overlap does not.
+  let genes: GeneRow[] | undefined
+  let byHgnc: Map<string, GeneRow> | undefined
+  let coordsByChr: Map<string, CoordRow[]> | undefined
   let symbols: Map<string, string> | undefined
+  const ensure = (): void => {
+    if (genes !== undefined) return
+    const db = new DatabaseSync(path, { readOnly: true })
+    let loadedGenes: GeneRow[]
+    let coords: CoordRow[]
+    try {
+      // Two plain scans joined in JS: the SQL join costs ~40 ms in per-row index lookups.
+      loadedGenes = rows(
+        db,
+        "SELECT hgnc_id, symbol, locus_group = 'protein-coding gene' FROM genes"
+      )
+      coords = rows(
+        db,
+        'SELECT chromosome, start_pos, end_pos, hgnc_id FROM gene_coordinates WHERE assembly = ?',
+        build
+      )
+    } finally {
+      db.close()
+    }
+    byHgnc = new Map()
+    for (const gene of loadedGenes) byHgnc.set(gene[0], gene)
+    coordsByChr = new Map()
+    for (const row of coords) {
+      const list = coordsByChr.get(row[0])
+      if (list === undefined) coordsByChr.set(row[0], [row])
+      else list.push(row)
+    }
+    genes = loadedGenes
+  }
   const allSymbols = (): Map<string, string> => {
+    ensure()
     if (symbols === undefined) {
       symbols = new Map()
-      for (const [hgncId, symbol] of genes)
+      for (const [hgncId, symbol] of genes!)
         symbols.set(symbol.toUpperCase(), symbol).set(hgncId, symbol)
     }
     return symbols
   }
-  const coordsByChr = new Map<string, CoordRow[]>()
-  for (const row of coords) {
-    const list = coordsByChr.get(row[0])
-    if (list === undefined) coordsByChr.set(row[0], [row])
-    else list.push(row)
-  }
   // Spans are built per chromosome on first use: a case touches few, the load stays under budget.
   const built = new Map<string, Chromosome | undefined>()
   const get = (chr: string): Chromosome | undefined => {
+    ensure()
     const key = chrKey(chr)
     if (!built.has(key)) {
-      const list = coordsByChr.get(key)
-      built.set(key, list === undefined ? undefined : chromosome(list, byHgnc))
+      const list = coordsByChr!.get(key)
+      built.set(key, list === undefined ? undefined : chromosome(list, byHgnc!))
     }
     return built.get(key)
   }
@@ -120,7 +136,7 @@ function load(path: string, build: string): GeneIntervals {
       const c = get(chr)
       if (c === undefined) return []
       const out: GeneSpan[] = []
-      for (let i = lowerBound(c.starts, a - c.maxSpan); i < c.spans.length; i++) {
+      for (let i = lowerBound(c.maxEnds, a); i < c.spans.length; i++) {
         const span = c.spans[i]
         if (span.start > b) break
         if (span.end >= a) out.push(span)

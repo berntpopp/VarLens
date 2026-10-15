@@ -47,8 +47,7 @@ function scorer(): HpoGeneScorer {
       }
       return best
     },
-    explainDisease: vi.fn((id: string, score?: number) => explanation(id, score ?? 0)),
-    sidak: (s) => s
+    explainDisease: vi.fn((id: string, score?: number) => explanation(id, score ?? 0))
   }
 }
 
@@ -139,15 +138,15 @@ function context(rows: LightRow[], info: Partial<CaseInfo> = {}, locus = inputs(
 }
 
 describe('CNV locus fields', () => {
-  it('scores the CSQ gene set with dosage weights and names the best gene', () => {
+  it('scores the CSQ gene set with plain best gene and names the best gene', () => {
     const r = cnv(1)
     const d = context([r], { hpo: scorer() }).ctx.derived(r)
-    // GB (HI 3, weight 1) 0.8 beats GA (unknown, weight 0.6) 0.9 · 0.6.
+    // GA (0.9) beats GB (0.8) on plain best-gene scoring.
     expect(d).toMatchObject({
-      hpo_resnik: 0.8,
-      hpo_best_disease: 'OMIM:GB',
+      hpo_resnik: 0.9,
+      hpo_best_disease: 'OMIM:GA',
       hpo_conflicts: 0,
-      hpo_best_locus: 'GB',
+      hpo_best_locus: 'GA',
       cnv_gene_count: 2,
       str_band: null
     })
@@ -159,13 +158,10 @@ describe('CNV locus fields', () => {
     expect(d).toMatchObject({ hpo_resnik: null, hpo_best_locus: null, cnv_gene_count: 2 })
   })
 
-  it('a het CNV is not its own second hit (HI 30), another het allele is', () => {
+  it('scores a single-gene CNV with its unpenalized gene score', () => {
     const del = cnv(3, { pos: 19_000, end_pos: 31_000, gene_symbol: 'GR' })
     const alone = context([del], { hpo: scorer() }, inputs({ cnvGenes: new Map() }))
-    expect(alone.ctx.derived(del).hpo_resnik).toBeCloseTo(0.7 * 0.3)
-    const snv = row(4, { chr: '15', pos: 25_000, ref: 'A', alt: 'G', gene_symbol: 'GR' })
-    const pair = context([del, snv], { hpo: scorer() }, inputs({ cnvGenes: new Map() }))
-    expect(pair.ctx.derived(del).hpo_resnik).toBeCloseTo(0.7)
+    expect(alone.ctx.derived(del).hpo_resnik).toBeCloseTo(0.7)
   })
 
   it('explains the locus score with the note on the kept row', () => {
@@ -173,13 +169,13 @@ describe('CNV locus fields', () => {
     const hpo = scorer()
     const { ctx } = context([r], { hpo })
     const [kept] = withHpoExplanations([r as unknown as ScoredCandidate], ctx)
-    expect(hpo.explainDisease).toHaveBeenCalledWith('OMIM:GB', 0.8)
+    expect(hpo.explainDisease).toHaveBeenCalledWith('OMIM:GA', 0.9)
     expect(kept.rank_hpo).toMatchObject({
-      score: 0.8,
+      score: 0.9,
       locus: {
         kind: 'gene',
-        id: 'GB',
-        dosage: 'HI 3 (ClinGen 2026-10-14)',
+        id: 'GA',
+        label: 'GA',
         diseaseGenes: 2,
         genes: 2
       }
@@ -263,11 +259,10 @@ describe('SNV rows', () => {
   })
 
   it('toLightRow copies the locus fields only for CNV and STR rows', () => {
-    const extra = { variant_type: 'snv', sv_type: 'DEL', info_json: '{}' }
-    expect(toLightRow(row(21, extra))).not.toHaveProperty('info_json')
-    expect(toLightRow(cnv(22, { info_json: '{}' }))).toMatchObject({
-      sv_type: 'DEL',
-      info_json: '{}'
+    const extra = { variant_type: 'snv', sv_type: 'DEL' }
+    expect(toLightRow(row(21, extra))).not.toHaveProperty('sv_type')
+    expect(toLightRow(cnv(22))).toMatchObject({
+      sv_type: 'DEL'
     })
   })
 })

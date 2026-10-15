@@ -106,11 +106,18 @@ describe('getAutocompleteSuggestions — case info.<KEY> fields (#596, #538)', (
     expect(byKey.some((s) => s.value === 'info.REVEL')).toBe(true)
   })
 
-  it('does not flood the empty picker or offer INFO keys in the cohort view', () => {
+  it('does not flood the empty picker, offers INFO keys in cohort (#639), and hides them in shortlist', () => {
     expect(
       getAutocompleteSuggestions('', [], 'case', fields).some((s) => s.value.startsWith('info.'))
     ).toBe(false)
-    expect(getAutocompleteSuggestions('info.', [], 'cohort', fields)).toEqual([])
+    expect(
+      getAutocompleteSuggestions('', [], 'cohort', fields).some((s) => s.value.startsWith('info.'))
+    ).toBe(false)
+    expect(getAutocompleteSuggestions('info.', [], 'cohort', fields).map((s) => s.value)).toEqual([
+      'info.REVEL',
+      'info.AltAF_Index'
+    ])
+    expect(getAutocompleteSuggestions('info.', [], 'shortlist', fields)).toEqual([])
   })
 
   it('offers the INFO operators for an info key', () => {

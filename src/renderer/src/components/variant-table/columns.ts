@@ -1,4 +1,8 @@
-import { computed, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
+import type { AnalysisGroupMember, WindowAPI } from '../../../../shared/types/api'
+import { ZYGOSITY_COLORS } from '../../../../shared/config/domain.config'
+import { unwrapIpcResult } from '../../../../shared/types/errors'
+import { genotypeZygosity } from '../../../../shared/utils/genotype'
 import type { useColumnPreferences } from '../../composables/useColumnPreferences'
 import { useExternalLinksStore } from '../../stores/externalLinksStore'
 import { LINKS_COLUMN_KEY, linksColumnWidthRem } from '../../utils/link-outs'
@@ -15,30 +19,11 @@ export interface ColumnDef {
   sortable: boolean
   width?: string
   align?: 'start' | 'end' | 'center'
-  /**
-   * Optional value getter. When set, Vuetify reads this function instead of
-   * `item[key]` for cell content. Required for extension columns where the
-   * sort key (dotted, e.g. `sv.support`) differs from the row property name
-   * (the SELECT projection alias, e.g. `_sv_support`). Vuetify 3 treats a
-   * dotted `key` string as a nested path accessor via `getObjectValueByPath`
-   * — without this getter, `item['sv']['support']` resolves to undefined and
-   * the cell renders empty.
-   *
-   * Parameter type is `any` to remain assignable to Vuetify's
-   * `SelectItemKey<Variant>` function branch — Vuetify expects
-   * `(item: Variant, fallback?: any) => any`, which is stricter than
-   * `Record<string, unknown>` (Variant has no index signature). Callers
-   * narrow the item shape via type assertion inside the getter.
-   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value?: (item: any) => unknown
 }
 
-/**
- * Returns the appropriate column definitions for a given variant type.
- * Used by the variant table tabs to swap column sets when switching between
- * SNV/Indel, SV, CNV, and STR views.
- */
+/** Returns the appropriate column definitions for a given variant type. */
 export function getHeadersForType(variantType: string): ColumnDef[] {
   switch (variantType) {
     case 'sv':
@@ -52,11 +37,6 @@ export function getHeadersForType(variantType: string): ColumnDef[] {
   }
 }
 
-/**
- * Static base column definitions for the variant table. ClinVar and gnomAD AF
- * sit right after Gene/Consequence so the clinically critical columns are on
- * screen at 1366 px (audit 06 §3.2); a saved user order still wins.
- */
 export const baseHeaders: ColumnDef[] = [
   { title: '', key: 'annotations', sortable: false, width: '100px', align: 'center' },
   { title: 'Chr', key: 'chr', sortable: true },
@@ -81,10 +61,6 @@ export const baseHeaders: ColumnDef[] = [
   { title: 'MoI', key: 'moi', sortable: true }
 ]
 
-/**
- * The merged Links column (one icon link per `virtual` external link), or
- * nothing when no such link is enabled. Shared by case, cohort and shortlist.
- */
 export function linksColumn(linkCount: number): ColumnDef[] {
   if (linkCount === 0) return []
   return [
@@ -95,6 +71,73 @@ export function linksColumn(linkCount: number): ColumnDef[] {
       width: `${linksColumnWidthRem(linkCount)}rem`
     }
   ]
+}
+
+export function roleLabel(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+export function zygosityColor(gt: string | null | undefined): string | undefined {
+  const zygosity = genotypeZygosity(gt)
+  return zygosity === null ? undefined : ZYGOSITY_COLORS[zygosity]
+}
+
+export function formatFamilyCallMeta(call?: {
+  gq: number | null
+  dp: number | null
+}): string | undefined {
+  if (!call) return undefined
+  const parts: string[] = []
+  if (call.gq != null) parts.push(`GQ ${call.gq}`)
+  if (call.dp != null) parts.push(`DP ${call.dp}`)
+  return parts.length > 0 ? parts.join(' · ') : undefined
+}
+
+export function useFamilyMembers(
+  groupIdGetter: () => number | undefined,
+  caseIdGetter: () => number,
+  api?: WindowAPI
+): Ref<AnalysisGroupMember[]> {
+  const familyMembers = ref<AnalysisGroupMember[]>([])
+  watch(
+    [groupIdGetter, caseIdGetter],
+    async ([groupId, currentCaseId]) => {
+      if (groupId == null || api?.analysisGroups?.get === undefined) {
+        familyMembers.value = []
+        return
+      }
+      try {
+        const group = unwrapIpcResult(await api.analysisGroups.get(groupId))
+        if (groupIdGetter() !== groupId || caseIdGetter() !== currentCaseId) return
+        const members = group?.members ?? []
+        familyMembers.value = members.some((m) => m.case_id === currentCaseId)
+          ? members.filter((m) => m.case_id !== currentCaseId)
+          : []
+      } catch {
+        familyMembers.value = []
+      }
+    },
+    { immediate: true }
+  )
+  return familyMembers
+}
+
+export function familyMemberColumns(
+  members: ReadonlyArray<{ case_id: number; role: string }>
+): ColumnDef[] {
+  return members.map((m) => ({
+    key: `_member_${m.case_id}`,
+    title: roleLabel(m.role),
+    align: 'center' as const,
+    sortable: false
+  }))
+}
+
+function spliceAfterGt(cols: ColumnDef[], memberCols: ColumnDef[]): ColumnDef[] {
+  if (memberCols.length === 0) return cols
+  const gtIdx = cols.findIndex((c) => c.key === 'gt_num')
+  if (gtIdx === -1) return [...cols, ...memberCols]
+  return [...cols.slice(0, gtIdx + 1), ...memberCols, ...cols.slice(gtIdx + 1)]
 }
 
 /**
@@ -112,17 +155,22 @@ export function useVariantColumns(
   prefs: ReturnType<typeof useColumnPreferences>['prefs'],
   variantType?: Ref<string> | ComputedRef<string>,
   /** The case, for the Phenotype column's default (usePhenotypeColumn.ts) */
-  caseId?: () => number
+  caseId?: () => number,
+  /** Non-proband members of the active analysis group (#628). */
+  familyMembers?:
+    | Ref<ReadonlyArray<{ case_id: number; role: string }>>
+    | ComputedRef<ReadonlyArray<{ case_id: number; role: string }>>
 ) {
   if (caseId !== undefined) prefs = withPhenotypeDefault(prefs, caseId)
   const linksStore = useExternalLinksStore()
+  const memberCols = computed(() => familyMemberColumns(familyMembers?.value ?? []))
 
   /** All headers including the merged Links column (SNV/Indel view only). */
   const headers: ComputedRef<ColumnDef[]> = computed(() => {
     const type = variantType?.value ?? 'snv'
-    const typeHeaders = getHeadersForType(type)
-    // Type-specific views (SV/CNV/STR) have curated columns and no link-outs
-    if (type !== 'snv') return typeHeaders
+    // Type-specific views (SV/CNV/STR) have curated columns and no link-outs or exact-coordinate family joins
+    if (type !== 'snv') return getHeadersForType(type)
+    const typeHeaders = spliceAfterGt(getHeadersForType(type), memberCols.value)
     return [...typeHeaders, ...linksColumn(linksStore.virtualLinks.length)]
   })
 
@@ -130,7 +178,11 @@ export function useVariantColumns(
   const orderedColumns = computed(() => {
     const base = headers.value
     if (prefs.value.order.length > 0) {
-      return [...base].sort((a, b) => {
+      const memberKeySet = new Set(memberCols.value.map((c) => c.key))
+      const withoutUnorderedMembers = base.filter(
+        (c) => !memberKeySet.has(c.key) || prefs.value.order.includes(c.key)
+      )
+      const sorted = [...withoutUnorderedMembers].sort((a, b) => {
         const aIdx = prefs.value.order.indexOf(a.key)
         const bIdx = prefs.value.order.indexOf(b.key)
         if (aIdx === -1 && bIdx === -1) return 0
@@ -138,6 +190,8 @@ export function useVariantColumns(
         if (bIdx === -1) return -1
         return aIdx - bIdx
       })
+      const unorderedMembers = memberCols.value.filter((c) => !prefs.value.order.includes(c.key))
+      return spliceAfterGt(sorted, unorderedMembers)
     }
     return base
   })

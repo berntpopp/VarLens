@@ -29,9 +29,12 @@ const pp = (i: Interval): string => `Δ ${fmt(i)} pp`
 
 export function verdicts(cnv: CnvRun, str: StrRun, checks: Checks): Verdict[] {
   const realD = pairedDelta(cnv.real, 'A3', 'A0', 'h10')
-  const largeD = pairedDelta(cnv.sim.moderate.large, 'A3', 'A0', 'h10')
+  const largeA0H1 = pairedDelta(cnv.sim.moderate.large, 'A3', 'A0', 'h1')
+  const largeRegH10 = pairedDelta(cnv.sim.moderate.large, 'A3', 'region', 'h10')
+  const largeSumH10 = pairedDelta(cnv.sim.moderate.large, 'A3', 'sum', 'h10')
   const regions = cnv.sim.moderate.all.filter((c) => c.source === 'region')
-  const regionD = pairedDelta(regions, 'A3', 'A2', 'h10')
+  const regionH1 = pairedDelta(regions, 'A3', 'A0', 'h1')
+  const regionH10 = pairedDelta(regions, 'A3', 'A0', 'h10')
   const rhoA3 = median(cnv.real.flatMap((c) => c.rho.map((r) => r.A3)))
   const rhoA0 = median(cnv.real.flatMap((c) => c.rho.map((r) => r.A0)))
   const inv = checks.invariance
@@ -49,13 +52,25 @@ export function verdicts(cnv: CnvRun, str: StrRun, checks: Checks): Verdict[] {
     },
     {
       id: 'CNV-2',
-      pass: cnv.sim.moderate.large.length > 0 && largeD.estimate >= 0.05 && largeD.lo > 0,
-      value: `A3 − A0 Hit@10 ${pp(largeD)}, n = ${cnv.sim.moderate.large.length} (bar ≥ +5.0, lo > 0)`
+      pass:
+        cnv.sim.moderate.large.length > 0 &&
+        largeA0H1.estimate > 0 &&
+        largeA0H1.lo > 0 &&
+        largeRegH10.estimate >= 0.5 &&
+        largeRegH10.lo > 0 &&
+        largeSumH10.estimate >= 0.05 &&
+        largeSumH10.lo > 0,
+      value: `A3 − A0 Hit@1 ${pp(largeA0H1)} (lo > 0); A3 − region Hit@10 ${pp(largeRegH10)} (bar ≥ +50.0); A3 − sum Hit@10 ${pp(largeSumH10)} (bar ≥ +5.0, lo > 0), n = ${cnv.sim.moderate.large.length}`
     },
     {
       id: 'CNV-3',
-      pass: regions.length > 0 && regionD.estimate >= 0.2,
-      value: `A3 − A2 Hit@10 ${pp(regionD)}, n = ${regions.length} (bar ≥ +20)`
+      pass:
+        regions.length > 0 &&
+        regionH1.estimate >= 0.2 &&
+        regionH1.lo > 0 &&
+        regionH10.estimate >= 0.1 &&
+        regionH10.lo > 0,
+      value: `A3 − A0 Hit@1 ${pp(regionH1)} (bar ≥ +20.0); Hit@10 ${pp(regionH10)} (bar ≥ +10.0), n = ${regions.length}`
     },
     {
       id: 'CNV-4',
@@ -98,6 +113,31 @@ export function verdicts(cnv: CnvRun, str: StrRun, checks: Checks): Verdict[] {
 const section = (title: string, cases: CaseMetrics[], arms: readonly string[]): string =>
   `### ${title}\n\n${armTable(cases, arms)}\n`
 
+function realPerClusterTable(real: CnvRun['real']): string {
+  const byCluster = new Map<string, CnvRun['real']>()
+  for (const c of real) {
+    const list = byCluster.get(c.cluster)
+    if (list === undefined) byCluster.set(c.cluster, [c])
+    else list.push(c)
+  }
+  const pct = (xs: number[]): string =>
+    ((100 * xs.reduce((a, b) => a + b, 0)) / xs.length).toFixed(1)
+  const rows = [...byCluster.entries()]
+    .sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+    .map(
+      ([cluster, cs]) =>
+        `| ${cluster} | ${cs.length} | ${pct(cs.map((c) => c.arms.A0.h1))} | ${pct(cs.map((c) => c.arms.A0.h10))} | ${pct(cs.map((c) => c.arms.A3.h1))} | ${pct(cs.map((c) => c.arms.A3.h10))} |`
+    )
+  return [
+    '### Real cases per locus cluster (#642)',
+    '',
+    '| Cluster | Cases | A0 Hit@1 (%) | A0 Hit@10 (%) | A3 Hit@1 (%) | A3 Hit@10 (%) |',
+    '|---|---|---|---|---|---|',
+    ...rows,
+    ''
+  ].join('\n')
+}
+
 export function renderReport(cnv: CnvRun, str: StrRun, checks: Checks, commit: string): string {
   const v = verdicts(cnv, str, checks)
   const levels = Object.keys(cnv.sim) as NoiseLevelId[]
@@ -110,7 +150,7 @@ export function renderReport(cnv: CnvRun, str: StrRun, checks: Checks, commit: s
   return [
     '# CNV/STR phenotype scoring: validation report',
     '',
-    `Protocol: \`protocol.md\` (pre-registered, see \`preregistration.md\`). Code at \`${commit}\`.`,
+    `Protocol: \`protocol.md\` (pre-registered, see \`protocol.md\`). Code at \`${commit}\`.`,
     `Data: ${checks.sources}.`,
     '',
     '## Criteria',
@@ -134,11 +174,17 @@ export function renderReport(cnv: CnvRun, str: StrRun, checks: Checks, commit: s
     'Hit@k and MRR in %, 95 % locus-clustered bootstrap CIs (2,000 replicates).',
     '',
     section('Real cases (phenopacket-store 0.1.27, observed terms)', cnv.real, CNV_ARMS),
+    realPerClusterTable(cnv.real),
     ...levels.map((lv) => section(`Simulation, ${lv}, all backgrounds`, cnv.sim[lv].all, CNV_ARMS)),
     section('Simulation, moderate, ≥ 1 Mb backgrounds (CNV-2)', cnv.sim.moderate.large, CNV_ARMS),
     section(
       'Simulation, moderate, ClinGen region cases (CNV-3)',
       cnv.sim.moderate.all.filter((c) => c.source === 'region'),
+      CNV_ARMS
+    ),
+    section(
+      'Simulation, moderate, ClinVar non-region cases',
+      cnv.sim.moderate.all.filter((c) => c.source === 'clinvar'),
       CNV_ARMS
     ),
     '## STR',

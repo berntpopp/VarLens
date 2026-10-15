@@ -258,8 +258,36 @@ describe('parseDsl', () => {
     it('rejects cohort-only fields in a single case and accepts them in the cohort view', () => {
       expect(parseDsl('carrier_count:>=:2').errors[0].message).toContain('cohort field')
       expect(parseDsl('carrier_count:>=:2', 'cohort').errors).toEqual([])
+      expect(parseDsl('acmg_best:=:Pathogenic').errors[0].message).toContain('cohort field')
+      expect(parseDsl('acmg_best:is:null', 'cohort')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'acmg_best', operator: 'is:null', value: null }
+      })
+      expect(parseDsl('acmg_best:=:Pathogenic', 'cohort')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'acmg_best', operator: '=', value: 'Pathogenic' }
+      })
+      expect(parseDsl('acmg:=:Pathogenic', 'cohort')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'acmg_best', operator: '=', value: 'Pathogenic' }
+      })
       expect(parseDsl('gt_num:=:1/1').errors).toEqual([])
       expect(parseDsl('cadd:>=:20', 'cohort').errors).toEqual([])
+    })
+
+    it('accepts info.<KEY> filters in both case and cohort scopes (#639)', () => {
+      expect(parseDsl('info.DP:>:50', 'case')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'info.DP', operator: '>', value: 50 }
+      })
+      expect(parseDsl('info.DP:>:50', 'cohort')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'info.DP', operator: '>', value: 50 }
+      })
+      expect(parseDsl('info.REVEL:is:null', 'cohort')).toMatchObject({
+        errors: [],
+        ast: { type: 'rule', column: 'info.REVEL', operator: 'is:null', value: null }
+      })
     })
   })
 })

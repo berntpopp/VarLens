@@ -7,16 +7,16 @@ export type SoloInheritanceMode =
   'homozygous' | 'heterozygous' | 'x_hemizygous' | 'candidate_compound_het'
 
 /** Trio modes — require family data */
-export type TrioInheritanceMode = 'de_novo' | 'autosomal_recessive' | 'compound_het'
+export type TrioInheritanceMode =
+  | 'de_novo'
+  | 'autosomal_recessive'
+  | 'compound_het'
+  | 'autosomal_dominant'
+  | 'x_recessive'
+  | 'x_dominant'
 
 /** Future modes */
-export type FutureInheritanceMode =
-  | 'autosomal_dominant'
-  | 'compound_het_denovo'
-  | 'x_dominant'
-  | 'x_recessive'
-  | 'carrier_screening'
-  | 'upd'
+export type FutureInheritanceMode = 'compound_het_denovo' | 'carrier_screening' | 'upd'
 
 export type InheritanceMode = SoloInheritanceMode | TrioInheritanceMode | FutureInheritanceMode
 
@@ -30,7 +30,10 @@ export const SOLO_MODES: readonly SoloInheritanceMode[] = [
 export const TRIO_MODES: readonly TrioInheritanceMode[] = [
   'de_novo',
   'autosomal_recessive',
-  'compound_het'
+  'compound_het',
+  'autosomal_dominant',
+  'x_recessive',
+  'x_dominant'
 ] as const
 
 /** A mode that needs an analysis group (family) to be evaluated. */
@@ -107,5 +110,29 @@ export const INHERITANCE_MODE_META: Record<
     help: 'Het variants (including assumed het calls) of one gene inherited from opposite parents: one parent carries the variant and the other has a reference call or is without a row. Variants both parents carry, or with an uncalled parent, are left out.',
     requiresFamily: true,
     color: 'deep-orange'
+  },
+  autosomal_dominant: {
+    mode: 'autosomal_dominant',
+    abbr: 'AD',
+    label: 'Autosomal dominant',
+    help: 'Het (including assumed het calls) on autosomes in the proband, carried by every other affected member in the analysis group and reference or uncalled in every unaffected member. Requires at least one other affected family member.',
+    requiresFamily: true,
+    color: 'indigo'
+  },
+  x_recessive: {
+    mode: 'x_recessive',
+    abbr: 'XLR',
+    label: 'X-linked recessive',
+    help: 'On non-PAR chrX: hemizygous in a male proband or homozygous (1/1) in a female proband, with a het carrier mother (if in the group) and a reference unaffected father (if in the group).',
+    requiresFamily: true,
+    color: 'teal'
+  },
+  x_dominant: {
+    mode: 'x_dominant',
+    abbr: 'XLD',
+    label: 'X-linked dominant',
+    help: 'On non-PAR chrX: het or male hemizygous in the proband, carried by every other affected group member and reference or uncalled in every unaffected group member.',
+    requiresFamily: true,
+    color: 'cyan'
   }
 }

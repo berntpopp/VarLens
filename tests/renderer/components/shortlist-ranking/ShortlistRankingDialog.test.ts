@@ -164,4 +164,23 @@ describe('ShortlistRankingDialog', () => {
     expect(w.find('[data-testid="ranking-save"]').exists()).toBe(false)
     expect(w.find('[data-testid="ranking-new"]').exists()).toBe(false)
   })
+
+  it('toggles considerPhasing in the candidate gate and persists it (#637)', async () => {
+    const w = await mountDialog(3)
+    const toggle = w.find('[data-testid="ranking-consider-phasing"] input')
+    expect((toggle.element as HTMLInputElement).checked).toBe(false)
+    await toggle.setValue(true)
+    await w.find('[data-testid="ranking-save"]').trigger('click')
+    await flushPromises()
+    expect(updatePreset).toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({
+        filterJson: {
+          shortlist: expect.objectContaining({
+            baseFilters: expect.objectContaining({ considerPhasing: true })
+          })
+        }
+      })
+    )
+  })
 })

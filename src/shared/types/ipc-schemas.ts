@@ -23,6 +23,7 @@ import { DOMAIN_CONFIG } from '../config'
 import { ACMG_CLASSIFICATIONS } from '../config/domain.config'
 import { normalizeAcmgClassification } from '../utils/acmg'
 import { EvidenceRulesetSchema } from './evidence-ruleset-schemas'
+import { SOLO_MODES, TRIO_MODES } from './inheritance'
 export {
   UsernameSchema,
   PasswordSchema,
@@ -203,77 +204,66 @@ export const CaseSearchParamsSchema = z.object({
  */
 export type ValidatedCaseSearchParams = z.infer<typeof CaseSearchParamsSchema>
 
+const nullishUnitNumber = () =>
+  z
+    .number()
+    .min(0)
+    .max(1)
+    .nullish()
+    .transform((val) => val ?? undefined)
+const nullishNonNegNumber = () =>
+  z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((val) => val ?? undefined)
+const nullishPositiveInt = () =>
+  z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((val) => val ?? undefined)
+
 /**
  * Schema for variant filter parameters (partial, without case_id)
  * Matches Omit<VariantFilter, 'case_id'> in src/main/database/types.ts
- *
- * Note: case_id is passed separately in variants:query IPC handler
  */
 export const VariantFilterPartialSchema = z.object({
-  // Text filters (nullish - frontend may send null)
   gene_symbol: nullishString(),
   search_query: nullishString(),
-
-  // Single value filter (deprecated per type comment)
   consequence: nullishString(),
-
-  // Array filters (nullish - frontend may send null)
   consequences: nullishStringArray(),
   funcs: nullishStringArray(),
   clinvars: nullishStringArray(),
 
   // Numeric filters (validated ranges, nullish)
-  gnomad_af_max: z
-    .number()
-    .min(0)
-    .max(1)
-    .nullish()
-    .transform((val) => val ?? undefined),
+  gnomad_af_max: nullishUnitNumber(),
   cadd_min: z
     .number()
     .min(0)
     .max(DOMAIN_CONFIG.MAX_CADD_SCORE)
     .nullish()
     .transform((val) => val ?? undefined),
-  max_internal_af: z
-    .number()
-    .min(0)
-    .max(1)
-    .nullish()
-    .transform((val) => val ?? undefined),
-  carrier_count_max: z
-    .number()
-    .int()
-    .positive()
-    .nullish()
-    .transform((val) => val ?? undefined),
+  max_internal_af: nullishUnitNumber(),
+  carrier_count_max: nullishPositiveInt(),
 
   // Exact match filters (for variant navigation)
   chr: nullishString(),
-  pos: z
-    .number()
-    .int()
-    .positive()
-    .nullish()
-    .transform((val) => val ?? undefined),
+  pos: nullishPositiveInt(),
   ref: nullishString(),
   alt: nullishString(),
 
-  // Tag filters
+  // Tag & annotation filters
   tag_ids: nullishNumberArray(),
-
-  // Annotation filters
   starred_only: z.boolean().optional(),
   has_comment: z.boolean().optional(),
   acmg_classifications: nullishStringArray(),
-
-  // Per-column typed filters (operator + value)
   column_filters: z
     .record(z.string(), ColumnFilterSchema)
     .nullish()
     .transform((val) => val ?? undefined),
-
-  // Annotation scope for star/ACMG filters
   annotation_scope: z.enum(['case', 'all']).optional(),
 
   // Panel-based genomic interval filtering
@@ -291,29 +281,18 @@ export const VariantFilterPartialSchema = z.object({
 
   // Inheritance mode filters
   inheritance_modes: z
-    .array(
-      z.enum([
-        'homozygous',
-        'heterozygous',
-        'x_hemizygous',
-        'candidate_compound_het',
-        'de_novo',
-        'autosomal_recessive',
-        'compound_het'
-      ])
-    )
+    .array(z.enum([...SOLO_MODES, ...TRIO_MODES] as [string, ...string[]]))
     .nullish()
     .transform((val) => val ?? undefined),
-  analysis_group_id: z
-    .number()
-    .int()
-    .positive()
-    .nullish()
-    .transform((val) => val ?? undefined),
+  analysis_group_id: nullishPositiveInt(),
   consider_phasing: z
     .boolean()
     .nullish()
     .transform((val) => val ?? undefined),
+  de_novo_min_gq: nullishNonNegNumber(),
+  de_novo_min_dp: nullishNonNegNumber(),
+  de_novo_min_ab: nullishUnitNumber(),
+  de_novo_max_parent_ab: nullishUnitNumber(),
 
   // Variant type discriminator filter (snv, indel, sv, cnv, str)
   variant_type: z
@@ -789,6 +768,10 @@ export const FilterStateSchema = z.object({
   inheritanceModes: z.array(z.string()),
   analysisGroupId: z.number().int().positive().nullable(),
   considerPhasing: z.boolean(),
+  deNovoMinGq: z.number().int().nonnegative().nullable().optional(),
+  deNovoMinDp: z.number().int().nonnegative().nullable().optional(),
+  deNovoMinAb: z.number().min(0).max(1).nullable().optional(),
+  deNovoMaxParentAb: z.number().min(0).max(1).nullable().optional(),
   columnFilters: z.record(z.string(), ColumnFilterSchema),
   /**
    * Shortlist configuration, present only on presets with `kind='shortlist'`.

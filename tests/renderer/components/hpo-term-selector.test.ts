@@ -41,6 +41,32 @@ describe('HpoTermSelector', () => {
     wrapper.unmount()
   })
 
+  it('ranks HP:0000365 Hearing impairment first for synonym "hearing loss" with matchedSynonym', async () => {
+    window.api = createMockApi()
+    const wrapper = mount(HpoTermSelector, {
+      props: { modelValue: [] },
+      global: { plugins: [createVuetify({ components, directives })] }
+    })
+    const autocomplete = wrapper.findComponent({ name: 'VAutocomplete' })
+    autocomplete.vm.$emit('update:search', 'hearing loss')
+
+    await vi.waitFor(() => {
+      const items = autocomplete.props('items') as Array<{
+        id: string
+        name: string
+        matchedSynonym?: string
+        assigned: boolean
+      }>
+      expect(items[0]).toEqual({
+        id: 'HP:0000365',
+        name: 'Hearing impairment',
+        matchedSynonym: 'Hearing loss',
+        assigned: false
+      })
+    })
+    wrapper.unmount()
+  })
+
   it('drops a debounced search once the query was cleared (after an add)', async () => {
     window.api = createMockApi()
     const wrapper = mount(HpoTermSelector, {

@@ -430,22 +430,6 @@ export const diseaseScore01 = (cs: CaseScores, d: number): number =>
   cs.options.correction === 'z' ? boundedZ(cs.diseaseScore[d]) : cs.diseaseScore[d]
 
 /**
- * Šidák size correction on the case's own gene distribution (CNV/STR spec
- * §4.1): the score the best of n random genes of this case reaches with the
- * same tail probability as `score`. `score` should be one of the case's gene
- * scores; sidak(cs, s, 1) === s and the result never exceeds `score`.
- */
-export function sidak(cs: CaseScores, score: number, n: number): number {
-  const G = cs.sorted.length
-  if (G === 0 || n < 1) return score
-  const q = 1 - percentile(cs.sorted, score)
-  const p = 1 - Math.pow(1 - q, n)
-  // 1e-9 absorbs float error in p·G so an exact rank is not pushed one past.
-  const rank = Math.min(G, Math.max(1, Math.ceil(p * G - 1e-9)))
-  return Math.min(score, cs.sorted[G - rank])
-}
-
-/**
  * Matched pairs and conflicts of disease d (explainGene's body; STR and region
  * routes call it directly). The percentile is against the case's gene scores.
  */

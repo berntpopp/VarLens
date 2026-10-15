@@ -64,7 +64,7 @@ export function cohortPhenotypePageSql(dialect: SqlDialect, table: Table = plain
       ? 'SELECT * FROM unnest($1::text[], $2::bigint[])'
       : 'SELECT value ->> 0, value ->> 1 FROM json_each(?)'
   return `SELECT pv.chr, pv.pos, pv.ref, pv.alt, pv.variant_type, pc.genome_build,
-      MAX(ps.score) AS score
+      MAX(ps.score) AS score, COUNT(DISTINCT pv.case_id) AS carriers
     ${carrierScoresFrom(dialect, table)}
     WHERE (pv.chr, pv.pos) IN (${loci}) AND ${carrierRowSql('pv')}
     GROUP BY pv.chr, pv.pos, pv.ref, pv.alt, pv.variant_type, pc.genome_build`
@@ -100,11 +100,24 @@ export function attachCasePhenotype(
 const identityKey = (v: Record<keyof CohortVariantIdentity, unknown>): string =>
   [v.chr, Number(v.pos), v.ref, v.alt, v.variant_type, v.genome_build].map(String).join('\u0000')
 
-/** Set `phenotype_score` on every cohort row: the best score of its carriers, else null. */
+/** Set `phenotype_score` and carrier hint (`phenotype_disease`) on every cohort row. */
 export function attachCohortPhenotype(
-  rows: Array<CohortVariantIdentity & { phenotype_score?: number | null }>,
-  hits: Array<Record<keyof CohortVariantIdentity, unknown> & { score: unknown }>
+  rows: Array<
+    CohortVariantIdentity & { phenotype_score?: number | null; phenotype_disease?: string | null }
+  >,
+  hits: Array<
+    Record<keyof CohortVariantIdentity, unknown> & { score: unknown; carriers?: number | string }
+  >
 ): void {
-  const byIdentity = new Map(hits.map((h) => [identityKey(h), Number(h.score)]))
-  for (const row of rows) row.phenotype_score = byIdentity.get(identityKey(row)) ?? null
+  const byIdentity = new Map(hits.map((h) => [identityKey(h), h]))
+  for (const row of rows) {
+    const hit = byIdentity.get(identityKey(row))
+    row.phenotype_score = hit === undefined ? null : Number(hit.score)
+    const carriers = hit?.carriers === undefined ? 0 : Number(hit.carriers)
+    if (carriers > 0) {
+      row.phenotype_disease = `${carriers} ${carriers === 1 ? 'carrier' : 'carriers'} scored`
+    } else if ('phenotype_disease' in row) {
+      row.phenotype_disease = null
+    }
+  }
 }

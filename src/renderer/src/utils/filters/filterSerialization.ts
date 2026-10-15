@@ -101,6 +101,22 @@ export function buildFilterIpcParams(filters: FilterState): FilterIpcParams {
   if (plainState.considerPhasing) {
     params.consider_phasing = true
   }
+  if (plainState.inheritanceModes?.includes('de_novo')) {
+    const fin = (v: number | null | undefined, max = Infinity, int = false): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max
+        ? int
+          ? Math.trunc(v)
+          : v
+        : undefined
+    const minGq = fin(plainState.deNovoMinGq, Infinity, true)
+    const minDp = fin(plainState.deNovoMinDp, Infinity, true)
+    const minAb = fin(plainState.deNovoMinAb, 1)
+    const maxParentAb = fin(plainState.deNovoMaxParentAb, 1)
+    if (minGq !== undefined) params.de_novo_min_gq = minGq
+    if (minDp !== undefined) params.de_novo_min_dp = minDp
+    if (minAb !== undefined) params.de_novo_min_ab = minAb
+    if (maxParentAb !== undefined) params.de_novo_max_parent_ab = maxParentAb
+  }
 
   if (plainState.columnFilters !== undefined && Object.keys(plainState.columnFilters).length > 0) {
     // Already plain JS (stripped above); reuse the helper for an isolated copy.
@@ -161,6 +177,18 @@ export function buildVariantFilterFromState(
   }
   if (ipcParams.consider_phasing !== undefined) {
     variantFilter.consider_phasing = ipcParams.consider_phasing
+  }
+  if (ipcParams.de_novo_min_gq !== undefined) {
+    variantFilter.de_novo_min_gq = ipcParams.de_novo_min_gq
+  }
+  if (ipcParams.de_novo_min_dp !== undefined) {
+    variantFilter.de_novo_min_dp = ipcParams.de_novo_min_dp
+  }
+  if (ipcParams.de_novo_min_ab !== undefined) {
+    variantFilter.de_novo_min_ab = ipcParams.de_novo_min_ab
+  }
+  if (ipcParams.de_novo_max_parent_ab !== undefined) {
+    variantFilter.de_novo_max_parent_ab = ipcParams.de_novo_max_parent_ab
   }
   if (ipcParams.column_filters !== undefined) {
     variantFilter.column_filters = ipcParams.column_filters

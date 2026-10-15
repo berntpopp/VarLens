@@ -106,7 +106,8 @@ describe('PostgresCohortRepository', () => {
             alt: 'G',
             variant_type: 'snv',
             genome_build: 'GRCh38',
-            score: 0.75
+            score: 0.75,
+            carriers: '2'
           }
         ]
       })
@@ -118,6 +119,7 @@ describe('PostgresCohortRepository', () => {
     expect(callText(query.mock.calls[3])).toContain('FROM "public"."variant_tags" vt')
     expect(callParams(query.mock.calls[3])).toEqual([[123]])
     expect(callText(query.mock.calls[4])).toContain('"public"."case_phenotype_scores" ps')
+    expect(callText(query.mock.calls[4])).toContain('COUNT(DISTINCT pv.case_id) AS carriers')
     expect(callParams(query.mock.calls[4])).toEqual([['1'], [123]])
     expect(normalizeSql(query.mock.calls[0][0] as string)).toBe(
       'SELECT COUNT(*)::bigint AS total_cases FROM "public"."cases"'
@@ -152,7 +154,8 @@ describe('PostgresCohortRepository', () => {
           sv_type: null,
           sv_length: null,
           tag_ids: [7],
-          phenotype_score: 0.75
+          phenotype_score: 0.75,
+          phenotype_disease: '2 carriers scored'
         }
       ]
     })

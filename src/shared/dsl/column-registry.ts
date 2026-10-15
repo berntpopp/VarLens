@@ -373,8 +373,8 @@ export const HPO_DERIVED_COLUMNS = [
 const COUNT_OPERATORS: DslOperator[] = ['=', '!=', '<', '>', '<=', '>=']
 
 /**
- * Cohort-summary fields (numeric column-filter keys) outside the shared
- * registry: only the cohort view can filter on them.
+ * Cohort-summary fields outside the shared registry: only the cohort view can
+ * filter on them.
  */
 export const COHORT_ONLY_COLUMNS: readonly FilterColumnDef[] = [
   {
@@ -404,12 +404,26 @@ export const COHORT_ONLY_COLUMNS: readonly FilterColumnDef[] = [
     aliases: [],
     type: 'numeric',
     operators: COUNT_OPERATORS
+  },
+  {
+    key: 'acmg_best',
+    label: 'ACMG (best)',
+    aliases: ['acmg'],
+    type: 'categorical',
+    operators: ['=', '!=', '~'],
+    commonValues: [
+      { value: 'Pathogenic', label: 'Pathogenic' },
+      { value: 'Likely pathogenic', label: 'Likely pathogenic' },
+      { value: 'Uncertain significance', label: 'Uncertain significance' },
+      { value: 'Likely benign', label: 'Likely benign' },
+      { value: 'Benign', label: 'Benign' }
+    ]
   }
 ]
 
 /**
- * Operators for `info.<KEY>` fields (custom VCF INFO values, case view only,
- * #538) besides `is:null` / `is:notnull`. The fields are per case and not in
+ * Operators for `info.<KEY>` fields (custom VCF INFO values, #538, #639)
+ * besides `is:null` / `is:notnull`. The fields are per case and not in
  * FILTER_COLUMNS; the parser validates the key against the VCF INFO ID grammar.
  */
 export const INFO_FIELD_OPERATORS: readonly DslOperator[] = [...NUMERIC_OPERATORS, '~']
@@ -435,7 +449,14 @@ export function getOperatorsForColumn(nameOrAlias: string): DslOperator[] {
 
 /** Get common value suggestions for a column (empty array if none) */
 export function getCommonValues(nameOrAlias: string): CommonValue[] {
-  return findColumn(nameOrAlias)?.commonValues ?? []
+  const lower = nameOrAlias.toLowerCase()
+  return (
+    findColumn(nameOrAlias)?.commonValues ??
+    COHORT_ONLY_COLUMNS.find(
+      (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
+    )?.commonValues ??
+    []
+  )
 }
 
 /**

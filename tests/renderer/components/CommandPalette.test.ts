@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
-import CommandPalette from '@renderer/components/CommandPalette.vue'
+import CommandPalette, { type PaletteExtraCommand } from '@renderer/components/CommandPalette.vue'
 import { SHORTCUTS } from '@renderer/config/keyboardShortcuts'
 
 const vuetify = createVuetify()
 
-async function mountPalette(actions: Record<string, () => void>) {
+async function mountPalette(
+  actions: Record<string, () => void>,
+  extraCommands?: ReadonlyArray<PaletteExtraCommand>
+) {
   const wrapper = mount(CommandPalette, {
     props: {
       modelValue: true,
       actions,
+      extraCommands,
       'onUpdate:modelValue': (open: boolean) => wrapper.setProps({ modelValue: open })
     },
     global: { plugins: [vuetify] },
@@ -38,6 +42,37 @@ describe('CommandPalette', () => {
       SHORTCUTS.help.description + SHORTCUTS.help.key,
       SHORTCUTS.faq.description + SHORTCUTS.faq.key
     ])
+  })
+
+  it('lists and executes extraCommands alongside shortcuts, omitting <kbd> when key is unset', async () => {
+    const switchView = vi.fn()
+    const applyPreset = vi.fn()
+    await mountPalette({ help: vi.fn() }, [
+      { id: 'nav:switch-view', description: 'Switch to Cohort view', action: switchView },
+      {
+        id: 'preset:1',
+        description: 'Apply preset: Rare Coding',
+        key: 'P1',
+        action: applyPreset
+      }
+    ])
+
+    const rows = options().map((el) => el.textContent ?? '')
+    expect(rows).toEqual([
+      SHORTCUTS.help.description + SHORTCUTS.help.key,
+      'Switch to Cohort view',
+      'Apply preset: Rare CodingP1'
+    ])
+
+    const input = document.body.querySelector('input')!
+    input.value = 'Cohort view'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(switchView).toHaveBeenCalledTimes(1)
+    expect(applyPreset).not.toHaveBeenCalled()
   })
 
   it('focuses the command input on open', async () => {
