@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <v-toolbar density="compact" color="app-bar">
+  <div class="app-sidebar">
+    <v-toolbar density="compact" color="app-bar" class="app-sidebar__toolbar">
       <span class="ml-2 text-body-large font-weight-medium">
         Cases
         <span v-if="(caseCount ?? 0) > 0" class="text-body-small ml-1" style="opacity: 0.8"
@@ -66,3 +66,23 @@ defineEmits<{
   'vcf-import-click': []
 }>()
 </script>
+
+<style scoped>
+/* The toolbar and the case list's search/filters stay visible while the list scrolls. */
+.app-sidebar {
+  --sidebar-toolbar-height: 48px;
+}
+
+.app-sidebar__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.app-sidebar :deep(.case-list-controls) {
+  position: sticky;
+  top: var(--sidebar-toolbar-height);
+  z-index: 2;
+  background: rgb(var(--v-theme-surface));
+}
+</style>

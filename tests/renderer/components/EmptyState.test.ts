@@ -46,6 +46,15 @@ describe('EmptyState first impression', () => {
     expect(wrapper.find('.empty-state__cta').attributes('aria-busy')).toBe('false')
   })
 
+  it('"Select a case" opens a closed sidebar', async () => {
+    const { wrapper, appState } = mountWithState(true)
+    appState.setCaseCount(3)
+    appState.closeSidebar()
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-testid="empty-state-open-sidebar"]').trigger('click')
+    expect(appState.sidebarOpen.value).toBe(true)
+  })
+
   it('shows the import CTA when loading finished with zero cases', async () => {
     const { wrapper, appState } = mountWithState(false)
     appState.setCaseCount(0)
