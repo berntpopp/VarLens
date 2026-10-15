@@ -36,10 +36,14 @@ export function cohortPhenotypeScoreSql(
   dialect: SqlDialect,
   table: Table = plain
 ): string {
-  return `(SELECT MAX(ps.score) ${carrierScoresFrom(dialect, table)}
+  // The gene pre-check skips the carrier probe for rows of genes no case scored (2x on a WGS sort).
+  // ponytail: keyed on the row's representative gene; a carrier annotated with another gene is
+  // only seen by the page lookup. Probe every row if mixed-gene coordinates matter.
+  return `(CASE WHEN ${alias}.gene_symbol IN (SELECT gene_symbol FROM ${table('case_phenotype_scores')})
+    THEN (SELECT MAX(ps.score) ${carrierScoresFrom(dialect, table)}
     WHERE pv.chr = ${alias}.chr AND pv.pos = ${alias}.pos AND pv.ref = ${alias}.ref
       AND pv.alt = ${alias}.alt AND pv.variant_type = ${alias}.variant_type
-      AND pc.genome_build = ${alias}.genome_build AND ${carrierRowSql('pv')})`
+      AND pc.genome_build = ${alias}.genome_build AND ${carrierRowSql('pv')}) END)`
 }
 
 /** Params: case id, the page's variant ids (a JSON array on SQLite). */
