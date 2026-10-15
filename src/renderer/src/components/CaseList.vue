@@ -1,15 +1,15 @@
 <template>
-  <v-text-field
-    v-model="searchTerm"
-    :prepend-inner-icon="mdiMagnify"
-    placeholder="Search cases..."
-    density="compact"
-    hide-details
-    clearable
-    class="mx-2 mt-2"
-  />
-
-  <div class="case-filters-stack mx-2 mt-1">
+  <!-- Sticky below the sidebar toolbar (AppSidebar.vue) while the case list scrolls. -->
+  <div class="case-list-controls px-2 pt-2 pb-1">
+    <v-text-field
+      v-model="searchTerm"
+      :prepend-inner-icon="mdiMagnify"
+      placeholder="Search cases..."
+      density="compact"
+      hide-details
+      clearable
+      class="mb-1"
+    />
     <v-select
       v-model="selectedCohortIds"
       :items="cohortGroupsCache"

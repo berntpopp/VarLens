@@ -18,10 +18,15 @@
              nothing until the case list has answered, in reserved space. -->
         <div class="empty-state__cta" :aria-busy="!casesLoaded">
           <template v-if="casesLoaded && hasCases">
-            <p class="text-body-medium text-muted">
-              <v-icon size="small" class="mr-1" :icon="mdiArrowLeft" />
+            <v-btn
+              variant="text"
+              class="text-body-medium text-none text-muted"
+              :prepend-icon="mdiArrowLeft"
+              data-testid="empty-state-open-sidebar"
+              @click="appState?.openSidebar()"
+            >
               Select a case from the sidebar to view variants
-            </p>
+            </v-btn>
           </template>
           <template v-else-if="databaseStore.noDatabaseOpen">
             <p class="text-body-medium text-muted">
