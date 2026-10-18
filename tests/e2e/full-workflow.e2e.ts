@@ -144,7 +144,7 @@ test.describe('Case View', () => {
     const contextIndicator = window.locator('.context-indicator')
     await expect(contextIndicator).toBeVisible()
 
-    const table = window.locator('.v-data-table-server')
+    const table = window.locator('.variant-table--sticky.v-data-table')
     await expect(table).toBeVisible()
 
     await window.screenshot({ path: testInfo.outputPath('case-selected.png') })
@@ -153,11 +153,12 @@ test.describe('Case View', () => {
   // eslint-disable-next-line no-empty-pattern
   test('variant table shows data columns', async ({}, testInfo) => {
     // Check if we have a variant table visible
-    const table = window.locator('.v-data-table-server')
+    const table = window.locator('.variant-table--sticky.v-data-table')
     await expect(table).toBeVisible()
 
     // Should have column headers
-    const headers = window.locator('.v-data-table-server th')
+    const headers = table.locator('th')
+    await expect(headers.first()).toBeVisible()
     const headerCount = await headers.count()
     expect(headerCount).toBeGreaterThan(3)
 
