@@ -68,7 +68,7 @@ const baseHeaders = [
   { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
   { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
   { title: '★', key: 'is_starred', width: '3.125rem', sortable: false },
-  { title: '', key: 'actions', width: '5rem', sortable: false }
+  { title: 'Actions', key: 'actions', width: '5rem', sortable: false }
 ] as const
 
 // Link-outs resolve exactly like the case/cohort tables (shared resolvers)

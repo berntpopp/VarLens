@@ -364,4 +364,19 @@ describe('ShortlistTable', () => {
     expect(state.proteinViewRequest.value).toEqual({ variant: item, tab: 'lollipop' })
     wrapper.unmount()
   })
+
+  it('renders accessible title for the actions column header (#669)', () => {
+    const wrapper = mount(ShortlistTable, {
+      props: { rows: [] },
+      global: { plugins: [vuetify] }
+    })
+    const headers = wrapper.findComponent({ name: 'VDataTable' }).props('headers') as {
+      key: string
+      title: string
+    }[]
+    const actionsHeader = headers.find((h) => h.key === 'actions')
+    expect(actionsHeader?.title).toBe('Actions')
+    wrapper.unmount()
+  })
 })
+

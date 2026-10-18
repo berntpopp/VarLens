@@ -47,4 +47,27 @@ describe('CaseMetadataModal — web tab bar', () => {
     expect(variant('Comments')).toBe(false)
     wrapper.unmount()
   })
+
+  it('provides an accessible name via aria-label on the dialog (#669)', async () => {
+    const wrapper = mount(CaseMetadataModal, {
+      props: { caseId: 1, caseName: 'case-a', variantCount: 3, createdAt: 0 },
+      global: {
+        plugins: [vuetify],
+        stubs: {
+          CaseMetadataCard: true,
+          CaseCommentsTab: true,
+          CaseMetricsTab: true,
+          CaseDataInfoTab: true
+        }
+      },
+      attachTo: document.body
+    })
+    ;(wrapper.vm as unknown as { show: () => void }).show()
+    await flushPromises()
+    const vDialog = wrapper.findComponent({ name: 'VDialog' })
+    const el = document.body.querySelector('[aria-label="Case Metadata"]')
+    expect(vDialog.props('ariaLabel') ?? el?.getAttribute('aria-label') ?? vDialog.attributes('aria-label')).toBe('Case Metadata')
+    wrapper.unmount()
+  })
 })
+
