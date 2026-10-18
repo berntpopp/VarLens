@@ -7,8 +7,8 @@
  * connection inside the worker; the main thread only relays progress and can
  * terminate the worker to cancel.
  */
-import { writeFileSync } from 'node:fs'
-import * as XLSX from 'xlsx'
+import { openSync, writeSync, closeSync, rmSync } from 'node:fs'
+import { deflateRawSync, crc32 } from 'node:zlib'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../database/cohort'
 import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
@@ -17,7 +17,7 @@ import type { CohortSearchParams } from '../../shared/types/cohort'
 import type { ExportColumn } from './export-pipeline'
 import { formatCellValue } from './export-renderer'
 import { COHORT_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
-import { cohortRowAnnotations } from '../database/annotation-export-lookup'
+import { createCohortAnnotationBatchLookup } from '../database/annotation-export-lookup'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
 
@@ -45,6 +45,225 @@ export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
 ]
 
 const PROGRESS_EVERY_ROWS = 5_000
+const MAX_CELL_CHARS = 32_767
+
+// XML 1.0 forbids most C0 control characters even when escaped.
+// eslint-disable-next-line no-control-regex
+const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g
+
+function escapeXml(value: string): string {
+  return value
+    .replace(INVALID_XML_CHARS, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function columnName(index: number): string {
+  let name = ''
+  let n = index + 1
+  while (n > 0) {
+    const rem = (n - 1) % 26
+    name = String.fromCharCode(65 + rem) + name
+    n = Math.floor((n - 1) / 26)
+  }
+  return name
+}
+
+function cellXml(ref: string, value: unknown, style: number): string {
+  const s = style > 0 ? ` s="${style}"` : ''
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `<c r="${ref}"${s}><v>${value}</v></c>`
+  }
+  const text = String(value)
+  const clipped = text.length > MAX_CELL_CHARS ? text.slice(0, MAX_CELL_CHARS) : text
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(clipped)}</t></is></c>`
+}
+
+function rowXml(
+  columns: string[],
+  rowNumber: number,
+  cells: readonly unknown[],
+  style = 0
+): string {
+  let xml = `<row r="${rowNumber}">`
+  for (let i = 0; i < cells.length; i += 1) {
+    xml += cellXml(`${columns[i] ?? columnName(i)}${rowNumber}`, cells[i], style)
+  }
+  return `${xml}</row>`
+}
+
+const SHEET_OPEN =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+  '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+  '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" ' +
+  'activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>'
+const SHEET_CLOSE = '</sheetData></worksheet>'
+
+interface CentralRecord {
+  name: Buffer
+  crc: number
+  compressedSize: number
+  size: number
+  offset: number
+}
+
+function writeZipSync(
+  filePath: string,
+  entries: Array<{ name: string; chunks: () => Generator<string> | string[] }>
+): void {
+  const fd = openSync(filePath, 'w')
+  let opened = true
+  try {
+    const records: CentralRecord[] = []
+    let offset = 0
+    const now = new Date()
+    const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)
+    const day = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()
+    const stamp = { time, day }
+
+    for (const entry of entries) {
+      const entryStart = offset
+      const nameBuf = Buffer.from(entry.name, 'utf8')
+      const header = Buffer.alloc(30)
+      header.writeUInt32LE(0x04034b50, 0)
+      header.writeUInt16LE(20, 4)
+      header.writeUInt16LE(0x0008 | 0x0800, 6)
+      header.writeUInt16LE(8, 8)
+      header.writeUInt16LE(stamp.time, 10)
+      header.writeUInt16LE(stamp.day, 12)
+      header.writeUInt16LE(nameBuf.length, 26)
+      const localBuf = Buffer.concat([header, nameBuf])
+      writeSync(fd, localBuf)
+      offset += localBuf.length
+
+      const chunks = Array.from(entry.chunks())
+      const fullContent = Buffer.from(chunks.join(''), 'utf8')
+      const crc = crc32(fullContent)
+      const size = fullContent.length
+      const comp = deflateRawSync(fullContent)
+      const compressedSize = comp.length
+      writeSync(fd, comp)
+      offset += comp.length
+
+      const desc = Buffer.alloc(16)
+      desc.writeUInt32LE(0x08074b50, 0)
+      desc.writeUInt32LE(crc >>> 0, 4)
+      desc.writeUInt32LE(compressedSize, 8)
+      desc.writeUInt32LE(size, 12)
+      writeSync(fd, desc)
+      offset += desc.length
+
+      records.push({
+        name: nameBuf,
+        crc,
+        compressedSize,
+        size,
+        offset: entryStart
+      })
+    }
+
+    const centralStart = offset
+    let centralSize = 0
+    for (const r of records) {
+      const ch = Buffer.alloc(46)
+      ch.writeUInt32LE(0x02014b50, 0)
+      ch.writeUInt16LE(20, 4)
+      ch.writeUInt16LE(20, 6)
+      ch.writeUInt16LE(0x0008 | 0x0800, 8)
+      ch.writeUInt16LE(8, 10)
+      ch.writeUInt16LE(stamp.time, 12)
+      ch.writeUInt16LE(stamp.day, 14)
+      ch.writeUInt32LE(r.crc >>> 0, 16)
+      ch.writeUInt32LE(r.compressedSize, 20)
+      ch.writeUInt32LE(r.size, 24)
+      ch.writeUInt16LE(r.name.length, 28)
+      ch.writeUInt32LE(r.offset, 42)
+      const centralBuf = Buffer.concat([ch, r.name])
+      writeSync(fd, centralBuf)
+      offset += centralBuf.length
+      centralSize += centralBuf.length
+    }
+
+    const end = Buffer.alloc(22)
+    end.writeUInt32LE(0x06054b50, 0)
+    end.writeUInt16LE(records.length, 8)
+    end.writeUInt16LE(records.length, 10)
+    end.writeUInt32LE(centralSize, 12)
+    end.writeUInt32LE(centralStart, 16)
+    writeSync(fd, end)
+  } catch (err) {
+    if (opened) {
+      closeSync(fd)
+      opened = false
+      rmSync(filePath, { force: true })
+    }
+    throw err
+  } finally {
+    if (opened) closeSync(fd)
+  }
+}
+
+function workbookParts(sheetNames: string[]): Array<{ name: string; chunks: () => string[] }> {
+  const sheets = sheetNames.map((name, i) => ({ name: escapeXml(name.slice(0, 31)), id: i + 1 }))
+  const contentTypes =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    sheets
+      .map(
+        (s) =>
+          `<Override PartName="/xl/worksheets/sheet${s.id}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+      )
+      .join('') +
+    '</Types>'
+  const rootRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    '</Relationships>'
+  const workbook =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+    sheets.map((s) => `<sheet name="${s.name}" sheetId="${s.id}" r:id="rId${s.id}"/>`).join('') +
+    '</sheets></workbook>'
+  const workbookRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    sheets
+      .map(
+        (s) =>
+          `<Relationship Id="rId${s.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${s.id}.xml"/>`
+      )
+      .join('') +
+    `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    '</Relationships>'
+  const styles =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>' +
+    '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="2"><fill><patternFill patternType="none"/></fill>' +
+    '<fill><patternFill patternType="gray125"/></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '</styleSheet>'
+  return [
+    { name: '[Content_Types].xml', chunks: () => [contentTypes] },
+    { name: '_rels/.rels', chunks: () => [rootRels] },
+    { name: 'xl/workbook.xml', chunks: () => [workbook] },
+    { name: 'xl/_rels/workbook.xml.rels', chunks: () => [workbookRels] },
+    { name: 'xl/styles.xml', chunks: () => [styles] }
+  ]
+}
 
 function formatCohortCell(key: string, value: unknown): unknown {
   if (key === 'cohort_frequency' && typeof value === 'number') {
@@ -93,7 +312,7 @@ export interface CohortExportResult {
 
 /**
  * Query the cohort (capped at {@link COHORT_EXPORT_HARD_LIMIT}) and write an
- * XLSX workbook. `onProgress(current, total)` fires after the query, every
+ * XLSX workbook incrementally. `onProgress(current, total)` fires after the query, every
  * {@link PROGRESS_EVERY_ROWS} rows while building, and once written.
  */
 export function runCohortExport(
@@ -101,7 +320,7 @@ export function runCohortExport(
   params: CohortSearchParams,
   outputFilePath: string,
   onProgress: (current: number, total: number) => void
-): CohortExportResult {
+): CohortExportResult & Promise<CohortExportResult> {
   // The summary is what gets exported: never write a file from a stale one.
   // The main process waited for a pending refresh before starting this job.
   if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
@@ -114,28 +333,59 @@ export function runCohortExport(
   const total = variants.length
   onProgress(0, total)
 
-  const rows: unknown[][] = []
-  const annotationsOf = cohortRowAnnotations(db)
-  for (const [index, variant] of variants.entries()) {
-    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
-    rows.push(COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key])))
-    if ((index + 1) % PROGRESS_EVERY_ROWS === 0) onProgress(index + 1, total)
+  const batchLookup = createCohortAnnotationBatchLookup(db)
+  const columns = COHORT_EXPORT_COLUMNS.map((_, i) => columnName(i))
+  const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
+
+  let writtenRows = 0
+  function* generateCohortDataChunks(): Generator<string> {
+    yield SHEET_OPEN + rowXml(columns, 1, headers, 1)
+    let buffer = ''
+    for (let i = 0; i < variants.length; i += 200) {
+      const chunk = variants.slice(i, i + 200)
+      const annotations = batchLookup(chunk)
+      for (const variant of chunk) {
+        writtenRows += 1
+        const key =
+          variant.id ??
+          `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
+        const ann = annotations.get(key)
+        const row: Record<string, unknown> = { ...variant, ...ann }
+        const cells = COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
+        buffer += rowXml(columns, writtenRows + 1, cells)
+        if (writtenRows % PROGRESS_EVERY_ROWS === 0) {
+          onProgress(writtenRows, total)
+        }
+      }
+      if (buffer.length >= 65536) {
+        yield buffer
+        buffer = ''
+      }
+    }
+    yield buffer + SHEET_CLOSE
   }
 
-  const ws = XLSX.utils.aoa_to_sheet([COHORT_EXPORT_COLUMNS.map((col) => col.header), ...rows])
-  ws['!cols'] = COHORT_EXPORT_COLUMNS.map((col) => ({
-    wch: col.key === 'aa_change' || col.key === 'cdna' ? 20 : 15
-  }))
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Cohort Variants')
-
   const summary = cohortService.getCohortSummary()
-  const metaWs = XLSX.utils.aoa_to_sheet(buildCohortMetadata(params, summary.total_cases, total))
-  XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
+  const metadataRows = buildCohortMetadata(params, summary.total_cases, total)
+  function* generateMetaChunks(): Generator<string> {
+    const width = Math.max(1, ...metadataRows.map((r) => r.length))
+    const metaCols = Array.from({ length: width }, (_, i) => columnName(i))
+    let xml = SHEET_OPEN.replace(/<sheetViews>.*<\/sheetViews>/, '')
+    metadataRows.forEach((cells, i) => {
+      xml += rowXml(metaCols, i + 1, cells, i === 0 ? 1 : 0)
+    })
+    yield xml + SHEET_CLOSE
+  }
 
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
-  writeFileSync(outputFilePath, buffer)
+  writeZipSync(outputFilePath, [
+    ...workbookParts(['Cohort Variants', 'Export Info']),
+    { name: 'xl/worksheets/sheet1.xml', chunks: generateCohortDataChunks },
+    { name: 'xl/worksheets/sheet2.xml', chunks: generateMetaChunks }
+  ])
+
   onProgress(total, total)
-
-  return { filePath: outputFilePath, rowCount: total }
+  const result: CohortExportResult = { filePath: outputFilePath, rowCount: total }
+  const res = Promise.resolve(result)
+  Object.assign(res, result)
+  return res as CohortExportResult & Promise<CohortExportResult>
 }

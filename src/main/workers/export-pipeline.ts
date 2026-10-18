@@ -7,16 +7,20 @@
  * in isolation.
  */
 import { createWriteStream } from 'node:fs'
-import { writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
 import { formatCellValue, csvEscape } from './export-renderer'
 import { CASE_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
-import { caseRowAnnotations } from '../database/annotation-export-lookup'
+import { createCaseAnnotationBatchLookup } from '../database/annotation-export-lookup'
+import {
+  xlsxStream,
+  type XlsxSheetSpec,
+  type XlsxStreamResult,
+  type XlsxCell
+} from '../../web/server/downloads/xlsx-stream'
 
 /** Column definition for export output. */
 export interface ExportColumn {
@@ -75,16 +79,38 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
 
   onProgress?.(0, 0)
 
-  const annotationsOf = caseRowAnnotations(db)
+  const batchLookup = createCaseAnnotationBatchLookup(db)
   let rowCount = 0
   function* csvLines(): Generator<string> {
     yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
+    let chunk: Record<string, unknown>[] = []
     for (const variant of iterator) {
-      const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
-      const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
-      yield cells.join(',') + '\r\n'
-      rowCount++
-      if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
+      chunk.push(variant)
+      if (chunk.length >= 200) {
+        const annotations = batchLookup(chunk)
+        for (const v of chunk) {
+          const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+          const cells = EXPORT_COLUMNS.map((col) =>
+            csvEscape(formatCellValue(col.key, row[col.key]))
+          )
+          yield cells.join(',') + '\r\n'
+          rowCount++
+          if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
+        }
+        chunk = []
+      }
+    }
+    if (chunk.length > 0) {
+      const annotations = batchLookup(chunk)
+      for (const v of chunk) {
+        const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+        const cells = EXPORT_COLUMNS.map((col) =>
+          csvEscape(formatCellValue(col.key, row[col.key]))
+        )
+        yield cells.join(',') + '\r\n'
+        rowCount++
+        if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
+      }
     }
   }
 
@@ -142,9 +168,9 @@ export function buildMetadataSheet(
 }
 
 /**
- * Run the XLSX export pipeline: build worksheets in memory and write to file.
+ * Run the XLSX export pipeline: stream worksheets incrementally to file.
  */
-function runXlsxPipeline(params: ExportPipelineParams): ExportPipelineResult {
+async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
   const { db, compiledSql, compiledParams, outputFilePath, caseName, filterSummary, onProgress } =
     params
 
@@ -154,38 +180,60 @@ function runXlsxPipeline(params: ExportPipelineParams): ExportPipelineResult {
   onProgress?.(0, 0)
 
   const headers = EXPORT_COLUMNS.map((col) => col.header)
-  const rows: (string | number | null)[][] = []
-  const annotationsOf = caseRowAnnotations(db)
+  const batchLookup = createCaseAnnotationBatchLookup(db)
+  const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
-  let i = 0
-  for (const variant of iterator) {
-    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
-    rows.push(EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key])))
-    i++
-
-    if (i % 1000 === 0) {
-      onProgress?.(i, 0)
+  async function* generateRows(): AsyncGenerator<readonly XlsxCell[]> {
+    let chunk: Record<string, unknown>[] = []
+    for (const variant of iterator) {
+      chunk.push(variant)
+      if (chunk.length >= 200) {
+        const annotations = batchLookup(chunk)
+        for (const v of chunk) {
+          const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+          yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
+          if ((result.rowCount + 1) % 1000 === 0) {
+            onProgress?.(result.rowCount + 1, 0)
+          }
+        }
+        chunk = []
+      }
+    }
+    if (chunk.length > 0) {
+      const annotations = batchLookup(chunk)
+      for (const v of chunk) {
+        const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+        yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
+        if ((result.rowCount + 1) % 1000 === 0) {
+          onProgress?.(result.rowCount + 1, 0)
+        }
+      }
     }
   }
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-  ws['!cols'] = EXPORT_COLUMNS.map((col) => ({
-    wch: col.key === 'aa_change' ? 20 : 15
-  }))
+  const sheet: XlsxSheetSpec = {
+    name: 'Variants',
+    header: headers,
+    rows: generateRows()
+  }
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Variants')
+  const info = {
+    name: 'Export Info',
+    rows: (res: XlsxStreamResult) => buildMetadataSheet(caseName, res.rowCount, filterSummary)
+  }
 
-  // Metadata sheet (includes active filter summary)
-  const metaData = buildMetadataSheet(caseName, i, filterSummary)
-  const metaWs = XLSX.utils.aoa_to_sheet(metaData)
-  XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
+  const stream = createWriteStream(outputFilePath)
+  let opened = false
+  stream.once('open', () => (opened = true))
+  try {
+    await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
+  } catch (error) {
+    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+    throw error
+  }
 
-  // Write file — use XLSX.write + writeFileSync for ESM compatibility
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
-  writeFileSync(outputFilePath, buf)
-
-  return { rowCount: i, filePath: outputFilePath }
+  onProgress?.(result.rowCount, result.rowCount)
+  return { rowCount: result.rowCount, filePath: outputFilePath }
 }
 
 /**
