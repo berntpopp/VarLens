@@ -212,7 +212,7 @@ function createInsecureLocalPostgresSecretStore(userDataPath: string): SecretSto
 
 /**
  * DB path-authority gate for `database:open` / `database:create` /
- * `database:showInFolder` / `database:removeRecent`.
+ * `database:showInFolder` / `database:removeRecent` / `database:deleteFile`.
  *
  * A path is allowed only if it was picked via a dialog this session
  * (`database:selectFile` / `database:selectSaveLocation`, which enroll into
@@ -564,6 +564,9 @@ export function registerDatabaseHandlers({
       if (!validated.success) {
         mainLogger.error(`Invalid database:deleteFile path: ${validated.error.message}`, 'database')
         throw new Error('Invalid file path')
+      }
+      if (!isAllowedDatabasePath(validated.data, getDbManager)) {
+        throwUnallowedDatabasePath('database:deleteFile', validated.data)
       }
       return deleteDbFile(validated.data, getDbManager, getDbKeyStore())
     })
