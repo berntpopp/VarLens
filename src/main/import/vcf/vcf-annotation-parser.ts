@@ -145,11 +145,7 @@ function parseCsqForAlleles(
         `CSQ has more than ${MAX_VCF_TOTAL_ANNOTATION_VALUES} total values`
       )
     }
-    const fields = new Map<string, string>()
-
-    for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
-      if (parts[i] !== '') fields.set(csqFieldNames[i], decodeCsqValue(parts[i]))
-    }
+    const fields = parseCsqEntry(parts, csqFieldNames)
 
     parsed.push({ fields, allele: fields.get('Allele') ?? '' })
   }
@@ -204,6 +200,75 @@ function decodeCsqValue(value: string): string {
   return value.replace(CSQ_ESCAPE_PATTERN, (escape) => VEP_CSQ_VALUE_ESCAPES[escape.toUpperCase()])
 }
 
+export function parseFiniteFloat(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+  if (typeof raw !== 'string') return null
+  if (raw === '' || raw === '.') return null
+  const n = Number.parseFloat(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+export function parseCsqEntry(
+  annOrParts: string | string[],
+  csqFieldNames: string[]
+): Map<string, string> {
+  const parts = Array.isArray(annOrParts)
+    ? annOrParts
+    : splitBounded(annOrParts, '|', MAX_VCF_ANNOTATION_FIELDS)
+  if (parts === null) {
+    throw new VcfResourceLimitError(
+      `CSQ annotation has more than ${MAX_VCF_ANNOTATION_FIELDS} fields`
+    )
+  }
+  const fields = new Map<string, string>()
+  for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
+    const val = parts[i]
+    if (val !== '' && val !== '.') {
+      fields.set(csqFieldNames[i], decodeCsqValue(val))
+    }
+  }
+  return fields
+}
+
+export function extractFromCsq(
+  source: Map<string, string> | Record<string, unknown> | CsqTranscript | null | undefined
+): {
+  gnomadAf: number | null
+  cadd: number | null
+  clinvar: string | null
+  vepClinSig: string | null
+} {
+  const getField = (key: string): string | null => {
+    if (!source) return null
+    if ('fields' in source && source.fields instanceof Map) {
+      return source.fields.get(key) ?? null
+    }
+    if (source instanceof Map) {
+      return (source as Map<string, string>).get(key) ?? null
+    }
+    const val = (source as Record<string, unknown>)[key]
+    return val != null ? String(val) : null
+  }
+
+  const afE = parseFiniteFloat(getField('gnomADe_AF') ?? getField('gnomad_af_exomes'))
+  const afG = parseFiniteFloat(getField('gnomADg_AF') ?? getField('gnomad_af_genomes'))
+  const afAny = parseFiniteFloat(
+    getField('gnomAD_AF') ?? getField('gnomad_af') ?? getField('MAX_AF')
+  )
+  const gnomadAf = afE ?? afG ?? afAny ?? null
+  const cadd = parseFiniteFloat(getField('CADD_PHRED') ?? getField('cadd'))
+  const clinvar = getField('ClinVar_CLNSIG') ?? getField('clinvar') ?? null
+  const vepClinSig = getField('CLIN_SIG') ?? null
+
+  return {
+    gnomadAf,
+    cadd,
+    clinvar,
+    vepClinSig
+  }
+}
+
 function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
 
@@ -245,9 +310,7 @@ function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): Annota
     best?.fields.get('Consequence') ?? null
   )
 
-  const gnomadAfStr = best?.fields.get('gnomADe_AF') ?? best?.fields.get('gnomADg_AF') ?? null
-  const caddStr = best?.fields.get('CADD_PHRED') ?? null
-  const clinvarStr = best?.fields.get('ClinVar_CLNSIG') ?? null
+  const extracted = extractFromCsq(best)
 
   return {
     geneSymbol: best?.fields.get('SYMBOL') ?? null,
@@ -256,10 +319,10 @@ function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): Annota
     transcript: best?.fields.get('Feature') ?? null,
     cdna: best?.fields.get('HGVSc') ?? null,
     aaChange: best?.fields.get('HGVSp') ?? null,
-    gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
-    cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
-    clinvar: clinvarStr ?? null,
-    vepClinSig: best?.fields.get('CLIN_SIG') ?? null,
+    gnomadAf: extracted.gnomadAf,
+    cadd: extracted.cadd,
+    clinvar: extracted.clinvar,
+    vepClinSig: extracted.vepClinSig,
     selectedFields: best?.fields,
     transcripts
   }

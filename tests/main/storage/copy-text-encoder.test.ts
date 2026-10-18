@@ -134,17 +134,30 @@ describe('encodeFloat', () => {
   it('null → \\N', () => {
     expect(encodeFloat(null)).toBe('\\N')
   })
+  it('undefined → \\N', () => {
+    expect(encodeFloat(undefined)).toBe('\\N')
+  })
   it('0 → "0"', () => {
     expect(encodeFloat(0)).toBe('0')
   })
-  it('NaN → "NaN" (Postgres float8 token)', () => {
-    expect(encodeFloat(NaN)).toBe('NaN')
+  it('valid float → string', () => {
+    expect(encodeFloat(0.0012)).toBe('0.0012')
+    expect(encodeFloat(1.25)).toBe('1.25')
   })
-  it('Infinity → "Infinity"', () => {
-    expect(encodeFloat(Infinity)).toBe('Infinity')
+  it('NaN → \\N (SQL NULL)', () => {
+    expect(encodeFloat(NaN)).toBe('\\N')
   })
-  it('-Infinity → "-Infinity"', () => {
-    expect(encodeFloat(-Infinity)).toBe('-Infinity')
+  it('Infinity → \\N', () => {
+    expect(encodeFloat(Infinity)).toBe('\\N')
+  })
+  it('-Infinity → \\N', () => {
+    expect(encodeFloat(-Infinity)).toBe('\\N')
+  })
+  it('empty string → \\N', () => {
+    expect(encodeFloat('')).toBe('\\N')
+  })
+  it('missing token "." → \\N', () => {
+    expect(encodeFloat('.')).toBe('\\N')
   })
 })
 

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseAnnotation,
-  parseAnnotationsForAlleles
+  parseAnnotationsForAlleles,
+  parseCsqEntry,
+  extractFromCsq
 } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
@@ -624,6 +626,53 @@ describe('vcf-annotation-parser', () => {
       expect(() =>
         parseAnnotationsForAlleles(new Map([['CSQ', annotations]]), csqHeader, deletionAlts, 'AA')
       ).toThrow(VcfResourceLimitError)
+    })
+  })
+
+  describe('numeric CSQ normalization (#658)', () => {
+    it('parseCsqEntry treats "." as missing', () => {
+      const fieldNames = ['Allele', 'gnomADe_AF', 'gnomADg_AF', 'CADD_PHRED']
+      const map = parseCsqEntry('A|.|.|.', fieldNames)
+      expect(map.get('Allele')).toBe('A')
+      expect(map.has('gnomADe_AF')).toBe(false)
+      expect(map.has('gnomADg_AF')).toBe(false)
+      expect(map.has('CADD_PHRED')).toBe(false)
+    })
+
+    it('extractFromCsq returns null (never NaN) on non-numeric or missing values', () => {
+      const res = extractFromCsq({
+        gnomad_af_exomes: '.',
+        gnomad_af_genomes: '.',
+        cadd: 'invalid'
+      })
+      expect(res.gnomadAf).toBeNull()
+      expect(res.cadd).toBeNull()
+    })
+
+    it('extractFromCsq falls back to gnomad_af_genomes when gnomad_af_exomes is "."', () => {
+      const res = extractFromCsq({
+        gnomad_af_exomes: '.',
+        gnomad_af_genomes: '0.0012'
+      })
+      expect(res.gnomadAf).toBe(0.0012)
+    })
+
+    it('parseAnnotation normalizes "." and falls back between exomes and genomes', () => {
+      const csqFields = [
+        'Allele',
+        'Consequence',
+        'IMPACT',
+        'SYMBOL',
+        'Feature',
+        'gnomADe_AF',
+        'gnomADg_AF',
+        'CADD_PHRED'
+      ]
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|.|0.0012|.']])
+      const result = parseAnnotation(info, csqHeader, 'T')
+      expect(result.gnomadAf).toBe(0.0012)
+      expect(result.cadd).toBeNull()
     })
   })
 })
