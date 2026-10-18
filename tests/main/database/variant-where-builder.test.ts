@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { COHORT_FREQUENCY_SQL } from '../../../src/main/database/cohort-frequency-sql'
 import { buildBaseWhere } from '../../../src/main/database/variant-where-builder'
+import { translateBareColumnFilter } from '../../../src/main/database/variant-filter/column-filters'
 import type { ColumnFilter } from '../../../src/shared/types/column-filters'
 
 describe('buildBaseWhere', () => {
@@ -165,6 +166,71 @@ describe('translateColumnFilter branches', () => {
     )
     expect(result.sql).toBe('')
     expect(result.params).toEqual([])
+  })
+
+  it('column_filter consequence IN produces severity filter SQL', () => {
+    const result = buildBaseWhere(
+      { column_filters: { consequence: { operator: 'in', value: ['HIGH'] } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(result.sql).toContain('v.impact_rank IN (4)')
+    expect(result.sql).toContain('v.consequence IN (?)')
+    expect(result.params).toEqual(['HIGH'])
+  })
+
+  it('translates bare column filters with SQLite vs Postgres dialect parity', () => {
+    const sqliteParams: unknown[] = []
+    const sqliteSql = translateBareColumnFilter(
+      'gene_symbol',
+      { operator: 'like', value: 'BRCA' },
+      {
+        dialect: 'sqlite',
+        numericColumn: false,
+        bind: (v) => {
+          sqliteParams.push(v)
+          return '?'
+        }
+      }
+    )
+    const pgParams: unknown[] = []
+    const pgSql = translateBareColumnFilter(
+      'gene_symbol',
+      { operator: 'like', value: 'BRCA' },
+      {
+        dialect: 'postgres',
+        numericColumn: false,
+        bind: (v) => {
+          pgParams.push(v)
+          return `$${pgParams.length}`
+        }
+      }
+    )
+    expect(sqliteSql).toBe("gene_symbol LIKE ? ESCAPE '\\' COLLATE NOCASE")
+    expect(sqliteParams).toEqual(['%BRCA%'])
+    expect(pgSql).toBe("gene_symbol ILIKE $1 ESCAPE '\\'")
+    expect(pgParams).toEqual(['%BRCA%'])
+
+    // Range comparison parity
+    const sqliteRange = translateBareColumnFilter(
+      'cadd',
+      { operator: '>=', value: 20 },
+      {
+        dialect: 'sqlite',
+        numericColumn: true,
+        bind: () => '?'
+      }
+    )
+    const pgRange = translateBareColumnFilter(
+      'cadd',
+      { operator: '>=', value: 20 },
+      {
+        dialect: 'postgres',
+        numericColumn: true,
+        bind: () => '$1'
+      }
+    )
+    expect(sqliteRange).toBe('(cadd IS NULL OR cadd >= ?)')
+    expect(pgRange).toBe('(cadd IS NULL OR cadd >= $1)')
   })
 })
 

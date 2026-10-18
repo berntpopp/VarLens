@@ -244,6 +244,7 @@ function translateColumnFilter(
       : scope === 'cohort-listing' && column === PHENOTYPE_SCORE_KEY
         ? cohortPhenotypeScoreSql(baseAlias, 'sqlite')
         : comparedColumnSql(column, `${baseAlias}.${column}`)
+  const { operator, value } = filter
   const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
   if (isSeverityKey(column) && severity !== null) {
     const target = severityTarget(column, baseAlias, params)
