@@ -254,5 +254,75 @@ describe('AcmgClassificationPanel confirm step', () => {
       expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
       wrapper.unmount()
     })
+
+    it('same variantKey with updated variantData preserves draft (#660)', async () => {
+      const wrapper = mount(AcmgClassificationPanel, {
+        props: {
+          evidenceJson: null,
+          variantData: { gnomad_af: null, cadd: null, clinvar: null },
+          variantKey: 'case-1:chr1:100:A:G'
+        },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+      await wrapper.vm.$nextTick()
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+
+      // Late annotations resolve for the same variant (variantKey matches)
+      await wrapper.setProps({
+        variantData: { gnomad_af: 0.001, cadd: 28, clinvar: null, revel: 0.8 },
+        variantKey: 'case-1:chr1:100:A:G'
+      })
+
+      expect(await Promise.race([leave, flushPromises().then(() => 'asking')])).toBe('asking')
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').text()).toContain('PVS1')
+      click('acmg-leave-cancel')
+      expect(await leave).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('changing variantKey drops draft and settles leave prompt (#660)', async () => {
+      const wrapper = mount(AcmgClassificationPanel, {
+        props: {
+          evidenceJson: null,
+          variantData: { gnomad_af: null, cadd: null, clinvar: null },
+          variantKey: 'case-1:chr1:100:A:G'
+        },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+      await wrapper.vm.$nextTick()
+      const leave = (wrapper.vm as unknown as Leave).confirmLeave()
+      await wrapper.vm.$nextTick()
+
+      // Navigated to another variant (variantKey changes)
+      await wrapper.setProps({
+        variantData: { gnomad_af: null, cadd: null, clinvar: null },
+        variantKey: 'case-1:chr2:200:C:T'
+      })
+
+      expect(await leave).toBe(true)
+      expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+  })
+
+  it('exposes applySuggestions method which applies suggestions from variantData (#685)', async () => {
+    const wrapper = mount(AcmgClassificationPanel, {
+      props: {
+        evidenceJson: null,
+        variantData: { gnomad_af: 0.000001, cadd: 28, clinvar: 'Pathogenic' }
+      },
+      global: { plugins: [vuetify] }
+    })
+    const vm = wrapper.vm as unknown as { applySuggestions: () => void; pending: unknown }
+    expect(vm.pending).toBeNull()
+    vm.applySuggestions()
+    await wrapper.vm.$nextTick()
+    expect(vm.pending).not.toBeNull()
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
   })
 })

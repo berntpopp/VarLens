@@ -145,18 +145,47 @@
             </div>
 
             <!-- Evidence-based classification panel -->
-            <v-expansion-panels v-if="canWrite" variant="accordion" class="mb-1">
-              <v-expansion-panel>
+            <v-expansion-panels v-if="canWrite" v-model="acmgExpanded" variant="accordion" class="mb-1">
+              <v-expansion-panel :value="0">
                 <v-expansion-panel-title class="text-body-2 pa-2">
                   <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
                   Evidence editor
                   <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
                     (has evidence)
                   </span>
+                  <!-- Inline suggestion preview pills (#685) -->
+                  <div
+                    v-if="suggestedAcmgCodes.length > 0"
+                    class="d-inline-flex align-center ga-1 ml-2"
+                    data-testid="acmg-suggested-preview"
+                    @click.stop="handleApplySuggestionsPreview"
+                  >
+                    <v-chip
+                      v-for="code in suggestedAcmgCodes"
+                      :key="code"
+                      size="x-small"
+                      color="warning"
+                      variant="tonal"
+                      class="text-caption font-weight-bold"
+                    >
+                      {{ code }}
+                    </v-chip>
+                    <v-btn
+                      size="x-small"
+                      variant="text"
+                      color="primary"
+                      density="compact"
+                      class="text-caption px-1"
+                      data-testid="apply-acmg-suggestions-btn"
+                    >
+                      Apply
+                    </v-btn>
+                  </div>
                 </v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <AcmgClassificationPanel
                     ref="acmgPanelRef"
+                    :variant-key="variantKey"
                     :evidence-json="currentAcmgEvidence"
                     :variant-data="currentVariantData"
                     :save="handleAcmgEvidenceChange"
@@ -222,8 +251,10 @@ import {
   watch,
   defineAsyncComponent,
   inject,
-  provide
+  provide,
+  nextTick
 } from 'vue'
+import { generateSuggestions, type VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
@@ -429,15 +460,44 @@ const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvid
 const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
 // Variant annotation data for auto-suggestions
-const currentVariantData = computed(() => {
+const currentVariantData = computed<VariantAnnotationData | null>(() => {
   if (!props.variant) return null
+  const v = props.variant as unknown as Record<string, unknown>
   return {
     gnomad_af: props.variant.gnomad_af ?? null,
     cadd:
       'cadd' in props.variant ? (props.variant.cadd ?? null) : (props.variant.cadd_phred ?? null),
-    clinvar: props.variant.clinvar ?? null
+    clinvar: props.variant.clinvar ?? null,
+    revel:
+      ('revel' in v && v.revel !== undefined ? (v.revel as number | null) : null) ??
+      revelScore.value ??
+      null,
+    spliceai_max:
+      ('spliceai_max' in v && v.spliceai_max !== undefined
+        ? (v.spliceai_max as number | null)
+        : null) ??
+      spliceaiMaxDelta.value ??
+      null
   }
 })
+
+const variantKey = computed(() => {
+  if (!props.variant) return null
+  return `${props.caseId ?? ''}:${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
+})
+
+const suggestedAcmgCodes = computed<string[]>(() => {
+  if (!currentVariantData.value) return []
+  return generateSuggestions(currentVariantData.value).map((s) => s.code)
+})
+
+const acmgExpanded = ref<number | undefined>(undefined)
+
+const handleApplySuggestionsPreview = async (): Promise<void> => {
+  acmgExpanded.value = 0
+  await nextTick()
+  acmgPanelRef.value?.applySuggestions?.()
+}
 
 // Current quick classification (from annotation, not evidence-based)
 const currentQuickClassification = computed<AcmgClassification | null>(() => {
@@ -539,7 +599,10 @@ watch(
 )
 
 // Selection changes and closes wait for the evidence editor's unsaved-draft prompt
-const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)
+const acmgPanelRef = ref<{
+  confirmLeave: () => Promise<boolean> | null
+  applySuggestions?: () => void
+} | null>(null)
 const appState = inject(AppStateKey, null)
 appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
