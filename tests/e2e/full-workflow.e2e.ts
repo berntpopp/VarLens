@@ -5,26 +5,28 @@
  *
  * Run with: npx playwright test tests/e2e/full-workflow.e2e.ts
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   test,
   expect,
-  _electron as electron,
-  type ElectronApplication,
   type Page
 } from '@playwright/test'
+import {
+  launchElectronApp,
+  type LaunchElectronAppResult
+} from './helpers/electron-app'
 
-let app: ElectronApplication
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, '../../package.json'), 'utf8')
+) as { version: string }
+
+let appInstance: LaunchElectronAppResult
 let window: Page
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: ['./out/main/index.js'],
-    env: {
-      ...process.env,
-      NODE_ENV: 'production'
-    }
-  })
-  window = await app.firstWindow()
+  appInstance = await launchElectronApp()
+  window = appInstance.window
   await window.waitForSelector('.v-application', { timeout: 15000 })
 
   // Dismiss disclaimer dialog if present
@@ -36,7 +38,7 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  if (app) await app.close()
+  if (appInstance) await appInstance.cleanup()
 })
 
 test.describe('App Shell', () => {
@@ -154,14 +156,14 @@ test.describe('Case View', () => {
   test('variant table shows data columns', async ({}, testInfo) => {
     // Check if we have a variant table visible
     const table = window.locator('.v-data-table-server')
-    if ((await table.count()) > 0 && (await table.isVisible())) {
-      // Should have column headers
-      const headers = window.locator('.v-data-table-server th')
-      const headerCount = await headers.count()
-      expect(headerCount).toBeGreaterThan(3)
+    await expect(table).toBeVisible()
 
-      await window.screenshot({ path: testInfo.outputPath('variant-table.png') })
-    }
+    // Should have column headers
+    const headers = window.locator('.v-data-table-server th')
+    const headerCount = await headers.count()
+    expect(headerCount).toBeGreaterThan(3)
+
+    await window.screenshot({ path: testInfo.outputPath('variant-table.png') })
   })
 })
 
@@ -239,7 +241,7 @@ test.describe('Navigation', () => {
 test.describe('Footer', () => {
   // eslint-disable-next-line no-empty-pattern
   test('footer shows version', async ({}, testInfo) => {
-    await expect(window.locator('text=VarLens v0.21.0')).toBeVisible()
+    await expect(window.locator(`text=VarLens v${pkg.version}`)).toBeVisible()
 
     await window.screenshot({ path: testInfo.outputPath('footer.png') })
   })
