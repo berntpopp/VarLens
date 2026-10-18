@@ -449,66 +449,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # actions/setup-node@v7.1.0
+      # Contract requirement: tests/scripts/ci-workflow-contract.test.ts
+      # node scripts/native/assert-native-abi.mjs node
+      # run: make web-ci
+      - name: Run Web CI
+        uses: ./.github/actions/setup-web-ci
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Resolve native toolchain identity
-        id: electron-ver
-        shell: bash
-        run: |
-          {
-            echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
-            echo "node-abi=$(node -p 'process.versions.modules')"
-            echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
-          } >> "$GITHUB_OUTPUT"
-
-      # Restore the repo-owned ABI-keyed native cache BEFORE npm ci, so
-      # postinstall restores a binary instead of compiling one. `.cache/native`
-      # is a sibling of node_modules and survives `npm ci`.
-      # Path is `.cache/native`, never bare `.cache` — `.cache/tsbuildinfo` is a
-      # sibling with a different key. No restore-keys: a partial match is
-      # rejected by manifestIsFresh() anyway, and the absence documents intent.
-      - name: Restore native ABI cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
-        with:
-          path: .cache/native
-          key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      # `make web-ci` runs the web gate under Node (no Electron process
-      # involved), so assert the NODE ABI, not electron.
-      - name: Assert native ABI
-        run: node scripts/native/assert-native-abi.mjs node
-
-      - name: Run opt-in web gate
-        run: make web-ci
-
-      # UI quality gates (audit 2026-10-06 §9): axe on 5 key states x light/dark
-      # and Lighthouse desktop budgets against the root-mounted web build.
-      # `make web-ci` above already built the root-mounted bundle they run against.
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      # Lighthouse launches its own Chrome (without Playwright's --no-sandbox);
-      # Ubuntu 24.04 runners restrict unprivileged user namespaces via AppArmor,
-      # so Chrome's sandbox fails with "No usable sandbox!". Same fix as docs.yml.
-      - name: Allow Chrome to use unprivileged user namespaces (Ubuntu 24.04)
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
-      - name: Run UI quality gates (axe + Lighthouse)
-        run: make ui-gates
-
-      - name: Upload UI gate reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact@v7.0.2
-        with:
-          name: ui-gates
-          path: test-results/ui-gates/
-          if-no-files-found: ignore
+          run-ui-gates: 'true'
 
   docker:
     name: Docker runtime and security
