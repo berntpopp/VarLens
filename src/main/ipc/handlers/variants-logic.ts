@@ -89,18 +89,30 @@ export function buildVariantFilter(
     const pool = getDbPool?.()
     if (pool) {
       // Pool path: let the worker resolve intervals off the main thread.
-      // Attach genome_build so the worker can look up coordinates in the
-      // correct assembly without making an extra IPC-side DB call.
-      const dbRef = getDb()
-      const caseData = dbRef.cases.getCase(fullFilter.case_id)
+      // Attach genome_build if available so the worker can look up coordinates in the
+      // correct assembly without an extra worker DB call, but don't fail if getDb throws.
+      let genomeBuild = (filters as { genome_build?: string }).genome_build
+      if (genomeBuild === undefined) {
+        try {
+          const dbRef = getDb?.()
+          const caseData = dbRef?.cases?.getCase(fullFilter.case_id)
+          genomeBuild = caseData?.genome_build
+        } catch {
+          // Worker resolves off-thread if DB is inaccessible on main thread
+        }
+      }
       ;(fullFilter as VariantFilter & { genome_build?: string }).genome_build =
-        caseData?.genome_build ?? 'GRCh38'
+        genomeBuild ?? 'GRCh38'
       // active_panel_ids and panel_padding_bp are forwarded as-is
     } else {
       // Fallback (no pool): compute on the main thread synchronously
+      let genomeBuild = (filters as { genome_build?: string }).genome_build
       const dbRef = getDb()
-      const caseData = dbRef.cases.getCase(fullFilter.case_id)
-      const genomeBuild = caseData?.genome_build ?? 'GRCh38'
+      if (genomeBuild === undefined) {
+        const caseData = dbRef.cases.getCase(fullFilter.case_id)
+        genomeBuild = caseData?.genome_build
+      }
+      genomeBuild = genomeBuild ?? 'GRCh38'
 
       // Throws if the computation itself fails — never treat that as "no
       // panel configured" (see panelIntervalHelper.ts for the contract).

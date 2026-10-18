@@ -32,16 +32,31 @@ const GREEN_AMBER_LEVELS = new Set(['2', '3', '4', 'green', 'amber'])
 // Panel CRUD
 // ============================================================
 
-export function listPanels(getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.listPanels()
+function isStorageSession(value: unknown): value is StorageSession {
+  return typeof value === 'object' && value !== null && 'getReadExecutor' in value
 }
 
-export function getPanel(id: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  const panel = db.panels.getPanel(id)
+export function listPanels(
+  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
+): unknown | Promise<unknown> {
+  const target = getDbOrSession()
+  if (isStorageSession(target)) {
+    return target.getReadExecutor().execute({ type: 'panels:list', params: [] })
+  }
+  return target.panels.listPanels()
+}
+
+export function getPanel(
+  id: number,
+  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
+): unknown | Promise<unknown> {
+  const target = getDbOrSession()
+  if (isStorageSession(target)) {
+    return getPanelWithGenes(id, () => target)
+  }
+  const panel = target.panels.getPanel(id)
   if (!panel) return null
-  const genes = db.panels.getGenes(id)
+  const genes = target.panels.getGenes(id)
   return { ...panel, genes }
 }
 
@@ -102,9 +117,15 @@ export function setGenes(
   return { success: true }
 }
 
-export function getGenes(panelId: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.getGenes(panelId)
+export function getGenes(
+  panelId: number,
+  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
+): unknown | Promise<unknown> {
+  const target = getDbOrSession()
+  if (isStorageSession(target)) {
+    return target.getReadExecutor().execute({ type: 'panels:getGenes', params: [panelId] })
+  }
+  return target.panels.getGenes(panelId)
 }
 
 // ============================================================
@@ -132,9 +153,15 @@ export function deactivatePanel(
   return { success: true }
 }
 
-export function getActivePanelsForCase(caseId: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.getActivePanelsForCase(caseId)
+export function getActivePanelsForCase(
+  caseId: number,
+  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
+): unknown | Promise<unknown> {
+  const target = getDbOrSession()
+  if (isStorageSession(target)) {
+    return target.getReadExecutor().execute({ type: 'panels:activeForCase', params: [caseId] })
+  }
+  return target.panels.getActivePanelsForCase(caseId)
 }
 
 // ============================================================

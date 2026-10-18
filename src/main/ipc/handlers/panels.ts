@@ -50,11 +50,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
 
   ipcMain.handle('panels:list', async () => {
     return wrapHandler(async () => {
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session.getReadExecutor().execute({ type: 'panels:list', params: [] })
-      }
-      return listPanels(getDb)
+      return await listPanels(() => getDbManager().getCurrentSession())
     })
   })
 
@@ -162,13 +158,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         mainLogger.error(`Invalid panels:getGenes panelId: ${validated.error.message}`, 'panels')
         throw new Error('Invalid panel ID')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session
-          .getReadExecutor()
-          .execute({ type: 'panels:getGenes', params: [validated.data] })
-      }
-      return getGenes(validated.data, getDb)
+      return await getGenes(validated.data, () => getDbManager().getCurrentSession())
     })
   })
 
@@ -218,13 +208,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
         )
         throw new Error('Invalid case ID')
       }
-      const session = getDbManager().getCurrentSession()
-      if (session.capabilities.backend === 'postgres') {
-        return await session
-          .getReadExecutor()
-          .execute({ type: 'panels:activeForCase', params: [validated.data] })
-      }
-      return getActivePanelsForCase(validated.data, getDb)
+      return await getActivePanelsForCase(validated.data, () => getDbManager().getCurrentSession())
     })
   })
 

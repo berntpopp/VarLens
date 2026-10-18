@@ -2,7 +2,7 @@
  * Panels logic smoke tests — verifies module exports are intact after extraction.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import * as logic from '../../../src/main/ipc/handlers/panels-logic'
 
 describe('panels-logic exports', () => {
@@ -24,5 +24,48 @@ describe('panels-logic exports', () => {
     expect(typeof logic.importPanelApp).toBe('function')
     expect(typeof logic.generateStringDb).toBe('function')
     expect(typeof logic.generateBedContent).toBe('function')
+  })
+
+  it('routes listPanels through session read executor', async () => {
+    const execute = vi.fn().mockResolvedValue([{ id: 1, name: 'Cardio' }])
+    const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
+
+    await expect(logic.listPanels(getSession)).resolves.toEqual([{ id: 1, name: 'Cardio' }])
+    expect(execute).toHaveBeenCalledWith({ type: 'panels:list', params: [] })
+  })
+
+  it('routes getPanel through session read executor', async () => {
+    const execute = vi.fn().mockImplementation((task) => {
+      if (task.type === 'panels:get') return Promise.resolve({ id: 1, name: 'Cardio' })
+      if (task.type === 'panels:getGenes') return Promise.resolve([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
+      return Promise.resolve(null)
+    })
+    const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
+
+    await expect(logic.getPanel(1, getSession)).resolves.toEqual({
+      id: 1,
+      name: 'Cardio',
+      genes: [{ hgncId: 'HGNC:1', symbol: 'TTN' }]
+    })
+    expect(execute).toHaveBeenCalledWith({ type: 'panels:get', params: [1] })
+    expect(execute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [1] })
+  })
+
+  it('routes getGenes through session read executor', async () => {
+    const execute = vi.fn().mockResolvedValue([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
+    const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
+
+    await expect(logic.getGenes(1, getSession)).resolves.toEqual([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
+    expect(execute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [1] })
+  })
+
+  it('routes getActivePanelsForCase through session read executor', async () => {
+    const execute = vi.fn().mockResolvedValue([{ panel_id: 1, padding_bp: 50 }])
+    const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
+
+    await expect(logic.getActivePanelsForCase(42, getSession)).resolves.toEqual([
+      { panel_id: 1, padding_bp: 50 }
+    ])
+    expect(execute).toHaveBeenCalledWith({ type: 'panels:activeForCase', params: [42] })
   })
 })
