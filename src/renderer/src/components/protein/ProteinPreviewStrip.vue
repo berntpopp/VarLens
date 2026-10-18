@@ -153,7 +153,9 @@ const length = computed(() => {
   return fromDomains > 0 ? fromDomains : (mappingQuery.data.value?.proteinLength ?? 0)
 })
 const pct = (aa: number): string => `${Math.min(100, (aa / Math.max(1, length.value)) * 100)}%`
-const markerColor = computed(() => getConsequenceColor(props.variant.consequence ?? 'unknown'))
+const markerColor = computed(() =>
+  getConsequenceColor(props.variant.func ?? props.variant.consequence ?? 'unknown')
+)
 const summary = computed(() =>
   protein.value === null
     ? ''

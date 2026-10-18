@@ -107,4 +107,24 @@ describe('buildLollipopVariants (cohort carriers)', () => {
     const caseVariant = { ...row({}), carrier_count: undefined } as unknown as CohortVariant
     expect(buildLollipopVariants(caseVariant, [], 'THOC5')[0].carrierCount).toBeUndefined()
   })
+
+  it('uses SO consequence term (v.func) when available, falling back to v.consequence (#664)', () => {
+    const withFunc = row({
+      func: 'inframe_deletion',
+      consequence: 'MODERATE'
+    })
+    const resultFunc = buildLollipopVariants(withFunc, [], 'THOC5')
+    expect(resultFunc[0].consequence).toBe('inframe_deletion')
+    expect(resultFunc[0].consequenceCategory).toBe('inframe')
+    expect(resultFunc[0].color).toBe('#7B3294')
+
+    const withoutFunc = row({
+      func: null,
+      consequence: 'MODERATE'
+    })
+    const resultFallback = buildLollipopVariants(withoutFunc, [], 'THOC5')
+    expect(resultFallback[0].consequence).toBe('MODERATE')
+    expect(resultFallback[0].consequenceCategory).toBe('missense')
+  })
 })
+

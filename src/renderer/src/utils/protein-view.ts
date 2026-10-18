@@ -68,7 +68,7 @@ export function proteinStripSummary(
 function toLollipopVariant(v: AnyVariant, highlighted: boolean): LollipopVariant | null {
   const protein = proteinPositionOf(v)
   if (protein === null) return null
-  const consequence = v.consequence ?? 'unknown'
+  const consequence = v.func ?? v.consequence ?? 'unknown'
   const cadd = 'cadd' in v ? (v.cadd ?? null) : 'cadd_phred' in v ? (v.cadd_phred ?? null) : null
   return {
     proteinPosition: protein.position,
