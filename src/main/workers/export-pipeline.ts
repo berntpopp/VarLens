@@ -66,6 +66,7 @@ export interface ExportPipelineParams {
 export interface ExportPipelineResult {
   rowCount: number
   filePath: string
+  truncated?: boolean
 }
 
 /**
@@ -104,9 +105,7 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
       const annotations = batchLookup(chunk)
       for (const v of chunk) {
         const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-        const cells = EXPORT_COLUMNS.map((col) =>
-          csvEscape(formatCellValue(col.key, row[col.key]))
-        )
+        const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
         yield cells.join(',') + '\r\n'
         rowCount++
         if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
@@ -219,7 +218,10 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
 
   const info = {
     name: 'Export Info',
-    rows: (res: XlsxStreamResult) => buildMetadataSheet(caseName, res.rowCount, filterSummary)
+    rows: (res: XlsxStreamResult) => [
+      ...buildMetadataSheet(caseName, res.rowCount, filterSummary),
+      ...(res.truncated ? [['Truncated', 'Excel row limit reached; use CSV for all rows']] : [])
+    ]
   }
 
   const stream = createWriteStream(outputFilePath)
@@ -233,7 +235,11 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
   }
 
   onProgress?.(result.rowCount, result.rowCount)
-  return { rowCount: result.rowCount, filePath: outputFilePath }
+  return {
+    rowCount: result.rowCount,
+    filePath: outputFilePath,
+    ...(result.truncated ? { truncated: true } : {})
+  }
 }
 
 /**

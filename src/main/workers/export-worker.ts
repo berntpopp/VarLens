@@ -47,7 +47,8 @@ async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
     postMsg({
       type: 'complete',
       filePath: result.filePath,
-      rowCount: result.rowCount
+      rowCount: result.rowCount,
+      ...(result.truncated !== undefined ? { truncated: result.truncated } : {})
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))

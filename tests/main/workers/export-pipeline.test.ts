@@ -23,6 +23,7 @@ import {
 } from '../../../src/main/workers/export-pipeline'
 import { COHORT_EXPORT_COLUMNS } from '../../../src/main/workers/cohort-export'
 import type { ExportPipelineParams } from '../../../src/main/workers/export-pipeline'
+import * as xlsxStreamModule from '../../../src/web/server/downloads/xlsx-stream'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -570,5 +571,33 @@ describe('runExportPipeline — XLSX', () => {
 
     expect(result.rowCount).toBe(1)
     expect(result.filePath).toBe(params.outputFilePath)
+  })
+
+  it('surfaces truncation note on Export Info sheet and returns truncated: true when row limit is reached', async () => {
+    insertVariant(db, caseId, { chr: '1', pos: 100 })
+    const params = makeXlsxParams()
+
+    const originalXlsxStream = xlsxStreamModule.xlsxStream
+    const spy = vi
+      .spyOn(xlsxStreamModule, 'xlsxStream')
+      .mockImplementation((sheet, result, info) => {
+        result.truncated = true
+        return originalXlsxStream(sheet, result, info)
+      })
+
+    try {
+      const result = await runExportPipeline(params)
+      expect(result.truncated).toBe(true)
+
+      const wb = readXlsxFile(params.outputFilePath)
+      const metaWs = wb.Sheets['Export Info']
+      const metaData = XLSX.utils.sheet_to_json<string[]>(metaWs, { header: 1 }) as string[][]
+      expect(metaData).toContainEqual([
+        'Truncated',
+        'Excel row limit reached; use CSV for all rows'
+      ])
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

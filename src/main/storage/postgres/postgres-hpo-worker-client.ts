@@ -2,9 +2,10 @@
  * Postgres Hpo Worker Client
  *
  * Runs HPO scoring, prewarming, and explanation in a dedicated off-thread Worker
- * (node:worker_threads) with LRU caching.
+ * (node:worker_threads) backed by hpo-similarity-worker.
  */
 import { Worker } from 'node:worker_threads'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { GenePhenotypeScore } from '../../services/phenotype/hpo-similarity-db'
 import type { HpoProfileTerm } from '../../../shared/types/hpo-profile'
@@ -15,20 +16,13 @@ export interface HpoWorkerResponse<T = unknown> {
   result?: T
   error?: string
   threadId: number
-  cacheHit?: boolean
   cacheHits?: number
-}
-
-export interface ScoreAllGenesMetaResult {
-  scores: GenePhenotypeScore[]
-  threadId: number
-  cacheHit: boolean
-  cacheHits: number
 }
 
 export class PostgresHpoWorkerClient {
   private worker: Worker | null = null
   private nextId = 1
+  private disposed = false
   private readonly pending = new Map<
     number,
     {
@@ -37,115 +31,34 @@ export class PostgresHpoWorkerClient {
     }
   >()
 
-  constructor(private readonly modulePath?: string) {}
+  constructor(private readonly workerPathOverride?: string) {}
 
   private getWorker(): Worker {
     if (this.worker !== null) return this.worker
 
-    const resolvedModulePath =
-      this.modulePath ?? resolve(process.cwd(), 'src/main/services/phenotype/hpo-similarity-db.ts')
+    const candidates = [
+      this.workerPathOverride,
+      resolve(__dirname, 'hpo-similarity-worker.cjs'),
+      resolve(__dirname, 'hpo-similarity-worker.js'),
+      resolve(process.cwd(), 'out/web/hpo-similarity-worker.cjs'),
+      resolve(process.cwd(), 'out/main/hpo-similarity-worker.js')
+    ].filter((p): p is string => Boolean(p))
 
-    const bootstrapCode = `
-      const { parentPort, threadId, workerData } = require('node:worker_threads');
-      const { resolve } = require('node:path');
+    const builtPath = candidates.find((p) => existsSync(p)) ?? null
 
-      let hpo;
-      const candidates = [
-        workerData?.hpoModulePath,
-        resolve(__dirname, '../../services/phenotype/hpo-similarity-db.js'),
-        resolve(process.cwd(), 'out/main/index.js'),
-        resolve(process.cwd(), 'src/main/services/phenotype/hpo-similarity-db.ts')
-      ].filter(Boolean);
-
-      for (const p of candidates) {
-        try {
-          if (!p.endsWith('.ts')) {
-            hpo = require(p);
-            if (hpo && typeof hpo.scoreAllGenes === 'function') break;
-          }
-        } catch {}
-      }
-
-      if (!hpo || typeof hpo.scoreAllGenes !== 'function') {
+    let worker: Worker
+    if (builtPath !== null) {
+      worker = new Worker(builtPath)
+    } else {
+      const workerTsPath = resolve(process.cwd(), 'src/main/workers/hpo-similarity-worker.ts')
+      const bootstrapCode = `
         const { createJiti } = require('jiti');
         const jiti = createJiti(process.cwd() + '/index.js');
-        for (const p of candidates) {
-          try {
-            hpo = jiti(p);
-            if (hpo && typeof hpo.scoreAllGenes === 'function') break;
-          } catch {}
-        }
-      }
+        jiti(${JSON.stringify(workerTsPath)});
+      `
+      worker = new Worker(bootstrapCode, { eval: true })
+    }
 
-      if (!hpo || typeof hpo.scoreAllGenes !== 'function') {
-        throw new Error('Could not load hpo-similarity-db in worker thread');
-      }
-
-      const lruCache = new Map();
-      const MAX_CACHE_SIZE = 100;
-      let cacheHits = 0;
-
-      parentPort.on('message', (msg) => {
-        try {
-          if (msg.type === 'ping') {
-            parentPort.postMessage({ id: msg.id, ok: true, threadId, cacheHits });
-          } else if (msg.type === 'prewarm') {
-            const res = hpo.prewarmHpoIndex(msg.path);
-            parentPort.postMessage({ id: msg.id, ok: true, result: res, threadId, cacheHits });
-          } else if (msg.type === 'caseScores') {
-            const cacheKey = JSON.stringify(msg.terms);
-            let hit = false;
-            let res;
-            if (lruCache.has(cacheKey)) {
-              res = lruCache.get(cacheKey);
-              hit = true;
-              cacheHits += 1;
-              lruCache.delete(cacheKey);
-              lruCache.set(cacheKey, res);
-            } else {
-              res = hpo.scoreAllGenes(msg.terms, msg.path);
-              if (lruCache.size >= MAX_CACHE_SIZE) {
-                const firstKey = lruCache.keys().next().value;
-                lruCache.delete(firstKey);
-              }
-              lruCache.set(cacheKey, res);
-            }
-            parentPort.postMessage({
-              id: msg.id,
-              ok: true,
-              result: res,
-              threadId,
-              cacheHit: hit,
-              cacheHits
-            });
-          } else if (msg.type === 'explainGene') {
-            const res = hpo.explainCaseGene(msg.caseTerms, msg.gene);
-            parentPort.postMessage({ id: msg.id, ok: true, result: res, threadId, cacheHits });
-          } else if (msg.type === 'stats') {
-            parentPort.postMessage({
-              id: msg.id,
-              ok: true,
-              threadId,
-              cacheHits,
-              cacheSize: lruCache.size
-            });
-          }
-        } catch (err) {
-          parentPort.postMessage({
-            id: msg.id,
-            ok: false,
-            error: err instanceof Error ? err.message : String(err),
-            threadId,
-            cacheHits
-          });
-        }
-      });
-    `
-
-    const worker = new Worker(bootstrapCode, {
-      eval: true,
-      workerData: { hpoModulePath: resolvedModulePath }
-    })
     worker.unref()
 
     worker.on('message', (response: HpoWorkerResponse) => {
@@ -167,8 +80,14 @@ export class PostgresHpoWorkerClient {
       this.worker = null
     })
 
-    worker.on('exit', () => {
+    worker.on('exit', (code) => {
       this.worker = null
+      if (!this.disposed) {
+        for (const [, handler] of this.pending) {
+          handler.reject(new Error(`HPO worker exited (code ${code})`))
+        }
+        this.pending.clear()
+      }
     })
 
     this.worker = worker
@@ -176,6 +95,9 @@ export class PostgresHpoWorkerClient {
   }
 
   private send<T>(msg: Record<string, unknown>): Promise<HpoWorkerResponse<T>> {
+    if (this.disposed) {
+      return Promise.reject(new Error('PostgresHpoWorkerClient has been destroyed'))
+    }
     const id = this.nextId++
     const worker = this.getWorker()
     return new Promise((resolve, reject) => {
@@ -200,15 +122,14 @@ export class PostgresHpoWorkerClient {
     return resp.result ?? []
   }
 
-  async scoreAllGenesWithMeta(
+  async scoreAllGenesWithThread(
     terms: readonly HpoProfileTerm[],
     path?: string
-  ): Promise<ScoreAllGenesMetaResult> {
+  ): Promise<{ scores: GenePhenotypeScore[]; threadId: number; cacheHits: number }> {
     const resp = await this.send<GenePhenotypeScore[]>({ type: 'caseScores', terms, path })
     return {
       scores: resp.result ?? [],
       threadId: resp.threadId,
-      cacheHit: Boolean(resp.cacheHit),
       cacheHits: resp.cacheHits ?? 0
     }
   }
@@ -223,12 +144,12 @@ export class PostgresHpoWorkerClient {
     return resp.threadId
   }
 
-  async getCacheHits(): Promise<number> {
-    const resp = await this.send<{ cacheHits: number }>({ type: 'stats' })
-    return resp.cacheHits ?? 0
-  }
-
   async destroy(): Promise<void> {
+    this.disposed = true
+    for (const [, handler] of this.pending) {
+      handler.reject(new Error('PostgresHpoWorkerClient destroyed'))
+    }
+    this.pending.clear()
     if (this.worker !== null) {
       const worker = this.worker
       this.worker = null

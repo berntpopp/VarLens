@@ -52,5 +52,5 @@ export interface ExportFilterSummary {
 /** Worker → main thread */
 export type ExportWorkerMessage =
   | { type: 'progress'; current: number; total: number }
-  | { type: 'complete'; filePath: string; rowCount: number }
+  | { type: 'complete'; filePath: string; rowCount: number; truncated?: boolean }
   | { type: 'error'; error: string; stack?: string }

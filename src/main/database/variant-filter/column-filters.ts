@@ -5,7 +5,11 @@ import { infoFieldFilterSql, infoFieldKey } from '../../../shared/filters/info-f
 import { sql } from 'kysely'
 import { escapeLikePattern } from '../search/search-clause-emitter'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
-import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
+import {
+  buildNullCheckSql,
+  isNullCheckOperator,
+  type NullCheckOperator
+} from '../../../shared/filters/column-null-check'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
 import { SORTABLE_COLUMNS } from './sortable-columns'
@@ -44,6 +48,60 @@ export function coerceColumnFilterComparisonValue(
   return typeof value === 'number' ? value : Number.isFinite(num) ? num : value
 }
 
+export type ParsedBareColumnFilter =
+  | { kind: 'null'; operator: NullCheckOperator; numericColumn: boolean }
+  | { kind: 'in'; values: string[] }
+  | { kind: 'like'; pattern: string; numericColumn: boolean }
+  | { kind: 'compare'; operator: '=' | '!='; value: string | number }
+  | {
+      kind: 'range'
+      operator: RangeOperator
+      value: string | number
+      includeEmpty: boolean
+    }
+
+/**
+ * Shared bare column filter parser. Normalizes operator and value shapes across
+ * Kysely (Path 1), SQLite (Path 2), and PostgreSQL (Path 3).
+ */
+export function parseBareColumnFilter(
+  filterDef: { operator: string; value: unknown; includeEmpty?: boolean },
+  numericColumn: boolean,
+  includeEmptyDefault = true
+): ParsedBareColumnFilter | null {
+  const { operator, value } = filterDef
+  if (isNullCheckOperator(operator)) {
+    return { kind: 'null', operator, numericColumn }
+  }
+  if (operator === 'in' && Array.isArray(value)) {
+    if (value.length === 0) return null
+    return { kind: 'in', values: value.map((item) => String(item)) }
+  }
+  if (operator === 'like' && typeof value === 'string') {
+    if (value.trim() === '') return null
+    return { kind: 'like', pattern: `%${escapeLikePattern(value)}%`, numericColumn }
+  }
+  if ((operator === '=' || operator === '!=') && isComparable(value)) {
+    return {
+      kind: 'compare',
+      operator,
+      value: coerceColumnFilterComparisonValue(value, numericColumn)
+    }
+  }
+  if (
+    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
+    isComparable(value)
+  ) {
+    return {
+      kind: 'range',
+      operator,
+      value: coerceColumnFilterComparisonValue(value, numericColumn),
+      includeEmpty: filterDef.includeEmpty ?? includeEmptyDefault
+    }
+  }
+  return null
+}
+
 /**
  * Shared dialect-aware bare column filter translator across SQL variant query paths (Path 2 and 3).
  * Translates null checks, IN, LIKE/ILIKE, equality, and range comparisons.
@@ -53,50 +111,35 @@ export function translateBareColumnFilter(
   filterDef: { operator: string; value: unknown; includeEmpty?: boolean },
   options: ColumnFilterTranslationOptions
 ): string | null {
-  const { operator, value } = filterDef
-  if (isNullCheckOperator(operator)) {
-    return buildNullCheckSql(sqlColumn, operator, options.numericColumn, options.dialect)
-  }
-  if (operator === 'in' && Array.isArray(value)) {
-    if (value.length === 0) return null
-    const placeholders = value
-      .map((item) =>
-        options.bind(
-          options.numericColumn && (typeof item === 'string' || typeof item === 'number')
-            ? coerceColumnFilterComparisonValue(item, true)
-            : String(item)
-        )
-      )
-      .join(', ')
-    return `${sqlColumn} IN (${placeholders})`
-  }
-  if (operator === 'like' && typeof value === 'string') {
-    if (value.trim() === '') return null
-    const pattern = `%${escapeLikePattern(value)}%`
-    const placeholder = options.bind(pattern)
-    if (options.dialect === 'postgres') {
-      const textColumn = options.numericColumn ? `${sqlColumn}::text` : sqlColumn
-      return `${textColumn} ILIKE ${placeholder} ESCAPE '\\'`
+  const parsed = parseBareColumnFilter(
+    filterDef,
+    options.numericColumn,
+    options.includeEmptyDefault ?? true
+  )
+  if (parsed === null) return null
+
+  switch (parsed.kind) {
+    case 'null':
+      return buildNullCheckSql(sqlColumn, parsed.operator, parsed.numericColumn, options.dialect)
+    case 'in': {
+      const placeholders = parsed.values.map((v) => options.bind(v)).join(', ')
+      return `${sqlColumn} IN (${placeholders})`
     }
-    return `${sqlColumn} LIKE ${placeholder} ESCAPE '\\' COLLATE NOCASE`
+    case 'like': {
+      const placeholder = options.bind(parsed.pattern)
+      if (options.dialect === 'postgres') {
+        const textColumn = parsed.numericColumn ? `${sqlColumn}::text` : sqlColumn
+        return `${textColumn} ILIKE ${placeholder} ESCAPE '\\'`
+      }
+      return `${sqlColumn} LIKE ${placeholder} ESCAPE '\\' COLLATE NOCASE`
+    }
+    case 'compare':
+      return `${sqlColumn} ${parsed.operator} ${options.bind(parsed.value)}`
+    case 'range': {
+      const comparison = `${sqlColumn} ${parsed.operator} ${options.bind(parsed.value)}`
+      return parsed.includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison
+    }
   }
-  if (
-    (operator === '=' || operator === '!=') &&
-    (typeof value === 'string' || typeof value === 'number')
-  ) {
-    const compValue = coerceColumnFilterComparisonValue(value, options.numericColumn)
-    return `${sqlColumn} ${operator} ${options.bind(compValue)}`
-  }
-  if (
-    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-    (typeof value === 'string' || typeof value === 'number')
-  ) {
-    const compValue = coerceColumnFilterComparisonValue(value, options.numericColumn)
-    const comparison = `${sqlColumn} ${operator} ${options.bind(compValue)}`
-    const includeEmpty = filterDef.includeEmpty ?? options.includeEmptyDefault ?? true
-    return includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison
-  }
-  return null
 }
 
 /**
@@ -111,22 +154,11 @@ const target = (sqlColumn: string) =>
 function whereIn(
   query: VariantQueryBuilder,
   sqlColumn: string,
-  value: readonly unknown[]
+  values: readonly string[]
 ): VariantQueryBuilder {
-  if (value.length === 0) return query
-  const params = sql.join(value.map((v) => sql`${String(v)}`))
+  if (values.length === 0) return query
+  const params = sql.join(values.map((v) => sql`${v}`))
   return query.where(sql<boolean>`${target(sqlColumn)} IN (${params})`)
-}
-
-/** Case-insensitive substring match. Blank input is skipped — LIKE '%%' excludes NULLs. */
-function whereLike(
-  query: VariantQueryBuilder,
-  sqlColumn: string,
-  value: string
-): VariantQueryBuilder {
-  if (value.trim() === '') return query
-  const pattern = `%${escapeLikePattern(value)}%`
-  return query.where(sql<boolean>`${target(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`)
 }
 
 /** Range comparison — includeEmpty defaults to true (don't lose unannotated variants). */
@@ -135,10 +167,10 @@ function whereRange(
   sqlColumn: string,
   operator: RangeOperator,
   compValue: ComparableValue,
-  includeEmpty: boolean | undefined
+  includeEmpty: boolean
 ): VariantQueryBuilder {
   const col = target(sqlColumn)
-  if (includeEmpty !== false) {
+  if (includeEmpty) {
     return query.where(({ or, eb }) => or([eb(col, 'is', null), eb(col, operator, compValue)]))
   }
   return query.where(col, operator, compValue)
@@ -151,28 +183,25 @@ function applyColumnFilter(
   filterDef: ColumnFilterDef,
   numericColumn: boolean
 ): VariantQueryBuilder {
-  const { operator, value } = filterDef
-  if (isNullCheckOperator(operator)) {
-    // `sqlColumn` comes from SORTABLE_COLUMNS (internal), so sql.raw is safe.
-    return query.where(
-      sql.raw<boolean>(buildNullCheckSql(sqlColumn, operator, numericColumn, 'sqlite'))
-    )
+  const parsed = parseBareColumnFilter(filterDef, numericColumn, true)
+  if (parsed === null) return query
+
+  switch (parsed.kind) {
+    case 'null':
+      return query.where(
+        sql.raw<boolean>(buildNullCheckSql(sqlColumn, parsed.operator, numericColumn, 'sqlite'))
+      )
+    case 'in':
+      return whereIn(query, sqlColumn, parsed.values)
+    case 'like':
+      return query.where(
+        sql<boolean>`${target(sqlColumn)} COLLATE NOCASE LIKE ${parsed.pattern} ESCAPE '\\'`
+      )
+    case 'compare':
+      return query.where(target(sqlColumn), parsed.operator, parsed.value)
+    case 'range':
+      return whereRange(query, sqlColumn, parsed.operator, parsed.value, parsed.includeEmpty)
   }
-  if (operator === 'in' && Array.isArray(value)) return whereIn(query, sqlColumn, value)
-  if (operator === 'like' && typeof value === 'string') return whereLike(query, sqlColumn, value)
-  if ((operator === '=' || operator === '!=') && isComparable(value)) {
-    // Exact match — NULLs excluded (user is looking for specific values)
-    const compValue = coerceColumnFilterComparisonValue(value, numericColumn)
-    return query.where(target(sqlColumn), operator, compValue)
-  }
-  if (
-    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-    isComparable(value)
-  ) {
-    const compValue = coerceColumnFilterComparisonValue(value, numericColumn)
-    return whereRange(query, sqlColumn, operator, compValue, filterDef.includeEmpty)
-  }
-  return query
 }
 
 /** `info.<KEY>` filter (#538); key and values were validated by assertValidColumnFilterValues. */

@@ -147,6 +147,7 @@ export class PostgresStorageSession implements StorageSession {
     return this.pool
   }
 
+  private readonly postgresReadExecutor: PostgresReadExecutor
   private readonly readExecutor: StorageReadExecutor
   private readonly writeExecutor: StorageWriteExecutor
   private readonly importExecutor: StorageImportExecutor
@@ -192,29 +193,27 @@ export class PostgresStorageSession implements StorageSession {
       buildReviews,
       transcripts
     })
-    this.readExecutor = withPhenotypeScores(
-      new PostgresReadExecutor({
-        casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
-        availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema),
-        buildReviews,
-        overview: new PostgresOverviewRepository(options.pool, options.config.schema),
-        export: exportRows,
-        cohort,
-        tags,
-        annotations,
-        commentsMetrics,
-        panels,
-        panelStatus: new PostgresPanelIntervalResolver(options.pool, options.config.schema),
-        filterPresets,
-        shortlist,
-        analysisGroups,
-        audit,
-        transcripts,
-        caseMetadata,
-        variants
-      }),
-      this.writeExecutor
-    )
+    this.postgresReadExecutor = new PostgresReadExecutor({
+      casesQuery: new PostgresCasesQueryRepository(options.pool, options.config.schema),
+      availableBuilds: new PostgresAvailableBuildsRepository(options.pool, options.config.schema),
+      buildReviews,
+      overview: new PostgresOverviewRepository(options.pool, options.config.schema),
+      export: exportRows,
+      cohort,
+      tags,
+      annotations,
+      commentsMetrics,
+      panels,
+      panelStatus: new PostgresPanelIntervalResolver(options.pool, options.config.schema),
+      filterPresets,
+      shortlist,
+      analysisGroups,
+      audit,
+      transcripts,
+      caseMetadata,
+      variants
+    })
+    this.readExecutor = withPhenotypeScores(this.postgresReadExecutor, this.writeExecutor)
     this.importExecutor = new PostgresImportExecutor({
       schema: options.config.schema,
       // buildPostgresClientConfig always sets connectionString = config.url (a string),
@@ -293,6 +292,7 @@ export class PostgresStorageSession implements StorageSession {
   }
 
   async close(): Promise<void> {
+    await this.postgresReadExecutor.close()
     await this.pool.end()
   }
 

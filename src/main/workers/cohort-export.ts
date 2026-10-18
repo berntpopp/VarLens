@@ -110,84 +110,93 @@ export async function runCohortExport(
   // The main process waited for a pending refresh before starting this job.
   if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
 
-  const cohortService = new CohortService(db)
-  onProgress(0, 0)
+  const startedTx = !db.inTransaction
+  if (startedTx) db.exec('BEGIN DEFERRED')
 
-  const summary = cohortService.getCohortSummary()
-  const batchLookup = createCohortAnnotationBatchLookup(db)
-  const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
-  const result: XlsxStreamResult = { rowCount: 0, truncated: false }
+  try {
+    const cohortService = new CohortService(db)
+    const summary = cohortService.getCohortSummary()
+    onProgress(0, 0)
+    const batchLookup = createCohortAnnotationBatchLookup(db)
+    const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
+    const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
-  let totalCount = 0
-  let initialProgressReported = false
-  let yieldedRows = 0
+    let totalCount = 0
+    let initialProgressReported = false
+    let yieldedRows = 0
 
-  async function* generateCohortRows(): AsyncGenerator<readonly XlsxCell[]> {
-    let offset = 0
-    while (offset < COHORT_EXPORT_HARD_LIMIT) {
-      const pageLimit = Math.min(PAGE_SIZE, COHORT_EXPORT_HARD_LIMIT - offset)
-      const page = cohortService.getCohortVariants({
-        ...params,
-        limit: pageLimit,
-        offset
-      })
+    async function* generateCohortRows(): AsyncGenerator<readonly XlsxCell[]> {
+      let offset = 0
+      while (offset < COHORT_EXPORT_HARD_LIMIT) {
+        const pageLimit = Math.min(PAGE_SIZE, COHORT_EXPORT_HARD_LIMIT - offset)
+        const page = cohortService.getCohortVariants({
+          ...params,
+          limit: pageLimit,
+          offset
+        })
 
-      if (!initialProgressReported) {
-        totalCount = Math.min(page.total_count, COHORT_EXPORT_HARD_LIMIT)
-        onProgress(0, totalCount)
-        initialProgressReported = true
-      }
+        if (!initialProgressReported) {
+          totalCount = Math.min(page.total_count, COHORT_EXPORT_HARD_LIMIT)
+          onProgress(0, totalCount)
+          initialProgressReported = true
+        }
 
-      const variants = page.data
-      if (variants.length === 0) break
+        const variants = page.data
+        if (variants.length === 0) break
 
-      for (let i = 0; i < variants.length; i += 200) {
-        const chunk = variants.slice(i, i + 200)
-        const annotations = batchLookup(chunk)
-        for (const variant of chunk) {
-          const key =
-            (variant as { id?: unknown }).id ??
-            `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
-          const ann = annotations.get(key)
-          const row: Record<string, unknown> = { ...variant, ...ann }
-          yield COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
-          yieldedRows += 1
-          if (yieldedRows % PROGRESS_EVERY_ROWS === 0) {
-            onProgress(yieldedRows, totalCount)
+        for (let i = 0; i < variants.length; i += 200) {
+          const chunk = variants.slice(i, i + 200)
+          const annotations = batchLookup(chunk)
+          for (const variant of chunk) {
+            const key =
+              (variant as { id?: unknown }).id ??
+              `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
+            const ann = annotations.get(key)
+            const row: Record<string, unknown> = { ...variant, ...ann }
+            yield COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
+            yieldedRows += 1
+            if (yieldedRows % PROGRESS_EVERY_ROWS === 0) {
+              onProgress(yieldedRows, totalCount)
+            }
           }
         }
+
+        offset += variants.length
+        if (variants.length < pageLimit) break
       }
 
-      offset += variants.length
-      if (variants.length < pageLimit) break
+      if (!initialProgressReported) {
+        onProgress(0, 0)
+      }
     }
 
-    if (!initialProgressReported) {
-      onProgress(0, 0)
+    const sheet: XlsxSheetSpec = {
+      name: 'Cohort Variants',
+      header: headers,
+      rows: generateCohortRows()
+    }
+
+    const info = {
+      name: 'Export Info',
+      rows: (res: XlsxStreamResult) =>
+        buildCohortMetadata(params, summary.total_cases, res.rowCount)
+    }
+
+    const stream = createWriteStream(outputFilePath)
+    let opened = false
+    stream.once('open', () => (opened = true))
+    try {
+      await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
+    } catch (error) {
+      if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+      throw error
+    }
+
+    onProgress(result.rowCount, result.rowCount)
+    return { filePath: outputFilePath, rowCount: result.rowCount }
+  } finally {
+    if (startedTx && db.inTransaction) {
+      db.exec('ROLLBACK')
     }
   }
-
-  const sheet: XlsxSheetSpec = {
-    name: 'Cohort Variants',
-    header: headers,
-    rows: generateCohortRows()
-  }
-
-  const info = {
-    name: 'Export Info',
-    rows: (res: XlsxStreamResult) => buildCohortMetadata(params, summary.total_cases, res.rowCount)
-  }
-
-  const stream = createWriteStream(outputFilePath)
-  let opened = false
-  stream.once('open', () => (opened = true))
-  try {
-    await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
-  } catch (error) {
-    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
-    throw error
-  }
-
-  onProgress(result.rowCount, result.rowCount)
-  return { filePath: outputFilePath, rowCount: result.rowCount }
 }
