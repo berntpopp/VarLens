@@ -81,9 +81,9 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
         }
       }
 
-      // Use npx to resolve tsx portably (handles .cmd on Windows, PATH resolution)
-      const isWin = process.platform === 'win32'
-      const npxCmd = isWin ? 'npx.cmd' : 'npx'
+      // Execute the builder script directly with tsx cli via process.execPath
+      // (avoid npx.cmd / shell: true to prevent DEP0190 and command injection when paths have spaces or special characters)
+      const tsxCliPath = resolve(appPath, 'node_modules', 'tsx', 'dist', 'cli.mjs')
 
       // Destination: always write to userData so it takes precedence on next load
       const userDataDbPath = join(app.getPath('userData'), 'gene_reference.db')
@@ -94,13 +94,13 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
 
       return new Promise<{ success: boolean; message: string }>((resolve_p) => {
         execFile(
-          npxCmd,
-          ['tsx', scriptPath],
+          process.execPath,
+          [tsxCliPath, scriptPath],
           {
             cwd: appPath,
             timeout: 5 * 60 * 1000, // 5 minute timeout
-            shell: isWin,
-            env: { ...process.env }
+            shell: false,
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
           },
           (error, stdout, stderr) => {
             if (error) {

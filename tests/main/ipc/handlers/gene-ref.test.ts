@@ -28,11 +28,17 @@ vi.mock('../../../../src/main/database/geneReferenceLoader', () => ({
 import { app } from 'electron'
 import { execFile } from 'child_process'
 import { existsSync, copyFileSync } from 'fs'
-import { getGeneReferenceDb, closeGeneReferenceDb } from '../../../../src/main/database/geneReferenceLoader'
+import {
+  getGeneReferenceDb,
+  closeGeneReferenceDb
+} from '../../../../src/main/database/geneReferenceLoader'
 
 type HandlerCallback = (...args: unknown[]) => Promise<unknown>
 
-function makeIpcMain(): { handle: ReturnType<typeof vi.fn>; handlers: Map<string, HandlerCallback> } {
+function makeIpcMain(): {
+  handle: ReturnType<typeof vi.fn>
+  handlers: Map<string, HandlerCallback>
+} {
   const handlers = new Map<string, HandlerCallback>()
   const handle = vi.fn((channel: string, callback: HandlerCallback) => {
     handlers.set(channel, callback)
@@ -57,7 +63,9 @@ describe('gene-ref IPC handlers', () => {
 
     vi.mocked(getGeneReferenceDb).mockReturnValue({
       getInfo: vi.fn(() => mockInfo),
-      getAssemblies: vi.fn(() => [{ id: 'GRCh38', display_name: 'GRCh38', aliases: [], source_version: 'v1' }])
+      getAssemblies: vi.fn(() => [
+        { id: 'GRCh38', display_name: 'GRCh38', aliases: [], source_version: 'v1' }
+      ])
     } as never)
 
     ipc = makeIpcMain()
@@ -152,58 +160,55 @@ describe('gene-ref IPC handlers', () => {
       expect(execFile).not.toHaveBeenCalled()
     })
 
-    it('invokes execFile with shell: true on Windows and completes update', async () => {
+    it('invokes execFile with process.execPath, tsx CLI, shell: false, and ELECTRON_RUN_AS_NODE: 1', async () => {
       Object.defineProperty(app, 'isPackaged', { value: false, configurable: true })
       vi.mocked(existsSync).mockReturnValue(true)
 
-      const originalPlatform = process.platform
-      try {
-        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      vi.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+        expect(cmd).toBe(process.execPath)
+        expect(Array.isArray(args)).toBe(true)
+        const [tsxPath, scriptPath] = args as string[]
+        expect(tsxPath).toContain('node_modules')
+        expect(tsxPath).toContain('cli.mjs')
+        expect(scriptPath).toContain('build-gene-reference-db.ts')
+        expect(typeof options).toBe('object')
+        expect((options as { shell: boolean }).shell).toBe(false)
+        expect((options as { env: Record<string, string> }).env.ELECTRON_RUN_AS_NODE).toBe('1')
+        if (typeof callback === 'function') {
+          callback(null, 'build output', '')
+        }
+        return {} as never
+      })
 
-        vi.mocked(execFile).mockImplementation((_cmd, _args, options, callback) => {
-          expect(typeof options).toBe('object')
-          expect((options as { shell: boolean }).shell).toBe(true)
-          if (typeof callback === 'function') {
-            callback(null, 'build output', '')
-          }
-          return {} as never
-        })
+      const handler = ipc.handlers.get('gene-ref:update')!
+      const result = (await handler({})) as { success: boolean; message: string }
 
-        const handler = ipc.handlers.get('gene-ref:update')!
-        const result = (await handler({})) as { success: boolean; message: string }
-
-        expect(result.success).toBe(true)
-        expect(copyFileSync).toHaveBeenCalled()
-        expect(closeGeneReferenceDb).toHaveBeenCalled()
-      } finally {
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
-      }
+      expect(result.success).toBe(true)
+      expect(copyFileSync).toHaveBeenCalled()
+      expect(closeGeneReferenceDb).toHaveBeenCalled()
     })
 
-    it('invokes execFile with shell: false on non-Windows', async () => {
+    it('handles appPath with spaces safely without shell expansion', async () => {
       Object.defineProperty(app, 'isPackaged', { value: false, configurable: true })
+      vi.mocked(app.getAppPath).mockReturnValueOnce('/mock/path with spaces & special chars')
       vi.mocked(existsSync).mockReturnValue(true)
 
-      const originalPlatform = process.platform
-      try {
-        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+      vi.mocked(execFile).mockImplementation((cmd, args, options, callback) => {
+        expect(cmd).toBe(process.execPath)
+        expect(Array.isArray(args)).toBe(true)
+        const [tsxPath] = args as string[]
+        expect(tsxPath).toContain('path with spaces & special chars')
+        expect((options as { shell: boolean }).shell).toBe(false)
+        if (typeof callback === 'function') {
+          callback(null, 'build output', '')
+        }
+        return {} as never
+      })
 
-        vi.mocked(execFile).mockImplementation((cmd, _args, options, callback) => {
-          expect(cmd).toBe('npx')
-          expect((options as { shell: boolean }).shell).toBe(false)
-          if (typeof callback === 'function') {
-            callback(null, 'build output', '')
-          }
-          return {} as never
-        })
+      const handler = ipc.handlers.get('gene-ref:update')!
+      const result = (await handler({})) as { success: boolean; message: string }
 
-        const handler = ipc.handlers.get('gene-ref:update')!
-        const result = (await handler({})) as { success: boolean; message: string }
-
-        expect(result.success).toBe(true)
-      } finally {
-        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
-      }
+      expect(result.success).toBe(true)
     })
   })
 })
