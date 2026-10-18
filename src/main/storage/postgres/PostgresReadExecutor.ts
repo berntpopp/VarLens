@@ -177,10 +177,18 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         prewarmHpoIndex()
         return null
 
-      // ponytail: in-process like the shortlist's scorer: the web server scores here
-      // (~0.1-1 s per case, once per profile); desktop Postgres blocks its main thread.
+      // shortcut: in-process scoreAllGenes yields via setImmediate off the calling event loop;
+      // full off-thread worker pool deferred until desktop Postgres is promoted.
       case 'hpo:caseScores':
-        return scoreAllGenes(task.params[0])
+        return await new Promise((resolve, reject) => {
+          setImmediate(() => {
+            try {
+              resolve(scoreAllGenes(task.params[0]))
+            } catch (error) {
+              reject(error)
+            }
+          })
+        })
 
       case 'hpo:explainGene':
         return explainCaseGene(

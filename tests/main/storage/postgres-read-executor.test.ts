@@ -403,4 +403,15 @@ describe('PostgresReadExecutor', () => {
     ).resolves.toBe(expected)
     expect(panelStatus.getResolutionStatus).toHaveBeenCalledWith(request)
   })
+
+  it('dispatches hpo:caseScores asynchronously off the event loop', async () => {
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    let syncFlag = false
+    const promise = executor.execute({ type: 'hpo:caseScores', params: [[]] }).then((res) => {
+      expect(syncFlag).toBe(true)
+      return res
+    })
+    syncFlag = true
+    await expect(promise).resolves.toEqual([])
+  })
 })
