@@ -1,5 +1,6 @@
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import { mainLogger } from '../services/MainLogger'
+import { sqlPlaceholders } from './sql-utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -168,7 +169,125 @@ export class GeneReferenceDb {
   }
 
   validateSymbols(inputs: string[]): GeneValidationResult[] {
-    return inputs.map((input) => this.validateSymbol(input))
+    if (inputs.length === 0) return []
+
+    const trimmedInputs = inputs.map((input) => input.trim())
+    const uniqueTrimmed = Array.from(new Set(trimmedInputs))
+
+    const BATCH_SIZE = 500
+    const genesBySymbolLower = new Map<string, GeneRow>()
+
+    // Step 1: Batch lookup on genes.symbol (COLLATE NOCASE)
+    for (let i = 0; i < uniqueTrimmed.length; i += BATCH_SIZE) {
+      const chunk = uniqueTrimmed.slice(i, i + BATCH_SIZE)
+      const placeholders = sqlPlaceholders(chunk.length)
+      const rows = this.db
+        .prepare(
+          `SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE symbol COLLATE NOCASE IN (${placeholders})`
+        )
+        .all(...chunk) as GeneRow[]
+      for (const row of rows) {
+        genesBySymbolLower.set(row.symbol.toLowerCase(), row)
+      }
+    }
+
+    // Step 2: Search gene_aliases for any symbols not matched to an approved gene
+    const unmatched = uniqueTrimmed.filter((sym) => !genesBySymbolLower.has(sym.toLowerCase()))
+    const aliasesByLower = new Map<string, AliasRow[]>()
+    const hgncIdsToFetch = new Set<string>()
+
+    if (unmatched.length > 0) {
+      for (let i = 0; i < unmatched.length; i += BATCH_SIZE) {
+        const chunk = unmatched.slice(i, i + BATCH_SIZE)
+        const placeholders = sqlPlaceholders(chunk.length)
+        const rows = this.db
+          .prepare(
+            `SELECT alias, hgnc_id, alias_type FROM gene_aliases WHERE alias COLLATE NOCASE IN (${placeholders})`
+          )
+          .all(...chunk) as AliasRow[]
+        for (const row of rows) {
+          const key = row.alias.toLowerCase()
+          let list = aliasesByLower.get(key)
+          if (list === undefined) {
+            list = []
+            aliasesByLower.set(key, list)
+          }
+          list.push(row)
+          hgncIdsToFetch.add(row.hgnc_id)
+        }
+      }
+    }
+
+    // Step 3: Fetch gene info for any alias-referenced HGNC IDs
+    const genesByHgncId = new Map<string, GeneRow>()
+    const hgncIdsList = Array.from(hgncIdsToFetch)
+    if (hgncIdsList.length > 0) {
+      for (let i = 0; i < hgncIdsList.length; i += BATCH_SIZE) {
+        const chunk = hgncIdsList.slice(i, i + BATCH_SIZE)
+        const placeholders = sqlPlaceholders(chunk.length)
+        const rows = this.db
+          .prepare(
+            `SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE hgnc_id IN (${placeholders})`
+          )
+          .all(...chunk) as GeneRow[]
+        for (const row of rows) {
+          genesByHgncId.set(row.hgnc_id, row)
+        }
+      }
+    }
+
+    // Cache the resolved result per unique trimmed string
+    const resultByTrimmed = new Map<string, GeneValidationResult>()
+    for (const trimmed of uniqueTrimmed) {
+      const lower = trimmed.toLowerCase()
+      const gene = genesBySymbolLower.get(lower)
+      if (gene !== undefined) {
+        resultByTrimmed.set(trimmed, {
+          input: trimmed,
+          status: 'approved',
+          symbol: gene.symbol,
+          hgncId: gene.hgnc_id,
+          name: gene.name ?? undefined,
+          locusGroup: gene.locus_group ?? undefined
+        })
+        continue
+      }
+
+      const aliases = aliasesByLower.get(lower)
+      if (aliases !== undefined && aliases.length === 1) {
+        const alias = aliases[0]
+        const resolvedGene = genesByHgncId.get(alias.hgnc_id)
+        resultByTrimmed.set(trimmed, {
+          input: trimmed,
+          status: 'alias',
+          symbol: resolvedGene?.symbol,
+          hgncId: alias.hgnc_id,
+          name: resolvedGene?.name ?? undefined,
+          locusGroup: resolvedGene?.locus_group ?? undefined,
+          currentSymbol: resolvedGene?.symbol,
+          aliasType: alias.alias_type
+        })
+        continue
+      }
+
+      if (aliases !== undefined && aliases.length > 1) {
+        const candidates = aliases.map((a) => {
+          const g = genesByHgncId.get(a.hgnc_id)
+          return { symbol: g?.symbol ?? a.hgnc_id, hgncId: a.hgnc_id }
+        })
+        resultByTrimmed.set(trimmed, {
+          input: trimmed,
+          status: 'ambiguous',
+          candidates
+        })
+        continue
+      }
+
+      resultByTrimmed.set(trimmed, { input: trimmed, status: 'unknown' })
+    }
+
+    // Map back in exact original input order
+    return trimmedInputs.map((trimmed) => resultByTrimmed.get(trimmed)!)
   }
 
   // -------------------------------------------------------------------------
@@ -280,12 +399,32 @@ export class GeneReferenceDb {
 
   getCoordinatesForGenes(hgncIds: string[], assembly: string): Map<string, GeneCoordinates> {
     const result = new Map<string, GeneCoordinates>()
-    for (const hgncId of hgncIds) {
-      const coords = this.getGeneCoordinates(hgncId, assembly)
-      if (coords) {
-        result.set(hgncId, coords)
+    if (hgncIds.length === 0) return result
+
+    const uniqueHgncIds = Array.from(new Set(hgncIds))
+    const BATCH_SIZE = 500
+
+    for (let i = 0; i < uniqueHgncIds.length; i += BATCH_SIZE) {
+      const chunk = uniqueHgncIds.slice(i, i + BATCH_SIZE)
+      const placeholders = sqlPlaceholders(chunk.length)
+      const rows = this.db
+        .prepare(
+          `SELECT hgnc_id, assembly, chromosome, start_pos, end_pos, strand FROM gene_coordinates WHERE assembly = ? AND hgnc_id IN (${placeholders})`
+        )
+        .all(assembly, ...chunk) as CoordinateRow[]
+
+      for (const row of rows) {
+        result.set(row.hgnc_id, {
+          hgncId: row.hgnc_id,
+          assembly: row.assembly,
+          chromosome: row.chromosome,
+          start_pos: row.start_pos,
+          end_pos: row.end_pos,
+          strand: row.strand
+        })
       }
     }
+
     return result
   }
 

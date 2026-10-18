@@ -80,6 +80,34 @@ describe('GeneReferenceDb', () => {
       const results = geneRef.validateSymbols([])
       expect(results).toEqual([])
     })
+
+    it('preserves duplicate inputs and exact input casing in results', () => {
+      const inputs = ['  BRCA1  ', 'brca1', 'BRCA1', 'RNF53', 'rnf53']
+      const results = geneRef.validateSymbols(inputs)
+      expect(results).toHaveLength(5)
+      expect(results[0]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[1]).toMatchObject({ input: 'brca1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[2]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[3]).toMatchObject({ input: 'RNF53', status: 'alias', symbol: 'BRCA1' })
+      expect(results[4]).toMatchObject({ input: 'rnf53', status: 'alias', symbol: 'BRCA1' })
+    })
+
+    it('handles batch size exceeding chunk limit (>500 items)', () => {
+      // 550 items with alternating approved and unknown
+      const largeList = Array.from({ length: 550 }, (_, i) =>
+        i % 2 === 0 ? 'BRCA1' : `UNKNOWN_GENE_${i}`
+      )
+      const results = geneRef.validateSymbols(largeList)
+      expect(results).toHaveLength(550)
+      for (let i = 0; i < 550; i++) {
+        if (i % 2 === 0) {
+          expect(results[i].status).toBe('approved')
+          expect(results[i].symbol).toBe('BRCA1')
+        } else {
+          expect(results[i].status).toBe('unknown')
+        }
+      }
+    })
   })
 
   describe('autocomplete', () => {
@@ -179,6 +207,19 @@ describe('GeneReferenceDb', () => {
     it('returns empty map for empty input', () => {
       const coords = geneRef.getCoordinatesForGenes([], 'GRCh38')
       expect(coords.size).toBe(0)
+    })
+
+    it('handles duplicate hgncIds and chunks exceeding 500 items', () => {
+      // 550 items containing duplicates of HGNC:1100 and HGNC:11998 plus unknown IDs
+      const largeList = Array.from({ length: 550 }, (_, i) => {
+        if (i % 2 === 0) return 'HGNC:1100'
+        if (i % 3 === 0) return 'HGNC:11998'
+        return `HGNC:FAKE_${i}`
+      })
+      const coords = geneRef.getCoordinatesForGenes(largeList, 'GRCh38')
+      expect(coords.size).toBe(2)
+      expect(coords.has('HGNC:1100')).toBe(true)
+      expect(coords.has('HGNC:11998')).toBe(true)
     })
   })
 
