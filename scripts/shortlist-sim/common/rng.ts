@@ -10,6 +10,8 @@ export function rng(seed: number): () => number {
   }
 }
 
+export const mulberry32 = rng
+
 /** Fisher–Yates shuffle into a new array. */
 export function shuffle<T>(items: readonly T[], rnd: () => number): T[] {
   const out = [...items]

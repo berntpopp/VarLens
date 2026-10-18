@@ -1,5 +1,5 @@
 // Gene → cross-validation fold (spec §5.2): sort, seeded Fisher–Yates shuffle, round-robin.
-import { mulberry32 } from './prng'
+import { mulberry32 } from '../common/rng'
 
 export function geneFolds(genes: Iterable<string>, k: number, seed: number): Map<string, number> {
   if (!Number.isInteger(k) || k < 1)

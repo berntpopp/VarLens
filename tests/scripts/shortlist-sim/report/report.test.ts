@@ -14,7 +14,7 @@ import {
 import { analyze } from '../../../../scripts/shortlist-sim/report/analysis'
 import { pointsSection } from '../../../../scripts/shortlist-sim/report/markdown'
 import { renderReport } from '../../../../scripts/shortlist-sim/report/report'
-import { mulberry32 } from '../../../../scripts/shortlist-sim/stats/prng'
+import { mulberry32 } from '../../../../scripts/shortlist-sim/common/rng'
 
 const SCORERS = [
   { id: 'tier1', label: 'Tier 1 candidates', base: 12 },
