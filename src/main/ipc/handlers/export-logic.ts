@@ -38,9 +38,10 @@ export interface ExportResult {
   success: boolean
   filePath?: string
   error?: string
+  cancelled?: boolean
 }
 
-const CANCELLED_RESULT: ExportResult = { success: false, error: 'Export cancelled' }
+const CANCELLED_RESULT: ExportResult = { success: false, error: 'Export cancelled', cancelled: true }
 
 /**
  * Run an export as a tracked `export` job so it shows up in `jobs:changed`

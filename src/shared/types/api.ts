@@ -286,8 +286,8 @@ export interface ShellOpenExternalResult {
 }
 
 export interface ShellAPI {
-  openExternal: (url: string) => Promise<ShellOpenExternalResult>
-  updateDomains: (domains: string[]) => Promise<void>
+  openExternal: (url: string) => Promise<IpcResult<ShellOpenExternalResult>>
+  updateDomains: (domains: string[]) => Promise<IpcResult<void>>
 }
 
 /** Successful export result */
@@ -295,6 +295,7 @@ export interface ExportResult {
   success: boolean
   filePath?: string
   error?: string
+  cancelled?: boolean
 }
 
 export interface ExportAPI {
@@ -733,7 +734,7 @@ export interface PanelsAPI {
     panelId: number,
     assembly: string,
     paddingBp: number
-  ) => Promise<IpcResult<{ success: boolean; path?: string }>>
+  ) => Promise<IpcResult<{ success: boolean; path?: string; cancelled?: boolean }>>
 }
 
 export interface GeneRefCheckUpdatesResult {

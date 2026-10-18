@@ -6,6 +6,7 @@ export interface ExportResult {
   success: boolean
   filePath?: string
   error?: string
+  cancelled?: boolean
 }
 
 /**

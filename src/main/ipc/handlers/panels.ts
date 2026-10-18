@@ -347,7 +347,7 @@ export function registerPanelHandlers({ ipcMain, getDb, getDbManager }: HandlerD
       })
 
       if (canceled || !filePath) {
-        return { success: false, path: undefined }
+        return { success: false, path: undefined, cancelled: true }
       }
       assertNotDatabaseFile(filePath, getDbManager)
 
