@@ -385,7 +385,7 @@ const openFAQ = (): void => {
 const openGitHub = async (): Promise<void> => {
   if (api) {
     try {
-      const result = await api.shell.openExternal(APP_CONFIG.URLS.GITHUB)
+      const result = unwrapIpcResult(await api.shell.openExternal(APP_CONFIG.URLS.GITHUB))
       if (!result.success) {
         logService.error('Failed to open GitHub URL: ' + String(result.error), 'app')
       }
@@ -398,7 +398,7 @@ const openGitHub = async (): Promise<void> => {
 const openDocs = async (): Promise<void> => {
   if (api) {
     try {
-      const result = await api.shell.openExternal(APP_CONFIG.URLS.DOCS)
+      const result = unwrapIpcResult(await api.shell.openExternal(APP_CONFIG.URLS.DOCS))
       if (!result.success) {
         logService.error('Failed to open documentation URL: ' + String(result.error), 'app')
       }
@@ -411,7 +411,7 @@ const openDocs = async (): Promise<void> => {
 const openLicense = async (): Promise<void> => {
   if (api) {
     try {
-      const result = await api.shell.openExternal(APP_CONFIG.URLS.LICENSE)
+      const result = unwrapIpcResult(await api.shell.openExternal(APP_CONFIG.URLS.LICENSE))
       if (!result.success) {
         logService.error('Failed to open license URL: ' + String(result.error), 'app')
       }

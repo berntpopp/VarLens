@@ -65,7 +65,9 @@ export function useFilterExport(
         return { success: false, error: result.error }
       }
 
-      return result?.error === 'Export cancelled' ? { success: false, cancelled: true } : null
+      return result?.error === 'Export cancelled' || result?.cancelled === true
+        ? { success: false, cancelled: true }
+        : null
     } catch (error) {
       logService.error(
         'Export error: ' +

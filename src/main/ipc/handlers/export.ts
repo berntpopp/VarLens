@@ -127,7 +127,7 @@ export function registerExportHandlers({
           })
 
           if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
-            return { success: false, error: 'Export cancelled', cancelled: true }
+            return { success: false, cancelled: true }
           }
           assertNotDatabaseFile(result.filePath, getDbManager)
           outputFilePath = result.filePath
@@ -218,7 +218,7 @@ export function registerExportHandlers({
         })
 
         if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
-          return { success: false, error: 'Export cancelled', cancelled: true }
+          return { success: false, cancelled: true }
         }
         assertNotDatabaseFile(result.filePath, getDbManager)
         outputFilePath = result.filePath
