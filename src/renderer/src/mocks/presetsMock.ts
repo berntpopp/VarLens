@@ -17,10 +17,16 @@ export const defaultMockShortlistPresets: FilterPreset[] = BUILT_IN_SHORTLIST_PR
   })
 )
 
-let mockPresets: FilterPreset[] = [...defaultMockShortlistPresets]
+const clonePresets = (): FilterPreset[] =>
+  defaultMockShortlistPresets.map((p) => ({
+    ...p,
+    filterJson: structuredClone(p.filterJson)
+  }))
+
+let mockPresets: FilterPreset[] = clonePresets()
 
 export function resetMockPresets(): void {
-  mockPresets = [...defaultMockShortlistPresets]
+  mockPresets = clonePresets()
 }
 
 export const mockPresetsApi: PresetsAPI = {

@@ -45,6 +45,15 @@ test.beforeAll(async () => {
   // Seed deterministic database and fixture cases
   await createPerfDatabase(appInstance.app, window, appInstance.userDataDir)
   await importFrozenPerfFixture(window, appInstance.app)
+
+  // Reload renderer to sync store with raw IPC imported fixture cases
+  await window.reload()
+  await window.locator('.v-application').waitFor({ state: 'visible', timeout: 10000 })
+  const disclaimerAfterReload = window.locator('button:has-text("I Understand")')
+  if ((await disclaimerAfterReload.count()) > 0 && (await disclaimerAfterReload.isVisible())) {
+    await disclaimerAfterReload.click()
+    await window.waitForTimeout(300)
+  }
 })
 
 test.afterAll(async () => {

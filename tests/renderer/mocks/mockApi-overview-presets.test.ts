@@ -56,4 +56,26 @@ describe('mockApi overview and presets', () => {
     expect(cohortSummary.total_variants).toBe(0)
     expect(cohortSummary.unique_variants).toBe(0)
   })
+
+  it('presets.reorder mutates sort order and resetMockPresets restores defaults cleanly', async () => {
+    const original = await mockApi.presets.list()
+    expect(original[0].sortOrder).toBe(0)
+    expect(original[1].sortOrder).toBe(1)
+
+    // Swap sort orders
+    await mockApi.presets.reorder([
+      { id: original[0].id, sortOrder: 99 },
+      { id: original[1].id, sortOrder: 100 }
+    ])
+
+    const mutated = await mockApi.presets.list()
+    expect(mutated.find((p) => p.id === original[0].id)?.sortOrder).toBe(99)
+    expect(mutated.find((p) => p.id === original[1].id)?.sortOrder).toBe(100)
+
+    // Reset and verify defaults restored without leaking mutated values
+    resetMockData()
+    const restored = await mockApi.presets.list()
+    expect(restored[0].sortOrder).toBe(0)
+    expect(restored[1].sortOrder).toBe(1)
+  })
 })

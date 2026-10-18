@@ -366,18 +366,19 @@ export const mockApi: WindowAPI = {
       { path: '/mock/database.db', name: 'Mock Database', lastOpened: Date.now() }
     ],
     getOverview: async () => {
+      const active = activeVariants()
+      const casesList = cases.map((c) => ({
+        id: c.id,
+        name: c.name,
+        variant_count: active.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
+        created_at: c.created_at,
+        affected_status: null
+      }))
       const summaryResult = await mockApi.cohort.getSummary()
       if ('code' in summaryResult) return summaryResult
-      const active = activeVariants()
       return {
         summary: summaryResult,
-        cases: cases.map((c) => ({
-          id: c.id,
-          name: c.name,
-          variant_count: active.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
-          created_at: c.created_at,
-          affected_status: null
-        })),
+        cases: casesList,
         cohortGroups: [],
         tags: [],
         topPhenotypes: []
