@@ -171,15 +171,23 @@ export class GeneReferenceDb {
   validateSymbols(inputs: string[]): GeneValidationResult[] {
     if (inputs.length === 0) return []
 
-    const trimmedInputs = inputs.map((input) => input.trim())
-    const uniqueTrimmed = Array.from(new Set(trimmedInputs))
+    // Deduplicate case-insensitively for database queries
+    const lowerToTrimmed = new Map<string, string>()
+    for (const input of inputs) {
+      const trimmed = input.trim()
+      const lower = trimmed.toLowerCase()
+      if (!lowerToTrimmed.has(lower)) {
+        lowerToTrimmed.set(lower, trimmed)
+      }
+    }
+    const deduplicatedQueries = Array.from(lowerToTrimmed.values())
 
     const BATCH_SIZE = 500
     const genesBySymbolLower = new Map<string, GeneRow>()
 
     // Step 1: Batch lookup on genes.symbol (COLLATE NOCASE)
-    for (let i = 0; i < uniqueTrimmed.length; i += BATCH_SIZE) {
-      const chunk = uniqueTrimmed.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < deduplicatedQueries.length; i += BATCH_SIZE) {
+      const chunk = deduplicatedQueries.slice(i, i + BATCH_SIZE)
       const placeholders = sqlPlaceholders(chunk.length)
       const rows = this.db
         .prepare(
@@ -192,7 +200,9 @@ export class GeneReferenceDb {
     }
 
     // Step 2: Search gene_aliases for any symbols not matched to an approved gene
-    const unmatched = uniqueTrimmed.filter((sym) => !genesBySymbolLower.has(sym.toLowerCase()))
+    const unmatched = deduplicatedQueries.filter(
+      (sym) => !genesBySymbolLower.has(sym.toLowerCase())
+    )
     const aliasesByLower = new Map<string, AliasRow[]>()
     const hgncIdsToFetch = new Set<string>()
 
@@ -236,14 +246,12 @@ export class GeneReferenceDb {
       }
     }
 
-    // Cache the resolved result per unique trimmed string
-    const resultByTrimmed = new Map<string, GeneValidationResult>()
-    for (const trimmed of uniqueTrimmed) {
-      const lower = trimmed.toLowerCase()
+    // Pre-resolve result per unique lower-cased symbol
+    const resultByLower = new Map<string, Omit<GeneValidationResult, 'input'>>()
+    for (const lower of lowerToTrimmed.keys()) {
       const gene = genesBySymbolLower.get(lower)
       if (gene !== undefined) {
-        resultByTrimmed.set(trimmed, {
-          input: trimmed,
+        resultByLower.set(lower, {
           status: 'approved',
           symbol: gene.symbol,
           hgncId: gene.hgnc_id,
@@ -257,8 +265,7 @@ export class GeneReferenceDb {
       if (aliases !== undefined && aliases.length === 1) {
         const alias = aliases[0]
         const resolvedGene = genesByHgncId.get(alias.hgnc_id)
-        resultByTrimmed.set(trimmed, {
-          input: trimmed,
+        resultByLower.set(lower, {
           status: 'alias',
           symbol: resolvedGene?.symbol,
           hgncId: alias.hgnc_id,
@@ -275,19 +282,26 @@ export class GeneReferenceDb {
           const g = genesByHgncId.get(a.hgnc_id)
           return { symbol: g?.symbol ?? a.hgnc_id, hgncId: a.hgnc_id }
         })
-        resultByTrimmed.set(trimmed, {
-          input: trimmed,
+        resultByLower.set(lower, {
           status: 'ambiguous',
           candidates
         })
         continue
       }
 
-      resultByTrimmed.set(trimmed, { input: trimmed, status: 'unknown' })
+      resultByLower.set(lower, { status: 'unknown' })
     }
 
     // Map back in exact original input order
-    return trimmedInputs.map((trimmed) => resultByTrimmed.get(trimmed)!)
+    return inputs.map((input) => {
+      const trimmed = input.trim()
+      const lower = trimmed.toLowerCase()
+      const res = resultByLower.get(lower)!
+      return {
+        input: trimmed,
+        ...res
+      } as GeneValidationResult
+    })
   }
 
   // -------------------------------------------------------------------------
@@ -403,6 +417,7 @@ export class GeneReferenceDb {
 
     const uniqueHgncIds = Array.from(new Set(hgncIds))
     const BATCH_SIZE = 500
+    const fetched = new Map<string, GeneCoordinates>()
 
     for (let i = 0; i < uniqueHgncIds.length; i += BATCH_SIZE) {
       const chunk = uniqueHgncIds.slice(i, i + BATCH_SIZE)
@@ -414,7 +429,7 @@ export class GeneReferenceDb {
         .all(assembly, ...chunk) as CoordinateRow[]
 
       for (const row of rows) {
-        result.set(row.hgnc_id, {
+        fetched.set(row.hgnc_id, {
           hgncId: row.hgnc_id,
           assembly: row.assembly,
           chromosome: row.chromosome,
@@ -422,6 +437,14 @@ export class GeneReferenceDb {
           end_pos: row.end_pos,
           strand: row.strand
         })
+      }
+    }
+
+    // Preserve exact input order from uniqueHgncIds
+    for (const id of uniqueHgncIds) {
+      const coord = fetched.get(id)
+      if (coord !== undefined) {
+        result.set(id, coord)
       }
     }
 

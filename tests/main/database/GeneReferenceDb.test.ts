@@ -108,6 +108,30 @@ describe('GeneReferenceDb', () => {
         }
       }
     })
+
+    it('handles ambiguous alias in batch validation (#672)', () => {
+      const results = geneRef.validateSymbols(['2F1', '2f1'])
+      expect(results).toHaveLength(2)
+      expect(results[0].status).toBe('ambiguous')
+      expect(results[0].input).toBe('2F1')
+      expect(results[0].candidates?.length).toBeGreaterThan(1)
+      expect(results[1].status).toBe('ambiguous')
+      expect(results[1].input).toBe('2f1')
+      expect(results[1].candidates?.length).toBeGreaterThan(1)
+    })
+
+    it('deduplicates case variations before chunking (>500 items) (#672)', () => {
+      const list: string[] = []
+      for (let i = 0; i < 300; i++) {
+        list.push(`GENE_${i}`)
+        list.push(`gene_${i}`)
+      }
+      list.push('BRCA1', 'brca1')
+      const results = geneRef.validateSymbols(list)
+      expect(results).toHaveLength(602)
+      expect(results[600]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[601]).toMatchObject({ input: 'brca1', status: 'approved', symbol: 'BRCA1' })
+    })
   })
 
   describe('autocomplete', () => {
@@ -220,6 +244,16 @@ describe('GeneReferenceDb', () => {
       expect(coords.size).toBe(2)
       expect(coords.has('HGNC:1100')).toBe(true)
       expect(coords.has('HGNC:11998')).toBe(true)
+    })
+
+    it('preserves exact input order of unique hgncIds (#672)', () => {
+      const ids = ['HGNC:11998', 'HGNC:1100']
+      const coords = geneRef.getCoordinatesForGenes(ids, 'GRCh38')
+      expect(Array.from(coords.keys())).toEqual(['HGNC:11998', 'HGNC:1100'])
+
+      const reversedIds = ['HGNC:1100', 'HGNC:11998']
+      const coordsRev = geneRef.getCoordinatesForGenes(reversedIds, 'GRCh38')
+      expect(Array.from(coordsRev.keys())).toEqual(['HGNC:1100', 'HGNC:11998'])
     })
   })
 
