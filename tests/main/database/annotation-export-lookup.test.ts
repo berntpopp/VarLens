@@ -1,8 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import {
-  caseRowAnnotations,
-  cohortRowAnnotations,
   createCaseAnnotationBatchLookup,
   createCohortAnnotationBatchLookup
 } from '../../../src/main/database/annotation-export-lookup'
@@ -50,23 +48,6 @@ describe('annotation-export-lookup', () => {
     db.close()
   })
 
-  describe('caseRowAnnotations', () => {
-    it('returns own and global annotation cells', () => {
-      const getAnn = caseRowAnnotations(db, 1)
-      const res = getAnn({
-        id: 101,
-        case_id: 1,
-        chr: '1',
-        pos: 100,
-        ref: 'A',
-        alt: 'T'
-      })
-      expect(res.acmg_classification).toBe('Pathogenic')
-      expect(res.case_comment).toBe('case note')
-      expect(res.global_comment).toBe('global note')
-    })
-  })
-
   describe('createCaseAnnotationBatchLookup', () => {
     it('batches coordinate queries and returns matching annotation cells', () => {
       const lookup = createCaseAnnotationBatchLookup(db, 1)
@@ -90,22 +71,37 @@ describe('annotation-export-lookup', () => {
         global_comment: null
       })
     })
+
+    it('queries case_variant_annotations and variant_annotations in chunks of 200 (O(chunks) queries)', () => {
+      const prepareSpy = vi.spyOn(db, 'prepare')
+      const lookup = createCaseAnnotationBatchLookup(db, 1)
+      prepareSpy.mockClear()
+
+      // Create 450 rows => ceil(450 / 200) = 3 chunks
+      const rows = Array.from({ length: 450 }, (_, i) => ({
+        id: i + 1,
+        case_id: 1,
+        chr: '1',
+        pos: 1000 + i,
+        ref: 'A',
+        alt: 'T'
+      }))
+
+      lookup(rows)
+
+      const caseAnnQueries = prepareSpy.mock.calls.filter(([sql]) =>
+        String(sql).includes('FROM case_variant_annotations')
+      )
+      const globalAnnQueries = prepareSpy.mock.calls.filter(([sql]) =>
+        String(sql).includes('FROM variant_annotations')
+      )
+
+      expect(caseAnnQueries.length).toBe(3)
+      expect(globalAnnQueries.length).toBe(3)
+    })
   })
 
-  describe('cohortRowAnnotations & createCohortAnnotationBatchLookup', () => {
-    it('cohortRowAnnotations returns global call of row build', () => {
-      const getAnn = cohortRowAnnotations(db)
-      const res = getAnn({
-        chr: '1',
-        pos: 100,
-        ref: 'A',
-        alt: 'T',
-        genome_build: 'GRCh38'
-      })
-      expect(res.acmg_classification).toBe('Likely pathogenic')
-      expect(res.global_comment).toBe('global note')
-    })
-
+  describe('createCohortAnnotationBatchLookup', () => {
     it('createCohortAnnotationBatchLookup returns batch results', () => {
       const lookup = createCohortAnnotationBatchLookup(db)
       const rows = [
@@ -125,6 +121,28 @@ describe('annotation-export-lookup', () => {
         acmg_override_reason: null,
         global_comment: null
       })
+    })
+
+    it('queries variant_annotations in chunks of 200 (O(chunks) queries)', () => {
+      const prepareSpy = vi.spyOn(db, 'prepare')
+      const lookup = createCohortAnnotationBatchLookup(db)
+      prepareSpy.mockClear()
+
+      const rows = Array.from({ length: 450 }, (_, i) => ({
+        id: i + 1,
+        chr: '1',
+        pos: 1000 + i,
+        ref: 'A',
+        alt: 'T',
+        genome_build: 'GRCh38'
+      }))
+
+      lookup(rows)
+
+      const globalAnnQueries = prepareSpy.mock.calls.filter(([sql]) =>
+        String(sql).includes('variant_annotations')
+      )
+      expect(globalAnnQueries.length).toBe(3)
     })
   })
 })

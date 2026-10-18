@@ -9,11 +9,11 @@ function postMsg(msg: ExportWorkerMessage): void {
   parentPort?.postMessage(msg)
 }
 
-function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): void {
+async function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): Promise<void> {
   let db: DatabaseType | null = null
   try {
     db = openWorkerDatabaseReadOnly(msg.dbPath, msg.encryptionKey)
-    const result = runCohortExport(db, msg.params, msg.outputFilePath, (current, total) => {
+    const result = await runCohortExport(db, msg.params, msg.outputFilePath, (current, total) => {
       postMsg({ type: 'progress', current, total })
     })
     postMsg({ type: 'complete', filePath: result.filePath, rowCount: result.rowCount })

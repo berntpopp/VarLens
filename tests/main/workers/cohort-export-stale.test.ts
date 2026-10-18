@@ -33,18 +33,18 @@ describe('SQLite cohort export while the summary is stale', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('the worker writes the file from a current summary', () => {
+  it('the worker writes the file from a current summary', async () => {
     const file = join(dir, 'current.xlsx')
-    expect(runCohortExport(service.database, {}, file, () => undefined)).toMatchObject({
+    expect(await runCohortExport(service.database, {}, file, () => undefined)).toMatchObject({
       rowCount: 1
     })
     expect(existsSync(file)).toBe(true)
   })
 
-  it('the worker refuses a stale summary and writes nothing', () => {
+  it('the worker refuses a stale summary and writes nothing', async () => {
     service.database.exec(MARK_STALE_SQL)
     const file = join(dir, 'stale.xlsx')
-    expect(() => runCohortExport(service.database, {}, file, () => undefined)).toThrow(
+    await expect(runCohortExport(service.database, {}, file, () => undefined)).rejects.toThrow(
       CohortSummaryRefreshingError
     )
     expect(existsSync(file)).toBe(false)

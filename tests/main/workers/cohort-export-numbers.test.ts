@@ -37,16 +37,16 @@ describe('SQLite cohort export number cells', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('writes gnomAD AF and CADD as rounded numbers', () => {
+  it('writes gnomAD AF and CADD as rounded numbers', async () => {
     const file = join(dir, 'cohort.xlsx')
-    runCohortExport(service.database, {}, file, () => undefined)
+    await runCohortExport(service.database, {}, file, () => undefined)
     const wb = XLSX.read(readFileSync(file))
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]])
     expect(rows[0]['gnomAD AF']).toBe(0.0000363)
     expect(rows[0]['CADD Score']).toBe(25.46)
   })
 
-  it('writes the global ACMG class and comment of the row build (#574)', () => {
+  it('writes the global ACMG class and comment of the row build (#574)', async () => {
     service.annotations.upsertGlobalAnnotation('1', 100, 'A', 'T', 'GRCh38', {
       acmg_classification: 'Likely pathogenic',
       global_comment: 'reviewed'
@@ -56,7 +56,7 @@ describe('SQLite cohort export number cells', () => {
       global_comment: 'other build'
     })
     const file = join(dir, 'cohort.xlsx')
-    runCohortExport(service.database, {}, file, () => undefined)
+    await runCohortExport(service.database, {}, file, () => undefined)
     const wb = XLSX.read(readFileSync(file))
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]])
     expect(rows[0]).toMatchObject({
