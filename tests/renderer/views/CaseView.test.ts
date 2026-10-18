@@ -606,6 +606,33 @@ describe('CaseView — Shortlist tab integration', () => {
     await flushPromises()
     expect(vm.typeCounts).toEqual({ snv: 12, sv: 3 })
   })
+
+  it('resets countsLoading to false when switching from in-flight case to null or 0 (#665)', async () => {
+    let resolveCase!: (counts: Record<string, number>) => void
+    typeCountsMock.mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolveCase = resolve
+      })
+    })
+
+    const { wrapper, state } = mountCaseView(1)
+    await nextTick()
+
+    const vm = wrapper.vm as unknown as { countsLoading: boolean }
+    expect(vm.countsLoading).toBe(true)
+
+    // Clear case selection while request is in-flight
+    state.selectedCaseId.value = null
+    await flushPromises()
+
+    // countsLoading must reset to false immediately
+    expect(vm.countsLoading).toBe(false)
+
+    // Resolve the in-flight request late
+    resolveCase({ snv: 5 })
+    await flushPromises()
+    expect(vm.countsLoading).toBe(false)
+  })
 })
 
 describe('CaseView — welcome screen import', () => {

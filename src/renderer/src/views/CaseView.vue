@@ -144,6 +144,7 @@ let typeCountsRequestId = 0
 async function loadTypeCounts(caseId: number | null): Promise<void> {
   const requestId = ++typeCountsRequestId
   if (caseId === null || caseId === 0 || api === undefined) {
+    countsLoading.value = false
     typeCounts.value = {}
     return
   }

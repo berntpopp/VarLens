@@ -325,4 +325,71 @@ describe('AcmgClassificationPanel confirm step', () => {
     expect(vm.pending).not.toBeNull()
     expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
   })
+
+  it('stale save resolution after A -> B -> A navigation does not wipe new draft (#660)', async () => {
+    let resolveFirstSave!: (val: boolean) => void
+    const firstSavePromise = new Promise<boolean>((resolve) => {
+      resolveFirstSave = resolve
+    })
+
+    let callCount = 0
+    const saveMock = vi.fn(() => {
+      callCount++
+      if (callCount === 1) {
+        return firstSavePromise
+      }
+      return Promise.resolve(true)
+    })
+
+    const wrapper = mount(AcmgClassificationPanel, {
+      props: {
+        evidenceJson: null,
+        variantData: { gnomad_af: null, cadd: null, clinvar: null },
+        variantKey: 'case-1:chr1:100:A:G',
+        save: saveMock
+      },
+      global: { plugins: [vuetify] }
+    })
+
+    // Edit variant A (stage PVS1)
+    wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+
+    // Trigger save on variant A (in-flight)
+    await wrapper.find('[data-testid="acmg-apply"]').trigger('click')
+    expect(saveMock).toHaveBeenCalledTimes(1)
+
+    // Navigate A -> B
+    await wrapper.setProps({
+      evidenceJson: null,
+      variantData: { gnomad_af: null, cadd: null, clinvar: null },
+      variantKey: 'case-1:chr2:200:C:T'
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(false)
+
+    // Navigate B -> A
+    await wrapper.setProps({
+      evidenceJson: null,
+      variantData: { gnomad_af: null, cadd: null, clinvar: null },
+      variantKey: 'case-1:chr1:100:A:G'
+    })
+    await wrapper.vm.$nextTick()
+
+    // Start a new draft on variant A (stage PS1)
+    wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PS1')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').text()).toContain('PS1')
+
+    // Now resolve the first in-flight save from the previous epoch
+    resolveFirstSave(true)
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // The new draft on variant A must NOT be wiped
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="acmg-apply-bar"]').text()).toContain('PS1')
+  })
 })

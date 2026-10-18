@@ -145,54 +145,61 @@
             </div>
 
             <!-- Evidence-based classification panel -->
-            <v-expansion-panels v-if="canWrite" v-model="acmgExpanded" variant="accordion" class="mb-1">
-              <v-expansion-panel :value="0">
-                <v-expansion-panel-title class="text-body-2 pa-2">
-                  <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
-                  Evidence editor
-                  <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
-                    (has evidence)
-                  </span>
-                  <!-- Inline suggestion preview pills (#685) -->
-                  <div
-                    v-if="suggestedAcmgCodes.length > 0"
-                    class="d-inline-flex align-center ga-1 ml-2"
-                    data-testid="acmg-suggested-preview"
-                    @click.stop="handleApplySuggestionsPreview"
-                  >
-                    <v-chip
-                      v-for="code in suggestedAcmgCodes"
-                      :key="code"
-                      size="x-small"
-                      color="warning"
-                      variant="tonal"
-                      class="text-caption font-weight-bold"
+            <div v-if="canWrite" class="mb-1">
+              <div
+                v-if="suggestedAcmgCodes.length > 0"
+                class="d-flex align-center justify-end mb-1"
+              >
+                <v-btn
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  density="compact"
+                  class="text-caption px-1"
+                  data-testid="apply-acmg-suggestions-btn"
+                  @click="handleApplySuggestionsPreview"
+                >
+                  Apply suggestions ({{ suggestedAcmgCodes.join(', ') }})
+                </v-btn>
+              </div>
+              <v-expansion-panels v-model="acmgExpanded" variant="accordion">
+                <v-expansion-panel :value="0">
+                  <v-expansion-panel-title class="text-body-2 pa-2">
+                    <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
+                    Evidence editor
+                    <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
+                      (has evidence)
+                    </span>
+                    <!-- Inline suggestion preview pills (read-only chips) (#685, #669) -->
+                    <div
+                      v-if="suggestedAcmgCodes.length > 0"
+                      class="d-inline-flex align-center ga-1 ml-2"
+                      data-testid="acmg-suggested-preview"
                     >
-                      {{ code }}
-                    </v-chip>
-                    <v-btn
-                      size="x-small"
-                      variant="text"
-                      color="primary"
-                      density="compact"
-                      class="text-caption px-1"
-                      data-testid="apply-acmg-suggestions-btn"
-                    >
-                      Apply
-                    </v-btn>
-                  </div>
-                </v-expansion-panel-title>
-                <v-expansion-panel-text>
-                  <AcmgClassificationPanel
-                    ref="acmgPanelRef"
-                    :variant-key="variantKey"
-                    :evidence-json="currentAcmgEvidence"
-                    :variant-data="currentVariantData"
-                    :save="handleAcmgEvidenceChange"
-                  />
-                </v-expansion-panel-text>
-              </v-expansion-panel>
-            </v-expansion-panels>
+                      <v-chip
+                        v-for="code in suggestedAcmgCodes"
+                        :key="code"
+                        size="x-small"
+                        color="warning"
+                        variant="tonal"
+                        class="text-caption font-weight-bold"
+                      >
+                        {{ code }}
+                      </v-chip>
+                    </div>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <AcmgClassificationPanel
+                      ref="acmgPanelRef"
+                      :variant-key="variantKey"
+                      :evidence-json="currentAcmgEvidence"
+                      :variant-data="currentVariantData"
+                      :save="handleAcmgEvidenceChange"
+                    />
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </div>
 
             <div v-if="hasGlobalAcmg && mode === 'case'" class="text-body-small text-muted mt-1">
               Global: {{ globalAcmgClassification }}
@@ -251,8 +258,7 @@ import {
   watch,
   defineAsyncComponent,
   inject,
-  provide,
-  nextTick
+  provide
 } from 'vue'
 import { generateSuggestions, type VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
 import { AppStateKey } from '../composables/useAppState'
@@ -346,6 +352,8 @@ watch(
   () => scrollRef.value?.scrollTo({ top: 0 })
 )
 const genomeBuild = useVariantGenomeBuild(props)
+
+const appState = inject(AppStateKey, null)
 
 // External lookups: always on in desktop; an admin-controlled, default-off
 // server setting in web; read from the capability document (fail-closed).
@@ -483,7 +491,9 @@ const currentVariantData = computed<VariantAnnotationData | null>(() => {
 
 const variantKey = computed(() => {
   if (!props.variant) return null
-  return `${props.caseId ?? ''}:${props.variant.chr}:${props.variant.pos}:${props.variant.ref}:${props.variant.alt}`
+  const v = props.variant
+  const build = 'genome_build' in v && v.genome_build ? v.genome_build : (genomeBuild.value ?? '')
+  return `${props.caseId ?? ''}:${build}:${v.chr}:${v.pos}:${v.ref}:${v.alt}`
 })
 
 const suggestedAcmgCodes = computed<string[]>(() => {
@@ -493,10 +503,37 @@ const suggestedAcmgCodes = computed<string[]>(() => {
 
 const acmgExpanded = ref<number | undefined>(undefined)
 
-const handleApplySuggestionsPreview = async (): Promise<void> => {
+// Selection changes and closes wait for the evidence editor's unsaved-draft prompt
+const acmgPanelRef = ref<{
+  confirmLeave: () => Promise<boolean> | null
+  applySuggestions?: () => void
+} | null>(null)
+
+const pendingSuggestedStaging = ref<string | null>(null)
+
+watch(acmgPanelRef, (panel) => {
+  if (panel !== null && pendingSuggestedStaging.value === variantKey.value) {
+    panel.applySuggestions?.()
+    pendingSuggestedStaging.value = null
+  }
+})
+
+watch(variantKey, () => {
+  pendingSuggestedStaging.value = null
+})
+
+const handleApplySuggestionsPreview = (): void => {
   acmgExpanded.value = 0
-  await nextTick()
-  acmgPanelRef.value?.applySuggestions?.()
+  const key = variantKey.value
+  if (key === null) return
+
+  const panel = acmgPanelRef.value
+  if (panel !== null) {
+    panel.applySuggestions?.()
+    pendingSuggestedStaging.value = null
+  } else {
+    pendingSuggestedStaging.value = key
+  }
 }
 
 // Current quick classification (from annotation, not evidence-based)
@@ -598,12 +635,6 @@ watch(
   { immediate: true }
 )
 
-// Selection changes and closes wait for the evidence editor's unsaved-draft prompt
-const acmgPanelRef = ref<{
-  confirmLeave: () => Promise<boolean> | null
-  applySuggestions?: () => void
-} | null>(null)
-const appState = inject(AppStateKey, null)
 appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
 // Escape closes the panel, unless a text field or an open menu/dialog owns it

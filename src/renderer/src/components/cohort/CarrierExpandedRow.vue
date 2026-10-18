@@ -137,14 +137,4 @@ const formatZygosity = (gt: string): string => {
   border-top: 1px solid rgba(0, 0, 0, 0.12);
   width: 100%;
 }
-
-:deep(table) {
-  table-layout: auto !important;
-  width: 100% !important;
-}
-
-:deep(td),
-:deep(th) {
-  max-width: none !important;
-}
 </style>

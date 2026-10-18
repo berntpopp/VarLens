@@ -73,6 +73,3 @@ export function generateSuggestions(data: VariantAnnotationData): AcmgEvidenceCo
 
   return suggestions
 }
-
-export const suggestAcmgCodes = generateSuggestions
-

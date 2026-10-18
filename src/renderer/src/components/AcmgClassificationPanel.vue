@@ -385,6 +385,8 @@ function emitChange(): void {
       : { classification: effectiveClassification.value, evidenceJson }
 }
 
+let variantEpoch = 0
+
 async function applyPending(): Promise<void> {
   const draft = pending.value
   if (draft === null) return
@@ -393,14 +395,11 @@ async function applyPending(): Promise<void> {
     return
   }
   if (props.save) {
-    const variantData = props.variantData
-    const variantKey = props.variantKey
+    const epochAtStart = variantEpoch
     const saved = await props.save(draft)
     await nextTick()
-    // Another variant was opened while saving: its state is already loaded.
-    const hasVariantChanged =
-      variantKey !== undefined ? props.variantKey !== variantKey : props.variantData !== variantData
-    if (hasVariantChanged) return
+    // Another variant was opened while saving (including A -> B -> A): its state is already loaded.
+    if (variantEpoch !== epochAtStart) return
     if (!saved) {
       // The failed write's rollback reloaded the saved evidence: put the draft back.
       loadState(draft.evidenceJson)
@@ -477,9 +476,13 @@ watch(
   (_, old) => {
     // Same variant (late annotation load, a save's own reload): the draft and its prompt stay.
     const isSameVariant =
-      props.variantKey !== undefined && old?.[2] !== undefined
+      old !== undefined &&
+      (props.variantKey !== undefined && old[2] !== undefined
         ? props.variantKey === old[2]
-        : old?.[1] === props.variantData
+        : old[1] === props.variantData)
+    if (!isSameVariant) {
+      variantEpoch++
+    }
     const draft = isSameVariant ? pending.value : null
     loadState(props.evidenceJson)
     baselineJson = evidenceFingerprint(serialize())
