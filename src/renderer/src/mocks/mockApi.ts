@@ -7,6 +7,7 @@
  */
 
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
+import type { FilterPreset } from '../../../shared/types/filter-presets'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockHpoDataApi } from './hpoDataMock'
@@ -28,6 +29,82 @@ import { mockVariants, mockFilterOptions } from './fixtures/variants'
 // Mutable state for interactive development
 let cases = [...mockCases]
 const variants = [...mockVariants]
+
+const defaultShortlistPresets: FilterPreset[] = [
+  {
+    id: 1,
+    name: 'Tier 1 candidates',
+    description: 'Strict ranking: rare HIGH/MOD impact, top-50. ClinVar P/LP and starred variants pinned to top.',
+    filterJson: {
+      shortlist: {
+        variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str'],
+        topN: 50,
+        baseFilters: { consequences: ['HIGH', 'MODERATE'], maxGnomadAf: 0.001 },
+        perTypeOverrides: { sv: { maxGnomadAf: 0.01 }, cnv: { maxGnomadAf: 0.01 }, str: {} },
+        rankConfig: {
+          weights: { impact: 0.25, pathogenicity: 0.25, rarity: 0.25, clinvar: 0.25, phenotype: 0 },
+          clinvarPinTop: true,
+          pinStarredTop: true
+        }
+      }
+    },
+    kind: 'shortlist',
+    isBuiltIn: true,
+    isVisible: true,
+    sortOrder: 0,
+    createdAt: 0,
+    updatedAt: 0
+  },
+  {
+    id: 2,
+    name: 'Recessive candidates',
+    description: 'Biallelic and homozygous focus: rare coding SNVs/indels in recessive disease genes.',
+    filterJson: {
+      shortlist: {
+        variantTypeScope: ['snv', 'indel'],
+        topN: 50,
+        baseFilters: { consequences: ['HIGH', 'MODERATE'], maxGnomadAf: 0.01 },
+        perTypeOverrides: {},
+        rankConfig: {
+          weights: { impact: 0.2, pathogenicity: 0.2, rarity: 0.3, clinvar: 0.1, phenotype: 0.2 },
+          clinvarPinTop: true,
+          pinStarredTop: true
+        }
+      }
+    },
+    kind: 'shortlist',
+    isBuiltIn: true,
+    isVisible: true,
+    sortOrder: 1,
+    createdAt: 0,
+    updatedAt: 0
+  },
+  {
+    id: 3,
+    name: 'Broad candidate survey',
+    description: 'Inclusive discovery sweep: top-100 across all variant types with relaxed frequency threshold.',
+    filterJson: {
+      shortlist: {
+        variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str'],
+        topN: 100,
+        baseFilters: { maxGnomadAf: 0.01 },
+        perTypeOverrides: {},
+        rankConfig: {
+          weights: { impact: 0.2, pathogenicity: 0.2, rarity: 0.2, clinvar: 0.2, phenotype: 0.2 },
+          clinvarPinTop: false,
+          pinStarredTop: true
+        }
+      }
+    },
+    kind: 'shortlist',
+    isBuiltIn: true,
+    isVisible: true,
+    sortOrder: 2,
+    createdAt: 0,
+    updatedAt: 0
+  }
+]
+let mockPresets: FilterPreset[] = [...defaultShortlistPresets]
 // Drop matching mock cases; returns how many were removed.
 const removeCases = (match: (id: number) => boolean): number =>
   cases.length - (cases = cases.filter((c) => !match(c.id))).length
@@ -347,27 +424,53 @@ export const mockApi: WindowAPI = {
     recentList: async () => [
       { path: '/mock/database.db', name: 'Mock Database', lastOpened: Date.now() }
     ],
-    getOverview: async () => ({
-      summary: {
-        total_cases: 0,
-        total_variants: 0,
-        unique_variants: 0,
-        avg_variants_per_case: 0,
-        genes_with_variants: 0,
-        starred_variants: 0,
-        acmg_counts: {
-          pathogenic: 0,
-          likely_pathogenic: 0,
-          vus: 0,
-          likely_benign: 0,
-          benign: 0
-        }
-      },
-      cases: [],
-      cohortGroups: [],
-      tags: [],
-      topPhenotypes: []
-    }),
+    getOverview: async () => {
+      const totalCases = cases.length
+      const totalVariants = variants.length
+      const uniqueVariants = new Set(variants.map((v) => cohortVariantKey(v))).size
+      const avgVariantsPerCase = totalCases > 0 ? Math.round((totalVariants / totalCases) * 10) / 10 : 0
+      const genesWithVariants = new Set(variants.map((v) => v.gene_symbol).filter(Boolean)).size
+      const starredVariants = variants.filter((v) => Boolean(v.is_starred)).length
+
+      const acmgCounts = {
+        pathogenic: 0,
+        likely_pathogenic: 0,
+        vus: 0,
+        likely_benign: 0,
+        benign: 0
+      }
+
+      for (const v of variants) {
+        const cv = (v.clinvar ?? '').toLowerCase()
+        if (cv.includes('pathogenic') && !cv.includes('likely')) acmgCounts.pathogenic++
+        else if (cv.includes('likely_pathogenic') || cv.includes('likely pathogenic')) acmgCounts.likely_pathogenic++
+        else if (cv.includes('uncertain') || cv.includes('vus')) acmgCounts.vus++
+        else if (cv.includes('likely_benign') || cv.includes('likely benign')) acmgCounts.likely_benign++
+        else if (cv.includes('benign')) acmgCounts.benign++
+      }
+
+      return {
+        summary: {
+          total_cases: totalCases,
+          total_variants: totalVariants,
+          unique_variants: uniqueVariants,
+          avg_variants_per_case: avgVariantsPerCase,
+          genes_with_variants: genesWithVariants,
+          starred_variants: starredVariants,
+          acmg_counts: acmgCounts
+        },
+        cases: cases.map((c) => ({
+          id: c.id,
+          name: c.name,
+          variant_count: variants.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
+          created_at: c.created_at,
+          affected_status: null
+        })),
+        cohortGroups: [],
+        tags: [],
+        topPhenotypes: []
+      }
+    },
     removeRecent: async () => ({ success: true }),
     deleteFile: async () => ({ success: true }),
     showInFolder: async () => ({ success: true })
@@ -1108,33 +1211,51 @@ export const mockApi: WindowAPI = {
   },
 
   presets: {
-    list: async () => [],
-    create: async (params) => ({
-      id: 1,
-      name: params.name,
-      description: params.description ?? null,
-      filterJson: params.filterJson,
-      kind: params.kind ?? 'filter',
-      isBuiltIn: false,
-      isVisible: true,
-      sortOrder: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }),
-    update: async (_id, updates) => ({
-      id: _id,
-      name: updates.name ?? 'Preset',
-      description: updates.description ?? null,
-      filterJson: updates.filterJson ?? {},
-      kind: updates.kind ?? 'filter',
-      isBuiltIn: false,
-      isVisible: updates.isVisible ?? true,
-      sortOrder: updates.sortOrder ?? 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }),
-    delete: async () => {},
-    reorder: async () => {}
+    list: async () => [...mockPresets],
+    create: async (params) => {
+      const p: FilterPreset = {
+        id: (mockPresets.length > 0 ? Math.max(...mockPresets.map((x) => x.id)) : 0) + 1,
+        name: params.name,
+        description: params.description ?? null,
+        filterJson: params.filterJson,
+        kind: params.kind ?? 'filter',
+        isBuiltIn: false,
+        isVisible: true,
+        sortOrder: mockPresets.length,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+      mockPresets.push(p)
+      return p
+    },
+    update: async (_id, updates) => {
+      const idx = mockPresets.findIndex((p) => p.id === _id)
+      if (idx !== -1) {
+        mockPresets[idx] = { ...mockPresets[idx], ...updates, updatedAt: Date.now() }
+        return mockPresets[idx]
+      }
+      return {
+        id: _id,
+        name: updates.name ?? 'Preset',
+        description: updates.description ?? null,
+        filterJson: updates.filterJson ?? {},
+        kind: updates.kind ?? 'filter',
+        isBuiltIn: false,
+        isVisible: updates.isVisible ?? true,
+        sortOrder: updates.sortOrder ?? 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }
+    },
+    delete: async (id) => {
+      mockPresets = mockPresets.filter((p) => p.id !== id)
+    },
+    reorder: async (items) => {
+      for (const item of items) {
+        const p = mockPresets.find((x) => x.id === item.id)
+        if (p) p.sortOrder = item.sortOrder
+      }
+    }
   },
 
   analysisGroups: {

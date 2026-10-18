@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:18
+    image: postgres:16
     restart: unless-stopped
     ports:
       - '127.0.0.1:${VARLENS_PG_PORT}:5432'
