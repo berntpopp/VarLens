@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { WebEventHub, type WebEvent } from '../../../../src/web/server/events'
 import { revalidateStreamSession } from '../../../../src/web/server/event-stream-session'
@@ -83,6 +86,24 @@ describe('SessionRevocations', () => {
     for (const sid of ['a', 'b', 'c', 'd']) revocations.revoke(sid)
     expect(revocations.isRevoked('a')).toBe(false)
     expect(revocations.isRevoked('d')).toBe(true)
+  })
+
+  it('persists revocations to disk across instances', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-revocations-'))
+    const filePath = join(dir, 'revocations.json')
+    try {
+      const now = 1000
+      const r1 = new SessionRevocations(60_000, 10, () => now, filePath)
+      r1.revoke('sid-alpha')
+      expect(r1.isRevoked('sid-alpha')).toBe(true)
+
+      // Boot fresh instance pointing to same file
+      const r2 = new SessionRevocations(60_000, 10, () => now, filePath)
+      expect(r2.isRevoked('sid-alpha')).toBe(true)
+      expect(r2.isRevoked('sid-beta')).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
