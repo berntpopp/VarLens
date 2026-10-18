@@ -279,6 +279,7 @@ export const VariantFilterPartialSchema = z.object({
     .max(1000000)
     .nullish()
     .transform((val) => val ?? undefined),
+  genome_build: nullishString(),
 
   // Inheritance mode filters
   inheritance_modes: z

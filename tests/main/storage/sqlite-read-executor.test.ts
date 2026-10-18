@@ -254,6 +254,80 @@ describe('SqliteReadExecutor', () => {
     )
   })
 
+  describe('panels read tasks offloading (#674)', () => {
+    it('offloads panels:list, panels:get, panels:getGenes, panels:activeForCase to dbPool when present', async () => {
+      const dbPool = {
+        run: vi.fn().mockImplementation(async (task) => `result-of-${task.type}`)
+      }
+      const databaseService = {
+        panels: {
+          listPanels: vi.fn(),
+          getPanel: vi.fn(),
+          getGenes: vi.fn(),
+          getActivePanelsForCase: vi.fn()
+        }
+      }
+      const executor = new SqliteReadExecutor(databaseService as never, dbPool as never)
+
+      await expect(executor.execute({ type: 'panels:list', params: [] })).resolves.toBe(
+        'result-of-panels:list'
+      )
+      expect(dbPool.run).toHaveBeenCalledWith({ type: 'panels:list', params: [] })
+
+      await expect(executor.execute({ type: 'panels:get', params: [42] })).resolves.toBe(
+        'result-of-panels:get'
+      )
+      expect(dbPool.run).toHaveBeenCalledWith({ type: 'panels:get', params: [42] })
+
+      await expect(executor.execute({ type: 'panels:getGenes', params: [42] })).resolves.toBe(
+        'result-of-panels:getGenes'
+      )
+      expect(dbPool.run).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [42] })
+
+      await expect(executor.execute({ type: 'panels:activeForCase', params: [7] })).resolves.toBe(
+        'result-of-panels:activeForCase'
+      )
+      expect(dbPool.run).toHaveBeenCalledWith({ type: 'panels:activeForCase', params: [7] })
+
+      expect(databaseService.panels.listPanels).not.toHaveBeenCalled()
+      expect(databaseService.panels.getPanel).not.toHaveBeenCalled()
+      expect(databaseService.panels.getGenes).not.toHaveBeenCalled()
+      expect(databaseService.panels.getActivePanelsForCase).not.toHaveBeenCalled()
+    })
+
+    it('falls back to databaseService when dbPool is null', async () => {
+      const databaseService = {
+        panels: {
+          listPanels: vi.fn().mockReturnValue(['panel-list']),
+          getPanel: vi.fn().mockReturnValue({ id: 42 }),
+          getGenes: vi.fn().mockReturnValue([{ id: 1 }]),
+          getActivePanelsForCase: vi.fn().mockReturnValue([{ panel_id: 1 }])
+        }
+      }
+      const executor = new SqliteReadExecutor(databaseService as never, null)
+
+      await expect(executor.execute({ type: 'panels:list', params: [] })).resolves.toEqual([
+        'panel-list'
+      ])
+      expect(databaseService.panels.listPanels).toHaveBeenCalled()
+
+      await expect(executor.execute({ type: 'panels:get', params: [42] })).resolves.toEqual({
+        id: 42
+      })
+      expect(databaseService.panels.getPanel).toHaveBeenCalledWith(42)
+
+      await expect(executor.execute({ type: 'panels:getGenes', params: [42] })).resolves.toEqual([
+        { id: 1 }
+      ])
+      expect(databaseService.panels.getGenes).toHaveBeenCalledWith(42)
+
+      await expect(
+        executor.execute({ type: 'panels:activeForCase', params: [7] })
+      ).resolves.toEqual([{ panel_id: 1 }])
+      expect(databaseService.panels.getActivePanelsForCase).toHaveBeenCalledWith(7)
+    })
+  })
+
   describe('panels:resolutionStatus', () => {
     const expected = { genomeBuild: 'x', totalGenes: 1, unmappedCount: 0, unmappedGenes: [] }
 
