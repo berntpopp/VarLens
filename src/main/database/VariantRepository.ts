@@ -64,6 +64,8 @@ export class VariantRepository extends BaseRepository {
   private ftsSnapshot: TriggerSnapshot = {}
   private readonly statementCache = new Map<string, Statement>()
 
+  private caseMetaRevInitialized = false
+
   /**
    * Clear cached column metadata for a specific case, or all cases if omitted.
    */
@@ -76,7 +78,24 @@ export class VariantRepository extends BaseRepository {
     }
   }
 
+  private ensureCaseMetaRevSchema(): void {
+    if (this.caseMetaRevInitialized) return
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS _case_meta_rev (case_id INTEGER PRIMARY KEY, rev INTEGER NOT NULL DEFAULT 0);
+        CREATE TRIGGER IF NOT EXISTS _variants_case_meta_rev_au AFTER UPDATE ON variants BEGIN
+          INSERT INTO _case_meta_rev(case_id, rev) VALUES (NEW.case_id, 1)
+          ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
+        END;
+      `)
+      this.caseMetaRevInitialized = true
+    } catch {
+      // Table variants may not exist yet; will retry on next invocation
+    }
+  }
+
   private getCaseStamp(caseId: number): string {
+    this.ensureCaseMetaRevSchema()
     let dataVersion = 0
     try {
       const dv = this.db.pragma('data_version', { simple: true })
@@ -86,12 +105,30 @@ export class VariantRepository extends BaseRepository {
     } catch {
       // Ignore if pragma fails
     }
-    const row = this.db
-      .prepare('SELECT COUNT(*) AS cnt, MAX(id) AS max_id FROM variants WHERE case_id = ?')
-      .get(caseId) as { cnt: number; max_id: number | null } | undefined
-    const cnt = row?.cnt ?? 0
-    const maxId = row?.max_id ?? 0
-    return `${dataVersion}:${this.mutationSeq}:${cnt}:${maxId}`
+    let cnt = 0
+    let maxId = 0
+    let rev = 0
+    try {
+      const row = this.db
+        .prepare(
+          'SELECT COUNT(*) AS cnt, COALESCE(MAX(id), 0) AS max_id, COALESCE((SELECT rev FROM _case_meta_rev WHERE case_id = ?), 0) AS rev FROM variants WHERE case_id = ?'
+        )
+        .get(caseId, caseId) as { cnt: number; max_id: number; rev: number } | undefined
+      cnt = row?.cnt ?? 0
+      maxId = row?.max_id ?? 0
+      rev = row?.rev ?? 0
+    } catch {
+      try {
+        const row = this.db
+          .prepare('SELECT COUNT(*) AS cnt, MAX(id) AS max_id FROM variants WHERE case_id = ?')
+          .get(caseId) as { cnt: number; max_id: number | null } | undefined
+        cnt = row?.cnt ?? 0
+        maxId = row?.max_id ?? 0
+      } catch {
+        // Ignore if query fails
+      }
+    }
+    return `${dataVersion}:${this.mutationSeq}:${cnt}:${maxId}:${rev}`
   }
 
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {

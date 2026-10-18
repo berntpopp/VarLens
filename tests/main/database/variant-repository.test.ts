@@ -346,6 +346,24 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
     })
 
+    it('invalidates cache when variants table is updated directly in SQLite (#671)', () => {
+      const caseId = createTestCase(service, 'cache-direct-update')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      service.database
+        .prepare("UPDATE variants SET gene_symbol = 'TP53' WHERE case_id = ? AND pos = 100")
+        .run(caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
+    })
+
     it('evicts oldest entries when cache exceeds MAX_META_CACHE_SIZE (50)', () => {
       const caseIds: number[] = []
       for (let i = 0; i < 55; i++) {
@@ -368,4 +386,3 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
     })
   })
 })
-
