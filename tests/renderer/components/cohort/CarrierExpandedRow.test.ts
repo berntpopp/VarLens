@@ -248,4 +248,11 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).toContain('Case GRCh37')
     expect(wrapper.text()).not.toContain('Case GRCh38')
   })
+
+  it('applies carrier-subtable class so columns do not collapse (#662)', () => {
+    const wrapper = mountRow()
+    const table = wrapper.find('.nested-carriers-table')
+    expect(table.classes()).toContain('carrier-subtable')
+  })
 })
+

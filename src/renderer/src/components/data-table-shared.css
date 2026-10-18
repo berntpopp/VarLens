@@ -134,6 +134,22 @@
   width: 0;
 }
 
+/* Nested carrier subtable in cohort expanded rows: restore auto layout, full width, and unclipped cells */
+.table-container .carrier-subtable .v-table__wrapper > table,
+.table-container .nested-carriers-table .v-table__wrapper > table,
+.table-container table.carrier-subtable,
+.table-container table.nested-carriers-table {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+
+.table-container .carrier-subtable td,
+.table-container .carrier-subtable th,
+.table-container .nested-carriers-table td,
+.table-container .nested-carriers-table th {
+  max-width: none !important;
+}
+
 /* Stale-while-revalidate: rows stay visible while a refetch runs and are
    dimmed (after a short delay, see useTableLoadingState) instead of being
    replaced by a skeleton. */
