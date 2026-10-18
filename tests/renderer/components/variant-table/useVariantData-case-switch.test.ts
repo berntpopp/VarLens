@@ -130,4 +130,46 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
 
     expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 10, total: 99 })
   })
+
+  it('guards unfilteredCount against out-of-order query responses on case switch (#665)', async () => {
+    let resolveCase1!: (val: unknown) => void
+    let resolveCase2!: (val: unknown) => void
+
+    queryMock.mockImplementation((id: number) => {
+      if (id === 1) {
+        return new Promise((resolve) => {
+          resolveCase1 = () =>
+            resolve(ok({ data: rowsFor(1), total_count: 10, unfiltered_count: 100 }))
+        })
+      }
+      if (id === 2) {
+        return new Promise((resolve) => {
+          resolveCase2 = () =>
+            resolve(ok({ data: rowsFor(2), total_count: 20, unfiltered_count: 200 }))
+        })
+      }
+      return Promise.resolve(ok({ data: [], total_count: 0, unfiltered_count: 0 }))
+    })
+
+    const { caseId, data, onCountsUpdate } = setup()
+    void data.loadVariants()
+    await nextTick()
+
+    // Switch to case 2 while case 1 query is still pending
+    caseId.value = 2
+    await flushPromises()
+
+    // Case 2 resolves first
+    resolveCase2(null)
+    await flushPromises()
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 20, total: 200 })
+
+    // Now Case 1 slow response arrives out-of-order
+    resolveCase1(null)
+    await flushPromises()
+
+    // Case 1 response MUST NOT overwrite Case 2 counts!
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 20, total: 200 })
+  })
 })
+

@@ -139,15 +139,21 @@ const { consumePendingTab } = useCaseTabUrlParam({
   availableTabs: () => tabItems.value.map((item) => item.type)
 })
 
+let typeCountsRequestId = 0
+
 async function loadTypeCounts(caseId: number | null): Promise<void> {
+  const requestId = ++typeCountsRequestId
   if (caseId === null || caseId === 0 || api === undefined) {
     typeCounts.value = {}
     return
   }
   countsLoading.value = true
   try {
-    typeCounts.value = unwrapIpcResult(await api.variants.typeCounts(caseId))
+    const counts = unwrapIpcResult(await api.variants.typeCounts(caseId))
+    if (requestId !== typeCountsRequestId) return
+    typeCounts.value = counts
   } catch (error) {
+    if (requestId !== typeCountsRequestId) return
     logService.error(
       'Failed to load variant type counts: ' +
         (isIpcError(error) ? (error.userMessage ?? error.message) : formatError(error)),
@@ -156,9 +162,13 @@ async function loadTypeCounts(caseId: number | null): Promise<void> {
     typeCounts.value = {}
     return
   } finally {
-    countsLoading.value = false
-    typeCountsSettled.value = true
+    if (requestId === typeCountsRequestId) {
+      countsLoading.value = false
+      typeCountsSettled.value = true
+    }
   }
+
+  if (requestId !== typeCountsRequestId) return
 
   // Default-selection rule: if the user hasn't explicitly picked a tab
   // since the case switch (the tab still equals `autoSelectedTab`, set by
@@ -371,7 +381,8 @@ defineExpose({
   selectedVariantType,
   lastNonShortlistType,
   variantTableType,
-  tabItems
+  tabItems,
+  typeCounts
 })
 </script>
 
