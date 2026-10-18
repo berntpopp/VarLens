@@ -135,16 +135,11 @@
 }
 
 /* Nested carrier subtable in cohort expanded rows: restore auto layout, full width, and unclipped cells */
-.table-container .carrier-subtable .v-table__wrapper > table,
-.table-container .nested-carriers-table .v-table__wrapper > table,
-.table-container table.carrier-subtable,
-.table-container table.nested-carriers-table {
+.table-container .nested-carriers-table .v-table__wrapper > table {
   table-layout: auto !important;
   width: 100% !important;
 }
 
-.table-container .carrier-subtable td,
-.table-container .carrier-subtable th,
 .table-container .nested-carriers-table td,
 .table-container .nested-carriers-table th {
   max-width: none !important;

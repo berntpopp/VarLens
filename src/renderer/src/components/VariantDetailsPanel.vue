@@ -492,7 +492,7 @@ const currentVariantData = computed<VariantAnnotationData | null>(() => {
 const variantKey = computed(() => {
   if (!props.variant) return null
   const v = props.variant
-  const build = 'genome_build' in v && v.genome_build ? v.genome_build : (genomeBuild.value ?? '')
+  const build = 'genome_build' in v ? (v.genome_build ?? '') : ''
   return `${props.caseId ?? ''}:${build}:${v.chr}:${v.pos}:${v.ref}:${v.alt}`
 })
 

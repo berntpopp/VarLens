@@ -379,4 +379,3 @@ describe('ShortlistTable', () => {
     wrapper.unmount()
   })
 })
-

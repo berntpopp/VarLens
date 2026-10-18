@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, watch, markRaw, toRaw, type Ref } from 'vue'
+import { ref, shallowRef, computed, watch, markRaw, toRaw, readonly, type Ref } from 'vue'
 import type { Variant, VariantFilter } from '../../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../../shared/types/column-filters'
 import { useOffsetPagination } from '../../composables/useOffsetPagination'
@@ -276,6 +276,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     // Table state
     variants,
     totalCount,
+    unfilteredCount: readonly(unfilteredCount),
     loading,
     /** Last query failure; rows/count from the previous success stay visible (#530). */
     loadError,

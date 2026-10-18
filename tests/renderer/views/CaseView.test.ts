@@ -551,12 +551,15 @@ describe('CaseView — Shortlist tab integration', () => {
     }
     expect(vm.typeCounts).toEqual({ sv: 5 })
 
+    const expectedVariantType = vm.selectedVariantType
+
     // Now Case 1 slow response arrives out-of-order
     resolveCase1({ snv: 42 })
     await flushPromises()
 
-    // Stale Case 1 response must NOT overwrite Case 2!
+    // Stale Case 1 response must NOT overwrite Case 2 counts or change active tab!
     expect(vm.typeCounts).toEqual({ sv: 5 })
+    expect(vm.selectedVariantType).toBe(expectedVariantType)
   })
 
   it('guards loadTypeCounts against out-of-order responses during A -> B -> A case switch (#665)', async () => {

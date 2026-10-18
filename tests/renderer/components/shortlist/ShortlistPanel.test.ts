@@ -327,4 +327,3 @@ describe('ShortlistPanel', () => {
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
   })
 })
-

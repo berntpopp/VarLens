@@ -66,8 +66,11 @@ describe('CaseMetadataModal — web tab bar', () => {
     await flushPromises()
     const vDialog = wrapper.findComponent({ name: 'VDialog' })
     const el = document.body.querySelector('[aria-label="Case Metadata"]')
-    expect(vDialog.props('ariaLabel') ?? el?.getAttribute('aria-label') ?? vDialog.attributes('aria-label')).toBe('Case Metadata')
+    expect(
+      vDialog.props('ariaLabel') ??
+        el?.getAttribute('aria-label') ??
+        vDialog.attributes('aria-label')
+    ).toBe('Case Metadata')
     wrapper.unmount()
   })
 })
-

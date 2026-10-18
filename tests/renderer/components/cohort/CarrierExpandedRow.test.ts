@@ -249,10 +249,36 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).not.toContain('Case GRCh38')
   })
 
-  it('applies carrier-subtable class so columns do not collapse (#662)', () => {
+  it('applies nested-carriers-table class and defines auto layout overrides in shared CSS (#662)', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
     const wrapper = mountRow()
     const table = wrapper.find('.nested-carriers-table')
-    expect(table.classes()).toContain('carrier-subtable')
+    expect(table.exists()).toBe(true)
+
+    const cssPath = path.resolve(
+      __dirname,
+      '../../../../src/renderer/src/components/data-table-shared.css'
+    )
+    const cssContent = fs.readFileSync(cssPath, 'utf-8')
+
+    // Inner nested carrier table must have auto layout and full width to prevent column collapse
+    expect(cssContent).toMatch(
+      /\.table-container\s+\.nested-carriers-table\s+\.v-table__wrapper\s*>\s*table\s*\{[^}]*table-layout:\s*auto\s*!important/
+    )
+    expect(cssContent).toMatch(
+      /\.table-container\s+\.nested-carriers-table\s+\.v-table__wrapper\s*>\s*table\s*\{[^}]*width:\s*100%\s*!important/
+    )
+    expect(cssContent).toMatch(
+      /\.table-container\s+\.nested-carriers-table\s+td[^{]*\{[^}]*max-width:\s*none\s*!important/
+    )
+
+    // Outer table must preserve fixed layout and zero initial width for CLS prevention
+    expect(cssContent).toMatch(
+      /\.table-container\s+\.v-table__wrapper\s*>\s*table\s*\{[^}]*table-layout:\s*fixed/
+    )
+    expect(cssContent).toMatch(
+      /\.table-container\s+\.v-table__wrapper\s*>\s*table\s*\{[^}]*width:\s*0/
+    )
   })
 })
-

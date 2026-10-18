@@ -127,4 +127,3 @@ describe('buildLollipopVariants (cohort carriers)', () => {
     expect(resultFallback[0].consequenceCategory).toBe('missense')
   })
 })
-

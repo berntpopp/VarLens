@@ -1,7 +1,7 @@
 /* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { defineComponent, h, ref } from 'vue'
+import { defineAsyncComponent, defineComponent, h } from 'vue'
 import { VLayout } from 'vuetify/components'
 import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
@@ -66,7 +66,6 @@ function mountPanelWithVariant(
     pos: 100,
     ref: 'A',
     alt: 'G',
-    genome_build: 'GRCh38',
     ...variantDataOverrides
   }
   const mode = options.mode ?? 'case'
@@ -132,6 +131,44 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
 
     expect(panel.find('[data-testid="acmg-suggested-preview"]').exists()).toBe(false)
     expect(panel.find('[data-testid="apply-acmg-suggestions-btn"]').exists()).toBe(false)
+  })
+
+  it('forwards revel and spliceai_max from variant into suggestions preview (#685)', async () => {
+    const revelHigh = mountPanelWithVariant({ revel: 0.85 })
+    await flushPromises()
+    expect(revelHigh.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
+    wrapper?.unmount()
+
+    const revelLow = mountPanelWithVariant({ revel: 0.15 })
+    await flushPromises()
+    expect(revelLow.find('[data-testid="acmg-suggested-preview"]').text()).toContain('BP4')
+    wrapper?.unmount()
+
+    const spliceAi = mountPanelWithVariant({ spliceai_max: 0.7 })
+    await flushPromises()
+    expect(spliceAi.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
+    wrapper?.unmount()
+  })
+
+  it('variantKey on a case variant does not change when async case build resolves (#660)', async () => {
+    // Case variant has no genome_build on variant object
+    const panel = mountPanelWithVariant({
+      chr: '1',
+      pos: 100,
+      ref: 'A',
+      alt: 'G'
+    })
+    await flushPromises()
+
+    await panel.find('.v-expansion-panel-title').trigger('click')
+    await flushPromises()
+
+    const initialKey = capturedPanelProps.variantKey
+    expect(initialKey).toBe('10::1:100:A:G')
+
+    // Stays stable because it does not depend on async genomeBuild
+    await flushPromises()
+    expect(capturedPanelProps.variantKey).toBe(initialKey)
   })
 
   it('passes variantKey containing genome_build to AcmgClassificationPanel (#660)', async () => {
@@ -224,11 +261,14 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
   })
 
   it('stages suggestions on first click even when AcmgClassificationPanel is lazy-mounted (#685)', async () => {
-    const shouldMountInner = ref(false)
-    const lazyApplyMock = vi.fn()
+    let resolveComponent!: (comp: typeof MockAcmgClassificationPanel) => void
+    const asyncLoaderPromise = new Promise<typeof MockAcmgClassificationPanel>((resolve) => {
+      resolveComponent = (comp) => resolve(comp)
+    })
 
-    const LazyAcmgClassificationPanel = defineComponent({
-      name: 'AcmgClassificationPanel',
+    const lazyApplyMock = vi.fn()
+    const ResolvedMockPanel = defineComponent({
+      name: 'LazyResolvedPanel',
       props: {
         variantKey: { type: String, default: null }
       },
@@ -237,25 +277,32 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
           applySuggestions: lazyApplyMock,
           confirmLeave: () => null
         })
-        return () => (shouldMountInner.value ? h('div', { class: 'lazy-mounted' }) : null)
+        return () => h('div', { class: 'lazy-resolved-panel' })
       }
     })
 
+    const LazyPanel = defineAsyncComponent(() => asyncLoaderPromise)
+
     const panel = mountPanelWithVariant(
       { cadd: 30, gnomad_af: 0.000001 },
-      { customStubs: { AcmgClassificationPanel: LazyAcmgClassificationPanel } }
+      { customStubs: { AcmgClassificationPanel: LazyPanel } }
     )
     await flushPromises()
 
-    // Panel is initially collapsed and inner component is not ready
+    // Panel is initially collapsed and async component is still unresolved
     const applyBtn = panel.find('[data-testid="apply-acmg-suggestions-btn"]')
+    expect(applyBtn.exists()).toBe(true)
+
+    // Click apply suggestions: acmgPanelRef.value is genuinely null at this moment
     await applyBtn.trigger('click')
     await flushPromises()
+    expect(lazyApplyMock).not.toHaveBeenCalled()
 
-    // Inner component now mounts
-    shouldMountInner.value = true
+    // Resolve the async component loader
+    resolveComponent(ResolvedMockPanel)
     await flushPromises()
 
+    // Now mounted, suggestions must be applied automatically
     expect(lazyApplyMock).toHaveBeenCalledOnce()
   })
 })
