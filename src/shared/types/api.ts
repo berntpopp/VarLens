@@ -1,3 +1,5 @@
+import type { IpcResult } from './errors'
+
 // Auto-update types
 export type UpdateState =
   'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -18,10 +20,10 @@ export interface UpdateStatus {
 }
 
 export interface UpdaterAPI {
-  checkForUpdate: () => Promise<void>
-  downloadUpdate: () => Promise<void>
-  installUpdate: () => Promise<void>
-  getStatus: () => Promise<UpdateStatus>
+  checkForUpdate: () => Promise<IpcResult<void>>
+  downloadUpdate: () => Promise<IpcResult<void>>
+  installUpdate: () => Promise<IpcResult<void>>
+  getStatus: () => Promise<IpcResult<UpdateStatus>>
   onStatusChange: (callback: (status: UpdateStatus) => void) => () => void
 }
 
@@ -60,7 +62,6 @@ import type {
   RegionFile
 } from './database'
 import type { ProgressUpdate, ImportResult } from './import'
-import type { IpcResult } from './errors'
 import type { BuildConfidence } from '../genome/genome-build'
 import type {
   CohortVariant,

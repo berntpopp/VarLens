@@ -46,7 +46,8 @@ import type {
   CaseMetadata,
   CaseExternalId,
   CohortGroup,
-  GeneListWithCount
+  GeneListWithCount,
+  UpdateStatus
 } from '../../../src/shared/types/api'
 import type { IpcResult } from '../../../src/shared/types/errors'
 import type {
@@ -205,3 +206,21 @@ describe('case-metadata domain — Task A4 IpcResult laundering guard', () => {
     >()
   })
 })
+
+describe('updater domain — compile-time IpcResult shapes', () => {
+  it('compile-time check: WindowAPI updater methods return IpcResult', () => {
+    expectTypeOf<Awaited<ReturnType<WindowAPI['updater']['checkForUpdate']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['updater']['downloadUpdate']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['updater']['installUpdate']>>>().toEqualTypeOf<
+      IpcResult<void>
+    >()
+    expectTypeOf<Awaited<ReturnType<WindowAPI['updater']['getStatus']>>>().toEqualTypeOf<
+      IpcResult<UpdateStatus>
+    >()
+  })
+})
+

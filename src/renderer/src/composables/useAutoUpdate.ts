@@ -1,6 +1,8 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { UpdateStatus } from '../../../shared/types/api'
+import { unwrapIpcResult } from '../../../shared/types/errors'
+import { logService } from '../services/LogService'
 import { useApiService } from './useApiService'
 import { useCapabilityStore } from '../stores/capabilityStore'
 
@@ -23,9 +25,18 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
 
   if (api) {
     // Fetch initial status
-    api.updater.getStatus().then((status) => {
-      updateStatus.value = status
-    })
+    api.updater
+      .getStatus()
+      .then((res) => {
+        try {
+          updateStatus.value = unwrapIpcResult(res)
+        } catch (err) {
+          logService.error(`Failed to get initial updater status: ${err}`, 'updater')
+        }
+      })
+      .catch((err) => {
+        logService.error(`Failed to invoke getStatus: ${err}`, 'updater')
+      })
 
     // Listen for status changes
     cleanup = api.updater.onStatusChange((status: UpdateStatus) => {
@@ -46,19 +57,31 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
 
   async function checkForUpdate(): Promise<void> {
     if (api) {
-      await api.updater.checkForUpdate()
+      try {
+        unwrapIpcResult(await api.updater.checkForUpdate())
+      } catch (err) {
+        logService.error(`Failed to check for update: ${err}`, 'updater')
+      }
     }
   }
 
   async function downloadUpdate(): Promise<void> {
     if (api) {
-      await api.updater.downloadUpdate()
+      try {
+        unwrapIpcResult(await api.updater.downloadUpdate())
+      } catch (err) {
+        logService.error(`Failed to download update: ${err}`, 'updater')
+      }
     }
   }
 
   async function installUpdate(): Promise<void> {
     if (api) {
-      await api.updater.installUpdate()
+      try {
+        unwrapIpcResult(await api.updater.installUpdate())
+      } catch (err) {
+        logService.error(`Failed to install update: ${err}`, 'updater')
+      }
     }
   }
 
