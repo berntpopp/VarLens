@@ -136,17 +136,9 @@ test.describe('Case View', () => {
   test('selecting a case loads variant table', async ({}, testInfo) => {
     // Select the first imported case
     await selectCaseByName(window, PERF_CASE_NAMES[0])
-    await window.waitForTimeout(500)
-
-    // Switch to the SNV/Indel tab if needed so .v-data-table-server is visible
-    const variantTabs = window.locator('.variant-type-tabs .v-tab')
-    if ((await variantTabs.count()) > 1) {
-      const firstTabText = (await variantTabs.nth(0).textContent()) ?? ''
-      if (firstTabText.includes('Shortlist')) {
-        await variantTabs.nth(1).click()
-        await window.waitForTimeout(300)
-      }
-    }
+    const snvTab = window.locator('.v-tab').filter({ hasText: /SNV\/Indel/i }).first()
+    await expect(snvTab).toBeVisible()
+    await snvTab.click()
 
     // Context indicator should show case name
     const contextIndicator = window.locator('.context-indicator')
