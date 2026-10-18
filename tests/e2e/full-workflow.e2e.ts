@@ -16,6 +16,12 @@ import {
   launchElectronApp,
   type LaunchElectronAppResult
 } from './helpers/electron-app'
+import {
+  createPerfDatabase,
+  importFrozenPerfFixture,
+  selectCaseByName,
+  PERF_CASE_NAMES
+} from './helpers/perf-fixture'
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../../package.json'), 'utf8')
@@ -35,6 +41,10 @@ test.beforeAll(async () => {
     await disclaimerBtn.click()
     await window.waitForTimeout(500)
   }
+
+  // Seed deterministic database and fixture cases
+  await createPerfDatabase(appInstance.app, window, appInstance.userDataDir)
+  await importFrozenPerfFixture(window, appInstance.app)
 })
 
 test.afterAll(async () => {
@@ -115,41 +125,28 @@ test.describe('Case View', () => {
 
   // eslint-disable-next-line no-empty-pattern
   test('selecting a case loads variant table', async ({}, testInfo) => {
-    // Open sidebar
-    const sidebar = window.locator('.v-navigation-drawer--left')
-    if (!(await sidebar.isVisible())) {
-      const toggleBtn = window.locator('.sidebar-toggle-btn')
-      await toggleBtn.click()
-      await window.waitForTimeout(300)
-    }
+    // Select the first imported case
+    await selectCaseByName(window, PERF_CASE_NAMES[0])
+    await window.waitForTimeout(500)
 
-    // Click first case in list
-    const caseItem = window
-      .locator('.v-list-item')
-      .filter({ hasText: /variants/ })
-      .first()
-    if ((await caseItem.count()) > 0) {
-      await caseItem.click()
-      await window.waitForTimeout(1000)
-
-      // Variant table or filter toolbar should appear
-      const hasTable = await window
-        .locator('.v-data-table-server, .filter-bar-container')
-        .first()
-        .isVisible()
-        .catch(() => false)
-
-      await window.screenshot({ path: testInfo.outputPath('case-selected.png') })
-
-      if (hasTable) {
-        // Context indicator should show case name
-        const contextIndicator = window.locator('.context-indicator')
-        await expect(contextIndicator).toBeVisible()
+    // Switch to the SNV/Indel tab if needed so .v-data-table-server is visible
+    const variantTabs = window.locator('.variant-type-tabs .v-tab')
+    if ((await variantTabs.count()) > 1) {
+      const firstTabText = (await variantTabs.nth(0).textContent()) ?? ''
+      if (firstTabText.includes('Shortlist')) {
+        await variantTabs.nth(1).click()
+        await window.waitForTimeout(300)
       }
-    } else {
-      // No cases available - take screenshot of current state
-      await window.screenshot({ path: testInfo.outputPath('no-cases-available.png') })
     }
+
+    // Context indicator should show case name
+    const contextIndicator = window.locator('.context-indicator')
+    await expect(contextIndicator).toBeVisible()
+
+    const table = window.locator('.v-data-table-server')
+    await expect(table).toBeVisible()
+
+    await window.screenshot({ path: testInfo.outputPath('case-selected.png') })
   })
 
   // eslint-disable-next-line no-empty-pattern

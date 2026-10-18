@@ -38,11 +38,12 @@ describe('hosted gate contracts', () => {
   })
 
   test('Node lanes install their ABI directly and verify the binary', () => {
+    const setupWebCi = read('.github/actions/setup-web-ci/action.yml')
+    expect(setupWebCi).toContain('node scripts/native/assert-native-abi.mjs node')
+    expect(setupWebCi).not.toContain('npm run rebuild:')
+
     for (const [file, name, runtime] of [
       ['build', 'checks', 'node'],
-      ['build', 'web-ci', 'node'],
-      ['web-ci', 'web-ci', 'node'],
-      ['publish-web', 'web-ci', 'node'],
       ['build', 'package', 'electron'],
       ['docs', 'build-screenshots', 'electron']
     ]) {
@@ -51,6 +52,13 @@ describe('hosted gate contracts', () => {
       expect(source).toContain(`node scripts/native/assert-native-abi.mjs ${runtime}`)
       expect(source).not.toContain('npm run rebuild:')
     }
+
+    for (const file of ['build', 'web-ci', 'publish-web']) {
+      const source = job(workflow(file), 'web-ci')
+      expect(source).toContain('VARLENS_NATIVE_RUNTIME: node')
+      expect(source).toContain('uses: ./.github/actions/setup-web-ci')
+    }
+
     expect(workflow('build')).toContain('path: .cache/prettier')
     expect(workflow('build')).not.toContain('.eslintcache')
     expect(workflow('build')).not.toContain('.prettiercache')

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -38,6 +38,21 @@ export function validateActionPins(source) {
   return errors
 }
 
+function findYamlFiles(dir, prefix = '') {
+  const results = []
+  if (!existsSync(dir)) return results
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = resolve(dir, entry.name)
+    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      results.push(...findYamlFiles(fullPath, relPath))
+    } else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) {
+      results.push({ path: fullPath, label: relPath })
+    }
+  }
+  return results
+}
+
 function main() {
   const command = process.argv[2] ?? 'check'
   let errors
@@ -48,14 +63,11 @@ function main() {
       needs: JSON.parse(process.env.NEEDS_JSON ?? '{}')
     })
   } else if (command === 'check') {
-    const directory = resolve('.github/workflows')
-    errors = readdirSync(directory)
-      .filter((name) => /\.ya?ml$/.test(name))
-      .flatMap((name) =>
-        validateActionPins(readFileSync(resolve(directory, name), 'utf8')).map(
-          (error) => `${name}: ${error}`
-        )
-      )
+    const workflowFiles = findYamlFiles(resolve('.github/workflows'))
+    const actionFiles = findYamlFiles(resolve('.github/actions'), 'actions')
+    errors = [...workflowFiles, ...actionFiles].flatMap(({ path, label }) =>
+      validateActionPins(readFileSync(path, 'utf8')).map((error) => `${label}: ${error}`)
+    )
   } else throw new Error(`Unknown workflow-policy command: ${command}`)
   if (errors.length) throw new Error(errors.join('\n'))
   process.stdout.write('Workflow policy passed.\n')

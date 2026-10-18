@@ -102,8 +102,10 @@ describe('web CI target wiring', () => {
 
   test('web publish workflow runs web-ci before building images', () => {
     const publish = readFileSync(resolve(ROOT, '.github/workflows/publish-web.yml'), 'utf8')
+    const action = readFileSync(resolve(ROOT, '.github/actions/setup-web-ci/action.yml'), 'utf8')
 
-    expect(publish).toMatch(/web-ci:[\s\S]*?run: make web-ci/)
+    expect(publish).toMatch(/web-ci:[\s\S]*?uses: \.\/\.github\/actions\/setup-web-ci/)
+    expect(action).toMatch(/run: make web-ci/)
     expect(publish).toMatch(/build-and-push:[\s\S]*?needs: web-ci/)
     expect(publish).not.toMatch(/branches: \[main\]/)
     expect(publish).toMatch(/Trivy gate[\s\S]*?Push scanned image/)

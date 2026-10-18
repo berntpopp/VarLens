@@ -7,11 +7,11 @@
  */
 
 import type { WindowAPI, CommentCategory } from '../../../shared/types/api'
-import type { FilterPreset } from '../../../shared/types/filter-presets'
 import type { StorageCapabilities } from '../../../shared/types/storage-capabilities'
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockHpoDataApi } from './hpoDataMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
+import { mockPresetsApi, resetMockPresets } from './presetsMock'
 import {
   addMockCarrier,
   mockAvailableBuilds,
@@ -28,86 +28,27 @@ import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
 // Mutable state for interactive development
 let cases = [...mockCases]
-const variants = [...mockVariants]
+let variants = [...mockVariants]
 
-const defaultShortlistPresets: FilterPreset[] = [
-  {
-    id: 1,
-    name: 'Tier 1 candidates',
-    description: 'Strict ranking: rare HIGH/MOD impact, top-50. ClinVar P/LP and starred variants pinned to top.',
-    filterJson: {
-      shortlist: {
-        variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str'],
-        topN: 50,
-        baseFilters: { consequences: ['HIGH', 'MODERATE'], maxGnomadAf: 0.001 },
-        perTypeOverrides: { sv: { maxGnomadAf: 0.01 }, cnv: { maxGnomadAf: 0.01 }, str: {} },
-        rankConfig: {
-          weights: { impact: 0.25, pathogenicity: 0.25, rarity: 0.25, clinvar: 0.25, phenotype: 0 },
-          clinvarPinTop: true,
-          pinStarredTop: true
-        }
-      }
-    },
-    kind: 'shortlist',
-    isBuiltIn: true,
-    isVisible: true,
-    sortOrder: 0,
-    createdAt: 0,
-    updatedAt: 0
-  },
-  {
-    id: 2,
-    name: 'Recessive candidates',
-    description: 'Biallelic and homozygous focus: rare coding SNVs/indels in recessive disease genes.',
-    filterJson: {
-      shortlist: {
-        variantTypeScope: ['snv', 'indel'],
-        topN: 50,
-        baseFilters: { consequences: ['HIGH', 'MODERATE'], maxGnomadAf: 0.01 },
-        perTypeOverrides: {},
-        rankConfig: {
-          weights: { impact: 0.2, pathogenicity: 0.2, rarity: 0.3, clinvar: 0.1, phenotype: 0.2 },
-          clinvarPinTop: true,
-          pinStarredTop: true
-        }
-      }
-    },
-    kind: 'shortlist',
-    isBuiltIn: true,
-    isVisible: true,
-    sortOrder: 1,
-    createdAt: 0,
-    updatedAt: 0
-  },
-  {
-    id: 3,
-    name: 'Broad candidate survey',
-    description: 'Inclusive discovery sweep: top-100 across all variant types with relaxed frequency threshold.',
-    filterJson: {
-      shortlist: {
-        variantTypeScope: ['snv', 'indel', 'sv', 'cnv', 'str'],
-        topN: 100,
-        baseFilters: { maxGnomadAf: 0.01 },
-        perTypeOverrides: {},
-        rankConfig: {
-          weights: { impact: 0.2, pathogenicity: 0.2, rarity: 0.2, clinvar: 0.2, phenotype: 0.2 },
-          clinvarPinTop: false,
-          pinStarredTop: true
-        }
-      }
-    },
-    kind: 'shortlist',
-    isBuiltIn: true,
-    isVisible: true,
-    sortOrder: 2,
-    createdAt: 0,
-    updatedAt: 0
-  }
-]
-let mockPresets: FilterPreset[] = [...defaultShortlistPresets]
+const activeVariants = () => {
+  const caseIds = new Set(cases.map((c) => c.id))
+  return variants.filter((v) => caseIds.has(v.case_id))
+}
+
 // Drop matching mock cases; returns how many were removed.
-const removeCases = (match: (id: number) => boolean): number =>
-  cases.length - (cases = cases.filter((c) => !match(c.id))).length
+const removeCases = (match: (id: number) => boolean): number => {
+  const prevLen = cases.length
+  cases = cases.filter((c) => !match(c.id))
+  const survivingIds = new Set(cases.map((c) => c.id))
+  variants = variants.filter((v) => survivingIds.has(v.case_id))
+  return prevLen - cases.length
+}
+
+export function resetMockData(): void {
+  cases = [...mockCases]
+  variants = [...mockVariants]
+  resetMockPresets()
+}
 
 export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
   backend: 'sqlite',
@@ -425,44 +366,15 @@ export const mockApi: WindowAPI = {
       { path: '/mock/database.db', name: 'Mock Database', lastOpened: Date.now() }
     ],
     getOverview: async () => {
-      const totalCases = cases.length
-      const totalVariants = variants.length
-      const uniqueVariants = new Set(variants.map((v) => cohortVariantKey(v))).size
-      const avgVariantsPerCase = totalCases > 0 ? Math.round((totalVariants / totalCases) * 10) / 10 : 0
-      const genesWithVariants = new Set(variants.map((v) => v.gene_symbol).filter(Boolean)).size
-      const starredVariants = variants.filter((v) => Boolean(v.is_starred)).length
-
-      const acmgCounts = {
-        pathogenic: 0,
-        likely_pathogenic: 0,
-        vus: 0,
-        likely_benign: 0,
-        benign: 0
-      }
-
-      for (const v of variants) {
-        const cv = (v.clinvar ?? '').toLowerCase()
-        if (cv.includes('pathogenic') && !cv.includes('likely')) acmgCounts.pathogenic++
-        else if (cv.includes('likely_pathogenic') || cv.includes('likely pathogenic')) acmgCounts.likely_pathogenic++
-        else if (cv.includes('uncertain') || cv.includes('vus')) acmgCounts.vus++
-        else if (cv.includes('likely_benign') || cv.includes('likely benign')) acmgCounts.likely_benign++
-        else if (cv.includes('benign')) acmgCounts.benign++
-      }
-
+      const summaryResult = await mockApi.cohort.getSummary()
+      if ('code' in summaryResult) return summaryResult
+      const active = activeVariants()
       return {
-        summary: {
-          total_cases: totalCases,
-          total_variants: totalVariants,
-          unique_variants: uniqueVariants,
-          avg_variants_per_case: avgVariantsPerCase,
-          genes_with_variants: genesWithVariants,
-          starred_variants: starredVariants,
-          acmg_counts: acmgCounts
-        },
+        summary: summaryResult,
         cases: cases.map((c) => ({
           id: c.id,
           name: c.name,
-          variant_count: variants.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
+          variant_count: active.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
           created_at: c.created_at,
           affected_status: null
         })),
@@ -738,17 +650,18 @@ export const mockApi: WindowAPI = {
     },
 
     getSummary: async () => {
+      const active = activeVariants()
       // Calculate unique variants (distinct chr:pos:ref:alt)
-      const uniqueKeys = new Set(variants.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`))
+      const uniqueKeys = new Set(active.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`))
       const uniqueGenes = new Set(
-        variants.map((v) => v.gene_symbol).filter((g): g is string => g !== undefined && g !== null)
+        active.map((v) => v.gene_symbol).filter((g): g is string => g !== undefined && g !== null)
       )
 
       return {
         total_cases: cases.length,
-        total_variants: variants.length,
+        total_variants: active.length,
         unique_variants: uniqueKeys.size,
-        avg_variants_per_case: cases.length > 0 ? variants.length / cases.length : 0,
+        avg_variants_per_case: cases.length > 0 ? active.length / cases.length : 0,
         genes_with_variants: uniqueGenes.size,
         starred_variants: 0,
         acmg_counts: {
@@ -761,7 +674,7 @@ export const mockApi: WindowAPI = {
       }
     },
 
-    getCarriers: async (variant) => mockCohortCarriers(variant, variants, cases),
+    getCarriers: async (variant) => mockCohortCarriers(variant, activeVariants(), cases),
 
     getGeneBurden: async () => {
       // Aggregate per-gene statistics
@@ -1210,53 +1123,7 @@ export const mockApi: WindowAPI = {
     changePassword: async () => {}
   },
 
-  presets: {
-    list: async () => [...mockPresets],
-    create: async (params) => {
-      const p: FilterPreset = {
-        id: (mockPresets.length > 0 ? Math.max(...mockPresets.map((x) => x.id)) : 0) + 1,
-        name: params.name,
-        description: params.description ?? null,
-        filterJson: params.filterJson,
-        kind: params.kind ?? 'filter',
-        isBuiltIn: false,
-        isVisible: true,
-        sortOrder: mockPresets.length,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      }
-      mockPresets.push(p)
-      return p
-    },
-    update: async (_id, updates) => {
-      const idx = mockPresets.findIndex((p) => p.id === _id)
-      if (idx !== -1) {
-        mockPresets[idx] = { ...mockPresets[idx], ...updates, updatedAt: Date.now() }
-        return mockPresets[idx]
-      }
-      return {
-        id: _id,
-        name: updates.name ?? 'Preset',
-        description: updates.description ?? null,
-        filterJson: updates.filterJson ?? {},
-        kind: updates.kind ?? 'filter',
-        isBuiltIn: false,
-        isVisible: updates.isVisible ?? true,
-        sortOrder: updates.sortOrder ?? 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      }
-    },
-    delete: async (id) => {
-      mockPresets = mockPresets.filter((p) => p.id !== id)
-    },
-    reorder: async (items) => {
-      for (const item of items) {
-        const p = mockPresets.find((x) => x.id === item.id)
-        if (p) p.sortOrder = item.sortOrder
-      }
-    }
-  },
+  presets: mockPresetsApi,
 
   analysisGroups: {
     list: async () => [],

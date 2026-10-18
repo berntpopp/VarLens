@@ -71,9 +71,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # actions/checkout@v7.0.1
 
-      # Contract requirement: tests/scripts/ci-workflow-contract.test.ts
-      # node scripts/native/assert-native-abi.mjs node
-      # run: make web-ci
       - name: Run Web CI
         uses: ./.github/actions/setup-web-ci
         with:
