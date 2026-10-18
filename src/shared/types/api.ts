@@ -740,6 +740,7 @@ export interface GeneRefCheckUpdatesResult {
   currentBuiltAt: number
   daysSinceBuilt: number
   needsUpdate: boolean
+  canUpdate?: boolean
 }
 
 export interface GeneRefUpdateResult {

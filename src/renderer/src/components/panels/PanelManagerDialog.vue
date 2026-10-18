@@ -318,7 +318,9 @@ const capabilities = useCapabilityStore()
 const canImportPanelApp = computed(() => capabilities.canUse('panelAppImport'))
 const canGenerateStringDb = computed(() => capabilities.canUse('stringDbPanels'))
 const canExportBed = computed(() => capabilities.canUse('panelBedExport'))
-const canUpdateGeneRef = computed(() => capabilities.canUse('geneRefUpdate'))
+const canUpdateGeneRef = computed(
+  () => capabilities.canUse('geneRefUpdate') && (geneRefInfo.value?.canUpdate ?? false)
+)
 const externalLookupNotes = computed(() => {
   const notes = [
     capabilities.capabilityReason('panelAppImport'),

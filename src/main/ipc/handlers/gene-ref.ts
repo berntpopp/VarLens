@@ -14,7 +14,13 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
   ipcMain.handle('gene-ref:info', async () => {
     return wrapHandler(async () => {
       const geneRef = getGeneReferenceDb()
-      return geneRef.getInfo()
+      const info = geneRef.getInfo()
+      const scriptPath = resolve(app.getAppPath(), 'scripts', 'build-gene-reference-db.ts')
+      const canUpdate = !app.isPackaged && existsSync(scriptPath)
+      return {
+        ...info,
+        canUpdate
+      }
     })
   })
 
@@ -36,12 +42,15 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       const nowMs = Date.now()
       const builtAtMs = info.builtAt * 1000 // builtAt is Unix seconds
       const daysSinceBuilt = Math.floor((nowMs - builtAtMs) / (1000 * 60 * 60 * 24))
-      const needsUpdate = daysSinceBuilt > 90
+      const scriptPath = resolve(app.getAppPath(), 'scripts', 'build-gene-reference-db.ts')
+      const canUpdate = !app.isPackaged && existsSync(scriptPath)
+      const needsUpdate = canUpdate && daysSinceBuilt > 90
 
       return {
         currentBuiltAt: info.builtAt,
         daysSinceBuilt,
-        needsUpdate
+        needsUpdate,
+        canUpdate
       }
     })
   })
@@ -60,8 +69,11 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       const appPath = app.getAppPath()
       const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
 
-      if (!existsSync(scriptPath)) {
-        mainLogger.warn(`Gene ref build script not found at: ${scriptPath}`, 'gene-ref')
+      if (app.isPackaged || !existsSync(scriptPath)) {
+        mainLogger.warn(
+          `Gene ref build script not available (packaged=${app.isPackaged}, path=${scriptPath})`,
+          'gene-ref'
+        )
         return {
           success: false,
           message:
@@ -70,7 +82,8 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       }
 
       // Use npx to resolve tsx portably (handles .cmd on Windows, PATH resolution)
-      const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+      const isWin = process.platform === 'win32'
+      const npxCmd = isWin ? 'npx.cmd' : 'npx'
 
       // Destination: always write to userData so it takes precedence on next load
       const userDataDbPath = join(app.getPath('userData'), 'gene_reference.db')
@@ -86,6 +99,7 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
           {
             cwd: appPath,
             timeout: 5 * 60 * 1000, // 5 minute timeout
+            shell: isWin,
             env: { ...process.env }
           },
           (error, stdout, stderr) => {
