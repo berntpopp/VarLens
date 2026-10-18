@@ -649,6 +649,17 @@ describe('vcf-annotation-parser', () => {
       expect(res.cadd).toBeNull()
     })
 
+    it('extractFromCsq falls back to alias key when primary key is "."', () => {
+      const res = extractFromCsq({
+        gnomADe_AF: '.',
+        gnomad_af_exomes: '0.002',
+        ClinVar_CLNSIG: '.',
+        clinvar: 'Pathogenic'
+      })
+      expect(res.gnomadAf).toBe(0.002)
+      expect(res.clinvar).toBe('Pathogenic')
+    })
+
     it('extractFromCsq falls back to gnomad_af_genomes when gnomad_af_exomes is "."', () => {
       const res = extractFromCsq({
         gnomad_af_exomes: '.',

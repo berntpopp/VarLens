@@ -241,14 +241,17 @@ export function extractFromCsq(
 } {
   const getField = (key: string): string | null => {
     if (!source) return null
+    let raw: unknown
     if ('fields' in source && source.fields instanceof Map) {
-      return source.fields.get(key) ?? null
+      raw = source.fields.get(key)
+    } else if (source instanceof Map) {
+      raw = (source as Map<string, string>).get(key)
+    } else {
+      raw = (source as Record<string, unknown>)[key]
     }
-    if (source instanceof Map) {
-      return (source as Map<string, string>).get(key) ?? null
-    }
-    const val = (source as Record<string, unknown>)[key]
-    return val != null ? String(val) : null
+    if (raw == null) return null
+    const str = String(raw).trim()
+    return str === '' || str === '.' ? null : str
   }
 
   const afE = parseFiniteFloat(getField('gnomADe_AF') ?? getField('gnomad_af_exomes'))

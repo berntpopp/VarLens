@@ -87,10 +87,11 @@ export const encodeFloat: CopyColumnEncoder = (value) => {
     return String(value)
   }
   if (typeof value === 'string') {
-    if (value === '' || value === '.') return NULL_TOKEN
-    const n = Number(value)
+    const trimmed = value.trim()
+    if (trimmed === '' || trimmed === '.') return NULL_TOKEN
+    const n = Number(trimmed)
     if (!Number.isFinite(n)) return NULL_TOKEN
-    return value
+    return trimmed
   }
   return String(value)
 }

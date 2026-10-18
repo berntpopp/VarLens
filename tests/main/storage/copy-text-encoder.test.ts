@@ -156,8 +156,17 @@ describe('encodeFloat', () => {
   it('empty string → \\N', () => {
     expect(encodeFloat('')).toBe('\\N')
   })
+  it('whitespace-only string → \\N', () => {
+    expect(encodeFloat('   ')).toBe('\\N')
+    expect(encodeFloat('\t\n')).toBe('\\N')
+  })
   it('missing token "." → \\N', () => {
     expect(encodeFloat('.')).toBe('\\N')
+    expect(encodeFloat(' . ')).toBe('\\N')
+  })
+  it('non-numeric string token → \\N', () => {
+    expect(encodeFloat('abc')).toBe('\\N')
+    expect(encodeFloat('NaN')).toBe('\\N')
   })
 })
 
