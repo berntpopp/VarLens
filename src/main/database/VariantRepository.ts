@@ -55,11 +55,44 @@ const COMPUTED_COLUMNS = new Set(['internal_af'])
 
 export class VariantRepository extends BaseRepository {
   private static readonly MAX_STATEMENT_CACHE_SIZE = 50
+  private static readonly MAX_META_CACHE_SIZE = 50
+  private readonly columnMetaCache = new Map<number, { stamp: string; data: ColumnFilterMeta[] }>()
+  private mutationSeq = 0
   private cases: CaseRepository
   private readonly filterBuilder: VariantFilterBuilder
   private readonly searchService: VariantSearchService
   private ftsSnapshot: TriggerSnapshot = {}
   private readonly statementCache = new Map<string, Statement>()
+
+  /**
+   * Clear cached column metadata for a specific case, or all cases if omitted.
+   */
+  clearColumnMetaCache(caseId?: number): void {
+    this.mutationSeq++
+    if (caseId !== undefined) {
+      this.columnMetaCache.delete(caseId)
+    } else {
+      this.columnMetaCache.clear()
+    }
+  }
+
+  private getCaseStamp(caseId: number): string {
+    let dataVersion = 0
+    try {
+      const dv = this.db.pragma('data_version', { simple: true })
+      if (typeof dv === 'number' || typeof dv === 'string' || typeof dv === 'bigint') {
+        dataVersion = Number(dv)
+      }
+    } catch {
+      // Ignore if pragma fails
+    }
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS cnt, MAX(id) AS max_id FROM variants WHERE case_id = ?')
+      .get(caseId) as { cnt: number; max_id: number | null } | undefined
+    const cnt = row?.cnt ?? 0
+    const maxId = row?.max_id ?? 0
+    return `${dataVersion}:${this.mutationSeq}:${cnt}:${maxId}`
+  }
 
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
     super(db, kysely)
@@ -86,6 +119,7 @@ export class VariantRepository extends BaseRepository {
    * Must be paired with a subsequent call to `finishBulkInsert()`.
    */
   beginBulkInsert(): void {
+    this.clearColumnMetaCache()
     this.ftsSnapshot = tearDownFtsTriggers(this.db)
   }
 
@@ -99,6 +133,7 @@ export class VariantRepository extends BaseRepository {
       VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[],
     caseId: number
   ): void {
+    this.clearColumnMetaCache(caseId)
     const runTransaction = this.db.transaction(
       (
         batch: (Omit<Variant, 'id' | 'case_id'> &
@@ -193,6 +228,7 @@ export class VariantRepository extends BaseRepository {
    * `finishBulkInsert()`.
    */
   finishBulkInsertNoCount(): void {
+    this.clearColumnMetaCache()
     try {
       rebuildAllFtsIndexes(this.db)
     } catch (error) {
@@ -224,6 +260,7 @@ export class VariantRepository extends BaseRepository {
    * Call this once after all `insertBatch()` calls to complete a bulk insert session.
    */
   finishBulkInsert(caseId: number, totalInserted: number): void {
+    this.clearColumnMetaCache(caseId)
     this.cases.updateCaseVariantCount(caseId, totalInserted)
     this.finishBulkInsertNoCount()
   }
@@ -434,10 +471,19 @@ export class VariantRepository extends BaseRepository {
    * one UNION ALL distinct-values pull for low-cardinality columns. Used by
    * `getFilterOptions` to populate the legacy full-metadata response.
    *
+   * Results are cached per caseId and invalidated when the case stamp changes.
    * For per-column on-demand fetches (including extension columns) use the
    * scope-aware public `getColumnMeta(scope, columnKey)` below instead.
    */
-  private getAllColumnMetas(caseId: number): ColumnFilterMeta[] {
+  getAllColumnMetas(caseId: number): ColumnFilterMeta[] {
+    const stamp = this.getCaseStamp(caseId)
+    const cached = this.columnMetaCache.get(caseId)
+    if (cached !== undefined && cached.stamp === stamp) {
+      this.columnMetaCache.delete(caseId)
+      this.columnMetaCache.set(caseId, cached)
+      return cached.data
+    }
+
     const DISTINCT_THRESHOLD = 50
     // Exclude computed columns (e.g. internal_af) which don't exist as physical table columns
     const columns = Object.entries(BASE_SORTABLE_COLUMNS).filter(
@@ -518,7 +564,17 @@ export class VariantRepository extends BaseRepository {
       }
     }
 
-    return meta.map(withOfferedValues)
+    const result = meta.map(withOfferedValues)
+
+    if (this.columnMetaCache.size >= VariantRepository.MAX_META_CACHE_SIZE) {
+      const oldestKey = this.columnMetaCache.keys().next().value
+      if (oldestKey !== undefined) {
+        this.columnMetaCache.delete(oldestKey)
+      }
+    }
+    this.columnMetaCache.set(caseId, { stamp, data: result })
+
+    return result
   }
 
   // ── Scope-aware single-column metadata (base + extension) ────

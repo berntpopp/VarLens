@@ -282,4 +282,90 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(types.has('cnv')).toBe(true)
     })
   })
+
+  describe('getAllColumnMetas caching and invalidation (#671)', () => {
+    it('returns identical cached array on repeated calls', () => {
+      const caseId = createTestCase(service, 'cache-hit')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1', gnomad_af: 0.01 },
+        { chr: '1', pos: 200, ref: 'A', alt: 'T', gene_symbol: 'TP53', gnomad_af: 0.05 }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1).toBe(meta2) // exact same cached reference
+    })
+
+    it('invalidates cache when new variants are inserted via insertVariantsBatch', () => {
+      const caseId = createTestCase(service, 'cache-invalidation-batch')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1', gnomad_af: 0.01 }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 200, ref: 'A', alt: 'T', gene_symbol: 'TP53', gnomad_af: 0.05 }
+      ])
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
+    })
+
+    it('invalidates cache when clearColumnMetaCache is called', () => {
+      const caseId = createTestCase(service, 'cache-clear')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      service.variants.clearColumnMetaCache(caseId)
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2).toEqual(meta1)
+    })
+
+    it('invalidates cache when variants table is mutated directly in SQLite', () => {
+      const caseId = createTestCase(service, 'cache-direct-sql')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+
+      service.database
+        .prepare(
+          "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol) VALUES (?, '1', 200, 'A', 'G', 'TP53')"
+        )
+        .run(caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
+    })
+
+    it('evicts oldest entries when cache exceeds MAX_META_CACHE_SIZE (50)', () => {
+      const caseIds: number[] = []
+      for (let i = 0; i < 55; i++) {
+        const id = createTestCase(service, `case-${i}`)
+        service.variants.insertVariantsBatch(id, [
+          { chr: '1', pos: 100 + i, ref: 'A', alt: 'T', gene_symbol: `GENE${i}` }
+        ])
+        caseIds.push(id)
+      }
+
+      // Query all 55 cases into cache
+      const cachedFirst = service.variants.getAllColumnMetas(caseIds[0])
+      for (let i = 1; i < 55; i++) {
+        service.variants.getAllColumnMetas(caseIds[i])
+      }
+
+      // caseIds[0] should have been evicted (oldest of >50)
+      const reFetchedFirst = service.variants.getAllColumnMetas(caseIds[0])
+      expect(reFetchedFirst).not.toBe(cachedFirst) // newly computed
+    })
+  })
 })
+
