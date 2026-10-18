@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { basename } from 'node:path'
 import { statSync } from 'node:fs'
 import type { Readable } from 'node:stream'
-import { Client, type ClientConfig, type PoolClient } from 'pg'
+import { Client, type ClientConfig } from 'pg'
 
 import {
   POSTGRES_IMPORT_CANCELLATION_MESSAGE,
@@ -248,7 +248,7 @@ export async function runImport(
     if (isCancelled()) throw new Error(POSTGRES_IMPORT_CANCELLATION_MESSAGE)
   }
   /** Wait for the summary write lock; a cancel during the wait ends as a cancel. */
-  const lockSummary = async (queryable: Pick<PoolClient, 'query'>): Promise<void> => {
+  const lockSummary = async (queryable: Pick<Client, 'query'>): Promise<void> => {
     try {
       await lockSummaryForWrite(queryable, start.schema, isCancelled)
     } catch (error) {
@@ -275,7 +275,7 @@ export async function runImport(
       await acquireWorkspaceImportLock(client, start.schema)
       const generation = await new PostgresVcfImportRepository(
         start.schema
-      ).recoverInterruptedImports(client as unknown as Pick<PoolClient, 'query'>)
+      ).recoverInterruptedImports(client)
       fence = { schema: start.schema, generation }
     }
 
@@ -317,7 +317,7 @@ export async function runImport(
 
           const repo = new PostgresVcfImportRepository(start.schema)
           provisionalImport = await fenced(() =>
-            repo.beginProvisionalImport(client as unknown as Pick<PoolClient, 'query'>, {
+            repo.beginProvisionalImport(client, {
               caseName: start.caseName,
               filePath,
               fileSize: vcfFileSize,
@@ -361,7 +361,7 @@ export async function runImport(
             beganTransaction = true
             await client.query('SET LOCAL synchronous_commit = OFF')
             const variantCount = await profilePhase('writeVcfFile', () =>
-              repo.writeVcfFile(client as unknown as Pick<PoolClient, 'query'>, request)
+              repo.writeVcfFile(client, request)
             )
             await client.query('COMMIT')
             beganTransaction = false
@@ -420,7 +420,7 @@ export async function runImport(
           }
           throwIfCancelled()
           await repo.finishProvisionalImport(
-            client as unknown as Pick<PoolClient, 'query'>,
+            client,
             caseId,
             vcfFileName,
             'vcf',
@@ -543,7 +543,7 @@ export async function runImport(
                 })()
 
       const { caseId, variantCount } = await repo.writeJsonImport(
-        client as unknown as Pick<PoolClient, 'query'>,
+        client,
         {
           filePath,
           fileName,
@@ -661,7 +661,7 @@ export async function runImport(
             let fileCaseId: number
             if (caseId === 0) {
               provisionalImport = await fenced(() =>
-                repo.beginProvisionalImport(client as unknown as Pick<PoolClient, 'query'>, {
+                repo.beginProvisionalImport(client, {
                   caseName: start.caseName,
                   filePath: fileSpec.filePath,
                   fileSize,
@@ -672,7 +672,7 @@ export async function runImport(
               fileCaseId = provisionalImport.caseId
             } else {
               const watermark = await repo.captureVariantWatermark(
-                client as unknown as Pick<PoolClient, 'query'>,
+                client,
                 caseId
               )
               currentFileProvisional = { caseId, watermark, isNew: false }
@@ -714,7 +714,7 @@ export async function runImport(
               beganTransaction = true
               await client.query('SET LOCAL synchronous_commit = OFF')
               const batchResult = await repo.writeVcfFile(
-                client as unknown as Pick<PoolClient, 'query'>,
+                client,
                 request
               )
               await client.query('COMMIT')
@@ -776,7 +776,7 @@ export async function runImport(
               beganTransaction = false
               if (currentFileProvisional !== null) {
                 await repo.cleanupProvisionalImport(
-                  client as unknown as Pick<PoolClient, 'query'>,
+                  client,
                   currentFileProvisional,
                   caseIdBeforeFile === 0
                     ? { fence }
@@ -835,7 +835,7 @@ export async function runImport(
             })
             throwIfCancelled()
             await repo.finishProvisionalImport(
-              client as unknown as Pick<PoolClient, 'query'>,
+              client,
               caseId,
               lastSuccessfulFileName,
               'vcf',
@@ -898,7 +898,7 @@ export async function runImport(
       try {
         const repo = new PostgresVcfImportRepository(start.schema)
         await repo.cleanupProvisionalImport(
-          client as unknown as Pick<PoolClient, 'query'>,
+          client,
           provisionalImport,
           { fence }
         )

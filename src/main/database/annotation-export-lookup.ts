@@ -11,7 +11,23 @@ import {
   type ExportedAnnotation
 } from '../../shared/acmg/annotation-export'
 
-type Row = Record<string, unknown>
+export interface CaseLookupRow {
+  id?: unknown
+  case_id?: unknown
+  chr?: unknown
+  pos?: unknown
+  ref?: unknown
+  alt?: unknown
+}
+
+export interface CohortLookupRow {
+  id?: unknown
+  chr: string
+  pos: number
+  ref: string
+  alt: string
+  genome_build: string
+}
 
 /** The global row of a coordinate; the build expression completes it. */
 const GLOBAL_AT = `SELECT acmg_classification, acmg_evidence, global_comment AS comment
@@ -22,7 +38,7 @@ const GLOBAL_AT = `SELECT acmg_classification, acmg_evidence, global_comment AS 
 export function caseRowAnnotations(
   db: DatabaseType,
   caseId?: number | string
-): (row: Row) => ReturnType<typeof caseExportCells> {
+): (row: CaseLookupRow) => ReturnType<typeof caseExportCells> {
   let cachedCaseId: number | string | undefined = caseId
   let genomeBuild: string | null = null
   let ownMap: Map<unknown, ExportedAnnotation> | null = null
@@ -82,10 +98,10 @@ export function caseRowAnnotations(
 
 const CHUNK_SIZE = 200
 
-export function createCaseAnnotationBatchLookup(
+export function createCaseAnnotationBatchLookup<T extends CaseLookupRow = CaseLookupRow>(
   db: DatabaseType,
   caseId?: number | string
-): (rows: readonly Row[]) => Map<unknown, ReturnType<typeof caseExportCells>> {
+): (rows: readonly T[]) => Map<unknown, ReturnType<typeof caseExportCells>> {
   let cachedCaseId: number | string | undefined = caseId
   let genomeBuild: string | null = null
   let ownMap: Map<unknown, ExportedAnnotation> | null = null
@@ -121,7 +137,7 @@ export function createCaseAnnotationBatchLookup(
     getOwnAndBuild(caseId)
   }
 
-  return (rows: readonly Row[]) => {
+  return (rows: readonly CaseLookupRow[]) => {
     const result = new Map<unknown, ReturnType<typeof caseExportCells>>()
     if (rows.length === 0) return result
 
@@ -186,10 +202,10 @@ export function cohortRowAnnotations(
     )
 }
 
-export function createCohortAnnotationBatchLookup(
+export function createCohortAnnotationBatchLookup<T extends CohortLookupRow = CohortLookupRow>(
   db: DatabaseType
-): (rows: readonly Row[]) => Map<unknown, ReturnType<typeof cohortExportCells>> {
-  return (rows: readonly Row[]) => {
+): (rows: readonly T[]) => Map<unknown, ReturnType<typeof cohortExportCells>> {
+  return (rows: readonly T[]) => {
     const result = new Map<unknown, ReturnType<typeof cohortExportCells>>()
     if (rows.length === 0) return result
 

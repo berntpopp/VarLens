@@ -6,9 +6,12 @@
  */
 import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { isSeverityKey } from '../../../shared/config/severity.config'
-import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import { severityFilterOperands, severityFilterSql } from '../../../shared/filters/severity-filter'
 import { infoFieldFilterSql, infoFieldKey } from '../../../shared/filters/info-field-filter'
+import {
+  translateBareColumnFilter,
+  coerceColumnFilterComparisonValue
+} from '../../database/variant-filter/column-filters'
 import type { CarrierRanks } from '../../../shared/sql/cohort-representative'
 import type { VariantFilter } from '../../../shared/types/database'
 import { POSTGRES_VARIANT_COLUMN_DEFINITIONS } from './postgres-variant-columns'
@@ -59,10 +62,7 @@ export function addPostgresColumnFilters(
     const { operator, value } = filterDef
 
     const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
-    if (isNullCheckOperator(operator)) {
-      const numeric = definition.kind === 'numeric'
-      addWhere(buildNullCheckSql(sqlColumn, operator, numeric, 'postgres'))
-    } else if (isSeverityKey(column) && severity !== null) {
+    if (isSeverityKey(column) && severity !== null) {
       const clause = severityFilterSql(
         column,
         severity.values,
@@ -74,29 +74,16 @@ export function addPostgresColumnFilters(
         severity.negate
       )
       if (clause !== null) addWhere(clause)
-    } else if (operator === 'in' && Array.isArray(value)) {
-      if (value.length === 0) continue
-      addWhere(`${sqlColumn} IN (${value.map((item) => addParam(String(item))).join(', ')})`)
-    } else if (operator === 'like' && typeof value === 'string') {
-      if (value.trim() === '') continue
-      // Numeric columns need the cast: `double precision ILIKE text` does not exist.
-      const textColumn = definition.kind === 'numeric' ? `${sqlColumn}::text` : sqlColumn
-      addWhere(`${textColumn} ILIKE ${addParam(`%${escapeLikePattern(value)}%`)} ESCAPE '\\'`)
-    } else if (
-      (operator === '=' || operator === '!=') &&
-      (typeof value === 'string' || typeof value === 'number')
-    ) {
-      addWhere(
-        `${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, definition.kind === 'numeric'))}`
-      )
-    } else if (
-      (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-      (typeof value === 'string' || typeof value === 'number')
-    ) {
-      const comparison = `${sqlColumn} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, definition.kind === 'numeric'))}`
-      const includeEmpty = filterDef.includeEmpty ?? !column.includes('.')
-      addWhere(includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison)
+      continue
     }
+
+    const clause = translateBareColumnFilter(sqlColumn, filterDef, {
+      dialect: 'postgres',
+      numericColumn: definition.kind === 'numeric',
+      bind: (item) => addParam(item),
+      includeEmptyDefault: !column.includes('.')
+    })
+    if (clause !== null) addWhere(clause)
   }
 }
 
@@ -105,11 +92,4 @@ export function hasPostgresColumnFilterPrefix(filter: VariantFilter, prefix: str
 }
 
 /** Only numeric columns coerce: on a text column "007" must stay "007" (#510). */
-export function normalizePostgresColumnFilterValue(
-  value: string | number,
-  isNumeric: boolean
-): string | number {
-  if (!isNumeric || typeof value === 'number') return value
-  const numericValue = Number(value)
-  return Number.isFinite(numericValue) ? numericValue : value
-}
+export const normalizePostgresColumnFilterValue = coerceColumnFilterComparisonValue

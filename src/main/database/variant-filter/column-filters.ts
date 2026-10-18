@@ -2,7 +2,6 @@ import { isSeverityKey } from '../../../shared/config/severity.config'
 import { severityFilterOperands } from '../../../shared/filters/severity-filter'
 import { boundPredicate, PLACEHOLDER, whereSeverity } from './severity-filter'
 import { infoFieldFilterSql, infoFieldKey } from '../../../shared/filters/info-field-filter'
-import { sql } from 'kysely'
 import { escapeLikePattern } from '../search/search-clause-emitter'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../../shared/filters/column-filter-validation'
 import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
@@ -13,101 +12,99 @@ import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
 import { casePhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../../shared/sql/phenotype-score-sql'
 
 type ColumnFilterDef = NonNullable<VariantFilter['column_filters']>[string]
-type ComparableValue = string | number
-type RangeOperator = '<' | '>' | '<=' | '>='
 
-function isComparable(value: unknown): value is ComparableValue {
-  return typeof value === 'string' || typeof value === 'number'
+export interface ColumnFilterTranslationOptions {
+  dialect: 'sqlite' | 'postgres'
+  numericColumn: boolean
+  bind: (value: unknown) => string
+  includeEmptyDefault?: boolean
 }
 
 /**
- * Bind a comparison value in the storage class of its column: numbers for
+ * Bind/normalize a comparison value in the storage class of its column: numbers for
  * numeric columns, text for everything else.
- *
- * The distinction matters because better-sqlite3 binds every JS number as a
- * REAL. Compared with a TEXT column SQLite renders it as text first, so
- * `chr = 7` becomes `chr = '7.0'` and can never match the stored `'7'`.
  */
-function coerceComparisonValue(value: ComparableValue, numericColumn: boolean): ComparableValue {
+export function coerceColumnFilterComparisonValue(
+  value: string | number,
+  numericColumn: boolean
+): string | number {
   if (!numericColumn) return String(value)
   const num = Number(value)
   return typeof value === 'number' ? value : Number.isFinite(num) ? num : value
 }
 
 /**
- * `sqlColumn` below is internal SQL text, never user input: `variants.<column>`
- * from SORTABLE_COLUMNS (a quoted reference) or that column wrapped by
- * comparedColumnSql, e.g. `ABS(variants.sv_length)` (raw SQL).
+ * Shared dialect-aware bare column filter translator across all variant query paths.
+ * Translates null checks, IN, LIKE/ILIKE, equality, and range comparisons.
  */
-const target = (sqlColumn: string) =>
-  sqlColumn.includes('(') ? sql.raw<unknown>(sqlColumn) : sql.ref<unknown>(sqlColumn)
-
-/** Parameterized IN clause using sql.join; an empty list is skipped. */
-function whereIn(
-  query: VariantQueryBuilder,
+export function translateBareColumnFilter(
   sqlColumn: string,
-  value: readonly unknown[]
-): VariantQueryBuilder {
-  if (value.length === 0) return query
-  const params = sql.join(value.map((v) => sql`${String(v)}`))
-  return query.where(sql<boolean>`${target(sqlColumn)} IN (${params})`)
-}
-
-/** Case-insensitive substring match. Blank input is skipped — LIKE '%%' excludes NULLs. */
-function whereLike(
-  query: VariantQueryBuilder,
-  sqlColumn: string,
-  value: string
-): VariantQueryBuilder {
-  if (value.trim() === '') return query
-  const pattern = `%${escapeLikePattern(value)}%`
-  return query.where(sql<boolean>`${target(sqlColumn)} COLLATE NOCASE LIKE ${pattern} ESCAPE '\\'`)
-}
-
-/** Range comparison — includeEmpty defaults to true (don't lose unannotated variants). */
-function whereRange(
-  query: VariantQueryBuilder,
-  sqlColumn: string,
-  operator: RangeOperator,
-  compValue: ComparableValue,
-  includeEmpty: boolean | undefined
-): VariantQueryBuilder {
-  const col = target(sqlColumn)
-  if (includeEmpty !== false) {
-    return query.where(({ or, eb }) => or([eb(col, 'is', null), eb(col, operator, compValue)]))
+  filterDef: { operator: string; value: unknown; includeEmpty?: boolean },
+  options: ColumnFilterTranslationOptions
+): string | null {
+  const { operator, value } = filterDef
+  if (isNullCheckOperator(operator)) {
+    return buildNullCheckSql(sqlColumn, operator, options.numericColumn, options.dialect)
   }
-  return query.where(col, operator, compValue)
+  if (operator === 'in' && Array.isArray(value)) {
+    if (value.length === 0) return null
+    const placeholders = value
+      .map((item) =>
+        options.bind(
+          typeof item === 'string' || typeof item === 'number'
+            ? coerceColumnFilterComparisonValue(item, options.numericColumn)
+            : String(item)
+        )
+      )
+      .join(', ')
+    return `${sqlColumn} IN (${placeholders})`
+  }
+  if (operator === 'like' && typeof value === 'string') {
+    if (value.trim() === '') return null
+    const pattern = `%${escapeLikePattern(value)}%`
+    const placeholder = options.bind(pattern)
+    if (options.dialect === 'postgres') {
+      const textColumn = options.numericColumn ? `${sqlColumn}::text` : sqlColumn
+      return `${textColumn} ILIKE ${placeholder} ESCAPE '\\'`
+    }
+    return `${sqlColumn} LIKE ${placeholder} ESCAPE '\\' COLLATE NOCASE`
+  }
+  if (
+    (operator === '=' || operator === '!=') &&
+    (typeof value === 'string' || typeof value === 'number')
+  ) {
+    const compValue = coerceColumnFilterComparisonValue(value, options.numericColumn)
+    return `${sqlColumn} ${operator} ${options.bind(compValue)}`
+  }
+  if (
+    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
+    (typeof value === 'string' || typeof value === 'number')
+  ) {
+    const compValue = coerceColumnFilterComparisonValue(value, options.numericColumn)
+    const comparison = `${sqlColumn} ${operator} ${options.bind(compValue)}`
+    const includeEmpty = filterDef.includeEmpty ?? options.includeEmptyDefault ?? true
+    return includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison
+  }
+  return null
 }
 
-/** Translate one bare-key column filter; unsupported operator/value shapes are ignored. */
+/** Translate one bare-key column filter using the shared dialect-aware translator. */
 function applyColumnFilter(
   query: VariantQueryBuilder,
   sqlColumn: string,
   filterDef: ColumnFilterDef,
   numericColumn: boolean
 ): VariantQueryBuilder {
-  const { operator, value } = filterDef
-  if (isNullCheckOperator(operator)) {
-    // `sqlColumn` comes from SORTABLE_COLUMNS (internal), so sql.raw is safe.
-    return query.where(
-      sql.raw<boolean>(buildNullCheckSql(sqlColumn, operator, numericColumn, 'sqlite'))
-    )
-  }
-  if (operator === 'in' && Array.isArray(value)) return whereIn(query, sqlColumn, value)
-  if (operator === 'like' && typeof value === 'string') return whereLike(query, sqlColumn, value)
-  if ((operator === '=' || operator === '!=') && isComparable(value)) {
-    // Exact match — NULLs excluded (user is looking for specific values)
-    const compValue = coerceComparisonValue(value, numericColumn)
-    return query.where(target(sqlColumn), operator, compValue)
-  }
-  if (
-    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-    isComparable(value)
-  ) {
-    const compValue = coerceComparisonValue(value, numericColumn)
-    return whereRange(query, sqlColumn, operator, compValue, filterDef.includeEmpty)
-  }
-  return query
+  const bound: unknown[] = []
+  const clause = translateBareColumnFilter(sqlColumn, filterDef, {
+    dialect: 'sqlite',
+    numericColumn,
+    bind: (v) => {
+      bound.push(v)
+      return PLACEHOLDER
+    }
+  })
+  return clause === null ? query : query.where(boundPredicate(clause, bound))
 }
 
 /** `info.<KEY>` filter (#538); key and values were validated by assertValidColumnFilterValues. */

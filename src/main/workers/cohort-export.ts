@@ -347,7 +347,7 @@ export function runCohortExport(
       for (const variant of chunk) {
         writtenRows += 1
         const key =
-          variant.id ??
+          (variant as { id?: unknown }).id ??
           `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
         const ann = annotations.get(key)
         const row: Record<string, unknown> = { ...variant, ...ann }
