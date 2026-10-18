@@ -37,6 +37,7 @@ vi.mock('../../../../src/renderer/src/composables/useShortlistQuery', () => {
     result: ref<ShortlistResult | null>(null),
     loading: ref(false),
     error: ref<Error | null>(null),
+    presetsLoading: ref(false),
     refresh
   }
   return {
@@ -117,6 +118,7 @@ function resetState(): void {
   state.result.value = null
   state.selectedPresetId.value = 1
   state.shortlistPresets.value = [{ id: 1, name: 'Tier 1 candidates' } as FilterPreset]
+  state.presetsLoading.value = false
   ;(state.refresh as ReturnType<typeof vi.fn>).mockClear()
   upsertPerCaseMock.mockClear()
 }
@@ -299,4 +301,30 @@ describe('ShortlistPanel', () => {
     // currently-selected preset name must appear in the rendered text.
     expect(wrapper.text()).toContain('Tier 1 candidates')
   })
+
+  it('renders empty-presets state instead of infinite skeleton when presets are empty (#663)', async () => {
+    state.shortlistPresets.value = []
+    state.selectedPresetId.value = null
+    state.result.value = null
+    state.loading.value = false
+    state.error.value = null
+    state.presetsLoading.value = false
+
+    const wrapper = mount(ShortlistPanel, {
+      props: { caseId: 1 },
+      global: { plugins: [vuetify] }
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="shortlist-empty-presets"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('No shortlist presets available')
+
+    // Clicking Refresh does not get stuck in skeleton
+    const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('Refresh'))
+    await refreshBtn?.trigger('click')
+    expect(state.refresh).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
+  })
 })
+

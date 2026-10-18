@@ -58,7 +58,7 @@ const emit = defineEmits<{
 const { api } = useApiService()
 
 const caseIdRef = toRef(props, 'caseId')
-const { shortlistPresets, selectedPresetId, result, loading, error, refresh } =
+const { shortlistPresets, selectedPresetId, result, loading, error, refresh, presetsLoading } =
   useShortlistQuery(caseIdRef)
 
 // Same loading presentation as the case/cohort tables (stale-while-revalidate)
@@ -66,9 +66,17 @@ const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   loading,
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
+
+const hasNoPresets = computed(
+  () => !loading.value && !presetsLoading?.value && shortlistPresets.value.length === 0
+)
+
 // Skeleton until the first result, not only while `loading`: the query starts
 // asynchronously, so gating on loading left the body empty for a frame or two.
-const showSkeleton = computed(() => result.value === null && error.value === null)
+const showSkeleton = computed(() => {
+  if (hasNoPresets.value) return false
+  return result.value === null && error.value === null
+})
 
 // Plain-language explanation of how the shortlist is built: every matching
 // variant is scored, the best N are shown (#537).
@@ -193,6 +201,27 @@ function dismissError(): void {
           <v-btn variant="text" size="small" @click="refresh">Retry</v-btn>
         </template>
       </v-alert>
+
+      <div
+        v-else-if="hasNoPresets"
+        class="pa-6 text-center text-medium-emphasis"
+        data-testid="shortlist-empty-presets"
+      >
+        <v-icon size="large" class="mb-2" :icon="mdiTuneVariant" />
+        <div class="text-body-1 font-weight-medium">No shortlist presets available</div>
+        <div class="text-caption mt-1 mb-3">
+          Configure a shortlist ranking preset to score and rank candidate variants.
+        </div>
+        <v-btn
+          v-if="canWrite"
+          variant="outlined"
+          size="small"
+          :prepend-icon="mdiTuneVariant"
+          @click="openRankingDialog(null)"
+        >
+          {{ SHORTLIST_RANKING_EDITOR.actions.editRanking }}
+        </v-btn>
+      </div>
 
       <div
         v-else-if="result && result.rows.length === 0"

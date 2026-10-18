@@ -56,6 +56,7 @@ export function useShortlistQuery(caseId: Ref<number>) {
 
   // Shortlist presets only; the filter presets of the drawer are a separate list.
   const shortlistPresets = presetStore.visibleShortlistPresets
+  const presetsLoading = presetStore.loading
 
   const selectedPresetId = ref<number | null>(null)
 
@@ -187,12 +188,21 @@ export function useShortlistQuery(caseId: Ref<number>) {
     unsubscribeAnnotations()
   })
 
+  async function refresh(): Promise<void> {
+    if (shortlistPresets.value.length === 0) {
+      await presetStore.loadPresets()
+      return
+    }
+    await fetch()
+  }
+
   return {
     shortlistPresets,
     selectedPresetId,
     result,
     loading,
     error,
-    refresh: fetch
+    refresh,
+    presetsLoading
   }
 }
