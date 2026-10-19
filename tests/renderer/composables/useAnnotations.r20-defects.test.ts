@@ -1,3 +1,4 @@
+/* eslint-disable vue/one-component-per-file -- test hosts */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, effectScope, ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -6,13 +7,18 @@ import { useDatabaseStore } from '@renderer/stores/databaseStore'
 import { useBulkTriageSelection } from '@renderer/composables/useBulkTriageSelection'
 import { createScopedAnnotationOps } from '@renderer/composables/annotation-scoped-ops'
 import {
+  allocateMutationId,
   annotationCache,
   beginAnnotationRequest,
+  bumpWriteVersion,
   cacheSet,
   ensurePerCaseSlotOwner,
   getPerCaseByVariantId,
+  getWriteVersion,
   inFlightMutations,
   perCaseSlotKey,
+  perCaseVersionSlot,
+  removeInFlightMutation,
   resetAnnotationState,
   setCachedVariantId,
   setPerCaseByVariantId,
@@ -190,5 +196,92 @@ describe('Round 20 regression defects', () => {
     d.resolve(mockPerCase(11, { acmg_classification: 'Likely pathogenic' }))
     await p
     eff.stop()
+  })
+
+  it('Round 21 Defect 1: allocateMutationId provides unique IDs preventing cross-path removal', () => {
+    const id1 = allocateMutationId()
+    const id2 = allocateMutationId()
+    expect(id2).toBeGreaterThan(id1)
+
+    const slotKey = perCaseSlotKey(1, 11, key)
+    inFlightMutations.set(slotKey, [
+      { id: id1, fieldGroup: 'acmg', writeVer: 1, patch: { acmg_classification: 'Pathogenic' } },
+      { id: id2, fieldGroup: 'star', writeVer: 2, patch: { starred: 1 } }
+    ])
+
+    removeInFlightMutation(slotKey, id2)
+    const remaining = inFlightMutations.get(slotKey)
+    expect(remaining?.length).toBe(1)
+    expect(remaining?.[0].id).toBe(id1)
+  })
+
+  it('Round 21 Defect 2: uncached write registers in inFlightMutations and preserves newer bulk classification', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    ensurePerCaseSlotOwner(key, 1, 11)
+    expect(annotationCache.value.has(key)).toBe(false)
+
+    const d = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase).mockReturnValue(d.promise as never)
+    vi.mocked(api.annotations.batchUpsertPerCase).mockResolvedValue({ updatedCount: 1 } as never)
+    vi.mocked(api.annotations.batchGet).mockResolvedValue({
+      [key]: { global: null, perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' }) }
+    } as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const pComment = ops.upsertComment(scope, coords, 'test note')
+
+    const slotKey = perCaseSlotKey(1, 11, key)
+    expect(inFlightMutations.has(slotKey)).toBe(true)
+
+    const eff = effectScope()
+    const app = createApp({})
+    app.provide(AppStateKey, {
+      selectedPanelVariant: ref(null),
+      selectedCaseId: ref(1)
+    })
+    const bulk = app.runWithContext(() =>
+      eff.run(() =>
+        useBulkTriageSelection({
+          items: () => [{ id: 11, ...coords }],
+          getItemId: (r: { id: number }) => r.id,
+          caseId: 1,
+          genomeBuild: 'GRCh38'
+        })
+      )
+    )!
+    bulk.toggleSelectAll(true)
+    await bulk.applyBulkTriage({ acmg_classification: 'Pathogenic' })
+
+    d.resolve(mockPerCase(11, { per_case_comment: 'test note', acmg_classification: 'Benign' }))
+    await pComment
+
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(key)?.perCase?.per_case_comment).toBe('test note')
+    eff.stop()
+  })
+
+  it('Round 21 Defect 3: sibling row version bumps do not interfere with pending toggles', () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const vSlot11 = perCaseVersionSlot(1, 11, 'star')
+    const vSlot12 = perCaseVersionSlot(1, 12, 'star')
+
+    const verA = bumpWriteVersion(key, vSlot11)
+    expect(verA).toBe(1)
+
+    const verB = bumpWriteVersion(key, vSlot12)
+    expect(verB).toBe(1)
+
+    expect(getWriteVersion(key, vSlot11)).toBe(1)
+    expect(getWriteVersion(key, vSlot12)).toBe(1)
+
+    const bulkVer = bumpWriteVersion(key, 'perCase:star')
+    expect(bulkVer).toBe(2)
+    expect(getWriteVersion(key, vSlot11)).toBe(2)
+    expect(getWriteVersion(key, vSlot12)).toBe(2)
+
+    const verA2 = bumpWriteVersion(key, vSlot11)
+    expect(verA2).toBe(3)
+    expect(getWriteVersion(key, vSlot11)).toBe(3)
+    expect(getWriteVersion(key, vSlot12)).toBe(2)
   })
 })

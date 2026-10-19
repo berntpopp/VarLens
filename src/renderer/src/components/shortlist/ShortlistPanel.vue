@@ -41,6 +41,7 @@ import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlis
 import type { CaseVariantAnnotation } from '../../../../shared/types/database-entities'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import {
+  allocateMutationId,
   annotationCache,
   applyConfirmedFieldPatches,
   bumpKeyVersion,
@@ -144,7 +145,6 @@ const shortlistExplanation = computed(() => {
 })
 
 const pendingStarByRow = new Map<string, { target: boolean; token: number; writeVer: number }>()
-let nextStarToggleToken = 0
 
 /**
  * Toggle the star annotation for a row. Writes through
@@ -176,7 +176,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const nextStarred = !currentStarred
   ensurePerCaseSlotOwner(key, row.case_id, row.id)
   const writeVer = bumpWriteVersion(key, vSlot)
-  const toggleToken = ++nextStarToggleToken
+  const toggleToken = allocateMutationId()
   pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
   const slotKey = perCaseSlotKey(row.case_id, row.id, key)
   const inFlightList = inFlightMutations.get(slotKey) ?? []

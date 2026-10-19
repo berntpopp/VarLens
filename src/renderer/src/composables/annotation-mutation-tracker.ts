@@ -27,8 +27,14 @@ export function perCaseVersionSlot(
   return `perCase:${caseId}:${variantId}:${fg}`
 }
 
+let nextMutationId = 0
+export function allocateMutationId(): number {
+  return ++nextMutationId
+}
+
 const issuedWriteVersions = new Map<string, number>()
 const confirmedWriteVersions = new Map<string, number>()
+const maxVariantWriteVersions = new Map<string, number>()
 export const confirmedFieldPatches = new Map<
   string,
   Partial<Record<'star' | 'acmg' | 'comment', SlotPatch>>
@@ -41,7 +47,16 @@ export function bumpWriteVersion(key: string, slot: string = 'perCase'): number 
   if (parts.length === 4 && parts[0] === 'perCase') {
     const coordKey = `perCase:${parts[3]}:${key}`
     base = Math.max(base, issuedWriteVersions.get(coordKey) ?? 0)
-    issuedWriteVersions.set(coordKey, base + 1)
+    const next = base + 1
+    issuedWriteVersions.set(k, next)
+    maxVariantWriteVersions.set(
+      coordKey,
+      Math.max(maxVariantWriteVersions.get(coordKey) ?? 0, next)
+    )
+    return next
+  }
+  if (parts.length === 2 && parts[0] === 'perCase') {
+    base = Math.max(base, maxVariantWriteVersions.get(k) ?? 0)
   }
   const next = base + 1
   issuedWriteVersions.set(k, next)
@@ -194,8 +209,10 @@ export function pruneInFlightMutationsOnSuccess(
 }
 
 export function clearMutationTracker(): void {
+  nextMutationId = 0
   issuedWriteVersions.clear()
   confirmedWriteVersions.clear()
+  maxVariantWriteVersions.clear()
   confirmedFieldPatches.clear()
   confirmedBases.clear()
   inFlightMutations.clear()

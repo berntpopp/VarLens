@@ -10,6 +10,7 @@ import type { CaseVariantAnnotation } from '../../../shared/types/database-entit
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import {
+  allocateMutationId,
   annotationCache,
   applyConfirmedFieldPatches,
   beginAnnotationRequest,
@@ -108,8 +109,6 @@ function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): b
   return true
 }
 
-let nextMutationId = 0
-
 function upsert(
   client: WindowAPI,
   scope: AnnotationWriteScope,
@@ -163,20 +162,21 @@ async function mutate(
   const plan = buildPlan(curSlot, baseSlot)
 
   const writeVer = bumpWriteVersion(key, vSlot)
-  const mutationId = ++nextMutationId
+  const mutationId = allocateMutationId()
+
+  const list = inFlightMutations.get(slotKey) ?? []
+  list.push({
+    id: mutationId,
+    fieldGroup,
+    writeVer,
+    patch: { ...plan.optimistic, ...slotIdentity(scope) }
+  })
+  inFlightMutations.set(slotKey, list)
 
   if (current) {
     if (!confirmedBases.has(slotKey)) {
       confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
     }
-    const list = inFlightMutations.get(slotKey) ?? []
-    list.push({
-      id: mutationId,
-      fieldGroup,
-      writeVer,
-      patch: { ...plan.optimistic, ...slotIdentity(scope) }
-    })
-    inFlightMutations.set(slotKey, list)
     writeSlot(current, scope, computeOptimisticSlot(confirmedBases.get(slotKey) ?? null, list))
     triggerAnnotationCache()
   }
@@ -257,7 +257,7 @@ async function mutate(
           inFlightMutations.delete(slotKey)
           confirmedFieldPatches.delete(slotKey)
         }
-      } else if (target) {
+      } else if (target && current) {
         rollBackSlot(target, scope, plan.rollback, baseSlot)
       }
     }
