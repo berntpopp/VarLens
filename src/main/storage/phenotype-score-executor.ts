@@ -28,11 +28,15 @@ function scoreScope(task: StorageReadTask): number | null | undefined {
   return undefined
 }
 
+export interface PhenotypeScoreReadExecutor extends StorageReadExecutor {
+  ensureCaseScores(caseId: number | null): Promise<void>
+}
+
 export function withPhenotypeScores(
   read: StorageReadExecutor,
   write: StorageWriteExecutor,
   dataKey: () => string | null = currentHpoDataKey
-): StorageReadExecutor {
+): PhenotypeScoreReadExecutor {
   // Concurrent reads of one case and profile share its rescore instead of scoring twice.
   const pending = new Map<string, Promise<void>>()
   let cohortPass: Promise<void> | null = null
@@ -83,6 +87,7 @@ export function withPhenotypeScores(
     )
 
   return {
+    ensureCaseScores: ensureLogged,
     async execute(task) {
       const scope = scoreScope(task)
       if (scope === null) {
@@ -91,6 +96,24 @@ export function withPhenotypeScores(
         await ensureLogged(scope)
       }
       return read.execute(task)
+    }
+  }
+}
+
+export function withPhenotypeWriteScores(
+  write: StorageWriteExecutor,
+  read: PhenotypeScoreReadExecutor
+): StorageWriteExecutor {
+  return {
+    async execute(task) {
+      const result = await write.execute(task)
+      if (
+        task.type === 'case-metadata:assignHpoTerm' ||
+        task.type === 'case-metadata:removeHpoTerm'
+      ) {
+        await read.ensureCaseScores(task.params[0])
+      }
+      return result
     }
   }
 }

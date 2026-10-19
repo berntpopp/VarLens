@@ -4,7 +4,7 @@
  * score. The explanation tooltip is mounted on the first hover or focus only,
  * and its explanation fetched once per case and gene (usePhenotypeColumn.ts).
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { HpoExplanation } from '../../../../shared/types/hpo-profile'
 import { EmptyPlaceholder } from '../table-cells'
 import PhenotypeExplanation from '../shortlist/PhenotypeExplanation.vue'
@@ -23,6 +23,20 @@ const props = defineProps<{
 const armed = ref(false)
 const open = ref(false)
 const explanation = ref<HpoExplanation | null | undefined>(undefined)
+
+watch(
+  () => [
+    props.caseId,
+    props.row.gene_symbol,
+    props.row.phenotype_score,
+    props.row.phenotype_disease
+  ],
+  () => {
+    armed.value = false
+    open.value = false
+    explanation.value = undefined
+  }
+)
 
 function arm(): void {
   const gene = props.row.gene_symbol

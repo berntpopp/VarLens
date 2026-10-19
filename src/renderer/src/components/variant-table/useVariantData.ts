@@ -179,6 +179,15 @@ export function useVariantData(options: UseVariantDataOptions) {
   // Work requested while hidden (KeepAlive / Shortlist tab) is replayed on show (P0-3).
   const { requestReload, markPending, isPending } = useDeferredReload(active, invalidateAndReload)
 
+  const refreshCurrentPage = async (): Promise<void> => {
+    pageCursors.clear()
+    if (!active.value) {
+      markPending()
+      return
+    }
+    await reloadCurrentPage()
+  }
+
   // Reset state on case change; unfiltered count is fetched with the first page load
   watch(
     caseId,
@@ -186,6 +195,7 @@ export function useVariantData(options: UseVariantDataOptions) {
       caseGeneration++
       selectedVariantId.value = null
       clearAllColumnFilters()
+      pageCursors.clear()
 
       if (newCaseId !== undefined && newCaseId !== 0) {
         if (import.meta.env.DEV) {
@@ -291,7 +301,7 @@ export function useVariantData(options: UseVariantDataOptions) {
 
     // Methods
     loadVariants,
-    reloadCurrentPage,
+    reloadCurrentPage: refreshCurrentPage,
     buildQueryFilters,
     resetSort,
     getRowProps,

@@ -29,7 +29,7 @@ import { PostgresVariantReadRepository } from './PostgresVariantReadRepository'
 import type { StorageImportExecutor } from '../import-executor'
 import type { StorageReadExecutor } from '../read-executor'
 import { PostgresWriteExecutor } from './PostgresWriteExecutor'
-import { withPhenotypeScores } from '../phenotype-score-executor'
+import { withPhenotypeScores, withPhenotypeWriteScores } from '../phenotype-score-executor'
 import {
   buildPostgresClientConfig,
   buildPostgresConnectionLabel,
@@ -182,7 +182,7 @@ export class PostgresStorageSession implements StorageSession {
       rows: exportRows
     })
     const buildReviews = new PostgresBuildReviewRepository(options.pool, options.config.schema)
-    this.writeExecutor = new PostgresWriteExecutor(caseMetadata, this.caseLifecycle, {
+    const rawWriteExecutor = new PostgresWriteExecutor(caseMetadata, this.caseLifecycle, {
       tags,
       annotations,
       commentsMetrics,
@@ -213,7 +213,9 @@ export class PostgresStorageSession implements StorageSession {
       caseMetadata,
       variants
     })
-    this.readExecutor = withPhenotypeScores(this.postgresReadExecutor, this.writeExecutor)
+    const scoreReadExecutor = withPhenotypeScores(this.postgresReadExecutor, rawWriteExecutor)
+    this.readExecutor = scoreReadExecutor
+    this.writeExecutor = withPhenotypeWriteScores(rawWriteExecutor, scoreReadExecutor)
     this.importExecutor = new PostgresImportExecutor({
       schema: options.config.schema,
       // buildPostgresClientConfig always sets connectionString = config.url (a string),

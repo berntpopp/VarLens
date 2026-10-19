@@ -18,7 +18,10 @@ import {
   buildHpoSimilarityDb,
   openHpoGeneScorer
 } from '../../../src/main/services/phenotype/hpo-similarity-db'
-import { withPhenotypeScores } from '../../../src/main/storage/phenotype-score-executor'
+import {
+  withPhenotypeScores,
+  withPhenotypeWriteScores
+} from '../../../src/main/storage/phenotype-score-executor'
 import type { StorageReadExecutor } from '../../../src/main/storage/read-executor'
 import type { StorageWriteExecutor } from '../../../src/main/storage/write-executor'
 import { SqliteReadExecutor } from '../../../src/main/storage/sqlite/SqliteReadExecutor'
@@ -413,5 +416,36 @@ describe('phenotype score executor', () => {
     expect(await read.execute(task as never)).toBe('rows')
     expect(scoreCalls).toBe(0)
     expect(writeCalls).toBe(0)
+  })
+
+  it('recalculates and stores phenotype scores immediately on assignHpoTerm and removeHpoTerm', async () => {
+    const writtenTasks: string[] = []
+    const rawWrite: StorageWriteExecutor = {
+      execute: async (task) => {
+        writtenTasks.push(task.type)
+        return 'ok'
+      }
+    }
+    const read = withPhenotypeScores(
+      fakeRead(async () => [
+        { geneSymbol: 'GENE1', score: 0.75, diseaseId: 'OMIM:1', diseaseLabel: 'D1' }
+      ]),
+      rawWrite,
+      () => 'hpo-1'
+    )
+    const wrappedWrite = withPhenotypeWriteScores(rawWrite, read)
+
+    await wrappedWrite.execute({
+      type: 'case-metadata:assignHpoTerm',
+      params: [1, 'HP:1', 'Label']
+    })
+    expect(writtenTasks).toEqual(['case-metadata:assignHpoTerm', 'phenotype:replaceScores'])
+
+    writtenTasks.length = 0
+    await wrappedWrite.execute({
+      type: 'case-metadata:removeHpoTerm',
+      params: [1, 'HP:1']
+    })
+    expect(writtenTasks).toEqual(['case-metadata:removeHpoTerm', 'phenotype:replaceScores'])
   })
 })

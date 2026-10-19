@@ -9,6 +9,7 @@ WEB_DEV_PORT ?= 8787
 WEB_DEV_SCHEMA_SLUG ?= $(shell basename "$$(pwd)" | tr '[:upper:].-' '[:lower:]__' | sed 's/[^a-z0-9_]/_/g; s/^[^a-z_]/web_/')
 WEB_DEV_SCHEMA ?= web_dev_$(WEB_DEV_SCHEMA_SLUG)
 WEB_DEV_RECOVERY_KEY_DIR ?= /tmp/varlens-web-dev
+WEB_DEV_HPO_DB_PATH ?= $(CURDIR)/.cache/hpo/hpo_similarity.db
 WEB_DEV_API_LATENCY_MS ?= 75
 WEB_DEV_ADMIN_USERNAME ?= admin
 WEB_DEV_ENV_FILE ?= .env.web.local
@@ -84,6 +85,12 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 		node -e "const { Client } = require('pg'); const client = new Client({ connectionString: process.env.VARLENS_PG_URL }); client.connect().then(() => client.end()).then(() => process.exit(0)).catch(() => process.exit(1));" \
 		&& echo "Postgres reachable at $$(node -e 'const url = new URL(process.env.VARLENS_PG_URL); console.log(url.host)') - skipping pg-up." \
 		|| $(MAKE) pg-up
+	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; \
+		hpo_db="$${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}"; \
+		if [ ! -f "$$hpo_db" ]; then \
+			echo "Building HPO similarity DB at $$hpo_db..."; \
+			npm run rebuild:node && npm run build:hpo-db -- --out "$$hpo_db"; \
+		fi
 	VARLENS_WEB_BASE=/ npm run build:web
 	@echo ""
 	@echo "Starting VarLens web mode:"
@@ -92,6 +99,7 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 	@echo "  Postgres: .env.postgres.local"
 	@if [ -f "$(WEB_DEV_ENV_FILE)" ]; then echo "  Web env:  $(WEB_DEV_ENV_FILE)"; else echo "  Web env:  $(WEB_DEV_ENV_FILE) (not present; using defaults)"; fi
 	@echo "  Schema:   $(WEB_DEV_SCHEMA)"
+	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  HPO DB:   $${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}"
 	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  Secrets:  $${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}"
 	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  API delay: $${VARLENS_WEB_API_LATENCY_MS:-$(WEB_DEV_API_LATENCY_MS)}ms"
 	@echo "  Dev admin bootstrap: set VARLENS_ADMIN_PASSWORD_HASH for first run"
@@ -104,6 +112,7 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 		VARLENS_WEB_API_LATENCY_MS="$${VARLENS_WEB_API_LATENCY_MS:-$(WEB_DEV_API_LATENCY_MS)}" \
 		VARLENS_PG_SCHEMA="$(WEB_DEV_SCHEMA)" \
 		VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
+		VARLENS_HPO_DB_PATH="$${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}" \
 		VARLENS_ADMIN_USERNAME="$${VARLENS_ADMIN_USERNAME:-$(WEB_DEV_ADMIN_USERNAME)}" \
 		VARLENS_ADMIN_PASSWORD_HASH="$${VARLENS_ADMIN_PASSWORD_HASH:-}" \
 		node out/web/server.cjs
