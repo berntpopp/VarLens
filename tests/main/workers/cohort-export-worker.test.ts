@@ -186,4 +186,26 @@ describe('cohort export worker', () => {
     expect(existsSync(existingTemp)).toBe(true)
     expect(readFileSync(existingTemp, 'utf8')).toBe('pre-existing file content')
   })
+
+  it('cleans up reserved temp file and invokes onError when Worker initialization throws synchronously', async () => {
+    const outputFilePath = join(dir, 'fail-launch.xlsx')
+    const tempFilePath = join(dir, 'fail-launch.part')
+
+    const client = new ExportWorkerClient('invalid-worker-path')
+    const err = await new Promise<string>((resolvePromise) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        tempFilePath,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (e) => resolvePromise(e),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(err).toBeTruthy()
+    expect(existsSync(tempFilePath)).toBe(false)
+  })
 })

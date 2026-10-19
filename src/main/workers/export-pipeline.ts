@@ -16,6 +16,7 @@ import {
   existsSync,
   fchmodSync,
   fstatSync,
+  lstatSync,
   openSync,
   rmSync,
   statSync
@@ -185,18 +186,31 @@ export async function streamToExportFile(
       }
 
       if (tempFilePrecreated !== undefined && tempFilePrecreated !== false) {
+        if (lstatSync(tempFilePath).isSymbolicLink()) {
+          throw new Error('Refusing to write to unexpected or replaced temporary export file')
+        }
         const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
         fd = openSync(tempFilePath, openFlags)
         const st = fstatSync(fd)
         const isObjectExpected =
           typeof tempFilePrecreated === 'object' && tempFilePrecreated !== null
+        const expectedDev = isObjectExpected
+          ? 'dev' in tempFilePrecreated
+            ? tempFilePrecreated.dev
+            : (tempFilePrecreated as { tempFileDev?: number }).tempFileDev
+          : undefined
+        const expectedIno = isObjectExpected
+          ? 'ino' in tempFilePrecreated
+            ? tempFilePrecreated.ino
+            : (tempFilePrecreated as { tempFileIno?: number }).tempFileIno
+          : undefined
         const identityMismatch =
           !st.isFile() ||
-          (isObjectExpected &&
-            (st.dev !== tempFilePrecreated.dev || st.ino !== tempFilePrecreated.ino))
+          (expectedDev !== undefined && st.dev !== expectedDev) ||
+          (expectedIno !== undefined && st.ino !== expectedIno)
 
         if (identityMismatch) {
-          throw new Error('Temporary export file identity mismatch')
+          throw new Error('Refusing to write to unexpected or replaced temporary export file')
         }
         createdTempFile = true
         fchmodSync(fd, targetMode)

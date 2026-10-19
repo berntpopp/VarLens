@@ -298,6 +298,7 @@ describe.skipIf(!RUN_PG)('phenotype column on PostgreSQL', () => {
     const schema = `vt_phenocol_${randomBytes(4).toString('hex')}`
     const pool = new Pool({ connectionString: PG_URL, max: 4 })
     await pool.query(`CREATE SCHEMA "${schema}"`)
+    let read: PostgresReadExecutor | undefined
     try {
       await new PostgresMigrationRunner(pool, schema, POSTGRES_MIGRATIONS).migrate()
       const summary = new PostgresCohortSummaryRepository()
@@ -325,13 +326,14 @@ describe.skipIf(!RUN_PG)('phenotype column on PostgreSQL', () => {
         caseIds.push(id)
       }
       const caseMetadata = new PostgresCaseMetadataRepository(pool, schema)
+      read = new PostgresReadExecutor({
+        variants: new PostgresVariantReadRepository(pool, schema),
+        cohort: new PostgresCohortRepository(pool, schema),
+        caseMetadata
+      } as never)
       const backend: Backend = {
         caseIds,
-        read: new PostgresReadExecutor({
-          variants: new PostgresVariantReadRepository(pool, schema),
-          cohort: new PostgresCohortRepository(pool, schema),
-          caseMetadata
-        } as never),
+        read,
         write: new PostgresWriteExecutor(caseMetadata, {} as never, {} as never),
         storedRows: async (caseId) =>
           Number(
@@ -342,10 +344,13 @@ describe.skipIf(!RUN_PG)('phenotype column on PostgreSQL', () => {
               )
             ).rows[0].n
           ),
-        close: async () => undefined
+        close: async () => {
+          await read?.close()
+        }
       }
       expect(rounded(await scenario(backend))).toEqual(rounded(expected))
     } finally {
+      await read?.close().catch(() => undefined)
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`)
       await pool.end()
     }

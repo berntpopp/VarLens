@@ -114,58 +114,67 @@ export class ExportWorkerClient {
           closeSync(fd)
         }
       } catch (err) {
-        if (this.currentTempFilePath !== null) {
-          try {
-            rmSync(this.currentTempFilePath, { force: true })
-          } catch {
-            // ignore
-          }
-          this.currentTempFilePath = null
-        }
+        this.cleanupTempFile()
         hooks.onError((err as Error).message)
         return
       }
     }
 
     this.hooks = hooks
-    this.worker = new Worker(this.workerPath)
 
-    this.worker.on('message', (msg: ExportWorkerMessage) => {
-      switch (msg.type) {
-        case 'progress':
-          hooks.onProgress(msg.current, msg.total)
-          break
-        case 'complete':
-          this.currentTempFilePath = null
-          this.cleanup()
-          hooks.onComplete(msg.filePath, msg.rowCount)
-          break
-        case 'error':
-          this.cleanup()
-          hooks.onError(msg.error)
-          break
-      }
-    })
+    try {
+      this.worker = new Worker(this.workerPath)
 
-    this.worker.on('error', (err: Error) => {
-      mainLogger.error(`Export worker error: ${err.message}`, 'ExportWorkerClient')
-      if (this.worker === null) return
-      this.cleanup()
-      hooks.onError(err.message)
-    })
+      this.worker.on('message', (msg: ExportWorkerMessage) => {
+        switch (msg.type) {
+          case 'progress':
+            hooks.onProgress(msg.current, msg.total)
+            break
+          case 'complete':
+            this.currentTempFilePath = null
+            this.cleanup()
+            hooks.onComplete(msg.filePath, msg.rowCount)
+            break
+          case 'error':
+            this.cleanup()
+            hooks.onError(msg.error)
+            break
+        }
+      })
 
-    this.worker.on('exit', (code) => {
-      if (code !== 0 && this.worker !== null) {
-        mainLogger.error(`Export worker exited with code ${code}`, 'ExportWorkerClient')
+      this.worker.on('error', (err: Error) => {
+        mainLogger.error(`Export worker error: ${err.message}`, 'ExportWorkerClient')
+        if (this.worker === null) return
         this.cleanup()
-        hooks.onError(`Export worker exited with code ${code}`)
-      }
-    })
+        hooks.onError(err.message)
+      })
 
-    this.worker.postMessage({
-      ...message,
-      ...(tempFilePath !== undefined ? { tempFilePath, tempFilePrecreated } : {})
-    })
+      this.worker.on('exit', (code) => {
+        if (code !== 0 && this.worker !== null) {
+          mainLogger.error(`Export worker exited with code ${code}`, 'ExportWorkerClient')
+          this.cleanup()
+          hooks.onError(`Export worker exited with code ${code}`)
+        }
+      })
+
+      this.worker.postMessage({
+        ...message,
+        ...(tempFilePath !== undefined ? { tempFilePath, tempFilePrecreated } : {})
+      })
+    } catch (err) {
+      if (this.worker !== null) {
+        try {
+          void this.worker.terminate()
+        } catch {
+          // ignore
+        }
+        this.worker = null
+      }
+      this.hooks = null
+      this.cleanupTempFile()
+      hooks.onError(err instanceof Error ? err.message : String(err))
+      return
+    }
   }
 
   /**
@@ -180,19 +189,20 @@ export class ExportWorkerClient {
     hooks?.onCancelled?.()
   }
 
-  private cleanup(): void {
-    this.hooks = null
+  private cleanupTempFile(): void {
     const tempPath = this.currentTempFilePath
     this.currentTempFilePath = null
-    const removeTempFile = (): void => {
-      if (tempPath !== null) {
-        try {
-          rmSync(tempPath, { force: true })
-        } catch {
-          // ignore cleanup errors
-        }
+    if (tempPath !== null) {
+      try {
+        rmSync(tempPath, { force: true })
+      } catch {
+        // ignore cleanup errors
       }
     }
+  }
+
+  private cleanup(): void {
+    this.hooks = null
     if (this.worker !== null) {
       const worker = this.worker
       this.worker = null
@@ -203,30 +213,23 @@ export class ExportWorkerClient {
           mainLogger.warn(`Export worker terminate failed: ${err.message}`, 'ExportWorkerClient')
         })
         .finally(() => {
-          removeTempFile()
+          this.cleanupTempFile()
         })
     } else {
-      removeTempFile()
+      this.cleanupTempFile()
     }
   }
 
   async destroy(): Promise<void> {
+    this.hooks = null
+    this.cleanupTempFile()
     if (this.worker !== null) {
       const worker = this.worker
       this.worker = null
-      this.hooks = null
-      const tempPath = this.currentTempFilePath
-      this.currentTempFilePath = null
       try {
         await worker.terminate()
-      } finally {
-        if (tempPath !== null) {
-          try {
-            rmSync(tempPath, { force: true })
-          } catch {
-            // ignore
-          }
-        }
+      } catch {
+        // ignore
       }
     }
   }

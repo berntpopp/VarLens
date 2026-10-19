@@ -59,8 +59,6 @@ export class PostgresHpoWorkerClient {
       worker = new Worker(bootstrapCode, { eval: true })
     }
 
-    worker.unref()
-
     worker.on('message', (response: HpoWorkerResponse) => {
       if (this.worker !== worker) return
       const handler = this.pending.get(response.id)
@@ -95,6 +93,8 @@ export class PostgresHpoWorkerClient {
         }
       }
     })
+
+    worker.unref()
 
     this.worker = worker
     return worker

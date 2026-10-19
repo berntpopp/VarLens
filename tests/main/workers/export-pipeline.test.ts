@@ -505,12 +505,16 @@ describe('runExportPipeline — CSV', () => {
       await runExportPipeline(params)
       expect(existsSync(output)).toBe(true)
       const stat1 = statSync(output)
-      expect(stat1.mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect(stat1.mode & 0o777).toBe(0o600)
+      }
 
       // Overwrite existing file
       await runExportPipeline(params)
       const stat2 = statSync(output)
-      expect(stat2.mode & 0o777).toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect(stat2.mode & 0o777).toBe(0o600)
+      }
     })
 
     it('closes db cleanly without busy query error after runExportPipeline rejects with EEXIST (CSV and XLSX)', async () => {
@@ -583,7 +587,9 @@ describe('runExportPipeline — CSV', () => {
         tempFilePrecreated: true
       })
 
-      await expect(runExportPipeline(params)).rejects.toThrow()
+      await expect(runExportPipeline(params)).rejects.toThrow(
+        /Refusing to write to unexpected or replaced temporary export file/
+      )
       expect(existsSync(symlinkTarget)).toBe(true)
       expect(readFileSync(symlinkTarget, 'utf8')).toBe('secret untouched content')
     })
@@ -600,10 +606,28 @@ describe('runExportPipeline — CSV', () => {
       })
 
       await expect(runExportPipeline(params)).rejects.toThrow(
-        /Temporary export file identity mismatch/
+        /Refusing to write to unexpected or replaced temporary export file/
       )
       expect(existsSync(differentFile)).toBe(true)
       expect(readFileSync(differentFile, 'utf8')).toBe('original file content')
+    })
+
+    it('rejects without modifying or deleting target when tempFilePath has mismatched tempFileDev/tempFileIno', async () => {
+      const differentFile = join(tmpDir, 'different-file-alt-keys.part')
+      writeFileSync(differentFile, 'original file content alt keys')
+
+      const output = join(tmpDir, 'mismatch-out-alt.csv')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath: differentFile,
+        tempFilePrecreated: { tempFileDev: 999999, tempFileIno: 888888 } as never
+      })
+
+      await expect(runExportPipeline(params)).rejects.toThrow(
+        /Refusing to write to unexpected or replaced temporary export file/
+      )
+      expect(existsSync(differentFile)).toBe(true)
+      expect(readFileSync(differentFile, 'utf8')).toBe('original file content alt keys')
     })
 
     it('holds read transaction across entire iterateAnnotatedRows so trailing partial chunk is not polluted by mid-export commits', () => {
