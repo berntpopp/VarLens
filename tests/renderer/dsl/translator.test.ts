@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { translateAst, serializeColumnFilters } from '../../../src/renderer/src/dsl/translator'
+import {
+  translateAst,
+  serializeColumnFilters,
+  normalizeClinicalPaste
+} from '../../../src/renderer/src/dsl/translator'
 import { parseDsl } from '../../../src/renderer/src/dsl/parser'
 import type { DslNode } from '../../../src/renderer/src/dsl/types'
 
@@ -145,6 +149,29 @@ describe('translateAst Boolean fidelity (#526)', () => {
     expect(result.errors).toEqual([])
     expect(result.columnFilters).toEqual(expected)
   })
+
+  it('combines pos lower and upper bounds into a single range filter (#683)', () => {
+    const result = translate('pos:>=:43044295 AND pos:<=:43125483')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.pos).toEqual({
+      operator: 'between',
+      value: [43044295, 43125483]
+    })
+  })
+
+  it('translates normalized clinical coordinate interval to chr and pos bounds (#683)', () => {
+    const input = normalizeClinicalPaste('chr17:43,044,295-43,125,483')
+    const result = translate(input)
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.chr).toEqual({
+      operator: 'in',
+      value: ['chr17', '17']
+    })
+    expect(result.columnFilters.pos).toEqual({
+      operator: 'between',
+      value: [43044295, 43125483]
+    })
+  })
 })
 
 describe('translateAst — chromosome', () => {
@@ -183,5 +210,16 @@ describe('serializeColumnFilters', () => {
     const second = parseDsl(text)
     expect(second.errors).toEqual([])
     expect(translateAst(second.ast!).columnFilters).toEqual(first.columnFilters)
+  })
+
+  it('round-trips clinical interval with between operator (#683)', () => {
+    const filters = {
+      chr: { operator: 'in' as const, value: ['chr17', '17'] },
+      pos: { operator: 'between' as const, value: [43044295, 43125483] as [number, number] }
+    }
+    const text = serializeColumnFilters(filters)
+    const second = parseDsl(text)
+    expect(second.errors).toEqual([])
+    expect(translateAst(second.ast!).columnFilters).toEqual(filters)
   })
 })

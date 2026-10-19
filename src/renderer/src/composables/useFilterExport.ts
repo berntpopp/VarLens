@@ -5,14 +5,28 @@ import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
-import type { VariantFilter } from '../../../shared/types/api'
+import type { BatchAnnotationKey, Variant, VariantFilter } from '../../../shared/types/api'
+import {
+  formatSignOutTable,
+  variantToSignOutRow,
+  type SignOutRow
+} from '../utils/sign-out-clipboard'
+
+export { formatSignOutTable, variantToSignOutRow, type SignOutRow }
+
+export interface CopySignOutResult {
+  success: boolean
+  count: number
+  format?: 'markdown' | 'tsv'
+  error?: string
+}
 
 async function getVariantExportBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('export.variants')
 }
 
 /**
- * Composable for variant export functionality.
+ * Composable for variant export and clinical sign-out clipboard functionality.
  * Extracted from useFilterState to separate export concerns.
  */
 export function useFilterExport(
@@ -82,5 +96,87 @@ export function useFilterExport(
     }
   }
 
-  return { exportToExcel }
+  const copySignOutTable = async (
+    caseId: number,
+    format: 'markdown' | 'tsv'
+  ): Promise<CopySignOutResult> => {
+    if (!api) {
+      logService.warn('API not available - running outside Electron', 'export')
+      return { success: false, count: 0, error: 'API not available' }
+    }
+
+    try {
+      const [starredRes, acmgRes] = await Promise.all([
+        api.variants.query(
+          caseId,
+          { starred_only: true, annotation_scope: 'all' } as Omit<VariantFilter, 'case_id'>,
+          0,
+          500
+        ),
+        api.variants.query(
+          caseId,
+          {
+            acmg_classifications: ['Pathogenic', 'Likely pathogenic'],
+            annotation_scope: 'all'
+          } as Omit<VariantFilter, 'case_id'>,
+          0,
+          500
+        )
+      ])
+
+      const starredVariants = unwrapIpcResult(starredRes)?.data ?? []
+      const acmgVariants = unwrapIpcResult(acmgRes)?.data ?? []
+
+      const seen = new Set<number>()
+      const deduped: Variant[] = []
+      for (const v of [...starredVariants, ...acmgVariants]) {
+        if (!seen.has(v.id)) {
+          seen.add(v.id)
+          deduped.push(v)
+        }
+      }
+
+      if (deduped.length === 0) {
+        return {
+          success: false,
+          count: 0,
+          error: 'No starred or Pathogenic / Likely pathogenic variants found for this case.'
+        }
+      }
+
+      const keys: BatchAnnotationKey[] = deduped.map((v) => ({
+        variantId: v.id,
+        chr: v.chr,
+        pos: v.pos,
+        ref: v.ref,
+        alt: v.alt
+      }))
+
+      const annotRes = await api.annotations.batchGet(caseId, keys)
+      const annotationsMap = unwrapIpcResult(annotRes) ?? {}
+
+      const rows: SignOutRow[] = deduped.map((v) => {
+        const annot = annotationsMap[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`]
+        return variantToSignOutRow(v, annot)
+      })
+
+      const text = formatSignOutTable(rows, format)
+      if (typeof navigator.clipboard?.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+      }
+
+      return { success: true, count: deduped.length, format }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : isIpcError(error)
+            ? (error.userMessage ?? error.message)
+            : String(error)
+      logService.error('Copy sign-out error: ' + message, 'export')
+      return { success: false, count: 0, error: message }
+    }
+  }
+
+  return { exportToExcel, copySignOutTable }
 }

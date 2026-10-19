@@ -10,11 +10,13 @@
     :export-blocked-reason="writeBlockedReason"
     :export-formats="isWebRuntime()"
     :columns="columns"
+    :copying-sign-out="copyingSignOut"
     @clear-all="handleClearAll"
     @clear-filter="handleClearFilter"
     @open-filter-drawer="filterDrawerOpen = true"
     @open-columns-drawer="columnsDrawerOpen = true"
     @export="exportToExcel"
+    @copy-sign-out="handleCopySignOut"
   >
     <template #filters>
       <!-- DSL search bar (replaces plain text search) -->
@@ -248,15 +250,9 @@ function sanitizeUnsupportedVariantFilters(
 ): Omit<VariantFilter, 'case_id'> {
   const next: Omit<VariantFilter, 'case_id'> = { ...filter }
 
-  if (!currentCanUseFeature('variants.tagFilters')) {
-    delete next.tag_ids
-  }
-  if (!currentCanUseFeature('variants.commentFilters')) {
-    delete next.has_comment
-  }
-  if (!currentCanUseFeature('variants.acmgFilters')) {
-    delete next.acmg_classifications
-  }
+  if (!currentCanUseFeature('variants.tagFilters')) delete next.tag_ids
+  if (!currentCanUseFeature('variants.commentFilters')) delete next.has_comment
+  if (!currentCanUseFeature('variants.acmgFilters')) delete next.acmg_classifications
   if (!currentCanUseFeature('variants.annotationFilters')) {
     delete next.annotation_scope
     delete next.starred_only
@@ -266,18 +262,10 @@ function sanitizeUnsupportedVariantFilters(
     delete next.panel_padding_bp
     delete next.panel_intervals
   }
-  if (!currentCanUseFeature('variants.columnMeta')) {
-    delete next.column_filters
-  }
-  if (!currentCanUseFeature('variants.inheritanceFilters')) {
-    delete next.inheritance_modes
-  }
-  if (!currentCanUseFeature('variants.analysisGroupFilters')) {
-    delete next.analysis_group_id
-  }
-  if (!currentCanUseFeature('variants.phasingFilters')) {
-    delete next.consider_phasing
-  }
+  if (!currentCanUseFeature('variants.columnMeta')) delete next.column_filters
+  if (!currentCanUseFeature('variants.inheritanceFilters')) delete next.inheritance_modes
+  if (!currentCanUseFeature('variants.analysisGroupFilters')) delete next.analysis_group_id
+  if (!currentCanUseFeature('variants.phasingFilters')) delete next.consider_phasing
 
   return next
 }
@@ -310,6 +298,7 @@ const {
   searchGeneSymbols,
   loadFilterOptions,
   emitFilters,
+  copySignOutTable,
   exportToExcel: composableExportToExcel
 } = useFilterState(
   computed(() => props.caseId),
@@ -582,6 +571,19 @@ const exportToExcel = async (format?: ExportFormat) => {
       ? { text: 'Open folder', callback: () => api?.export.revealInFolder(filePath) }
       : undefined
     emit('export-success', { filePath, action })
+  }
+}
+
+const copyingSignOut = ref(false)
+const handleCopySignOut = async (format: 'markdown' | 'tsv'): Promise<void> => {
+  copyingSignOut.value = true
+  try {
+    const res = await copySignOutTable(props.caseId, format)
+    emit('export-success', { filePath: `clipboard (${res.count} variants)` })
+  } catch (err) {
+    emit('export-error', formatError(err))
+  } finally {
+    copyingSignOut.value = false
   }
 }
 

@@ -9,11 +9,16 @@ import type { DslNode, DslFilterRule, DslGroup, DslOperator } from './types'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import { findColumn } from './column-registry'
 import { contigQueryNames } from '../../../shared/utils/contig'
+export { normalizeClinicalPaste } from './clinical-paste'
+
+export type ExtendedColumnFilter =
+  | (ColumnFilter & { includeEmpty?: boolean })
+  | { operator: 'between'; value: [number, number]; includeEmpty?: boolean }
 
 /** Result of translating a DSL AST */
 export interface TranslationResult {
   /** Column filters to merge into the query (key = column name) */
-  columnFilters: Record<string, ColumnFilter & { includeEmpty?: boolean }>
+  columnFilters: Record<string, ExtendedColumnFilter>
   /** Names of @preset references found in the expression */
   presetNames: string[]
   /**
@@ -55,7 +60,29 @@ function setFilter(
   filter: ColumnFilter,
   source: string
 ): void {
-  if (result.columnFilters[column] !== undefined) {
+  const existing = result.columnFilters[column]
+  if (existing !== undefined) {
+    if (column === 'pos') {
+      const isExistingLower = existing.operator === '>=' || existing.operator === '>'
+      const isExistingUpper = existing.operator === '<=' || existing.operator === '<'
+      const isNewLower = filter.operator === '>=' || filter.operator === '>'
+      const isNewUpper = filter.operator === '<=' || filter.operator === '<'
+
+      if ((isExistingLower && isNewUpper) || (isExistingUpper && isNewLower)) {
+        const v1 = Number(existing.value)
+        const v2 = Number(filter.value)
+        if (Number.isFinite(v1) && Number.isFinite(v2)) {
+          const min = Math.min(v1, v2)
+          const max = Math.max(v1, v2)
+          result.columnFilters[column] = {
+            operator: 'between',
+            value: [min, max]
+          }
+          return
+        }
+      }
+    }
+
     // A flat map holds one condition per field: overwriting would drop a bound
     result.errors.push(
       `${source}: only one condition per field is supported ('${column}' is used twice)`
@@ -179,9 +206,14 @@ function quoteValue(value: string | number): string {
  * {@link translateAst} for everything it produces. Used to keep the committed
  * search text (and so `?q=`) in step when one applied condition is removed.
  */
-export function serializeColumnFilters(columnFilters: Record<string, ColumnFilter>): string {
+export function serializeColumnFilters(
+  columnFilters: Record<string, ColumnFilter | ExtendedColumnFilter>
+): string {
   return Object.entries(columnFilters)
     .map(([column, { operator, value }]) => {
+      if ((operator as string) === 'between' && Array.isArray(value)) {
+        return `${column}:>=:${value[0]} AND ${column}:<=:${value[1]}`
+      }
       const op = DSL_OPERATORS[operator]
       if (operator === 'is_null' || operator === 'not_null') return `${column}:${op}`
       if (Array.isArray(value)) {

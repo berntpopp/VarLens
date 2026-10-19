@@ -96,3 +96,39 @@ describe('SlimFilterToolbar on a phone', () => {
     wrapper.unmount()
   })
 })
+
+describe('SlimFilterToolbar Copy Sign-Out', () => {
+  it('renders copy-sign-out menu when enabled and emits format on click', async () => {
+    const orig = window.innerWidth
+    window.innerWidth = 1440
+    const vuetifyWide = createVuetify({
+      components,
+      directives,
+      display: {
+        mobileBreakpoint: 'sm',
+        thresholds: { xs: 0, sm: 600, md: 960, lg: 1280, xl: 1920 }
+      }
+    })
+    const wrapper = mount(SlimFilterToolbar, {
+      props: {
+        ...baseProps,
+        showSignOut: true
+      },
+      attachTo: document.body,
+      global: { plugins: [vuetifyWide] }
+    })
+    window.innerWidth = orig
+    const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
+    expect(btn.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('does not render copy-sign-out menu when disabled/omitted', () => {
+    const wrapper = mountToolbar({
+      ...baseProps
+    })
+    const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
+    expect(btn.exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
