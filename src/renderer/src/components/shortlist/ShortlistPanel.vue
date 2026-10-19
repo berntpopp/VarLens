@@ -47,6 +47,8 @@ import {
   bumpWriteVersion,
   cacheSet,
   computeOptimisticSlot,
+  confirmedBases,
+  ensurePerCaseSlotOwner,
   evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
   getCachedBuild,
@@ -58,6 +60,7 @@ import {
   hasDbSwitchedSince,
   inFlightMutations,
   markAwaited,
+  pruneInFlightMutationsOnSuccess,
   setConfirmedFieldPatch,
   setConfirmedWriteVersion,
   unloadedSlotOf,
@@ -163,6 +166,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         ? cachedPerCase.starred === 1
         : row.is_starred
   const nextStarred = !currentStarred
+  ensurePerCaseSlotOwner(key, row.case_id, row.id)
   const writeVer = bumpWriteVersion(key, 'perCase:star')
   const toggleToken = ++nextStarToggleToken
   pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
@@ -186,8 +190,14 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       setConfirmedWriteVersion(key, 'perCase:star', writeVer)
       const slotKey = `perCase:${key}`
       setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
+      pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
       const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
       const remaining = inFlightMutations.get(slotKey)
+      if (remaining && remaining.length > 0) {
+        confirmedBases.set(slotKey, merged)
+      } else {
+        confirmedBases.delete(slotKey)
+      }
       const finalSlot =
         remaining && remaining.length > 0
           ? (computeOptimisticSlot(merged, remaining) as CaseVariantAnnotation)

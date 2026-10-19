@@ -92,6 +92,8 @@ import {
   beginAnnotationRequest,
   bumpWriteVersion,
   clearAnnotationCache,
+  confirmedBases,
+  inFlightMutations,
   isKeyLoading,
   setConfirmedWriteVersion,
   setLoading,
@@ -694,5 +696,58 @@ describe('ShortlistPanel', () => {
 
     // It requested starred = true based on actual state, not stale inverted pending
     expect(upsertPerCaseMock).toHaveBeenLastCalledWith(7, 42, { starred: true })
+  })
+
+  it('prunes superseded in-flight star mutation on successful toggle-star in ShortlistPanel', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+    const slotKey = `perCase:${key}`
+
+    // Seed an in-flight star mutation from an earlier toggle (writeVer 1)
+    const writeVer1 = bumpWriteVersion(key, 'perCase:star')
+    inFlightMutations.set(slotKey, [
+      { id: 99, fieldGroup: 'star', writeVer: writeVer1, patch: { starred: 1 } }
+    ])
+    confirmedBases.set(slotKey, { starred: 0 } as never)
+
+    let resolveStar!: (val: unknown) => void
+    upsertPerCaseMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStar = resolve
+        })
+    )
+
+    // Trigger toggle from ShortlistPanel (writeVer > writeVer1)
+    await table.vm.$emit('toggle-star', row)
+    expect(inFlightMutations.get(slotKey)?.length).toBe(1)
+
+    // Toggle resolves
+    resolveStar({
+      id: 1,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1,
+      per_case_comment: null,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    })
+    await flushPromises()
+
+    // The superseded in-flight mutation is pruned and confirmedBases deleted
+    expect(inFlightMutations.has(slotKey)).toBe(false)
+    expect(confirmedBases.has(slotKey)).toBe(false)
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
   })
 })

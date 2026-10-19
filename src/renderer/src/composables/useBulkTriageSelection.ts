@@ -493,7 +493,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         }
       }
 
-      evictAnnotationCacheKeysForBulkTriage(affectedKeys, touchedFields, bulkWriteVersions)
+      evictAnnotationCacheKeysForBulkTriage(affectedKeys, touchedFields, bulkWriteVersions, updates)
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)

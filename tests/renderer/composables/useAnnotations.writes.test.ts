@@ -17,6 +17,11 @@ import {
   annotationCache,
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
+import {
+  confirmedBases,
+  confirmedFieldPatches,
+  evictAnnotationCacheKeysForBulkTriage
+} from '@renderer/composables/annotation-cache'
 import { logService } from '@renderer/services/LogService'
 import { AppStateKey, createAppState } from '@renderer/composables/useAppState'
 import { BUILD_COPY } from '../../../src/shared/config/genome-builds.config'
@@ -296,6 +301,11 @@ describe('overlapping mutations and rollback', () => {
     setActivePinia(undefined as never)
   })
 
+  async function trackCase(caseId: number): Promise<void> {
+    await a.loadAnnotations(caseId, 'chrP', 1, 'A', 'A')
+    annotationCache.value.delete('chrP:1:A:A')
+  }
+
   it('restores baseline when overlapping classification and comment writes both reject', async () => {
     seedEntry()
     const p1 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Pathogenic')
@@ -494,5 +504,165 @@ describe('overlapping mutations and rollback', () => {
     // Both Pathogenic and 'new note' MUST be preserved
     expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
     expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('new note')
+  })
+
+  it('isolates confirmed patches between sibling variants sharing coordinates on owner switch', async () => {
+    await trackCase(CASE_ID)
+    window.api.annotations.upsertPerCase = vi.fn().mockResolvedValue({
+      id: 1,
+      case_id: CASE_ID,
+      variant_id: 11,
+      starred: 0,
+      acmg_classification: null,
+      acmg_evidence: null,
+      per_case_comment: 'variant 11 comment',
+      created_at: 0,
+      updated_at: 0
+    })
+    await a.upsertPerCaseComment(CASE_ID, 11, ...V, 'variant 11 comment')
+    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toEqual({
+      per_case_comment: 'variant 11 comment'
+    })
+
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      [KEY]: {
+        global: null,
+        perCase: {
+          id: 2,
+          case_id: CASE_ID,
+          variant_id: 12,
+          starred: 0,
+          acmg_classification: 'Benign',
+          acmg_evidence: null,
+          per_case_comment: null,
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+    await a.loadAnnotationsBatch(CASE_ID, [{ id: 12, chr: V[0], pos: V[1], ref: V[2], alt: V[3] }])
+
+    expect(annotationCache.value.get(KEY)?.perCase?.variant_id).toBe(12)
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBeNull()
+    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toEqual({
+      per_case_comment: null
+    })
+  })
+
+  it('preserves bulk ACMG when delayed single-row comment resolves with older server snapshot', async () => {
+    await trackCase(CASE_ID)
+    seedEntry()
+    let deferredComment!: { resolve: (val: unknown) => void; reject: (err: unknown) => void }
+    window.api.annotations.upsertPerCase = vi.fn().mockImplementation(() => {
+      return new Promise((resolve, reject) => {
+        deferredComment = { resolve, reject }
+      })
+    })
+
+    const pComment = a.upsertPerCaseComment(CASE_ID, VARIANT_ID, ...V, 'new comment')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('new comment')
+
+    const bulkWriteVersions = new Map()
+    evictAnnotationCacheKeysForBulkTriage([KEY], ['acmg'], bulkWriteVersions, {
+      acmg_classification: 'Pathogenic'
+    })
+
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      [KEY]: {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: CASE_ID,
+          variant_id: VARIANT_ID,
+          starred: 0,
+          acmg_classification: 'Pathogenic',
+          acmg_evidence: null,
+          per_case_comment: 'old comment',
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+    await a.loadAnnotationsBatch(CASE_ID, [
+      { id: VARIANT_ID, chr: V[0], pos: V[1], ref: V[2], alt: V[3] }
+    ])
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('new comment')
+
+    deferredComment.resolve({
+      id: 1,
+      case_id: CASE_ID,
+      variant_id: VARIANT_ID,
+      starred: 0,
+      acmg_classification: 'Benign',
+      acmg_evidence: null,
+      per_case_comment: 'new comment',
+      created_at: 0,
+      updated_at: 0
+    })
+    await pComment
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('new comment')
+  })
+
+  it('rolls back failed comment to post-bulk state rather than obsolete pre-bulk base', async () => {
+    await trackCase(CASE_ID)
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      [KEY]: {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: CASE_ID,
+          variant_id: VARIANT_ID,
+          starred: 0,
+          acmg_classification: 'Benign',
+          acmg_evidence: null,
+          per_case_comment: 'initial note',
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+    await a.loadAnnotationsBatch(CASE_ID, [
+      { id: VARIANT_ID, chr: V[0], pos: V[1], ref: V[2], alt: V[3] }
+    ])
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
+
+    const bulkWriteVersions = new Map()
+    evictAnnotationCacheKeysForBulkTriage([KEY], ['acmg'], bulkWriteVersions, {
+      acmg_classification: 'Pathogenic'
+    })
+
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      [KEY]: {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: CASE_ID,
+          variant_id: VARIANT_ID,
+          starred: 0,
+          acmg_classification: 'Pathogenic',
+          acmg_evidence: null,
+          per_case_comment: 'initial note',
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+    await a.loadAnnotationsBatch(CASE_ID, [
+      { id: VARIANT_ID, chr: V[0], pos: V[1], ref: V[2], alt: V[3] }
+    ])
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(confirmedBases.has(`perCase:${KEY}`)).toBe(false)
+
+    window.api.annotations.upsertPerCase = vi.fn().mockRejectedValue(new Error('Network error'))
+    const ok = await a.upsertPerCaseComment(CASE_ID, VARIANT_ID, ...V, 'doomed comment')
+    expect(ok).toBe(false)
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('initial note')
+    expect(confirmedBases.has(`perCase:${KEY}`)).toBe(false)
   })
 })
