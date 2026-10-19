@@ -59,6 +59,7 @@ import {
   getWriteVersion,
   hasDbSwitchedSince,
   inFlightMutations,
+  isPerCaseSlotOwner,
   markAwaited,
   pruneInFlightMutationsOnSuccess,
   setConfirmedFieldPatch,
@@ -185,6 +186,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       getAnnotationCacheEpoch() === epoch &&
       getCachedBuild() === build &&
       (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
+      isPerCaseSlotOwner(key, row.case_id, row.id) &&
       writeVer > getConfirmedWriteVersion(key, 'perCase:star')
     if (stillOnScope) {
       setConfirmedWriteVersion(key, 'perCase:star', writeVer)

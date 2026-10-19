@@ -41,6 +41,7 @@ import {
   inFlightMutations,
   isCacheOfBuild,
   isKeyLoading,
+  isPerCaseSlotOwner,
   isTrackedCase,
   markAwaited,
   mergeServerSlot,
@@ -90,12 +91,10 @@ function extractFieldGroupPatch(
   if (updated === null) return {}
   if (fieldGroup === 'star') return 'starred' in updated ? { starred: updated.starred } : {}
   if (fieldGroup === 'acmg') {
-    return {
-      ...('acmg_classification' in updated
-        ? { acmg_classification: updated.acmg_classification }
-        : {}),
-      ...('acmg_evidence' in updated ? { acmg_evidence: updated.acmg_evidence } : {})
-    }
+    const p: SlotPatch = {}
+    if ('acmg_classification' in updated) p.acmg_classification = updated.acmg_classification
+    if ('acmg_evidence' in updated) p.acmg_evidence = updated.acmg_evidence
+    return p
   }
   const commentKey = scope.kind === 'case' ? 'per_case_comment' : 'global_comment'
   return commentKey in updated
@@ -216,14 +215,8 @@ function upsert(
   if (!GENOME_BUILDS.some((b) => b.id === scope.build)) {
     throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
   }
-  return client.annotations.upsertGlobal(
-    coords.chr,
-    coords.pos,
-    coords.ref,
-    coords.alt,
-    updates,
-    scope.build
-  )
+  const { chr, pos, ref, alt } = coords
+  return client.annotations.upsertGlobal(chr, pos, ref, alt, updates, scope.build)
 }
 
 /**
@@ -277,11 +270,11 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    if (leftScope(scope, dbPath)) {
-      removeInFlightMutation(slotKey, mutationId)
-      return true
-    }
-    if (writeVer <= getConfirmedWriteVersion(key, `${slot}:${fieldGroup}`)) {
+    if (
+      leftScope(scope, dbPath) ||
+      (scope.kind === 'case' && !isPerCaseSlotOwner(key, scope.caseId, scope.variantId)) ||
+      writeVer <= getConfirmedWriteVersion(key, `${slot}:${fieldGroup}`)
+    ) {
       removeInFlightMutation(slotKey, mutationId)
       return true
     }
@@ -331,11 +324,8 @@ async function mutate(
         if (remaining && remaining.length > 0) {
           writeSlot(target, scope, computeOptimisticSlot(base, remaining))
         } else {
-          if (base !== null) {
-            writeSlot(target, scope, { ...base })
-          } else {
-            rollBackSlot(target, scope, plan.rollback, null)
-          }
+          if (base !== null) writeSlot(target, scope, { ...base })
+          else rollBackSlot(target, scope, plan.rollback, null)
           confirmedBases.delete(slotKey)
           inFlightMutations.delete(slotKey)
         }
@@ -490,10 +480,14 @@ async function loadBatch(
       const cachedVid = getCachedVariantId(key)
       const sameCoords = cached?.global?.chr === undefined || cached.global.chr === v.chr
       const stale =
-        typeof v.id === 'number' &&
-        ((cached?.perCase != null && cached.perCase.variant_id !== v.id) ||
-          (cachedVid !== undefined && cachedVid !== v.id) ||
-          (typeof v.is_starred === 'boolean' && (cached?.perCase?.starred === 1) !== v.is_starred))
+        (cached !== undefined &&
+          ((typeof v.id === 'number' &&
+            cached.perCase != null &&
+            cached.perCase.variant_id !== v.id) ||
+            (typeof v.is_starred === 'boolean' &&
+              !inFlightMutations.has(`perCase:${key}`) &&
+              (cached.perCase?.starred === 1) !== v.is_starred))) ||
+        (typeof v.id === 'number' && cachedVid !== undefined && cachedVid !== v.id)
       if (sameCoords && stale) evictAnnotationCacheKeys([key])
     }
     if (needsLoad(key, scope.kind)) uncached.push(batchKey(scope, v))

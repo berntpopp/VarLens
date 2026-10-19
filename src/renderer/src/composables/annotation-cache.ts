@@ -354,6 +354,11 @@ export function ensurePerCaseSlotOwner(key: string, caseId: number, variantId: n
   perCaseSlotOwners.set(key, { caseId, variantId })
 }
 
+export function isPerCaseSlotOwner(key: string, caseId: number, variantId: number): boolean {
+  const cur = perCaseSlotOwners.get(key)
+  return !cur || (cur.caseId === caseId && cur.variantId === variantId)
+}
+
 export function computeOptimisticSlot(
   base: VariantAnnotation | CaseVariantAnnotation | null,
   mutations: InFlightMutation[]
@@ -476,7 +481,6 @@ export const isTrackedCase = (caseId: number): boolean => lastCaseId === caseId
 function dropKeyMetadata(key: string): void {
   keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
   cachedVariantIds.delete(key)
-  perCaseSlotOwners.delete(key)
   loadingStates.value.delete(key)
   loadingTokens.delete(key)
   unloadedSlots.delete(key)
@@ -491,6 +495,7 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   for (const key of keys) {
     if (annotationCache.value.delete(key)) changed = true
     dropKeyMetadata(key)
+    perCaseSlotOwners.delete(key)
     for (const p of ['perCase', 'global']) {
       confirmedBases.delete(`${p}:${key}`)
       inFlightMutations.delete(`${p}:${key}`)
@@ -509,10 +514,15 @@ function applyBulkUpdatesPatch(
     const isStarred = Boolean(u.starred ?? u.is_starred)
     setConfirmedFieldPatch(slotKey, 'star', { starred: isStarred ? 1 : 0 })
   } else if (fg === 'acmg' && ('acmg_classification' in u || 'acmg_evidence' in u)) {
-    setConfirmedFieldPatch(slotKey, 'acmg', {
-      acmg_classification: (u.acmg_classification as SlotPatch['acmg_classification']) ?? null,
-      acmg_evidence: (u.acmg_evidence as string | null) ?? null
-    })
+    const patch: SlotPatch = { ...(confirmedFieldPatches.get(slotKey)?.acmg ?? {}) }
+    if ('acmg_classification' in u) {
+      patch.acmg_classification =
+        (u.acmg_classification as SlotPatch['acmg_classification']) ?? null
+    }
+    if ('acmg_evidence' in u) {
+      patch.acmg_evidence = (u.acmg_evidence as string | null) ?? null
+    }
+    setConfirmedFieldPatch(slotKey, 'acmg', patch)
   } else if (fg === 'comment' && 'per_case_comment' in u) {
     setConfirmedFieldPatch(slotKey, 'comment', {
       per_case_comment: (u.per_case_comment as string | null) ?? null
@@ -535,15 +545,18 @@ export function evictAnnotationCacheKeysForBulkTriage(
     const slotKey = `perCase:${key}`
     for (const fg of touchedFields) {
       const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, `perCase:${fg}`)
-      setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
-      pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
-      if (updates) {
-        applyBulkUpdatesPatch(slotKey, fg, updates)
-      } else {
-        const patches = confirmedFieldPatches.get(slotKey)
-        if (patches) {
-          delete patches[fg]
-          if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(slotKey)
+      const prevConfirmed = getConfirmedWriteVersion(key, `perCase:${fg}`)
+      if (bulkVer > prevConfirmed) {
+        setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
+        pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
+        if (updates) {
+          applyBulkUpdatesPatch(slotKey, fg, updates)
+        } else {
+          const patches = confirmedFieldPatches.get(slotKey)
+          if (patches) {
+            delete patches[fg]
+            if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(slotKey)
+          }
         }
       }
     }
