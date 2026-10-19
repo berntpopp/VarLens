@@ -20,6 +20,7 @@ import {
   beginAnnotationRequest,
   bumpWriteVersion,
   evictAnnotationCacheKeys,
+  evictAnnotationCacheKeysForBulkTriage,
   getCachedBuild,
   getCachedCaseId,
   getCurrentDbPath,
@@ -450,6 +451,20 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         affectedKeys.add(variantKey(initialPanel))
       }
 
+      const touchedFields: Array<'star' | 'acmg' | 'comment'> = []
+      if (updates.starred !== undefined || 'is_starred' in updates) touchedFields.push('star')
+      if ('acmg_classification' in updates || 'acmg_evidence' in updates) touchedFields.push('acmg')
+      if ('per_case_comment' in updates) touchedFields.push('comment')
+
+      const bulkWriteVersions = new Map<string, Map<'star' | 'acmg' | 'comment', number>>()
+      for (const k of affectedKeys) {
+        const m = new Map<'star' | 'acmg' | 'comment', number>()
+        for (const fg of touchedFields) {
+          m.set(fg, bumpWriteVersion(k, `perCase:${fg}`))
+        }
+        bulkWriteVersions.set(k, m)
+      }
+
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
 
       // If active case or database changed away from cid, write has committed in storage
@@ -478,13 +493,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         }
       }
 
-      for (const k of affectedKeys) {
-        bumpWriteVersion(k, 'perCase:star')
-        bumpWriteVersion(k, 'perCase:acmg')
-        bumpWriteVersion(k, 'perCase:comment')
-      }
-      // Evict stale cached keys while cache is still on this case (even if disposed!)
-      evictAnnotationCacheKeys(affectedKeys)
+      evictAnnotationCacheKeysForBulkTriage(affectedKeys, touchedFields, bulkWriteVersions)
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)

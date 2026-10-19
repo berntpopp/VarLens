@@ -1,11 +1,6 @@
 /**
  * Module-level annotation cache shared by every `useAnnotations()` caller.
- *
- * Owns the LRU cache, the per-variant loading flags, the stale-request
- * generation counter and the db/case/build scope tracking that clears stale
- * data when the user switches database, case or genome build. Global
- * annotations are keyed by build (#577): entries of one build are never
- * served to a view of another.
+ * Owns the LRU cache, loading flags, generation counters and db/case/build scope tracking.
  */
 
 import { shallowRef, triggerRef } from 'vue'
@@ -160,15 +155,8 @@ export function triggerAnnotationCache(): void {
   triggerRef(annotationCache)
 }
 
-// The cohort table (global scope) and the case table (per-case scope) share
-// this cache. An entry is not always filled for both: a global load or write
-// knows nothing about the per-case slot, and a per-case write on a row that
-// was never loaded knows nothing about the global one. The slot that was never
-// fetched holds `null` like a real "no annotation", so it is tracked here —
-// otherwise the other table would take the entry as loaded and never ask.
-// Entries without a mark (including ones set directly on the map) are complete.
+// Tracks un-fetched slots so views know whether an entry is complete.
 const unloadedSlots = new Map<string, AnnotationSlot>()
-// Keys whose in-flight request will only bring the global slot.
 const globalOnlyLoading = new Set<string>()
 
 function rememberUnloadedSlot(key: string, slot: AnnotationSlot): void {
@@ -277,9 +265,7 @@ export function getAnnotationGeneration(kind: AnnotationBatchKind): number {
   return annotationGenerations[kind]
 }
 
-// Keys a batch load skipped because an earlier batch already had them in
-// flight. If that earlier batch turns out to be from a previous page it is
-// discarded — except for these keys, which the current page is waiting for.
+// Keys a batch load skipped because an earlier batch already had them in flight.
 const awaitedKeys: Record<AnnotationBatchKind, Set<string>> = {
   case: new Set(),
   global: new Set()
@@ -295,8 +281,7 @@ export function takeAwaited(kind: AnnotationBatchKind, key: string): boolean {
   return awaitedKeys[kind].delete(key)
 }
 
-// Incremented every time the cache is emptied. A request that captured an
-// older epoch started against entries that no longer exist.
+// Incremented every time the cache is emptied.
 let cacheEpoch = 0
 
 export function getAnnotationCacheEpoch(): number {
@@ -307,10 +292,7 @@ export function getGeneration(): number {
   return cacheEpoch
 }
 
-// Version counter per variant key — incremented on eviction so in-flight
-// reads that were started before eviction cannot overwrite newer or evicted data.
-// evictionEpoch ensures that clearing the cache during a case round-trip (A -> B -> A)
-// never causes an older in-flight request's keyVersion to collide with a new one.
+// Version counter per variant key — incremented on eviction to drop stale reads.
 let evictionEpoch = 0
 const keyVersions = new Map<string, number>()
 
@@ -322,17 +304,58 @@ export function bumpKeyVersion(key: string): void {
   keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
 }
 
-const writeVersions = new Map<string, number>()
+const issuedWriteVersions = new Map<string, number>()
+const confirmedWriteVersions = new Map<string, number>()
+const confirmedFieldPatches = new Map<
+  string,
+  Partial<Record<'star' | 'acmg' | 'comment', SlotPatch>>
+>()
 
 export function bumpWriteVersion(key: string, slot: string = 'perCase'): number {
   const k = `${slot}:${key}`
-  const next = (writeVersions.get(k) ?? 0) + 1
-  writeVersions.set(k, next)
+  const next = (issuedWriteVersions.get(k) ?? 0) + 1
+  issuedWriteVersions.set(k, next)
   return next
 }
 
 export function getWriteVersion(key: string, slot: string = 'perCase'): number {
-  return writeVersions.get(`${slot}:${key}`) ?? 0
+  return issuedWriteVersions.get(`${slot}:${key}`) ?? 0
+}
+
+export function getConfirmedWriteVersion(key: string, slot: string = 'perCase'): number {
+  return confirmedWriteVersions.get(`${slot}:${key}`) ?? 0
+}
+
+export function setConfirmedWriteVersion(key: string, slot: string, version: number): void {
+  const k = `${slot}:${key}`
+  if (version > (confirmedWriteVersions.get(k) ?? 0)) {
+    confirmedWriteVersions.set(k, version)
+  }
+}
+
+export function setConfirmedFieldPatch(
+  slotKey: string,
+  fieldGroup: 'star' | 'acmg' | 'comment',
+  patch: SlotPatch
+): void {
+  if (Object.keys(patch).length === 0) return
+  const existing = confirmedFieldPatches.get(slotKey) ?? {}
+  existing[fieldGroup] = patch
+  confirmedFieldPatches.set(slotKey, existing)
+}
+
+export function applyConfirmedFieldPatches(
+  slotKey: string,
+  base: SlotValue | null
+): SlotValue | null {
+  if (base === null) return null
+  const patches = confirmedFieldPatches.get(slotKey)
+  if (!patches) return base
+  let merged: Record<string, unknown> = { ...base }
+  for (const fg of ['star', 'acmg', 'comment'] as const) {
+    if (patches[fg]) merged = { ...merged, ...patches[fg] }
+  }
+  return merged as unknown as SlotValue
 }
 
 export interface InFlightMutation {
@@ -391,6 +414,8 @@ function clearEntries(): void {
   cachedVariantIds.clear()
   confirmedBases.clear()
   inFlightMutations.clear()
+  confirmedWriteVersions.clear()
+  confirmedFieldPatches.clear()
   annotationCache.value.clear()
   loadingStates.value.clear()
   loadingTokens.clear()
@@ -402,25 +427,17 @@ function clearEntries(): void {
   triggerRef(loadingStates)
 }
 
-/**
- * Get current database path safely (returns null if Pinia not available,
- * e.g. in unit tests without a store setup).
- */
+/** Get current database path safely (returns null if Pinia not available). */
 export function getCurrentDbPath(): string | null {
   try {
     const db = useDatabaseStore()
     return db.currentPath
   } catch {
-    // Pinia not available (e.g. in unit tests without store setup)
     return null
   }
 }
 
-/**
- * Check if the scope (dbPath + caseId) has changed and clear cache if so.
- * Called before cache reads/writes to ensure stale data from a previous
- * database or case is never served.
- */
+/** Check if the scope (dbPath + caseId + build) has changed and clear cache if so. */
 function ensureScopeOrClear(
   dbPath: string | null,
   caseId: number | null,
@@ -429,7 +446,6 @@ function ensureScopeOrClear(
   const dbChanged = dbPath !== null && lastDbPath !== null && dbPath !== lastDbPath
   const caseChanged = caseId !== null && lastCaseId !== null && caseId !== lastCaseId
   const buildChanged = build !== null && lastBuild !== null && build !== lastBuild
-  // A case whose build is not known yet must not read entries of a known build.
   const buildUnknown = caseId !== null && build === null && lastBuild !== null
 
   if (dbChanged || caseChanged || buildChanged || buildUnknown) {
@@ -442,10 +458,7 @@ function ensureScopeOrClear(
   if (build !== null || buildUnknown) lastBuild = build
 }
 
-/**
- * Start a request for the given case (null = global scope): clears the cache
- * if the db/case changed and returns the database path the request belongs to.
- */
+/** Start a request: clears the cache if scope changed and returns db path. */
 export function beginAnnotationRequest(
   caseId: number | null,
   build: string | null = null
@@ -455,7 +468,7 @@ export function beginAnnotationRequest(
   return dbPath
 }
 
-/** False while the cache holds another build's entries (a view of `build` must not read them). */
+/** False while the cache holds another build's entries. */
 export function isCacheOfBuild(build: string | null): boolean {
   return build === null || lastBuild === null || lastBuild === build
 }
@@ -470,12 +483,7 @@ export function getCachedCaseId(): number | null {
   return lastCaseId
 }
 
-/**
- * Empty the cache now if it still holds entries of a database that is no
- * longer open. A request does this on its way in; a response that finds the
- * database switched under it must do the same, or its optimistic value would
- * keep being served until the next request.
- */
+/** Empty the cache if it still holds entries of a closed database. */
 export function dropCacheOfClosedDatabase(): void {
   ensureScopeOrClear(getCurrentDbPath(), null)
 }
@@ -491,23 +499,54 @@ export function isTrackedCase(caseId: number): boolean {
   return lastCaseId === caseId
 }
 
+function dropKeyMetadata(key: string): void {
+  keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+  cachedVariantIds.delete(key)
+  loadingStates.value.delete(key)
+  loadingTokens.delete(key)
+  unloadedSlots.delete(key)
+  globalOnlyLoading.delete(key)
+  awaitedKeys.case.delete(key)
+  awaitedKeys.global.delete(key)
+}
+
 /** Evict specific variant keys from the cache while preserving unrelated entries. */
 export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   let changed = false
   for (const key of keys) {
     if (annotationCache.value.delete(key)) changed = true
-    keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
-    cachedVariantIds.delete(key)
+    dropKeyMetadata(key)
     confirmedBases.delete(`perCase:${key}`)
     confirmedBases.delete(`global:${key}`)
     inFlightMutations.delete(`perCase:${key}`)
     inFlightMutations.delete(`global:${key}`)
-    loadingStates.value.delete(key)
-    loadingTokens.delete(key)
-    unloadedSlots.delete(key)
-    globalOnlyLoading.delete(key)
-    awaitedKeys.case.delete(key)
-    awaitedKeys.global.delete(key)
+    confirmedFieldPatches.delete(`perCase:${key}`)
+    confirmedFieldPatches.delete(`global:${key}`)
+  }
+  if (changed) triggerRef(annotationCache)
+}
+
+/** Evict keys for bulk triage while preserving newer and untouched single-row mutations. */
+export function evictAnnotationCacheKeysForBulkTriage(
+  affectedKeys: Iterable<string>,
+  touchedFields: Array<'star' | 'acmg' | 'comment'>,
+  bulkWriteVersions: Map<string, Map<'star' | 'acmg' | 'comment', number>>
+): void {
+  let changed = false
+  for (const key of affectedKeys) {
+    if (annotationCache.value.delete(key)) changed = true
+    dropKeyMetadata(key)
+    const slotKey = `perCase:${key}`
+    for (const fg of touchedFields) {
+      const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, `perCase:${fg}`)
+      setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
+      pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
+      const patches = confirmedFieldPatches.get(slotKey)
+      if (patches) {
+        delete patches[fg]
+        if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(slotKey)
+      }
+    }
   }
   if (changed) triggerRef(annotationCache)
 }
@@ -527,7 +566,9 @@ export function resetAnnotationState(): void {
   evictionEpoch = 0
   nextLoadingToken = 0
   keyVersions.clear()
-  writeVersions.clear()
+  issuedWriteVersions.clear()
+  confirmedWriteVersions.clear()
+  confirmedFieldPatches.clear()
   cachedVariantIds.clear()
   confirmedBases.clear()
   inFlightMutations.clear()

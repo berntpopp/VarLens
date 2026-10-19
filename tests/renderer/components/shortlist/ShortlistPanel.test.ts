@@ -93,6 +93,7 @@ import {
   bumpWriteVersion,
   clearAnnotationCache,
   isKeyLoading,
+  setConfirmedWriteVersion,
   setLoading,
   variantKey
 } from '../../../../src/renderer/src/composables/annotation-cache'
@@ -658,8 +659,9 @@ describe('ShortlistPanel', () => {
     // 1. Single toggle clicked (pending star in flight)
     await table.vm.$emit('toggle-star', row)
 
-    // 2. Bulk triage runs while single toggle is in flight, bumping write version
-    bumpWriteVersion(key, 'perCase:star')
+    // 2. Bulk triage runs while single toggle is in flight, bumping and confirming write version
+    const bulkVer = bumpWriteVersion(key, 'perCase:star')
+    setConfirmedWriteVersion(key, 'perCase:star', bulkVer)
 
     // 3. Single toggle resolves
     resolveSingleStar({

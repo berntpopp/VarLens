@@ -38,21 +38,28 @@ import { useAnnotations } from '../../composables/useAnnotations'
 import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
+import type { CaseVariantAnnotation } from '../../../../shared/types/database-entities'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import {
   annotationCache,
+  applyConfirmedFieldPatches,
   bumpKeyVersion,
   bumpWriteVersion,
   cacheSet,
+  computeOptimisticSlot,
   evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
   getCachedBuild,
   getCachedCaseId,
   getCachedVariantId,
+  getConfirmedWriteVersion,
   getCurrentDbPath,
   getWriteVersion,
   hasDbSwitchedSince,
+  inFlightMutations,
   markAwaited,
+  setConfirmedFieldPatch,
+  setConfirmedWriteVersion,
   unloadedSlotOf,
   variantKey
 } from '../../composables/annotation-cache'
@@ -174,14 +181,23 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       getAnnotationCacheEpoch() === epoch &&
       getCachedBuild() === build &&
       (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
-      getWriteVersion(key, 'perCase:star') === writeVer
+      writeVer > getConfirmedWriteVersion(key, 'perCase:star')
     if (stillOnScope) {
+      setConfirmedWriteVersion(key, 'perCase:star', writeVer)
+      const slotKey = `perCase:${key}`
+      setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
+      const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
+      const remaining = inFlightMutations.get(slotKey)
+      const finalSlot =
+        remaining && remaining.length > 0
+          ? (computeOptimisticSlot(merged, remaining) as CaseVariantAnnotation)
+          : merged
       const liveEntry = annotationCache.value.get(key)
       const liveUnloaded = unloadedSlotOf(key)
       bumpKeyVersion(key)
       cacheSet(
         key,
-        { global: liveEntry?.global ?? null, perCase: updated },
+        { global: liveEntry?.global ?? null, perCase: finalSlot },
         liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
       )
     }

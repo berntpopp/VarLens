@@ -37,6 +37,14 @@ describe('useBulkTriageSelection', () => {
     }
   })
 
+  const defer = <T = unknown>() => {
+    let resolve!: (val: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
   const items = ref([
     { id: 101, chr: 'chr1', pos: 1000, ref: 'A', alt: 'T' },
     { id: 102, chr: 'chr1', pos: 2000, ref: 'C', alt: 'G' },
@@ -138,18 +146,12 @@ describe('useBulkTriageSelection', () => {
 
   it('dispatches applyBulkTriage with batchUpsertPerCase', async () => {
     const bulk = createBulk()
-
     bulk.toggleSelect(101)
     bulk.toggleSelect(102)
-
-    await bulk.applyBulkTriage({
-      starred: true
-    })
-
+    await bulk.applyBulkTriage({ starred: true })
     expect(window.api.annotations.batchUpsertPerCase).toHaveBeenCalledWith(42, [101, 102], {
       starred: true
     })
-
     expect(onTriageApplied).toHaveBeenCalledTimes(1)
     expect(bulk.selectedCount.value).toBe(0)
   })
@@ -167,15 +169,11 @@ describe('useBulkTriageSelection', () => {
       {},
       { [AppStateKey as symbol]: { showSnack: showSnackSpy } }
     )
-
     bulkInstance.toggleSelect(101)
     bulkInstance.toggleSelect(102)
     expect(bulkInstance.selectedCount.value).toBe(2)
 
-    const updated = await bulkInstance.applyBulkTriage({
-      acmg_classification: 'Pathogenic'
-    })
-
+    const updated = await bulkInstance.applyBulkTriage({ acmg_classification: 'Pathogenic' })
     expect(updated).toBe(0)
     expect(showSnackSpy).toHaveBeenCalledWith('Override reason required', 'error')
     expect(bulkInstance.selectedCount.value).toBe(2)
@@ -264,12 +262,9 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('discards post-await completion work if caseId changes mid-flight during applyBulkTriage', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
 
     const bulk = createBulk()
     bulk.toggleSelect(101)
@@ -285,7 +280,7 @@ describe('useBulkTriageSelection', () => {
     bulk.toggleSelect(104)
     expect(bulk.selectedIds.value).toEqual([104])
 
-    resolveUpsert({ updatedCount: 2 })
+    upsertDef.resolve({ updatedCount: 2 })
     const count = await triagePromise
     expect(count).toBe(2)
     expect(onTriageApplied).not.toHaveBeenCalled()
@@ -294,14 +289,10 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('prevents older in-flight batchGet from overwriting refreshed data after cache eviction', async () => {
-    let resolveFirstBatch!: (val: unknown) => void
-    const firstBatchPromise = new Promise((resolve) => {
-      resolveFirstBatch = resolve
-    })
-
+    const firstBatchDef = defer()
     const batchGetSpy = vi
       .fn()
-      .mockReturnValueOnce(firstBatchPromise)
+      .mockReturnValueOnce(firstBatchDef.promise)
       .mockResolvedValueOnce({
         '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Benign' })
       })
@@ -317,7 +308,7 @@ describe('useBulkTriageSelection', () => {
     await loadAnnotationsBatch(42, [{ id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' }])
     expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
 
-    resolveFirstBatch({
+    firstBatchDef.resolve({
       '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Pathogenic' })
     })
     await initialLoad
@@ -353,11 +344,7 @@ describe('useBulkTriageSelection', () => {
   it('does not wipe unselected cached variants when applyBulkTriage runs after beginAnnotationRequest with known build', async () => {
     const { beginAnnotationRequest } =
       await import('../../../src/renderer/src/composables/annotation-cache')
-
-    // Simulate page load having established GRCh38 build for Case 42
     beginAnnotationRequest(42, 'GRCh38')
-
-    // Pre-populate unselected variant B in annotationCache
     annotationCache.value.set('1:200:G:C', mockCacheEntry(2))
 
     const bulk = createBulk({
@@ -366,29 +353,19 @@ describe('useBulkTriageSelection', () => {
         { id: 2, chr: '1', pos: 200, ref: 'G', alt: 'C' }
       ]
     })
-
-    // Select ONLY variant 1
     bulk.toggleSelect(1)
-
-    // Run applyBulkTriage
     await bulk.applyBulkTriage({ starred: true })
 
-    // Unselected variant 2 MUST still be cached (not wiped by buildUnknown in beginAnnotationRequest)
     expect(annotationCache.value.has('1:200:G:C')).toBe(true)
     expect(annotationCache.value.get('1:200:G:C')?.perCase?.id).toBe(2)
   })
 
   it('invalidates and refreshes affected visible cache entries while preserving new selection on A -> B -> A round-trip', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
 
     const bulk = createBulk()
-
-    // 1. On Case 42 (Case A), item 101 has cached Benign classification
     annotationCache.value.set(
       'chr1:1000:A:T',
       mockCacheEntry(101, { acmg_classification: 'Benign' })
@@ -396,58 +373,44 @@ describe('useBulkTriageSelection', () => {
     bulk.toggleSelect(101)
     expect(bulk.selectedIds.value).toEqual([101])
 
-    // 2. Start bulk triage for item 101 on Case 42 to Pathogenic
     const triagePromise = bulk.applyBulkTriage({ acmg_classification: 'Pathogenic' })
     expect(bulk.isExecuting.value).toBe(true)
 
-    // 3. User navigates Case 42 -> Case 99 (Case B)
     caseId.value = 99
     await vi.waitFor(() => expect(bulk.selectedIds.value.length).toBe(0))
 
-    // 4. User navigates back Case 99 -> Case 42 (Case A again)
     caseId.value = 42
     await vi.waitFor(() => expect(bulk.selectedIds.value.length).toBe(0))
 
-    // Simulate item 101 having Benign in cache before write finishes
     annotationCache.value.set(
       'chr1:1000:A:T',
       mockCacheEntry(101, { acmg_classification: 'Benign' })
     )
-
-    // User selects item 103 in the new session of Case 42
     bulk.toggleSelect(103)
     expect(bulk.selectedIds.value).toEqual([103])
 
-    // Configure batchGet mock to return committed Pathogenic data for item 101
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = vi.fn().mockResolvedValue({
       'chr1:1000:A:T': mockCacheEntry(101, { acmg_classification: 'Pathogenic' })
     })
 
-    // 5. In-flight upsert from initial Case 42 resolves
-    resolveUpsert({ updatedCount: 1 })
+    upsertDef.resolve({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
-    // 6. Because toValue(caseId) === 42, affected visible row 101 was refreshed to Pathogenic!
     expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
       'Pathogenic'
     )
-    // 7. Selection [103] is preserved, and onTriageApplied is called because case 42 is active
     expect(onTriageApplied).toHaveBeenCalledTimes(1)
     expect(bulk.selectedIds.value).toEqual([103])
     expect(bulk.isExecuting.value).toBe(false)
   })
 
   it('does not clear newly modified selection when in-flight bulk triage resolves and refreshes panel and table', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
 
-    // Open panel variant on an off-page row (id 999)
     const panelVariantRef = ref({
       id: 999,
       case_id: 42,
@@ -456,7 +419,6 @@ describe('useBulkTriageSelection', () => {
       ref: 'A',
       alt: 'T'
     })
-
     const batchGetSpy = vi.fn().mockResolvedValue({
       'chr1:9990:A:T': mockCacheEntry(999, { starred: 1 })
     })
@@ -483,7 +445,7 @@ describe('useBulkTriageSelection', () => {
     bulkInstance.toggleSelect(102)
     expect(bulkInstance.selectedIds.value).toEqual([101, 102])
 
-    resolveUpsert({ updatedCount: 1 })
+    upsertDef.resolve({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
@@ -497,12 +459,9 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('does not touch cache or trigger batchGet if component unmounts and case switches to Case 2 while write is in flight', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
     const batchGetSpy = vi.fn().mockResolvedValue({})
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
@@ -524,7 +483,7 @@ describe('useBulkTriageSelection', () => {
     annotationCache.value.set('chr2:5000:C:T', mockCacheEntry(501, { case_id: 2 }))
 
     // Resolve old write for Case 42
-    resolveUpsert({ updatedCount: 1 })
+    upsertDef.resolve({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
@@ -536,11 +495,8 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('does not trigger batchGet for Case 1 or touch Case 2 cache if disposed during invalidateTags await', async () => {
-    let resolveInvalidateTags!: () => void
-    const deferredInvalidate = new Promise<void>((resolve) => {
-      resolveInvalidateTags = resolve
-    })
-    vi.mocked(invalidateTags).mockReturnValueOnce(deferredInvalidate)
+    const invalidateDef = defer<void>()
+    vi.mocked(invalidateTags).mockReturnValueOnce(invalidateDef.promise)
 
     const batchGetSpy = vi.fn().mockResolvedValue({})
     // @ts-expect-error Mock window.api
@@ -562,7 +518,7 @@ describe('useBulkTriageSelection', () => {
     beginAnnotationRequest(2, 'GRCh38')
     annotationCache.value.set('chr2:5000:C:T', mockCacheEntry(501, { case_id: 2 }))
 
-    resolveInvalidateTags()
+    invalidateDef.resolve()
     const count = await triagePromise
 
     expect(count).toBe(2)
@@ -572,11 +528,8 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('hands off to committedWriteListeners and reloads evicted annotations if unmounted during invalidateTags await on same case', async () => {
-    let resolveInvalidateTags!: () => void
-    const deferredInvalidate = new Promise<void>((resolve) => {
-      resolveInvalidateTags = resolve
-    })
-    vi.mocked(invalidateTags).mockReturnValueOnce(deferredInvalidate)
+    const invalidateDef = defer<void>()
+    vi.mocked(invalidateTags).mockReturnValueOnce(invalidateDef.promise)
 
     const batchGetSpy = vi.fn().mockResolvedValue({
       'chr1:1000:A:T': mockCacheEntry(101, { tag_id: 5 })
@@ -601,7 +554,7 @@ describe('useBulkTriageSelection', () => {
     })
 
     wrapper.unmount()
-    resolveInvalidateTags()
+    invalidateDef.resolve()
     const count = await triagePromise
 
     expect(count).toBe(2)
@@ -612,12 +565,9 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('evicts stale cache on round-trip A -> B -> A and reloads fresh annotations even if no peer instance is mounted', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
 
     let bulk1!: ReturnType<typeof useBulkTriageSelection>
     const scope1 = effectScope()
@@ -646,7 +596,7 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
-    resolveUpsert({ updatedCount: 1 })
+    upsertDef.resolve({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
@@ -657,12 +607,9 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('reloads fresh annotations via disposed writer recovery on A -> B -> A when annotation read was in-flight at commit time', async () => {
-    let resolveUpsert!: (val: unknown) => void
-    const deferredUpsert = new Promise((resolve) => {
-      resolveUpsert = resolve
-    })
+    const upsertDef = defer()
     // @ts-expect-error Mock window.api
-    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
 
     let bulk1!: ReturnType<typeof useBulkTriageSelection>
     const scope1 = effectScope()
@@ -686,7 +633,7 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
-    resolveUpsert({ updatedCount: 1 })
+    upsertDef.resolve({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
@@ -739,9 +686,7 @@ describe('useBulkTriageSelection', () => {
     const batchGetSpy = vi
       .fn()
       .mockReturnValueOnce(firstBatchPromise)
-      .mockResolvedValueOnce({
-        '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Benign' })
-      })
+      .mockResolvedValueOnce({ '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Benign' }) })
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
@@ -762,12 +707,8 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('retains post-write refreshed annotations across page changes via markAwaited', async () => {
-    let resolveBatchGet!: (val: unknown) => void
-    const deferredBatchGet = new Promise((resolve) => {
-      resolveBatchGet = resolve
-    })
-
-    const batchGetSpy = vi.fn().mockReturnValue(deferredBatchGet)
+    const batchGetDef = defer()
+    const batchGetSpy = vi.fn().mockReturnValue(batchGetDef.promise)
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
@@ -785,7 +726,7 @@ describe('useBulkTriageSelection', () => {
 
     invalidateAnnotationGeneration('case')
 
-    resolveBatchGet({
+    batchGetDef.resolve({
       'chr1:1000:A:T': mockCacheEntry(101, { starred: 1 })
     })
 
@@ -793,5 +734,64 @@ describe('useBulkTriageSelection', () => {
 
     expect(annotationCache.value.has('chr1:1000:A:T')).toBe(true)
     expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.starred).toBe(1)
+  })
+
+  it('preserves single-row ACMG in flight when bulk star completes and reloads before ACMG resolves', async () => {
+    const bulkDef = defer()
+    const batchGetDef = defer()
+    const acmgDef = defer()
+
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(bulkDef.promise)
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = vi.fn().mockReturnValue(batchGetDef.promise)
+    // @ts-expect-error Mock window.api
+    window.api.annotations.upsertPerCase = vi.fn().mockReturnValue(acmgDef.promise)
+
+    annotationCache.value.set(
+      'chr1:1000:A:T',
+      mockCacheEntry(101, { starred: 0, acmg_classification: 'Benign' })
+    )
+
+    const bulk = createBulk()
+    bulk.toggleSelect(101)
+    const bulkPromise = bulk.applyBulkTriage({ starred: true })
+
+    const { setAcmgClassification } = useAnnotations()
+    const acmgPromise = setAcmgClassification(42, 101, 'chr1', 1000, 'A', 'T', 'Pathogenic')
+
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
+      'Pathogenic'
+    )
+
+    bulkDef.resolve({ updatedCount: 1 })
+    await vi.waitFor(() => {
+      expect(window.api.annotations.batchGet).toHaveBeenCalled()
+    })
+
+    batchGetDef.resolve({
+      'chr1:1000:A:T': mockCacheEntry(101, { starred: 1, acmg_classification: 'Benign' })
+    })
+    await bulkPromise
+
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.starred).toBe(1)
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
+      'Pathogenic'
+    )
+
+    acmgDef.resolve(
+      mockCacheEntry(101, {
+        starred: 1,
+        acmg_classification: 'Pathogenic',
+        acmg_evidence: null,
+        per_case_comment: null
+      }).perCase
+    )
+    await acmgPromise
+
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.starred).toBe(1)
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
+      'Pathogenic'
+    )
   })
 })
