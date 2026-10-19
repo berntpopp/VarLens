@@ -1,65 +1,57 @@
-# Brand assets & favicons
+# Brand assets & icons
 
-How the VarLens logo is used for the browser favicon, PWA/app icons, and the
-web login wall. **The logo artwork is never redrawn here** — every asset is the
-existing logo, only *resized and reformatted* to fit each surface.
+How the VarLens icon is drawn and turned into every desktop, web and docs asset.
 
-## Source of truth
+## The mark
 
-`src/renderer/public/favicon.svg` is the canonical logo (the DNA-helix-in-a-lens
-mark). The identical artwork also lives at `resources/icon.svg` (desktop app
-icon) and `docs/public/logo.svg` (docs/marketing). All favicon raster assets are
-derived from `favicon.svg`; if the logo changes, regenerate (below).
+A protein lollipop plot whose tallest variant is a magnifying lens, leaning in to
+inspect; the amber head inside the glass is the variant. Graphite tile, silver
+ring, one amber accent. Chosen in the October 2026 icon exploration (canvas:
+claude.ai artifact "VarLens Icon Explorations").
 
-## The set (modern minimal)
+## Source of truth: four vector drawings
 
-Following the current best-practice "few files, not twenty" approach
-([Evil Martians — How to Favicon](https://evilmartians.com/chronicles/how-to-favicon-in-2021-six-files-that-fit-most-needs),
-[Favicon best practices 2025](https://iconmaker.studio/blog/favicon-best-practices-2025)):
+`resources/brand/` holds one SVG per size range. Small sizes are redrawn, not
+scaled: each keeps the leaning lens, the amber arc and the amber variant, and
+drops detail as it shrinks.
 
-| File | Size | Purpose |
+| File | Used at | Notes |
 |---|---|---|
-| `favicon.svg` | scalable | Modern-browser tab icon (the logo itself) |
-| `favicon.ico` | 16/32/48 | Legacy tabs, Google results |
-| `apple-touch-icon.png` | 180×180 | iOS home screen (opaque white tile, padded) |
-| `icon-192.png` | 192×192 | Android home screen (transparent) |
-| `icon-512.png` | 512×512 | PWA splash (transparent) |
-| `icon-maskable-512.png` | 512×512 | Android adaptive icon (maskable, 80% safe zone) |
-| `manifest.webmanifest` | — | PWA metadata + icon list |
+| `varlens-full.svg` | 128 px and up | Glass, shadow, four neighbour lollipops |
+| `varlens-m.svg` | 48–64 px | Two neighbours, strokes ×1.5 |
+| `varlens-s.svg` | 24–32 px | 32 px grid, flat colour, no filters |
+| `varlens-xs.svg` | 16 px | 16 px grid, nothing thinner than 1 px |
 
-All live in `src/renderer/public/` and are copied to the served root by Vite
-(web build → `out/web/public/`, desktop renderer build alike).
+`varlens-s.svg` and `varlens-xs.svg` keep straight edges on whole pixels so they
+render sharp. Edit the SVGs, never the generated rasters.
 
-### Head wiring (`src/renderer/index.html`)
+## Generated assets
 
-```html
-<link rel="icon" href="/favicon.ico" sizes="32x32" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="manifest" href="/manifest.webmanifest" />
-<meta name="theme-color" content="#1E3A5F" />
-```
+`npm run icons:generate` (`scripts/brand/build-icons.mjs`, needs `rsvg-convert`)
+writes everything below from those four files. Each raster size takes the drawing
+for its range; `.ico` and `.icns` embed one PNG per size.
 
-Notes: iOS/maskable tiles must be opaque (the logo has dark ink), so they sit on
-a white tile with padding; the manifest icon `src`s are relative so they resolve
-under the app's URL prefix (`APP_PATH_PREFIX`).
+| Output | From |
+|---|---|
+| `build/icon.icns` | macOS grid (824 px body on 1024, soft shadow) for ≥128; pixel-grid drawings for 16–64 |
+| `build/icon.ico`, `resources/icon.ico` | 16–256, per size range |
+| `build/icons/NxN.png`, `build/icon.png` | Linux set, per size range |
+| `resources/icon.png`, `resources/icon.svg` | Dev-mode window icon (`src/main/index.ts`), full master |
+| `src/renderer/public/favicon.svg` | Copy of `varlens-s.svg` (tab icon, login-wall logo) |
+| `src/renderer/public/favicon.ico` | 16/32/48 |
+| `src/renderer/public/apple-touch-icon.png` | 180, opaque square tile (iOS applies its own mask) |
+| `src/renderer/public/icon-192.png`, `icon-512.png` | PWA "any" icons |
+| `src/renderer/public/icon-maskable-512.png` | Opaque tile, art inside the 80% safe zone |
+| `docs/public/logo.svg` | Copy of `varlens-m.svg` (docs nav, docs favicon, README) |
 
-## Login wall logo
+The renderer toolbar imports `resources/brand/varlens-s.svg` directly as a Vite
+asset (`AppToolbar.vue`), so the in-app mark is vector too.
 
-The standalone login page (`src/web/login/login.html`) shows the logo with
-`<img src="…/favicon.svg">`. The page gate (`src/web/server/page-gate.ts`)
-302-redirects every anonymous request except `/healthz` and `/login`, so the
-favicon assets are added to its `PUBLIC_ROOT_ASSETS` allowlist — they are the
-non-sensitive public logo, so they load for unauthenticated visitors (the login
-tab favicon + this `<img>`). No inlining: the logo stays a single source file.
+## Head wiring and the login wall
 
-## Regenerating
-
-Requires `rsvg-convert` (librsvg), `magick` (ImageMagick), `icotool` (icoutils).
-
-```bash
-# Favicon / app-icon raster set from src/renderer/public/favicon.svg
-bash scripts/brand/build-favicons.sh
-```
-
-This only resizes/reformats the existing logo; it never edits the paths.
+`src/renderer/index.html` and `src/web/login/login.html` link `favicon.ico`,
+`favicon.svg` and `apple-touch-icon.png`; `src/web/index.html` links
+`favicon.svg`. The web page gate (`src/web/server/page-gate.ts`) lets
+these public files through to anonymous visitors, so the login tab and its logo
+load before sign-in. The web renderer build copies the set explicitly
+(`vite.web-renderer.config.ts`).

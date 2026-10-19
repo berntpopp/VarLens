@@ -17,6 +17,7 @@
       @click="handleHomeClick"
       @keydown.enter="handleHomeClick"
     >
+      <img :src="varlensMark" alt="" width="22" height="22" class="app-logo" />
       VarLens
       <v-tooltip activator="parent" location="bottom">Return to home</v-tooltip>
     </v-app-bar-title>
@@ -233,6 +234,7 @@ import { usePermissions } from '../composables/usePermissions'
 import { useShortlistRankingDialog } from '../composables/useShortlistRankingDialog'
 import { SHORTLIST_RANKING_EDITOR } from '../config/shortlistRankingEditor'
 import type { AffectedStatus, CaseSex } from '../../../shared/types/api'
+import varlensMark from '../../../../resources/brand/varlens-s.svg'
 import {
   mdiAccount,
   mdiAccountGroup,
@@ -373,10 +375,17 @@ const showExternalLookups = computed(() => isWebRuntime() && toolbarAuth.isAdmin
 
 .app-title {
   cursor: pointer;
+  /* Vuetify's toolbar title has flex-basis 0; with grow 0 it collapsed to 0 px. */
+  flex: 0 0 auto !important;
 }
 
 .app-title:hover {
   text-decoration: underline;
+}
+
+.app-logo {
+  margin-right: 8px;
+  vertical-align: -5px;
 }
 
 .select-case-hint {
