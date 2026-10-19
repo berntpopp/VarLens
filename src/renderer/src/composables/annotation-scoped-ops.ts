@@ -427,14 +427,20 @@ async function loadBatch(
     const ident = scope.kind === 'case' && typeof v.id === 'number' ? `${key}:${v.id}` : key
     if (seenVariantIdentifiers.has(ident)) continue
     seenVariantIdentifiers.add(ident)
+    let sameCoords = true
     if (scope.kind === 'case') {
       const cached = annotationCache.value.get(key)
       const cachedVid = getCachedVariantId(key)
-      const sameCoords = cached?.global?.chr === undefined || cached.global.chr === v.chr
-      if (typeof v.id === 'number' && cached !== undefined) {
-        if (cached.perCase === null || cached.perCase.variant_id === v.id || !sameCoords) {
-          setPerCaseByVariantId(scope.caseId, v.id, cached.perCase, key)
-        }
+      sameCoords = cached?.global?.chr === undefined || cached.global.chr === v.chr
+      if (
+        typeof v.id === 'number' &&
+        cached !== undefined &&
+        sameCoords &&
+        unloadedSlotOf(key) !== 'perCase' &&
+        ((cached.perCase === null && (cachedVid === undefined || cachedVid === v.id)) ||
+          cached.perCase?.variant_id === v.id)
+      ) {
+        setPerCaseByVariantId(scope.caseId, v.id, cached.perCase, key)
       }
       const batchHasCachedVid =
         cachedVid !== undefined && variants.some((o) => o.id === cachedVid && variantKey(o) === key)
@@ -457,6 +463,7 @@ async function loadBatch(
       needsLoad(key, scope.kind) ||
       (scope.kind === 'case' &&
         typeof v.id === 'number' &&
+        sameCoords &&
         !hasPerCaseByVariantId(scope.caseId, v.id) &&
         !isKeyLoading(key))
     ) {

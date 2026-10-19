@@ -462,9 +462,9 @@ export function evictAnnotationCacheKeysForBulkTriage(
       const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
       if (bulkVer > prevConfirmed) {
         setConfirmedWriteVersion(key, vSlot, bulkVer)
-        setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
+        if (!o) setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
         pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
-        pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
+        if (!o) pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
         if (
           updates &&
           (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
