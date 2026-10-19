@@ -493,4 +493,104 @@ describe('Round 20 regression defects', () => {
     expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
     expect(getPerCaseByVariantId(1, 12)?.starred).toBe(0)
   })
+
+  it('Round 28 Fix 1: non-owner sibling write triggers annotationCache reactivity on optimistic and confirmed writes', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const entry11 = mockPerCase(11, { starred: 1 })
+    const entry12 = mockPerCase(12, { starred: 0 })
+    cacheSet(key, { global: null, perCase: entry11 })
+    setCachedVariantId(key, 11)
+    ensurePerCaseSlotOwner(key, 1, 11)
+    setPerCaseByVariantId(1, 11, entry11, key)
+    setPerCaseByVariantId(1, 12, entry12, key)
+
+    const dWrite = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase).mockReturnValueOnce(dWrite.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const scope12 = { kind: 'case' as const, caseId: 1, variantId: 12, build: 'GRCh38' }
+    const p = ops.toggleStar(scope12, coords)
+
+    expect(getPerCaseByVariantId(1, 12, key)?.starred).toBe(1)
+
+    dWrite.resolve(mockPerCase(12, { starred: 1, acmg_classification: 'Pathogenic' }))
+    await p
+
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Pathogenic')
+    expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
+  })
+
+  it('Round 28 Fix 2: loadBatch wave 2 preserves perCaseByVariantId when sibling write bumps keyVersion', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const entry11 = mockPerCase(11, { starred: 0 })
+    const entry12 = mockPerCase(12, { starred: 1, acmg_classification: 'Likely pathogenic' })
+    const dWave1 = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet)
+      .mockResolvedValueOnce({ [key]: { global: null, perCase: entry11 } } as never)
+      .mockReturnValueOnce(dWave1.promise as never)
+    vi.mocked(api.annotations.upsertPerCase).mockResolvedValueOnce(
+      mockPerCase(11, { starred: 1 }) as never
+    )
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const batchPromise = ops.loadBatch(scope, [
+      { id: 11, ...coords },
+      { id: 12, ...coords }
+    ])
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    await ops.toggleStar({ kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' }, coords)
+
+    dWave1.resolve({ [key]: { global: null, perCase: entry12 } })
+    await batchPromise
+
+    expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 12, key)?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Likely pathogenic')
+  })
+
+  it('Round 28 Fix 3: load with variantId promotes already-loaded sibling from perCaseByVariantId without extra IPC', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const entry11 = mockPerCase(11, { starred: 1 })
+    const entry12 = mockPerCase(12, { starred: 0, acmg_classification: 'Benign' })
+    cacheSet(key, { global: null, perCase: entry12 })
+    setCachedVariantId(key, 12)
+    ensurePerCaseSlotOwner(key, 1, 12)
+    setPerCaseByVariantId(1, 11, entry11, key)
+    setPerCaseByVariantId(1, 12, entry12, key)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    await ops.load({ kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' }, coords)
+
+    expect(api.annotations.getForVariant).not.toHaveBeenCalled()
+    expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(11)
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Benign')
+  })
+
+  it('Round 28 Fix 4: uncached concurrent mutations preserve confirmed field patch on null base when second field group fails', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const dAcmg = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase).mockReturnValueOnce(dAcmg.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const scope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+    const pAcmg = ops.setAcmgClassification(scope11, coords, 'Pathogenic')
+
+    // Simulate bulk star confirmation setting a confirmedFieldPatch while confirmedBases is still null
+    const slotKey = perCaseSlotKey(1, 11, key)
+    const { setConfirmedFieldPatch } = await import('@renderer/composables/annotation-cache')
+    setConfirmedFieldPatch(slotKey, 'star', { starred: 1 })
+
+    dAcmg.reject(new Error('ACMG write failed'))
+    const resAcmg = await pAcmg
+    expect(resAcmg).toBe(false)
+
+    expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification ?? null).toBeNull()
+  })
 })
+
+

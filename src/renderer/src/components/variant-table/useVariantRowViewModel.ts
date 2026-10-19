@@ -17,6 +17,11 @@
 import { computed, type Ref, type ShallowRef } from 'vue'
 import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import type { Variant } from '../../../../shared/types/api'
+import {
+  annotationCache as sharedAnnotationCache,
+  getPerCaseByVariantId,
+  hasPerCaseByVariantId
+} from '../../composables/annotation-cache'
 
 export interface RowViewModel {
   links: Record<string, string | null>
@@ -35,6 +40,8 @@ export interface LinkConfig {
 
 type AnnotationEntry = {
   perCase: {
+    variant_id?: number
+    case_id?: number
     starred?: number
     acmg_classification?: AcmgClassification | null
     per_case_comment?: string | null
@@ -65,11 +72,24 @@ export function buildRowViewModels(
   previous: Map<number, RowViewModel> = new Map()
 ): Map<number, RowViewModel> {
   const map = new Map<number, RowViewModel>()
+  const isSharedCache = annotationCache === sharedAnnotationCache.value
 
   for (const v of variants) {
     const key = v.id
-    const ann = annotationCache.get(variantKey(v.chr, v.pos, v.ref, v.alt))
-    const perCase = ann?.perCase ?? null
+    const coordKey = variantKey(v.chr, v.pos, v.ref, v.alt)
+    const ann = annotationCache.get(coordKey)
+    const perCase =
+      isSharedCache &&
+      typeof v.case_id === 'number' &&
+      typeof v.id === 'number' &&
+      hasPerCaseByVariantId(v.case_id, v.id)
+        ? (getPerCaseByVariantId(v.case_id, v.id, coordKey) ?? null)
+        : ann?.perCase &&
+            typeof ann.perCase.variant_id === 'number' &&
+            typeof v.id === 'number' &&
+            ann.perCase.variant_id !== v.id
+          ? null
+          : (ann?.perCase ?? null)
     const global = ann?.global ?? null
 
     const links: Record<string, string | null> = {}

@@ -108,10 +108,19 @@ export function applyConfirmedFieldPatches(
   slotKey: string,
   base: SlotValue | null
 ): SlotValue | null {
-  if (base === null) return null
   const patches = confirmedFieldPatches.get(slotKey)
-  if (!patches) return base
-  let merged: Record<string, unknown> = { ...base }
+  if (!patches || Object.keys(patches).length === 0) return base
+  let merged: Record<string, unknown> = base ? { ...base } : {}
+  if (!base && slotKey.startsWith('perCase:')) {
+    const parts = slotKey.split(':')
+    if (parts.length >= 4) {
+      const cid = Number(parts[1])
+      const vid = Number(parts[2])
+      if (Number.isFinite(cid) && Number.isFinite(vid)) {
+        merged = { case_id: cid, variant_id: vid }
+      }
+    }
+  }
   for (const fg of ['star', 'acmg', 'comment'] as const) {
     if (patches[fg]) merged = { ...merged, ...patches[fg] }
   }
@@ -139,6 +148,16 @@ export function getPerCaseSlotOwner(
 
 export const perCaseByVariantId = new Map<string, CaseVariantAnnotation | null>()
 const variantKeysByCoord = new Map<string, Set<string>>()
+const caseVariantVersions = new Map<string, number>()
+
+export function getCaseVariantVersion(caseId: number, variantId: number): number {
+  return caseVariantVersions.get(`${caseId}:${variantId}`) ?? 0
+}
+
+export function bumpCaseVariantVersion(caseId: number, variantId: number): void {
+  const k = `${caseId}:${variantId}`
+  caseVariantVersions.set(k, (caseVariantVersions.get(k) ?? 0) + 1)
+}
 
 export function setPerCaseByVariantId(
   caseId: number,
@@ -163,6 +182,7 @@ export function deletePerCaseForCoordKey(coordKey: string): void {
   if (set) {
     for (const k of Array.from(set)) {
       const [cid, vid] = k.split(':').map(Number)
+      bumpCaseVariantVersion(cid, vid)
       if (!inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))) {
         perCaseByVariantId.delete(k)
         set.delete(k)
@@ -223,6 +243,7 @@ export function clearMutationTracker(): void {
   perCaseSlotOwners.clear()
   perCaseByVariantId.clear()
   variantKeysByCoord.clear()
+  caseVariantVersions.clear()
 }
 
 export function resetMutationTracker(): void {

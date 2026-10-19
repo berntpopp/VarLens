@@ -88,7 +88,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAnnotations } from '../composables/useAnnotations'
-import { variantKey } from '../composables/annotation-cache'
+import {
+  getPerCaseByVariantId,
+  hasPerCaseByVariantId,
+  variantKey
+} from '../composables/annotation-cache'
 import InlineEditableText from './InlineEditableText.vue'
 import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
 import type { Variant } from '../../../shared/types/api'
@@ -130,15 +134,26 @@ const globalComment = computed(() => {
   return annotations?.global?.global_comment ?? null
 })
 
-const perCaseComment = computed(() => {
+const perCaseEntry = computed(() => {
+  const vid = 'id' in props.variant ? props.variant.id : undefined
+  if (
+    props.mode === 'case' &&
+    props.caseId !== null &&
+    typeof vid === 'number' &&
+    hasPerCaseByVariantId(props.caseId, vid)
+  ) {
+    return getPerCaseByVariantId(props.caseId, vid, variantKey(props.variant)) ?? null
+  }
   const annotations = getAnnotations(
     props.variant.chr,
     props.variant.pos,
     props.variant.ref,
     props.variant.alt
   )
-  return annotations?.perCase?.per_case_comment ?? null
+  return annotations?.perCase ?? null
 })
+
+const perCaseComment = computed(() => perCaseEntry.value?.per_case_comment ?? null)
 
 // Get timestamps
 const globalTimestamps = computed(() => {
@@ -156,20 +171,14 @@ const globalTimestamps = computed(() => {
     : null
 })
 
-const perCaseTimestamps = computed(() => {
-  const annotations = getAnnotations(
-    props.variant.chr,
-    props.variant.pos,
-    props.variant.ref,
-    props.variant.alt
-  )
-  return annotations?.perCase
+const perCaseTimestamps = computed(() =>
+  perCaseEntry.value
     ? {
-        created_at: annotations.perCase.created_at,
-        updated_at: annotations.perCase.updated_at
+        created_at: perCaseEntry.value.created_at,
+        updated_at: perCaseEntry.value.updated_at
       }
     : null
-})
+)
 
 // Save handlers: resolve false when nothing was saved, so the editor keeps the text
 const handleGlobalSave = async (value: string | null): Promise<boolean> => {

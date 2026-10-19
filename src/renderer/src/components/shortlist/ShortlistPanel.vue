@@ -40,40 +40,18 @@ import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
 import type { CaseVariantAnnotation } from '../../../../shared/types/database-entities'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+// prettier-ignore
 import {
-  allocateMutationId,
-  annotationCache,
-  applyConfirmedFieldPatches,
-  bumpKeyVersion,
-  bumpWriteVersion,
-  cacheSet,
-  computeOptimisticSlot,
-  confirmedBases,
-  confirmedFieldPatches,
-  ensurePerCaseSlotOwner,
-  evictAnnotationCacheKeys,
-  getAnnotationCacheEpoch,
-  getCachedBuild,
-  getCachedCaseId,
-  getCachedVariantId,
-  getConfirmedWriteVersion,
-  getCurrentDbPath,
-  getPerCaseByVariantId,
-  getWriteVersion,
-  hasDbSwitchedSince,
-  inFlightMutations,
-  isCacheOfBuild,
-  isPerCaseSlotOwner,
-  markAwaited,
-  perCaseSlotKey,
-  perCaseVersionSlot,
-  pruneInFlightMutationsOnSuccess,
-  removeInFlightMutation,
-  setConfirmedFieldPatch,
-  setConfirmedWriteVersion,
-  setPerCaseByVariantId,
-  unloadedSlotOf,
-  variantKey
+  allocateMutationId, annotationCache, applyConfirmedFieldPatches, bumpCaseVariantVersion,
+  bumpKeyVersion, bumpWriteVersion, cacheSet, computeOptimisticSlot, confirmedBases,
+  confirmedFieldPatches, ensurePerCaseSlotOwner, evictCoordSlotOnly, evictPerCaseVariant,
+  getAnnotationCacheEpoch, getCachedBuild, getCachedCaseId, getCachedVariantId,
+  getConfirmedWriteVersion, getCurrentDbPath, getPerCaseByVariantId, getWriteVersion,
+  hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild,
+  isPerCaseSlotOwner, markAwaited, perCaseSlotKey, perCaseVersionSlot,
+  pruneInFlightMutationsOnSuccess, removeInFlightMutation, setCachedVariantId,
+  setConfirmedFieldPatch, setConfirmedWriteVersion, setPerCaseByVariantId,
+  triggerAnnotationCache, unloadedSlotOf, variantKey
 } from '../../composables/annotation-cache'
 import { usePermissions } from '../../composables/usePermissions'
 import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
@@ -227,6 +205,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         remaining && remaining.length > 0
           ? (computeOptimisticSlot(merged, remaining) as CaseVariantAnnotation)
           : merged
+      bumpCaseVariantVersion(row.case_id, row.id)
       setPerCaseByVariantId(row.case_id, row.id, finalSlot, key)
       if (isOwner) {
         const liveEntry = annotationCache.value.get(key)
@@ -237,6 +216,8 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
           { global: liveEntry?.global ?? null, perCase: finalSlot },
           liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
         )
+      } else {
+        triggerAnnotationCache()
       }
     } else {
       if (epoch === getAnnotationCacheEpoch()) {
@@ -272,6 +253,8 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
           { global: liveEntry?.global ?? null, perCase: rolledBack },
           liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
         )
+      } else {
+        triggerAnnotationCache()
       }
       if (!remaining || remaining.length === 0) {
         confirmedBases.delete(slotKey)
@@ -300,9 +283,13 @@ let dialogOpenSeq = 0
 function isRowAnnotationVerified(row: ShortlistRow): boolean {
   const key = variantKey(row)
   const cached = annotationCache.value.get(key)
+  if (cached === undefined || unloadedSlotOf(key) === 'global') return false
+  if (hasPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key)
+    return pc === null || (pc !== undefined && pc.variant_id === row.id && pc.case_id === row.case_id)
+  }
   const cachedVid = getCachedVariantId(key)
   return (
-    cached !== undefined &&
     unloadedSlotOf(key) === undefined &&
     cachedVid === row.id &&
     (cached.perCase === null ||
@@ -314,7 +301,8 @@ async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
   const seq = ++dialogOpenSeq
   const key = variantKey(row)
   if (!isRowAnnotationVerified(row)) {
-    evictAnnotationCacheKeys([key])
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
     if (typeof api?.annotations?.batchGet !== 'function') {
       appState?.showSnack('Failed to load variant annotations.', 'error')
       return false
@@ -326,9 +314,19 @@ async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
     return false
   }
   if (!isRowAnnotationVerified(row)) {
-    evictAnnotationCacheKeys([key])
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
     appState?.showSnack('Failed to load variant annotations.', 'error')
     return false
+  }
+  if (hasPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key) ?? null
+    const existing = annotationCache.value.get(key)
+    ensurePerCaseSlotOwner(key, row.case_id, row.id)
+    setCachedVariantId(key, row.id)
+    if (existing !== undefined && (existing.perCase !== pc || unloadedSlotOf(key) === 'perCase')) {
+      cacheSet(key, { global: existing.global, perCase: pc })
+    }
   }
   return true
 }

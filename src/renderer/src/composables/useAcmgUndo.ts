@@ -11,6 +11,7 @@
 import { inject } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useAnnotations, type UseAnnotationsOptions } from './useAnnotations'
+import { getPerCaseByVariantId, hasPerCaseByVariantId, variantKey } from './annotation-cache'
 import { AppStateKey } from './useAppState'
 import { planAcmgUndo, type AcmgState } from '../utils/acmg/acmg-undo'
 import { logService } from '../services/LogService'
@@ -53,8 +54,11 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     ...rest: [...Locus, AcmgClassification | null]
   ): Promise<boolean> {
     const [chr, pos, ref, alt, classification] = rest
+    const key = variantKey({ chr, pos, ref, alt })
     const previous: AcmgState = {
-      classification: annotations.getAcmgClassification(chr, pos, ref, alt)
+      classification: hasPerCaseByVariantId(caseId, variantId)
+        ? (getPerCaseByVariantId(caseId, variantId, key)?.acmg_classification ?? null)
+        : annotations.getAcmgClassification(chr, pos, ref, alt)
     }
     // Nothing was saved (rolled back and reported): no success message, no Undo.
     if (
@@ -105,9 +109,16 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     ...rest: [...Locus, AcmgClassification | null, string]
   ): Promise<boolean> {
     const [chr, pos, ref, alt, classification, evidenceJson] = rest
+    const key = variantKey({ chr, pos, ref, alt })
+    const hasPerRow = hasPerCaseByVariantId(caseId, variantId)
+    const rowPc = hasPerRow ? getPerCaseByVariantId(caseId, variantId, key) : undefined
     const previous: AcmgState = {
-      classification: annotations.getAcmgClassification(chr, pos, ref, alt),
-      evidenceJson: annotations.getAcmgEvidence(chr, pos, ref, alt)
+      classification: hasPerRow
+        ? (rowPc?.acmg_classification ?? null)
+        : annotations.getAcmgClassification(chr, pos, ref, alt),
+      evidenceJson: hasPerRow
+        ? (rowPc?.acmg_evidence ?? null)
+        : annotations.getAcmgEvidence(chr, pos, ref, alt)
     }
     const saved = await annotations.setAcmgClassificationWithEvidence(
       caseId,

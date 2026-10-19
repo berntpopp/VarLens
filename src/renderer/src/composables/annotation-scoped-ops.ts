@@ -12,16 +12,17 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 // prettier-ignore
 import {
   allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
-  bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot, cacheSetPerCaseSlot,
-  computeOptimisticSlot, confirmedBases, confirmedFieldPatches, dropCacheOfClosedDatabase,
-  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant, evictCoordSlotOnly,
-  getAnnotationCacheEpoch, getAnnotationGeneration, getCachedVariantId, getConfirmedWriteVersion,
-  getKeyVersion, getPerCaseSlotOwner, hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations,
-  isCacheOfBuild, isKeyLoading, isLoadingCaseVariant, isPerCaseSlotOwner, isTrackedCase, markAwaited,
-  mergeServerSlot, needsLoad, otherSlot, perCaseSlotKey, perCaseVersionSlot,
-  pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation, rollBackSlot, setCachedVariantId,
-  setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading, setLoadingCaseVariant,
-  setPerCaseByVariantId, perCaseByVariantId, getPerCaseByVariantId, slotIdentity, slotOf, takeAwaited,
+  bumpCaseVariantVersion, bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot,
+  cacheSetPerCaseSlot, computeOptimisticSlot, confirmedBases, confirmedFieldPatches,
+  dropCacheOfClosedDatabase, ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant,
+  evictCoordSlotOnly, getAnnotationCacheEpoch, getAnnotationGeneration, getCachedVariantId,
+  getCaseVariantVersion, getConfirmedWriteVersion, getKeyVersion, getPerCaseSlotOwner,
+  hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild, isKeyLoading,
+  isLoadingCaseVariant, isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad,
+  otherSlot, perCaseSlotKey, perCaseVersionSlot, pruneInFlightMutationsOnSuccess, readSlot,
+  removeInFlightMutation, rollBackSlot, setCachedVariantId, setConfirmedFieldPatch,
+  setConfirmedWriteVersion, setLoading, setLoadingCaseVariant, setPerCaseByVariantId,
+  perCaseByVariantId, getPerCaseByVariantId, slotIdentity, slotOf, takeAwaited,
   triggerAnnotationCache, unloadedSlotOf, variantKey, writeSlot,
   type AnnotationCache, type AnnotationUpdates, type AnnotationWriteScope, type MutationPlan,
   type SlotValue, type VariantCoords,
@@ -30,7 +31,8 @@ import {
 
 /** Scope of a load: one case, or global. */
 export type AnnotationLoadScope =
-  { kind: 'case'; caseId: number; build: string | null } | { kind: 'global'; build: string | null }
+  | { kind: 'case'; caseId: number; variantId?: number; build: string | null }
+  | { kind: 'global'; build: string | null }
 
 export function globalScope(build: string | null): { kind: 'global'; build: string | null } {
   return { kind: 'global', build }
@@ -138,6 +140,7 @@ async function mutate(
   // prettier-ignore
   if (scope.kind === 'case') {
     setPerCaseByVariantId(scope.caseId, scope.variantId, optimistic as CaseVariantAnnotation | null, key)
+    if (siblingOccupied) triggerAnnotationCache()
   }
 
   try {
@@ -167,6 +170,7 @@ async function mutate(
         ? computeOptimisticSlot(mergedConfirmed, remaining)
         : mergedConfirmed
     if (scope.kind === 'case') {
+      bumpCaseVariantVersion(scope.caseId, scope.variantId)
       setPerCaseByVariantId(scope.caseId, scope.variantId, finalSlot as CaseVariantAnnotation, key)
     }
     if (!remaining || remaining.length === 0) {
@@ -179,6 +183,7 @@ async function mutate(
     }
 
     if (scope.kind === 'case' && !isOwner) {
+      triggerAnnotationCache()
       return true
     }
 
@@ -280,48 +285,34 @@ async function fetchEntry(
   return { global, perCase: null }
 }
 
-/** Cache a load result: a per-case load fills both slots, a global load only its own. */
+// prettier-ignore
 function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationCache): void {
   if (scope.kind === 'case') {
-    const owner = entry.perCase
-      ? { caseId: entry.perCase.case_id, variantId: entry.perCase.variant_id }
-      : getPerCaseSlotOwner(key)
+    const owner = entry.perCase ? { caseId: entry.perCase.case_id, variantId: entry.perCase.variant_id } : getPerCaseSlotOwner(key)
     const slotKey = owner ? perCaseSlotKey(owner.caseId, owner.variantId, key) : `perCase:${key}`
     const inFlight = inFlightMutations.get(slotKey)
     if (entry.perCase !== null) {
       ensurePerCaseSlotOwner(key, entry.perCase.case_id, entry.perCase.variant_id)
       setPerCaseByVariantId(entry.perCase.case_id, entry.perCase.variant_id, entry.perCase, key)
       if (inFlight && inFlight.length > 0) {
-        const writeScope: AnnotationWriteScope = {
-          kind: 'case',
-          caseId: entry.perCase.case_id,
-          variantId: entry.perCase.variant_id,
-          build: scope.build
-        }
+        const writeScope: AnnotationWriteScope = { kind: 'case', caseId: entry.perCase.case_id, variantId: entry.perCase.variant_id, build: scope.build }
         for (const fg of ['star', 'acmg', 'comment'] as const) {
           if (confirmedFieldPatches.get(slotKey)?.[fg] === undefined) {
             const p = extractFieldGroupPatch(writeScope, fg, entry.perCase)
-            setConfirmedFieldPatch(slotKey, fg, p)
-            setConfirmedFieldPatch(`perCase:${key}`, fg, p)
+            setConfirmedFieldPatch(slotKey, fg, p); setConfirmedFieldPatch(`perCase:${key}`, fg, p)
           }
         }
       }
     }
     if (inFlight && inFlight.length > 0) {
-      const basePerCase = entry.perCase
-        ? (applyConfirmedFieldPatches(slotKey, entry.perCase) as CaseVariantAnnotation)
-        : null
+      const basePerCase = entry.perCase ? (applyConfirmedFieldPatches(slotKey, entry.perCase) as CaseVariantAnnotation) : null
       confirmedBases.set(slotKey, basePerCase)
       const perCase = computeOptimisticSlot(basePerCase, inFlight) as CaseVariantAnnotation | null
       cacheSet(key, { global: entry.global, perCase })
       if (owner) setPerCaseByVariantId(owner.caseId, owner.variantId, perCase, key)
     } else {
-      confirmedBases.delete(slotKey)
-      inFlightMutations.delete(slotKey)
-      confirmedFieldPatches.delete(slotKey)
-      const hasOther = Array.from(inFlightMutations.keys()).some(
-        (k) => k.endsWith(`:${key}`) && k !== slotKey
-      )
+      confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
+      const hasOther = Array.from(inFlightMutations.keys()).some((k) => k.endsWith(`:${key}`) && k !== slotKey)
       if (!hasOther) confirmedFieldPatches.delete(`perCase:${key}`)
       cacheSet(key, { global: entry.global, perCase: entry.perCase })
     }
@@ -331,7 +322,7 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
 }
 
 // prettier-ignore
-function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: number, reqVid?: number): void {
+function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: number, reqVid?: number, startVidVer?: number): void {
   const unloaded = unloadedSlotOf(key)
   if (unloaded === 'global') cacheSetGlobalSlot(key, entry.global)
   else if (unloaded === 'perCase') {
@@ -342,45 +333,59 @@ function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: numb
       else if (pc !== null) setPerCaseByVariantId(caseId, pc.variant_id, pc, key)
     }
   }
+  if (reqVid !== undefined && startVidVer !== undefined && getCaseVariantVersion(caseId, reqVid) === startVidVer) {
+    const pc = entry.perCase
+    if (pc === null || (pc.variant_id === reqVid && pc.case_id === caseId)) {
+      const sk = perCaseSlotKey(caseId, reqVid, key)
+      const inf = inFlightMutations.get(sk)
+      const base = pc ? (applyConfirmedFieldPatches(sk, pc) as CaseVariantAnnotation) : null
+      const stored = inf && inf.length > 0 ? (computeOptimisticSlot(base, inf) as CaseVariantAnnotation | null) : pc
+      setPerCaseByVariantId(caseId, reqVid, stored, key)
+    }
+  }
 }
 
-/** Load annotations for one variant (call on row visible or expand). */
-async function load(
-  api: WindowAPI | undefined,
-  scope: AnnotationLoadScope,
-  coords: VariantCoords
-): Promise<void> {
-  // A global row is only known for a build: without one there is nothing to load.
+// prettier-ignore
+async function load(api: WindowAPI | undefined, scope: AnnotationLoadScope, coords: VariantCoords): Promise<void> {
   if (!api || globalBuildOf(scope) === null) return
   const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   const key = variantKey(coords)
+  if (scope.kind === 'case' && typeof scope.variantId === 'number') {
+    const ex = annotationCache.value.get(key)
+    if (ex !== undefined && unloadedSlotOf(key) !== 'global' && hasPerCaseByVariantId(scope.caseId, scope.variantId)) {
+      const pc = getPerCaseByVariantId(scope.caseId, scope.variantId, key) ?? null
+      ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId); setCachedVariantId(key, scope.variantId)
+      if (ex.perCase !== pc || unloadedSlotOf(key) === 'perCase') cacheSet(key, { global: ex.global, perCase: pc })
+      return
+    }
+    if (ex !== undefined && ((ex.perCase != null && ex.perCase.variant_id !== scope.variantId) || (getCachedVariantId(key) !== undefined && getCachedVariantId(key) !== scope.variantId))) {
+      evictCoordSlotOnly(key)
+    }
+  }
   if (!needsLoad(key, scope.kind)) return
 
   const version = getKeyVersion(key)
+  const vidVer = scope.kind === 'case' && typeof scope.variantId === 'number' ? getCaseVariantVersion(scope.caseId, scope.variantId) : undefined
   const loadingToken = setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
     if (isResponseStale(scope, dbPath)) return
-    const isStale =
-      scope.kind === 'case'
-        ? getKeyVersion(key) !== version
-        : getKeyVersion(key) % 1_000_000 !== version % 1_000_000
+    const isStale = scope.kind === 'case' ? getKeyVersion(key) !== version : getKeyVersion(key) % 1_000_000 !== version % 1_000_000
     if (isStale) {
-      const sameEpoch =
-        Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(version / 1_000_000)
-      if (scope.kind === 'case' && sameEpoch) applyStalePerCaseSlot(key, entry, scope.caseId)
+      if (scope.kind === 'case' && Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(version / 1_000_000)) {
+        applyStalePerCaseSlot(key, entry, scope.caseId, scope.variantId, vidVer)
+      }
       return
     }
     storeLoaded(key, scope, entry)
-  } catch (error) {
-    logService.error(
-      `Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error),
-      'annotations'
-    )
-  } finally {
-    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
-      setLoading(key, false, scope.kind, loadingToken)
+    if (scope.kind === 'case' && typeof scope.variantId === 'number') {
+      ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId); setCachedVariantId(key, scope.variantId)
+      setPerCaseByVariantId(scope.caseId, scope.variantId, annotationCache.value.get(key)?.perCase ?? entry.perCase, key)
     }
+  } catch (error) {
+    logService.error(`Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error), 'annotations')
+  } finally {
+    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) setLoading(key, false, scope.kind, loadingToken)
   }
 }
 
@@ -484,13 +489,17 @@ async function loadBatch(
 
   for (const uncached of waves) {
     const requestedVariantIds = new Map<string, number>()
+    const vidVersionsAtStart = new Map<string, number>()
     const keyVersionsAtStart = new Map<string, number>()
     const loadingTokensAtStart = new Map<string, number>()
     for (const vk of uncached) {
       const k = variantKey(vk)
       if (typeof vk.variantId === 'number') {
         requestedVariantIds.set(k, vk.variantId)
-        if (scope.kind === 'case') setLoadingCaseVariant(scope.caseId, vk.variantId, true)
+        if (scope.kind === 'case') {
+          vidVersionsAtStart.set(k, getCaseVariantVersion(scope.caseId, vk.variantId))
+          setLoadingCaseVariant(scope.caseId, vk.variantId, true)
+        }
       }
       keyVersionsAtStart.set(k, getKeyVersion(k))
       loadingTokensAtStart.set(k, setLoading(k, true, scope.kind))
@@ -519,7 +528,8 @@ async function loadBatch(
                   key,
                   value as AnnotationCache,
                   scope.caseId,
-                  requestedVariantIds.get(key)
+                  requestedVariantIds.get(key),
+                  vidVersionsAtStart.get(key)
                 )
               }
             }

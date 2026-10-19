@@ -39,7 +39,8 @@ import {
   getConfirmedWriteVersion,
   setConfirmedWriteVersion,
   pruneInFlightMutationsOnSuccess,
-  deletePerCaseForCoordKey
+  deletePerCaseForCoordKey,
+  bumpCaseVariantVersion
 } from './annotation-mutation-tracker'
 
 export type AnnotationSlot = keyof AnnotationCache
@@ -313,6 +314,7 @@ export function getPerCaseByVariantId(
   variantId: number,
   coordKey?: string
 ): CaseVariantAnnotation | null | undefined {
+  void annotationCache.value
   if (typeof coordKey === 'string' && coordKey.length > 0) {
     const cached = annotationCache.value.get(coordKey)?.perCase
     if (cached != null && cached.case_id === caseId && cached.variant_id === variantId) {
@@ -421,6 +423,7 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
 
 /** Evict a single perCase variant entry without dropping sibling variant data. */
 export function evictPerCaseVariant(caseId: number, variantId: number, key: string): void {
+  bumpCaseVariantVersion(caseId, variantId)
   perCaseByVariantId.delete(`${caseId}:${variantId}`)
   if (
     cachedVariantIds.get(key) === variantId ||
@@ -538,6 +541,7 @@ export function evictAnnotationCacheKeysForBulkTriage(
       deletePerCaseForCoordKey(key)
     }
     for (const o of owners) {
+      bumpCaseVariantVersion(o.caseId, o.variantId)
       const sk = perCaseSlotKey(o.caseId, o.variantId, key)
       const rem = inFlightMutations.get(sk)
       if (rem && rem.length > 0) {
