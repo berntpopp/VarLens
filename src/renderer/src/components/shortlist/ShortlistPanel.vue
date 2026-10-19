@@ -57,6 +57,7 @@ import {
   getCachedVariantId,
   getConfirmedWriteVersion,
   getCurrentDbPath,
+  getPerCaseByVariantId,
   getWriteVersion,
   hasDbSwitchedSince,
   inFlightMutations,
@@ -162,7 +163,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const key = variantKey(row)
   const rowKey = `${row.case_id}:${row.id}`
   const vSlot = perCaseVersionSlot(row.case_id, row.id, 'star')
-  const cachedPerCase = annotationCache.value.get(key)?.perCase
+  const cachedPerCase = getPerCaseByVariantId(row.case_id, row.id, key)
   const pending = pendingStarByRow.get(rowKey)
   const currentStarred =
     pending !== undefined && getWriteVersion(key, vSlot) === pending.writeVer
@@ -202,41 +203,65 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       getAnnotationCacheEpoch() === epoch &&
       getCachedBuild() === build &&
       (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
-      isPerCaseSlotOwner(key, row.case_id, row.id) &&
       writeVer > confirmedVer
     if (stillOnScope) {
       setConfirmedWriteVersion(key, vSlot, writeVer)
       setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
-      setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
       pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
-      pruneInFlightMutationsOnSuccess(`perCase:${key}`, 'star', writeVer)
+      const isOwner = isPerCaseSlotOwner(key, row.case_id, row.id)
+      if (isOwner) {
+        setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
+        pruneInFlightMutationsOnSuccess(`perCase:${key}`, 'star', writeVer)
+      }
       const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
-      setPerCaseByVariantId(row.case_id, row.id, merged, key)
       const remaining = inFlightMutations.get(slotKey)
       if (remaining && remaining.length > 0) {
         confirmedBases.set(slotKey, merged)
       } else {
         confirmedBases.delete(slotKey)
         confirmedFieldPatches.delete(slotKey)
-        confirmedFieldPatches.delete(`perCase:${key}`)
+        if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
       }
       const finalSlot =
         remaining && remaining.length > 0
           ? (computeOptimisticSlot(merged, remaining) as CaseVariantAnnotation)
           : merged
-      const liveEntry = annotationCache.value.get(key)
-      const liveUnloaded = unloadedSlotOf(key)
-      bumpKeyVersion(key)
-      cacheSet(
-        key,
-        { global: liveEntry?.global ?? null, perCase: finalSlot },
-        liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
-      )
+      setPerCaseByVariantId(row.case_id, row.id, finalSlot, key)
+      if (isOwner) {
+        const liveEntry = annotationCache.value.get(key)
+        const liveUnloaded = unloadedSlotOf(key)
+        bumpKeyVersion(key)
+        cacheSet(
+          key,
+          { global: liveEntry?.global ?? null, perCase: finalSlot },
+          liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
+        )
+      }
     } else {
       removeInFlightMutation(slotKey, toggleToken)
     }
   } catch (e) {
     removeInFlightMutation(slotKey, toggleToken)
+    if (confirmedBases.has(slotKey)) {
+      const base = confirmedBases.get(slotKey) ?? null
+      const rolledBack = (applyConfirmedFieldPatches(slotKey, base) ??
+        base) as CaseVariantAnnotation | null
+      setPerCaseByVariantId(row.case_id, row.id, rolledBack, key)
+      if (isPerCaseSlotOwner(key, row.case_id, row.id)) {
+        const liveEntry = annotationCache.value.get(key)
+        const liveUnloaded = unloadedSlotOf(key)
+        bumpKeyVersion(key)
+        cacheSet(
+          key,
+          { global: liveEntry?.global ?? null, perCase: rolledBack },
+          liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
+        )
+      }
+      if (!inFlightMutations.has(slotKey)) {
+        confirmedBases.delete(slotKey)
+        confirmedFieldPatches.delete(slotKey)
+      }
+    }
     logService.error(
       `toggle star failed: ${
         e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)

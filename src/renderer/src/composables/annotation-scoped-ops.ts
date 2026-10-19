@@ -195,29 +195,29 @@ async function mutate(
     setConfirmedWriteVersion(key, vSlot, writeVer)
     const patch = extractFieldGroupPatch(scope, fieldGroup, updated)
     setConfirmedFieldPatch(slotKey, fieldGroup, patch)
-    if (scope.kind === 'case') setConfirmedFieldPatch(`perCase:${key}`, fieldGroup, patch)
+    const isOwner = scope.kind === 'case' && isPerCaseSlotOwner(key, scope.caseId, scope.variantId)
+    if (isOwner) setConfirmedFieldPatch(`perCase:${key}`, fieldGroup, patch)
     pruneInFlightMutationsOnSuccess(slotKey, fieldGroup, writeVer)
 
     const remaining = inFlightMutations.get(slotKey)
     const mergedConfirmed = applyConfirmedFieldPatches(slotKey, updated)!
+    const finalSlot =
+      remaining && remaining.length > 0
+        ? computeOptimisticSlot(mergedConfirmed, remaining)
+        : mergedConfirmed
     if (scope.kind === 'case') {
-      setPerCaseByVariantId(
-        scope.caseId,
-        scope.variantId,
-        mergedConfirmed as CaseVariantAnnotation,
-        key
-      )
+      setPerCaseByVariantId(scope.caseId, scope.variantId, finalSlot as CaseVariantAnnotation, key)
     }
     if (!remaining || remaining.length === 0) {
       confirmedBases.delete(slotKey)
       inFlightMutations.delete(slotKey)
       confirmedFieldPatches.delete(slotKey)
-      if (scope.kind === 'case') confirmedFieldPatches.delete(`perCase:${key}`)
+      if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
     } else {
       confirmedBases.set(slotKey, mergedConfirmed)
     }
 
-    if (scope.kind === 'case' && !isPerCaseSlotOwner(key, scope.caseId, scope.variantId)) {
+    if (scope.kind === 'case' && !isOwner) {
       return true
     }
 
@@ -226,10 +226,6 @@ async function mutate(
     const written = slot
     const unloaded = live ? unloadedSlotOf(key) : otherSlot(written)
     bumpKeyVersion(key)
-    const finalSlot =
-      remaining && remaining.length > 0
-        ? computeOptimisticSlot(mergedConfirmed, remaining)
-        : mergedConfirmed
     cacheSet(
       key,
       mergeServerSlot(live, scope, finalSlot!),
