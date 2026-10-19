@@ -64,6 +64,21 @@ function row(overrides: Partial<ShortlistRow> = {}): ShortlistRow {
   } as ShortlistRow
 }
 
+function mockPerCase(variantId = 1, starred = 1, overrides: Record<string, unknown> = {}) {
+  return {
+    id: variantId,
+    case_id: 1,
+    variant_id: variantId,
+    starred,
+    created_at: 0,
+    updated_at: 0,
+    per_case_comment: null,
+    acmg_classification: null,
+    acmg_evidence: null,
+    ...overrides
+  }
+}
+
 describe('ShortlistTable', () => {
   it('renders one row per input item', () => {
     const wrapper = mount(ShortlistTable, {
@@ -175,14 +190,34 @@ describe('ShortlistTable', () => {
     expect((emitted?.[0]?.[0] as ShortlistRow).id).toBe(1)
   })
 
-  it('emits toggle-star when star icon is clicked', async () => {
-    const wrapper = mount(ShortlistTable, {
-      props: { rows: [row()] },
+  it('reads star status from annotationCache only when variant_id and case_id match (#684)', async () => {
+    const r = row({ id: 1, case_id: 1, is_starred: false })
+    const key = variantKey(r)
+    // Sibling variant with different variant_id at same coordinates
+    annotationCache.value.set(key, { global: null, perCase: mockPerCase(999, 1) })
+    triggerRef(annotationCache)
+    let wrapper = mount(ShortlistTable, {
+      props: { rows: [r] },
       global: { plugins: [vuetify, pinia] }
     })
-    const star = wrapper.find('[data-testid="shortlist-star-1"]')
+    let star = wrapper.find('[data-testid="shortlist-star-1"]')
+    expect(star.attributes('aria-label')).toBe('Star variant')
+    expect(star.attributes('aria-pressed')).toBe('false')
+
+    // Matching variant_id
+    annotationCache.value.set(key, { global: null, perCase: mockPerCase(1, 1) })
+    triggerRef(annotationCache)
+    wrapper = mount(ShortlistTable, {
+      props: { rows: [r] },
+      global: { plugins: [vuetify, pinia] }
+    })
+    star = wrapper.find('[data-testid="shortlist-star-1"]')
+    expect(star.attributes('aria-label')).toBe('Unstar variant')
+    expect(star.attributes('aria-pressed')).toBe('true')
     await star.trigger('click')
-    expect(wrapper.emitted('toggle-star')).toBeTruthy()
+    expect(wrapper.emitted('toggle-star')?.[0]?.[0]).toMatchObject({ is_starred: true })
+    annotationCache.value.delete(key)
+    triggerRef(annotationCache)
   })
 
   it('variant_notation for SNV is chr:pos ref>alt', () => {
@@ -196,15 +231,7 @@ describe('ShortlistTable', () => {
   it('variant_notation for SV is chr:pos sv_type sv_length bp', () => {
     const wrapper = mount(ShortlistTable, {
       props: {
-        rows: [
-          row({
-            variant_type: 'sv',
-            chr: '2',
-            pos: 5000,
-            sv_type: 'DEL',
-            sv_length: -1000
-          })
-        ]
+        rows: [row({ variant_type: 'sv', chr: '2', pos: 5000, sv_type: 'DEL', sv_length: -1000 })]
       },
       global: { plugins: [vuetify, pinia] }
     })
@@ -213,15 +240,7 @@ describe('ShortlistTable', () => {
 
   it('renders HGVS c. and p. on SNV rows when cdna and aa_change are present', () => {
     const wrapper = mount(ShortlistTable, {
-      props: {
-        rows: [
-          row({
-            variant_type: 'snv',
-            cdna: '123A>G',
-            aa_change: 'Arg41Gly'
-          } as Partial<ShortlistRow>)
-        ]
-      },
+      props: { rows: [row({ variant_type: 'snv', cdna: '123A>G', aa_change: 'Arg41Gly' })] },
       global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
@@ -232,15 +251,7 @@ describe('ShortlistTable', () => {
 
   it('preserves existing c./p. prefixes from annotators like SnpEff', () => {
     const wrapper = mount(ShortlistTable, {
-      props: {
-        rows: [
-          row({
-            variant_type: 'snv',
-            cdna: 'c.456C>T',
-            aa_change: 'p.Pro152Leu'
-          } as Partial<ShortlistRow>)
-        ]
-      },
+      props: { rows: [row({ variant_type: 'snv', cdna: 'c.456C>T', aa_change: 'p.Pro152Leu' })] },
       global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
@@ -268,7 +279,7 @@ describe('ShortlistTable', () => {
             variant_type: 'snv',
             cdna: 'ENST00000361682.4:c.186C>T',
             aa_change: 'ENSP00000354346.4:p.Ala62%3D'
-          } as Partial<ShortlistRow>)
+          })
         ]
       },
       global: { plugins: [vuetify, pinia] }
@@ -282,15 +293,7 @@ describe('ShortlistTable', () => {
 
   it('omits HGVS lines on SNV rows when cdna/aa_change are null', () => {
     const wrapper = mount(ShortlistTable, {
-      props: {
-        rows: [
-          row({
-            variant_type: 'snv',
-            cdna: null,
-            aa_change: null
-          } as Partial<ShortlistRow>)
-        ]
-      },
+      props: { rows: [row({ variant_type: 'snv', cdna: null, aa_change: null })] },
       global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
@@ -310,9 +313,9 @@ describe('ShortlistTable', () => {
             pos: 2000,
             sv_type: 'INS',
             sv_length: 500,
-            cdna: '999A>G', // should be ignored for SV
+            cdna: '999A>G',
             aa_change: 'Arg1Gly'
-          } as Partial<ShortlistRow>)
+          })
         ]
       },
       global: { plugins: [vuetify, pinia] }
@@ -493,18 +496,10 @@ describe('ShortlistTable', () => {
       const key = variantKey({ chr: '1', pos: 5555, ref: 'C', alt: 'A' })
       annotationCache.value.set(key, {
         global: null,
-        perCase: {
-          id: 1,
-          case_id: 1,
-          variant_id: 1,
-          is_starred: 0,
+        perCase: mockPerCase(1, 0, {
           acmg_classification: 'Pathogenic',
-          acmg_evidence_count: 2,
-          per_case_comment: 'Important variant',
-          tags: null,
-          created_at: '',
-          updated_at: ''
-        }
+          per_case_comment: 'Important variant'
+        })
       })
       triggerRef(annotationCache)
 
@@ -515,8 +510,36 @@ describe('ShortlistTable', () => {
 
       expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).exists()).toBe(true)
       expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).text()).toContain('P')
-      expect(wrapper.find(`[data-testid="shortlist-comment-${item.id}"]`).exists()).toBe(true)
+      expect(
+        wrapper.find(`[data-testid="shortlist-comment-${item.id}"]`).attributes('aria-label')
+      ).toBe('Edit comment')
       wrapper.unmount()
+
+      // Sibling variant with different variant_id at same coordinates
+      annotationCache.value.set(key, {
+        global: null,
+        perCase: mockPerCase(999, 0, {
+          acmg_classification: 'Pathogenic',
+          per_case_comment: 'Sibling variant'
+        })
+      })
+      triggerRef(annotationCache)
+      const siblingWrapper = mount(ShortlistTable, {
+        props: { rows: [item] },
+        global: { plugins: [vuetify, pinia] }
+      })
+      expect(siblingWrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).text()).not.toContain(
+        'P'
+      )
+      expect(
+        siblingWrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).attributes('aria-label')
+      ).toBe('Set ACMG classification')
+      expect(
+        siblingWrapper.find(`[data-testid="shortlist-comment-${item.id}"]`).attributes('aria-label')
+      ).toBe('Add comment')
+      siblingWrapper.unmount()
+      annotationCache.value.delete(key)
+      triggerRef(annotationCache)
     })
 
     it('cancels debounced live sync and ignores arrow keys when deactivated via KeepAlive', async () => {

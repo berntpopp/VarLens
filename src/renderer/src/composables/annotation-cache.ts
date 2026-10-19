@@ -252,7 +252,10 @@ function ensureScopeOrClear(
   // A case whose build is not known yet must not read entries of a known build.
   const buildUnknown = caseId !== null && build === null && lastBuild !== null
 
-  if (dbChanged || caseChanged || buildChanged || buildUnknown) clearEntries()
+  if (dbChanged || caseChanged || buildChanged || buildUnknown) {
+    clearEntries()
+    if (caseId === null) lastCaseId = null
+  }
 
   if (dbPath !== null) lastDbPath = dbPath
   if (caseId !== null) lastCaseId = caseId

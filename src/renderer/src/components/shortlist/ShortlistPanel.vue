@@ -25,7 +25,7 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, inject, ref, toRef, watch } from 'vue'
 import { mdiInformationOutline, mdiRefresh, mdiTuneVariant } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
@@ -39,13 +39,29 @@ import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import {
+  annotationCache,
+  cacheSet,
+  evictAnnotationCacheKeys,
+  getAnnotationCacheEpoch,
+  getCachedBuild,
+  getCachedCaseId,
+  hasDbSwitchedSince,
+  getCurrentDbPath,
+  isKeyLoading,
+  setLoading,
+  unloadedSlotOf,
+  variantKey
+} from '../../composables/annotation-cache'
 import { usePermissions } from '../../composables/usePermissions'
 import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
 import { SHORTLIST_RANKING_EDITOR } from '../../config/shortlistRankingEditor'
+import { AppStateKey } from '../../composables/useAppState'
 
 const { open: openRankingDialog } = useShortlistRankingDialog()
 
 const { canWrite } = usePermissions()
+const appState = inject(AppStateKey, null)
 
 const props = defineProps<{
   caseId: number
@@ -118,14 +134,39 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
     logService.warn('toggle star skipped: API unavailable', 'shortlist.panel')
     return
   }
+  const dbPath = getCurrentDbPath()
+  const epoch = getAnnotationCacheEpoch()
+  const build = getCachedBuild()
+  const key = variantKey(row)
+  const nextStarred = !row.is_starred
   try {
-    unwrapIpcResult(
+    const updated = unwrapIpcResult(
       await api.annotations.upsertPerCase(row.case_id, row.id, {
-        starred: !row.is_starred
+        starred: nextStarred
       })
     )
-    // No manual refresh — the variants:annotationChanged broadcast
-    // triggers a refetch via useShortlistQuery's subscription.
+    const activeCaseId = appState?.selectedCaseId?.value
+    const stillOnScope =
+      !hasDbSwitchedSince(dbPath) &&
+      props.caseId === row.case_id &&
+      (activeCaseId == null || activeCaseId === row.case_id) &&
+      getAnnotationCacheEpoch() === epoch &&
+      getCachedBuild() === build &&
+      (getCachedCaseId() === null || getCachedCaseId() === row.case_id)
+    if (stillOnScope) {
+      const liveEntry = annotationCache.value.get(key)
+      const liveUnloaded = unloadedSlotOf(key)
+      const wasLoading = isKeyLoading(key)
+      evictAnnotationCacheKeys([key])
+      cacheSet(
+        key,
+        { global: liveEntry?.global ?? null, perCase: updated },
+        liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
+      )
+      if (wasLoading) {
+        setLoading(key, true, 'case')
+      }
+    }
   } catch (e) {
     logService.error(
       `toggle star failed: ${

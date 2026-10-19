@@ -144,22 +144,30 @@ useProteinViewShortcut(() =>
 )
 
 function getRowProps({ item }: { item: ShortlistRow }) {
-  const isSelected = selectedItem.value?.id === item.id
-  return {
-    class: {
-      'variant-row--selected': isSelected
-    }
-  }
+  return { class: { 'variant-row--selected': selectedItem.value?.id === item.id } }
 }
 
 function getAcmgFor(item: ShortlistRow): AcmgClassification | null {
-  const key = variantKey({ chr: item.chr, pos: item.pos, ref: item.ref, alt: item.alt })
-  const cached = annotationCache.value.get(key)
-  return cached?.perCase?.acmg_classification ?? cached?.global?.acmg_classification ?? null
+  const cached = annotationCache.value.get(variantKey(item))
+  const perCase =
+    cached?.perCase != null &&
+    cached.perCase.variant_id === item.id &&
+    cached.perCase.case_id === item.case_id
+      ? cached.perCase
+      : null
+  return perCase?.acmg_classification ?? cached?.global?.acmg_classification ?? null
 }
 
 function hasCommentFor(item: ShortlistRow): boolean {
   return hasCommentForHelper(item, annotationCache.value)
+}
+
+function isStarredFor(item: ShortlistRow): boolean {
+  const perCase = annotationCache.value.get(variantKey(item))?.perCase
+  if (perCase != null && perCase.variant_id === item.id && perCase.case_id === item.case_id) {
+    return perCase.starred === 1
+  }
+  return item.is_starred
 }
 
 const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
@@ -282,7 +290,10 @@ onKeyStroke(
 )
 
 const actionHandlers: Record<string, () => void> = {
-  s: () => emit('toggle-star', selectedItem.value!),
+  s: () => {
+    if (!selectedItem.value) return
+    emit('toggle-star', { ...selectedItem.value, is_starred: isStarredFor(selectedItem.value) })
+  },
   a: () => emit('acmg-click', selectedItem.value!),
   c: () => emit('comment-click', selectedItem.value!)
 }
@@ -395,16 +406,16 @@ onKeyStroke(
         <button
           type="button"
           class="annotation-btn"
-          :aria-label="item.is_starred ? 'Unstar variant' : 'Star variant'"
-          :aria-pressed="item.is_starred"
+          :aria-label="isStarredFor(item) ? 'Unstar variant' : 'Star variant'"
+          :aria-pressed="isStarredFor(item)"
           :data-testid="`shortlist-star-${item.id}`"
           :disabled="props.readOnly === true"
-          @click.stop="emit('toggle-star', item)"
+          @click.stop="emit('toggle-star', { ...item, is_starred: isStarredFor(item) })"
         >
           <CellIcon
             class="shortlist-row-icon"
-            :color="item.is_starred ? 'primary' : null"
-            :icon="item.is_starred ? mdiStar : mdiStarOutline"
+            :color="isStarredFor(item) ? 'primary' : null"
+            :icon="isStarredFor(item) ? mdiStar : mdiStarOutline"
           />
         </button>
         <button

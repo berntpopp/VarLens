@@ -94,7 +94,11 @@ export function hasCommentFor(
   cache: {
     get(key: string):
       | {
-          perCase?: { per_case_comment?: string | null } | null
+          perCase?: {
+            variant_id?: number
+            case_id?: number
+            per_case_comment?: string | null
+          } | null
           global?: { global_comment?: string | null } | null
         }
       | undefined
@@ -102,10 +106,15 @@ export function hasCommentFor(
 ): boolean {
   const key = `${item.chr}:${item.pos}:${item.ref}:${item.alt}`
   const cached = cache.get(key)
-  const perCase = cached?.perCase?.per_case_comment
+  const perCaseComment =
+    cached?.perCase != null &&
+    cached.perCase.variant_id === item.id &&
+    cached.perCase.case_id === item.case_id
+      ? cached.perCase.per_case_comment
+      : null
   const global = cached?.global?.global_comment
   return (
-    (perCase !== undefined && perCase !== null && perCase !== '') ||
+    (perCaseComment !== undefined && perCaseComment !== null && perCaseComment !== '') ||
     (global !== undefined && global !== null && global !== '')
   )
 }

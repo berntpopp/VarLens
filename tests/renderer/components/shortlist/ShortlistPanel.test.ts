@@ -51,7 +51,21 @@ vi.mock('../../../../src/renderer/src/composables/useShortlistQuery', () => {
 // The panel's `onToggleStar` handler calls `api.annotations.upsertPerCase`
 // via `useApiService()`. We expose the mock so tests can assert on its
 // invocation signature.
-const upsertPerCaseMock = vi.fn().mockResolvedValue({})
+const upsertPerCaseMock = vi
+  .fn()
+  .mockImplementation(
+    async (caseId: number, variantId: number, updates: { starred?: boolean }) => ({
+      id: 1,
+      case_id: caseId,
+      variant_id: variantId,
+      per_case_comment: null,
+      starred: updates.starred ? 1 : 0,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    })
+  )
 vi.mock('../../../../src/renderer/src/composables/useApiService', () => ({
   useApiService: () => ({
     api: {
@@ -68,13 +82,24 @@ import ShortlistPanel from '../../../../src/renderer/src/components/shortlist/Sh
 import { createPinia, setActivePinia } from 'pinia'
 import { installCapabilities } from '../../helpers/capabilities'
 import { useShortlistRankingDialog } from '../../../../src/renderer/src/composables/useShortlistRankingDialog'
+import {
+  annotationCache,
+  beginAnnotationRequest,
+  clearAnnotationCache,
+  isKeyLoading,
+  setLoading,
+  variantKey
+} from '../../../../src/renderer/src/composables/annotation-cache'
 
 // Fresh Pinia per test: ShortlistTable resolves its Links column through the
 // external-links store, and the star is role-gated (usePermissions reads the
 // capability document).
+let pinia: ReturnType<typeof createPinia>
 beforeEach(() => {
-  setActivePinia(createPinia())
+  pinia = createPinia()
+  setActivePinia(pinia)
   installCapabilities()
+  clearAnnotationCache()
 })
 
 const state = (
@@ -128,11 +153,15 @@ describe('ShortlistPanel', () => {
     resetState()
   })
 
-  it('opens the ranking settings on the selected preset', async () => {
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
+  function mountPanel(props: { caseId: number } = { caseId: 1 }) {
+    return mount(ShortlistPanel, {
+      props,
+      global: { plugins: [vuetify, pinia] }
     })
+  }
+
+  it('opens the ranking settings on the selected preset', async () => {
+    const wrapper = mountPanel({ caseId: 1 })
     await wrapper.find('[data-testid="shortlist-edit-ranking"]').trigger('click')
     expect(useShortlistRankingDialog().state).toEqual({ open: true, presetId: 1 })
   })
@@ -140,38 +169,26 @@ describe('ShortlistPanel', () => {
   it('shows the skeleton before the first query has started (no empty-body frame)', () => {
     state.loading.value = false
     state.result.value = null
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(true)
   })
 
   it('keeps the summary slot rendered before a result so the header height is fixed', () => {
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.find('.shortlist-panel__summary').exists()).toBe(true)
   })
 
   it('renders loading skeleton when loading=true', () => {
     state.loading.value = true
     state.result.value = null
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(true)
   })
 
   it('renders error alert when error is set', () => {
     state.loading.value = false
     state.error.value = new Error('boom')
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.text()).toContain('boom')
   })
 
@@ -182,10 +199,7 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.text()).toContain('No variants matched')
   })
 
@@ -196,10 +210,7 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.findComponent({ name: 'ShortlistTable' }).exists()).toBe(true)
   })
 
@@ -211,10 +222,7 @@ describe('ShortlistPanel', () => {
       elapsedMs: 10
     }
     state.loading.value = true
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ShortlistTable' }).exists()).toBe(true)
     expect(wrapper.find('.shortlist-panel__body').attributes('aria-busy')).toBe('true')
@@ -227,10 +235,7 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     await table.vm.$emit('row-click', minimalRow())
     expect(wrapper.emitted('row-click')).toBeTruthy()
@@ -243,10 +248,7 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     await table.vm.$emit('open-in-tab', 'sv')
     expect(wrapper.emitted('open-in-tab')?.[0]?.[0]).toBe('sv')
@@ -260,14 +262,105 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 7 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 7 })
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     await table.vm.$emit('toggle-star', row)
     await flushPromises()
     expect(upsertPerCaseMock).toHaveBeenCalledWith(7, 42, { starred: true })
+  })
+
+  it('toggle-star updates annotationCache for the row (#684)', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+    expect(annotationCache.value.has(key)).toBe(false)
+
+    await table.vm.$emit('toggle-star', row)
+    await flushPromises()
+
+    const cached = annotationCache.value.get(key)
+    expect(cached).toBeDefined()
+    expect(cached?.perCase?.starred).toBe(1)
+  })
+
+  it('toggle-star unstars and updates annotationCache (#684)', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: true })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    await table.vm.$emit('toggle-star', row)
+    await flushPromises()
+
+    const cached = annotationCache.value.get(key)
+    expect(cached).toBeDefined()
+    expect(cached?.perCase?.starred).toBe(0)
+  })
+
+  it('toggle-star restores isKeyLoading if load was in flight', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+    setLoading(key, true, 'case')
+
+    await table.vm.$emit('toggle-star', row)
+    await flushPromises()
+
+    expect(isKeyLoading(key)).toBe(true)
+    setLoading(key, false)
+  })
+
+  it('toggle-star discards cache write if build switched during write', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    let resolveUpsert!: (val: unknown) => void
+    upsertPerCaseMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpsert = resolve
+        })
+    )
+
+    await table.vm.$emit('toggle-star', row)
+    beginAnnotationRequest(7, 'GRCh38')
+    resolveUpsert({
+      id: 1,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1
+    })
+    await flushPromises()
+
+    expect(annotationCache.value.has(key)).toBe(false)
   })
 
   it('toggle-star does NOT call refresh (relies on broadcast)', async () => {
@@ -278,10 +371,7 @@ describe('ShortlistPanel', () => {
       presetUsed: null,
       elapsedMs: 10
     }
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     await table.vm.$emit('toggle-star', row)
     await flushPromises()
@@ -293,10 +383,7 @@ describe('ShortlistPanel', () => {
       { id: 1, name: 'Tier 1 candidates' } as FilterPreset,
       { id: 2, name: 'Tier 2 candidates' } as FilterPreset
     ]
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     // v-select renders its selected item inline in the activator, so the
     // currently-selected preset name must appear in the rendered text.
     expect(wrapper.text()).toContain('Tier 1 candidates')
@@ -310,10 +397,7 @@ describe('ShortlistPanel', () => {
     state.error.value = null
     state.presetsLoading.value = false
 
-    const wrapper = mount(ShortlistPanel, {
-      props: { caseId: 1 },
-      global: { plugins: [vuetify] }
-    })
+    const wrapper = mountPanel({ caseId: 1 })
     await flushPromises()
 
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)

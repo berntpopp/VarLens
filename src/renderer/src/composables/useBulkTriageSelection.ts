@@ -25,6 +25,7 @@ import {
   getGeneration,
   hasDbSwitchedSince,
   isKeyLoading,
+  markAwaited,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -155,6 +156,21 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
   const currentItems = computed(() => toValue(items))
 
+  async function reloadBatchAwaited(
+    targetCid: number,
+    items: Array<VariantCoords & { id: number }>
+  ): Promise<void> {
+    beginAnnotationRequest(targetCid, toValue(options.genomeBuild) ?? getCachedBuild())
+    for (const item of items) {
+      const k = variantKey(item)
+      if (!annotationCache.value.has(k) && isKeyLoading(k)) {
+        evictAnnotationCacheKeys([k])
+      }
+      markAwaited('case', k)
+    }
+    await loadAnnotationsBatch(targetCid, items)
+  }
+
   async function reloadAffectedAndPanel(
     targetCid: number,
     targetDbPath: string | null,
@@ -195,7 +211,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }
 
     if (toReloadMap.size > 0) {
-      await loadAnnotationsBatch(targetCid, Array.from(toReloadMap.values()))
+      await reloadBatchAwaited(targetCid, Array.from(toReloadMap.values()))
       if (!isStillActiveCase(targetCid, targetDbPath)) {
         return false
       }
@@ -454,12 +470,10 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         ref: string
         alt: string
       }> = []
-      if (getCachedCaseId() === cid) {
-        for (const [id, coords] of targetCoords.entries()) {
-          const k = variantKey(coords)
-          if (annotationCache.value.has(k) || isKeyLoading(k)) {
-            preCachedToReload.push({ id, ...coords })
-          }
+      for (const [id, coords] of targetCoords.entries()) {
+        const k = variantKey(coords)
+        if (annotationCache.value.has(k) || isKeyLoading(k)) {
+          preCachedToReload.push({ id, ...coords })
         }
       }
 
@@ -484,23 +498,21 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           number,
           { id: number; chr: string; pos: number; ref: string; alt: string }
         >()
-        if (getCachedCaseId() === targetCid) {
-          for (const v of preCachedToReload) {
-            const k = variantKey(v)
-            if (!annotationCache.value.has(k) && !isKeyLoading(k)) {
-              missingMap.set(v.id, v)
-            }
+        for (const v of preCachedToReload) {
+          const k = variantKey(v)
+          if (!annotationCache.value.has(k)) {
+            missingMap.set(v.id, v)
           }
         }
         const currentPanel = getPanelVariantCoords(targetCid)
         if (currentPanel !== null) {
           const pKey = variantKey(currentPanel)
-          if (!annotationCache.value.has(pKey) && !isKeyLoading(pKey)) {
+          if (!annotationCache.value.has(pKey)) {
             missingMap.set(currentPanel.id, currentPanel)
           }
         }
         if (missingMap.size > 0) {
-          await loadAnnotationsBatch(targetCid, Array.from(missingMap.values()))
+          await reloadBatchAwaited(targetCid, Array.from(missingMap.values()))
         }
       }
 

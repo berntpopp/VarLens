@@ -33,6 +33,7 @@ import {
   cacheSet,
   cacheSetGlobalSlot,
   dropCacheOfClosedDatabase,
+  evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
   getAnnotationGeneration,
   getKeyVersion,
@@ -373,7 +374,7 @@ async function load(
 }
 
 /** A row to batch-load: per-case rows also carry their `variants.id`. */
-export type BatchLoadVariant = VariantCoords & { id?: number }
+export type BatchLoadVariant = VariantCoords & { id?: number; is_starred?: boolean }
 
 /**
  * The key sent to `annotations:batchGet`. Per-case keys MUST carry `variantId`
@@ -402,6 +403,18 @@ async function loadBatch(
   const uncached: BatchAnnotationKey[] = []
   for (const v of variants) {
     const key = variantKey(v)
+    if (scope.kind === 'case') {
+      const cached = annotationCache.value.get(key)
+      if (
+        cached !== undefined &&
+        ((typeof v.id === 'number' &&
+          cached.perCase !== null &&
+          cached.perCase.variant_id !== v.id) ||
+          (typeof v.is_starred === 'boolean' && (cached.perCase?.starred === 1) !== v.is_starred))
+      ) {
+        evictAnnotationCacheKeys([key])
+      }
+    }
     if (needsLoad(key, scope.kind)) uncached.push(batchKey(scope, v))
     // Already in flight: rely on that request, even if its batch is later
     // found to belong to a previous page.
@@ -433,7 +446,17 @@ async function loadBatch(
           scope.kind === 'case'
             ? getKeyVersion(key) !== startVer
             : getKeyVersion(key) % 1_000_000 !== startVer % 1_000_000
-        if (isStale) continue
+        if (isStale) {
+          const sameEpoch =
+            Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(startVer / 1_000_000)
+          if (scope.kind === 'case' && sameEpoch && unloadedSlotOf(key) === 'global') {
+            const awaited = takeAwaited(scope.kind, key)
+            if (!fromPriorPage || awaited) {
+              cacheSetGlobalSlot(key, (value as AnnotationCache).global)
+            }
+          }
+          continue
+        }
       }
       const awaited = takeAwaited(scope.kind, key)
       if (fromPriorPage && !awaited) continue
@@ -454,7 +477,10 @@ async function loadBatch(
           (scope.kind === 'case'
             ? getKeyVersion(k) === startVer
             : getKeyVersion(k) % 1_000_000 === startVer % 1_000_000)
-        if (versionMatches) {
+        const sameEpoch =
+          startVer !== undefined &&
+          Math.floor(getKeyVersion(k) / 1_000_000) === Math.floor(startVer / 1_000_000)
+        if (versionMatches || (sameEpoch && !needsLoad(k, scope.kind))) {
           setLoading(k, false)
         }
       }

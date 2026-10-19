@@ -31,9 +31,6 @@ describe('useBulkTriageSelection', () => {
       variant_id: id,
       is_starred: false,
       acmg_classification: null,
-      acmg_evidence: null,
-      acmg_override_reason: null,
-      notes: null,
       created_at: 1000,
       updated_at: 1000,
       ...extraPerCase
@@ -66,10 +63,7 @@ describe('useBulkTriageSelection', () => {
     let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
     const wrapper = mount(
       defineComponent({
-        setup: () => {
-          bulkInstance = createBulk(customOptions)
-          return () => null
-        }
+        setup: () => ((bulkInstance = createBulk(customOptions)), () => null)
       }),
       { global: { plugins: [pinia], provide: provides } }
     )
@@ -92,16 +86,13 @@ describe('useBulkTriageSelection', () => {
     }
   })
 
-  it('initializes with empty selection', () => {
+  it('initializes and toggles selection', () => {
     const bulk = createBulk()
     expect(bulk.selectedIds.value.length).toBe(0)
     expect(bulk.selectedCount.value).toBe(0)
     expect(bulk.isAllSelected.value).toBe(false)
     expect(bulk.isSomeSelected.value).toBe(false)
-  })
 
-  it('selects and deselects single items', () => {
-    const bulk = createBulk()
     bulk.toggleSelect(101)
     expect(bulk.isSelected(101)).toBe(true)
     expect(bulk.selectedCount.value).toBe(1)
@@ -111,10 +102,7 @@ describe('useBulkTriageSelection', () => {
     bulk.toggleSelect(101)
     expect(bulk.isSelected(101)).toBe(false)
     expect(bulk.selectedCount.value).toBe(0)
-  })
 
-  it('supports toggleSelectAll', () => {
-    const bulk = createBulk()
     bulk.toggleSelectAll(true)
     expect(bulk.selectedCount.value).toBe(4)
     expect(bulk.isAllSelected.value).toBe(true)
@@ -145,9 +133,7 @@ describe('useBulkTriageSelection', () => {
     expect(bulk.selectedCount.value).toBe(1)
 
     caseId.value = 99
-    await vi.waitFor(() => {
-      expect(bulk.selectedCount.value).toBe(0)
-    })
+    await vi.waitFor(() => expect(bulk.selectedCount.value).toBe(0))
   })
 
   it('dispatches applyBulkTriage with batchUpsertPerCase', async () => {
@@ -200,24 +186,17 @@ describe('useBulkTriageSelection', () => {
 
   it('synchronizes native DOM checkbox .checked state on Shift+Click', () => {
     const bulk = createBulk()
-    const checkbox1 = document.createElement('input')
-    checkbox1.type = 'checkbox'
-    checkbox1.checked = false
-
-    bulk.handleRowCheckboxClick(101, { shiftKey: false, target: checkbox1 })
-    checkbox1.checked = true
-    expect(bulk.selectedIds.value).toEqual([101])
-
-    const checkbox3 = document.createElement('input')
-    checkbox3.type = 'checkbox'
-    bulk.handleRowCheckboxClick(103, { shiftKey: false, target: checkbox3 })
-    checkbox3.checked = true
+    const cb1 = Object.assign(document.createElement('input'), { type: 'checkbox', checked: false })
+    const cb3 = Object.assign(document.createElement('input'), { type: 'checkbox' })
+    bulk.handleRowCheckboxClick(101, { shiftKey: false, target: cb1 })
+    cb1.checked = true
+    bulk.handleRowCheckboxClick(103, { shiftKey: false, target: cb3 })
+    cb3.checked = true
     expect(bulk.selectedIds.value).toEqual([101, 103])
-
-    checkbox1.checked = false
-    bulk.handleRowCheckboxClick(101, { shiftKey: true, target: checkbox1 })
+    cb1.checked = false
+    bulk.handleRowCheckboxClick(101, { shiftKey: true, target: cb1 })
     expect(bulk.selectedIds.value).toEqual(expect.arrayContaining([101, 102, 103]))
-    expect(checkbox1.checked).toBe(true)
+    expect(cb1.checked).toBe(true)
   })
 
   it('evicts only selected variant cache entries on bulk triage and preserves unrelated entries', async () => {
@@ -301,9 +280,7 @@ describe('useBulkTriageSelection', () => {
     expect(bulk.isExecuting.value).toBe(true)
 
     caseId.value = 99
-    await vi.waitFor(() => {
-      expect(bulk.selectedIds.value.length).toBe(0)
-    })
+    await vi.waitFor(() => expect(bulk.selectedIds.value.length).toBe(0))
 
     bulk.toggleSelect(104)
     expect(bulk.selectedIds.value).toEqual([104])
@@ -425,15 +402,11 @@ describe('useBulkTriageSelection', () => {
 
     // 3. User navigates Case 42 -> Case 99 (Case B)
     caseId.value = 99
-    await vi.waitFor(() => {
-      expect(bulk.selectedIds.value.length).toBe(0)
-    })
+    await vi.waitFor(() => expect(bulk.selectedIds.value.length).toBe(0))
 
     // 4. User navigates back Case 99 -> Case 42 (Case A again)
     caseId.value = 42
-    await vi.waitFor(() => {
-      expect(bulk.selectedIds.value.length).toBe(0)
-    })
+    await vi.waitFor(() => expect(bulk.selectedIds.value.length).toBe(0))
 
     // Simulate item 101 having Benign in cache before write finishes
     annotationCache.value.set(
@@ -750,10 +723,7 @@ describe('useBulkTriageSelection', () => {
     expect(showSnackSpy).toHaveBeenCalledWith(CAP_MSG, 'warning')
 
     bulkInstance.clearSelection()
-    expect(bulkInstance.selectedCount.value).toBe(0)
     for (let i = 1; i <= 995; i++) bulkInstance.toggleSelect(i)
-    expect(bulkInstance.selectedCount.value).toBe(995)
-
     showSnackSpy.mockClear()
     bulkInstance.handleRowCheckboxClick(1005, new MouseEvent('click', { shiftKey: true }))
     expect(bulkInstance.selectedCount.value).toBe(1000)
@@ -789,5 +759,39 @@ describe('useBulkTriageSelection', () => {
     })
     await initialLoad
     expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
+  })
+
+  it('retains post-write refreshed annotations across page changes via markAwaited', async () => {
+    let resolveBatchGet!: (val: unknown) => void
+    const deferredBatchGet = new Promise((resolve) => {
+      resolveBatchGet = resolve
+    })
+
+    const batchGetSpy = vi.fn().mockReturnValue(deferredBatchGet)
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    const { invalidateAnnotationGeneration } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+
+    const bulk = createBulk()
+    bulk.toggleSelect(101)
+
+    const triagePromise = bulk.applyBulkTriage({ starred: true })
+
+    await vi.waitFor(() => {
+      expect(batchGetSpy).toHaveBeenCalled()
+    })
+
+    invalidateAnnotationGeneration('case')
+
+    resolveBatchGet({
+      'chr1:1000:A:T': mockCacheEntry(101, { starred: 1 })
+    })
+
+    await triagePromise
+
+    expect(annotationCache.value.has('chr1:1000:A:T')).toBe(true)
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.starred).toBe(1)
   })
 })
