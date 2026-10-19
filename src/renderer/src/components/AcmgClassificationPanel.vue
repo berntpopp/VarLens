@@ -135,6 +135,7 @@
       auto-grow
       hide-details
       class="text-caption"
+      @update:model-value="emitChange"
       @blur="emitChange"
     />
 
@@ -230,6 +231,8 @@ const props = defineProps<{
   evidenceJson: string | null
   /** Variant annotation data for auto-suggestions */
   variantData: VariantAnnotationData | null
+  /** Stable identifier for variant identity across annotation/refresh updates */
+  variantKey?: string | null
   /** Persists an applied draft; the draft stays pending unless it resolves true. */
   save?: (draft: AcmgDraft) => Promise<boolean>
 }>()
@@ -383,7 +386,10 @@ function emitChange(): void {
       : { classification: effectiveClassification.value, evidenceJson }
 }
 
+let variantEpoch = 0
+
 async function applyPending(): Promise<void> {
+  emitChange()
   const draft = pending.value
   if (draft === null) return
   if (overrideReasonMissing.value) {
@@ -391,11 +397,11 @@ async function applyPending(): Promise<void> {
     return
   }
   if (props.save) {
-    const variantData = props.variantData
+    const epochAtStart = variantEpoch
     const saved = await props.save(draft)
     await nextTick()
-    // Another variant was opened while saving: its state is already loaded.
-    if (props.variantData !== variantData) return
+    // Another variant was opened while saving (including A -> B -> A): its state is already loaded.
+    if (variantEpoch !== epochAtStart) return
     if (!saved) {
       // The failed write's rollback reloaded the saved evidence: put the draft back.
       loadState(draft.evidenceJson)
@@ -468,10 +474,22 @@ function onLeaveKeydown(e: KeyboardEvent): void {
 // Watching variantData ensures we reset when switching between variants
 // that both have null evidence (where evidenceJson alone wouldn't trigger).
 watch(
-  () => [props.evidenceJson, props.variantData] as const,
+  () => [props.evidenceJson, props.variantData, props.variantKey] as const,
   (_, old) => {
     // Same variant (late annotation load, a save's own reload): the draft and its prompt stay.
-    const draft = old?.[1] === props.variantData ? pending.value : null
+    const isSameVariant =
+      old !== undefined &&
+      (props.variantKey !== undefined && old[2] !== undefined
+        ? props.variantKey === old[2]
+        : old[1] === props.variantData)
+    if (!isSameVariant) {
+      variantEpoch++
+    }
+    if (isSameVariant) {
+      emitChange()
+      if (props.evidenceJson === old[0]) return
+    }
+    const draft = isSameVariant ? pending.value : null
     loadState(props.evidenceJson)
     baselineJson = evidenceFingerprint(serialize())
     if (draft !== null) return loadState(draft.evidenceJson)
@@ -483,7 +501,13 @@ watch(
 
 onBeforeUnmount(() => settleLeave(true))
 
-defineExpose({ applyPending, discardPending, pending, confirmLeave })
+defineExpose({
+  applyPending,
+  discardPending,
+  pending,
+  confirmLeave,
+  applySuggestions: handleAutoSuggest
+})
 </script>
 
 <style scoped>

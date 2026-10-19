@@ -1,7 +1,7 @@
 <template>
   <tr>
     <td :colspan="colspan" class="pa-0">
-      <v-table density="compact" class="nested-carriers-table bg-grey-lighten-3">
+      <v-table density="compact" class="nested-carriers-table carrier-subtable bg-grey-lighten-3">
         <caption
           v-if="carriers.some((carrier) => isAssumedHetGenotype(carrier.gt_num))"
           class="assumed-het-note text-caption text-medium-emphasis text-left pa-2"
@@ -132,7 +132,9 @@ const formatZygosity = (gt: string): string => {
   caption-side: bottom;
 }
 
-.nested-carriers-table {
+.nested-carriers-table,
+.carrier-subtable {
   border-top: 1px solid rgba(0, 0, 0, 0.12);
+  width: 100%;
 }
 </style>

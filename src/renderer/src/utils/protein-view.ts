@@ -15,6 +15,53 @@ import { formatHgvs } from './formatters'
 
 type AnyVariant = Variant | CohortVariant
 
+const SO_SEVERITY_ORDER: readonly string[] = [
+  'splice_acceptor_variant',
+  'splice_donor_variant',
+  'stop_gained',
+  'frameshift_variant',
+  'stop_lost',
+  'start_lost',
+  'inframe_insertion',
+  'inframe_deletion',
+  'missense_variant',
+  'splice_region_variant',
+  'synonymous_variant',
+  'HIGH',
+  'MODERATE',
+  'LOW'
+]
+
+/**
+ * Resolves the primary SO consequence term or impact fallback for a variant,
+ * properly handling combined '&'-separated terms (e.g. missense_variant&splice_region_variant)
+ * by severity order, and falling back to VEP impact when func is unrecognized.
+ */
+export function resolveVariantConsequence(v: AnyVariant): string {
+  const func = typeof v.func === 'string' ? v.func.trim() : ''
+  if (func !== '') {
+    if (getConsequenceCategory(func) !== 'other') {
+      return func
+    }
+    const terms = func
+      .split(/[&,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (terms.length > 0) {
+      for (const term of SO_SEVERITY_ORDER) {
+        if (terms.includes(term)) return term
+      }
+    }
+  }
+
+  const consequence = typeof v.consequence === 'string' ? v.consequence.trim() : ''
+  if (consequence !== '' && getConsequenceCategory(consequence) !== 'other') {
+    return consequence
+  }
+
+  return func !== '' ? func : consequence !== '' ? consequence : 'unknown'
+}
+
 /**
  * Protein position and the notation it came from: aa_change first, then cdna
  * (some import formats put the protein notation in the cDNA column).
@@ -68,7 +115,7 @@ export function proteinStripSummary(
 function toLollipopVariant(v: AnyVariant, highlighted: boolean): LollipopVariant | null {
   const protein = proteinPositionOf(v)
   if (protein === null) return null
-  const consequence = v.consequence ?? 'unknown'
+  const consequence = resolveVariantConsequence(v)
   const cadd = 'cadd' in v ? (v.cadd ?? null) : 'cadd_phred' in v ? (v.cadd_phred ?? null) : null
   return {
     proteinPosition: protein.position,

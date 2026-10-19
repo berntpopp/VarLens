@@ -248,4 +248,74 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).toContain('Case GRCh37')
     expect(wrapper.text()).not.toContain('Case GRCh38')
   })
+
+  it('applies nested-carriers-table and carrier-subtable classes, verifying DOM computed styles with shared CSS (#662)', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const cssPath = path.resolve(
+      __dirname,
+      '../../../../src/renderer/src/components/data-table-shared.css'
+    )
+    const cssContent = fs.readFileSync(cssPath, 'utf-8')
+
+    const styleEl = document.createElement('style')
+    styleEl.textContent = cssContent
+    document.head.appendChild(styleEl)
+
+    const container = document.createElement('div')
+    container.className = 'table-container'
+    container.innerHTML = `
+      <div class="v-data-table">
+        <div class="v-table__wrapper">
+          <table class="outer-table">
+            <tbody id="outer-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `
+    document.body.appendChild(container)
+    const tbody = container.querySelector('#outer-tbody')!
+
+    const wrapper = mount(CarrierExpandedRow, {
+      global: { plugins: [vuetify, ...queryPlugins(pinia)] },
+      props: { colspan: 5, variant: variant(100) },
+      attachTo: tbody
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const outerTable = container.querySelector('.outer-table') as HTMLElement
+    const innerTableWrapper = wrapper.find('.nested-carriers-table .v-table__wrapper > table')
+    expect(innerTableWrapper.exists()).toBe(true)
+    const innerTable = innerTableWrapper.element as HTMLElement
+
+    // Outer table preserves fixed layout and zero width
+    const outerStyle = window.getComputedStyle(outerTable)
+    expect(outerStyle.tableLayout).toBe('fixed')
+    expect(outerStyle.width).toBe('0px')
+
+    // Inner subtable has auto layout and full width (does not inherit width: 0)
+    const innerStyle = window.getComputedStyle(innerTable)
+    expect(innerStyle.tableLayout).toBe('auto')
+    expect(innerStyle.width).toBe('100%')
+
+    // Inner table elements have carrier-subtable class and cells exist
+    expect(wrapper.find('.carrier-subtable').exists()).toBe(true)
+    const cells = wrapper.findAll('.carrier-subtable th, .carrier-subtable td')
+    expect(cells.length).toBeGreaterThan(0)
+
+    // Renders Case, Zygosity, GQ, DP and visible View in Case button
+    const tableText = wrapper.find('.carrier-subtable').text()
+    expect(tableText).toContain('Case')
+    expect(tableText).toContain('Zygosity')
+    expect(tableText).toContain('GQ')
+    expect(tableText).toContain('DP')
+    const viewBtn = wrapper.find('tbody tr .v-btn')
+    expect(viewBtn.exists()).toBe(true)
+    expect(viewBtn.text()).toContain('View in Case')
+
+    // Clean up DOM
+    styleEl.remove()
+    container.remove()
+  })
 })

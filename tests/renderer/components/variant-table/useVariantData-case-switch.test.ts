@@ -130,4 +130,104 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
 
     expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 10, total: 99 })
   })
+
+  it('guards unfilteredCount against out-of-order query responses on case switch (#665)', async () => {
+    let resolveCase1!: (val: unknown) => void
+    let resolveCase2!: (val: unknown) => void
+
+    queryMock.mockImplementation((id: number) => {
+      if (id === 1) {
+        return new Promise((resolve) => {
+          resolveCase1 = () =>
+            resolve(ok({ data: rowsFor(1), total_count: 10, unfiltered_count: 100 }))
+        })
+      }
+      if (id === 2) {
+        return new Promise((resolve) => {
+          resolveCase2 = () =>
+            resolve(ok({ data: rowsFor(2), total_count: 20, unfiltered_count: 200 }))
+        })
+      }
+      return Promise.resolve(ok({ data: [], total_count: 0, unfiltered_count: 0 }))
+    })
+
+    const { caseId, data, onCountsUpdate } = setup()
+    void data.loadVariants()
+    await nextTick()
+
+    // Switch to case 2 while case 1 query is still pending
+    caseId.value = 2
+    await flushPromises()
+
+    // Case 2 resolves first
+    resolveCase2(null)
+    await flushPromises()
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 20, total: 200 })
+
+    // Now Case 1 slow response arrives out-of-order
+    resolveCase1(null)
+    await flushPromises()
+
+    // Case 1 response MUST NOT overwrite Case 2 counts!
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 20, total: 200 })
+  })
+
+  it('guards unfilteredCount against out-of-order query responses on A -> B -> A switch (#665)', async () => {
+    let resolveVisit1CaseA!: (val: unknown) => void
+    let resolveCaseB!: (val: unknown) => void
+    let resolveVisit2CaseA!: (val: unknown) => void
+    let queryCall = 0
+
+    queryMock.mockImplementation((id: number) => {
+      queryCall++
+      if (id === 1 && queryCall === 1) {
+        return new Promise((resolve) => {
+          resolveVisit1CaseA = () =>
+            resolve(ok({ data: rowsFor(1), total_count: 10, unfiltered_count: 999 }))
+        })
+      }
+      if (id === 2) {
+        return new Promise((resolve) => {
+          resolveCaseB = () =>
+            resolve(ok({ data: rowsFor(2), total_count: 20, unfiltered_count: 200 }))
+        })
+      }
+      if (id === 1 && queryCall > 2) {
+        return new Promise((resolve) => {
+          resolveVisit2CaseA = () =>
+            resolve(ok({ data: rowsFor(1), total_count: 15, unfiltered_count: 250 }))
+        })
+      }
+      return Promise.resolve(ok({ data: [], total_count: 0, unfiltered_count: 0 }))
+    })
+
+    const { caseId, data } = setup()
+    void data.loadVariants()
+    await nextTick()
+
+    // Switch A -> B
+    caseId.value = 2
+    await flushPromises()
+
+    // Case B resolves
+    resolveCaseB(null)
+    await flushPromises()
+    expect(data.unfilteredCount.value).toBe(200)
+
+    // Switch B -> A
+    caseId.value = 1
+    await flushPromises()
+
+    // Visit 2 to Case A resolves with unfiltered_count: 250
+    resolveVisit2CaseA(null)
+    await flushPromises()
+    expect(data.unfilteredCount.value).toBe(250)
+
+    // Visit 1 to Case A resolves late with stale unfiltered_count: 999
+    resolveVisit1CaseA(null)
+    await flushPromises()
+
+    // unfilteredCount MUST remain 250 (not overwritten by stale 999)
+    expect(data.unfilteredCount.value).toBe(250)
+  })
 })

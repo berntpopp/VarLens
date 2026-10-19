@@ -145,25 +145,61 @@
             </div>
 
             <!-- Evidence-based classification panel -->
-            <v-expansion-panels v-if="canWrite" variant="accordion" class="mb-1">
-              <v-expansion-panel>
-                <v-expansion-panel-title class="text-body-2 pa-2">
-                  <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
-                  Evidence editor
-                  <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
-                    (has evidence)
-                  </span>
-                </v-expansion-panel-title>
-                <v-expansion-panel-text>
-                  <AcmgClassificationPanel
-                    ref="acmgPanelRef"
-                    :evidence-json="currentAcmgEvidence"
-                    :variant-data="currentVariantData"
-                    :save="handleAcmgEvidenceChange"
-                  />
-                </v-expansion-panel-text>
-              </v-expansion-panel>
-            </v-expansion-panels>
+            <div v-if="canWrite" class="mb-1">
+              <div
+                v-if="suggestedAcmgCodes.length > 0"
+                class="d-flex align-center justify-end mb-1"
+              >
+                <v-btn
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  density="compact"
+                  class="text-caption px-1"
+                  data-testid="apply-acmg-suggestions-btn"
+                  @click="handleApplySuggestionsPreview"
+                >
+                  Apply suggestions ({{ suggestedAcmgCodes.join(', ') }})
+                </v-btn>
+              </div>
+              <v-expansion-panels v-model="acmgExpanded" variant="accordion">
+                <v-expansion-panel :value="0">
+                  <v-expansion-panel-title class="text-body-2 pa-2">
+                    <v-icon size="small" class="mr-1" :icon="mdiClipboardCheckOutline" />
+                    Evidence editor
+                    <span v-if="hasAcmgEvidence" class="text-caption text-medium-emphasis ml-1">
+                      (has evidence)
+                    </span>
+                    <!-- Inline suggestion preview pills (read-only chips) (#685, #669) -->
+                    <div
+                      v-if="suggestedAcmgCodes.length > 0"
+                      class="d-inline-flex align-center ga-1 ml-2"
+                      data-testid="acmg-suggested-preview"
+                    >
+                      <v-chip
+                        v-for="code in suggestedAcmgCodes"
+                        :key="code"
+                        size="x-small"
+                        color="warning"
+                        variant="tonal"
+                        class="text-caption font-weight-bold"
+                      >
+                        {{ code }}
+                      </v-chip>
+                    </div>
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <AcmgClassificationPanel
+                      ref="acmgPanelRef"
+                      :variant-key="variantKey"
+                      :evidence-json="currentAcmgEvidence"
+                      :variant-data="currentVariantData"
+                      :save="handleAcmgEvidenceChange"
+                    />
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </div>
 
             <div v-if="hasGlobalAcmg && mode === 'case'" class="text-body-small text-muted mt-1">
               Global: {{ globalAcmgClassification }}
@@ -222,8 +258,10 @@ import {
   watch,
   defineAsyncComponent,
   inject,
-  provide
+  provide,
+  type AsyncComponentLoader
 } from 'vue'
+import { useVariantAcmgPreview } from '../utils/acmg/acmg-variant-data'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
@@ -250,28 +288,13 @@ import InfoFieldsSection from './variant-details/InfoFieldsSection.vue'
 // Lazy-load non-critical panel sections to speed up initial open
 import SectionSkeleton from './SectionSkeleton.vue'
 
-const asyncOpts = { delay: 0, loadingComponent: SectionSkeleton }
-
-const ExternalLinksSection = defineAsyncComponent({
-  loader: () => import('./ExternalLinksSection.vue'),
-  ...asyncOpts
-})
-const CommentsSection = defineAsyncComponent({
-  loader: () => import('./CommentsSection.vue'),
-  ...asyncOpts
-})
-const TagsSection = defineAsyncComponent({
-  loader: () => import('./TagsSection.vue'),
-  ...asyncOpts
-})
-const AcmgClassificationPanel = defineAsyncComponent({
-  loader: () => import('./AcmgClassificationPanel.vue'),
-  ...asyncOpts
-})
-const ActivityLogPanel = defineAsyncComponent({
-  loader: () => import('./ActivityLogPanel.vue'),
-  ...asyncOpts
-})
+const lazySection = (loader: AsyncComponentLoader) =>
+  defineAsyncComponent({ loader, delay: 0, loadingComponent: SectionSkeleton })
+const ExternalLinksSection = lazySection(() => import('./ExternalLinksSection.vue'))
+const CommentsSection = lazySection(() => import('./CommentsSection.vue'))
+const TagsSection = lazySection(() => import('./TagsSection.vue'))
+const AcmgClassificationPanel = lazySection(() => import('./AcmgClassificationPanel.vue'))
+const ActivityLogPanel = lazySection(() => import('./ActivityLogPanel.vue'))
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -315,6 +338,8 @@ watch(
   () => scrollRef.value?.scrollTo({ top: 0 })
 )
 const genomeBuild = useVariantGenomeBuild(props)
+
+const appState = inject(AppStateKey, null)
 
 // External lookups: always on in desktop; an admin-controlled, default-off
 // server setting in web; read from the capability document (fail-closed).
@@ -428,59 +453,37 @@ const currentAcmgEvidence = computed(() => {
 const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
 const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
-// Variant annotation data for auto-suggestions
-const currentVariantData = computed(() => {
-  if (!props.variant) return null
-  return {
-    gnomad_af: props.variant.gnomad_af ?? null,
-    cadd:
-      'cadd' in props.variant ? (props.variant.cadd ?? null) : (props.variant.cadd_phred ?? null),
-    clinvar: props.variant.clinvar ?? null
-  }
+const {
+  currentVariantData,
+  variantKey,
+  suggestedAcmgCodes,
+  acmgExpanded,
+  acmgPanelRef,
+  handleApplySuggestionsPreview
+} = useVariantAcmgPreview({
+  variant: computed(() => props.variant),
+  caseId: computed(() => props.caseId),
+  revelFallback: revelScore,
+  spliceAiFallback: spliceaiMaxDelta
 })
 
 // Current quick classification (from annotation, not evidence-based)
 const currentQuickClassification = computed<AcmgClassification | null>(() => {
   if (!props.variant) return null
-  if (props.mode === 'case') {
-    return getAcmgClassification(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt
-    )
-  }
-  return getGlobalAcmgClassification(
-    props.variant.chr,
-    props.variant.pos,
-    props.variant.ref,
-    props.variant.alt
-  )
+  const { chr, pos, ref: r, alt: a } = props.variant
+  return props.mode === 'case'
+    ? getAcmgClassification(chr, pos, r, a)
+    : getGlobalAcmgClassification(chr, pos, r, a)
 })
 
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
   if (props.variant === null || acmgLocked.value) return
-  const value = classification === currentQuickClassification.value ? null : classification
-
+  const val = classification === currentQuickClassification.value ? null : classification
+  const { chr, pos, ref: r, alt: a } = props.variant
   if (props.mode === 'case' && props.caseId !== null) {
-    const variantId = (props.variant as Variant).id
-    await setAcmgClassification(
-      props.caseId,
-      variantId,
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      value
-    )
+    await setAcmgClassification(props.caseId, (props.variant as Variant).id, chr, pos, r, a, val)
   } else {
-    await setGlobalAcmgClassification(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      value
-    )
+    await setGlobalAcmgClassification(chr, pos, r, a, val)
   }
 }
 
@@ -489,29 +492,26 @@ const handleAcmgEvidenceChange = async (payload: {
   evidenceJson: string
 }): Promise<boolean> => {
   if (props.variant === null) return false
-
-  if (props.mode === 'case' && props.caseId !== null) {
-    const variantId = (props.variant as Variant).id
-    return setAcmgClassificationWithEvidence(
-      props.caseId,
-      variantId,
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      payload.classification,
-      payload.evidenceJson
-    )
-  } else {
-    return setGlobalAcmgClassificationWithEvidence(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      payload.classification,
-      payload.evidenceJson
-    )
-  }
+  const { chr, pos, ref: r, alt: a } = props.variant
+  return props.mode === 'case' && props.caseId !== null
+    ? setAcmgClassificationWithEvidence(
+        props.caseId,
+        (props.variant as Variant).id,
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
+    : setGlobalAcmgClassificationWithEvidence(
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
 }
 
 // Load annotations when variant changes
@@ -538,9 +538,6 @@ watch(
   { immediate: true }
 )
 
-// Selection changes and closes wait for the evidence editor's unsaved-draft prompt
-const acmgPanelRef = ref<{ confirmLeave: () => Promise<boolean> | null } | null>(null)
-const appState = inject(AppStateKey, null)
 appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 
 // Escape closes the panel, unless a text field or an open menu/dialog owns it

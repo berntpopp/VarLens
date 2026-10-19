@@ -8,7 +8,12 @@
   >
     <v-card>
       <v-card-title id="disclaimer-dialog-title">{{ config.title }}</v-card-title>
-      <v-card-text style="max-height: 70vh; overflow-y: auto">
+      <v-card-text
+        style="max-height: 70vh; overflow-y: auto"
+        tabindex="0"
+        role="region"
+        aria-label="Disclaimer text"
+      >
         <p class="mb-4">{{ config.introduction }}</p>
         <div
           v-for="(limitation, index) in config.limitations"

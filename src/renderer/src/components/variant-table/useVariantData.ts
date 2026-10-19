@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, watch, markRaw, toRaw, type Ref } from 'vue'
+import { ref, shallowRef, computed, watch, markRaw, toRaw, readonly, type Ref } from 'vue'
 import type { Variant, VariantFilter } from '../../../../shared/types/api'
 import type { ColumnFilterMeta } from '../../../../shared/types/column-filters'
 import { useOffsetPagination } from '../../composables/useOffsetPagination'
@@ -60,6 +60,7 @@ export function useVariantData(options: UseVariantDataOptions) {
   const selectedVariantId = ref<number | null>(null)
   // Flag: request unfiltered count to be piggybacked on the next page load
   let needsUnfilteredCount = true
+  let caseGeneration = 0
 
   // Keyset paging (web/Postgres; shared/types/variant-paging.ts): remember the
   // cursor that resumes after each fetched page, keyed by the next page's
@@ -112,6 +113,7 @@ export function useVariantData(options: UseVariantDataOptions) {
 
       const plainFilters = buildQueryFilters()
       const shouldFetchUnfiltered = needsUnfilteredCount
+      const requestGeneration = caseGeneration
       const cursorScope = `${caseId.value}|${limit}|${JSON.stringify(sortItems)}|${JSON.stringify(plainFilters)}`
       const result = unwrapIpcResult(
         await api.variants.query(
@@ -125,14 +127,16 @@ export function useVariantData(options: UseVariantDataOptions) {
           pageCursors.get(`${cursorScope}@${offset}`) ?? ''
         )
       )
-      if (result.next_cursor !== undefined) {
-        if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
-        pageCursors.set(`${cursorScope}@${offset + limit}`, result.next_cursor)
-      }
+      if (requestGeneration === caseGeneration) {
+        if (result.next_cursor !== undefined) {
+          if (pageCursors.size >= MAX_PAGE_CURSORS) pageCursors.clear()
+          pageCursors.set(`${cursorScope}@${offset + limit}`, result.next_cursor)
+        }
 
-      if (shouldFetchUnfiltered && result.unfiltered_count !== undefined) {
-        unfilteredCount.value = result.unfiltered_count
-        needsUnfilteredCount = false
+        if (shouldFetchUnfiltered && result.unfiltered_count !== undefined) {
+          unfilteredCount.value = result.unfiltered_count
+          needsUnfilteredCount = false
+        }
       }
 
       return {
@@ -179,6 +183,7 @@ export function useVariantData(options: UseVariantDataOptions) {
   watch(
     caseId,
     (newCaseId, oldCaseId) => {
+      caseGeneration++
       selectedVariantId.value = null
       clearAllColumnFilters()
 
@@ -271,6 +276,7 @@ export function useVariantData(options: UseVariantDataOptions) {
     // Table state
     variants,
     totalCount,
+    unfilteredCount: readonly(unfilteredCount),
     loading,
     /** Last query failure; rows/count from the previous success stay visible (#530). */
     loadError,
