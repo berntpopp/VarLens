@@ -259,6 +259,18 @@ export function isKeyLoading(key: string): boolean {
   return loadingStates.value.get(key) ?? false
 }
 
+const loadingCaseVariants = new Set<string>()
+
+export function isLoadingCaseVariant(caseId: number, variantId: number): boolean {
+  return loadingCaseVariants.has(`${caseId}:${variantId}`)
+}
+
+export function setLoadingCaseVariant(caseId: number, variantId: number, loading: boolean): void {
+  const k = `${caseId}:${variantId}`
+  if (loading) loadingCaseVariants.add(k)
+  else loadingCaseVariants.delete(k)
+}
+
 /**
  * True when a load of `kind` has to fetch this key: it is neither in flight
  * nor cached with everything that kind of load provides. A per-case load
@@ -318,6 +330,7 @@ function clearEntries(): void {
   clearMutationTracker()
   annotationCache.value.clear()
   loadingStates.value.clear()
+  loadingCaseVariants.clear()
   globalOnlyLoading.clear()
   awaitedKeys.case.clear()
   awaitedKeys.global.clear()
@@ -417,6 +430,13 @@ export function evictPerCaseVariant(caseId: number, variantId: number, key: stri
     dropKeyMetadata(key)
     perCaseSlotOwners.delete(key)
   }
+}
+
+/** Evict only the coordinate slot in annotationCache without touching perCaseByVariantId. */
+export function evictCoordSlotOnly(key: string): void {
+  if (annotationCache.value.delete(key)) triggerRef(annotationCache)
+  dropKeyMetadata(key)
+  perCaseSlotOwners.delete(key)
 }
 
 function applyBulkUpdatesPatch(
@@ -554,6 +574,7 @@ export function resetAnnotationState(): void {
   evictionEpoch = 0
   nextLoadingToken = 0
   for (const m of [keyVersions, cachedVariantIds, loadingTokens]) m.clear()
+  loadingCaseVariants.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0
 }

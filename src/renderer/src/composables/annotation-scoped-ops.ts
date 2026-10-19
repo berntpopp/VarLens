@@ -14,12 +14,13 @@ import {
   allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
   bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot, cacheSetPerCaseSlot,
   computeOptimisticSlot, confirmedBases, confirmedFieldPatches, dropCacheOfClosedDatabase,
-  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant, getAnnotationCacheEpoch,
-  getAnnotationGeneration, getCachedVariantId, getConfirmedWriteVersion, getKeyVersion,
-  getPerCaseSlotOwner, hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild,
-  isKeyLoading, isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad, otherSlot,
-  perCaseSlotKey, perCaseVersionSlot, pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation,
-  rollBackSlot, setCachedVariantId, setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading,
+  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant, evictCoordSlotOnly,
+  getAnnotationCacheEpoch, getAnnotationGeneration, getCachedVariantId, getConfirmedWriteVersion,
+  getKeyVersion, getPerCaseSlotOwner, hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations,
+  isCacheOfBuild, isKeyLoading, isLoadingCaseVariant, isPerCaseSlotOwner, isTrackedCase, markAwaited,
+  mergeServerSlot, needsLoad, otherSlot, perCaseSlotKey, perCaseVersionSlot,
+  pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation, rollBackSlot, setCachedVariantId,
+  setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading, setLoadingCaseVariant,
   setPerCaseByVariantId, perCaseByVariantId, getPerCaseByVariantId, slotIdentity, slotOf, takeAwaited,
   triggerAnnotationCache, unloadedSlotOf, variantKey, writeSlot,
   type AnnotationCache, type AnnotationUpdates, type AnnotationWriteScope, type MutationPlan,
@@ -49,32 +50,21 @@ const scopeCaseId = (scope: AnnotationLoadScope): number | null =>
 const scopeQualifier = (scope: AnnotationLoadScope): string =>
   scope.kind === 'global' ? 'global ' : ''
 
-/** Discard a response when the database (or, per case, the case) switched while awaiting. */
-function isResponseStale(scope: AnnotationLoadScope, requestDbPath: string | null): boolean {
-  if (hasDbSwitchedSince(requestDbPath)) return true
-  if (!isCacheOfBuild(scope.build)) return true
-  return scope.kind === 'case' && !isTrackedCase(scope.caseId)
-}
+// prettier-ignore
+const isResponseStale = (scope: AnnotationLoadScope, requestDbPath: string | null): boolean =>
+  hasDbSwitchedSince(requestDbPath) || !isCacheOfBuild(scope.build) || (scope.kind === 'case' && !isTrackedCase(scope.caseId))
 
-/** True when a write settled after its database or case was left. */
-function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): boolean {
+// prettier-ignore
+const leftScope = (scope: AnnotationWriteScope, requestDbPath: string | null): boolean => {
   if (!isResponseStale(scope, requestDbPath)) return false
-  dropCacheOfClosedDatabase()
-  return true
+  dropCacheOfClosedDatabase(); return true
 }
 
-function upsert(
-  client: WindowAPI,
-  scope: AnnotationWriteScope,
-  { chr, pos, ref, alt }: VariantCoords,
-  updates: AnnotationUpdates
-) {
-  if (scope.kind === 'case')
-    return client.annotations.upsertPerCase(scope.caseId, scope.variantId, updates)
+// prettier-ignore
+function upsert(client: WindowAPI, scope: AnnotationWriteScope, { chr, pos, ref, alt }: VariantCoords, updates: AnnotationUpdates) {
+  if (scope.kind === 'case') return client.annotations.upsertPerCase(scope.caseId, scope.variantId, updates)
   if (scope.build === null) throw new Error('genome build unknown; global annotation not saved')
-  if (!GENOME_BUILDS.some((b) => b.id === scope.build)) {
-    throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
-  }
+  if (!GENOME_BUILDS.some((b) => b.id === scope.build)) throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
   return client.annotations.upsertGlobal(chr, pos, ref, alt, updates, scope.build)
 }
 
@@ -245,12 +235,12 @@ async function mutate(
             (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
             current
           if (target) {
-            const canWriteTarget =
-              (scope.kind !== 'case' ||
-                current !== undefined ||
-                target.perCase == null ||
-                target.perCase.variant_id === scope.variantId) &&
-              !(current === undefined && rawBase === null && (!remaining || remaining.length === 0))
+            // prettier-ignore
+            const canWriteTarget = scope.kind !== 'case' || (current !== undefined
+              ? (target.perCase == null && (getCachedVariantId(key) === undefined || getCachedVariantId(key) === scope.variantId)) ||
+                (target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId)
+              : target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId &&
+                !(rawBase === null && (!remaining || remaining.length === 0)))
             if (canWriteTarget) {
               if (nextSlot !== null) writeSlot(target, scope, nextSlot)
               else rollBackSlot(target, scope, plan.rollback, null)
@@ -340,27 +330,16 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
   }
 }
 
-function applyStalePerCaseSlot(
-  key: string,
-  entry: AnnotationCache,
-  caseId: number,
-  reqVid?: number
-): void {
+// prettier-ignore
+function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: number, reqVid?: number): void {
   const unloaded = unloadedSlotOf(key)
   if (unloaded === 'global') cacheSetGlobalSlot(key, entry.global)
   else if (unloaded === 'perCase') {
     const pc = entry.perCase
-    if (
-      reqVid === undefined ||
-      pc === null ||
-      (pc.variant_id === reqVid && pc.case_id === caseId)
-    ) {
+    if (reqVid === undefined || pc === null || (pc.variant_id === reqVid && pc.case_id === caseId)) {
       cacheSetPerCaseSlot(key, pc, reqVid)
-      if (reqVid !== undefined) {
-        setPerCaseByVariantId(caseId, reqVid, pc, key)
-      } else if (pc !== null) {
-        setPerCaseByVariantId(caseId, pc.variant_id, pc, key)
-      }
+      if (reqVid !== undefined) setPerCaseByVariantId(caseId, reqVid, pc, key)
+      else if (pc !== null) setPerCaseByVariantId(caseId, pc.variant_id, pc, key)
     }
   }
 }
@@ -393,9 +372,6 @@ async function load(
       return
     }
     storeLoaded(key, scope, entry)
-    if (scope.kind === 'case' && entry.perCase) {
-      setPerCaseByVariantId(scope.caseId, entry.perCase.variant_id, entry.perCase, key)
-    }
   } catch (error) {
     logService.error(
       `Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error),
@@ -411,12 +387,11 @@ async function load(
 /** A row to batch-load: per-case rows also carry their `variants.id`. */
 export type BatchLoadVariant = VariantCoords & { id?: number; is_starred?: boolean }
 
-/** The key sent to `annotations:batchGet`. Per-case keys must carry `variantId`. */
-function batchKey(scope: AnnotationLoadScope, v: BatchLoadVariant): BatchAnnotationKey {
-  const key: BatchAnnotationKey = { chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt }
-  if (scope.kind === 'case' && typeof v.id === 'number') key.variantId = v.id
-  return key
-}
+// prettier-ignore
+const batchKey = (scope: AnnotationLoadScope, v: BatchLoadVariant): BatchAnnotationKey => ({
+  chr: v.chr, pos: v.pos, ref: v.ref, alt: v.alt,
+  ...(scope.kind === 'case' && typeof v.id === 'number' ? { variantId: v.id } : {})
+})
 
 /** Bulk load annotations for visible variants. */
 async function loadBatch(
@@ -471,13 +446,14 @@ async function loadBatch(
         if (typeof v.id === 'number') evictPerCaseVariant(scope.caseId, v.id, key)
         else evictAnnotationCacheKeys([key])
       }
+      // prettier-ignore
+      const siblingSwitch = sameCoords && typeof v.id === 'number' && !hasPerCaseByVariantId(scope.caseId, v.id) && cached !== undefined &&
+        ((cached.perCase != null && cached.perCase.variant_id !== v.id) || (cachedVid !== undefined && cachedVid !== v.id))
+      if (siblingSwitch) evictCoordSlotOnly(key)
     }
-    const needCaseVid =
-      scope.kind === 'case' &&
-      typeof v.id === 'number' &&
-      sameCoords &&
-      !hasPerCaseByVariantId(scope.caseId, v.id) &&
-      !isKeyLoading(key)
+    // prettier-ignore
+    const needCaseVid = scope.kind === 'case' && typeof v.id === 'number' && sameCoords &&
+      !hasPerCaseByVariantId(scope.caseId, v.id) && !isLoadingCaseVariant(scope.caseId, v.id)
     if (needsLoad(key, scope.kind) || needCaseVid) {
       neededVariants.push(v)
     } else if (isKeyLoading(key)) {
@@ -496,13 +472,24 @@ async function loadBatch(
     targetWave.push(bk)
   }
 
+  const batchAwaited = new Set<string>()
+  // prettier-ignore
+  const checkAwaited = (k: string): boolean => {
+    const a = takeAwaited(scope.kind, k) || batchAwaited.has(k)
+    if (a) batchAwaited.add(k)
+    return a
+  }
+
   for (const uncached of waves) {
     const requestedVariantIds = new Map<string, number>()
     const keyVersionsAtStart = new Map<string, number>()
     const loadingTokensAtStart = new Map<string, number>()
     for (const vk of uncached) {
       const k = variantKey(vk)
-      if (typeof vk.variantId === 'number') requestedVariantIds.set(k, vk.variantId)
+      if (typeof vk.variantId === 'number') {
+        requestedVariantIds.set(k, vk.variantId)
+        if (scope.kind === 'case') setLoadingCaseVariant(scope.caseId, vk.variantId, true)
+      }
       keyVersionsAtStart.set(k, getKeyVersion(k))
       loadingTokensAtStart.set(k, setLoading(k, true, scope.kind))
     }
@@ -524,7 +511,7 @@ async function loadBatch(
             const sameEpoch =
               Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(startVer / 1_000_000)
             if (scope.kind === 'case' && sameEpoch) {
-              const awaited = takeAwaited(scope.kind, key)
+              const awaited = checkAwaited(key)
               if (!fromPriorPage || awaited) {
                 applyStalePerCaseSlot(
                   key,
@@ -537,7 +524,7 @@ async function loadBatch(
             continue
           }
         }
-        const awaited = takeAwaited(scope.kind, key)
+        const awaited = checkAwaited(key)
         if (fromPriorPage && !awaited) continue
         if (scope.kind === 'case' && requestedVariantIds.has(key)) {
           ensurePerCaseSlotOwner(key, scope.caseId, requestedVariantIds.get(key)!)
@@ -565,9 +552,12 @@ async function loadBatch(
         'annotations'
       )
     } finally {
-      if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
-        for (const vk of uncached) {
-          const k = variantKey(vk)
+      for (const vk of uncached) {
+        const k = variantKey(vk)
+        if (scope.kind === 'case' && typeof vk.variantId === 'number') {
+          setLoadingCaseVariant(scope.caseId, vk.variantId, false)
+        }
+        if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
           setLoading(k, false, scope.kind, loadingTokensAtStart.get(k))
         }
       }

@@ -14,10 +14,14 @@ import {
   cacheSet,
   clearMutationTracker,
   ensurePerCaseSlotOwner,
+  getCachedVariantId,
   getConfirmedWriteVersion,
   getPerCaseByVariantId,
   getWriteVersion,
   inFlightMutations,
+  invalidateAnnotationGeneration,
+  isLoadingCaseVariant,
+  markAwaited,
   perCaseSlotKey,
   perCaseVersionSlot,
   removeInFlightMutation,
@@ -74,7 +78,8 @@ describe('Round 20 regression defects', () => {
         upsertPerCase: vi.fn(),
         upsertGlobal: vi.fn(),
         batchUpsertPerCase: vi.fn(),
-        batchGet: vi.fn()
+        batchGet: vi.fn(),
+        getForVariant: vi.fn()
       }
     } as unknown as WindowAPI
     ;(window as unknown as { api: WindowAPI }).api = api
@@ -366,5 +371,121 @@ describe('Round 20 regression defects', () => {
     expect(nextVer12).toBeGreaterThan(getConfirmedWriteVersion(key, vSlot12))
 
     eff.stop()
+  })
+
+  it('Round 26 Fix 1: load does not overwrite optimistic perCaseByVariantId on resolve', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    ensurePerCaseSlotOwner(key, 1, 11)
+    const baseEntry = mockPerCase(11, { starred: 0 })
+    cacheSet(key, { global: null, perCase: baseEntry })
+    setPerCaseByVariantId(1, 11, baseEntry, key)
+
+    const d = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase).mockReturnValue(d.promise as never)
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    void ops.toggleStar(scope, coords)
+
+    expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
+
+    vi.mocked(api.annotations.getForVariant).mockResolvedValue({
+      global: null,
+      perCase: baseEntry
+    } as never)
+    await ops.load(scope, coords)
+
+    expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
+    d.resolve({ ...baseEntry, starred: 1 })
+  })
+
+  it('Round 26 Fix 2: loadBatch does not suppress sibling 12 when sibling 11 is loading at same coordinates', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const d11 = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet).mockReturnValueOnce(d11.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const p1 = ops.loadBatch(scope, [{ id: 11, ...coords }])
+    expect(isLoadingCaseVariant(1, 11)).toBe(true)
+
+    const d12 = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet).mockReturnValueOnce(d12.promise as never)
+    const p2 = ops.loadBatch(scope, [{ id: 12, ...coords }])
+
+    expect(vi.mocked(api.annotations.batchGet)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(api.annotations.batchGet).mock.calls[1][1]).toEqual([
+      { chr: '1', pos: 100, ref: 'A', alt: 'T', variantId: 12 }
+    ])
+
+    d11.resolve({ [key]: { global: null, perCase: mockPerCase(11) } })
+    d12.resolve({ [key]: { global: null, perCase: mockPerCase(12) } })
+    await Promise.all([p1, p2])
+
+    expect(isLoadingCaseVariant(1, 11)).toBe(false)
+    expect(isLoadingCaseVariant(1, 12)).toBe(false)
+  })
+
+  it('Round 26 Fix 3: multi-wave loadBatch preserves awaited status across waves after page invalidation', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const dWave0 = defer<Record<string, unknown>>()
+    const dWave1 = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet)
+      .mockReturnValueOnce(dWave0.promise as never)
+      .mockReturnValueOnce(dWave1.promise as never)
+
+    markAwaited('case', key)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const p = ops.loadBatch(scope, [
+      { id: 11, ...coords },
+      { id: 12, ...coords }
+    ])
+
+    invalidateAnnotationGeneration('case')
+
+    dWave0.resolve({ [key]: { global: null, perCase: mockPerCase(11) } })
+    await Promise.resolve()
+
+    dWave1.resolve({ [key]: { global: null, perCase: mockPerCase(12) } })
+    await p
+
+    expect(getPerCaseByVariantId(1, 11)?.id).toBe(11)
+    expect(getPerCaseByVariantId(1, 12)?.id).toBe(12)
+  })
+
+  it('Round 26 Fix 4: rejected write when current === undefined does not overwrite unannotated sibling in cache', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    cacheSet(key, { global: null, perCase: null })
+    setCachedVariantId(key, 12)
+    ensurePerCaseSlotOwner(key, 1, 12)
+
+    const scope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+    vi.mocked(api.annotations.upsertPerCase).mockRejectedValue(new Error('Write failed'))
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const res = await ops.toggleStar(scope11, coords)
+    expect(res).toBe(false)
+
+    expect(getCachedVariantId(key)).toBe(12)
+    expect(annotationCache.value.get(key)?.perCase).toBeNull()
+  })
+
+  it('Round 26 Fix 5: loadBatch detects siblingSwitch, evictCoordSlotOnly, and loads sibling 12 while preserving sibling 11 perCaseByVariantId', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const entry11 = mockPerCase(11, { starred: 1 })
+    cacheSet(key, { global: null, perCase: entry11 })
+    setCachedVariantId(key, 11)
+    ensurePerCaseSlotOwner(key, 1, 11)
+    setPerCaseByVariantId(1, 11, entry11, key)
+
+    const entry12 = mockPerCase(12, { starred: 0 })
+    vi.mocked(api.annotations.batchGet).mockResolvedValue({
+      [key]: { global: null, perCase: entry12 }
+    } as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    await ops.loadBatch(scope, [{ id: 12, ...coords }])
+
+    expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 12)?.starred).toBe(0)
+    expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(12)
   })
 })
