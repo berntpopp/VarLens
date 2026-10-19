@@ -472,5 +472,25 @@ describe('database path-authority gate', () => {
       expectInvalidParametersResult(result)
       expect(deleteDbFile).not.toHaveBeenCalled()
     })
+
+    it('rejects a symlink path even if present in recent databases list (#659)', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'varlens-delete-symlink-'))
+      const realDb = join(dir, 'real.db')
+      const symlinkDb = join(dir, 'symlink.db')
+      writeFileSync(realDb, 'data')
+      symlinkSync(realDb, symlinkDb)
+
+      try {
+        const ipcMain = makeIpcMain()
+        registerDatabaseHandlers(makeDeps(ipcMain, { recentPaths: [symlinkDb] }) as never)
+
+        const result = await invokeHandler(ipcMain, 'database:deleteFile', symlinkDb)
+
+        expectInvalidParametersResult(result)
+        expect(deleteDbFile).not.toHaveBeenCalled()
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
   })
 })

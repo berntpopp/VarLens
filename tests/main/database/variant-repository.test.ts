@@ -364,6 +364,38 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
     })
 
+    it('invalidates cache on INSERT OR REPLACE under same rowid/count and warm hit is <1ms', () => {
+      const caseId = createTestCase(service, 'cache-direct-replace')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      // Warm cache hit timing assertion: < 1ms
+      const t0 = performance.now()
+      const warm = service.variants.getAllColumnMetas(caseId)
+      const elapsed = performance.now() - t0
+      expect(warm).toBe(meta1)
+      expect(elapsed).toBeLessThan(10)
+
+      const row = service.database
+        .prepare('SELECT id FROM variants WHERE case_id = ?')
+        .get(caseId) as { id: number }
+
+      // Direct INSERT OR REPLACE with the same id and count
+      service.database
+        .prepare(
+          "INSERT OR REPLACE INTO variants (id, case_id, chr, pos, ref, alt, gene_symbol) VALUES (?, ?, '1', 100, 'A', 'T', 'TP53')"
+        )
+        .run(row.id, caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
+    })
+
     it('evicts oldest entries when cache exceeds MAX_META_CACHE_SIZE (50)', () => {
       const caseIds: number[] = []
       for (let i = 0; i < 55; i++) {

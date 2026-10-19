@@ -65,6 +65,15 @@ interface CountRow {
 // ---------------------------------------------------------------------------
 
 /**
+ * Case-folding key matching SQLite COLLATE NOCASE behavior.
+ * SQLite COLLATE NOCASE only folds ASCII 26 letters (A-Z to a-z) and does
+ * not fold Unicode characters (e.g. Kelvin sign '\u212A' is not folded to 'k').
+ */
+export function sqliteNocaseKey(value: string): string {
+  return value.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32))
+}
+
+/**
  * Read-only service for querying the bundled gene reference database.
  *
  * Uses prepared statements cached in the constructor for performance.
@@ -171,19 +180,19 @@ export class GeneReferenceDb {
   validateSymbols(inputs: string[]): GeneValidationResult[] {
     if (inputs.length === 0) return []
 
-    // Deduplicate case-insensitively for database queries
-    const lowerToTrimmed = new Map<string, string>()
+    // Deduplicate case-insensitively for database queries matching SQLite COLLATE NOCASE
+    const keyToTrimmed = new Map<string, string>()
     for (const input of inputs) {
       const trimmed = input.trim()
-      const lower = trimmed.toLowerCase()
-      if (!lowerToTrimmed.has(lower)) {
-        lowerToTrimmed.set(lower, trimmed)
+      const key = sqliteNocaseKey(trimmed)
+      if (!keyToTrimmed.has(key)) {
+        keyToTrimmed.set(key, trimmed)
       }
     }
-    const deduplicatedQueries = Array.from(lowerToTrimmed.values())
+    const deduplicatedQueries = Array.from(keyToTrimmed.values())
 
     const BATCH_SIZE = 500
-    const genesBySymbolLower = new Map<string, GeneRow>()
+    const genesBySymbolKey = new Map<string, GeneRow>()
 
     // Step 1: Batch lookup on genes.symbol (COLLATE NOCASE)
     for (let i = 0; i < deduplicatedQueries.length; i += BATCH_SIZE) {
@@ -195,15 +204,15 @@ export class GeneReferenceDb {
         )
         .all(...chunk) as GeneRow[]
       for (const row of rows) {
-        genesBySymbolLower.set(row.symbol.toLowerCase(), row)
+        genesBySymbolKey.set(sqliteNocaseKey(row.symbol), row)
       }
     }
 
     // Step 2: Search gene_aliases for any symbols not matched to an approved gene
     const unmatched = deduplicatedQueries.filter(
-      (sym) => !genesBySymbolLower.has(sym.toLowerCase())
+      (sym) => !genesBySymbolKey.has(sqliteNocaseKey(sym))
     )
-    const aliasesByLower = new Map<string, AliasRow[]>()
+    const aliasesByKey = new Map<string, AliasRow[]>()
     const hgncIdsToFetch = new Set<string>()
 
     if (unmatched.length > 0) {
@@ -216,11 +225,11 @@ export class GeneReferenceDb {
           )
           .all(...chunk) as AliasRow[]
         for (const row of rows) {
-          const key = row.alias.toLowerCase()
-          let list = aliasesByLower.get(key)
+          const key = sqliteNocaseKey(row.alias)
+          let list = aliasesByKey.get(key)
           if (list === undefined) {
             list = []
-            aliasesByLower.set(key, list)
+            aliasesByKey.set(key, list)
           }
           list.push(row)
           hgncIdsToFetch.add(row.hgnc_id)
@@ -246,12 +255,12 @@ export class GeneReferenceDb {
       }
     }
 
-    // Pre-resolve result per unique lower-cased symbol
-    const resultByLower = new Map<string, Omit<GeneValidationResult, 'input'>>()
-    for (const lower of lowerToTrimmed.keys()) {
-      const gene = genesBySymbolLower.get(lower)
+    // Pre-resolve result per unique SQLite NOCASE key
+    const resultByKey = new Map<string, Omit<GeneValidationResult, 'input'>>()
+    for (const key of keyToTrimmed.keys()) {
+      const gene = genesBySymbolKey.get(key)
       if (gene !== undefined) {
-        resultByLower.set(lower, {
+        resultByKey.set(key, {
           status: 'approved',
           symbol: gene.symbol,
           hgncId: gene.hgnc_id,
@@ -261,11 +270,11 @@ export class GeneReferenceDb {
         continue
       }
 
-      const aliases = aliasesByLower.get(lower)
+      const aliases = aliasesByKey.get(key)
       if (aliases !== undefined && aliases.length === 1) {
         const alias = aliases[0]
         const resolvedGene = genesByHgncId.get(alias.hgnc_id)
-        resultByLower.set(lower, {
+        resultByKey.set(key, {
           status: 'alias',
           symbol: resolvedGene?.symbol,
           hgncId: alias.hgnc_id,
@@ -282,21 +291,21 @@ export class GeneReferenceDb {
           const g = genesByHgncId.get(a.hgnc_id)
           return { symbol: g?.symbol ?? a.hgnc_id, hgncId: a.hgnc_id }
         })
-        resultByLower.set(lower, {
+        resultByKey.set(key, {
           status: 'ambiguous',
           candidates
         })
         continue
       }
 
-      resultByLower.set(lower, { status: 'unknown' })
+      resultByKey.set(key, { status: 'unknown' })
     }
 
     // Map back in exact original input order
     return inputs.map((input) => {
       const trimmed = input.trim()
-      const lower = trimmed.toLowerCase()
-      const res = resultByLower.get(lower)!
+      const key = sqliteNocaseKey(trimmed)
+      const res = resultByKey.get(key)!
       return {
         input: trimmed,
         ...res

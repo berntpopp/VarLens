@@ -92,21 +92,35 @@ describe('GeneReferenceDb', () => {
       expect(results[4]).toMatchObject({ input: 'rnf53', status: 'alias', symbol: 'BRCA1' })
     })
 
-    it('handles batch size exceeding chunk limit (>500 items)', () => {
-      // 550 items with alternating approved and unknown
-      const largeList = Array.from({ length: 550 }, (_, i) =>
-        i % 2 === 0 ? 'BRCA1' : `UNKNOWN_GENE_${i}`
-      )
+    it('handles batch size exceeding chunk limit (>500 unique symbols) (#672)', () => {
+      // 550 unique unknown symbols + approved symbols to exercise batch chunking across >500 queries
+      const largeList = Array.from({ length: 552 }, (_, i) => {
+        if (i === 0) return 'BRCA1'
+        if (i === 1) return 'TP53'
+        return `UNKNOWN_GENE_${i - 2}`
+      })
       const results = geneRef.validateSymbols(largeList)
-      expect(results).toHaveLength(550)
-      for (let i = 0; i < 550; i++) {
-        if (i % 2 === 0) {
-          expect(results[i].status).toBe('approved')
-          expect(results[i].symbol).toBe('BRCA1')
-        } else {
-          expect(results[i].status).toBe('unknown')
-        }
+      expect(results).toHaveLength(552)
+      expect(results[0]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[1]).toMatchObject({ input: 'TP53', status: 'approved', symbol: 'TP53' })
+      for (let i = 2; i < 552; i++) {
+        expect(results[i].status).toBe('unknown')
       }
+    })
+
+    it('matches SQLite COLLATE NOCASE ASCII folding without Unicode collision (Kelvin bug #672)', () => {
+      const kelvinKrt1 = '\u212ART1' // 'KRT1' with Kelvin sign
+      const asciiKrt1 = 'KRT1'
+
+      const r1 = geneRef.validateSymbols([kelvinKrt1, asciiKrt1])
+      expect(r1).toHaveLength(2)
+      expect(r1[0]).toMatchObject({ input: kelvinKrt1, status: 'unknown' })
+      expect(r1[1]).toMatchObject({ input: asciiKrt1, status: 'approved', symbol: 'KRT1' })
+
+      const r2 = geneRef.validateSymbols([asciiKrt1, kelvinKrt1])
+      expect(r2).toHaveLength(2)
+      expect(r2[0]).toMatchObject({ input: asciiKrt1, status: 'approved', symbol: 'KRT1' })
+      expect(r2[1]).toMatchObject({ input: kelvinKrt1, status: 'unknown' })
     })
 
     it('handles ambiguous alias in batch validation (#672)', () => {

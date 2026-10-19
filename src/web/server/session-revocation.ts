@@ -22,7 +22,9 @@ const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000
 const DEFAULT_MAX_ENTRIES = 50_000
 const REVOKED_SESSIONS_FILENAME = 'web-revoked-sessions.json'
 
-export function resolveDefaultRevocationsPath(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveDefaultRevocationsPath(
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
   const fromEnv = env.VARLENS_REVOKED_SESSIONS_PATH
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
     return fromEnv.trim()
@@ -37,6 +39,9 @@ export function resolveDefaultRevocationsPath(env: NodeJS.ProcessEnv = process.e
   }
   if (existsSync('/data')) {
     return join('/data', REVOKED_SESSIONS_FILENAME)
+  }
+  if (env.VITEST !== undefined || env.NODE_ENV === 'test') {
+    return undefined
   }
   const seed =
     env.VARLENS_SESSION_SECRET_HEX ??
@@ -95,7 +100,6 @@ export class SessionRevocations {
 
   private load(): void {
     if (this.storagePath === undefined || this.storagePath === '') return
-    if (!existsSync(this.storagePath)) return
     try {
       const raw = readFileSync(this.storagePath, 'utf8')
       const parsed = JSON.parse(raw) as Record<string, unknown>
@@ -106,6 +110,9 @@ export class SessionRevocations {
         }
       }
     } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        return
+      }
       throw new Error(
         `Failed to load revoked sessions from ${this.storagePath}: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err }

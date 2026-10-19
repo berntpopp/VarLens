@@ -69,16 +69,14 @@ export function useFilterExport(
         ? { success: false, cancelled: true }
         : null
     } catch (error) {
-      logService.error(
-        'Export error: ' +
-          (error instanceof Error
-            ? error.message
-            : isIpcError(error)
-              ? (error.userMessage ?? error.message)
-              : String(error)),
-        'export'
-      )
-      return null
+      const message =
+        error instanceof Error
+          ? error.message
+          : isIpcError(error)
+            ? (error.userMessage ?? error.message)
+            : String(error)
+      logService.error('Export error: ' + message, 'export')
+      return { success: false, error: message }
     } finally {
       exporting.value = false
     }

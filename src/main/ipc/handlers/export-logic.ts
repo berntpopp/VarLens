@@ -41,7 +41,11 @@ export interface ExportResult {
   cancelled?: boolean
 }
 
-const CANCELLED_RESULT: ExportResult = { success: false, error: 'Export cancelled', cancelled: true }
+const CANCELLED_RESULT: ExportResult = {
+  success: false,
+  error: 'Export cancelled',
+  cancelled: true
+}
 
 /**
  * Run an export as a tracked `export` job so it shows up in `jobs:changed`
@@ -86,7 +90,7 @@ function runWorkerExport(
       },
       onError: (error) => {
         mainLogger.error(`Export worker error: ${error}`, 'export')
-        resolve({ success: false, error })
+        reject(new Error(error))
       },
       onCancelled: () => {
         mainLogger.info('Export cancelled by user', 'export')
@@ -114,13 +118,10 @@ export async function prepareVariantExport(
   caseId: number,
   filters: Partial<VariantFilter>,
   getDbPool?: () => DbPool | null
-): Promise<
-  | {
-      compiled: { sql: string; parameters: readonly unknown[] }
-      count: number
-    }
-  | ExportResult
-> {
+): Promise<{
+  compiled: { sql: string; parameters: readonly unknown[] }
+  count: number
+}> {
   const db = getDb()
   // Resolve the active gene panel exactly as the on-screen query does
   // (buildVariantFilter): the compiled export SQL only understands
@@ -134,10 +135,9 @@ export async function prepareVariantExport(
       : db.variants.getExportCount(fullFilter)
 
   if (count > EXPORT_HARD_LIMIT) {
-    return {
-      success: false,
-      error: `Export limited to ${EXPORT_HARD_LIMIT.toLocaleString()} variants. Current filter matches ${count.toLocaleString()} variants. Please narrow your filters.`
-    }
+    throw new Error(
+      `Export limited to ${EXPORT_HARD_LIMIT.toLocaleString()} variants. Current filter matches ${count.toLocaleString()} variants. Please narrow your filters.`
+    )
   }
 
   const compiled = db.variants.compileExportQuery(fullFilter, EXPORT_HARD_LIMIT)
@@ -298,7 +298,7 @@ async function exportRowsToCsv(
     mainLogger.error(`${label} error: ${message}`, 'export')
     // Typed, user-facing: reported as it is rather than as a failed export.
     if (error instanceof CohortSummaryRefreshingError) throw error
-    return { success: false, error: message }
+    throw error instanceof Error ? error : new Error(message)
   } finally {
     stream.off('error', onStreamError)
   }

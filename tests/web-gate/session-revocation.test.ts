@@ -38,6 +38,29 @@ describe('resolveDefaultRevocationsPath', () => {
     expect(path1).toContain('varlens-revocations-')
     expect(path1.endsWith('.json')).toBe(true)
   })
+
+  it('returns undefined in test environment without explicit config', () => {
+    expect(
+      resolveDefaultRevocationsPath({
+        VITEST: 'true'
+      } as NodeJS.ProcessEnv)
+    ).toBeUndefined()
+
+    expect(
+      resolveDefaultRevocationsPath({
+        NODE_ENV: 'test'
+      } as NodeJS.ProcessEnv)
+    ).toBeUndefined()
+  })
+
+  it('prefers VARLENS_RECOVERY_KEY_DIR even in test environment', () => {
+    expect(
+      resolveDefaultRevocationsPath({
+        VITEST: 'true',
+        VARLENS_RECOVERY_KEY_DIR: '/my/recovery/keys'
+      } as NodeJS.ProcessEnv)
+    ).toBe(join('/my/recovery/keys', 'web-revoked-sessions.json'))
+  })
 })
 
 describe('SessionRevocations fail-closed persistence', () => {
@@ -50,6 +73,21 @@ describe('SessionRevocations fail-closed persistence', () => {
         /Failed to load revoked sessions/
       )
     } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('throws on startup if revocations file is unreadable (EACCES)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-revoc-unreadable-'))
+    const filePath = join(dir, 'revocations.json')
+    try {
+      writeFileSync(filePath, JSON.stringify({ sid1: Date.now() + 10000 }))
+      chmodSync(filePath, 0o000)
+      expect(() => new SessionRevocations(60_000, 10, Date.now, filePath)).toThrow(
+        /Failed to load revoked sessions/
+      )
+    } finally {
+      chmodSync(filePath, 0o600)
       rmSync(dir, { recursive: true, force: true })
     }
   })
@@ -81,6 +119,29 @@ describe('SessionRevocations fail-closed persistence', () => {
       expect(r2.isRevoked('sid-valid-1')).toBe(true)
       expect(r2.isRevoked('sid-valid-2')).toBe(false)
     } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('persists across restarts using default VARLENS_RECOVERY_KEY_DIR without passing storagePath', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-recovery-test-'))
+    const oldEnv = process.env.VARLENS_RECOVERY_KEY_DIR
+    process.env.VARLENS_RECOVERY_KEY_DIR = dir
+    try {
+      const now = 1000
+      const r1 = new SessionRevocations(60_000, 10, () => now)
+      r1.revoke('sid-persist-recovery')
+      expect(r1.isRevoked('sid-persist-recovery')).toBe(true)
+
+      // Second instance created without passing storagePath should pick up the file from VARLENS_RECOVERY_KEY_DIR
+      const r2 = new SessionRevocations(60_000, 10, () => now)
+      expect(r2.isRevoked('sid-persist-recovery')).toBe(true)
+    } finally {
+      if (oldEnv !== undefined) {
+        process.env.VARLENS_RECOVERY_KEY_DIR = oldEnv
+      } else {
+        delete process.env.VARLENS_RECOVERY_KEY_DIR
+      }
       rmSync(dir, { recursive: true, force: true })
     }
   })

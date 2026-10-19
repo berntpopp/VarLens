@@ -99,9 +99,6 @@ export function registerExportHandlers({
               validated.data.filters,
               getDbPool
             )
-        if (preparation !== null && 'success' in preparation) {
-          return preparation
-        }
 
         const defaultFileName = `${validated.data.caseName.replace(/[^a-z0-9]/gi, '_')}_variants.${isPostgres ? 'csv' : 'xlsx'}`
         let outputFilePath = automatedExportPath(defaultFileName)
@@ -109,7 +106,7 @@ export function registerExportHandlers({
 
         if (outputFilePath === null) {
           if (mainWindow === undefined || mainWindow.isDestroyed()) {
-            return { success: false, error: 'No window available for export dialog' }
+            throw new Error('No window available for export dialog')
           }
 
           const result = await dialog.showSaveDialog(mainWindow, {
@@ -200,7 +197,7 @@ export function registerExportHandlers({
             'Window closed before cohort export dialog, cannot show save dialog',
             'export'
           )
-          return { success: false, error: 'No window available for export dialog' }
+          throw new Error('No window available for export dialog')
         }
 
         const result = await dialog.showSaveDialog(mainWindow, {

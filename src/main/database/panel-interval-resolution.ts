@@ -11,6 +11,7 @@ import { mainLogger } from '../services/MainLogger'
 import type { CaseRepository } from './CaseRepository'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import type { PanelRepository } from './PanelRepository'
+import { NotFoundError } from './errors'
 
 /** The repository panel resolution reads from. */
 export interface PanelResolutionRepositories {
@@ -96,8 +97,9 @@ export function resolvePanelIntervalsInPlace(
       ) {
         genomeBuild = caseRow.genome_build
       }
-    } catch {
-      // Fall back to default GRCh38 if case lookup fails
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err
+      // Fall back to default GRCh38 if case is not found
     }
   }
   genomeBuild = genomeBuild ?? 'GRCh38'
