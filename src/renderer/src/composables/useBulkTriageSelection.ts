@@ -33,6 +33,19 @@ import { AppStateKey } from './useAppState'
 
 export const MAX_BULK_TRIAGE_SELECTION = 1000
 
+type CommittedWriteListener = (
+  cid: number,
+  dbPath: string | null,
+  targetSet: ReadonlySet<number>,
+  updates: BatchPerCaseAnnotationUpdates
+) => Promise<void>
+
+const committedWriteListeners = new Set<CommittedWriteListener>()
+
+export function _resetCommittedWriteListenersForTesting(): void {
+  committedWriteListeners.clear()
+}
+
 export interface UseBulkTriageSelectionOptions<T> {
   items: Ref<readonly T[]> | (() => readonly T[])
   getItemId: (item: T) => number
@@ -55,15 +68,6 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   const coordsById = new Map<number, VariantCoords>()
 
   let isDisposed = false
-  if (getCurrentScope()) {
-    onScopeDispose(() => {
-      isDisposed = true
-      scopeGen += 1
-      selectionRev += 1
-      activeApplyId += 1
-    })
-  }
-
   let scopeGen = 0
   let selectionRev = 0
   let activeApplyId = 0
@@ -104,8 +108,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }
   )
 
-  function isStillActiveCase(cid: number, myDbPath: string | null): boolean {
-    if (isDisposed || hasDbSwitchedSince(myDbPath) || toValue(caseId) !== cid) return false
+  function isCacheStillOnCase(cid: number, myDbPath: string | null): boolean {
+    if (hasDbSwitchedSince(myDbPath)) return false
+    if (!isDisposed && toValue(caseId) !== cid) return false
     const appCaseId = appState?.selectedCaseId?.value
     if (appCaseId !== undefined && appCaseId !== null && appCaseId !== cid) return false
     const cachedCid = getCachedCaseId()
@@ -113,11 +118,105 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     return true
   }
 
+  function isStillActiveCase(cid: number, myDbPath: string | null): boolean {
+    return !isDisposed && isCacheStillOnCase(cid, myDbPath)
+  }
+
   const selectedIdSet = computed(() => new Set(selectedIds.value))
   const selectedCount = computed(() => selectedIds.value.length)
   const isSelected = (id: number): boolean => selectedIdSet.value.has(id)
 
   const currentItems = computed(() => toValue(items))
+
+  async function reloadAffectedAndPanel(
+    targetCid: number,
+    targetDbPath: string | null,
+    targetSet: ReadonlySet<number>
+  ): Promise<boolean> {
+    const toReloadMap = new Map<
+      number,
+      { id: number; chr: string; pos: number; ref: string; alt: string }
+    >()
+    for (const item of currentItems.value) {
+      const id = getItemId(item)
+      if (targetSet.has(id)) {
+        const coords = extractCoords(item)
+        if (coords !== null) {
+          toReloadMap.set(id, { id, ...coords })
+        }
+      }
+    }
+
+    const currentPanel = appState?.selectedPanelVariant?.value
+    if (
+      currentPanel !== null &&
+      typeof currentPanel === 'object' &&
+      'id' in currentPanel &&
+      typeof currentPanel.id === 'number' &&
+      'chr' in currentPanel &&
+      'pos' in currentPanel &&
+      'ref' in currentPanel &&
+      'alt' in currentPanel
+    ) {
+      const panelCaseId =
+        'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
+      if (panelCaseId === undefined || panelCaseId === targetCid) {
+        const pKey = variantKey({
+          chr: String(currentPanel.chr),
+          pos: Number(currentPanel.pos),
+          ref: String(currentPanel.ref),
+          alt: String(currentPanel.alt)
+        })
+        if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
+          toReloadMap.set(currentPanel.id, {
+            id: currentPanel.id,
+            chr: String(currentPanel.chr),
+            pos: Number(currentPanel.pos),
+            ref: String(currentPanel.ref),
+            alt: String(currentPanel.alt)
+          })
+        }
+      }
+    }
+
+    if (toReloadMap.size > 0) {
+      await loadAnnotationsBatch(targetCid, Array.from(toReloadMap.values()))
+      if (!isStillActiveCase(targetCid, targetDbPath)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  const listener: CommittedWriteListener = async (
+    targetCid,
+    targetDbPath,
+    notifiedTargetSet,
+    notifiedUpdates
+  ) => {
+    if (!isStillActiveCase(targetCid, targetDbPath)) return
+    if (notifiedUpdates.tag_id !== undefined && getActivePinia()) {
+      await invalidateTags(true)
+      if (!isStillActiveCase(targetCid, targetDbPath)) return
+    }
+    const ok = await reloadAffectedAndPanel(targetCid, targetDbPath, notifiedTargetSet)
+    if (!ok) return
+    if (isStillActiveCase(targetCid, targetDbPath)) {
+      await onTriageApplied?.()
+    }
+  }
+
+  committedWriteListeners.add(listener)
+
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      isDisposed = true
+      scopeGen += 1
+      selectionRev += 1
+      activeApplyId += 1
+      committedWriteListeners.delete(listener)
+    })
+  }
 
   const isAllSelected = computed(() => {
     const list = currentItems.value
@@ -341,67 +440,30 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
       // If active case or database changed away from cid, write has committed in storage
       // but we do not touch the active different case's selection or cache.
-      if (!isStillActiveCase(cid, myDbPath)) {
+      if (!isCacheStillOnCase(cid, myDbPath)) {
         return res.updatedCount
       }
 
-      // cid is currently active (even if scopeGen !== myScopeGen after an A -> B -> A round-trip!)
+      // Evict stale cached keys while cache is still on this case (even if disposed!)
       evictAnnotationCacheKeys(affectedKeys)
+
+      if (isDisposed) {
+        await Promise.allSettled(
+          Array.from(committedWriteListeners).map((fn) => fn(cid, myDbPath, targetSet, updates))
+        )
+        return res.updatedCount
+      }
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
-      }
-
-      // Reload annotations for affected visible rows and open panel variant so active case never serves stale cached data
-      const toReloadMap = new Map<
-        number,
-        { id: number; chr: string; pos: number; ref: string; alt: string }
-      >()
-      for (const item of currentItems.value) {
-        const id = getItemId(item)
-        if (targetSet.has(id)) {
-          const coords = extractCoords(item)
-          if (coords !== null) {
-            toReloadMap.set(id, { id, ...coords })
-          }
+        if (!isStillActiveCase(cid, myDbPath)) {
+          return res.updatedCount
         }
       }
 
-      // Ensure open panel variant (even if from another page) is refreshed in annotationCache
-      const currentPanel = appState?.selectedPanelVariant?.value
-      if (
-        currentPanel !== null &&
-        typeof currentPanel === 'object' &&
-        'id' in currentPanel &&
-        typeof currentPanel.id === 'number' &&
-        'chr' in currentPanel &&
-        'pos' in currentPanel &&
-        'ref' in currentPanel &&
-        'alt' in currentPanel
-      ) {
-        const panelCaseId =
-          'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
-        if (panelCaseId === undefined || panelCaseId === cid) {
-          const pKey = variantKey({
-            chr: String(currentPanel.chr),
-            pos: Number(currentPanel.pos),
-            ref: String(currentPanel.ref),
-            alt: String(currentPanel.alt)
-          })
-          if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
-            toReloadMap.set(currentPanel.id, {
-              id: currentPanel.id,
-              chr: String(currentPanel.chr),
-              pos: Number(currentPanel.pos),
-              ref: String(currentPanel.ref),
-              alt: String(currentPanel.alt)
-            })
-          }
-        }
-      }
-
-      if (toReloadMap.size > 0) {
-        await loadAnnotationsBatch(cid, Array.from(toReloadMap.values()))
+      const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet)
+      if (!ok) {
+        return res.updatedCount
       }
 
       // Only perform selection cleanup if selection was not modified and session is unchanged

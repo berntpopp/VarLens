@@ -135,7 +135,7 @@ export const AnnotationPerCaseUpsertArgsSchema = z
 export const AnnotationBatchPerCaseUpsertArgsSchema = z
   .tuple([
     CaseVariantIdSchema.shape.caseId,
-    z.array(CaseVariantIdSchema.shape.variantId).min(1),
+    BatchPerCaseAnnotationInputSchema.shape.variantIds,
     BatchPerCaseAnnotationUpdatesInputSchema
   ])
   .rest(z.unknown())
