@@ -17,6 +17,7 @@ export interface ParityFixtureVariant {
   gnomad_af: number | null
   cadd: number | null
   gt_num: string
+  sv_length?: number | null
 }
 
 export interface ParityFixtureCase {
@@ -80,6 +81,7 @@ function variant(
     gnomad_af: null,
     cadd: null,
     gt_num: '0/1',
+    sv_length: null,
     ...over
   }
 }
@@ -95,6 +97,7 @@ export const A = {
     chr: '7',
     pos: 90_000,
     end_pos: 210_000,
+    sv_length: -120_000,
     ref: 'N',
     alt: '<DEL>',
     variant_type: 'cnv'

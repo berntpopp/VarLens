@@ -17,10 +17,10 @@ import {
   fchmodSync,
   fstatSync,
   openSync,
-  statSync,
-  type WriteStream
+  rmSync,
+  statSync
 } from 'node:fs'
-import { rename, rm } from 'node:fs/promises'
+import { rename } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
@@ -169,24 +169,24 @@ export async function streamToExportFile(
   const { outputFilePath, customTempFilePath, tempFilePrecreated, encoding } = options
   const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
+  let fd: number | null = null
   let createdTempFile = false
-  let stream: WriteStream
+  let stream: ReturnType<typeof createWriteStream> | null = null
 
-  if (isDevice) {
-    stream = createWriteStream(tempFilePath, encoding !== undefined ? { encoding } : undefined)
-  } else {
-    let targetMode = 0o600
-    try {
-      targetMode = statSync(outputFilePath).mode & 0o777
-    } catch {
-      // Destination does not exist yet; default to 0o600
-    }
-
-    let fd: number
-    if (tempFilePrecreated !== undefined && tempFilePrecreated !== false) {
-      const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
-      fd = openSync(tempFilePath, openFlags)
+  try {
+    if (isDevice) {
+      stream = createWriteStream(tempFilePath, encoding !== undefined ? { encoding } : undefined)
+    } else {
+      let targetMode = 0o600
       try {
+        targetMode = statSync(outputFilePath).mode & 0o777
+      } catch {
+        // Destination does not exist yet; default to 0o600
+      }
+
+      if (tempFilePrecreated !== undefined && tempFilePrecreated !== false) {
+        const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
+        fd = openSync(tempFilePath, openFlags)
         const st = fstatSync(fd)
         const isObjectExpected =
           typeof tempFilePrecreated === 'object' && tempFilePrecreated !== null
@@ -198,33 +198,41 @@ export async function streamToExportFile(
         if (identityMismatch) {
           throw new Error('Temporary export file identity mismatch')
         }
+        createdTempFile = true
         fchmodSync(fd, targetMode)
-      } catch (err) {
-        closeSync(fd)
-        throw err
+      } else {
+        fd = openSync(tempFilePath, 'wx', targetMode)
+        createdTempFile = true
+        fchmodSync(fd, targetMode)
       }
-      createdTempFile = true
-    } else {
-      fd = openSync(tempFilePath, 'wx', targetMode)
-      createdTempFile = true
-      fchmodSync(fd, targetMode)
+
+      stream = createWriteStream(tempFilePath, {
+        fd,
+        autoClose: true,
+        ...(encoding !== undefined ? { encoding } : {})
+      })
     }
 
-    stream = createWriteStream(tempFilePath, {
-      fd,
-      autoClose: true,
-      ...(encoding !== undefined ? { encoding } : {})
-    })
-  }
-
-  try {
     await pipeline(Readable.from(source), stream)
     if (!isDevice) {
       await rename(tempFilePath, outputFilePath)
     }
   } catch (error) {
+    if (stream !== null) {
+      stream.destroy()
+    } else if (fd !== null) {
+      try {
+        closeSync(fd)
+      } catch {
+        // ignore
+      }
+    }
     if (createdTempFile && !isDevice) {
-      await rm(tempFilePath, { force: true }).catch(() => undefined)
+      try {
+        rmSync(tempFilePath, { force: true })
+      } catch {
+        // ignore
+      }
     }
     throw error
   }

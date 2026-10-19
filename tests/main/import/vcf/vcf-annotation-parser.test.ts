@@ -3,7 +3,8 @@ import {
   parseAnnotation,
   parseAnnotationsForAlleles,
   parseCsqEntry,
-  extractFromCsq
+  extractFromCsq,
+  parseFiniteFloat
 } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
@@ -91,6 +92,27 @@ describe('vcf-annotation-parser', () => {
       // the same split already used on the top-level `variants` row.
       expect(result.transcripts[0].consequence).toBe('LOW')
       expect(result.transcripts[0].func).toBe('synonymous_variant')
+    })
+
+    it('rejects malformed float prefixes instead of parsing partial numbers', () => {
+      expect(parseFiniteFloat('0.2oops')).toBeNull()
+      expect(parseFiniteFloat('1e+')).toBeNull()
+
+      const csqFieldsWithGnomadG = [...csqFields.slice(0, 20), 'gnomADg_AF', ...csqFields.slice(20)]
+      const headerWithGnomadG = makeHeader({
+        annotationType: 'csq',
+        csqFields: csqFieldsWithGnomadG
+      })
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant|LOW|COMT|ENSG00000093010|Transcript|ENST00000361682|protein_coding|2/6|.|ENST00000361682.4:c.186C>T|ENSP00000354346.4:p.Ala62=|336|186|62|A|gcC/gcT|YES|NM_000754.4|0.2oops|0.0012|20oops||tolerated(0.8)|benign(0.05)'
+        ]
+      ])
+
+      const result = parseAnnotation(info, headerWithGnomadG, 'T')
+      expect(result.gnomadAf).toBe(0.0012)
+      expect(result.cadd).toBeNull()
     })
 
     it('decodes the %3D escape VEP writes into HGVSp (variant and transcript rows)', () => {

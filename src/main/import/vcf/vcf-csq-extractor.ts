@@ -17,8 +17,9 @@ export function parseFiniteFloat(raw: unknown): number | null {
   if (raw == null) return null
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
   if (typeof raw !== 'string') return null
-  if (raw === '' || raw === '.') return null
-  const n = Number.parseFloat(raw)
+  const trimmed = raw.trim()
+  if (trimmed === '' || trimmed === '.') return null
+  const n = Number(trimmed)
   return Number.isFinite(n) ? n : null
 }
 

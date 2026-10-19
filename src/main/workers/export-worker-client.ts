@@ -105,6 +105,7 @@ export class ExportWorkerClient {
       }
       try {
         const fd = openSync(tempFilePath, 'wx', targetMode)
+        this.currentTempFilePath = tempFilePath
         try {
           fchmodSync(fd, targetMode)
           const stat = fstatSync(fd)
@@ -112,8 +113,15 @@ export class ExportWorkerClient {
         } finally {
           closeSync(fd)
         }
-        this.currentTempFilePath = tempFilePath
       } catch (err) {
+        if (this.currentTempFilePath !== null) {
+          try {
+            rmSync(this.currentTempFilePath, { force: true })
+          } catch {
+            // ignore
+          }
+          this.currentTempFilePath = null
+        }
         hooks.onError((err as Error).message)
         return
       }
