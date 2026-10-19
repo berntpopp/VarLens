@@ -135,6 +135,7 @@
       auto-grow
       hide-details
       class="text-caption"
+      @update:model-value="emitChange"
       @blur="emitChange"
     />
 
@@ -388,6 +389,7 @@ function emitChange(): void {
 let variantEpoch = 0
 
 async function applyPending(): Promise<void> {
+  emitChange()
   const draft = pending.value
   if (draft === null) return
   if (overrideReasonMissing.value) {
@@ -482,6 +484,10 @@ watch(
         : old[1] === props.variantData)
     if (!isSameVariant) {
       variantEpoch++
+    }
+    if (isSameVariant) {
+      emitChange()
+      if (props.evidenceJson === old[0]) return
     }
     const draft = isSameVariant ? pending.value : null
     loadState(props.evidenceJson)

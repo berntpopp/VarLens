@@ -216,6 +216,53 @@ test.describe('Annotation Scope - Cohort View', () => {
 
     await window.screenshot({ path: testInfo.outputPath('cohort-table.png') })
   })
+
+  // eslint-disable-next-line no-empty-pattern
+  test('cohort view expands carrier subtable with non-zero cell and button widths (#662)', async ({}, testInfo) => {
+    const table = window.locator('.v-data-table-server')
+    if ((await table.count()) === 0 || !(await table.isVisible())) {
+      test.skip()
+      return
+    }
+
+    const expandBtn = window
+      .locator('.v-data-table-server button[aria-label*="Show carriers" i]')
+      .first()
+
+    if ((await expandBtn.count()) === 0) {
+      test.skip()
+      return
+    }
+
+    await expandBtn.click()
+    const subtable = window.locator('.carrier-subtable')
+    await expect(subtable).toBeVisible({ timeout: 5000 })
+
+    // Verify all rendered headers and data cells have non-zero width (#662)
+    const cellWidths = await window
+      .locator('.carrier-subtable th, .carrier-subtable td')
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width))
+
+    expect(cellWidths.length).toBeGreaterThan(0)
+    for (const w of cellWidths) {
+      expect(w).toBeGreaterThan(0)
+    }
+
+    // Verify "View in Case" button is rendered and has positive width
+    const viewBtn = window
+      .locator('.carrier-subtable')
+      .getByRole('button', { name: /View in Case/i })
+      .first()
+
+    if ((await viewBtn.count()) > 0) {
+      await expect(viewBtn).toBeVisible()
+      const box = await viewBtn.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.width).toBeGreaterThan(0)
+    }
+
+    await window.screenshot({ path: testInfo.outputPath('cohort-carrier-subtable.png') })
+  })
 })
 
 test.describe('Cross-view Navigation', () => {

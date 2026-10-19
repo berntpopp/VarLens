@@ -283,6 +283,40 @@ describe('AcmgClassificationPanel confirm step', () => {
       wrapper.unmount()
     })
 
+    it('preserves unblurred typed notes across same-variant refresh (#660)', async () => {
+      const wrapper = mount(AcmgClassificationPanel, {
+        props: {
+          evidenceJson: null,
+          variantData: { gnomad_af: null, cadd: null, clinvar: null },
+          variantKey: 'case-1:chr1:100:A:G'
+        },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      wrapper.findAllComponents(AcmgEvidenceGrid)[0].vm.$emit('code-click', 'PVS1')
+      await wrapper.vm.$nextTick()
+
+      // Type notes into textarea WITHOUT triggering blur
+      const textarea = wrapper.find('textarea')
+      await textarea.setValue('Unblurred clinical note')
+
+      // Late annotations / same variant refresh arrives
+      await wrapper.setProps({
+        variantData: { gnomad_af: 0.001, cadd: 28, clinvar: null },
+        variantKey: 'case-1:chr1:100:A:G'
+      })
+      await flushPromises()
+
+      const vm = wrapper.vm as unknown as {
+        pending: { evidenceJson: string } | null
+        notes: string
+      }
+      expect(vm.notes).toBe('Unblurred clinical note')
+      expect(vm.pending?.evidenceJson).toContain('Unblurred clinical note')
+      expect(vm.pending?.evidenceJson).toContain('PVS1')
+      wrapper.unmount()
+    })
+
     it('changing variantKey drops draft and settles leave prompt (#660)', async () => {
       const wrapper = mount(AcmgClassificationPanel, {
         props: {

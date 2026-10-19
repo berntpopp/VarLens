@@ -4,7 +4,11 @@
  */
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
-import type { LollipopVariant, ProteinDomain } from '../../../shared/types/protein'
+import type {
+  ConsequenceCategory,
+  LollipopVariant,
+  ProteinDomain
+} from '../../../shared/types/protein'
 import {
   getConsequenceCategory,
   getConsequenceColor,
@@ -43,8 +47,6 @@ export function resolveVariantConsequence(v: AnyVariant): string {
         const match = terms.find((t) => getConsequenceCategory(t) === sev)
         if (match !== undefined) return match
       }
-      const firstKnown = terms.find((t) => getConsequenceCategory(t) !== 'other')
-      if (firstKnown !== undefined) return firstKnown
     }
   }
 
