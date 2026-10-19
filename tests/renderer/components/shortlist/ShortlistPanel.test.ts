@@ -66,11 +66,16 @@ const upsertPerCaseMock = vi
       updated_at: 0
     })
   )
+const batchGetMock = vi.fn().mockImplementation(async () => ({}))
+const getForVariantMock = vi.fn().mockImplementation(async () => ({ global: null, perCase: null }))
+
 vi.mock('../../../../src/renderer/src/composables/useApiService', () => ({
   useApiService: () => ({
     api: {
       annotations: {
-        upsertPerCase: upsertPerCaseMock
+        upsertPerCase: upsertPerCaseMock,
+        batchGet: batchGetMock,
+        getForVariant: getForVariantMock
       }
     },
     isAvailable: { value: true }
@@ -90,6 +95,7 @@ import {
   setLoading,
   variantKey
 } from '../../../../src/renderer/src/composables/annotation-cache'
+import { useAnnotations } from '../../../../src/renderer/src/composables/useAnnotations'
 
 // Fresh Pinia per test: ShortlistTable resolves its Links column through the
 // external-links store, and the star is role-gated (usePermissions reads the
@@ -100,6 +106,8 @@ beforeEach(() => {
   setActivePinia(pinia)
   installCapabilities()
   clearAnnotationCache()
+  batchGetMock.mockReset().mockResolvedValue({})
+  getForVariantMock.mockReset().mockResolvedValue({ global: null, perCase: null })
 })
 
 const state = (
@@ -409,5 +417,189 @@ describe('ShortlistPanel', () => {
     await refreshBtn?.trigger('click')
     expect(state.refresh).toHaveBeenCalled()
     expect(wrapper.find('[data-testid="shortlist-loading"]').exists()).toBe(false)
+  })
+
+  it('prepareRowDialog evicts sibling row 999 cached when opening dialog for row 101', async () => {
+    const row101 = minimalRow({
+      id: 101,
+      case_id: 7,
+      chr: 'chr1',
+      pos: 100,
+      ref: 'A',
+      alt: 'G'
+    })
+    state.result.value = {
+      rows: [row101],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const key = variantKey(row101)
+
+    batchGetMock.mockResolvedValue({
+      [key]: {
+        global: null,
+        perCase: {
+          id: 100,
+          case_id: 7,
+          variant_id: 101,
+          starred: 1,
+          acmg_classification: 'Pathogenic',
+          acmg_evidence: null,
+          per_case_comment: 'correct note',
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+
+    // Sibling row 999 is cached at the same key
+    annotationCache.value.set(key, {
+      global: null,
+      perCase: {
+        id: 99,
+        case_id: 7,
+        variant_id: 999,
+        starred: 0,
+        acmg_classification: 'Benign',
+        acmg_evidence: null,
+        per_case_comment: 'sibling note',
+        created_at: 0,
+        updated_at: 0
+      }
+    })
+
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+
+    await table.vm.$emit('acmg-click', row101)
+    await flushPromises()
+
+    const cached = annotationCache.value.get(key)
+    expect(cached?.perCase?.variant_id).toBe(101)
+    expect(cached?.perCase?.acmg_classification).toBe('Pathogenic')
+  })
+
+  it('single-row loadAnnotations in flight when onToggleStar completes does not stall loading flag and does not overwrite star', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    let resolveSingleLoad!: (val: unknown) => void
+    const singleLoadPromise = new Promise((resolve) => {
+      resolveSingleLoad = resolve
+    })
+
+    const annotations = useAnnotations()
+    getForVariantMock.mockReturnValue(singleLoadPromise)
+
+    // 1. Start single-row load in flight
+    const pendingLoad = annotations.loadAnnotations(7, row.chr, row.pos, row.ref, row.alt)
+    expect(isKeyLoading(key)).toBe(true)
+
+    // 2. While single-row load is in flight, toggle-star completes
+    await table.vm.$emit('toggle-star', row)
+    await flushPromises()
+
+    // Key must still be loading because single-row load is pending
+    expect(isKeyLoading(key)).toBe(true)
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+
+    // 3. Single-row load resolves with stale unstarred data
+    resolveSingleLoad({
+      global: null,
+      perCase: {
+        id: 1,
+        case_id: 7,
+        variant_id: 42,
+        starred: 0,
+        per_case_comment: null,
+        acmg_classification: null,
+        acmg_evidence: null,
+        created_at: 0,
+        updated_at: 0
+      }
+    })
+    await pendingLoad
+    await flushPromises()
+
+    // Must NOT stall: loading flag must be cleared
+    expect(isKeyLoading(key)).toBe(false)
+    // Starred value must NOT be overwritten by the stale single load
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+  })
+
+  it('out-of-order star/unstar completion in ShortlistPanel preserves newer unstar result', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    let resolveStar!: (val: unknown) => void
+    const starPromise = new Promise((resolve) => {
+      resolveStar = resolve
+    })
+    let resolveUnstar!: (val: unknown) => void
+    const unstarPromise = new Promise((resolve) => {
+      resolveUnstar = resolve
+    })
+
+    upsertPerCaseMock
+      .mockImplementationOnce(() => starPromise)
+      .mockImplementationOnce(() => unstarPromise)
+
+    // 1. First click: star (requests starred = true)
+    await table.vm.$emit('toggle-star', row)
+
+    // 2. Second click: unstar (requests starred = false)
+    await table.vm.$emit('toggle-star', row)
+
+    // 3. Second request (unstar) resolves first
+    resolveUnstar({
+      id: 2,
+      case_id: 7,
+      variant_id: 42,
+      starred: 0,
+      per_case_comment: null,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    })
+    await flushPromises()
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(0)
+
+    // 4. First request (star) resolves late
+    resolveStar({
+      id: 1,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1,
+      per_case_comment: null,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    })
+    await flushPromises()
+
+    // Cache must NOT be overwritten by the older star response
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(0)
   })
 })

@@ -41,15 +41,19 @@ import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlis
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
 import {
   annotationCache,
+  bumpKeyVersion,
+  bumpWriteVersion,
   cacheSet,
   evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
   getCachedBuild,
   getCachedCaseId,
-  hasDbSwitchedSince,
+  getCachedVariantId,
   getCurrentDbPath,
-  isKeyLoading,
-  setLoading,
+  getWriteVersion,
+  hasDbSwitchedSince,
+  markAwaited,
+  needsLoad,
   unloadedSlotOf,
   variantKey
 } from '../../composables/annotation-cache'
@@ -123,6 +127,8 @@ const shortlistExplanation = computed(() => {
   )
 })
 
+const pendingStarByRow = new Map<string, boolean>()
+
 /**
  * Toggle the star annotation for a row. Writes through
  * `annotations.upsertPerCase` and relies on the
@@ -138,7 +144,17 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const epoch = getAnnotationCacheEpoch()
   const build = getCachedBuild()
   const key = variantKey(row)
-  const nextStarred = !row.is_starred
+  const rowKey = `${row.case_id}:${row.id}`
+  const cachedPerCase = annotationCache.value.get(key)?.perCase
+  const currentStarred = pendingStarByRow.has(rowKey)
+    ? pendingStarByRow.get(rowKey)!
+    : cachedPerCase && cachedPerCase.variant_id === row.id && cachedPerCase.case_id === row.case_id
+      ? cachedPerCase.starred === 1
+      : row.is_starred
+  const nextStarred = !currentStarred
+  pendingStarByRow.set(rowKey, nextStarred)
+  const writeVer = bumpWriteVersion(key, 'perCase')
+
   try {
     const updated = unwrapIpcResult(
       await api.annotations.upsertPerCase(row.case_id, row.id, {
@@ -152,20 +168,17 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       (activeCaseId == null || activeCaseId === row.case_id) &&
       getAnnotationCacheEpoch() === epoch &&
       getCachedBuild() === build &&
-      (getCachedCaseId() === null || getCachedCaseId() === row.case_id)
+      (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
+      getWriteVersion(key, 'perCase') === writeVer
     if (stillOnScope) {
       const liveEntry = annotationCache.value.get(key)
       const liveUnloaded = unloadedSlotOf(key)
-      const wasLoading = isKeyLoading(key)
-      evictAnnotationCacheKeys([key])
+      bumpKeyVersion(key)
       cacheSet(
         key,
         { global: liveEntry?.global ?? null, perCase: updated },
         liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
       )
-      if (wasLoading) {
-        setLoading(key, true, 'case')
-      }
     }
   } catch (e) {
     logService.error(
@@ -174,6 +187,51 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       }`,
       'shortlist.panel'
     )
+  } finally {
+    if (getWriteVersion(key, 'perCase') === writeVer) {
+      pendingStarByRow.delete(rowKey)
+    }
+  }
+}
+
+let dialogOpenSeq = 0
+
+async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
+  const seq = ++dialogOpenSeq
+  const key = variantKey(row)
+  const cached = annotationCache.value.get(key)
+  const cachedVid = getCachedVariantId(key)
+  const hasMismatch =
+    cached !== undefined &&
+    ((cached.perCase !== null &&
+      (cached.perCase.variant_id !== row.id || cached.perCase.case_id !== row.case_id)) ||
+      (cachedVid !== undefined && cachedVid !== row.id) ||
+      (cachedVid === undefined && typeof api?.annotations?.batchGet === 'function'))
+  if (hasMismatch) {
+    evictAnnotationCacheKeys([key])
+  }
+  if (needsLoad(key, 'case') && typeof api?.annotations?.batchGet === 'function') {
+    markAwaited('case', key)
+    await annotations.loadAnnotationsBatch(row.case_id, [row])
+  }
+  const after = annotationCache.value.get(key)?.perCase
+  if (after && (after.variant_id !== row.id || after.case_id !== row.case_id)) {
+    evictAnnotationCacheKeys([key])
+  }
+  return seq === dialogOpenSeq && props.caseId === row.case_id
+}
+
+async function onAcmgClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openAcmgEvidenceDialog(row)
+  }
+}
+
+async function onCommentClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openCommentDialog(row)
   }
 }
 
@@ -304,8 +362,8 @@ async function handleTriageApplied(): Promise<void> {
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"
         @toggle-star="onToggleStar"
-        @acmg-click="(row) => annotationDialogsRef?.openAcmgEvidenceDialog(row)"
-        @comment-click="(row) => annotationDialogsRef?.openCommentDialog(row)"
+        @acmg-click="onAcmgClick"
+        @comment-click="onCommentClick"
         @triage-applied="handleTriageApplied"
       />
     </div>

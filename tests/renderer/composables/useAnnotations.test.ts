@@ -13,7 +13,11 @@ import {
   annotationCache,
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
-import { setLoading, isKeyLoading } from '@renderer/composables/annotation-cache'
+import {
+  setLoading,
+  isKeyLoading,
+  evictAnnotationCacheKeys
+} from '@renderer/composables/annotation-cache'
 
 describe('useAnnotations', () => {
   let app: { unmount: () => void }
@@ -607,6 +611,44 @@ describe('stale-request guard (annotation generation)', () => {
 
     // Now case 2 finishes
     resolveCase2({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad2
+
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(false)
+  })
+
+  it('superseded batch does not clear newer batch loading flag', async () => {
+    let resolveBatch1: (val: unknown) => void = () => {}
+    const p1 = new Promise((r) => {
+      resolveBatch1 = r
+    })
+    let resolveBatch2: (val: unknown) => void = () => {}
+    const p2 = new Promise((r) => {
+      resolveBatch2 = r
+    })
+
+    window.api.annotations.batchGet = vi.fn().mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+
+    // Start batch 1
+    const pLoad1 = result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Force evict key and start batch 2 for the same key
+    evictAnnotationCacheKeys(['chr1:100:A:T'])
+    const pLoad2 = result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Batch 1 finishes first
+    resolveBatch1({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad1
+
+    // Key should STILL be loading because batch 2 owns the newer loading token!
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Batch 2 finishes
+    resolveBatch2({ 'chr1:100:A:T': { global: null, perCase: null } })
     await pLoad2
 
     expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(false)

@@ -18,6 +18,7 @@ import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
 import {
   annotationCache,
   beginAnnotationRequest,
+  bumpWriteVersion,
   evictAnnotationCacheKeys,
   getCachedBuild,
   getCachedCaseId,
@@ -477,6 +478,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         }
       }
 
+      for (const k of affectedKeys) {
+        bumpWriteVersion(k, 'perCase')
+      }
       // Evict stale cached keys while cache is still on this case (even if disposed!)
       evictAnnotationCacheKeys(affectedKeys)
 

@@ -39,6 +39,17 @@ export const MAX_CACHE_SIZE = 5000
 const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE)
 export const annotationCache = shallowRef<LruMap<string, AnnotationCache>>(lruCache)
 
+// Tracks variant_id mapped to cache key, including for entries whose perCase slot is null
+const cachedVariantIds = new Map<string, number>()
+
+export function getCachedVariantId(key: string): number | undefined {
+  return annotationCache.value.get(key)?.perCase?.variant_id ?? cachedVariantIds.get(key)
+}
+
+export function setCachedVariantId(key: string, variantId: number): void {
+  cachedVariantIds.set(key, variantId)
+}
+
 // Loading states per variant key
 const loadingStates = shallowRef<Map<string, boolean>>(new Map())
 
@@ -70,6 +81,11 @@ export function variantKey({ chr, pos, ref, alt }: VariantCoords): string {
 let pendingCacheTrigger = false
 export function cacheSet(key: string, value: AnnotationCache, unloaded?: AnnotationSlot): void {
   annotationCache.value.set(key, value)
+  if (value.perCase && typeof value.perCase.variant_id === 'number') {
+    cachedVariantIds.set(key, value.perCase.variant_id)
+  } else if (unloaded === 'perCase') {
+    cachedVariantIds.delete(key)
+  }
   if (unloaded === undefined) unloadedSlots.delete(key)
   else rememberUnloadedSlot(key, unloaded)
   if (!pendingCacheTrigger) {
@@ -127,17 +143,33 @@ export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null
   )
 }
 
-/** Set loading state and trigger shallowRef reactivity. */
-export function setLoading(key: string, value: boolean, kind: AnnotationBatchKind = 'case'): void {
+let nextLoadingToken = 0
+const loadingTokens = new Map<string, number>()
+
+/** Set loading state and trigger shallowRef reactivity. Returns loading token if set true. */
+export function setLoading(
+  key: string,
+  value: boolean,
+  kind: AnnotationBatchKind = 'case',
+  token?: number
+): number {
   if (value) {
+    const next = ++nextLoadingToken
     loadingStates.value.set(key, true)
+    loadingTokens.set(key, next)
     if (kind === 'global') globalOnlyLoading.add(key)
     else globalOnlyLoading.delete(key)
-  } else {
-    loadingStates.value.delete(key)
-    globalOnlyLoading.delete(key)
+    triggerRef(loadingStates)
+    return next
   }
+  if (token !== undefined && loadingTokens.get(key) !== token) {
+    return 0
+  }
+  loadingStates.value.delete(key)
+  loadingTokens.delete(key)
+  globalOnlyLoading.delete(key)
   triggerRef(loadingStates)
+  return 0
 }
 
 export function isKeyLoading(key: string): boolean {
@@ -207,13 +239,32 @@ export function getKeyVersion(key: string): number {
   return evictionEpoch * 1_000_000 + (keyVersions.get(key) ?? 0)
 }
 
+export function bumpKeyVersion(key: string): void {
+  keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+}
+
+const writeVersions = new Map<string, number>()
+
+export function bumpWriteVersion(key: string, slot: AnnotationSlot = 'perCase'): number {
+  const k = `${slot}:${key}`
+  const next = (writeVersions.get(k) ?? 0) + 1
+  writeVersions.set(k, next)
+  return next
+}
+
+export function getWriteVersion(key: string, slot: AnnotationSlot = 'perCase'): number {
+  return writeVersions.get(`${slot}:${key}`) ?? 0
+}
+
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++
   evictionEpoch++
   keyVersions.clear()
+  cachedVariantIds.clear()
   annotationCache.value.clear()
   loadingStates.value.clear()
+  loadingTokens.clear()
   unloadedSlots.clear()
   globalOnlyLoading.clear()
   awaitedKeys.case.clear()
@@ -317,7 +368,9 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   for (const key of keys) {
     if (annotationCache.value.delete(key)) changed = true
     keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+    cachedVariantIds.delete(key)
     loadingStates.value.delete(key)
+    loadingTokens.delete(key)
     unloadedSlots.delete(key)
     globalOnlyLoading.delete(key)
     awaitedKeys.case.delete(key)
@@ -339,7 +392,11 @@ export function resetAnnotationState(): void {
   clearAnnotationCache()
   cacheEpoch = 0
   evictionEpoch = 0
+  nextLoadingToken = 0
   keyVersions.clear()
+  writeVersions.clear()
+  cachedVariantIds.clear()
+  loadingTokens.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0
 }

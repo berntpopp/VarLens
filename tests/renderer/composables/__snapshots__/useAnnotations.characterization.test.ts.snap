@@ -163,33 +163,23 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
   "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
     "getForVariant": [
       [
         2,
@@ -206,14 +196,14 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
     "warn": [],
   },
-  "triggers": 2,
-  "triggersBeforeSettle": 0,
+  "triggers": 3,
+  "triggersBeforeSettle": 1,
 }
 `;
 
@@ -245,31 +235,6 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
   "duringFlight": [
     [
@@ -297,47 +262,38 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
-  "ipc": {},
+  "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
+  },
   "loadingAfter": [
     false,
     false,
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
-  "triggersBeforeSettle": 0,
+  "triggers": 1,
+  "triggersBeforeSettle": 1,
 }
 `;
 
@@ -369,31 +325,6 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
   "duringFlight": [
     [
@@ -421,47 +352,38 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
-  "ipc": {},
+  "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
+  },
   "loadingAfter": [
     false,
     false,
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
-  "triggersBeforeSettle": 0,
+  "triggers": 1,
+  "triggersBeforeSettle": 1,
 }
 `;
 
@@ -493,31 +415,6 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
   "duringFlight": [
     [
@@ -545,47 +442,43 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
-  "ipc": {},
+  "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
+  },
   "loadingAfter": [
     false,
     false,
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
-    "warn": [],
+    "warn": [
+      [
+        "Failed to load annotation batch: friendly",
+        "annotations",
+      ],
+    ],
   },
-  "triggers": 0,
-  "triggersBeforeSettle": 0,
+  "triggers": 1,
+  "triggersBeforeSettle": 1,
 }
 `;
 
@@ -617,31 +510,6 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
   "duringFlight": [
     [
@@ -669,47 +537,43 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
-  "ipc": {},
+  "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
+  },
   "loadingAfter": [
     false,
     false,
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
-    "warn": [],
+    "warn": [
+      [
+        "Failed to load annotation batch: boom",
+        "annotations",
+      ],
+    ],
   },
-  "triggers": 0,
-  "triggersBeforeSettle": 0,
+  "triggers": 1,
+  "triggersBeforeSettle": 1,
 }
 `;
 
@@ -719,25 +583,9 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
     [
       "chr1:100:A:G",
       {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
+        "global": null,
         "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
           "starred": 1,
-          "variant_id": 11,
         },
       },
     ],
@@ -745,25 +593,9 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
       "chr2:200:C:T",
       {
         "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
           "starred": 1,
         },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
+        "perCase": null,
       },
     ],
   ],
@@ -793,47 +625,38 @@ exports[`useAnnotations characterization > load batch > scope case > all-cached 
         },
       },
     ],
-    [
-      "chr2:200:C:T",
-      {
-        "global": {
-          "acmg_classification": "Benign",
-          "acmg_evidence": "{"BA1":true}",
-          "alt": "G",
-          "chr": "chr1",
-          "global_comment": "old global",
-          "id": 5,
-          "pos": 100,
-          "ref": "A",
-          "starred": 1,
-        },
-        "perCase": {
-          "acmg_classification": "Likely benign",
-          "acmg_evidence": "{"BS1":true}",
-          "case_id": 1,
-          "id": 6,
-          "per_case_comment": "old case",
-          "starred": 1,
-          "variant_id": 11,
-        },
-      },
-    ],
   ],
-  "ipc": {},
+  "ipc": {
+    "batchGet": [
+      [
+        1,
+        [
+          {
+            "alt": "T",
+            "chr": "chr2",
+            "pos": 200,
+            "ref": "C",
+            "variantId": 22,
+          },
+        ],
+        null,
+      ],
+    ],
+  },
   "loadingAfter": [
     false,
     false,
   ],
   "loadingDuringFlight": [
     false,
-    false,
+    true,
   ],
   "logs": {
     "error": [],
     "warn": [],
   },
-  "triggers": 0,
-  "triggersBeforeSettle": 0,
+  "triggers": 2,
+  "triggersBeforeSettle": 1,
 }
 `;
 

@@ -30,19 +30,24 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import {
   annotationCache,
   beginAnnotationRequest,
+  bumpKeyVersion,
+  bumpWriteVersion,
   cacheSet,
   cacheSetGlobalSlot,
   dropCacheOfClosedDatabase,
   evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
   getAnnotationGeneration,
+  getCachedVariantId,
   getKeyVersion,
+  getWriteVersion,
   hasDbSwitchedSince,
   isCacheOfBuild,
   isKeyLoading,
   isTrackedCase,
   markAwaited,
   needsLoad,
+  setCachedVariantId,
   setLoading,
   takeAwaited,
   triggerAnnotationCache,
@@ -274,7 +279,15 @@ async function mutate(
   const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
-  const current = annotationCache.value.get(key)
+  const rawCurrent = annotationCache.value.get(key)
+  const siblingOccupied =
+    scope.kind === 'case' &&
+    rawCurrent?.perCase != null &&
+    ((typeof rawCurrent.perCase.variant_id === 'number' &&
+      rawCurrent.perCase.variant_id !== scope.variantId) ||
+      (typeof rawCurrent.perCase.case_id === 'number' &&
+        rawCurrent.perCase.case_id !== scope.caseId))
+  const current = siblingOccupied ? undefined : rawCurrent
   const previous = (current ? readSlot(current, scope) : null) ?? null
   const plan = buildPlan(current, previous)
 
@@ -284,20 +297,30 @@ async function mutate(
     triggerAnnotationCache()
   }
 
+  const slot = slotOf(scope)
+  const writeVer = bumpWriteVersion(key, slot)
+
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
     if (leftScope(scope, dbPath)) return true
+    if (getWriteVersion(key, slot) !== writeVer) return true
     // Merge into what the cache holds now. If the cache was rebuilt while the
     // write was in flight (case switch), `current` belongs to the old scope:
     // update the entry the new scope loaded, and never recreate one from it.
     const live = annotationCache.value.get(key)
     if (epoch !== getAnnotationCacheEpoch() && !live) return true
     // The write confirms its own slot; the other one stays as (un)loaded as it was.
-    const written = slotOf(scope)
+    const written = slot
     const unloaded = live ? unloadedSlotOf(key) : otherSlot(written)
+    bumpKeyVersion(key)
     cacheSet(
       key,
-      mergeServerSlot(live, scope, updated),
+      scope.kind === 'case'
+        ? {
+            global: rawCurrent?.global ?? live?.global ?? null,
+            perCase: updated as CaseVariantAnnotation
+          }
+        : mergeServerSlot(live, scope, updated),
       unloaded === written ? undefined : unloaded
     )
     return true
@@ -305,6 +328,7 @@ async function mutate(
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
+    if (getWriteVersion(key, slot) !== writeVer) return false
     // Every failed write rolls back and notifies, so no view keeps showing the
     // optimistic value of a write that never landed.
     if (current) rollBackSlot(current, scope, plan, previous)
@@ -347,15 +371,22 @@ async function load(
   if (!needsLoad(key, scope.kind)) return
 
   const version = getKeyVersion(key)
-  setLoading(key, true, scope.kind)
+  const loadingToken = setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
+    if (isResponseStale(scope, dbPath)) return
     const isStale =
-      isResponseStale(scope, dbPath) ||
-      (scope.kind === 'case'
+      scope.kind === 'case'
         ? getKeyVersion(key) !== version
-        : getKeyVersion(key) % 1_000_000 !== version % 1_000_000)
-    if (isStale) return
+        : getKeyVersion(key) % 1_000_000 !== version % 1_000_000
+    if (isStale) {
+      const sameEpoch =
+        Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(version / 1_000_000)
+      if (scope.kind === 'case' && sameEpoch && unloadedSlotOf(key) === 'global') {
+        cacheSetGlobalSlot(key, entry.global)
+      }
+      return
+    }
     storeLoaded(key, scope, entry)
   } catch (error) {
     logService.error(
@@ -363,12 +394,8 @@ async function load(
       'annotations'
     )
   } finally {
-    const versionMatches =
-      scope.kind === 'case'
-        ? getKeyVersion(key) === version
-        : getKeyVersion(key) % 1_000_000 === version % 1_000_000
-    if (versionMatches && (scope.kind !== 'case' || isTrackedCase(scope.caseId))) {
-      setLoading(key, false)
+    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
+      setLoading(key, false, scope.kind, loadingToken)
     }
   }
 }
@@ -406,11 +433,15 @@ async function loadBatch(
     if (scope.kind === 'case') {
       const cached = annotationCache.value.get(key)
       if (
-        cached !== undefined &&
-        ((typeof v.id === 'number' &&
-          cached.perCase !== null &&
-          cached.perCase.variant_id !== v.id) ||
-          (typeof v.is_starred === 'boolean' && (cached.perCase?.starred === 1) !== v.is_starred))
+        (cached !== undefined &&
+          ((typeof v.id === 'number' &&
+            cached.perCase !== null &&
+            cached.perCase.variant_id !== v.id) ||
+            (typeof v.is_starred === 'boolean' &&
+              (cached.perCase?.starred === 1) !== v.is_starred))) ||
+        (typeof v.id === 'number' &&
+          getCachedVariantId(key) !== undefined &&
+          getCachedVariantId(key) !== v.id)
       ) {
         evictAnnotationCacheKeys([key])
       }
@@ -422,14 +453,24 @@ async function loadBatch(
   }
   if (uncached.length === 0) return
 
+  const requestedVariantIds = new Map<string, number>()
+  for (const vk of uncached) {
+    if (typeof vk.variantId === 'number') {
+      requestedVariantIds.set(variantKey(vk), vk.variantId)
+    }
+  }
+
   const keyVersionsAtStart = new Map<string, number>()
   for (const vk of uncached) {
     const k = variantKey(vk)
     keyVersionsAtStart.set(k, getKeyVersion(k))
   }
 
-  // Mark all keys as in-flight before the IPC call
-  for (const vk of uncached) setLoading(variantKey(vk), true, scope.kind)
+  const loadingTokensAtStart = new Map<string, number>()
+  for (const vk of uncached) {
+    const k = variantKey(vk)
+    loadingTokensAtStart.set(k, setLoading(k, true, scope.kind))
+  }
 
   try {
     const results = unwrapIpcResult(
@@ -461,6 +502,9 @@ async function loadBatch(
       const awaited = takeAwaited(scope.kind, key)
       if (fromPriorPage && !awaited) continue
       storeLoaded(key, scope, value as AnnotationCache)
+      if (scope.kind === 'case' && requestedVariantIds.has(key)) {
+        setCachedVariantId(key, requestedVariantIds.get(key)!)
+      }
     }
   } catch (error) {
     logService.warn(
@@ -471,18 +515,7 @@ async function loadBatch(
     if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
       for (const vk of uncached) {
         const k = variantKey(vk)
-        const startVer = keyVersionsAtStart.get(k)
-        const versionMatches =
-          startVer !== undefined &&
-          (scope.kind === 'case'
-            ? getKeyVersion(k) === startVer
-            : getKeyVersion(k) % 1_000_000 === startVer % 1_000_000)
-        const sameEpoch =
-          startVer !== undefined &&
-          Math.floor(getKeyVersion(k) / 1_000_000) === Math.floor(startVer / 1_000_000)
-        if (versionMatches || (sameEpoch && !needsLoad(k, scope.kind))) {
-          setLoading(k, false)
-        }
+        setLoading(k, false, scope.kind, loadingTokensAtStart.get(k))
       }
     }
   }
