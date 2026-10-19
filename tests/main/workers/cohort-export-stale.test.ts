@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import Database from 'better-sqlite3-multiple-ciphers'
 import { DatabaseService } from '../../../src/main/database'
+import { CohortService } from '../../../src/main/database/cohort'
 import { exportCohort } from '../../../src/main/ipc/handlers/export-logic'
 import { runCohortExport } from '../../../src/main/workers/cohort-export'
 import { CohortSummaryRefreshingError } from '../../../src/shared/errors/cohort-summary-refreshing'
@@ -109,9 +110,13 @@ describe('SQLite cohort export while the summary is stale', () => {
     service.cohortSummary.rebuild()
 
     const file = join(dir, 'cursor-export.xlsx')
+    const cohortService = new CohortService(service.database)
+    const page1 = cohortService.getCohortVariants({ limit: 1 })
+    expect(page1.next_cursor).toBeTruthy()
+
     const result = await runCohortExport(
       service.database,
-      { cursor: 'some-existing-cursor', _count_needed: true } as never,
+      { cursor: page1.next_cursor!, _count_needed: true } as never,
       file,
       () => undefined
     )

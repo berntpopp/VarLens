@@ -4,6 +4,7 @@
  * Streams query results in pages to an XLSX file using xlsxStream, avoiding
  * blocking the event loop and bounding memory usage.
  */
+import { randomUUID } from 'node:crypto'
 import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
@@ -104,7 +105,8 @@ export async function runCohortExport(
   db: DatabaseType,
   params: CohortSearchParams,
   outputFilePath: string,
-  onProgress: (current: number, total: number) => void
+  onProgress: (current: number, total: number) => void,
+  customTempFilePath?: string
 ): Promise<CohortExportResult> {
   // The summary is what gets exported: never write a file from a stale one.
   // The main process waited for a pending refresh before starting this job.
@@ -135,7 +137,8 @@ export async function runCohortExport(
         const page = cohortService.getCohortVariants({
           ...baseParams,
           limit: pageLimit,
-          offset
+          offset,
+          _count_needed: offset === 0
         })
 
         if (!initialProgressReported) {
@@ -189,13 +192,24 @@ export async function runCohortExport(
       accessSync(outputFilePath, constants.W_OK)
     }
     const isDevice = outputFilePath.startsWith('/dev/')
-    const tempFilePath = isDevice ? outputFilePath : `${outputFilePath}.part`
-    const stream = createWriteStream(tempFilePath)
+    const tempFilePath = isDevice
+      ? outputFilePath
+      : (customTempFilePath ?? `${outputFilePath}.${randomUUID()}.part`)
+    let createdTempFile = false
+    const stream = isDevice
+      ? createWriteStream(tempFilePath)
+      : createWriteStream(tempFilePath, { flags: 'wx' })
+    if (!isDevice) {
+      stream.once('open', () => {
+        createdTempFile = true
+      })
+    }
     try {
       await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
       if (!isDevice) await rename(tempFilePath, outputFilePath)
     } catch (error) {
-      if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
+      if (createdTempFile && !isDevice)
+        await rm(tempFilePath, { force: true }).catch(() => undefined)
       throw error
     }
 

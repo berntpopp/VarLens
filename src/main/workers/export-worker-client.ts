@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads'
 import { resolve } from 'path'
+import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
 import type {
   ExportMainMessage,
@@ -24,6 +25,7 @@ export interface ExportWorkerCallbacks extends ExportWorkerHooks {
   compiledSql: string
   compiledParams: readonly unknown[]
   outputFilePath: string
+  tempFilePath?: string
   caseName: string
   filterSummary: ExportFilterSummary
 }
@@ -33,12 +35,13 @@ export interface CohortExportWorkerParams extends ExportWorkerHooks {
   encryptionKey?: string
   params: CohortSearchParams
   outputFilePath: string
+  tempFilePath?: string
 }
 
 export class ExportWorkerClient {
   private worker: Worker | null = null
   private hooks: ExportWorkerHooks | null = null
-  private currentOutputFilePath: string | null = null
+  private currentTempFilePath: string | null = null
   private readonly workerPath: string
 
   constructor(workerPath?: string) {
@@ -59,6 +62,7 @@ export class ExportWorkerClient {
         compiledSql: callbacks.compiledSql,
         compiledParams: callbacks.compiledParams,
         outputFilePath: callbacks.outputFilePath,
+        tempFilePath: callbacks.tempFilePath,
         caseName: callbacks.caseName,
         filterSummary: callbacks.filterSummary,
         format: callbacks.outputFilePath.toLowerCase().endsWith('.csv') ? 'csv' : 'xlsx'
@@ -75,7 +79,8 @@ export class ExportWorkerClient {
         dbPath: options.dbPath,
         encryptionKey: options.encryptionKey,
         params: options.params,
-        outputFilePath: options.outputFilePath
+        outputFilePath: options.outputFilePath,
+        tempFilePath: options.tempFilePath
       },
       options
     )
@@ -86,8 +91,13 @@ export class ExportWorkerClient {
       throw new Error('Export worker is already running')
     }
 
+    const isDevice = message.outputFilePath.startsWith('/dev/')
+    const tempFilePath = isDevice
+      ? undefined
+      : (message.tempFilePath ?? `${message.outputFilePath}.${randomUUID()}.part`)
+
     this.hooks = hooks
-    this.currentOutputFilePath = message.outputFilePath
+    this.currentTempFilePath = tempFilePath ?? null
     this.worker = new Worker(this.workerPath)
 
     this.worker.on('message', (msg: ExportWorkerMessage) => {
@@ -96,7 +106,7 @@ export class ExportWorkerClient {
           hooks.onProgress(msg.current, msg.total)
           break
         case 'complete':
-          this.currentOutputFilePath = null
+          this.currentTempFilePath = null
           this.cleanup()
           hooks.onComplete(msg.filePath, msg.rowCount)
           break
@@ -122,7 +132,10 @@ export class ExportWorkerClient {
       }
     })
 
-    this.worker.postMessage(message)
+    this.worker.postMessage({
+      ...message,
+      ...(tempFilePath !== undefined ? { tempFilePath } : {})
+    })
   }
 
   /**
@@ -139,12 +152,12 @@ export class ExportWorkerClient {
 
   private cleanup(): void {
     this.hooks = null
-    const outputPath = this.currentOutputFilePath
-    this.currentOutputFilePath = null
-    const removePartFile = (): void => {
-      if (outputPath !== null) {
+    const tempPath = this.currentTempFilePath
+    this.currentTempFilePath = null
+    const removeTempFile = (): void => {
+      if (tempPath !== null) {
         try {
-          rmSync(`${outputPath}.part`, { force: true })
+          rmSync(tempPath, { force: true })
         } catch {
           // ignore cleanup errors
         }
@@ -160,10 +173,10 @@ export class ExportWorkerClient {
           mainLogger.warn(`Export worker terminate failed: ${err.message}`, 'ExportWorkerClient')
         })
         .finally(() => {
-          removePartFile()
+          removeTempFile()
         })
     } else {
-      removePartFile()
+      removeTempFile()
     }
   }
 
@@ -172,14 +185,14 @@ export class ExportWorkerClient {
       const worker = this.worker
       this.worker = null
       this.hooks = null
-      const outputPath = this.currentOutputFilePath
-      this.currentOutputFilePath = null
+      const tempPath = this.currentTempFilePath
+      this.currentTempFilePath = null
       try {
         await worker.terminate()
       } finally {
-        if (outputPath !== null) {
+        if (tempPath !== null) {
           try {
-            rmSync(`${outputPath}.part`, { force: true })
+            rmSync(tempPath, { force: true })
           } catch {
             // ignore
           }

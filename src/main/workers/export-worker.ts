@@ -13,9 +13,15 @@ async function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): Pro
   let db: DatabaseType | null = null
   try {
     db = openWorkerDatabaseReadOnly(msg.dbPath, msg.encryptionKey)
-    const result = await runCohortExport(db, msg.params, msg.outputFilePath, (current, total) => {
-      postMsg({ type: 'progress', current, total })
-    })
+    const result = await runCohortExport(
+      db,
+      msg.params,
+      msg.outputFilePath,
+      (current, total) => {
+        postMsg({ type: 'progress', current, total })
+      },
+      msg.tempFilePath
+    )
     postMsg({ type: 'complete', filePath: result.filePath, rowCount: result.rowCount })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
@@ -36,6 +42,7 @@ async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
       compiledSql: msg.compiledSql,
       compiledParams: msg.compiledParams,
       outputFilePath: msg.outputFilePath,
+      tempFilePath: msg.tempFilePath,
       format: msg.format,
       caseName: msg.caseName,
       filterSummary: msg.filterSummary,

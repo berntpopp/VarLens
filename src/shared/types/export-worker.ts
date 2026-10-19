@@ -20,6 +20,7 @@ export interface ExportCohortStartMessage {
   encryptionKey?: string
   params: CohortSearchParams
   outputFilePath: string
+  tempFilePath?: string
 }
 
 export type ExportVariantsStartMessage = {
@@ -31,6 +32,7 @@ export type ExportVariantsStartMessage = {
   /** Parameterized values for the compiled SQL */
   compiledParams: readonly unknown[]
   outputFilePath: string
+  tempFilePath?: string
   caseName: string
   /** Active filter summary for metadata sheet */
   filterSummary: ExportFilterSummary

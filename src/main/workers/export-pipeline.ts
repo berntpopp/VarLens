@@ -6,12 +6,16 @@
  * dependencies (parentPort, workerData). This makes the logic testable
  * in isolation.
  */
+import { randomUUID } from 'node:crypto'
 import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
-function prepareExportFilePath(outputFilePath: string): {
+function prepareExportFilePath(
+  outputFilePath: string,
+  customTempFilePath?: string
+): {
   tempFilePath: string
   isDevice: boolean
 } {
@@ -19,7 +23,9 @@ function prepareExportFilePath(outputFilePath: string): {
     accessSync(outputFilePath, constants.W_OK)
   }
   const isDevice = outputFilePath.startsWith('/dev/')
-  const tempFilePath = isDevice ? outputFilePath : `${outputFilePath}.part`
+  const tempFilePath = isDevice
+    ? outputFilePath
+    : (customTempFilePath ?? `${outputFilePath}.${randomUUID()}.part`)
   return { tempFilePath, isDevice }
 }
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
@@ -68,6 +74,7 @@ export interface ExportPipelineParams {
   compiledSql: string
   compiledParams: readonly unknown[]
   outputFilePath: string
+  tempFilePath?: string
   format: 'csv' | 'xlsx'
   caseName: string
   filterSummary: ExportFilterSummary
@@ -85,8 +92,15 @@ export interface ExportPipelineResult {
  * Run the CSV export pipeline: stream query results to a CSV file.
  */
 async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
-  const { db, compiledSql, compiledParams, outputFilePath, onProgress } = params
-  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath)
+  const {
+    db,
+    compiledSql,
+    compiledParams,
+    outputFilePath,
+    tempFilePath: customTempFilePath,
+    onProgress
+  } = params
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
   const stmt = db.prepare(compiledSql)
   const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
@@ -132,13 +146,22 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
     }
   }
 
-  const stream = createWriteStream(tempFilePath, { encoding: 'utf8' })
+  let createdTempFile = false
+  const stream = isDevice
+    ? createWriteStream(tempFilePath, { encoding: 'utf8' })
+    : createWriteStream(tempFilePath, { flags: 'wx', encoding: 'utf8' })
+  if (!isDevice) {
+    stream.once('open', () => {
+      createdTempFile = true
+    })
+  }
+
   try {
     // pipeline() handles backpressure and rejects on an open, write or source error.
     await pipeline(Readable.from(csvLines()), stream)
     if (!isDevice) await rename(tempFilePath, outputFilePath)
   } catch (error) {
-    if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
+    if (createdTempFile && !isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
     throw error
   }
 
@@ -186,9 +209,17 @@ export function buildMetadataSheet(
  * Run the XLSX export pipeline: stream worksheets incrementally to file.
  */
 async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
-  const { db, compiledSql, compiledParams, outputFilePath, caseName, filterSummary, onProgress } =
-    params
-  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath)
+  const {
+    db,
+    compiledSql,
+    compiledParams,
+    outputFilePath,
+    tempFilePath: customTempFilePath,
+    caseName,
+    filterSummary,
+    onProgress
+  } = params
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
   const stmt = db.prepare(compiledSql)
   const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
@@ -245,12 +276,21 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
     ]
   }
 
-  const stream = createWriteStream(tempFilePath)
+  let createdTempFile = false
+  const stream = isDevice
+    ? createWriteStream(tempFilePath)
+    : createWriteStream(tempFilePath, { flags: 'wx' })
+  if (!isDevice) {
+    stream.once('open', () => {
+      createdTempFile = true
+    })
+  }
+
   try {
     await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
     if (!isDevice) await rename(tempFilePath, outputFilePath)
   } catch (error) {
-    if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
+    if (createdTempFile && !isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
     throw error
   }
 

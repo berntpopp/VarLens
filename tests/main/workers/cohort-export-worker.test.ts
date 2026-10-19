@@ -4,7 +4,7 @@
  * cancellation. Uses the real bundled import + export workers.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
@@ -131,5 +131,28 @@ describe('cohort export worker', () => {
     })
 
     expect(outcome).toBe('cancelled')
+  })
+
+  it('does not delete a pre-existing .part file on cancel', async () => {
+    const outputFilePath = join(dir, 'cancelled-part.xlsx')
+    const existingPart = `${outputFilePath}.part`
+    writeFileSync(existingPart, 'pre-existing partial file')
+
+    await new Promise<void>((resolvePromise) => {
+      const client = new ExportWorkerClient(exportWorker)
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise(),
+        onError: () => resolvePromise(),
+        onCancelled: () => resolvePromise()
+      })
+      client.cancel()
+    })
+
+    expect(existsSync(existingPart)).toBe(true)
+    expect(readFileSync(existingPart, 'utf8')).toBe('pre-existing partial file')
   })
 })

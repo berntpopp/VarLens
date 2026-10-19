@@ -442,6 +442,51 @@ describe('runExportPipeline — CSV', () => {
       expect(readFileSync(existing, 'utf8')).toBe('original content must not be overwritten')
       expect(existsSync(`${existing}.part`)).toBe(false)
     })
+
+    it('preserves an existing <outputFilePath>.part file untouched when export succeeds', async () => {
+      const output = join(tmpDir, 'export-success.csv')
+      const existingPart = `${output}.part`
+      writeFileSync(existingPart, 'pre-existing part content must not be touched')
+      const params = makeCsvParams({ outputFilePath: output })
+      await runExportPipeline(params)
+      expect(existsSync(output)).toBe(true)
+      expect(existsSync(existingPart)).toBe(true)
+      expect(readFileSync(existingPart, 'utf8')).toBe(
+        'pre-existing part content must not be touched'
+      )
+    })
+
+    it('preserves an existing <outputFilePath>.part file untouched when export fails', async () => {
+      for (let i = 0; i < 5000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      const output = join(tmpDir, 'export-fail.csv')
+      const existingPart = `${output}.part`
+      writeFileSync(existingPart, 'pre-existing part content must not be touched')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        onProgress: (rows) => {
+          if (rows === 4000) throw new Error('mid-export failure')
+        }
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow('mid-export failure')
+      expect(existsSync(output)).toBe(false)
+      expect(existsSync(existingPart)).toBe(true)
+      expect(readFileSync(existingPart, 'utf8')).toBe(
+        'pre-existing part content must not be touched'
+      )
+    })
+
+    it('rejects with EEXIST when customTempFilePath already exists and preserves it', async () => {
+      const output = join(tmpDir, 'export-eexist.csv')
+      const existingTemp = join(tmpDir, 'existing-temp.part')
+      writeFileSync(existingTemp, 'do not overwrite me')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath: existingTemp
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow()
+      expect(existsSync(existingTemp)).toBe(true)
+      expect(readFileSync(existingTemp, 'utf8')).toBe('do not overwrite me')
+    })
   })
 })
 
