@@ -181,7 +181,7 @@ typecheck: ## Run TypeScript type checking
 # Testing
 #---------------------------------------------------------------------------
 
-test: ## Run tests once (VARLENS_WEB=1 adds explicit web checks; requires PostgreSQL)
+test: rebuild-node ## Run tests once (VARLENS_WEB=1 adds explicit web checks; requires PostgreSQL)
 	npm run test
 ifeq ($(VARLENS_WEB),1)
 	$(MAKE) build-web
@@ -189,10 +189,10 @@ ifeq ($(VARLENS_WEB),1)
 	$(MAKE) web-gate-integration
 endif
 
-test-watch: ## Run tests in watch mode
+test-watch: rebuild-node ## Run tests in watch mode
 	npm run test:watch
 
-test-coverage: ## Run tests with coverage report
+test-coverage: rebuild-node ## Run tests with coverage report
 	npm run test:coverage
 
 perf-build: ## Measure build pipeline stage timings (LABEL=name, optional ONLY=id,id)
@@ -238,7 +238,7 @@ web-gate-parity: web-data-verify ## Run Layer 3 parity scenarios (opt-in; boots 
 	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-gate-parity. This validates desktop↔web parity against PostgreSQL."; exit 2; fi
 	@if [ ! -f out/main/index.js ]; then echo "out/main/index.js missing — running 'make build' first"; npm run build; fi
 	npm run rebuild:electron
-	VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity
+	status=0; VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity || status=$$?; npm run rebuild:node || status=$$?; exit $$status
 
 web-parity-e2e: web-data-verify ## Run manifest-backed desktop↔web parity E2E (requires VARLENS_PG_URL)
 	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-parity-e2e. This is opt-in and never part of default desktop CI."; exit 2; fi

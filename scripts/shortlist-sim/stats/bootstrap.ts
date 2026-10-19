@@ -1,6 +1,6 @@
 // Cluster bootstrap over gene clusters (spec §5.4): every observation of a cluster is
 // resampled together; 95 % percentile interval; deterministic per seed.
-import { mulberry32 } from './prng'
+import { mulberry32 } from '../common/rng'
 
 export interface Interval {
   estimate: number

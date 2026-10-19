@@ -6,7 +6,7 @@ import {
   quantile
 } from '../../../../scripts/shortlist-sim/stats/bootstrap'
 import { geneFolds } from '../../../../scripts/shortlist-sim/stats/folds'
-import { mulberry32 } from '../../../../scripts/shortlist-sim/stats/prng'
+import { mulberry32 } from '../../../../scripts/shortlist-sim/common/rng'
 
 const meanOf = (xs: Array<{ v: number }>): number => xs.reduce((s, x) => s + x.v, 0) / xs.length
 

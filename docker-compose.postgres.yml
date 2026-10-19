@@ -1,13 +1,13 @@
 services:
   postgres:
-    image: postgres:18
+    image: postgres:16
     restart: unless-stopped
     ports:
       - '127.0.0.1:${VARLENS_PG_PORT}:5432'
     env_file:
       - .env.postgres.local
     volumes:
-      - varlens_postgres_data:/var/lib/postgresql
+      - varlens_postgres_data:/var/lib/postgresql/data
       - ./scripts/postgres/init-db:/docker-entrypoint-initdb.d:ro
     # Bulk-load tuning (Phase 16.2). Each `-c key=value` overrides one entry
     # in the default postgresql.conf. Rationale, in priority order:

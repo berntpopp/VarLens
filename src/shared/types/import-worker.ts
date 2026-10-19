@@ -35,52 +35,6 @@ export interface VariantInsertRow {
   source_format: string | null
 }
 
-/** Columns for the INSERT INTO variants (...) statement */
-export const VARIANT_INSERT_COLUMNS = [
-  'case_id',
-  'chr',
-  'pos',
-  'ref',
-  'alt',
-  'gene_symbol',
-  'omim_mim_number',
-  'consequence',
-  'gnomad_af',
-  'cadd',
-  'clinvar',
-  'gt_num',
-  'func',
-  'qual',
-  'hpo_sim_score',
-  'transcript',
-  'cdna',
-  'aa_change',
-  'moi',
-  'hpo_match',
-  'gq',
-  'dp',
-  'ad_ref',
-  'ad_alt',
-  'ab',
-  'filter',
-  'info_json',
-  'source_format'
-] as const
-
-/** Columns for the INSERT INTO variant_transcripts (...) statement */
-export const TRANSCRIPT_INSERT_COLUMNS = [
-  'variant_id',
-  'transcript_id',
-  'gene_symbol',
-  'consequence',
-  'func',
-  'cdna',
-  'aa_change',
-  'hpo_sim_score',
-  'moi',
-  'is_selected'
-] as const
-
 /** File import request sent from main to worker */
 export interface FileImportRequest {
   filePath: string

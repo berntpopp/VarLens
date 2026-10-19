@@ -16,7 +16,7 @@ import type {
 import type { BinSupport, ScenarioId } from '../common/types'
 import { quantile } from './bootstrap'
 import { estimatePoints, type BinCount } from './points'
-import { mulberry32 } from './prng'
+import { mulberry32 } from '../common/rng'
 
 /** First-match assignment of one row: its mode and, per group, the rule that fired. */
 export interface Assignment {
