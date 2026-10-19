@@ -170,8 +170,25 @@ const bulkSelection = useBulkTriageSelection({
   onTriageApplied: () => emit('triage-applied')
 })
 
+watch(
+  () => props.readOnly,
+  (ro) => {
+    if (ro) bulkSelection.clearSelection()
+  }
+)
+
 const appState = inject(AppStateKey, null)
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.interactive,
+  (ok) => {
+    if (!ok && arrowSyncTimer !== null) {
+      clearTimeout(arrowSyncTimer)
+      arrowSyncTimer = null
+    }
+  }
+)
 
 if (appState) {
   watch(
@@ -192,27 +209,26 @@ function triggerDebouncedPanelSync() {
     clearTimeout(arrowSyncTimer)
     arrowSyncTimer = null
   }
-  if (appState?.panelOpen.value === true && selectedItem.value) {
-    arrowSyncTimer = setTimeout(async () => {
-      arrowSyncTimer = null
-      if (appState?.panelOpen.value === true && selectedItem.value) {
-        const leavePromise = appState.confirmPanelLeave?.() ?? null
-        if (leavePromise !== null) {
-          const ok = await leavePromise
-          if (!ok) {
-            if (
-              appState.selectedPanelVariant.value &&
-              'id' in appState.selectedPanelVariant.value
-            ) {
-              selectByClick(appState.selectedPanelVariant.value as ShortlistRow)
-            }
-            return
-          }
+  if (props.interactive === false || appState?.panelOpen.value !== true || !selectedItem.value)
+    return
+  arrowSyncTimer = setTimeout(async () => {
+    arrowSyncTimer = null
+    const itemBeforeAwait = selectedItem.value
+    if (!props.interactive || appState?.panelOpen.value !== true || itemBeforeAwait === null) return
+    const leavePromise = appState.confirmPanelLeave?.() ?? null
+    if (leavePromise !== null) {
+      const ok = await leavePromise
+      if (!ok) {
+        if (appState.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value) {
+          selectByClick(appState.selectedPanelVariant.value as ShortlistRow)
         }
-        emit('row-click', selectedItem.value)
+        return
       }
-    }, 100)
-  }
+    }
+    const currentItem = selectedItem.value
+    if (!props.interactive || appState?.panelOpen.value !== true || currentItem === null) return
+    emit('row-click', currentItem)
+  }, 100)
 }
 
 onUnmounted(() => {
@@ -325,7 +341,7 @@ onKeyStroke(
     :items="props.rows"
     :item-value="rowKey"
     density="compact"
-    show-select
+    :show-select="!props.readOnly"
     :items-per-page="50"
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
@@ -466,10 +482,10 @@ onKeyStroke(
       <v-list-item @click="emit('row-click', actionsRow)">
         <v-list-item-title>View details</v-list-item-title>
       </v-list-item>
-      <v-list-item @click="emit('acmg-click', actionsRow)">
+      <v-list-item :disabled="props.readOnly === true" @click="emit('acmg-click', actionsRow)">
         <v-list-item-title>Classify ACMG</v-list-item-title>
       </v-list-item>
-      <v-list-item @click="emit('comment-click', actionsRow)">
+      <v-list-item :disabled="props.readOnly === true" @click="emit('comment-click', actionsRow)">
         <v-list-item-title>Edit comments</v-list-item-title>
       </v-list-item>
       <v-list-item @click="emit('open-in-tab', targetTabFor(actionsRow.variant_type))">
@@ -502,6 +518,7 @@ onKeyStroke(
   </v-tooltip>
 
   <BulkTriageActionBar
+    v-if="!props.readOnly"
     :selected-count="bulkSelection.selectedCount.value"
     :is-executing="bulkSelection.isExecuting.value"
     @apply="bulkSelection.applyBulkTriage"

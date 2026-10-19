@@ -22,7 +22,7 @@
       density="compact"
       fixed-header
       multi-sort
-      show-select
+      :show-select="canBulkWrite"
       class="elevation-1 variant-table--sticky"
       :class="{ 'table--stale': showStale }"
       :row-props="getRowProps"
@@ -225,6 +225,7 @@
     <AcmgQuickMenu :state="acmgQuickMenu" />
     <TagQuickMenu :state="tagQuickMenu" />
     <BulkTriageActionBar
+      v-if="canBulkWrite"
       :selected-count="bulkSelection.selectedCount.value"
       :is-executing="bulkSelection.isExecuting.value"
       @apply="bulkSelection.applyBulkTriage"
@@ -241,18 +242,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  toRef,
-  watch,
-  onMounted,
-  onUnmounted,
-  onActivated,
-  onDeactivated,
-  nextTick,
-  inject
-} from 'vue'
+import { ref, computed, toRef, watch, nextTick, inject } from 'vue'
+import { onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../shared/types/api'
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
@@ -410,6 +401,10 @@ const {
   getColumnFiltersParam
 } = variantData
 const phenotypeRefreshing = phenotype.usePhenotypeRefresh(caseIdGetter, reloadCurrentPage)
+const canBulkWrite = computed(() => canWrite.value && props.annotationScope !== 'all')
+watch(canBulkWrite, (can) => {
+  if (!can) bulkSelection.clearSelection()
+})
 
 const bulkSelection = useBulkTriageSelection<Variant>({
   items: () => variants.value,
@@ -521,32 +516,41 @@ if (appState) {
 
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
 
+watch(
+  () => props.interactive,
+  (ok) => {
+    if (!ok && arrowSyncTimer !== null) {
+      clearTimeout(arrowSyncTimer)
+      arrowSyncTimer = null
+    }
+  }
+)
+
 function triggerDebouncedPanelSync(): void {
   if (arrowSyncTimer !== null) {
     clearTimeout(arrowSyncTimer)
     arrowSyncTimer = null
   }
-  if (appState?.panelOpen.value === true && selectedItem.value) {
-    arrowSyncTimer = setTimeout(async () => {
-      arrowSyncTimer = null
-      if (appState?.panelOpen.value === true && selectedItem.value) {
-        const leavePromise = appState.confirmPanelLeave?.() ?? null
-        if (leavePromise !== null) {
-          const ok = await leavePromise
-          if (!ok) {
-            if (
-              appState.selectedPanelVariant.value &&
-              'id' in appState.selectedPanelVariant.value
-            ) {
-              selectByClick(appState.selectedPanelVariant.value as Variant)
-            }
-            return
-          }
+  if (props.interactive === false || appState?.panelOpen.value !== true || !selectedItem.value)
+    return
+  arrowSyncTimer = setTimeout(async () => {
+    arrowSyncTimer = null
+    const itemBeforeAwait = selectedItem.value
+    if (!props.interactive || appState?.panelOpen.value !== true || itemBeforeAwait === null) return
+    const leavePromise = appState.confirmPanelLeave?.() ?? null
+    if (leavePromise !== null) {
+      const ok = await leavePromise
+      if (!ok) {
+        if (appState.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value) {
+          selectByClick(appState.selectedPanelVariant.value as Variant)
         }
-        emit('row-click', selectedItem.value)
+        return
       }
-    }, 100)
-  }
+    }
+    const currentItem = selectedItem.value
+    if (!props.interactive || appState?.panelOpen.value !== true || currentItem === null) return
+    emit('row-click', currentItem)
+  }, 100)
 }
 
 // Row click handler
@@ -655,9 +659,7 @@ watch(selectedIndex, async (newIndex) => {
   if (newIndex === null) return
   await nextTick()
   const tableEl = dataTableRef.value?.$el as HTMLElement | undefined
-  if (!tableEl) return
-  const rows = tableEl.querySelectorAll('tbody tr')
-  const row = rows[newIndex] as HTMLElement | undefined
+  const row = tableEl?.querySelectorAll('tbody tr')[newIndex] as HTMLElement | undefined
   row?.scrollIntoView({ block: 'nearest', behavior: pendingScrollBehavior.value })
   pendingScrollBehavior.value = 'smooth'
 })

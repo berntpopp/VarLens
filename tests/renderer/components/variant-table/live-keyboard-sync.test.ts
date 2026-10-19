@@ -220,6 +220,7 @@ function dispatchKey(key: string): void {
 
 describe('VariantTable live keyboard sync & triage shortcuts', () => {
   beforeEach(() => {
+    fakeSelectedItem.value = { id: 42, chr: '1', pos: 100, ref: 'A', alt: 'T' }
     vi.useFakeTimers()
     moveDownSpy.mockClear()
     moveUpSpy.mockClear()
@@ -336,5 +337,39 @@ describe('VariantTable live keyboard sync & triage shortcuts', () => {
     expect(panelOpen.value).toBe(true)
     expect(clearSelectionSpy).not.toHaveBeenCalled()
     expect(wrapper.emitted('deselect')).toBeFalsy()
+  })
+
+  it('cancels debounced panel sync if interactive becomes false before debounce fires', async () => {
+    const wrapper = mountTable({ panelOpen: ref(true) })
+    dispatchKey('ArrowDown')
+    expect(moveDownSpy).toHaveBeenCalledTimes(1)
+
+    // Deactivate table before 100ms fires
+    await wrapper.setProps({ interactive: false })
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    expect(wrapper.emitted('row-click')).toBeFalsy()
+  })
+
+  it('does not emit row-click if selectedItem becomes null while confirmPanelLeave is pending', async () => {
+    let resolveLeave!: (ok: boolean) => void
+    const leavePromise = new Promise<boolean>((resolve) => {
+      resolveLeave = resolve
+    })
+    const wrapper = mountTable({
+      panelOpen: ref(true),
+      confirmPanelLeave: vi.fn().mockReturnValue(leavePromise)
+    })
+
+    dispatchKey('ArrowDown')
+    vi.advanceTimersByTime(110)
+
+    // While leavePromise is pending, selection clears/becomes null
+    fakeSelectedItem.value = null
+    resolveLeave(true)
+    await flushPromises()
+
+    expect(wrapper.emitted('row-click')).toBeFalsy()
   })
 })

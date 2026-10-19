@@ -27,6 +27,7 @@ export interface UseBulkTriageSelectionOptions<T> {
 export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions<T>) {
   const { items, getItemId, caseId, onTriageApplied } = options
   const { api } = useApiService()
+  const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
 
   const selectedIds = ref<number[]>([])
   const lastClickedId = ref<number | null>(null)
@@ -113,7 +114,6 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     if (cid === undefined || cid === null || selectedIds.value.length === 0 || !api) {
       return 0
     }
-    const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
     isExecuting.value = true
     try {
       const res = unwrapIpcResult(
@@ -127,15 +127,12 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       await onTriageApplied?.()
       return res.updatedCount
     } catch (error) {
-      logService.error(
-        `Bulk triage failed: ${error instanceof Error ? error.message : String(error)}`,
-        'useBulkTriageSelection'
-      )
       const msg = isIpcError(error)
         ? (error.userMessage ?? error.message)
         : error instanceof Error
           ? error.message
           : String(error)
+      logService.error(`Bulk triage failed: ${msg}`, 'useBulkTriageSelection')
       appState?.showSnack(msg, 'error')
       return 0
     } finally {

@@ -787,6 +787,136 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).not.toHaveBeenCalledWith('COMMIT')
     expect(release).toHaveBeenCalledOnce()
   })
+
+  it('batchUpsertPerCaseAnnotationWithAudit deduplicates variant IDs and executes once per unique ID', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // SELECT id FROM variants ... WHERE id = ANY($2::int[])
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101 (none)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            starred: true,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: '1714060800000',
+            updated_at: '1714060800000'
+          }
+        ]
+      }) // _upsertPerCaseAnnotationOn
+      .mockResolvedValueOnce({ rows: [] }) // audit.append
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const result = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 101], {
+      starred: true,
+      user_name: 'analyst'
+    })
+
+    expect(result).toEqual({ updatedCount: 1 })
+    expect(query).toHaveBeenNthCalledWith(1, 'BEGIN')
+    // Check variant lookup received deduplicated IDs [101]
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('WHERE case_id = $1 AND id = ANY($2::int[])'),
+      [1, [101]]
+    )
+    expect(query).toHaveBeenLastCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit rejects and rolls back when variants do not belong to case', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // only 1 of 2 IDs belongs to case
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    await expect(
+      repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], { starred: true })
+    ).rejects.toThrow('One or more variants do not belong to case 1')
+
+    expect(query).toHaveBeenCalledWith('BEGIN')
+    expect(query).toHaveBeenCalledWith('ROLLBACK')
+    expect(query).not.toHaveBeenCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit rejects and rolls back on assertOverrideReason failure or mid-write query error', async () => {
+    // 1. assertOverrideReason failure
+    const release1 = vi.fn()
+    const query1 = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // variants lookup
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            acmg_classification: 'Pathogenic',
+            starred: false
+          }
+        ]
+      }) // existing annotation with Pathogenic
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool1 = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query1), release: release1 }))
+    }
+    const repository1 = new PostgresAnnotationsRepository(pool1 as never, 'public')
+
+    // Updating to Benign without override_reason must fail assertOverrideReason
+    await expect(
+      repository1.batchUpsertPerCaseAnnotationWithAudit(1, [101], {
+        acmg_classification: 'Benign'
+      })
+    ).rejects.toThrow()
+
+    expect(query1).toHaveBeenCalledWith('BEGIN')
+    expect(query1).toHaveBeenCalledWith('ROLLBACK')
+    expect(query1).not.toHaveBeenCalledWith('COMMIT')
+    expect(release1).toHaveBeenCalledOnce()
+
+    // 2. Query error mid-transaction
+    const release2 = vi.fn()
+    const dbError = new Error('simulated disk failure mid-batch')
+    const query2 = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // existing annotation
+      .mockRejectedValueOnce(dbError) // upsert fails
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool2 = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query2), release: release2 }))
+    }
+    const repository2 = new PostgresAnnotationsRepository(pool2 as never, 'public')
+
+    await expect(
+      repository2.batchUpsertPerCaseAnnotationWithAudit(1, [101], { starred: true })
+    ).rejects.toThrow('simulated disk failure mid-batch')
+
+    expect(query2).toHaveBeenCalledWith('BEGIN')
+    expect(query2).toHaveBeenCalledWith('ROLLBACK')
+    expect(query2).not.toHaveBeenCalledWith('COMMIT')
+    expect(release2).toHaveBeenCalledOnce()
+  })
 })
 
 interface SeedVariant {
