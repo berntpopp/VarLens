@@ -788,19 +788,20 @@ describe('PostgresAnnotationsRepository', () => {
     expect(release).toHaveBeenCalledOnce()
   })
 
-  it('batchUpsertPerCaseAnnotationWithAudit deduplicates variant IDs and executes once per unique ID', async () => {
+  it('batchUpsertPerCaseAnnotationWithAudit deduplicates variant IDs and handles BIGINT IDs with $2::bigint[]', async () => {
     const release = vi.fn()
+    const bigintId = 2147483648
     const query = vi
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // SELECT id FROM variants ... WHERE id = ANY($2::int[])
-      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101 (none)
+      .mockResolvedValueOnce({ rows: [{ id: String(bigintId) }] }) // SELECT id FROM variants ... WHERE id = ANY($2::bigint[])
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for bigintId (none)
       .mockResolvedValueOnce({
         rows: [
           {
-            id: 1,
+            id: '1',
             case_id: 1,
-            variant_id: 101,
+            variant_id: bigintId,
             starred: true,
             acmg_classification: null,
             acmg_evidence: null,
@@ -818,18 +819,18 @@ describe('PostgresAnnotationsRepository', () => {
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
-    const result = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 101], {
+    const result = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [bigintId, bigintId], {
       starred: true,
       user_name: 'analyst'
     })
 
     expect(result).toEqual({ updatedCount: 1 })
     expect(query).toHaveBeenNthCalledWith(1, 'BEGIN')
-    // Check variant lookup received deduplicated IDs [101]
+    // Check variant lookup uses $2::bigint[] and received deduplicated IDs
     expect(query).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('WHERE case_id = $1 AND id = ANY($2::int[])'),
-      [1, [101]]
+      expect.stringContaining('WHERE case_id = $1 AND id = ANY($2::bigint[])'),
+      [1, [bigintId]]
     )
     expect(query).toHaveBeenLastCalledWith('COMMIT')
     expect(release).toHaveBeenCalledOnce()
@@ -867,14 +868,21 @@ describe('PostgresAnnotationsRepository', () => {
       .mockResolvedValueOnce({
         rows: [
           {
-            id: 1,
-            case_id: 1,
-            variant_id: 101,
+            id: '1',
+            case_id: '1',
+            variant_id: '101',
             acmg_classification: 'Pathogenic',
-            starred: false
+            acmg_evidence: JSON.stringify({
+              pathogenic: ['PVS1'],
+              benign: []
+            }),
+            starred: false,
+            per_case_comment: null,
+            created_at: '1714060800000',
+            updated_at: '1714060800000'
           }
         ]
-      }) // existing annotation with Pathogenic
+      }) // existing annotation with deciding pathogenic evidence
       .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
     const pool1 = {
       connect: vi.fn(async () => ({ query: summaryLockFree(query1), release: release1 }))
@@ -886,11 +894,20 @@ describe('PostgresAnnotationsRepository', () => {
       repository1.batchUpsertPerCaseAnnotationWithAudit(1, [101], {
         acmg_classification: 'Benign'
       })
-    ).rejects.toThrow()
+    ).rejects.toThrow(/overrid.*reason/i)
 
     expect(query1).toHaveBeenCalledWith('BEGIN')
     expect(query1).toHaveBeenCalledWith('ROLLBACK')
     expect(query1).not.toHaveBeenCalledWith('COMMIT')
+    // Assert no insert/upsert query was executed on case_variant_annotations
+    const insertCalls = query1.mock.calls.filter(([arg]) => {
+      const text =
+        typeof arg === 'string'
+          ? arg
+          : ((arg as { text?: string })?.text ?? (arg as { name?: string })?.name ?? '')
+      return text.includes('INSERT INTO') || text.includes('upsert_per_case')
+    })
+    expect(insertCalls.length).toBe(0)
     expect(release1).toHaveBeenCalledOnce()
 
     // 2. Query error mid-transaction

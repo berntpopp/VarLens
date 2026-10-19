@@ -323,11 +323,11 @@ export class PostgresAnnotationsRepository {
     try {
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
       const schemaName = quoteIdentifier(this.schema)
-      const validRows = await client.query<{ id: number }>(
-        `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::int[])`,
+      const validRows = await client.query<{ id: string | number }>(
+        `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::bigint[])`,
         [caseId, uniqueIds]
       )
-      const validIds = validRows.rows.map((r) => r.id)
+      const validIds = validRows.rows.map((r) => toNumber(r.id))
       if (validIds.length !== uniqueIds.length) {
         throw new Error(`One or more variants do not belong to case ${caseId}`)
       }

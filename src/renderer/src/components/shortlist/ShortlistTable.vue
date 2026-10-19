@@ -17,7 +17,7 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { ref, computed, inject, onUnmounted, watch } from 'vue'
+import { ref, computed, inject, onUnmounted, watch, onActivated, onDeactivated } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import {
   mdiStar,
@@ -47,8 +47,7 @@ import {
   targetTabFor,
   displayVariantType,
   hasCommentFor as hasCommentForHelper,
-  sortShortlistRows,
-  parseCurrentItems
+  sortShortlistRows
 } from './shortlist-table-helpers'
 import {
   useTableKeyboardNav,
@@ -115,6 +114,15 @@ const { rowKey } = useResultSetKeys(
 )
 
 // Keyboard navigation and row selection
+const isComponentActive = ref(true)
+onActivated(() => {
+  isComponentActive.value = true
+})
+onDeactivated(() => {
+  isComponentActive.value = false
+  clearArrowSyncTimer()
+})
+
 const rowsRef = computed(() => props.rows)
 
 const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTableKeyboardNav({
@@ -123,7 +131,9 @@ const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTab
   onSelect: (_item: ShortlistRow) => {}
 })
 
-useProteinViewShortcut(() => (props.interactive === false ? null : selectedItem.value))
+useProteinViewShortcut(() =>
+  !isComponentActive.value || props.interactive === false ? null : selectedItem.value
+)
 
 function getRowProps({ item }: { item: ShortlistRow }) {
   const isSelected = selectedItem.value?.id === item.id
@@ -145,22 +155,7 @@ function hasCommentFor(item: ShortlistRow): boolean {
 }
 
 const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
-const displayedRows = ref<ShortlistRow[]>([...props.rows])
-
-watch(
-  [() => props.rows, sortBy],
-  ([rows, sorts]) => {
-    displayedRows.value = sortShortlistRows(rows, sorts)
-  },
-  { immediate: true }
-)
-
-function onCurrentItemsUpdate(items: unknown[]): void {
-  const parsed = parseCurrentItems(items)
-  if (parsed.length > 0) {
-    displayedRows.value = parsed
-  }
-}
+const displayedRows = computed(() => sortShortlistRows(props.rows, sortBy.value))
 
 const caseId = computed(() => props.rows[0]?.case_id ?? null)
 const bulkSelection = useBulkTriageSelection({
@@ -180,13 +175,17 @@ watch(
 const appState = inject(AppStateKey, null)
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
 
+function clearArrowSyncTimer(): void {
+  if (arrowSyncTimer !== null) {
+    clearTimeout(arrowSyncTimer)
+    arrowSyncTimer = null
+  }
+}
+
 watch(
   () => props.interactive,
   (ok) => {
-    if (!ok && arrowSyncTimer !== null) {
-      clearTimeout(arrowSyncTimer)
-      arrowSyncTimer = null
-    }
+    if (!ok) clearArrowSyncTimer()
   }
 )
 
@@ -204,77 +203,68 @@ if (appState) {
   )
 }
 
-function triggerDebouncedPanelSync() {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
-  if (props.interactive === false || appState?.panelOpen.value !== true || !selectedItem.value)
-    return
+function canSyncDetails(): boolean {
+  return (
+    isComponentActive.value && props.interactive !== false && appState?.panelOpen.value === true
+  )
+}
+
+function triggerDebouncedPanelSync(): void {
+  clearArrowSyncTimer()
+  if (!appState || !canSyncDetails() || !selectedItem.value) return
+  const currentAppState = appState
   arrowSyncTimer = setTimeout(async () => {
     arrowSyncTimer = null
     const itemBeforeAwait = selectedItem.value
-    if (!props.interactive || appState?.panelOpen.value !== true || itemBeforeAwait === null) return
-    const leavePromise = appState.confirmPanelLeave?.() ?? null
+    if (!canSyncDetails() || itemBeforeAwait === null) return
+    const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
     if (leavePromise !== null) {
       const ok = await leavePromise
       if (!ok) {
-        if (appState.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value) {
-          selectByClick(appState.selectedPanelVariant.value as ShortlistRow)
+        if (
+          currentAppState.selectedPanelVariant.value &&
+          'id' in currentAppState.selectedPanelVariant.value
+        ) {
+          selectByClick(currentAppState.selectedPanelVariant.value as ShortlistRow)
         }
         return
       }
     }
     const currentItem = selectedItem.value
-    if (!props.interactive || appState?.panelOpen.value !== true || currentItem === null) return
+    if (!canSyncDetails() || currentItem === null) return
     emit('row-click', currentItem)
   }, 100)
 }
 
-onUnmounted(() => {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
-})
+onUnmounted(clearArrowSyncTimer)
 
-function handleRowClick(item: ShortlistRow) {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
+function handleRowClick(item: ShortlistRow): void {
+  clearArrowSyncTimer()
   selectByClick(item)
   emit('row-click', item)
 }
 
-onKeyStroke(
-  'ArrowDown',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused() || props.rows.length === 0) return
-    e.preventDefault()
-    moveDown()
-    triggerDebouncedPanelSync()
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'ArrowUp',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused() || props.rows.length === 0) return
-    e.preventDefault()
-    moveUp()
-    triggerDebouncedPanelSync()
-  },
-  { dedupe: true }
-)
+for (const [key, move] of [
+  ['ArrowDown', moveDown],
+  ['ArrowUp', moveUp]
+] as const) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (!isComponentActive.value || props.interactive === false) return
+      if (isInputFocused() || props.rows.length === 0) return
+      e.preventDefault()
+      move()
+      triggerDebouncedPanelSync()
+    },
+    { dedupe: true }
+  )
+}
 
 onKeyStroke(
   ['Enter', 'i'],
   (e: KeyboardEvent) => {
-    if (props.interactive === false) return
+    if (!isComponentActive.value || props.interactive === false) return
     if (isInputFocused() || isControlFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
@@ -282,46 +272,35 @@ onKeyStroke(
   { dedupe: true }
 )
 
-onKeyStroke(
-  's',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
-    if (props.readOnly === true) return
-    e.preventDefault()
-    emit('toggle-star', selectedItem.value)
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'a',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
-    if (props.readOnly === true) return
-    e.preventDefault()
-    emit('acmg-click', selectedItem.value)
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'c',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
-    if (props.readOnly === true) return
-    e.preventDefault()
-    emit('comment-click', selectedItem.value)
-  },
-  { dedupe: true }
-)
+const actionHandlers: Record<string, () => void> = {
+  s: () => emit('toggle-star', selectedItem.value!),
+  a: () => emit('acmg-click', selectedItem.value!),
+  c: () => emit('comment-click', selectedItem.value!)
+}
+for (const [key, handler] of Object.entries(actionHandlers)) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (!isComponentActive.value || props.interactive === false) return
+      if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
+      if (props.readOnly === true) return
+      e.preventDefault()
+      handler()
+    },
+    { dedupe: true }
+  )
+}
 
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
-    if (e.defaultPrevented || props.interactive === false || isInputFocused()) return
+    if (
+      !isComponentActive.value ||
+      props.interactive === false ||
+      e.defaultPrevented ||
+      isInputFocused()
+    )
+      return
     if (appState?.panelOpen.value === true) {
       e.preventDefault()
       appState.panelOpen.value = false
@@ -346,7 +325,6 @@ onKeyStroke(
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
     :row-props="getRowProps"
-    @update:current-items="onCurrentItemsUpdate"
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
     @mouseover="rankTip.onMouseover"
     @mouseout="rankTip.onMouseout"

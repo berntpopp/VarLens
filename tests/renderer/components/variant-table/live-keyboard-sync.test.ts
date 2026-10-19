@@ -1,7 +1,7 @@
 import { createPinia } from 'pinia'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
-import { ref, computed } from 'vue'
+import { ref, computed, defineComponent, KeepAlive } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -371,5 +371,67 @@ describe('VariantTable live keyboard sync & triage shortcuts', () => {
     await flushPromises()
 
     expect(wrapper.emitted('row-click')).toBeFalsy()
+  })
+
+  it('cancels debounced panel sync and ignores arrow keys when deactivated via KeepAlive', async () => {
+    const active = ref(true)
+    const appState = {
+      panelOpen: ref(true),
+      selectedPanelVariant: ref(null),
+      confirmPanelLeave: vi.fn().mockResolvedValue(true)
+    } as unknown as AppStateReturn
+
+    const Parent = defineComponent({
+      components: { KeepAlive, VariantTable },
+      setup() {
+        return { active, appState }
+      },
+      template: `
+        <KeepAlive>
+          <VariantTable
+            v-if="active"
+            :case-id="1"
+            :filters="{}"
+            variant-type="snv"
+            :interactive="true"
+          />
+        </KeepAlive>
+      `
+    })
+
+    const wrapper = mount(Parent, {
+      global: {
+        plugins: [vuetify, createPinia()],
+        provide: {
+          [AppStateKey as symbol]: appState
+        },
+        stubs: {
+          VDataTableServer: { template: '<div class="stub-table" />' },
+          VariantColumnHeader: true
+        }
+      }
+    })
+    mountedWrappers.push(wrapper as unknown as VueWrapper<InstanceType<typeof VariantTable>>)
+
+    const table = wrapper.findComponent(VariantTable)
+    expect(table.exists()).toBe(true)
+
+    // Arrow down starts 100ms debounced sync
+    dispatchKey('ArrowDown')
+    expect(moveDownSpy).toHaveBeenCalledTimes(1)
+
+    // Deactivate component via KeepAlive
+    active.value = false
+    await flushPromises()
+
+    // Advance timers past debounce
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    expect(table.emitted('row-click')).toBeFalsy()
+
+    // Key presses while deactivated must be ignored
+    dispatchKey('ArrowDown')
+    expect(moveDownSpy).toHaveBeenCalledTimes(1)
   })
 })

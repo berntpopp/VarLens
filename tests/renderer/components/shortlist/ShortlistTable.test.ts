@@ -26,7 +26,7 @@ import {
   annotationCache,
   variantKey
 } from '../../../../src/renderer/src/composables/useAnnotations'
-import { triggerRef } from 'vue'
+import { triggerRef, ref, defineComponent, KeepAlive } from 'vue'
 
 let pinia: ReturnType<typeof createPinia>
 beforeEach(() => {
@@ -519,6 +519,57 @@ describe('ShortlistTable', () => {
       expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).text()).toContain('P')
       expect(wrapper.find(`[data-testid="shortlist-comment-${item.id}"]`).exists()).toBe(true)
       wrapper.unmount()
+    })
+
+    it('cancels debounced live sync and ignores arrow keys when deactivated via KeepAlive', async () => {
+      vi.useFakeTimers()
+      const active = ref(true)
+      const state = createAppState()
+      state.panelOpen.value = true
+      const item = row({ id: 50 })
+
+      const Parent = defineComponent({
+        components: { KeepAlive, ShortlistTable },
+        setup() {
+          return { active, state, rows: [item] }
+        },
+        template: `
+          <KeepAlive>
+            <ShortlistTable
+              v-if="active"
+              :rows="rows"
+              :interactive="true"
+            />
+          </KeepAlive>
+        `
+      })
+
+      const wrapper = mount(Parent, {
+        global: { plugins: [vuetify, pinia], provide: { [AppStateKey as symbol]: state } },
+        attachTo: document.body
+      })
+
+      const table = wrapper.findComponent(ShortlistTable)
+      expect(table.exists()).toBe(true)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      // Deactivate before debounce elapses
+      active.value = false
+      await flushPromises()
+
+      vi.advanceTimersByTime(200)
+      expect(table.emitted('row-click')).toBeUndefined()
+
+      // Arrow key pressed while deactivated must not trigger sync
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+      vi.advanceTimersByTime(200)
+      expect(table.emitted('row-click')).toBeUndefined()
+
+      wrapper.unmount()
+      vi.useRealTimers()
     })
   })
 

@@ -516,55 +516,54 @@ if (appState) {
 
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
 
-watch(
-  () => props.interactive,
-  (ok) => {
-    if (!ok && arrowSyncTimer !== null) {
-      clearTimeout(arrowSyncTimer)
-      arrowSyncTimer = null
-    }
-  }
-)
-
-function triggerDebouncedPanelSync(): void {
+function clearArrowSyncTimer(): void {
   if (arrowSyncTimer !== null) {
     clearTimeout(arrowSyncTimer)
     arrowSyncTimer = null
   }
-  if (props.interactive === false || appState?.panelOpen.value !== true || !selectedItem.value)
-    return
+}
+
+watch(
+  () => props.interactive,
+  (ok) => {
+    if (!ok) clearArrowSyncTimer()
+  }
+)
+
+function canSyncDetails(): boolean {
+  return viewActive.value && props.interactive && appState?.panelOpen.value === true
+}
+
+function triggerDebouncedPanelSync(): void {
+  clearArrowSyncTimer()
+  if (!appState || !canSyncDetails() || selectedItem.value === null) return
+  const currentAppState = appState
   arrowSyncTimer = setTimeout(async () => {
     arrowSyncTimer = null
     const itemBeforeAwait = selectedItem.value
-    if (!props.interactive || appState?.panelOpen.value !== true || itemBeforeAwait === null) return
-    const leavePromise = appState.confirmPanelLeave?.() ?? null
+    if (!canSyncDetails() || itemBeforeAwait === null) return
+    const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
     if (leavePromise !== null) {
       const ok = await leavePromise
       if (!ok) {
-        if (appState.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value) {
-          selectByClick(appState.selectedPanelVariant.value as Variant)
-        }
+        const panelVar = currentAppState.selectedPanelVariant.value
+        if (panelVar && 'id' in panelVar) selectByClick(panelVar as Variant)
         return
       }
     }
     const currentItem = selectedItem.value
-    if (!props.interactive || appState?.panelOpen.value !== true || currentItem === null) return
+    if (!canSyncDetails() || currentItem === null) return
     emit('row-click', currentItem)
   }, 100)
 }
 
 // Row click handler
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
+  clearArrowSyncTimer()
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
-  const currentPanelId =
-    appState?.selectedPanelVariant.value && 'id' in appState.selectedPanelVariant.value
-      ? appState.selectedPanelVariant.value.id
-      : null
+  const panelVar = appState?.selectedPanelVariant.value
+  const currentPanelId = panelVar && 'id' in panelVar ? panelVar.id : null
   if (!appState || currentPanelId === item.id) {
     selectByClick(item)
     selectedVariantId.value = item.id
@@ -578,6 +577,7 @@ onActivated(() => {
 })
 onDeactivated(() => {
   viewActive.value = false
+  clearArrowSyncTimer()
 })
 
 // Keyboard navigation handlers
