@@ -187,4 +187,66 @@ describe('global annotations of one genome build', () => {
     answer({ [KEY]: { global: null, perCase: null } })
     await load
   })
+
+  it('a global write while a case load is in flight does not discard the pending case annotation', async () => {
+    const a = useAnnotations({ genomeBuild: 'GRCh38' })
+    let resolveCaseLoad!: (value: unknown) => void
+    vi.mocked(window.api.annotations.getForVariant).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCaseLoad = resolve
+      }) as never
+    )
+
+    // 1. Case load starts for variant
+    const caseLoadPromise = a.loadAnnotations(CASE_ID, ...V)
+
+    // 2. While case load is in flight, a global write occurs and resolves
+    vi.mocked(window.api.annotations.upsertGlobal).mockResolvedValueOnce({
+      id: 5,
+      chr: 'chr1',
+      pos: 100,
+      ref: 'A',
+      alt: 'G',
+      starred: 1,
+      acmg_classification: 'Benign',
+      acmg_evidence: null,
+      global_comment: 'global note',
+      created_at: 0,
+      updated_at: 0
+    } as never)
+    await a.setGlobalAcmgClassification(...V, 'Benign')
+
+    expect(a.getGlobalAcmgClassification(...V)).toBe('Benign')
+
+    // 3. Case load now resolves with case annotation
+    resolveCaseLoad({
+      global: {
+        id: 5,
+        chr: 'chr1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        starred: 0,
+        acmg_classification: null,
+        acmg_evidence: null,
+        global_comment: null
+      },
+      perCase: {
+        id: 10,
+        case_id: CASE_ID,
+        variant_id: 11,
+        starred: 1,
+        acmg_classification: 'Pathogenic',
+        acmg_evidence: null,
+        per_case_comment: 'case note'
+      }
+    })
+    await caseLoadPromise
+
+    // Per-case annotation was recovered and not discarded
+    expect(a.getAcmgClassification(...V)).toBe('Pathogenic')
+    expect(a.isStarred(...V)).toBe(true)
+    // Global annotation was also preserved
+    expect(a.getGlobalAcmgClassification(...V)).toBe('Benign')
+  })
 })

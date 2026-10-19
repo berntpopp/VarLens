@@ -479,7 +479,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }
 
       for (const k of affectedKeys) {
-        bumpWriteVersion(k, 'perCase')
+        bumpWriteVersion(k, 'perCase:star')
+        bumpWriteVersion(k, 'perCase:acmg')
+        bumpWriteVersion(k, 'perCase:comment')
       }
       // Evict stale cached keys while cache is still on this case (even if disposed!)
       evictAnnotationCacheKeys(affectedKeys)

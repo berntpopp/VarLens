@@ -22,6 +22,64 @@ export interface AnnotationCache {
 }
 
 export type AnnotationSlot = keyof AnnotationCache
+export type SlotValue = VariantAnnotation | CaseVariantAnnotation
+export type SlotPatch = Partial<VariantAnnotation> & Partial<CaseVariantAnnotation>
+
+export function otherSlot(slot: AnnotationSlot): AnnotationSlot {
+  return slot === 'perCase' ? 'global' : 'perCase'
+}
+
+export function readSlot(
+  entry: AnnotationCache,
+  slot: AnnotationSlot | { kind: 'case' | 'global' }
+): SlotValue | null {
+  const s = typeof slot === 'string' ? slot : slot.kind === 'case' ? 'perCase' : 'global'
+  return s === 'perCase' ? entry.perCase : entry.global
+}
+
+export function writeSlot(
+  entry: AnnotationCache,
+  slot: AnnotationSlot | { kind: 'case' | 'global' },
+  value: SlotValue | null
+): void {
+  const s = typeof slot === 'string' ? slot : slot.kind === 'case' ? 'perCase' : 'global'
+  if (s === 'perCase') entry.perCase = value as CaseVariantAnnotation | null
+  else entry.global = value as VariantAnnotation | null
+}
+
+export function slotOf(scope: { kind: 'case' | 'global' }): AnnotationSlot {
+  return scope.kind === 'case' ? 'perCase' : 'global'
+}
+
+export function slotIdentity(
+  scope: { kind: 'case'; caseId: number; variantId: number } | { kind: 'global' }
+): SlotPatch {
+  return scope.kind === 'case' ? { case_id: scope.caseId, variant_id: scope.variantId } : {}
+}
+
+export function mergeServerSlot(
+  current: AnnotationCache | undefined,
+  scope: { kind: 'case' | 'global' },
+  updated: SlotValue
+): AnnotationCache {
+  if (scope.kind === 'case') {
+    return { global: current?.global ?? null, perCase: updated as CaseVariantAnnotation }
+  }
+  return { global: updated as VariantAnnotation, perCase: current?.perCase ?? null }
+}
+
+export function rollBackSlot(
+  current: AnnotationCache,
+  scope: { kind: 'case' | 'global' },
+  rollback: SlotPatch | 'restore-previous',
+  base: SlotValue | null
+): void {
+  const value =
+    rollback === 'restore-previous'
+      ? base
+      : ({ ...readSlot(current, scope), ...rollback } as SlotValue)
+  writeSlot(current, scope, value)
+}
 
 export interface VariantCoords {
   chr: string
@@ -143,6 +201,27 @@ export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null
   )
 }
 
+/**
+ * Store the result of a per-case load. It only knows the per-case slot, so a
+ * global slot the cache already holds is kept.
+ */
+export function cacheSetPerCaseSlot(
+  key: string,
+  perCase: CaseVariantAnnotation | null,
+  requestedVariantId?: number
+): void {
+  const cache = annotationCache.value
+  const existing = cache.has(key) ? cache.get(key) : undefined
+  const globalKnown = existing !== undefined && unloadedSlots.get(key) !== 'global'
+  cacheSet(key, { global: existing?.global ?? null, perCase }, globalKnown ? undefined : 'global')
+  if (
+    requestedVariantId !== undefined &&
+    (perCase === null || perCase.variant_id === requestedVariantId)
+  ) {
+    cachedVariantIds.set(key, requestedVariantId)
+  }
+}
+
 let nextLoadingToken = 0
 const loadingTokens = new Map<string, number>()
 
@@ -245,15 +324,48 @@ export function bumpKeyVersion(key: string): void {
 
 const writeVersions = new Map<string, number>()
 
-export function bumpWriteVersion(key: string, slot: AnnotationSlot = 'perCase'): number {
+export function bumpWriteVersion(key: string, slot: string = 'perCase'): number {
   const k = `${slot}:${key}`
   const next = (writeVersions.get(k) ?? 0) + 1
   writeVersions.set(k, next)
   return next
 }
 
-export function getWriteVersion(key: string, slot: AnnotationSlot = 'perCase'): number {
+export function getWriteVersion(key: string, slot: string = 'perCase'): number {
   return writeVersions.get(`${slot}:${key}`) ?? 0
+}
+
+export interface InFlightMutation {
+  id: number
+  fieldGroup: 'star' | 'acmg' | 'comment'
+  writeVer: number
+  patch: Record<string, unknown>
+}
+
+export const confirmedBases = new Map<string, VariantAnnotation | CaseVariantAnnotation | null>()
+export const inFlightMutations = new Map<string, InFlightMutation[]>()
+
+export function computeOptimisticSlot(
+  base: VariantAnnotation | CaseVariantAnnotation | null,
+  mutations: InFlightMutation[]
+): VariantAnnotation | CaseVariantAnnotation | null {
+  if (base === null && mutations.length === 0) return null
+  let result: Record<string, unknown> = base ? { ...base } : {}
+  for (const m of mutations) {
+    result = { ...result, ...m.patch }
+  }
+  return result as unknown as VariantAnnotation | CaseVariantAnnotation
+}
+
+export function removeInFlightMutation(slotKey: string, mutationId: number): void {
+  const list = inFlightMutations.get(slotKey)
+  if (!list) return
+  const filtered = list.filter((m) => m.id !== mutationId)
+  if (filtered.length === 0) {
+    inFlightMutations.delete(slotKey)
+  } else {
+    inFlightMutations.set(slotKey, filtered)
+  }
 }
 
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
@@ -262,6 +374,8 @@ function clearEntries(): void {
   evictionEpoch++
   keyVersions.clear()
   cachedVariantIds.clear()
+  confirmedBases.clear()
+  inFlightMutations.clear()
   annotationCache.value.clear()
   loadingStates.value.clear()
   loadingTokens.clear()
@@ -369,6 +483,10 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
     if (annotationCache.value.delete(key)) changed = true
     keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
     cachedVariantIds.delete(key)
+    confirmedBases.delete(`perCase:${key}`)
+    confirmedBases.delete(`global:${key}`)
+    inFlightMutations.delete(`perCase:${key}`)
+    inFlightMutations.delete(`global:${key}`)
     loadingStates.value.delete(key)
     loadingTokens.delete(key)
     unloadedSlots.delete(key)
@@ -396,6 +514,8 @@ export function resetAnnotationState(): void {
   keyVersions.clear()
   writeVersions.clear()
   cachedVariantIds.clear()
+  confirmedBases.clear()
+  inFlightMutations.clear()
   loadingTokens.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0

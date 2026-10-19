@@ -261,3 +261,90 @@ describe('annotation writes that resolve after the scope changed', () => {
     expect(annotationCache.value.has(KEY)).toBe(false)
   })
 })
+
+describe('overlapping mutations and rollback', () => {
+  let a: Annotations
+  let deferredAcmg: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+  let deferredComment: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+
+  beforeEach(() => {
+    _resetAnnotationsForTesting()
+    setActivePinia(createPinia())
+    useDatabaseStore().currentPath = '/data/a.db'
+    window.api = createMockApi()
+    vi.spyOn(logService, 'error').mockImplementation(() => {})
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockImplementation((_cid: number, _vid: number, updates: Record<string, unknown>) => {
+        if (updates.acmg_classification !== undefined) {
+          return new Promise((resolve, reject) => {
+            deferredAcmg = { resolve, reject }
+          })
+        }
+        if (updates.per_case_comment !== undefined) {
+          return new Promise((resolve, reject) => {
+            deferredComment = { resolve, reject }
+          })
+        }
+        return Promise.resolve({ from: 'server' })
+      })
+    a = useAnnotations({ genomeBuild: 'GRCh38' })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    setActivePinia(undefined as never)
+  })
+
+  it('restores baseline when overlapping classification and comment writes both reject', async () => {
+    seedEntry()
+    const p1 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Pathogenic')
+    const p2 = a.upsertPerCaseComment(CASE_ID, VARIANT_ID, ...V, 'note')
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('note')
+
+    deferredAcmg.reject(new Error('acmg write failed'))
+    await p1
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('note')
+
+    deferredComment.reject(new Error('comment write failed'))
+    await p2
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
+    expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBe('old')
+  })
+
+  it('restores baseline when two overlapping classification writes both reject', async () => {
+    seedEntry()
+    let deferred1!: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+    let deferred2!: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+    let call = 0
+    window.api.annotations.upsertPerCase = vi.fn().mockImplementation(() => {
+      call++
+      if (call === 1) {
+        return new Promise((resolve, reject) => {
+          deferred1 = { resolve, reject }
+        })
+      }
+      return new Promise((resolve, reject) => {
+        deferred2 = { resolve, reject }
+      })
+    })
+
+    const p1 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'VUS')
+    const p2 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Pathogenic')
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+
+    deferred1.reject(new Error('first failed'))
+    await p1
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Pathogenic')
+
+    deferred2.reject(new Error('second failed'))
+    await p2
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
+  })
+})

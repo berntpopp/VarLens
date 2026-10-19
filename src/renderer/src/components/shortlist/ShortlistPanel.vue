@@ -53,7 +53,6 @@ import {
   getWriteVersion,
   hasDbSwitchedSince,
   markAwaited,
-  needsLoad,
   unloadedSlotOf,
   variantKey
 } from '../../composables/annotation-cache'
@@ -127,7 +126,8 @@ const shortlistExplanation = computed(() => {
   )
 })
 
-const pendingStarByRow = new Map<string, boolean>()
+const pendingStarByRow = new Map<string, { target: boolean; token: number; writeVer: number }>()
+let nextStarToggleToken = 0
 
 /**
  * Toggle the star annotation for a row. Writes through
@@ -146,14 +146,19 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const key = variantKey(row)
   const rowKey = `${row.case_id}:${row.id}`
   const cachedPerCase = annotationCache.value.get(key)?.perCase
-  const currentStarred = pendingStarByRow.has(rowKey)
-    ? pendingStarByRow.get(rowKey)!
-    : cachedPerCase && cachedPerCase.variant_id === row.id && cachedPerCase.case_id === row.case_id
-      ? cachedPerCase.starred === 1
-      : row.is_starred
+  const pending = pendingStarByRow.get(rowKey)
+  const currentStarred =
+    pending !== undefined && getWriteVersion(key, 'perCase:star') === pending.writeVer
+      ? pending.target
+      : cachedPerCase &&
+          cachedPerCase.variant_id === row.id &&
+          cachedPerCase.case_id === row.case_id
+        ? cachedPerCase.starred === 1
+        : row.is_starred
   const nextStarred = !currentStarred
-  pendingStarByRow.set(rowKey, nextStarred)
-  const writeVer = bumpWriteVersion(key, 'perCase')
+  const writeVer = bumpWriteVersion(key, 'perCase:star')
+  const toggleToken = ++nextStarToggleToken
+  pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
 
   try {
     const updated = unwrapIpcResult(
@@ -169,7 +174,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       getAnnotationCacheEpoch() === epoch &&
       getCachedBuild() === build &&
       (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
-      getWriteVersion(key, 'perCase') === writeVer
+      getWriteVersion(key, 'perCase:star') === writeVer
     if (stillOnScope) {
       const liveEntry = annotationCache.value.get(key)
       const liveUnloaded = unloadedSlotOf(key)
@@ -188,7 +193,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       'shortlist.panel'
     )
   } finally {
-    if (getWriteVersion(key, 'perCase') === writeVer) {
+    if (pendingStarByRow.get(rowKey)?.token === toggleToken) {
       pendingStarByRow.delete(rowKey)
     }
   }
@@ -196,36 +201,40 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
 
 let dialogOpenSeq = 0
 
-async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
-  const seq = ++dialogOpenSeq
+function isRowAnnotationVerified(row: ShortlistRow): boolean {
   const key = variantKey(row)
   const cached = annotationCache.value.get(key)
   const cachedVid = getCachedVariantId(key)
-  const alreadyVerified =
+  return (
     cached !== undefined &&
     unloadedSlotOf(key) === undefined &&
     cachedVid === row.id &&
     (cached.perCase === null ||
       (cached.perCase.variant_id === row.id && cached.perCase.case_id === row.case_id))
-  if (!alreadyVerified) {
-    if (
-      typeof api?.annotations?.batchGet === 'function' ||
-      (cached?.perCase != null &&
-        (cached.perCase.variant_id !== row.id || cached.perCase.case_id !== row.case_id)) ||
-      (cachedVid !== undefined && cachedVid !== row.id)
-    ) {
-      evictAnnotationCacheKeys([key])
-    }
-    if (needsLoad(key, 'case') && typeof api?.annotations?.batchGet === 'function') {
-      markAwaited('case', key)
-      await annotations.loadAnnotationsBatch(row.case_id, [row])
-    }
-  }
-  const after = annotationCache.value.get(key)?.perCase
-  if (after && (after.variant_id !== row.id || after.case_id !== row.case_id)) {
+  )
+}
+
+async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
+  const seq = ++dialogOpenSeq
+  const key = variantKey(row)
+  if (!isRowAnnotationVerified(row)) {
     evictAnnotationCacheKeys([key])
+    if (typeof api?.annotations?.batchGet !== 'function') {
+      appState?.showSnack('Failed to load variant annotations.', 'error')
+      return false
+    }
+    markAwaited('case', key)
+    await annotations.loadAnnotationsBatch(row.case_id, [row])
   }
-  return seq === dialogOpenSeq && props.caseId === row.case_id
+  if (seq !== dialogOpenSeq || props.caseId !== row.case_id) {
+    return false
+  }
+  if (!isRowAnnotationVerified(row)) {
+    evictAnnotationCacheKeys([key])
+    appState?.showSnack('Failed to load variant annotations.', 'error')
+    return false
+  }
+  return true
 }
 
 async function onAcmgClick(row: ShortlistRow): Promise<void> {

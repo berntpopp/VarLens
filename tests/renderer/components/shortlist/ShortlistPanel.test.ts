@@ -90,12 +90,14 @@ import { useShortlistRankingDialog } from '../../../../src/renderer/src/composab
 import {
   annotationCache,
   beginAnnotationRequest,
+  bumpWriteVersion,
   clearAnnotationCache,
   isKeyLoading,
   setLoading,
   variantKey
 } from '../../../../src/renderer/src/composables/annotation-cache'
 import { useAnnotations } from '../../../../src/renderer/src/composables/useAnnotations'
+import { AppStateKey } from '../../../../src/renderer/src/composables/useAppState'
 
 // Fresh Pinia per test: ShortlistTable resolves its Links column through the
 // external-links store, and the star is role-gated (usePermissions reads the
@@ -161,10 +163,13 @@ describe('ShortlistPanel', () => {
     resetState()
   })
 
-  function mountPanel(props: { caseId: number } = { caseId: 1 }) {
+  function mountPanel(
+    props: { caseId: number } = { caseId: 1 },
+    provide?: Record<string | symbol, unknown>
+  ) {
     return mount(ShortlistPanel, {
       props,
-      global: { plugins: [vuetify, pinia] }
+      global: { plugins: [vuetify, pinia], provide }
     })
   }
 
@@ -601,5 +606,91 @@ describe('ShortlistPanel', () => {
 
     // Cache must NOT be overwritten by the older star response
     expect(annotationCache.value.get(key)?.perCase?.starred).toBe(0)
+  })
+
+  it('prepareRowDialog shows error snackbar and refuses to open dialog if row annotations cannot be verified', async () => {
+    const row = minimalRow({ id: 101, case_id: 7, is_starred: true })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    batchGetMock.mockRejectedValueOnce(new Error('Network error'))
+
+    const showSnackSpy = vi.fn()
+    const wrapper = mountPanel(
+      { caseId: 7 },
+      { [AppStateKey as symbol]: { showSnack: showSnackSpy, selectedPanelVariant: ref(null) } }
+    )
+    await flushPromises()
+
+    const dialogs = wrapper.findComponent({ name: 'AnnotationDialogs' })
+    const openSpy = vi.spyOn(dialogs.vm, 'openAcmgEvidenceDialog')
+
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    await table.vm.$emit('acmg-click', row)
+    await flushPromises()
+
+    expect(showSnackSpy).toHaveBeenCalledWith('Failed to load variant annotations.', 'error')
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+
+  it('bulk triage bumping star write version cancels in-flight single toggle and allows next toggle from actual state', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = {
+      rows: [row],
+      totalCandidates: 1,
+      presetUsed: null,
+      elapsedMs: 10
+    }
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    let resolveSingleStar!: (val: unknown) => void
+    const singleStarPromise = new Promise((resolve) => {
+      resolveSingleStar = resolve
+    })
+    upsertPerCaseMock.mockImplementationOnce(() => singleStarPromise)
+
+    // 1. Single toggle clicked (pending star in flight)
+    await table.vm.$emit('toggle-star', row)
+
+    // 2. Bulk triage runs while single toggle is in flight, bumping write version
+    bumpWriteVersion(key, 'perCase:star')
+
+    // 3. Single toggle resolves
+    resolveSingleStar({
+      id: 1,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1,
+      per_case_comment: null,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    })
+    await flushPromises()
+
+    // 4. Next toggle click should not use stale inverted target
+    upsertPerCaseMock.mockImplementationOnce(async () => ({
+      id: 2,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1,
+      per_case_comment: null,
+      acmg_classification: null,
+      acmg_evidence: null,
+      created_at: 0,
+      updated_at: 0
+    }))
+    await table.vm.$emit('toggle-star', row)
+    await flushPromises()
+
+    // It requested starred = true based on actual state, not stale inverted pending
+    expect(upsertPerCaseMock).toHaveBeenLastCalledWith(7, 42, { starred: true })
   })
 })
