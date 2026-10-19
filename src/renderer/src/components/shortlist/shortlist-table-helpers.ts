@@ -123,17 +123,8 @@ export function sortShortlistRows(
     const valA = (a as unknown as Record<string, unknown>)[key]
     const valB = (b as unknown as Record<string, unknown>)[key]
     if (valA === valB) return 0
-    if (valA === undefined || valA === null) return 1
-    if (valB === undefined || valB === null) return -1
+    if (valA === undefined || valA === null) return -1 * mult
+    if (valB === undefined || valB === null) return 1 * mult
     return valA < valB ? -1 * mult : 1 * mult
   })
-}
-
-export function parseCurrentItems(items: unknown[]): ShortlistRow[] {
-  if (!Array.isArray(items) || items.length === 0) return []
-  return items.map((it) =>
-    it !== null && typeof it === 'object' && 'raw' in it
-      ? (it as { raw: ShortlistRow }).raw
-      : (it as ShortlistRow)
-  )
 }

@@ -39,7 +39,7 @@ export function globalAnnotationAuditEntries(
 ): AuditAppendParams[] {
   const entityKey = globalAnnotationEntityKey(coords, coords.genome_build)
   const entries: AuditAppendParams[] = []
-  if (updates.acmg_classification !== undefined) {
+  if ('acmg_classification' in updates) {
     entries.push({
       action_type: 'acmg_classify',
       entity_type: 'variant_annotation',
@@ -49,13 +49,13 @@ export function globalAnnotationAuditEntries(
           ? null
           : JSON.stringify({ acmg_classification: oldAnnotation.acmg_classification }),
       new_value: JSON.stringify({
-        acmg_classification: updates.acmg_classification,
+        acmg_classification: updates.acmg_classification ?? null,
         ...overrideReasonOf(updates.acmg_evidence)
       }),
       user_name: updates.user_name ?? null
     })
   }
-  if (updates.acmg_evidence !== undefined) {
+  if ('acmg_evidence' in updates) {
     entries.push({
       action_type: 'acmg_evidence_update',
       entity_type: 'variant_annotation',
@@ -64,7 +64,7 @@ export function globalAnnotationAuditEntries(
         oldAnnotation === null
           ? null
           : JSON.stringify({ acmg_evidence: oldAnnotation.acmg_evidence }),
-      new_value: JSON.stringify({ acmg_evidence: updates.acmg_evidence }),
+      new_value: JSON.stringify({ acmg_evidence: updates.acmg_evidence ?? null }),
       user_name: updates.user_name ?? null
     })
   }
@@ -90,16 +90,30 @@ export function perCaseAnnotationAuditEntries(
     starred?: boolean | number
     acmg_classification?: unknown
     acmg_evidence?: unknown
+    tag_id?: number
   },
   oldAnnotation: Record<string, unknown> | null
 ): AuditAppendParams[] {
-  return globalAnnotationAuditEntries(
+  const entries: AuditAppendParams[] = globalAnnotationAuditEntries(
     { chr: 'case', pos: caseId, ref: 'variant', alt: String(variantId) },
     updates,
     oldAnnotation
   ).map((entry) => ({
     ...entry,
-    entity_type: 'case_variant_annotation',
+    entity_type: 'case_variant_annotation' as const,
     entity_key: `case:${caseId}:variant:${variantId}`
   }))
+
+  if (updates.tag_id !== undefined) {
+    entries.push({
+      action_type: 'tag_assign',
+      entity_type: 'case_variant_annotation',
+      entity_key: `case:${caseId}:variant:${variantId}`,
+      old_value: null,
+      new_value: JSON.stringify({ tag_id: updates.tag_id }),
+      user_name: updates.user_name ?? null
+    })
+  }
+
+  return entries
 }

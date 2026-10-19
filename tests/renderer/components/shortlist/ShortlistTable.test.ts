@@ -639,5 +639,84 @@ describe('ShortlistTable', () => {
       expect(actionBar.props('selectedCount')).toBe(3)
       wrapper.unmount()
     })
+
+    it('supports Shift+Click range selection respecting sorted order with null values', async () => {
+      const items = [
+        row({ id: 1, gnomad_af: 0.2 }),
+        row({ id: 2, gnomad_af: null }),
+        row({ id: 3, gnomad_af: 0.1 })
+      ]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify, pinia] }
+      })
+
+      const dataTable = wrapper.findComponent({ name: 'VDataTable' })
+
+      // Ascending sort: [null (id 2), 0.1 (id 3), 0.2 (id 1)]
+      await dataTable.vm.$emit('update:sortBy', [{ key: 'gnomad_af', order: 'asc' }])
+      await flushPromises()
+
+      // Click first visible item (id 2, null)
+      const cb2 = wrapper.get('[data-testid="bulk-select-row-2"]')
+      await cb2.trigger('click')
+      await flushPromises()
+
+      // Shift+Click second visible item (id 3, 0.1)
+      const cb3 = wrapper.get('[data-testid="bulk-select-row-3"]')
+      await cb3.trigger('click', { shiftKey: true })
+      await flushPromises()
+
+      const actionBar = wrapper.findComponent({ name: 'BulkTriageActionBar' })
+      expect(actionBar.exists()).toBe(true)
+      expect(actionBar.props('selectedCount')).toBe(2)
+
+      // Clear selection
+      const clearBtn = actionBar.get('[data-testid="bulk-action-clear"]')
+      await clearBtn.trigger('click')
+      await flushPromises()
+
+      // Descending sort: [0.2 (id 1), 0.1 (id 3), null (id 2)]
+      await dataTable.vm.$emit('update:sortBy', [{ key: 'gnomad_af', order: 'desc' }])
+      await flushPromises()
+
+      // Click first visible item (id 1, 0.2)
+      const cb1 = wrapper.get('[data-testid="bulk-select-row-1"]')
+      await cb1.trigger('click')
+      await flushPromises()
+
+      // Shift+Click second visible item (id 3, 0.1)
+      await cb3.trigger('click', { shiftKey: true })
+      await flushPromises()
+
+      expect(actionBar.props('selectedCount')).toBe(2)
+      wrapper.unmount()
+    })
+
+    it('resynchronizes native checkbox DOM state when Shift+Clicking an already-selected row', async () => {
+      const items = [row({ id: 1 }), row({ id: 2 }), row({ id: 3 })]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify, pinia] }
+      })
+
+      // 1. Click row 1
+      const cb1 = wrapper.get<HTMLInputElement>('[data-testid="bulk-select-row-1"]')
+      await cb1.trigger('click')
+      expect(cb1.element.checked).toBe(true)
+
+      // 2. Click row 3
+      const cb3 = wrapper.get<HTMLInputElement>('[data-testid="bulk-select-row-3"]')
+      await cb3.trigger('click')
+      expect(cb3.element.checked).toBe(true)
+
+      // 3. Native browser click on cb1 flips .checked to false before click handler runs
+      cb1.element.checked = false
+      await cb1.trigger('click', { shiftKey: true })
+
+      // Range between 3 and 1 includes 1, 2, 3
+      expect(cb1.element.checked).toBe(true)
+      wrapper.unmount()
+    })
   })
 })

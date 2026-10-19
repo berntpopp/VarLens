@@ -195,4 +195,39 @@ describe('useBulkTriageSelection', () => {
     expect(bulkInstance.isSelected(102)).toBe(true)
     expect(onTriageApplied).not.toHaveBeenCalled()
   })
+
+  it('synchronizes native DOM checkbox .checked state on Shift+Click', () => {
+    const bulk = useBulkTriageSelection({
+      items: () => items.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    const checkbox1 = document.createElement('input')
+    checkbox1.type = 'checkbox'
+    checkbox1.checked = false
+
+    // 1. Click Row 1 (101) -> selects [101]
+    bulk.handleRowCheckboxClick(101, { shiftKey: false, target: checkbox1 })
+    checkbox1.checked = true
+    expect(bulk.selectedIds.value).toEqual([101])
+
+    // 2. Click Row 3 (103) -> selects [101, 103]
+    const checkbox3 = document.createElement('input')
+    checkbox3.type = 'checkbox'
+    bulk.handleRowCheckboxClick(103, { shiftKey: false, target: checkbox3 })
+    checkbox3.checked = true
+    expect(bulk.selectedIds.value).toEqual([101, 103])
+
+    // 3. Shift+Click Row 1 (101).
+    // Native browser click flips checkbox1.checked to false before event listener runs.
+    checkbox1.checked = false
+    bulk.handleRowCheckboxClick(101, { shiftKey: true, target: checkbox1 })
+
+    // Selection now includes range [103, 102, 101] -> all 3
+    expect(bulk.selectedIds.value).toEqual(expect.arrayContaining([101, 102, 103]))
+    // Crucially, checkbox1.checked must be resynchronized to true!
+    expect(checkbox1.checked).toBe(true)
+  })
 })

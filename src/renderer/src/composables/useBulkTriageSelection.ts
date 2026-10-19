@@ -68,12 +68,15 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }
   }
 
-  function handleRowCheckboxClick(id: number, event: MouseEvent): void {
+  function handleRowCheckboxClick(
+    id: number,
+    event?: { shiftKey?: boolean; target?: EventTarget | null }
+  ): void {
     const list = currentItems.value
     const idList = list.map(getItemId)
     const currentIndex = idList.indexOf(id)
 
-    if (event.shiftKey && lastClickedId.value !== null) {
+    if (event?.shiftKey === true && lastClickedId.value !== null) {
       const prevIndex = idList.indexOf(lastClickedId.value)
       if (prevIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(prevIndex, currentIndex)
@@ -84,13 +87,18 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           next.add(rId)
         }
         selectedIds.value = Array.from(next)
-        lastClickedId.value = id
-        return
+      } else {
+        toggleSelect(id)
       }
+    } else {
+      toggleSelect(id)
     }
 
-    // Normal click toggle
-    toggleSelect(id)
+    lastClickedId.value = id
+    const target = event?.target
+    if (target && typeof (target as HTMLInputElement).checked === 'boolean') {
+      ;(target as HTMLInputElement).checked = selectedIdSet.value.has(id)
+    }
   }
 
   function toggleSelect(id: number): void {

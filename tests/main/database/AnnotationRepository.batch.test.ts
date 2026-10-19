@@ -359,4 +359,58 @@ describe('executeSqliteWriteTask annotations:batchUpsertPerCaseWithAudit', () =>
     ).count
     expect(finalAuditCount).toBe(initialAuditCount)
   })
+
+  it('records tag_assign audit entries for bulk tag assignment', async () => {
+    await executeSqliteWriteTask(writeRepos, {
+      type: 'annotations:batchUpsertPerCaseWithAudit',
+      params: [1, [101, 102], { tag_id: 5, user_name: 'curator' }]
+    })
+
+    const tagEntries = db
+      .prepare("SELECT * FROM audit_log WHERE action_type = 'tag_assign' ORDER BY id ASC")
+      .all() as Array<{
+      action_type: string
+      entity_type: string
+      entity_key: string
+      new_value: string
+      user_name: string
+    }>
+    expect(tagEntries).toHaveLength(2)
+    expect(tagEntries[0]).toMatchObject({
+      action_type: 'tag_assign',
+      entity_type: 'case_variant_annotation',
+      entity_key: 'case:1:variant:101',
+      new_value: JSON.stringify({ tag_id: 5 }),
+      user_name: 'curator'
+    })
+    expect(tagEntries[1]).toMatchObject({
+      action_type: 'tag_assign',
+      entity_type: 'case_variant_annotation',
+      entity_key: 'case:1:variant:102',
+      new_value: JSON.stringify({ tag_id: 5 }),
+      user_name: 'curator'
+    })
+  })
+
+  it('records acmg_classify audit entries with null when clearing acmg_classification', async () => {
+    // First seed with Pathogenic
+    await executeSqliteWriteTask(writeRepos, {
+      type: 'annotations:batchUpsertPerCaseWithAudit',
+      params: [1, [101], { acmg_classification: 'Pathogenic' }]
+    })
+
+    // Now clear classification via { acmg_classification: undefined } (as transformed from null)
+    await executeSqliteWriteTask(writeRepos, {
+      type: 'annotations:batchUpsertPerCaseWithAudit',
+      params: [1, [101], { acmg_classification: undefined, user_name: 'curator' }]
+    })
+
+    const classifyEntries = db
+      .prepare("SELECT * FROM audit_log WHERE action_type = 'acmg_classify' ORDER BY id ASC")
+      .all() as Array<{ new_value: string }>
+    expect(classifyEntries).toHaveLength(2)
+    expect(JSON.parse(classifyEntries[1].new_value)).toEqual({
+      acmg_classification: null
+    })
+  })
 })
