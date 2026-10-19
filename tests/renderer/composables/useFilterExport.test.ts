@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { FILTER_DEFAULTS } from '../../../src/shared/filters/filterDefaults'
 import type { FilterState } from '../../../src/shared/types/filters'
 
@@ -17,6 +18,7 @@ import { useFilterExport } from '../../../src/renderer/src/composables/useFilter
 
 describe('useFilterExport', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     exportVariants.mockReset()
     exportVariants.mockResolvedValue({ success: true, filePath: '/tmp/case.xlsx' })
   })
@@ -38,5 +40,18 @@ describe('useFilterExport', () => {
     await exportToExcel(1, 'Case A', undefined, tableFilters)
 
     expect(exportVariants.mock.calls[0][1]).toEqual(tableFilters)
+  })
+
+  it('handles caught error and returns success: false with message (#677)', async () => {
+    exportVariants.mockRejectedValue(new Error('Export limited to 100,000 variants.'))
+
+    const { exportToExcel } = useFilterExport(
+      ref({ ...FILTER_DEFAULTS } as FilterState),
+      ref([]),
+      ref(false)
+    )
+
+    const res = await exportToExcel(1, 'Case A')
+    expect(res).toEqual({ success: false, error: 'Export limited to 100,000 variants.' })
   })
 })

@@ -2,6 +2,8 @@ import { unwrapIpcResult } from '../../../shared/types/errors'
 import type { IpcResult } from '../../../shared/types/errors'
 import { formatErrorMessage } from '../../../shared/errors/format-error-message'
 
+export { unwrapIpcResult }
+
 export function expectIpcResult<T>(result: IpcResult<T>): T {
   return unwrapIpcResult(result)
 }

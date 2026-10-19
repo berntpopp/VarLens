@@ -45,7 +45,8 @@ export function registerShellHandlers({ ipcMain }: HandlerDependencies): void {
       }
 
       if (!isUrlSafeForExternal(validated.data)) {
-        return { success: false, error: 'URL not allowed' }
+        mainLogger.warn(`Blocked attempt to open untrusted URL: ${validated.data}`, 'shell')
+        throw new Error('URL not allowed')
       }
 
       await shell.openExternal(validated.data)

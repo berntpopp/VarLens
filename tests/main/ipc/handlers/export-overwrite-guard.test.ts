@@ -154,5 +154,11 @@ describe('export save-path database guard', () => {
       expect(readFileSync(out).length).toBeGreaterThan(0)
       expect(readFileSync(currentDb)).toEqual(DB_BYTES)
     })
+
+    it(`${channel}: returns cancelled when the save dialog is cancelled`, async () => {
+      mocks.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
+      const result = await invoke[channel]()
+      expect(result).toMatchObject({ success: false, cancelled: true })
+    })
   }
 })

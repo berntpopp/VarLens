@@ -65,6 +65,49 @@ describe('variants-logic exports', () => {
     expect(getDb).not.toHaveBeenCalled()
   })
 
+  it('does not call getDb while preparing active panel filters when genome_build is provided', () => {
+    const getDb = vi.fn(() => {
+      throw new Error('getDb should not be called when genome_build is provided')
+    })
+    const getDbPool = () => ({}) as never
+
+    expect(
+      buildVariantFilter(
+        1,
+        { active_panel_ids: [1], panel_padding_bp: 50, genome_build: 'GRCh38' },
+        getDb,
+        getDbPool
+      )
+    ).toMatchObject({
+      case_id: 1,
+      active_panel_ids: [1],
+      panel_padding_bp: 50,
+      genome_build: 'GRCh38'
+    })
+    expect(getDb).not.toHaveBeenCalled()
+  })
+
+  it('does not call getDb while preparing active panel filters when genome_build is omitted and pool is present (#674)', () => {
+    const getDb = vi.fn(() => {
+      throw new Error('getDb should not be called when pool is present')
+    })
+    const getDbPool = () => ({}) as never
+
+    const res = buildVariantFilter(
+      1,
+      { active_panel_ids: [1], panel_padding_bp: 50 },
+      getDb,
+      getDbPool
+    )
+    expect(res).toMatchObject({
+      case_id: 1,
+      active_panel_ids: [1],
+      panel_padding_bp: 50
+    })
+    expect((res as { genome_build?: string }).genome_build).toBeUndefined()
+    expect(getDb).not.toHaveBeenCalled()
+  })
+
   it('routes variants:search through the postgres read executor without calling getDb', async () => {
     const execute = vi.fn().mockResolvedValue({ data: [], total_count: 0 })
     const getDb = vi.fn(() => {

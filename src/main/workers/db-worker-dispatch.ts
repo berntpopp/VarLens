@@ -255,6 +255,19 @@ export function dispatchTask(deps: DispatchDependencies, task: DbTask): unknown 
       case 'gene-lists:getGenes':
         return repos.geneLists.getGeneListGenes(params[0] as number) // geneListId
 
+      // ── Panels ────────────────────────────────────────────
+      case 'panels:list':
+        return repos.panels.listPanels()
+
+      case 'panels:get':
+        return repos.panels.getPanel(params[0] as number)
+
+      case 'panels:getGenes':
+        return repos.panels.getGenes(params[0] as number)
+
+      case 'panels:activeForCase':
+        return repos.panels.getActivePanelsForCase(params[0] as number)
+
       // ── Region Files ──────────────────────────────────────
       case 'region-files:list':
         return repos.geneLists.listRegionFiles()

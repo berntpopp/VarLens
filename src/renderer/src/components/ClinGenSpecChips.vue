@@ -24,7 +24,7 @@ import CSPEC from '../assets/data/clingen-cspec.json'
 import { CLINGEN_SPEC_COPY } from '../config/uiCopyConfig'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
-import { formatError } from '../utils/ipc-result'
+import { formatError, unwrapIpcResult } from '../utils/ipc-result'
 
 interface ClinGenSpec {
   id: string
@@ -41,9 +41,10 @@ const specs = computed(() => (props.gene === null ? [] : (GENES[props.gene] ?? [
 const { api } = useApiService()
 
 async function open(url: string): Promise<void> {
+  if (!api) return
   try {
-    const result = await api?.shell.openExternal(url)
-    if (result !== undefined && !result.success) {
+    const result = unwrapIpcResult(await api.shell.openExternal(url))
+    if (!result.success) {
       logService.warn(`Could not open ${url}`, 'clingen-spec')
     }
   } catch (e) {

@@ -44,7 +44,10 @@ export function createRepositories(db: DatabaseType) {
   const filterPresets = new FilterPresetRepository(db, kysely)
   const panels = new PanelRepository(db, kysely)
   const cohort = new CohortService(db)
-  transcripts.onSummaryChanged = () => cohort.invalidateColumnMetaCache()
+  transcripts.onSummaryChanged = () => {
+    cohort.invalidateColumnMetaCache()
+    variants.clearColumnMetaCache()
+  }
   const analysisGroups = new AnalysisGroupRepository(db, kysely)
   const shortlistService = new ShortlistService(db, filterPresets, {
     // Same filter pipeline (including FTS search) as the case variant table.

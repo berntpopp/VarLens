@@ -465,6 +465,10 @@ describe('Preload contract alignment', () => {
     expect(apiSource).toContain('export type CasesAPI = CasesDomainContract')
     expect(apiSource).toContain('getSummary: () => Promise<IpcResult<CohortSummary>>')
     expect(apiSource).toContain('runAssociation: (config: unknown) => Promise<IpcResult<unknown>>')
+    expect(apiSource).toContain('checkForUpdate: () => Promise<IpcResult<void>>')
+    expect(apiSource).toContain('downloadUpdate: () => Promise<IpcResult<void>>')
+    expect(apiSource).toContain('installUpdate: () => Promise<IpcResult<void>>')
+    expect(apiSource).toContain('getStatus: () => Promise<IpcResult<UpdateStatus>>')
   })
 })
 

@@ -336,15 +336,39 @@ export class SqliteReadExecutor implements StorageReadExecutor {
         return this.databaseService.metadata.listCaseMetrics(task.params[0])
 
       case 'panels:list':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({
+            type: 'panels:list',
+            params: []
+          })
+        }
         return this.databaseService.panels.listPanels()
 
       case 'panels:get':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({
+            type: 'panels:get',
+            params: [task.params[0]]
+          })
+        }
         return this.databaseService.panels.getPanel(task.params[0])
 
       case 'panels:getGenes':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({
+            type: 'panels:getGenes',
+            params: [task.params[0]]
+          })
+        }
         return this.databaseService.panels.getGenes(task.params[0])
 
       case 'panels:activeForCase':
+        if (this.dbPool !== null) {
+          return await this.dbPool.run({
+            type: 'panels:activeForCase',
+            params: [task.params[0]]
+          })
+        }
         return this.databaseService.panels.getActivePanelsForCase(task.params[0])
 
       case 'panels:resolutionStatus': {

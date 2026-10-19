@@ -39,7 +39,7 @@ import type { PostgresWebAuthService } from '../auth/PostgresWebAuthService'
 import { PlatformIdentityRevokedError, type PlatformIdentityService } from './platform-identity'
 import { registerAuthLoginRateLimit } from './rate-limit'
 import { requestPath } from './request-path'
-import { newSessionId, type SessionRevocations } from './session-revocation'
+import { newSessionId, SessionRevocations } from './session-revocation'
 import { isPublicApiDocsEnabled } from './instance-settings'
 
 declare module '@fastify/secure-session' {
@@ -218,6 +218,7 @@ export async function registerSessions(
   const key = loadOrCreateSessionKey()
   const production = isProductionMode()
   const platformMode = options.platformIdentity !== undefined
+  const revocations = options.revocations ?? new SessionRevocations()
 
   await app.register(secureSession, {
     key,
@@ -257,7 +258,7 @@ export async function registerSessions(
         secFetchSite: headerValue(request.headers['sec-fetch-site']),
         origin: headerValue(request.headers.origin),
         host: headerValue(request.headers.host),
-        protocol: headerValue(request.headers['x-forwarded-proto']) ?? request.protocol
+        protocol: request.protocol
       })
     ) {
       reply.code(403)
@@ -288,7 +289,7 @@ export async function registerSessions(
 
     const sessionUser = request.session.user
 
-    if (options.revocations?.isRevoked(request.session.sid) === true) {
+    if (revocations.isRevoked(request.session.sid) === true) {
       request.session.delete()
       reply.code(401)
       return reply.send({

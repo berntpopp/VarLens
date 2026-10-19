@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { join } from 'path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
@@ -79,6 +79,86 @@ describe('GeneReferenceDb', () => {
     it('returns empty array for empty input', () => {
       const results = geneRef.validateSymbols([])
       expect(results).toEqual([])
+    })
+
+    it('preserves duplicate inputs and exact input casing in results', () => {
+      const inputs = ['  BRCA1  ', 'brca1', 'BRCA1', 'RNF53', 'rnf53']
+      const results = geneRef.validateSymbols(inputs)
+      expect(results).toHaveLength(5)
+      expect(results[0]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[1]).toMatchObject({ input: 'brca1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[2]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[3]).toMatchObject({ input: 'RNF53', status: 'alias', symbol: 'BRCA1' })
+      expect(results[4]).toMatchObject({ input: 'rnf53', status: 'alias', symbol: 'BRCA1' })
+    })
+
+    it('handles batch size exceeding chunk limit (>500 unique symbols) (#672)', () => {
+      // 550 unique unknown symbols + approved symbols to exercise batch chunking across >500 queries
+      const sampleStmt = db.prepare('SELECT 1')
+      const proto = Object.getPrototypeOf(sampleStmt) as {
+        all: (...args: unknown[]) => unknown
+        get: (...args: unknown[]) => unknown
+      }
+      const allSpy = vi.spyOn(proto, 'all')
+      const getSpy = vi.spyOn(proto, 'get')
+
+      const largeList = Array.from({ length: 552 }, (_, i) => {
+        if (i === 0) return 'BRCA1'
+        if (i === 1) return 'TP53'
+        return `UNKNOWN_GENE_${i - 2}`
+      })
+      const results = geneRef.validateSymbols(largeList)
+      expect(results).toHaveLength(552)
+      expect(results[0]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[1]).toMatchObject({ input: 'TP53', status: 'approved', symbol: 'TP53' })
+      for (let i = 2; i < 552; i++) {
+        expect(results[i].status).toBe('unknown')
+      }
+      const executedQueries = allSpy.mock.calls.length + getSpy.mock.calls.length
+      expect(executedQueries).toBeGreaterThan(0)
+      expect(executedQueries).toBeLessThanOrEqual(10)
+
+      allSpy.mockRestore()
+      getSpy.mockRestore()
+    })
+
+    it('matches SQLite COLLATE NOCASE ASCII folding without Unicode collision (Kelvin bug #672)', () => {
+      const kelvinKrt1 = '\u212ART1' // 'KRT1' with Kelvin sign
+      const asciiKrt1 = 'KRT1'
+
+      const r1 = geneRef.validateSymbols([kelvinKrt1, asciiKrt1])
+      expect(r1).toHaveLength(2)
+      expect(r1[0]).toMatchObject({ input: kelvinKrt1, status: 'unknown' })
+      expect(r1[1]).toMatchObject({ input: asciiKrt1, status: 'approved', symbol: 'KRT1' })
+
+      const r2 = geneRef.validateSymbols([asciiKrt1, kelvinKrt1])
+      expect(r2).toHaveLength(2)
+      expect(r2[0]).toMatchObject({ input: asciiKrt1, status: 'approved', symbol: 'KRT1' })
+      expect(r2[1]).toMatchObject({ input: kelvinKrt1, status: 'unknown' })
+    })
+
+    it('handles ambiguous alias in batch validation (#672)', () => {
+      const results = geneRef.validateSymbols(['2F1', '2f1'])
+      expect(results).toHaveLength(2)
+      expect(results[0].status).toBe('ambiguous')
+      expect(results[0].input).toBe('2F1')
+      expect(results[0].candidates?.length).toBeGreaterThan(1)
+      expect(results[1].status).toBe('ambiguous')
+      expect(results[1].input).toBe('2f1')
+      expect(results[1].candidates?.length).toBeGreaterThan(1)
+    })
+
+    it('deduplicates case variations before chunking (>500 items) (#672)', () => {
+      const list: string[] = []
+      for (let i = 0; i < 300; i++) {
+        list.push(`GENE_${i}`)
+        list.push(`gene_${i}`)
+      }
+      list.push('BRCA1', 'brca1')
+      const results = geneRef.validateSymbols(list)
+      expect(results).toHaveLength(602)
+      expect(results[600]).toMatchObject({ input: 'BRCA1', status: 'approved', symbol: 'BRCA1' })
+      expect(results[601]).toMatchObject({ input: 'brca1', status: 'approved', symbol: 'BRCA1' })
     })
   })
 
@@ -179,6 +259,41 @@ describe('GeneReferenceDb', () => {
     it('returns empty map for empty input', () => {
       const coords = geneRef.getCoordinatesForGenes([], 'GRCh38')
       expect(coords.size).toBe(0)
+    })
+
+    it('handles duplicate hgncIds and chunks exceeding 500 items', () => {
+      const sampleStmt = db.prepare('SELECT 1')
+      const proto = Object.getPrototypeOf(sampleStmt) as {
+        all: (...args: unknown[]) => unknown
+        get: (...args: unknown[]) => unknown
+      }
+      const allSpy = vi.spyOn(proto, 'all')
+      const getSpy = vi.spyOn(proto, 'get')
+
+      // Pass >500 unique HGNC IDs plus duplicates of HGNC:1100 and HGNC:11998
+      const uniqueIds = Array.from({ length: 550 }, (_, i) => `HGNC:FAKE_${i}`)
+      const largeList = ['HGNC:1100', 'HGNC:11998', ...uniqueIds, 'HGNC:1100', 'HGNC:11998']
+      const coords = geneRef.getCoordinatesForGenes(largeList, 'GRCh38')
+      expect(coords.size).toBe(2)
+      expect(coords.has('HGNC:1100')).toBe(true)
+      expect(coords.has('HGNC:11998')).toBe(true)
+
+      const executedQueries = allSpy.mock.calls.length + getSpy.mock.calls.length
+      expect(executedQueries).toBeGreaterThan(0)
+      expect(executedQueries).toBeLessThanOrEqual(10)
+
+      allSpy.mockRestore()
+      getSpy.mockRestore()
+    })
+
+    it('preserves exact input order of unique hgncIds (#672)', () => {
+      const ids = ['HGNC:11998', 'HGNC:1100']
+      const coords = geneRef.getCoordinatesForGenes(ids, 'GRCh38')
+      expect(Array.from(coords.keys())).toEqual(['HGNC:11998', 'HGNC:1100'])
+
+      const reversedIds = ['HGNC:1100', 'HGNC:11998']
+      const coordsRev = geneRef.getCoordinatesForGenes(reversedIds, 'GRCh38')
+      expect(Array.from(coordsRev.keys())).toEqual(['HGNC:1100', 'HGNC:11998'])
     })
   })
 

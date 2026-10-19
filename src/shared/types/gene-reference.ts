@@ -41,4 +41,5 @@ export interface GeneRefInfo {
   coordinateCount: number
   assemblies: string[]
   builtAt: number
+  canUpdate?: boolean
 }

@@ -13,21 +13,20 @@ describe('postgres export logic', () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'varlens-pg-export-'))
     await rm(tempDir, { recursive: true, force: true })
 
-    const result = await Promise.race([
-      exportPostgresVariants(
-        (async function* () {
-          yield { id: 1, chr: '1' }
-        })(),
-        join(tempDir, 'missing', 'variants.csv'),
-        {}
-      ),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('export did not settle')), 1000)
-      )
-    ])
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('ENOENT')
+    await expect(
+      Promise.race([
+        exportPostgresVariants(
+          (async function* () {
+            yield { id: 1, chr: '1' }
+          })(),
+          join(tempDir, 'missing', 'variants.csv'),
+          {}
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('export did not settle')), 1000)
+        )
+      ])
+    ).rejects.toThrow(/ENOENT/)
   })
 
   it('streams postgres cohort rows to CSV with cohort export columns', async () => {

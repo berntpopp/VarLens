@@ -47,25 +47,32 @@ import {
 } from '../../shared/utils/phasing'
 import { VariantSearchService } from './VariantSearchService'
 import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
+import { COMPUTED_COLUMNS, VariantColumnMetaCache } from './variant-column-meta'
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
 
-/** Columns that are computed at query time (not physical table columns) -- excluded from getAllColumnMetas */
-const COMPUTED_COLUMNS = new Set(['internal_af'])
-
 export class VariantRepository extends BaseRepository {
   private static readonly MAX_STATEMENT_CACHE_SIZE = 50
+  private readonly columnMetaCache: VariantColumnMetaCache
   private cases: CaseRepository
   private readonly filterBuilder: VariantFilterBuilder
   private readonly searchService: VariantSearchService
   private ftsSnapshot: TriggerSnapshot = {}
   private readonly statementCache = new Map<string, Statement>()
 
+  /**
+   * Clear cached column metadata for a specific case, or all cases if omitted.
+   */
+  clearColumnMetaCache(caseId?: number): void {
+    this.columnMetaCache.clear(caseId)
+  }
+
   constructor(db: DatabaseType, kysely: Kysely<VarlensDatabase>, cases: CaseRepository) {
     super(db, kysely)
     this.cases = cases
     this.searchService = new VariantSearchService(db, kysely)
     this.filterBuilder = new VariantFilterBuilder(db, kysely, this.searchService)
+    this.columnMetaCache = new VariantColumnMetaCache(db)
   }
 
   private getStatement(sql: string): Statement {
@@ -86,6 +93,7 @@ export class VariantRepository extends BaseRepository {
    * Must be paired with a subsequent call to `finishBulkInsert()`.
    */
   beginBulkInsert(): void {
+    this.clearColumnMetaCache()
     this.ftsSnapshot = tearDownFtsTriggers(this.db)
   }
 
@@ -99,6 +107,7 @@ export class VariantRepository extends BaseRepository {
       VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[],
     caseId: number
   ): void {
+    this.clearColumnMetaCache(caseId)
     const runTransaction = this.db.transaction(
       (
         batch: (Omit<Variant, 'id' | 'case_id'> &
@@ -193,6 +202,7 @@ export class VariantRepository extends BaseRepository {
    * `finishBulkInsert()`.
    */
   finishBulkInsertNoCount(): void {
+    this.clearColumnMetaCache()
     try {
       rebuildAllFtsIndexes(this.db)
     } catch (error) {
@@ -224,6 +234,7 @@ export class VariantRepository extends BaseRepository {
    * Call this once after all `insertBatch()` calls to complete a bulk insert session.
    */
   finishBulkInsert(caseId: number, totalInserted: number): void {
+    this.clearColumnMetaCache(caseId)
     this.cases.updateCaseVariantCount(caseId, totalInserted)
     this.finishBulkInsertNoCount()
   }
@@ -434,91 +445,12 @@ export class VariantRepository extends BaseRepository {
    * one UNION ALL distinct-values pull for low-cardinality columns. Used by
    * `getFilterOptions` to populate the legacy full-metadata response.
    *
+   * Results are cached per caseId and invalidated when the case stamp changes.
    * For per-column on-demand fetches (including extension columns) use the
    * scope-aware public `getColumnMeta(scope, columnKey)` below instead.
    */
-  private getAllColumnMetas(caseId: number): ColumnFilterMeta[] {
-    const DISTINCT_THRESHOLD = 50
-    // Exclude computed columns (e.g. internal_af) which don't exist as physical table columns
-    const columns = Object.entries(BASE_SORTABLE_COLUMNS).filter(
-      ([key]) => !COMPUTED_COLUMNS.has(key)
-    )
-
-    // Query 1: Single scan — COUNT(DISTINCT col) for all columns + MIN/MAX for numeric columns
-    const selectParts: string[] = []
-    for (const [key, sqlCol] of columns) {
-      selectParts.push(`COUNT(DISTINCT "${sqlCol}") AS "cnt_${key}"`)
-      if (NUMERIC_COLUMN_FILTER_KEYS.has(key)) {
-        selectParts.push(`MIN(${comparedColumnSql(key, `"${sqlCol}"`)}) AS "min_${key}"`)
-        selectParts.push(`MAX(${comparedColumnSql(key, `"${sqlCol}"`)}) AS "max_${key}"`)
-      }
-    }
-    const aggSql = `SELECT ${selectParts.join(', ')} FROM variants WHERE case_id = ?`
-    const aggRow = this.db.prepare(aggSql).get(caseId) as Record<string, number | null>
-
-    // Build initial meta entries from aggregate results
-    const meta: ColumnFilterMeta[] = []
-    const lowCardinalityColumns: [string, string][] = []
-
-    for (const [key, sqlCol] of columns) {
-      const isNumeric = NUMERIC_COLUMN_FILTER_KEYS.has(key)
-      const distinctCount = (aggRow[`cnt_${key}`] as number) ?? 0
-
-      const entry: ColumnFilterMeta = {
-        key,
-        dataType: isNumeric ? 'numeric' : 'text',
-        distinctCount
-      }
-
-      if (isNumeric) {
-        const minVal = aggRow[`min_${key}`]
-        const maxVal = aggRow[`max_${key}`]
-        entry.min = minVal ?? undefined
-        entry.max = maxVal ?? undefined
-      }
-
-      if (distinctCount > 0 && distinctCount <= DISTINCT_THRESHOLD) {
-        lowCardinalityColumns.push([key, sqlCol])
-      }
-
-      meta.push(entry)
-    }
-
-    // Query 2: UNION ALL for distinct values of all low-cardinality columns
-    if (lowCardinalityColumns.length > 0) {
-      // SAFETY: sqlCol values come from hardcoded BASE_SORTABLE_COLUMNS constant
-      const unionParts = lowCardinalityColumns.map(
-        ([key, sqlCol]) =>
-          `SELECT '${key}' AS col_key, CAST("${sqlCol}" AS TEXT) AS val FROM variants WHERE case_id = ? AND "${sqlCol}" IS NOT NULL GROUP BY "${sqlCol}"`
-      )
-      const unionSql = unionParts.join(' UNION ALL ')
-      const params = lowCardinalityColumns.map(() => caseId)
-      const rows = this.db.prepare(unionSql).all(...params) as {
-        col_key: string
-        val: string
-      }[]
-
-      // Group results by column key
-      const valuesByKey = new Map<string, string[]>()
-      for (const row of rows) {
-        let arr = valuesByKey.get(row.col_key)
-        if (arr === undefined) {
-          arr = []
-          valuesByKey.set(row.col_key, arr)
-        }
-        arr.push(row.val)
-      }
-
-      // Attach sorted distinct values to corresponding meta entries
-      for (const entry of meta) {
-        const values = valuesByKey.get(entry.key)
-        if (values !== undefined) {
-          entry.distinctValues = values.sort((a, b) => a.localeCompare(b))
-        }
-      }
-    }
-
-    return meta.map(withOfferedValues)
+  getAllColumnMetas(caseId: number): ColumnFilterMeta[] {
+    return this.columnMetaCache.getAllColumnMetas(caseId)
   }
 
   // ── Scope-aware single-column metadata (base + extension) ────

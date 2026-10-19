@@ -56,6 +56,11 @@ export type DbTaskType =
   // Gene lists (read-only)
   | 'gene-lists:list'
   | 'gene-lists:getGenes'
+  // Panels (read-only)
+  | 'panels:list'
+  | 'panels:get'
+  | 'panels:getGenes'
+  | 'panels:activeForCase'
   // Region files (read-only)
   | 'region-files:list'
   // Database
