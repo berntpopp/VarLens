@@ -611,7 +611,42 @@ describe('Round 20 regression defects', () => {
       null
     )
     expect(getPerCaseByVariantId(1, 12, key)).toBeNull()
-    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Pathogenic')
+    expect(getPerCaseByVariantId(1, 11, key)).toBeUndefined()
+  })
+
+  it('overlapping sibling loads 11 -> 12 -> 11 do not let delayed first load for 11 overwrite newer 11 in either cache', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const d11Old = defer<Record<string, unknown>>()
+    const d12 = defer<Record<string, unknown>>()
+    const d11New = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet)
+      .mockReturnValueOnce(d11Old.promise as never)
+      .mockReturnValueOnce(d12.promise as never)
+      .mockReturnValueOnce(d11New.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const p11Old = ops.load({ kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' }, coords)
+    const p12 = ops.load({ kind: 'case', caseId: 1, variantId: 12, build: 'GRCh38' }, coords)
+    d12.resolve({
+      [key]: { global: null, perCase: mockPerCase(12, { acmg_classification: 'Uncertain significance' }) }
+    })
+    await p12
+
+    const p11New = ops.load({ kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' }, coords)
+    d11New.resolve({
+      [key]: { global: null, perCase: mockPerCase(11, { acmg_classification: 'Benign' }) }
+    })
+    await p11New
+
+    // Delayed first response for 11 resolves with stale Pathogenic
+    d11Old.resolve({
+      [key]: { global: null, perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' }) }
+    })
+    await p11Old
+
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Benign')
+    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Benign')
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Uncertain significance')
   })
 
   it('older loadBatch resolving after a non-owner sibling write does not overwrite the newly saved sibling annotation', async () => {

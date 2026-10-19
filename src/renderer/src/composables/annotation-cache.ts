@@ -40,7 +40,8 @@ import {
   setConfirmedWriteVersion,
   pruneInFlightMutationsOnSuccess,
   deletePerCaseForCoordKey,
-  bumpCaseVariantVersion
+  bumpCaseVariantVersion,
+  deleteLoadingVariantId
 } from './annotation-mutation-tracker'
 
 export type AnnotationSlot = keyof AnnotationCache
@@ -248,11 +249,10 @@ export function setLoading(
     triggerRef(loadingStates)
     return next
   }
-  if (token !== undefined && loadingTokens.get(key) !== token) {
-    return 0
-  }
+  if (token !== undefined && loadingTokens.get(key) !== token) return 0
   loadingStates.value.delete(key)
   loadingTokens.delete(key)
+  deleteLoadingVariantId(key)
   globalOnlyLoading.delete(key)
   triggerRef(loadingStates)
   return 0
@@ -400,13 +400,10 @@ export const isTrackedCase = (caseId: number): boolean => lastCaseId === caseId
 
 function dropKeyMetadata(key: string): void {
   keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
-  cachedVariantIds.delete(key)
-  loadingStates.value.delete(key)
-  loadingTokens.delete(key)
-  unloadedSlots.delete(key)
-  globalOnlyLoading.delete(key)
-  awaitedKeys.case.delete(key)
-  awaitedKeys.global.delete(key)
+  cachedVariantIds.delete(key); deleteLoadingVariantId(key)
+  loadingStates.value.delete(key); loadingTokens.delete(key)
+  unloadedSlots.delete(key); globalOnlyLoading.delete(key)
+  awaitedKeys.case.delete(key); awaitedKeys.global.delete(key)
 }
 
 function dropKeyState(key: string): void {

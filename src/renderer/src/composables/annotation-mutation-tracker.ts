@@ -149,6 +149,28 @@ export function getPerCaseSlotOwner(
 export const perCaseByVariantId = new Map<string, CaseVariantAnnotation | null>()
 const variantKeysByCoord = new Map<string, Set<string>>()
 const caseVariantVersions = new Map<string, number>()
+let nextLoadSeq = 0
+const acceptedLoadSeqs = new Map<string, number>()
+
+export function allocateLoadSeq(): number {
+  return ++nextLoadSeq
+}
+
+export function isLoadSeqStale(slot: string, seq: number): boolean {
+  return (acceptedLoadSeqs.get(slot) ?? 0) > seq
+}
+
+export function markLoadSeqAccepted(slot: string, seq: number): void {
+  if (seq > (acceptedLoadSeqs.get(slot) ?? 0)) {
+    acceptedLoadSeqs.set(slot, seq)
+  }
+}
+
+const loadingVariantIds = new Map<string, number>()
+export const getLoadingVariantId = (key: string): number | undefined => loadingVariantIds.get(key)
+export const setLoadingVariantId = (key: string, vid: number): void =>
+  void loadingVariantIds.set(key, vid)
+export const deleteLoadingVariantId = (key: string): void => void loadingVariantIds.delete(key)
 
 export function getCaseVariantVersion(caseId: number, variantId: number): number {
   return caseVariantVersions.get(`${caseId}:${variantId}`) ?? 0
@@ -157,6 +179,7 @@ export function getCaseVariantVersion(caseId: number, variantId: number): number
 export function bumpCaseVariantVersion(caseId: number, variantId: number): void {
   const k = `${caseId}:${variantId}`
   caseVariantVersions.set(k, (caseVariantVersions.get(k) ?? 0) + 1)
+  acceptedLoadSeqs.set(`caseVar:${k}`, ++nextLoadSeq)
 }
 
 export function setPerCaseByVariantId(
@@ -244,11 +267,14 @@ export function clearMutationTracker(): void {
   perCaseByVariantId.clear()
   variantKeysByCoord.clear()
   caseVariantVersions.clear()
+  acceptedLoadSeqs.clear()
+  loadingVariantIds.clear()
 }
 
 export function resetMutationTracker(): void {
   issuedWriteVersions.clear()
   maxVariantWriteVersions.clear()
+  nextLoadSeq = 0
   clearMutationTracker()
 }
 
