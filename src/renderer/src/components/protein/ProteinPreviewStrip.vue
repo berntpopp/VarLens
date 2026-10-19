@@ -103,7 +103,11 @@ import {
 import { proteinMappingQuery, proteinDomainsQuery } from '../../queries/protein'
 import { useProteinLookupsReason } from '../../composables/useProteinLookupsReason'
 import { formatError } from '../../utils/ipc-result'
-import { proteinPositionOf, proteinStripSummary } from '../../utils/protein-view'
+import {
+  proteinPositionOf,
+  proteinStripSummary,
+  resolveVariantConsequence
+} from '../../utils/protein-view'
 
 const props = defineProps<{ variant: Variant | CohortVariant }>()
 const emit = defineEmits<{ open: [tab: ProteinViewTab] }>()
@@ -153,9 +157,7 @@ const length = computed(() => {
   return fromDomains > 0 ? fromDomains : (mappingQuery.data.value?.proteinLength ?? 0)
 })
 const pct = (aa: number): string => `${Math.min(100, (aa / Math.max(1, length.value)) * 100)}%`
-const markerColor = computed(() =>
-  getConsequenceColor(props.variant.func ?? props.variant.consequence ?? 'unknown')
-)
+const markerColor = computed(() => getConsequenceColor(resolveVariantConsequence(props.variant)))
 const summary = computed(() =>
   protein.value === null
     ? ''

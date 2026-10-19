@@ -258,9 +258,10 @@ import {
   watch,
   defineAsyncComponent,
   inject,
-  provide
+  provide,
+  type AsyncComponentLoader
 } from 'vue'
-import { generateSuggestions, type VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
+import { useVariantAcmgPreview } from '../utils/acmg/acmg-variant-data'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
@@ -287,28 +288,13 @@ import InfoFieldsSection from './variant-details/InfoFieldsSection.vue'
 // Lazy-load non-critical panel sections to speed up initial open
 import SectionSkeleton from './SectionSkeleton.vue'
 
-const asyncOpts = { delay: 0, loadingComponent: SectionSkeleton }
-
-const ExternalLinksSection = defineAsyncComponent({
-  loader: () => import('./ExternalLinksSection.vue'),
-  ...asyncOpts
-})
-const CommentsSection = defineAsyncComponent({
-  loader: () => import('./CommentsSection.vue'),
-  ...asyncOpts
-})
-const TagsSection = defineAsyncComponent({
-  loader: () => import('./TagsSection.vue'),
-  ...asyncOpts
-})
-const AcmgClassificationPanel = defineAsyncComponent({
-  loader: () => import('./AcmgClassificationPanel.vue'),
-  ...asyncOpts
-})
-const ActivityLogPanel = defineAsyncComponent({
-  loader: () => import('./ActivityLogPanel.vue'),
-  ...asyncOpts
-})
+const lazySection = (loader: AsyncComponentLoader) =>
+  defineAsyncComponent({ loader, delay: 0, loadingComponent: SectionSkeleton })
+const ExternalLinksSection = lazySection(() => import('./ExternalLinksSection.vue'))
+const CommentsSection = lazySection(() => import('./CommentsSection.vue'))
+const TagsSection = lazySection(() => import('./TagsSection.vue'))
+const AcmgClassificationPanel = lazySection(() => import('./AcmgClassificationPanel.vue'))
+const ActivityLogPanel = lazySection(() => import('./ActivityLogPanel.vue'))
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
 import {
@@ -467,117 +453,37 @@ const currentAcmgEvidence = computed(() => {
 const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
 const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
-// Variant annotation data for auto-suggestions
-const currentVariantData = computed<VariantAnnotationData | null>(() => {
-  if (!props.variant) return null
-  const v = props.variant as unknown as Record<string, unknown>
-  return {
-    gnomad_af: props.variant.gnomad_af ?? null,
-    cadd:
-      'cadd' in props.variant ? (props.variant.cadd ?? null) : (props.variant.cadd_phred ?? null),
-    clinvar: props.variant.clinvar ?? null,
-    revel:
-      ('revel' in v && v.revel !== undefined ? (v.revel as number | null) : null) ??
-      revelScore.value ??
-      null,
-    spliceai_max:
-      ('spliceai_max' in v && v.spliceai_max !== undefined
-        ? (v.spliceai_max as number | null)
-        : null) ??
-      spliceaiMaxDelta.value ??
-      null
-  }
+const {
+  currentVariantData,
+  variantKey,
+  suggestedAcmgCodes,
+  acmgExpanded,
+  acmgPanelRef,
+  handleApplySuggestionsPreview
+} = useVariantAcmgPreview({
+  variant: computed(() => props.variant),
+  caseId: computed(() => props.caseId),
+  revelFallback: revelScore,
+  spliceAiFallback: spliceaiMaxDelta
 })
-
-const variantKey = computed(() => {
-  if (!props.variant) return null
-  const v = props.variant
-  const build = 'genome_build' in v ? (v.genome_build ?? '') : ''
-  return `${props.caseId ?? ''}:${build}:${v.chr}:${v.pos}:${v.ref}:${v.alt}`
-})
-
-const suggestedAcmgCodes = computed<string[]>(() => {
-  if (!currentVariantData.value) return []
-  return generateSuggestions(currentVariantData.value).map((s) => s.code)
-})
-
-const acmgExpanded = ref<number | undefined>(undefined)
-
-// Selection changes and closes wait for the evidence editor's unsaved-draft prompt
-const acmgPanelRef = ref<{
-  confirmLeave: () => Promise<boolean> | null
-  applySuggestions?: () => void
-} | null>(null)
-
-const pendingSuggestedStaging = ref<string | null>(null)
-
-watch(acmgPanelRef, (panel) => {
-  if (panel !== null && pendingSuggestedStaging.value === variantKey.value) {
-    panel.applySuggestions?.()
-    pendingSuggestedStaging.value = null
-  }
-})
-
-watch(variantKey, () => {
-  pendingSuggestedStaging.value = null
-})
-
-const handleApplySuggestionsPreview = (): void => {
-  acmgExpanded.value = 0
-  const key = variantKey.value
-  if (key === null) return
-
-  const panel = acmgPanelRef.value
-  if (panel !== null) {
-    panel.applySuggestions?.()
-    pendingSuggestedStaging.value = null
-  } else {
-    pendingSuggestedStaging.value = key
-  }
-}
 
 // Current quick classification (from annotation, not evidence-based)
 const currentQuickClassification = computed<AcmgClassification | null>(() => {
   if (!props.variant) return null
-  if (props.mode === 'case') {
-    return getAcmgClassification(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt
-    )
-  }
-  return getGlobalAcmgClassification(
-    props.variant.chr,
-    props.variant.pos,
-    props.variant.ref,
-    props.variant.alt
-  )
+  const { chr, pos, ref: r, alt: a } = props.variant
+  return props.mode === 'case'
+    ? getAcmgClassification(chr, pos, r, a)
+    : getGlobalAcmgClassification(chr, pos, r, a)
 })
 
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
   if (props.variant === null || acmgLocked.value) return
-  const value = classification === currentQuickClassification.value ? null : classification
-
+  const val = classification === currentQuickClassification.value ? null : classification
+  const { chr, pos, ref: r, alt: a } = props.variant
   if (props.mode === 'case' && props.caseId !== null) {
-    const variantId = (props.variant as Variant).id
-    await setAcmgClassification(
-      props.caseId,
-      variantId,
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      value
-    )
+    await setAcmgClassification(props.caseId, (props.variant as Variant).id, chr, pos, r, a, val)
   } else {
-    await setGlobalAcmgClassification(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      value
-    )
+    await setGlobalAcmgClassification(chr, pos, r, a, val)
   }
 }
 
@@ -586,29 +492,26 @@ const handleAcmgEvidenceChange = async (payload: {
   evidenceJson: string
 }): Promise<boolean> => {
   if (props.variant === null) return false
-
-  if (props.mode === 'case' && props.caseId !== null) {
-    const variantId = (props.variant as Variant).id
-    return setAcmgClassificationWithEvidence(
-      props.caseId,
-      variantId,
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      payload.classification,
-      payload.evidenceJson
-    )
-  } else {
-    return setGlobalAcmgClassificationWithEvidence(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt,
-      payload.classification,
-      payload.evidenceJson
-    )
-  }
+  const { chr, pos, ref: r, alt: a } = props.variant
+  return props.mode === 'case' && props.caseId !== null
+    ? setAcmgClassificationWithEvidence(
+        props.caseId,
+        (props.variant as Variant).id,
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
+    : setGlobalAcmgClassificationWithEvidence(
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
 }
 
 // Load annotations when variant changes

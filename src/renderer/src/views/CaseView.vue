@@ -542,31 +542,8 @@ defineExpose({
   font-weight: 500;
 }
 
-/*
- * The Shortlist tab is categorically different from the per-type tabs
- * (algorithmic cross-type ranking vs. raw table), so it should be
- * distinguishable at a glance — but this is a clinical UI, so we signal
- * hierarchy through restraint, not color. The treatment draws on
- * Material 3's "accent border" pattern and clinical-dashboard
- * conventions (signal specialness via typography + a single accent
- * mark, not background washes):
- *
- *   - A 3px leading accent bar in the theme `primary` (slate navy).
- *     This is the whole featured-tab signal — no background tint, no
- *     custom text color, no amber.
- *   - Font weight bumped to 600 (vs 500 default). Subtle but reads as
- *     "emphasized".
- *   - A 1px right-border separator + a few pixels of margin visually
- *     groups the Shortlist tab as a category distinct from the raw
- *     per-type tabs that follow.
- *   - The icon itself is colored via the template `color="primary"`
- *     binding — no additional CSS needed for hover/selected states
- *     since everything inherits from the base v-tab styling.
- *
- * CLAUDE.md forbids `surface-variant` backgrounds. This rule uses no
- * background at all — the accent bar + typography carry the whole
- * signal.
- */
+/* Shortlist tab is highlighted with subtle primary tint and 600 weight to distinguish
+   algorithmic cross-type ranking from per-type raw tables. */
 .variant-type-tabs :deep(.v-tab.shortlist-tab) {
   font-weight: 600;
   letter-spacing: 0.01em;

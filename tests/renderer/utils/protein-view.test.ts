@@ -6,7 +6,8 @@ import {
   proteinStripSummary,
   proteinTabReason,
   proteinViewBlockedReason,
-  proteinViewTabFor
+  proteinViewTabFor,
+  resolveVariantConsequence
 } from '../../../src/renderer/src/utils/protein-view'
 import { PROTEIN_VIEW_COPY } from '../../../src/renderer/src/config/proteinViewConfig'
 import type { CohortVariant } from '../../../src/shared/types/cohort'
@@ -125,5 +126,34 @@ describe('buildLollipopVariants (cohort carriers)', () => {
     const resultFallback = buildLollipopVariants(withoutFunc, [], 'THOC5')
     expect(resultFallback[0].consequence).toBe('MODERATE')
     expect(resultFallback[0].consequenceCategory).toBe('missense')
+  })
+
+  it('handles combined SO terms and impact fallback in resolveVariantConsequence (#664)', () => {
+    // Combined VEP SO terms: missense_variant&splice_region_variant -> missense
+    const combinedMissense = row({
+      func: 'missense_variant&splice_region_variant',
+      consequence: 'MODERATE'
+    })
+    expect(resolveVariantConsequence(combinedMissense)).toBe('missense_variant')
+    const resCombinedMissense = buildLollipopVariants(combinedMissense, [], 'THOC5')
+    expect(resCombinedMissense[0].consequenceCategory).toBe('missense')
+
+    // Combined VEP SO terms: splice_region_variant&intron_variant -> splice
+    const combinedSplice = row({
+      func: 'splice_region_variant&intron_variant',
+      consequence: 'LOW'
+    })
+    expect(resolveVariantConsequence(combinedSplice)).toBe('splice_region_variant')
+    const resCombinedSplice = buildLollipopVariants(combinedSplice, [], 'THOC5')
+    expect(resCombinedSplice[0].consequenceCategory).toBe('splice')
+
+    // Unrecognized func falling back to consequence: custom_unknown_term -> HIGH (truncating)
+    const unrecognizedFunc = row({
+      func: 'custom_unknown_term',
+      consequence: 'HIGH'
+    })
+    expect(resolveVariantConsequence(unrecognizedFunc)).toBe('HIGH')
+    const resUnrecognized = buildLollipopVariants(unrecognizedFunc, [], 'THOC5')
+    expect(resUnrecognized[0].consequenceCategory).toBe('truncating')
   })
 })

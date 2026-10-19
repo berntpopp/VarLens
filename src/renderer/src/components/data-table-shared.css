@@ -129,19 +129,18 @@
    width 0: a fixed table is max(width, sum of column widths) wide, so spare
    width is never spread over the columns and docking the details panel does
    not move every cell (CLS gate); max-content let cell content widen columns. */
-.table-container .v-table__wrapper > table {
+.table-container > .v-data-table > .v-table__wrapper > table {
   table-layout: fixed;
   width: 0;
 }
 
 /* Nested carrier subtable in cohort expanded rows: restore auto layout, full width, and unclipped cells */
-.table-container .nested-carriers-table .v-table__wrapper > table {
+.table-container :is(.nested-carriers-table, .carrier-subtable) .v-table__wrapper > table {
   table-layout: auto !important;
   width: 100% !important;
 }
 
-.table-container .nested-carriers-table td,
-.table-container .nested-carriers-table th {
+.table-container :is(.nested-carriers-table, .carrier-subtable) :is(td, th) {
   max-width: none !important;
 }
 
