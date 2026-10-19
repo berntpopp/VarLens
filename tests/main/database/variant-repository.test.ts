@@ -7,7 +7,7 @@
  * tests in variants.test.ts.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DatabaseService } from '../../../src/main/database'
 
 function createTestCase(db: DatabaseService, name: string): number {
@@ -373,12 +373,26 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       const meta1 = service.variants.getAllColumnMetas(caseId)
       expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
 
-      // Warm cache hit timing assertion: < 1ms
+      // Warm cache hit timing & DDL assertion: < 1ms, zero CREATE or INSERT statements
+      const execSpy = vi.spyOn(service.database, 'exec')
+      const prepareSpy = vi.spyOn(service.database, 'prepare')
+
       const t0 = performance.now()
       const warm = service.variants.getAllColumnMetas(caseId)
       const elapsed = performance.now() - t0
+
       expect(warm).toBe(meta1)
-      expect(elapsed).toBeLessThan(10)
+      expect(elapsed).toBeLessThan(1)
+
+      const ddlExecs = execSpy.mock.calls.filter(([sql]) => /CREATE|INSERT/i.test(String(sql)))
+      const ddlPrepares = prepareSpy.mock.calls.filter(([sql]) =>
+        /CREATE|INSERT/i.test(String(sql))
+      )
+      expect(ddlExecs.length).toBe(0)
+      expect(ddlPrepares.length).toBe(0)
+
+      execSpy.mockRestore()
+      prepareSpy.mockRestore()
 
       const row = service.database
         .prepare('SELECT id FROM variants WHERE case_id = ?')

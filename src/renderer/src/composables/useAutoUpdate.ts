@@ -1,9 +1,17 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { UpdateStatus } from '../../../shared/types/api'
-import { unwrapIpcResult } from '../../../shared/types/errors'
+import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { logService } from '../services/LogService'
 import { useApiService } from './useApiService'
+
+function formatError(err: unknown): string {
+  return isIpcError(err)
+    ? (err.userMessage ?? err.message)
+    : err instanceof Error
+      ? err.message
+      : String(err)
+}
 import { useCapabilityStore } from '../stores/capabilityStore'
 
 export interface UseAutoUpdateReturn {
@@ -31,11 +39,11 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
         try {
           updateStatus.value = unwrapIpcResult(res)
         } catch (err) {
-          logService.error(`Failed to get initial updater status: ${err}`, 'updater')
+          logService.error(`Failed to get initial updater status: ${formatError(err)}`, 'updater')
         }
       })
       .catch((err) => {
-        logService.error(`Failed to invoke getStatus: ${err}`, 'updater')
+        logService.error(`Failed to invoke getStatus: ${formatError(err)}`, 'updater')
       })
 
     // Listen for status changes
@@ -60,7 +68,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       try {
         unwrapIpcResult(await api.updater.checkForUpdate())
       } catch (err) {
-        logService.error(`Failed to check for update: ${err}`, 'updater')
+        logService.error(`Failed to check for update: ${formatError(err)}`, 'updater')
       }
     }
   }
@@ -70,7 +78,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       try {
         unwrapIpcResult(await api.updater.downloadUpdate())
       } catch (err) {
-        logService.error(`Failed to download update: ${err}`, 'updater')
+        logService.error(`Failed to download update: ${formatError(err)}`, 'updater')
       }
     }
   }
@@ -80,7 +88,7 @@ export function useAutoUpdate(): UseAutoUpdateReturn {
       try {
         unwrapIpcResult(await api.updater.installUpdate())
       } catch (err) {
-        logService.error(`Failed to install update: ${err}`, 'updater')
+        logService.error(`Failed to install update: ${formatError(err)}`, 'updater')
       }
     }
   }

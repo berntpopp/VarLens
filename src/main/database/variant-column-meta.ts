@@ -1,4 +1,4 @@
-import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
+import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import type { ColumnFilterMeta } from '../../shared/types/column-filters'
 import { withOfferedValues } from '../../shared/config'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
@@ -7,7 +7,20 @@ import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
 
 export const COMPUTED_COLUMNS = new Set(['internal_af'])
 
+const initializedDbs = new WeakSet<DatabaseType>()
+const revStatements = new WeakMap<DatabaseType, Statement>()
+
 export function ensureCaseMetaRevSchema(db: DatabaseType): void {
+  if (initializedDbs.has(db)) return
+  try {
+    const queryOnly = db.pragma('query_only', { simple: true })
+    if (queryOnly === 1 || queryOnly === true) {
+      initializedDbs.add(db)
+      return
+    }
+  } catch {
+    // Ignore pragma check failures
+  }
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS _case_meta_rev (case_id INTEGER PRIMARY KEY, rev INTEGER NOT NULL DEFAULT 0);
@@ -26,7 +39,7 @@ export function ensureCaseMetaRevSchema(db: DatabaseType): void {
         ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
       END;
     `)
-    db.exec(`INSERT OR IGNORE INTO _case_meta_rev(case_id, rev) SELECT id, 1 FROM cases;`)
+    initializedDbs.add(db)
   } catch {
     // If tables variants or cases don't exist yet, retry on next call
   }
@@ -62,8 +75,12 @@ export function getCaseStamp(db: DatabaseType, caseId: number, mutationSeq: numb
 
   let rev = 0
   try {
-    const row = db.prepare('SELECT rev FROM _case_meta_rev WHERE case_id = ?').get(caseId) as
-      { rev: number } | undefined
+    let stmt = revStatements.get(db)
+    if (stmt === undefined) {
+      stmt = db.prepare('SELECT rev FROM _case_meta_rev WHERE case_id = ?')
+      revStatements.set(db, stmt)
+    }
+    const row = stmt.get(caseId) as { rev: number } | undefined
     rev = row?.rev ?? 0
   } catch {
     // Ignore

@@ -77,7 +77,7 @@ function runWorkerExport(
   start: (client: ExportWorkerClient, hooks: WorkerExportHooks) => void
 ): Promise<ExportResult> {
   const workerClient = new ExportWorkerClient()
-  return new Promise<ExportResult>((resolve) => {
+  return new Promise<ExportResult>((resolve, reject) => {
     ctx.registerCancel(() => workerClient.cancel())
     start(workerClient, {
       onProgress: (current, total) => {

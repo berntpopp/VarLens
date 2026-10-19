@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { join } from 'path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { GeneReferenceDb } from '../../../src/main/database/GeneReferenceDb'
@@ -94,6 +94,7 @@ describe('GeneReferenceDb', () => {
 
     it('handles batch size exceeding chunk limit (>500 unique symbols) (#672)', () => {
       // 550 unique unknown symbols + approved symbols to exercise batch chunking across >500 queries
+      const prepareSpy = vi.spyOn(db, 'prepare')
       const largeList = Array.from({ length: 552 }, (_, i) => {
         if (i === 0) return 'BRCA1'
         if (i === 1) return 'TP53'
@@ -106,6 +107,8 @@ describe('GeneReferenceDb', () => {
       for (let i = 2; i < 552; i++) {
         expect(results[i].status).toBe('unknown')
       }
+      expect(prepareSpy.mock.calls.length).toBeLessThanOrEqual(10)
+      prepareSpy.mockRestore()
     })
 
     it('matches SQLite COLLATE NOCASE ASCII folding without Unicode collision (Kelvin bug #672)', () => {
@@ -248,16 +251,16 @@ describe('GeneReferenceDb', () => {
     })
 
     it('handles duplicate hgncIds and chunks exceeding 500 items', () => {
-      // 550 items containing duplicates of HGNC:1100 and HGNC:11998 plus unknown IDs
-      const largeList = Array.from({ length: 550 }, (_, i) => {
-        if (i % 2 === 0) return 'HGNC:1100'
-        if (i % 3 === 0) return 'HGNC:11998'
-        return `HGNC:FAKE_${i}`
-      })
+      const prepareSpy = vi.spyOn(db, 'prepare')
+      // Pass >500 unique HGNC IDs plus duplicates of HGNC:1100 and HGNC:11998
+      const uniqueIds = Array.from({ length: 550 }, (_, i) => `HGNC:FAKE_${i}`)
+      const largeList = ['HGNC:1100', 'HGNC:11998', ...uniqueIds, 'HGNC:1100', 'HGNC:11998']
       const coords = geneRef.getCoordinatesForGenes(largeList, 'GRCh38')
       expect(coords.size).toBe(2)
       expect(coords.has('HGNC:1100')).toBe(true)
       expect(coords.has('HGNC:11998')).toBe(true)
+      expect(prepareSpy.mock.calls.length).toBeLessThanOrEqual(10)
+      prepareSpy.mockRestore()
     })
 
     it('preserves exact input order of unique hgncIds (#672)', () => {
