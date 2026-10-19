@@ -90,6 +90,7 @@ export const WRITE_TASK_TYPES = [
   'annotations:upsertGlobal',
   'annotations:deleteGlobal',
   'annotations:upsertPerCase',
+  'annotations:batchUpsertPerCase',
   'annotations:deletePerCase',
   'case-comments:create',
   'case-comments:update',

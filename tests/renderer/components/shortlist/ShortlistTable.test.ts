@@ -22,6 +22,11 @@ import type { ShortlistRow } from '../../../../src/shared/types/shortlist'
 import { clinvarDisplayText } from '../../../../src/shared/config/severity.config'
 import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
 import { installCapabilities } from '../../helpers/capabilities'
+import {
+  annotationCache,
+  variantKey
+} from '../../../../src/renderer/src/composables/useAnnotations'
+import { triggerRef } from 'vue'
 
 // ShortlistTable resolves its Links column through the external-links store
 beforeEach(() => setActivePinia(createPinia()))
@@ -377,5 +382,173 @@ describe('ShortlistTable', () => {
     const actionsHeader = headers.find((h) => h.key === 'actions')
     expect(actionsHeader?.title).toBe('Actions')
     wrapper.unmount()
+  })
+
+  describe('triage shortcuts and live details sync (#681)', () => {
+    it('dispatches "a" shortcut to emit acmg-click on selected row', async () => {
+      const item = row({ id: 10 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.emitted('acmg-click')).toHaveLength(1)
+      expect(wrapper.emitted('acmg-click')![0]).toEqual([item])
+      wrapper.unmount()
+    })
+
+    it('dispatches "c" shortcut to emit comment-click on selected row', async () => {
+      const item = row({ id: 20 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.emitted('comment-click')).toHaveLength(1)
+      expect(wrapper.emitted('comment-click')![0]).toEqual([item])
+      wrapper.unmount()
+    })
+
+    it('dispatches "i" shortcut to emit row-click on selected row', async () => {
+      const item = row({ id: 30 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true },
+        global: { plugins: [vuetify] },
+        attachTo: document.body
+      })
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i' }))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.emitted('row-click')).toHaveLength(1)
+      expect(wrapper.emitted('row-click')![0]).toEqual([item])
+      wrapper.unmount()
+    })
+
+    it('debounces live details sync on arrow keys when panelOpen is true', async () => {
+      vi.useFakeTimers()
+      const state = createAppState()
+      state.panelOpen.value = true
+      const item = row({ id: 40 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true },
+        global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+        attachTo: document.body
+      })
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      // Before 100ms debounce
+      vi.advanceTimersByTime(50)
+      expect(wrapper.emitted('row-click')).toBeUndefined()
+
+      // After 100ms debounce
+      vi.advanceTimersByTime(60)
+      expect(wrapper.emitted('row-click')).toHaveLength(1)
+      expect(wrapper.emitted('row-click')![0]).toEqual([item])
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('does NOT live sync details on arrow keys when panelOpen is false', async () => {
+      vi.useFakeTimers()
+      const state = createAppState()
+      state.panelOpen.value = false
+      const item = row({ id: 50 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true },
+        global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+        attachTo: document.body
+      })
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+
+      vi.advanceTimersByTime(200)
+      expect(wrapper.emitted('row-click')).toBeUndefined()
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('renders ACMG and comment badges when present in annotation cache', async () => {
+      const item = row({ chr: '1', pos: 5555, ref: 'C', alt: 'A' })
+      const key = variantKey({ chr: '1', pos: 5555, ref: 'C', alt: 'A' })
+      annotationCache.value.set(key, {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: 1,
+          variant_id: 1,
+          is_starred: 0,
+          acmg_classification: 'Pathogenic',
+          acmg_evidence_count: 2,
+          per_case_comment: 'Important variant',
+          tags: null,
+          created_at: '',
+          updated_at: ''
+        }
+      })
+      triggerRef(annotationCache)
+
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item] },
+        global: { plugins: [vuetify] }
+      })
+
+      expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).exists()).toBe(true)
+      expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).text()).toContain('P')
+      expect(wrapper.find(`[data-testid="shortlist-comment-${item.id}"]`).exists()).toBe(true)
+      wrapper.unmount()
+    })
+  })
+
+  describe('bulk triage selection (#684)', () => {
+    it('selects all rows via header checkbox and displays BulkTriageActionBar', async () => {
+      const items = [row({ id: 101 }), row({ id: 102 })]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify] }
+      })
+
+      const selectAll = wrapper.get('[data-testid="bulk-select-all"]')
+      await selectAll.setValue(true)
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'BulkTriageActionBar' }).exists()).toBe(true)
+      expect(wrapper.findComponent({ name: 'BulkTriageActionBar' }).props('selectedCount')).toBe(2)
+      wrapper.unmount()
+    })
+
+    it('selects individual rows via row checkboxes', async () => {
+      const items = [row({ id: 201 }), row({ id: 202 })]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify] }
+      })
+
+      const rowCheckbox = wrapper.get('[data-testid="bulk-select-row-201"]')
+      await rowCheckbox.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'BulkTriageActionBar' }).props('selectedCount')).toBe(1)
+      wrapper.unmount()
+    })
   })
 })

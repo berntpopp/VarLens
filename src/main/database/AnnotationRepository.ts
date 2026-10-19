@@ -165,6 +165,77 @@ export class AnnotationRepository extends BaseRepository {
     })
   }
 
+  batchUpsertPerCaseAnnotation(
+    caseId: number,
+    variantIds: number[],
+    updates: Partial<
+      Omit<CaseVariantAnnotation, 'id' | 'case_id' | 'variant_id' | 'created_at' | 'updated_at'>
+    > & { tag_id?: number }
+  ): { updatedCount: number } {
+    if (variantIds.length === 0) return { updatedCount: 0 }
+    return this.runTransaction(() => {
+      const placeholders = variantIds.map(() => '?').join(', ')
+      const validRows = this.db
+        .prepare(`SELECT id FROM variants WHERE case_id = ? AND id IN (${placeholders})`)
+        .all(caseId, ...variantIds) as Array<{ id: number }>
+      const validIds = validRows.map((r) => r.id)
+      if (validIds.length !== variantIds.length) {
+        throw new Error(`One or more variants do not belong to case ${caseId}`)
+      }
+
+      const now = Date.now()
+      const acmgClassProvided = 'acmg_classification' in updates
+      const acmgEvidenceProvided = 'acmg_evidence' in updates
+      const commentProvided = 'per_case_comment' in updates
+      const starredProvided =
+        updates.starred !== undefined ||
+        (updates as { is_starred?: boolean }).is_starred !== undefined
+
+      if (acmgClassProvided || acmgEvidenceProvided || commentProvided || starredProvided) {
+        const commentVal = updates.per_case_comment ?? null
+        const starredVal = starredProvided
+          ? updates.starred !== undefined
+            ? updates.starred === true
+              ? 1
+              : 0
+            : (updates as { is_starred?: boolean }).is_starred === true
+              ? 1
+              : 0
+          : null
+        const acmgClassVal = updates.acmg_classification ?? null
+        const acmgEvidenceVal = updates.acmg_evidence ?? null
+
+        const stmt = this.db.prepare(`
+          INSERT INTO case_variant_annotations (case_id, variant_id, per_case_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at)
+          VALUES (?, ?, ?, IFNULL(?, 0), ?, ?, ?, ?)
+          ON CONFLICT(case_id, variant_id) DO UPDATE SET
+            per_case_comment = ${commentProvided ? 'excluded.per_case_comment' : 'per_case_comment'},
+            starred = ${starredProvided ? 'excluded.starred' : 'starred'},
+            acmg_classification = ${acmgClassProvided ? 'excluded.acmg_classification' : 'acmg_classification'},
+            acmg_evidence = ${acmgEvidenceProvided ? 'excluded.acmg_evidence' : 'acmg_evidence'},
+            updated_at = excluded.updated_at
+        `)
+
+        for (const vId of validIds) {
+          stmt.run(caseId, vId, commentVal, starredVal, acmgClassVal, acmgEvidenceVal, now, now)
+        }
+      }
+
+      if (updates.tag_id !== undefined) {
+        const tagStmt = this.db.prepare(`
+          INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT DO NOTHING
+        `)
+        for (const vId of validIds) {
+          tagStmt.run(caseId, vId, updates.tag_id, now)
+        }
+      }
+
+      return { updatedCount: validIds.length }
+    })
+  }
+
   deletePerCaseAnnotation(caseId: number, variantId: number): void {
     this.execRun(
       this.kysely

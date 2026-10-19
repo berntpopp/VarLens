@@ -232,6 +232,13 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
           normalizeAnnotationUpdates(task.params[2])
         )
 
+      case 'annotations:batchUpsertPerCaseWithAudit':
+        return await this.workflow.annotations.batchUpsertPerCaseAnnotationWithAudit(
+          task.params[0],
+          task.params[1],
+          normalizeAnnotationUpdates(task.params[2])
+        )
+
       case 'annotations:deletePerCase':
         return await this.workflow.annotations.deletePerCaseAnnotation(...task.params)
 

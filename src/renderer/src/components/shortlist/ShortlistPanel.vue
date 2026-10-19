@@ -25,14 +25,17 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed, toRef } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { mdiInformationOutline, mdiRefresh, mdiTuneVariant } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
+import AnnotationDialogs from '../AnnotationDialogs.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import { useShortlistQuery } from '../../composables/useShortlistQuery'
 import { useApiService } from '../../composables/useApiService'
+import { useAnnotations } from '../../composables/useAnnotations'
+import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
 import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
@@ -60,6 +63,20 @@ const { api } = useApiService()
 const caseIdRef = toRef(props, 'caseId')
 const { shortlistPresets, selectedPresetId, result, loading, error, refresh, presetsLoading } =
   useShortlistQuery(caseIdRef)
+
+const annotations = useAnnotations()
+const annotationActions = { ...annotations, ...useAcmgUndo() }
+const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+
+watch(
+  () => result.value?.rows,
+  (rows) => {
+    if (rows && rows.length > 0) {
+      void annotations.loadAnnotationsBatch(props.caseId, rows)
+    }
+  },
+  { immediate: true }
+)
 
 // Same loading presentation as the case/cohort tables (stale-while-revalidate)
 const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
@@ -238,8 +255,18 @@ function dismissError(): void {
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"
         @toggle-star="onToggleStar"
+        @acmg-click="(row) => annotationDialogsRef?.openAcmgEvidenceDialog(row)"
+        @comment-click="(row) => annotationDialogsRef?.openCommentDialog(row)"
+        @triage-applied="refresh"
       />
     </div>
+
+    <AnnotationDialogs
+      ref="annotationDialogsRef"
+      :case-id="caseId"
+      :annotation-actions="annotationActions"
+      @changed="refresh"
+    />
   </div>
 </template>
 

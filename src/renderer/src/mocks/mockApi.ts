@@ -760,6 +760,9 @@ export const mockApi: WindowAPI = {
       created_at: Date.now(),
       updated_at: Date.now()
     }),
+    batchUpsertPerCase: async (_caseId, variantIds) => ({
+      updatedCount: variantIds.length
+    }),
     deletePerCase: async () => {},
     getForVariant: async () => ({ global: null, perCase: null }),
     batchGet: async () => ({})

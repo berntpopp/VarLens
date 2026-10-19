@@ -22,12 +22,36 @@
       density="compact"
       fixed-header
       multi-sort
+      show-select
       class="elevation-1 variant-table--sticky"
       :class="{ 'table--stale': showStale }"
       :row-props="getRowProps"
       @update:options="loadVariants"
       @click:row="handleRowClick"
     >
+      <template #[`header.data-table-select`]>
+        <input
+          type="checkbox"
+          :checked="bulkSelection.isAllSelected.value"
+          :indeterminate="bulkSelection.isSomeSelected.value"
+          aria-label="Select all rows"
+          data-testid="bulk-select-all"
+          class="bulk-select-checkbox"
+          @change="bulkSelection.toggleSelectAll(($event.target as HTMLInputElement).checked)"
+        />
+      </template>
+
+      <template #[`item.data-table-select`]="{ item }">
+        <input
+          type="checkbox"
+          :checked="bulkSelection.isSelected(item.id)"
+          :aria-label="`Select variant ${item.id}`"
+          :data-testid="`bulk-select-row-${item.id}`"
+          class="bulk-select-checkbox"
+          @click.stop="bulkSelection.handleRowCheckboxClick(item.id, $event)"
+        />
+      </template>
+
       <!-- Custom header slots with per-column filter icons -->
       <template
         v-for="col in filterableColumns"
@@ -101,9 +125,7 @@
       </template>
 
       <!-- gnomAD AF in scientific notation -->
-      <template #[`item.gnomad_af`]="{ value }">
-        <FrequencyCell :frequency="value" />
-      </template>
+      <template #[`item.gnomad_af`]="{ value }"><FrequencyCell :frequency="value" /></template>
 
       <!-- ClinVar colored chips with dynamic link from store -->
       <template #[`item.clinvar`]="{ item, value }">
@@ -114,19 +136,9 @@
         />
       </template>
 
-      <!-- Ref allele with truncation and tooltip -->
-      <template #[`item.ref`]="{ value }">
-        <AlleleCell :allele="value" />
-      </template>
-
-      <!-- Alt allele with truncation and tooltip -->
-      <template #[`item.alt`]="{ value }">
-        <AlleleCell :allele="value" />
-      </template>
-
-      <template #[`item.cadd`]="{ value }">
-        <CaddScoreCell :score="value" />
-      </template>
+      <template #[`item.ref`]="{ value }"><AlleleCell :allele="value" /></template>
+      <template #[`item.alt`]="{ value }"><AlleleCell :allele="value" /></template>
+      <template #[`item.cadd`]="{ value }"><CaddScoreCell :score="value" /></template>
 
       <!-- Gene symbol with dynamic link from store -->
       <template #[`item.gene_symbol`]="{ item, value }">
@@ -149,26 +161,12 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <template #[`item.consequence`]="{ value }">
-        <ConsequenceCell :consequence="value" />
-      </template>
+      <template #[`item.consequence`]="{ value }"
+        ><ConsequenceCell :consequence="value"
+      /></template>
 
       <template #[`item.gt_num`]="{ item, value }">
-        <template v-if="value !== null && value !== undefined">
-          <v-chip size="x-small" :color="zygosityColor(value)" label>{{ value }}</v-chip>
-          <v-chip
-            v-if="item.comphet_phase"
-            size="x-small"
-            label
-            :color="COMPHET_PHASE_COLORS[item.comphet_phase]"
-            :title="COMPHET_PHASE_LABELS[item.comphet_phase]"
-            class="ml-1"
-            data-testid="comphet-phase-chip"
-          >
-            {{ item.comphet_phase }}
-          </v-chip>
-        </template>
-        <EmptyPlaceholder v-else />
+        <GenotypeCell :item="item" :value="value" />
       </template>
 
       <template
@@ -176,80 +174,44 @@
         :key="`member-${member.case_id}`"
         #[`item._member_${member.case_id}`]="{ item }"
       >
-        <span
-          v-if="item.family_calls?.[member.case_id]?.gt_num != null"
-          :title="formatFamilyCallMeta(item.family_calls?.[member.case_id])"
-          data-testid="family-member-call"
-        >
-          <v-chip
-            size="x-small"
-            :color="zygosityColor(item.family_calls[member.case_id].gt_num!)"
-            label
-          >
-            {{ item.family_calls[member.case_id].gt_num }}
-          </v-chip>
-          <span
-            v-if="formatFamilyCallMeta(item.family_calls[member.case_id])"
-            class="text-caption text-medium-emphasis ml-1"
-          >
-            {{ formatFamilyCallMeta(item.family_calls[member.case_id]) }}
-          </span>
-        </span>
-        <EmptyPlaceholder v-else />
+        <FamilyMemberCell :call="item.family_calls?.[member.case_id]" />
       </template>
 
-      <template #[`item.func`]="{ value }">
-        <ConsequenceCell :consequence="value" />
-      </template>
+      <template #[`item.func`]="{ value }"><ConsequenceCell :consequence="value" /></template>
 
       <template #[`item.qual`]="{ value }">
-        <template v-if="value !== null && value !== undefined && typeof value === 'number'">{{
-          value.toFixed(1)
-        }}</template>
+        <span v-if="typeof value === 'number'">{{ value.toFixed(1) }}</span>
         <EmptyPlaceholder v-else />
       </template>
 
-      <template #[`item.transcript`]="{ value }">
-        <span
-          v-if="value"
-          class="variant-data-mono transcript-truncated"
-          :data-tooltip="value"
-          data-tooltip-location="top"
-          >{{ value }}</span
-        >
-        <EmptyPlaceholder v-else />
-      </template>
+      <template #[`item.transcript`]="{ value }"><TranscriptCell :value="value" /></template>
 
       <template v-for="key in ['cdna', 'aa_change']" :key="key" #[`item.${key}`]="{ value }">
         <HgvsCell :value="value" />
       </template>
 
-      <template #[`item.phenotype_score`]="{ item }">
-        <PhenotypeScoreCell :case-id="caseId" :row="item" />
-      </template>
+      <template #[`item.phenotype_score`]="{ item }"
+        ><PhenotypeScoreCell :case-id="caseId" :row="item"
+      /></template>
 
       <template #[`item.hpo_sim_score`]="{ value }">
-        <template v-if="value !== null && value !== undefined && typeof value === 'number'">{{
-          value.toFixed(2)
-        }}</template>
+        <span v-if="typeof value === 'number'">{{ value.toFixed(2) }}</span>
         <EmptyPlaceholder v-else />
       </template>
 
       <!-- MoI and matched HPO terms (handle null) -->
       <template v-for="key in ['moi', 'hpo_match']" :key="key" #[`item.${key}`]="{ value }">
-        <template v-if="value !== null && value !== undefined">{{ value }}</template>
+        <span v-if="value != null">{{ value }}</span>
         <EmptyPlaceholder v-else />
       </template>
 
       <!-- Merged Links column: one icon link per configured link-out -->
-      <template #[`item._links`]="{ item }">
-        <LinkOutsCell :links="linkOuts" :urls="item.render.links" @click="openExternalLink" />
-      </template>
+      <template #[`item._links`]="{ item }"
+        ><LinkOutsCell :links="linkOuts" :urls="item.render.links" @click="openExternalLink"
+      /></template>
 
       <!-- First-load skeleton only; refetches keep rows (stale-while-revalidate) -->
-      <template #loading>
-        <TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" />
-      </template>
+      <template #loading><TableSkeletonRows :rows="Math.min(itemsPerPage, 15)" /></template>
 
       <!-- Empty state: each active filter, removable in one click (#568) -->
       <template #no-data>
@@ -264,6 +226,12 @@
 
     <AcmgQuickMenu :state="acmgQuickMenu" />
     <TagQuickMenu :state="tagQuickMenu" />
+    <BulkTriageActionBar
+      :selected-count="bulkSelection.selectedCount.value"
+      :is-executing="bulkSelection.isExecuting.value"
+      @apply="bulkSelection.applyBulkTriage"
+      @clear="bulkSelection.clearSelection"
+    />
     <AnnotationDialogs
       ref="annotationDialogsRef"
       :case-id="caseId"
@@ -291,7 +259,6 @@ import type { AnnotationChangeEvent, Variant, VariantFilter } from '../../../sha
 import type { AnnotationScope } from '../../../shared/types/annotations'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
 import type { ActiveFilter } from '../../../shared/types/filters'
-import { COMPHET_PHASE_COLORS, COMPHET_PHASE_LABELS } from '../../../shared/utils/phasing'
 import { buildColumnFilterChips } from '../utils/filters/activeFilters'
 import { useColumnFilterMeta } from '../composables/useColumnFilterMeta'
 import { useAnnotations, annotationCache } from '../composables/useAnnotations'
@@ -314,22 +281,28 @@ import { onKeyStroke } from '@vueuse/core'
 import { SHORTCUTS } from '../config/keyboardShortcuts'
 import VariantColumnHeader from './variant-table/VariantColumnHeader.vue'
 import AnnotationDialogs from './AnnotationDialogs.vue'
+import BulkTriageActionBar from './variant-table/BulkTriageActionBar.vue'
 import TableLoadIndicator from './table-state/TableLoadIndicator.vue'
 import SummaryStaleNotice from './table-state/SummaryStaleNotice.vue'
 import QueryErrorAlert from './table-state/QueryErrorAlert.vue'
 import TableSkeletonRows from './table-state/TableSkeletonRows.vue'
-import { useTableLoadingState } from '../composables/useTableLoadingState'
-import {
-  formatFamilyCallMeta,
-  useFamilyMembers,
-  useVariantColumns,
-  zygosityColor
-} from './variant-table/columns'
 import PhenotypeScoreCell from './variant-table/PhenotypeScoreCell.vue'
+import FilterEmptyState from './filters/FilterEmptyState.vue'
+import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
+import TagQuickMenu from './table-cells/TagQuickMenu.vue'
+import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
+import { provideTagQuickMenu } from './table-cells/tag-quick-menu'
+import { useResultSetKeys } from './table-state/useResultSetKeys'
+import { usePermissions } from '../composables/usePermissions'
+import { useTableLoadingState } from '../composables/useTableLoadingState'
+import { useFamilyMembers, useVariantColumns } from './variant-table/columns'
+import GenotypeCell from './variant-table/GenotypeCell.vue'
+import FamilyMemberCell from './variant-table/FamilyMemberCell.vue'
+import TranscriptCell from './variant-table/TranscriptCell.vue'
 import * as phenotype from './variant-table/usePhenotypeColumn'
 import { useVariantData } from './variant-table/useVariantData'
-import FilterEmptyState from './filters/FilterEmptyState.vue'
 import { useApiService } from '../composables/useApiService'
+import { useBulkTriageSelection } from '../composables/useBulkTriageSelection'
 import { AppStateKey } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
 import {
@@ -347,12 +320,6 @@ import {
   EmptyPlaceholder,
   HgvsCell
 } from './table-cells'
-import AcmgQuickMenu from './table-cells/AcmgQuickMenu.vue'
-import { provideAcmgQuickMenu } from './table-cells/acmg-quick-menu'
-import TagQuickMenu from './table-cells/TagQuickMenu.vue'
-import { provideTagQuickMenu } from './table-cells/tag-quick-menu'
-import { useResultSetKeys } from './table-state/useResultSetKeys'
-import { usePermissions } from '../composables/usePermissions'
 
 const { canWrite } = usePermissions()
 
@@ -362,7 +329,6 @@ interface Props {
   annotationScope?: AnnotationScope
   columnMeta?: ColumnFilterMeta[]
   variantType?: string
-  /** When `false`, global keyboard shortcuts registered by this component are suppressed. */
   interactive?: boolean
   activeFilters?: ActiveFilter[]
 }
@@ -411,6 +377,14 @@ const { headers, visibleHeaders, filterableColumns } = useVariantColumns(
 )
 
 // Data loading and state
+const variantData = useVariantData({
+  caseId: toRef(props, 'caseId'),
+  filters: toRef(props, 'filters'),
+  active: tableWorkActive,
+  columnMeta: computed(() => props.columnMeta ?? []),
+  onCountsUpdate: (counts) => emit('update:counts', counts),
+  onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
+})
 const {
   variants,
   totalCount,
@@ -427,7 +401,7 @@ const {
   buildQueryFilters,
   resetSort,
   getRowProps,
-  columnMeta,
+  columnMeta: dataColumnMeta,
   hasActiveFilters: hasColumnFilters,
   activeFilterCount: columnFilterCount,
   setColumnFilter,
@@ -436,15 +410,15 @@ const {
   hasFilter,
   getFilter,
   getColumnFiltersParam
-} = useVariantData({
-  caseId: toRef(props, 'caseId'),
-  filters: toRef(props, 'filters'),
-  active: tableWorkActive,
-  columnMeta: computed(() => props.columnMeta ?? []),
-  onCountsUpdate: (counts) => emit('update:counts', counts),
-  onSortUpdate: (hasSort) => emit('update:hasSort', hasSort)
-})
+} = variantData
 const phenotypeRefreshing = phenotype.usePhenotypeRefresh(caseIdGetter, reloadCurrentPage)
+
+const bulkSelection = useBulkTriageSelection<Variant>({
+  items: () => variants.value,
+  getItemId: (v) => v.id,
+  caseId: toRef(props, 'caseId'),
+  onTriageApplied: () => loadVariants()
+})
 
 // Page size incl. "Auto (fit)": as many rows as fit the visible table body
 const tableContainerRef = ref<HTMLElement | null>(null)
@@ -464,16 +438,15 @@ const { firstLoad, showStale, ariaBusy, liveMessage, resetFirstLoad } = useTable
 watch(() => props.caseId, resetFirstLoad)
 
 // Column metadata map + filter modes (shared composable)
-const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(columnMeta)
+const { columnMetaMap, columnFilterModes } = useColumnFilterMeta(dataColumnMeta)
 
 // Precomputed link config: one resolver per link slot, updated when store changes
 const { resolvers: linkResolvers, linkOuts } = useLinkResolvers()
-const linkConfig = computed<Record<string, LinkConfig>>(() => {
-  const config: Record<string, LinkConfig> = {}
-  for (const [key, resolve] of Object.entries(linkResolvers.value))
-    config[key] = { id: key, resolve }
-  return config
-})
+const linkConfig = computed<Record<string, LinkConfig>>(() =>
+  Object.fromEntries(
+    Object.entries(linkResolvers.value).map(([key, resolve]) => [key, { id: key, resolve }])
+  )
+)
 
 // Precomputed row view models: annotation + link state per variant key
 const { rowViewModels } = useVariantRowViewModel(variants, annotationCache, linkConfig)
@@ -509,6 +482,13 @@ const dataTableRef = ref<InstanceType<typeof import('vuetify/components').VDataT
 )
 
 // Keyboard navigation
+const keyboardNav = useTableKeyboardNav({
+  items: variants,
+  getItemId: (item: Variant) => item.id,
+  onSelect: (item: Variant) => {
+    selectedVariantId.value = item.id
+  }
+})
 const {
   selectedIndex,
   selectedItem,
@@ -517,13 +497,7 @@ const {
   moveDown,
   clearSelection,
   isInputFocused
-} = useTableKeyboardNav({
-  items: variants,
-  getItemId: (item: Variant) => item.id,
-  onSelect: (item: Variant) => {
-    selectedVariantId.value = item.id
-  }
-})
+} = keyboardNav
 
 if (appState) {
   watch(
@@ -541,8 +515,29 @@ if (appState) {
   )
 }
 
+let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
+
+function triggerDebouncedPanelSync(): void {
+  if (arrowSyncTimer !== null) {
+    clearTimeout(arrowSyncTimer)
+    arrowSyncTimer = null
+  }
+  if (appState?.panelOpen.value === true && selectedItem.value) {
+    arrowSyncTimer = setTimeout(() => {
+      arrowSyncTimer = null
+      if (appState?.panelOpen.value === true && selectedItem.value) {
+        emit('row-click', selectedItem.value)
+      }
+    }, 100)
+  }
+}
+
 // Row click handler
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
+  if (arrowSyncTimer !== null) {
+    clearTimeout(arrowSyncTimer)
+    arrowSyncTimer = null
+  }
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
   const currentPanelId =
@@ -581,13 +576,14 @@ for (const [key, move] of [
       pendingScrollBehavior.value = getAdaptiveRowScrollBehavior(lastKeyboardMoveAtMs.value, now)
       lastKeyboardMoveAtMs.value = now
       move()
+      triggerDebouncedPanelSync()
     },
     { dedupe: true }
   )
 }
 
 onKeyStroke(
-  SHORTCUTS.openDetails.key,
+  [SHORTCUTS.openDetails.key, 'i', 'I'],
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null || isControlFocused()) return
@@ -666,10 +662,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
   cleanupAnnotationChanged?.()
 })
 
-// Expose for parent components
 defineExpose({
   resetSort,
   refresh: loadVariants,
@@ -687,19 +683,8 @@ defineExpose({
 
 <style src="./data-table-shared.css"></style>
 <style scoped>
-/* Monospace data display */
-.variant-data-mono {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-}
-
-/* Transcript column truncation */
-.transcript-truncated {
-  max-width: 7.5rem;
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
+.bulk-select-checkbox {
+  cursor: pointer;
+  accent-color: rgb(var(--v-theme-primary));
 }
 </style>

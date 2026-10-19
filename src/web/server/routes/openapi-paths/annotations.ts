@@ -24,6 +24,12 @@ export function buildAnnotationOpenApiPaths(): Record<string, OpenApiPathItem> {
       body: AnnotationInvokeBodySchemas.upsertPerCase,
       response: AnnotationUnknownResponseSchema
     }),
+    '/api/annotations/batchUpsertPerCase': dispatcherMethodOperation({
+      tag: 'annotations',
+      summary: 'Batch create or update case-specific variant annotations',
+      body: AnnotationInvokeBodySchemas.batchUpsertPerCase,
+      response: AnnotationUnknownResponseSchema
+    }),
     '/api/annotations/getForVariant': dispatcherMethodOperation({
       tag: 'annotations',
       summary: 'Return global and case-specific annotations for a variant',

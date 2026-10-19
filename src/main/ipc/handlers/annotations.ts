@@ -9,6 +9,7 @@ import {
   GenomeBuildArgSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema,
+  BatchPerCaseAnnotationUpdatesSchema,
   CaseVariantIdSchema,
   VariantKeysSchema
 } from '../../../shared/api/schemas/annotations'
@@ -19,6 +20,7 @@ import {
   upsertGlobalAnnotationViaSession,
   getPerCaseAnnotation,
   upsertPerCaseAnnotationWithEvent,
+  batchUpsertPerCaseAnnotationWithEvent,
   getAnnotationsForVariant,
   batchGetAnnotations
 } from './annotations-logic'
@@ -225,6 +227,46 @@ export function registerAnnotationHandlers({
         return await upsertPerCaseAnnotationWithEvent(
           validatedIds.data.caseId,
           validatedIds.data.variantId,
+          validatedUpdates.data,
+          () => getDbManager().getCurrentSession(),
+          broadcastAnnotationChanged
+        )
+      })
+    }
+  )
+
+  /**
+   * Batch upsert per-case annotations for multiple variants
+   */
+  ipcMain.handle(
+    'annotations:batchUpsertPerCase',
+    async (_event, caseId: unknown, variantIds: unknown, updates: unknown) => {
+      return wrapHandler(async () => {
+        const validatedCase = CaseIdSchema.safeParse(caseId)
+        const validatedVariantIds = z
+          .array(z.number().int().positive())
+          .min(1)
+          .safeParse(variantIds)
+        if (!validatedCase.success || !validatedVariantIds.success) {
+          mainLogger.error(
+            `Invalid annotations:batchUpsertPerCase ids: caseId=${caseId}`,
+            'annotations'
+          )
+          throw new Error('Invalid case/variant IDs')
+        }
+
+        const validatedUpdates = BatchPerCaseAnnotationUpdatesSchema.safeParse(updates)
+        if (!validatedUpdates.success) {
+          mainLogger.error(
+            `Invalid annotations:batchUpsertPerCase updates: ${validatedUpdates.error.message}`,
+            'annotations'
+          )
+          throw new Error('Invalid annotation updates')
+        }
+
+        return await batchUpsertPerCaseAnnotationWithEvent(
+          validatedCase.data,
+          validatedVariantIds.data,
           validatedUpdates.data,
           () => getDbManager().getCurrentSession(),
           broadcastAnnotationChanged

@@ -151,6 +151,7 @@ export const annotationsManifest = {
   deleteGlobal: sharedWrite(),
   getPerCase: sharedRead(),
   upsertPerCase: sharedWrite(),
+  batchUpsertPerCase: sharedWrite(),
   deletePerCase: sharedWrite(),
   getForVariant: sharedRead(),
   batchGet: sharedRead()

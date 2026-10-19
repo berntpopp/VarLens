@@ -13,6 +13,8 @@ export function createAnnotationsApi(): AnnotationsDomainContract {
       ipcRenderer.invoke('annotations:getPerCase', caseId, variantId),
     upsertPerCase: (caseId, variantId, updates) =>
       ipcRenderer.invoke('annotations:upsertPerCase', caseId, variantId, updates),
+    batchUpsertPerCase: (caseId, variantIds, updates) =>
+      ipcRenderer.invoke('annotations:batchUpsertPerCase', caseId, variantIds, updates),
     deletePerCase: (caseId, variantId) =>
       ipcRenderer.invoke('annotations:deletePerCase', caseId, variantId),
     getForVariant: (caseId, chr, pos, ref, alt) =>
