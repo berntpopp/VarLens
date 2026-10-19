@@ -447,7 +447,9 @@ async function loadBatch(
         else evictAnnotationCacheKeys([key])
       }
       // prettier-ignore
-      const siblingSwitch = sameCoords && typeof v.id === 'number' && !hasPerCaseByVariantId(scope.caseId, v.id) && cached !== undefined &&
+      const batchHasCachedVid = cachedVid !== undefined && variants.some((o) => o.id === cachedVid && variantKey(o) === key)
+      // prettier-ignore
+      const siblingSwitch = sameCoords && typeof v.id === 'number' && !batchHasCachedVid && cached !== undefined &&
         ((cached.perCase != null && cached.perCase.variant_id !== v.id) || (cachedVid !== undefined && cachedVid !== v.id))
       if (siblingSwitch) evictCoordSlotOnly(key)
     }

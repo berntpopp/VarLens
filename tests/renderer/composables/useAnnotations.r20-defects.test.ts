@@ -468,24 +468,29 @@ describe('Round 20 regression defects', () => {
     expect(annotationCache.value.get(key)?.perCase).toBeNull()
   })
 
-  it('Round 26 Fix 5: loadBatch detects siblingSwitch, evictCoordSlotOnly, and loads sibling 12 while preserving sibling 11 perCaseByVariantId', async () => {
+  it('Round 26 Fix 5: loadBatch detects siblingSwitch when both siblings were loaded and one is requested alone', async () => {
     beginAnnotationRequest(1, 'GRCh38')
     const entry11 = mockPerCase(11, { starred: 1 })
-    cacheSet(key, { global: null, perCase: entry11 })
-    setCachedVariantId(key, 11)
-    ensurePerCaseSlotOwner(key, 1, 11)
-    setPerCaseByVariantId(1, 11, entry11, key)
-
     const entry12 = mockPerCase(12, { starred: 0 })
-    vi.mocked(api.annotations.batchGet).mockResolvedValue({
-      [key]: { global: null, perCase: entry12 }
-    } as never)
+    vi.mocked(api.annotations.batchGet)
+      .mockResolvedValueOnce({ [key]: { global: null, perCase: entry11 } } as never)
+      .mockResolvedValueOnce({ [key]: { global: null, perCase: entry12 } } as never)
+      .mockResolvedValueOnce({ [key]: { global: null, perCase: entry11 } } as never)
 
     const ops = createScopedAnnotationOps(api, () => undefined)
-    await ops.loadBatch(scope, [{ id: 12, ...coords }])
+    await ops.loadBatch(scope, [
+      { id: 11, ...coords },
+      { id: 12, ...coords }
+    ])
 
     expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
     expect(getPerCaseByVariantId(1, 12)?.starred).toBe(0)
     expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(12)
+
+    await ops.loadBatch(scope, [{ id: 11, ...coords }])
+
+    expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(11)
+    expect(getPerCaseByVariantId(1, 11)?.starred).toBe(1)
+    expect(getPerCaseByVariantId(1, 12)?.starred).toBe(0)
   })
 })
