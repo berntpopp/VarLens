@@ -155,4 +155,35 @@ describe('cohort export worker', () => {
     expect(existsSync(existingPart)).toBe(true)
     expect(readFileSync(existingPart, 'utf8')).toBe('pre-existing partial file')
   })
+
+  it('calls onError with EEXIST and does not delete existing file when tempFilePath already exists', async () => {
+    const outputFilePath = join(dir, 'eexist-test.xlsx')
+    const existingTemp = join(dir, 'already-taken.part')
+    writeFileSync(existingTemp, 'pre-existing file content')
+
+    const client = new ExportWorkerClient(exportWorker)
+    const err = await new Promise<string>((resolvePromise) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        tempFilePath: existingTemp,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (e) => resolvePromise(e),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(err).toContain('EEXIST')
+    expect(existsSync(existingTemp)).toBe(true)
+    expect(readFileSync(existingTemp, 'utf8')).toBe('pre-existing file content')
+
+    client.cancel()
+    expect(existsSync(existingTemp)).toBe(true)
+
+    await client.destroy()
+    expect(existsSync(existingTemp)).toBe(true)
+    expect(readFileSync(existingTemp, 'utf8')).toBe('pre-existing file content')
+  })
 })

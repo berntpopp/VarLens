@@ -74,9 +74,7 @@ export function extractFromCsq(
 
   const afE = parseFiniteFloat(getField('gnomADe_AF') ?? getField('gnomad_af_exomes'))
   const afG = parseFiniteFloat(getField('gnomADg_AF') ?? getField('gnomad_af_genomes'))
-  const afAny = parseFiniteFloat(
-    getField('gnomAD_AF') ?? getField('gnomad_af') ?? getField('MAX_AF')
-  )
+  const afAny = parseFiniteFloat(getField('gnomAD_AF') ?? getField('gnomad_af'))
   const gnomadAf = afE ?? afG ?? afAny ?? null
   const cadd = parseFiniteFloat(getField('CADD_PHRED') ?? getField('cadd'))
   const clinvar = getField('ClinVar_CLNSIG') ?? getField('clinvar') ?? null

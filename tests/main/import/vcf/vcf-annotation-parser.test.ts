@@ -15,6 +15,10 @@ import {
   MAX_VCF_ANNOTATIONS,
   VcfResourceLimitError
 } from '../../../../src/main/import/vcf/vcf-resource-limits'
+import {
+  applyInfoFieldRegistry,
+  DEFAULT_INFO_FIELD_MAPPINGS
+} from '../../../../src/main/import/vcf/info-field-registry'
 
 function makeHeader(overrides: Partial<VcfHeader> = {}): VcfHeader {
   return {
@@ -684,6 +688,46 @@ describe('vcf-annotation-parser', () => {
       const result = parseAnnotation(info, csqHeader, 'T')
       expect(result.gnomadAf).toBe(0.0012)
       expect(result.cadd).toBeNull()
+    })
+
+    it('extractFromCsq preserves numeric zero ("0" and "0.0") and treats empty string as null', () => {
+      const resZero = extractFromCsq({
+        gnomADe_AF: '0',
+        gnomADg_AF: '0.0',
+        CADD_PHRED: '0'
+      })
+      expect(resZero.gnomadAf).toBe(0)
+      expect(resZero.cadd).toBe(0)
+
+      const resEmpty = extractFromCsq({
+        gnomADe_AF: '',
+        gnomADg_AF: '',
+        CADD_PHRED: ''
+      })
+      expect(resEmpty.gnomadAf).toBeNull()
+      expect(resEmpty.cadd).toBeNull()
+    })
+
+    it('does not use MAX_AF as fallback for gnomadAf so standalone INFO gnomAD_AF is not suppressed', () => {
+      const csqFields = [
+        'Allele',
+        'Consequence',
+        'IMPACT',
+        'SYMBOL',
+        'Feature',
+        'gnomADe_AF',
+        'MAX_AF'
+      ]
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([
+        ['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|.|0.2'],
+        ['gnomAD_AF', '0.0001']
+      ])
+      const annotation = parseAnnotation(info, csqHeader, 'T')
+      expect(annotation.gnomadAf).toBeNull()
+
+      const infoResult = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+      expect(infoResult.mappedValues.get('gnomad_af')).toBe(0.0001)
     })
   })
 })

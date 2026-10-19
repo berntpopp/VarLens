@@ -1,7 +1,7 @@
 import { Worker } from 'worker_threads'
 import { resolve } from 'path'
 import { randomUUID } from 'node:crypto'
-import { rmSync } from 'node:fs'
+import { chmodSync, closeSync, openSync, rmSync, statSync } from 'node:fs'
 import type {
   ExportMainMessage,
   ExportWorkerMessage,
@@ -92,12 +92,33 @@ export class ExportWorkerClient {
     }
 
     const isDevice = message.outputFilePath.startsWith('/dev/')
-    const tempFilePath = isDevice
-      ? undefined
-      : (message.tempFilePath ?? `${message.outputFilePath}.${randomUUID()}.part`)
+    let tempFilePath: string | undefined
+    let tempFilePrecreated = false
+
+    if (!isDevice) {
+      tempFilePath = message.tempFilePath ?? `${message.outputFilePath}.${randomUUID()}.part`
+      let targetMode = 0o600
+      try {
+        targetMode = statSync(message.outputFilePath).mode & 0o777
+      } catch {
+        // Destination does not exist yet; default to 0o600
+      }
+      try {
+        const fd = openSync(tempFilePath, 'wx', targetMode)
+        try {
+          chmodSync(tempFilePath, targetMode)
+        } finally {
+          closeSync(fd)
+        }
+        this.currentTempFilePath = tempFilePath
+        tempFilePrecreated = true
+      } catch (err) {
+        hooks.onError((err as Error).message)
+        return
+      }
+    }
 
     this.hooks = hooks
-    this.currentTempFilePath = tempFilePath ?? null
     this.worker = new Worker(this.workerPath)
 
     this.worker.on('message', (msg: ExportWorkerMessage) => {
@@ -134,7 +155,7 @@ export class ExportWorkerClient {
 
     this.worker.postMessage({
       ...message,
-      ...(tempFilePath !== undefined ? { tempFilePath } : {})
+      ...(tempFilePath !== undefined ? { tempFilePath, tempFilePrecreated } : {})
     })
   }
 

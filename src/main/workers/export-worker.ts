@@ -20,7 +20,8 @@ async function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): Pro
       (current, total) => {
         postMsg({ type: 'progress', current, total })
       },
-      msg.tempFilePath
+      msg.tempFilePath,
+      msg.tempFilePrecreated
     )
     postMsg({ type: 'complete', filePath: result.filePath, rowCount: result.rowCount })
   } catch (error) {
@@ -43,6 +44,7 @@ async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
       compiledParams: msg.compiledParams,
       outputFilePath: msg.outputFilePath,
       tempFilePath: msg.tempFilePath,
+      tempFilePrecreated: msg.tempFilePrecreated,
       format: msg.format,
       caseName: msg.caseName,
       filterSummary: msg.filterSummary,

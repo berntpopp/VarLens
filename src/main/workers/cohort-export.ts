@@ -5,7 +5,16 @@
  * blocking the event loop and bounding memory usage.
  */
 import { randomUUID } from 'node:crypto'
-import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  createWriteStream,
+  existsSync,
+  openSync,
+  statSync,
+  type WriteStream
+} from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -106,7 +115,8 @@ export async function runCohortExport(
   params: CohortSearchParams,
   outputFilePath: string,
   onProgress: (current: number, total: number) => void,
-  customTempFilePath?: string
+  customTempFilePath?: string,
+  tempFilePrecreated?: boolean
 ): Promise<CohortExportResult> {
   // The summary is what gets exported: never write a file from a stale one.
   // The main process waited for a pending refresh before starting this job.
@@ -196,13 +206,20 @@ export async function runCohortExport(
       ? outputFilePath
       : (customTempFilePath ?? `${outputFilePath}.${randomUUID()}.part`)
     let createdTempFile = false
-    const stream = isDevice
-      ? createWriteStream(tempFilePath)
-      : createWriteStream(tempFilePath, { flags: 'wx' })
-    if (!isDevice) {
-      stream.once('open', () => {
-        createdTempFile = true
-      })
+    let stream: WriteStream
+    if (isDevice) {
+      stream = createWriteStream(tempFilePath)
+    } else {
+      let targetMode = 0o600
+      try {
+        targetMode = statSync(outputFilePath).mode & 0o777
+      } catch {
+        // Destination does not exist yet; default to 0o600
+      }
+      const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
+      createdTempFile = true
+      chmodSync(tempFilePath, targetMode)
+      stream = createWriteStream(tempFilePath, { fd, autoClose: true })
     }
     try {
       await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)

@@ -7,7 +7,16 @@
  * in isolation.
  */
 import { randomUUID } from 'node:crypto'
-import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  createWriteStream,
+  existsSync,
+  openSync,
+  statSync,
+  type WriteStream
+} from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -75,6 +84,7 @@ export interface ExportPipelineParams {
   compiledParams: readonly unknown[]
   outputFilePath: string
   tempFilePath?: string
+  tempFilePrecreated?: boolean
   format: 'csv' | 'xlsx'
   caseName: string
   filterSummary: ExportFilterSummary
@@ -89,6 +99,42 @@ export interface ExportPipelineResult {
 }
 
 /**
+ * Shared generator that chunks variants and attaches annotations.
+ * stmt.iterate is entered on first pull and always closed in finally.
+ */
+function* iterateAnnotatedRows(
+  db: DatabaseType,
+  compiledSql: string,
+  compiledParams: readonly unknown[]
+): Generator<Record<string, unknown>> {
+  const stmt = db.prepare(compiledSql)
+  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
+  const batchLookup = createCaseAnnotationBatchLookup(db)
+
+  try {
+    let chunk: Record<string, unknown>[] = []
+    for (const variant of iterator) {
+      chunk.push(variant)
+      if (chunk.length >= 200) {
+        const annotations = batchLookup(chunk)
+        for (const v of chunk) {
+          yield { ...v, ...annotations.get(v.id) }
+        }
+        chunk = []
+      }
+    }
+    if (chunk.length > 0) {
+      const annotations = batchLookup(chunk)
+      for (const v of chunk) {
+        yield { ...v, ...annotations.get(v.id) }
+      }
+    }
+  } finally {
+    iterator.return?.()
+  }
+}
+
+/**
  * Run the CSV export pipeline: stream query results to a CSV file.
  */
 async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
@@ -98,62 +144,39 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
     compiledParams,
     outputFilePath,
     tempFilePath: customTempFilePath,
+    tempFilePrecreated,
     onProgress
   } = params
   const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
-  const stmt = db.prepare(compiledSql)
-  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
-
   onProgress?.(0, 0)
 
-  const batchLookup = createCaseAnnotationBatchLookup(db)
-  let rowCount = 0
-  function* csvLines(): Generator<string> {
+  let createdTempFile = false
+  let stream: WriteStream
+  if (isDevice) {
+    stream = createWriteStream(tempFilePath, { encoding: 'utf8' })
+  } else {
+    let targetMode = 0o600
     try {
-      yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
-      let chunk: Record<string, unknown>[] = []
-      for (const variant of iterator) {
-        chunk.push(variant)
-        if (chunk.length >= 200) {
-          const annotations = batchLookup(chunk)
-          for (const v of chunk) {
-            const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-            const cells = EXPORT_COLUMNS.map((col) =>
-              csvEscape(formatCellValue(col.key, row[col.key]))
-            )
-            yield cells.join(',') + '\r\n'
-            rowCount++
-            if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
-          }
-          chunk = []
-        }
-      }
-      if (chunk.length > 0) {
-        const annotations = batchLookup(chunk)
-        for (const v of chunk) {
-          const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-          const cells = EXPORT_COLUMNS.map((col) =>
-            csvEscape(formatCellValue(col.key, row[col.key]))
-          )
-          yield cells.join(',') + '\r\n'
-          rowCount++
-          if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
-        }
-      }
-    } finally {
-      iterator.return?.()
+      targetMode = statSync(outputFilePath).mode & 0o777
+    } catch {
+      // Destination does not exist yet; default to 0o600
     }
+    const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
+    createdTempFile = true
+    chmodSync(tempFilePath, targetMode)
+    stream = createWriteStream(tempFilePath, { fd, autoClose: true, encoding: 'utf8' })
   }
 
-  let createdTempFile = false
-  const stream = isDevice
-    ? createWriteStream(tempFilePath, { encoding: 'utf8' })
-    : createWriteStream(tempFilePath, { flags: 'wx', encoding: 'utf8' })
-  if (!isDevice) {
-    stream.once('open', () => {
-      createdTempFile = true
-    })
+  let rowCount = 0
+  function* csvLines(): Generator<string> {
+    yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
+    for (const row of iterateAnnotatedRows(db, compiledSql, compiledParams)) {
+      const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
+      yield cells.join(',') + '\r\n'
+      rowCount++
+      if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
+    }
   }
 
   try {
@@ -215,50 +238,41 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
     compiledParams,
     outputFilePath,
     tempFilePath: customTempFilePath,
+    tempFilePrecreated,
     caseName,
     filterSummary,
     onProgress
   } = params
   const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
-  const stmt = db.prepare(compiledSql)
-  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
-
   onProgress?.(0, 0)
 
+  let createdTempFile = false
+  let stream: WriteStream
+  if (isDevice) {
+    stream = createWriteStream(tempFilePath)
+  } else {
+    let targetMode = 0o600
+    try {
+      targetMode = statSync(outputFilePath).mode & 0o777
+    } catch {
+      // Destination does not exist yet; default to 0o600
+    }
+    const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
+    createdTempFile = true
+    chmodSync(tempFilePath, targetMode)
+    stream = createWriteStream(tempFilePath, { fd, autoClose: true })
+  }
+
   const headers = EXPORT_COLUMNS.map((col) => col.header)
-  const batchLookup = createCaseAnnotationBatchLookup(db)
   const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
   async function* generateRows(): AsyncGenerator<readonly XlsxCell[]> {
-    try {
-      let chunk: Record<string, unknown>[] = []
-      for (const variant of iterator) {
-        chunk.push(variant)
-        if (chunk.length >= 200) {
-          const annotations = batchLookup(chunk)
-          for (const v of chunk) {
-            const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-            yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
-            if ((result.rowCount + 1) % 1000 === 0) {
-              onProgress?.(result.rowCount + 1, 0)
-            }
-          }
-          chunk = []
-        }
+    for (const row of iterateAnnotatedRows(db, compiledSql, compiledParams)) {
+      yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
+      if ((result.rowCount + 1) % 1000 === 0) {
+        onProgress?.(result.rowCount + 1, 0)
       }
-      if (chunk.length > 0) {
-        const annotations = batchLookup(chunk)
-        for (const v of chunk) {
-          const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-          yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
-          if ((result.rowCount + 1) % 1000 === 0) {
-            onProgress?.(result.rowCount + 1, 0)
-          }
-        }
-      }
-    } finally {
-      iterator.return?.()
     }
   }
 
@@ -274,16 +288,6 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
       ...buildMetadataSheet(caseName, res.rowCount, filterSummary),
       ...(res.truncated ? [['Truncated', 'Excel row limit reached; use CSV for all rows']] : [])
     ]
-  }
-
-  let createdTempFile = false
-  const stream = isDevice
-    ? createWriteStream(tempFilePath)
-    : createWriteStream(tempFilePath, { flags: 'wx' })
-  if (!isDevice) {
-    stream.once('open', () => {
-      createdTempFile = true
-    })
   }
 
   try {

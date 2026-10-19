@@ -10,7 +10,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync, existsSync, rmSync, mkdtempSync, writeFileSync, chmodSync } from 'node:fs'
+import {
+  readFileSync,
+  existsSync,
+  rmSync,
+  mkdtempSync,
+  writeFileSync,
+  chmodSync,
+  statSync
+} from 'node:fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import * as XLSX from 'xlsx'
@@ -486,6 +494,76 @@ describe('runExportPipeline — CSV', () => {
       await expect(runExportPipeline(params)).rejects.toThrow()
       expect(existsSync(existingTemp)).toBe(true)
       expect(readFileSync(existingTemp, 'utf8')).toBe('do not overwrite me')
+    })
+
+    it('creates new export file with 0o600 permissions and preserves existing 0o600 permissions', async () => {
+      const output = join(tmpDir, 'perms-test.csv')
+      const params = makeCsvParams({ outputFilePath: output })
+      await runExportPipeline(params)
+      expect(existsSync(output)).toBe(true)
+      const stat1 = statSync(output)
+      expect(stat1.mode & 0o777).toBe(0o600)
+
+      // Overwrite existing file
+      await runExportPipeline(params)
+      const stat2 = statSync(output)
+      expect(stat2.mode & 0o777).toBe(0o600)
+    })
+
+    it('closes db cleanly without busy query error after runExportPipeline rejects with EEXIST (CSV and XLSX)', async () => {
+      const dbPath = join(tmpDir, 'test-busy.db')
+      const separateDb = new Database(dbPath)
+      try {
+        separateDb.exec(
+          'CREATE TABLE variants (id INTEGER PRIMARY KEY, case_id INTEGER, chr TEXT, pos INTEGER, ref TEXT, alt TEXT)'
+        )
+        separateDb
+          .prepare(
+            "INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (1, '1', 100, 'A', 'T')"
+          )
+          .run()
+
+        // CSV test
+        const csvOutput = join(tmpDir, 'test-busy.csv')
+        const csvTemp = join(tmpDir, 'busy-temp.csv.part')
+        writeFileSync(csvTemp, 'already exists')
+
+        await expect(
+          runExportPipeline({
+            db: separateDb,
+            compiledSql: 'SELECT * FROM variants WHERE case_id = ?',
+            compiledParams: [1],
+            outputFilePath: csvOutput,
+            tempFilePath: csvTemp,
+            format: 'csv',
+            caseName: 'case1',
+            filterSummary: {}
+          })
+        ).rejects.toThrow()
+
+        // XLSX test
+        const xlsxOutput = join(tmpDir, 'test-busy.xlsx')
+        const xlsxTemp = join(tmpDir, 'busy-temp.xlsx.part')
+        writeFileSync(xlsxTemp, 'already exists')
+
+        await expect(
+          runExportPipeline({
+            db: separateDb,
+            compiledSql: 'SELECT * FROM variants WHERE case_id = ?',
+            compiledParams: [1],
+            outputFilePath: xlsxOutput,
+            tempFilePath: xlsxTemp,
+            format: 'xlsx',
+            caseName: 'case1',
+            filterSummary: {}
+          })
+        ).rejects.toThrow()
+
+        // db.close() must succeed immediately without throwing
+        expect(() => separateDb.close()).not.toThrow()
+      } finally {
+        if (separateDb.open) separateDb.close()
+      }
     })
   })
 })
