@@ -184,24 +184,24 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }>
   ): Promise<boolean> {
     const toReloadMap = new Map<
-      number,
+      string,
       { id: number; chr: string; pos: number; ref: string; alt: string }
     >()
     if (extraReloadItems) {
-      for (const item of extraReloadItems) toReloadMap.set(item.id, item)
+      for (const item of extraReloadItems) toReloadMap.set(variantKey(item), item)
     }
     for (const item of currentItems.value) {
       const id = getItemId(item)
       if (targetSet.has(id)) {
         const coords = extractCoords(item)
-        if (coords !== null) toReloadMap.set(id, { id, ...coords })
+        if (coords !== null) toReloadMap.set(variantKey(coords), { id, ...coords })
       }
     }
 
     const currentPanel = getPanelVariantCoords(targetCid)
     if (currentPanel !== null) {
       if (targetSet.has(currentPanel.id) || !annotationCache.value.has(variantKey(currentPanel))) {
-        toReloadMap.set(currentPanel.id, currentPanel)
+        toReloadMap.set(variantKey(currentPanel), currentPanel)
       }
     }
 
@@ -511,15 +511,15 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         )
         if (!isCacheStillOnCase(targetCid, myDbPath)) return
         const missingMap = new Map<
-          number,
+          string,
           { id: number; chr: string; pos: number; ref: string; alt: string }
         >()
         for (const v of preCachedToReload) {
-          if (!annotationCache.value.has(variantKey(v))) missingMap.set(v.id, v)
+          if (!annotationCache.value.has(variantKey(v))) missingMap.set(variantKey(v), v)
         }
         const currentPanel = getPanelVariantCoords(targetCid)
         if (currentPanel !== null && !annotationCache.value.has(variantKey(currentPanel))) {
-          missingMap.set(currentPanel.id, currentPanel)
+          missingMap.set(variantKey(currentPanel), currentPanel)
         }
         if (missingMap.size > 0) {
           await reloadBatchAwaited(targetCid, Array.from(missingMap.values()))

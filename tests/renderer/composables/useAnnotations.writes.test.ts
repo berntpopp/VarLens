@@ -707,7 +707,11 @@ describe('overlapping mutations and rollback', () => {
 
     deferredBulk.resolve({ updatedCount: 1 })
     await vi.waitFor(() => {
-      expect(window.api.annotations.batchGet).toHaveBeenCalled()
+      expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+        CASE_ID,
+        [{ chr: V[0], pos: V[1], ref: V[2], alt: V[3], variantId: 11 }],
+        null
+      )
     })
 
     deferredBatchGet.resolve({ [KEY]: mockPerCase(11, { acmg_classification: 'Benign' }) })
@@ -715,6 +719,20 @@ describe('overlapping mutations and rollback', () => {
 
     expect(annotationCache.value.get(KEY)?.perCase?.variant_id).toBe(11)
     expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
+  })
+
+  it('deduplicates sibling variants with same coords in loadBatch to avoid duplicate batchGet keys', async () => {
+    await trackCase(CASE_ID)
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({})
+    await a.loadAnnotationsBatch(CASE_ID, [
+      { id: 12, chr: V[0], pos: V[1], ref: V[2], alt: V[3] },
+      { id: 13, chr: V[0], pos: V[1], ref: V[2], alt: V[3] }
+    ])
+    expect(window.api.annotations.batchGet).toHaveBeenCalledWith(
+      CASE_ID,
+      [{ chr: V[0], pos: V[1], ref: V[2], alt: V[3], variantId: 13 }],
+      null
+    )
   })
 
   it('notifies peer committedWriteListeners on normal bulk triage completion', async () => {

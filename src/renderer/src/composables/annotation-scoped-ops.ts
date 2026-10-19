@@ -473,7 +473,7 @@ async function loadBatch(
   const generation = getAnnotationGeneration(scope.kind)
 
   // Filter out cached AND in-flight keys to prevent duplicate IPC calls
-  const uncached: BatchAnnotationKey[] = []
+  const uncachedByKey = new Map<string, BatchAnnotationKey>()
   for (const v of variants) {
     const key = variantKey(v)
     if (scope.kind === 'case') {
@@ -491,10 +491,11 @@ async function loadBatch(
         (typeof v.id === 'number' && cachedVid !== undefined && cachedVid !== v.id)
       if (sameCoords && stale) evictAnnotationCacheKeys([key])
     }
-    if (needsLoad(key, scope.kind)) uncached.push(batchKey(scope, v))
+    if (needsLoad(key, scope.kind)) uncachedByKey.set(key, batchKey(scope, v))
     else if (isKeyLoading(key)) markAwaited(scope.kind, key)
   }
-  if (uncached.length === 0) return
+  if (uncachedByKey.size === 0) return
+  const uncached = Array.from(uncachedByKey.values())
 
   const requestedVariantIds = new Map<string, number>()
   const keyVersionsAtStart = new Map<string, number>()
