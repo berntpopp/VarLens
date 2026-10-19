@@ -641,7 +641,7 @@ describe('useBulkTriageSelection', () => {
     expect(onTriageApplied).not.toHaveBeenCalled()
   })
 
-  it('evicts stale cache on round-trip A -> B -> A so live remounted instance reloads fresh annotations', async () => {
+  it('evicts stale cache on round-trip A -> B -> A and reloads fresh annotations even if no peer instance is mounted', async () => {
     let resolveUpsert!: (val: unknown) => void
     const deferredUpsert = new Promise((resolve) => {
       resolveUpsert = resolve
@@ -661,11 +661,10 @@ describe('useBulkTriageSelection', () => {
     // User navigates A -> B: unmount old shortlist
     scope1.stop()
 
-    // User navigates B -> A: new shortlist mounts on Case 42 and caches old Benign data
-    const scope2 = effectScope()
-    scope2.run(() => {
-      createBulk()
-    })
+    // User navigates B -> A: returned view caches old Benign data before write finishes (no peer instance mounted yet)
+    const { beginAnnotationRequest } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+    beginAnnotationRequest(42, 'GRCh38')
     annotationCache.value.set(
       'chr1:1000:A:T',
       mockCacheEntry(101, { acmg_classification: 'Benign' })
@@ -685,9 +684,6 @@ describe('useBulkTriageSelection', () => {
     expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
       'Pathogenic'
     )
-    expect(onTriageApplied).toHaveBeenCalled()
-
-    scope2.stop()
   })
 
   it('enforces MAX_BULK_TRIAGE_SELECTION cap of 1,000 with warning snack', () => {

@@ -131,12 +131,24 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   async function reloadAffectedAndPanel(
     targetCid: number,
     targetDbPath: string | null,
-    targetSet: ReadonlySet<number>
+    targetSet: ReadonlySet<number>,
+    extraReloadItems?: ReadonlyArray<{
+      id: number
+      chr: string
+      pos: number
+      ref: string
+      alt: string
+    }>
   ): Promise<boolean> {
     const toReloadMap = new Map<
       number,
       { id: number; chr: string; pos: number; ref: string; alt: string }
     >()
+    if (extraReloadItems) {
+      for (const item of extraReloadItems) {
+        toReloadMap.set(item.id, item)
+      }
+    }
     for (const item of currentItems.value) {
       const id = getItemId(item)
       if (targetSet.has(id)) {
@@ -380,11 +392,13 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     isExecuting.value = true
     try {
       const affectedKeys = new Set<string>()
+      const targetCoords = new Map<number, VariantCoords>()
 
       // 1. From coordsById for all selected IDs (preserves coords seen on other pages)
       for (const id of targetSet) {
         const coords = coordsById.get(id)
         if (coords !== undefined) {
+          targetCoords.set(id, coords)
           affectedKeys.add(variantKey(coords))
         }
       }
@@ -397,6 +411,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           if (targetSet.has(itemId)) {
             const coords = extractCoords(item)
             if (coords !== null) {
+              targetCoords.set(itemId, coords)
               coordsById.set(itemId, coords)
               affectedKeys.add(variantKey(coords))
             }
@@ -426,14 +441,14 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         'alt' in initialPanel
 
       if (isInitialPanelSelected) {
-        affectedKeys.add(
-          variantKey({
-            chr: String(initialPanel.chr),
-            pos: Number(initialPanel.pos),
-            ref: String(initialPanel.ref),
-            alt: String(initialPanel.alt)
-          })
-        )
+        const pCoords: VariantCoords = {
+          chr: String(initialPanel.chr),
+          pos: Number(initialPanel.pos),
+          ref: String(initialPanel.ref),
+          alt: String(initialPanel.alt)
+        }
+        targetCoords.set(initialPanel.id, pCoords)
+        affectedKeys.add(variantKey(pCoords))
       }
 
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
@@ -444,13 +459,40 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         return res.updatedCount
       }
 
+      const preCachedToReload: Array<{
+        id: number
+        chr: string
+        pos: number
+        ref: string
+        alt: string
+      }> = []
+      if (getCachedCaseId() === cid) {
+        for (const [id, coords] of targetCoords.entries()) {
+          if (annotationCache.value.has(variantKey(coords))) {
+            preCachedToReload.push({ id, ...coords })
+          }
+        }
+      }
+
       // Evict stale cached keys while cache is still on this case (even if disposed!)
       evictAnnotationCacheKeys(affectedKeys)
 
       if (isDisposed) {
+        if (updates.tag_id !== undefined && getActivePinia()) {
+          await invalidateTags(true)
+          if (!isCacheStillOnCase(cid, myDbPath)) {
+            return res.updatedCount
+          }
+        }
         await Promise.allSettled(
           Array.from(committedWriteListeners).map((fn) => fn(cid, myDbPath, targetSet, updates))
         )
+        if (isCacheStillOnCase(cid, myDbPath) && getCachedCaseId() === cid) {
+          const missing = preCachedToReload.filter((v) => !annotationCache.value.has(variantKey(v)))
+          if (missing.length > 0) {
+            await loadAnnotationsBatch(cid, missing)
+          }
+        }
         return res.updatedCount
       }
 
@@ -461,7 +503,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         }
       }
 
-      const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet)
+      const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet, preCachedToReload)
       if (!ok) {
         return res.updatedCount
       }
