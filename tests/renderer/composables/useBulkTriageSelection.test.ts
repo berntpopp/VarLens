@@ -4,7 +4,11 @@ import { ref, defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useBulkTriageSelection } from '../../../src/renderer/src/composables/useBulkTriageSelection'
-import { annotationCache } from '../../../src/renderer/src/composables/useAnnotations'
+import {
+  annotationCache,
+  useAnnotations
+} from '../../../src/renderer/src/composables/useAnnotations'
+import { evictAnnotationCacheKeys } from '../../../src/renderer/src/composables/annotation-cache'
 import { AppStateKey } from '../../../src/renderer/src/composables/useAppState'
 
 describe('useBulkTriageSelection', () => {
@@ -27,10 +31,7 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api = {
       annotations: {
-        batchUpsertPerCase: vi.fn().mockResolvedValue({
-          success: true,
-          data: { updatedCount: 2 }
-        }),
+        batchUpsertPerCase: vi.fn().mockResolvedValue({ updatedCount: 2 }),
         batchGet: vi.fn().mockResolvedValue({
           success: true,
           data: {}
@@ -427,5 +428,173 @@ describe('useBulkTriageSelection', () => {
       expect.arrayContaining([expect.objectContaining({ chr: '1', pos: 999 })]),
       expect.anything()
     )
+  })
+
+  it('discards post-await completion work if caseId changes mid-flight during applyBulkTriage', async () => {
+    let resolveUpsert!: (val: unknown) => void
+    const deferredUpsert = new Promise((resolve) => {
+      resolveUpsert = resolve
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+
+    const bulk = useBulkTriageSelection({
+      items: () => items.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    // 1. Select items 101 and 102 in Case 42
+    bulk.toggleSelect(101)
+    bulk.toggleSelect(102)
+    expect(bulk.selectedIds.value).toEqual([101, 102])
+
+    // Pre-populate cache for Case 42
+    annotationCache.value.set('chr1:1000:A:T', {
+      global: null,
+      perCase: {
+        id: 101,
+        case_id: 42,
+        variant_id: 101,
+        is_starred: false,
+        acmg_classification: null,
+        acmg_evidence: null,
+        acmg_override_reason: null,
+        notes: null,
+        created_at: 1000,
+        updated_at: 1000
+      }
+    })
+
+    // 2. Start bulk triage while on Case 42
+    const triagePromise = bulk.applyBulkTriage({ starred: true })
+    expect(bulk.isExecuting.value).toBe(true)
+
+    // 3. User switches to Case 99 while IPC is in flight
+    caseId.value = 99
+    // Wait for the caseId watch to clear selections for the old case
+    await vi.waitFor(() => {
+      expect(bulk.selectedIds.value.length).toBe(0)
+    })
+
+    // User selects a row in Case 99
+    bulk.toggleSelect(104)
+    expect(bulk.selectedIds.value).toEqual([104])
+
+    // 4. Resolve the in-flight upsert for Case 42
+    resolveUpsert({ updatedCount: 2 })
+    const count = await triagePromise
+
+    expect(count).toBe(2)
+    // Post-await completion was discarded:
+    // - onTriageApplied was NOT called for Case 42
+    expect(onTriageApplied).not.toHaveBeenCalled()
+    // - Selection of the active Case 99 was NOT cleared
+    expect(bulk.selectedIds.value).toEqual([104])
+    expect(bulk.isExecuting.value).toBe(false)
+  })
+
+  it('prevents older in-flight batchGet from overwriting refreshed data after cache eviction', async () => {
+    let resolveFirstBatch!: (val: unknown) => void
+    const firstBatchPromise = new Promise((resolve) => {
+      resolveFirstBatch = resolve
+    })
+
+    const batchGetSpy = vi
+      .fn()
+      // First call (older in-flight, e.g. Pathogenic) is deferred
+      .mockReturnValueOnce(firstBatchPromise)
+      // Second call (refreshed data, e.g. Benign) resolves immediately
+      .mockResolvedValueOnce({
+        '1:100:A:T': {
+          global: null,
+          perCase: {
+            id: 1,
+            case_id: 42,
+            variant_id: 1,
+            acmg_classification: 'Benign'
+          }
+        }
+      })
+
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    const { loadAnnotationsBatch } = useAnnotations()
+
+    // 1. Start initial fetch (Pathogenic) in the background
+    const initialLoad = loadAnnotationsBatch(42, [
+      { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' }
+    ])
+
+    // 2. Cache is evicted (e.g. user performed a triage update or eviction)
+    evictAnnotationCacheKeys(['1:100:A:T'])
+
+    // 3. Newer fetch runs and resolves with Benign
+    await loadAnnotationsBatch(42, [{ id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' }])
+
+    expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
+
+    // 4. Now the older in-flight fetch resolves with Pathogenic
+    resolveFirstBatch({
+      '1:100:A:T': {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: 42,
+          variant_id: 1,
+          acmg_classification: 'Pathogenic'
+        }
+      }
+    })
+    await initialLoad
+
+    // 5. Older in-flight response was ignored, Benign is retained!
+    expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
+  })
+
+  it('bounds coordsById strictly to selected rows across pages and clears on deselect', async () => {
+    const page1 = ref([
+      { id: 101, chr: '1', pos: 100, ref: 'A', alt: 'T' },
+      { id: 102, chr: '1', pos: 200, ref: 'C', alt: 'G' }
+    ])
+
+    const bulk = useBulkTriageSelection({
+      items: () => page1.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    // Initially nothing selected
+    expect(bulk.selectedIds.value).toEqual([])
+
+    // Select row 101
+    bulk.toggleSelect(101)
+    expect(bulk.isSelected(101)).toBe(true)
+
+    // Deselect row 101 -> removed from selection and coords
+    bulk.toggleSelect(101)
+    expect(bulk.isSelected(101)).toBe(false)
+
+    // Select row 102
+    bulk.toggleSelect(102)
+
+    // User navigates to page 2 without selecting page 2 rows
+    page1.value = [
+      { id: 103, chr: '2', pos: 300, ref: 'G', alt: 'A' },
+      { id: 104, chr: '3', pos: 400, ref: 'T', alt: 'C' }
+    ]
+
+    // Apply bulk triage for selected row 102
+    await bulk.applyBulkTriage({ starred: true })
+
+    // Only row 102 was in targetSet and batchUpsertPerCase
+    expect(window.api.annotations.batchUpsertPerCase).toHaveBeenCalledWith(42, [102], {
+      starred: true
+    })
+    // After triage applied, selection is cleared
+    expect(bulk.selectedCount.value).toBe(0)
   })
 })

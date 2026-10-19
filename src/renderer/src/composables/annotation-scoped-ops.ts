@@ -35,6 +35,7 @@ import {
   dropCacheOfClosedDatabase,
   getAnnotationCacheEpoch,
   getAnnotationGeneration,
+  getKeyVersion,
   hasDbSwitchedSince,
   isCacheOfBuild,
   isKeyLoading,
@@ -344,10 +345,11 @@ async function load(
   const key = variantKey(coords)
   if (!needsLoad(key, scope.kind)) return
 
+  const version = getKeyVersion(key)
   setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
-    if (isResponseStale(scope, dbPath)) return
+    if (isResponseStale(scope, dbPath) || getKeyVersion(key) !== version) return
     storeLoaded(key, scope, entry)
   } catch (error) {
     logService.error(
@@ -355,7 +357,7 @@ async function load(
       'annotations'
     )
   } finally {
-    if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
+    if (getKeyVersion(key) === version && (scope.kind !== 'case' || isTrackedCase(scope.caseId))) {
       setLoading(key, false)
     }
   }
@@ -398,6 +400,12 @@ async function loadBatch(
   }
   if (uncached.length === 0) return
 
+  const keyVersionsAtStart = new Map<string, number>()
+  for (const vk of uncached) {
+    const k = variantKey(vk)
+    keyVersionsAtStart.set(k, getKeyVersion(k))
+  }
+
   // Mark all keys as in-flight before the IPC call
   for (const vk of uncached) setLoading(variantKey(vk), true, scope.kind)
 
@@ -410,6 +418,8 @@ async function loadBatch(
     // for the rows the current page is still waiting for.
     const fromPriorPage = generation !== getAnnotationGeneration(scope.kind)
     for (const [key, value] of Object.entries(results)) {
+      const startVer = keyVersionsAtStart.get(key)
+      if (startVer !== undefined && getKeyVersion(key) !== startVer) continue
       const awaited = takeAwaited(scope.kind, key)
       if (fromPriorPage && !awaited) continue
       storeLoaded(key, scope, value as AnnotationCache)
@@ -421,7 +431,12 @@ async function loadBatch(
     )
   } finally {
     if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
-      for (const vk of uncached) setLoading(variantKey(vk), false)
+      for (const vk of uncached) {
+        const k = variantKey(vk)
+        if (getKeyVersion(k) === keyVersionsAtStart.get(k)) {
+          setLoading(k, false)
+        }
+      }
     }
   }
 }

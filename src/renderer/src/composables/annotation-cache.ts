@@ -192,9 +192,18 @@ export function getAnnotationCacheEpoch(): number {
   return cacheEpoch
 }
 
+// Version counter per variant key — incremented on eviction so in-flight
+// reads that were started before eviction cannot overwrite newer or evicted data.
+const keyVersions = new Map<string, number>()
+
+export function getKeyVersion(key: string): number {
+  return keyVersions.get(key) ?? 0
+}
+
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++
+  keyVersions.clear()
   annotationCache.value.clear()
   loadingStates.value.clear()
   unloadedSlots.clear()
@@ -286,6 +295,7 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   let changed = false
   for (const key of keys) {
     if (annotationCache.value.delete(key)) changed = true
+    keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
     loadingStates.value.delete(key)
     unloadedSlots.delete(key)
     globalOnlyLoading.delete(key)

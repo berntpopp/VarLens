@@ -15,7 +15,10 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
 import {
   annotationCache,
+  beginAnnotationRequest,
   evictAnnotationCacheKeys,
+  hasDbSwitchedSince,
+  isTrackedCase,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -41,33 +44,24 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   const isExecuting = ref(false)
   const coordsById = new Map<number, VariantCoords>()
 
-  function rememberCoords(itemList: readonly T[]): void {
-    for (const item of itemList) {
-      if (
-        item !== null &&
-        typeof item === 'object' &&
-        'chr' in item &&
-        'pos' in item &&
-        'ref' in item &&
-        'alt' in item
-      ) {
-        coordsById.set(getItemId(item), {
-          chr: String((item as unknown as VariantCoords).chr),
-          pos: Number((item as unknown as VariantCoords).pos),
-          ref: String((item as unknown as VariantCoords).ref),
-          alt: String((item as unknown as VariantCoords).alt)
-        })
+  function extractCoords(item: T): VariantCoords | null {
+    if (
+      item !== null &&
+      typeof item === 'object' &&
+      'chr' in item &&
+      'pos' in item &&
+      'ref' in item &&
+      'alt' in item
+    ) {
+      return {
+        chr: String((item as unknown as VariantCoords).chr),
+        pos: Number((item as unknown as VariantCoords).pos),
+        ref: String((item as unknown as VariantCoords).ref),
+        alt: String((item as unknown as VariantCoords).alt)
       }
     }
+    return null
   }
-
-  watch(
-    () => toValue(items),
-    (list) => {
-      rememberCoords(list)
-    },
-    { immediate: true }
-  )
 
   // Clear selection whenever caseId changes
   watch(
@@ -97,13 +91,21 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
   function toggleSelectAll(checked: boolean): void {
     const list = currentItems.value
-    rememberCoords(list)
     if (checked) {
       const allIds = list.map(getItemId)
       selectedIds.value = Array.from(new Set([...selectedIds.value, ...allIds]))
+      for (const item of list) {
+        const coords = extractCoords(item)
+        if (coords) {
+          coordsById.set(getItemId(item), coords)
+        }
+      }
     } else {
       const currentIdsSet = new Set(list.map(getItemId))
       selectedIds.value = selectedIds.value.filter((id) => !currentIdsSet.has(id))
+      for (const id of currentIdsSet) {
+        coordsById.delete(id)
+      }
     }
   }
 
@@ -112,7 +114,6 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     event?: { shiftKey?: boolean; target?: EventTarget | null }
   ): void {
     const list = currentItems.value
-    rememberCoords(list)
     const idList = list.map(getItemId)
     const currentIndex = idList.indexOf(id)
 
@@ -121,10 +122,15 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       if (prevIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(prevIndex, currentIndex)
         const end = Math.max(prevIndex, currentIndex)
-        const rangeIds = idList.slice(start, end + 1)
+        const rangeSlice = list.slice(start, end + 1)
         const next = new Set(selectedIds.value)
-        for (const rId of rangeIds) {
+        for (const item of rangeSlice) {
+          const rId = getItemId(item)
           next.add(rId)
+          const coords = extractCoords(item)
+          if (coords) {
+            coordsById.set(rId, coords)
+          }
         }
         selectedIds.value = Array.from(next)
       } else {
@@ -142,12 +148,19 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   }
 
   function toggleSelect(id: number): void {
-    rememberCoords(currentItems.value)
     const next = new Set(selectedIds.value)
     if (next.has(id)) {
       next.delete(id)
+      coordsById.delete(id)
     } else {
       next.add(id)
+      const item = currentItems.value.find((it) => getItemId(it) === id)
+      if (item !== undefined) {
+        const coords = extractCoords(item)
+        if (coords !== null) {
+          coordsById.set(id, coords)
+        }
+      }
     }
     selectedIds.value = Array.from(next)
     lastClickedId.value = id
@@ -156,6 +169,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   function clearSelection(): void {
     selectedIds.value = []
     lastClickedId.value = null
+    coordsById.clear()
   }
 
   async function applyBulkTriage(updates: BatchPerCaseAnnotationUpdates): Promise<number> {
@@ -163,13 +177,18 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     if (cid === undefined || cid === null || selectedIds.value.length === 0 || !api) {
       return 0
     }
+    const targetIds = [...selectedIds.value]
+    const targetSet = new Set(targetIds)
+    const requestDbPath = beginAnnotationRequest(cid)
+    const isStale = (): boolean =>
+      toValue(caseId) !== cid || hasDbSwitchedSince(requestDbPath) || !isTrackedCase(cid)
+
     isExecuting.value = true
     try {
-      const selectedSet = selectedIdSet.value
       const affectedKeys = new Set<string>()
 
       // 1. From coordsById for all selected IDs (preserves coords seen on other pages)
-      for (const id of selectedSet) {
+      for (const id of targetSet) {
         const coords = coordsById.get(id)
         if (coords) {
           affectedKeys.add(variantKey(coords))
@@ -178,85 +197,103 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
       // 2. From current items
       const itemList = toValue(items)
-      rememberCoords(itemList)
       for (const item of itemList) {
-        if (
-          item !== null &&
-          typeof item === 'object' &&
-          selectedSet.has(getItemId(item)) &&
-          'chr' in item &&
-          'pos' in item &&
-          'ref' in item &&
-          'alt' in item
-        ) {
-          affectedKeys.add(variantKey(item as unknown as VariantCoords))
+        if (item !== null && typeof item === 'object') {
+          const itemId = getItemId(item)
+          if (targetSet.has(itemId)) {
+            const coords = extractCoords(item)
+            if (coords) {
+              coordsById.set(itemId, coords)
+              affectedKeys.add(variantKey(coords))
+            }
+          }
         }
       }
 
       // 3. From annotationCache entries matching selected variant IDs
       for (const [key, entry] of annotationCache.value.entries()) {
         const vId = entry.perCase?.variant_id
-        if (vId !== undefined && selectedSet.has(vId)) {
+        if (vId !== undefined && targetSet.has(vId)) {
           affectedKeys.add(key)
         }
       }
 
       // 4. From panelVariant (if selected)
-      const panelVariant = appState?.selectedPanelVariant?.value
-      const isPanelVariantSelected =
-        panelVariant !== null &&
-        typeof panelVariant === 'object' &&
-        'id' in panelVariant &&
-        typeof panelVariant.id === 'number' &&
-        selectedSet.has(panelVariant.id) &&
-        'chr' in panelVariant &&
-        'pos' in panelVariant &&
-        'ref' in panelVariant &&
-        'alt' in panelVariant
+      const initialPanel = appState?.selectedPanelVariant?.value
+      const isInitialPanelSelected =
+        initialPanel !== null &&
+        typeof initialPanel === 'object' &&
+        'id' in initialPanel &&
+        typeof initialPanel.id === 'number' &&
+        targetSet.has(initialPanel.id) &&
+        'chr' in initialPanel &&
+        'pos' in initialPanel &&
+        'ref' in initialPanel &&
+        'alt' in initialPanel
 
-      if (isPanelVariantSelected) {
-        affectedKeys.add(variantKey(panelVariant as unknown as VariantCoords))
+      if (isInitialPanelSelected) {
+        affectedKeys.add(
+          variantKey({
+            chr: String(initialPanel.chr),
+            pos: Number(initialPanel.pos),
+            ref: String(initialPanel.ref),
+            alt: String(initialPanel.alt)
+          })
+        )
       }
 
-      const res = unwrapIpcResult(
-        await api.annotations.batchUpsertPerCase(cid, selectedIds.value, updates)
-      )
+      const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
+      if (isStale()) return res.updatedCount
 
       evictAnnotationCacheKeys(affectedKeys)
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
       }
+      if (isStale()) return res.updatedCount
+
       clearSelection()
       await onTriageApplied?.()
+      if (isStale()) return res.updatedCount
 
       // Ensure open panel variant from another page is refreshed in annotationCache
+      const currentPanel = appState?.selectedPanelVariant?.value
       if (
-        panelVariant !== null &&
-        typeof panelVariant === 'object' &&
-        'id' in panelVariant &&
-        typeof panelVariant.id === 'number' &&
-        'chr' in panelVariant &&
-        'pos' in panelVariant &&
-        'ref' in panelVariant &&
-        'alt' in panelVariant
+        currentPanel !== null &&
+        typeof currentPanel === 'object' &&
+        'id' in currentPanel &&
+        typeof currentPanel.id === 'number' &&
+        'chr' in currentPanel &&
+        'pos' in currentPanel &&
+        'ref' in currentPanel &&
+        'alt' in currentPanel
       ) {
-        const pKey = variantKey(panelVariant as unknown as VariantCoords)
-        if (isPanelVariantSelected || !annotationCache.value.has(pKey)) {
-          await loadAnnotationsBatch(cid, [
-            {
-              id: panelVariant.id,
-              chr: String(panelVariant.chr),
-              pos: Number(panelVariant.pos),
-              ref: String(panelVariant.ref),
-              alt: String(panelVariant.alt)
-            }
-          ])
+        const panelCaseId =
+          'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
+        if (panelCaseId === undefined || panelCaseId === cid) {
+          const pKey = variantKey({
+            chr: String(currentPanel.chr),
+            pos: Number(currentPanel.pos),
+            ref: String(currentPanel.ref),
+            alt: String(currentPanel.alt)
+          })
+          if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
+            await loadAnnotationsBatch(cid, [
+              {
+                id: currentPanel.id,
+                chr: String(currentPanel.chr),
+                pos: Number(currentPanel.pos),
+                ref: String(currentPanel.ref),
+                alt: String(currentPanel.alt)
+              }
+            ])
+          }
         }
       }
 
       return res.updatedCount
     } catch (error) {
+      if (isStale()) return 0
       const msg = isIpcError(error)
         ? (error.userMessage ?? error.message)
         : error instanceof Error

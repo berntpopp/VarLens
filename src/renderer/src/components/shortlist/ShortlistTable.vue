@@ -59,12 +59,8 @@ import type { AcmgClassification } from '../../../../shared/config/domain.config
 import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
 import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 import { AppStateKey } from '../../composables/useAppState'
-import {
-  annotationCache,
-  variantKey,
-  ACMG_COLORS,
-  ACMG_ABBREV
-} from '../../composables/useAnnotations'
+import { annotationCache, ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
+import { variantKey } from '../../composables/annotation-cache'
 import { useBulkTriageSelection } from '../../composables/useBulkTriageSelection'
 import BulkTriageActionBar from '../variant-table/BulkTriageActionBar.vue'
 

@@ -27,7 +27,7 @@ import {
 } from './annotation-cache'
 import { createScopedAnnotationOps, globalScope } from './annotation-scoped-ops'
 
-export { MAX_CACHE_SIZE, annotationCache, variantKey } from './annotation-cache'
+export { MAX_CACHE_SIZE, annotationCache } from './annotation-cache'
 
 // Get current user name for audit trail
 function getUserName(): string | undefined {

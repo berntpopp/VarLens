@@ -22,10 +22,8 @@ import type { ShortlistRow } from '../../../../src/shared/types/shortlist'
 import { clinvarDisplayText } from '../../../../src/shared/config/severity.config'
 import { AppStateKey, createAppState } from '../../../../src/renderer/src/composables/useAppState'
 import { installCapabilities } from '../../helpers/capabilities'
-import {
-  annotationCache,
-  variantKey
-} from '../../../../src/renderer/src/composables/useAnnotations'
+import { annotationCache } from '../../../../src/renderer/src/composables/useAnnotations'
+import { variantKey } from '../../../../src/renderer/src/composables/annotation-cache'
 import { triggerRef, ref, defineComponent, KeepAlive } from 'vue'
 
 let pinia: ReturnType<typeof createPinia>
