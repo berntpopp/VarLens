@@ -86,14 +86,9 @@ export const encodeFloat: CopyColumnEncoder = (value) => {
     if (!Number.isFinite(value)) return NULL_TOKEN
     return String(value)
   }
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed === '' || trimmed === '.') return NULL_TOKEN
-    const n = Number(trimmed)
-    if (!Number.isFinite(n)) return NULL_TOKEN
-    return trimmed
-  }
-  return String(value)
+  const trimmed = String(value).trim()
+  if (trimmed === '' || trimmed === '.') return NULL_TOKEN
+  return Number.isFinite(Number(trimmed)) ? trimmed : NULL_TOKEN
 }
 
 export interface CopyColumn {

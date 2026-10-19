@@ -168,6 +168,9 @@ describe('encodeFloat', () => {
     expect(encodeFloat('abc')).toBe('\\N')
     expect(encodeFloat('NaN')).toBe('\\N')
   })
+  it('bigint → string', () => {
+    expect(encodeFloat(1n)).toBe('1')
+  })
 })
 
 describe('encodeRowsToCopyText (async generator)', () => {

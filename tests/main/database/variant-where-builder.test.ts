@@ -234,14 +234,14 @@ describe('translateColumnFilter branches', () => {
               kysely.selectFrom('variants').select('id'),
               filter as never
             ).compile()
-            const r = buildBaseWhere(filter as never, { baseAlias: 'variants', scope: 'case' })
+            const rV = buildBaseWhere(filter as never, { baseAlias: 'v', scope: 'case' })
             const kIds = (db.prepare(k.sql).all(...k.parameters) as Array<{ id: number }>)
               .map((x) => x.id)
               .sort((a, b) => a - b)
             const rIds = (
               db
-                .prepare('SELECT id FROM variants' + (r.sql ? ' WHERE ' + r.sql : ''))
-                .all(...r.params) as Array<{ id: number }>
+                .prepare('SELECT id FROM variants v' + (rV.sql ? ' WHERE ' + rV.sql : ''))
+                .all(...rV.params) as Array<{ id: number }>
             )
               .map((x) => x.id)
               .sort((a, b) => a - b)
@@ -259,8 +259,36 @@ describe('translateColumnFilter branches', () => {
               { impact: 'v.impact_rank', clinvar: 'v.clinvar_rank' }
             )
             expect(pgValues, `pg params ${col}:${operator}:${String(includeEmpty)}`).toEqual(
-              r.params
+              rV.params
             )
+
+            const normalizedPgSql = pgSql
+              .join(' AND ')
+              .replace(/\$\d+/g, '?')
+              .replace(/::text/g, '')
+              .replace(/ ILIKE /g, ' LIKE ')
+            const normalizedSqliteSql = rV.sql.replace(' COLLATE NOCASE', '')
+            expect(normalizedPgSql, `sql ${col}:${operator}:${String(includeEmpty)}`).toBe(
+              normalizedSqliteSql
+            )
+
+            const sqliteAdaptedPgSql = pgSql
+              .join(' AND ')
+              .replace(/\$\d+/g, '?')
+              .replace(/::text/g, '')
+              .replace(/ ILIKE /g, ' LIKE ')
+            const pgIds = (
+              db
+                .prepare(
+                  'SELECT id FROM variants v' +
+                    (sqliteAdaptedPgSql ? ' WHERE ' + sqliteAdaptedPgSql : '')
+                )
+                .all(...pgValues) as Array<{ id: number }>
+            )
+              .map((x) => x.id)
+              .sort((a, b) => a - b)
+            expect(pgIds, `pgIds ${col}:${operator}:${String(includeEmpty)}`).toEqual(kIds)
+
             if (col === 'sv_length' && operator === 'in') {
               expect(pgSql.join(' ')).toContain('ABS(v.sv_length) IN ($1, $2, $3, $4)')
             }
