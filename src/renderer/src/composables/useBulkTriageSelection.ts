@@ -185,10 +185,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       alt: string
     }>
   ): Promise<boolean> {
-    const toReloadMap = new Map<
-      number,
-      { id: number; chr: string; pos: number; ref: string; alt: string }
-    >()
+    const toReloadMap = new Map<number, VariantCoords & { id: number }>()
     if (extraReloadItems) {
       for (const item of extraReloadItems) toReloadMap.set(item.id, item)
     }
@@ -201,10 +198,12 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }
 
     const currentPanel = getPanelVariantCoords(targetCid)
-    if (currentPanel !== null) {
-      if (targetSet.has(currentPanel.id) || !annotationCache.value.has(variantKey(currentPanel))) {
-        toReloadMap.set(currentPanel.id, currentPanel)
-      }
+    if (
+      currentPanel !== null &&
+      (targetSet.has(currentPanel.id) || !annotationCache.value.has(variantKey(currentPanel)))
+    ) {
+      toReloadMap.delete(currentPanel.id)
+      toReloadMap.set(currentPanel.id, currentPanel)
     }
 
     if (toReloadMap.size > 0) {
@@ -516,15 +515,13 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           )
         )
         if (!isCacheStillOnCase(targetCid, myDbPath)) return
-        const missingMap = new Map<
-          number,
-          { id: number; chr: string; pos: number; ref: string; alt: string }
-        >()
+        const missingMap = new Map<number, VariantCoords & { id: number }>()
         for (const v of preCachedToReload) {
           if (!annotationCache.value.has(variantKey(v))) missingMap.set(v.id, v)
         }
         const currentPanel = getPanelVariantCoords(targetCid)
         if (currentPanel !== null && !annotationCache.value.has(variantKey(currentPanel))) {
+          missingMap.delete(currentPanel.id)
           missingMap.set(currentPanel.id, currentPanel)
         }
         if (missingMap.size > 0) {

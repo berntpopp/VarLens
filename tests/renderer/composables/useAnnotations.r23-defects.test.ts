@@ -29,6 +29,7 @@ import {
   perCaseVersionSlot,
   resetAnnotationState,
   resetMutationTracker,
+  setCachedVariantId,
   setConfirmedFieldPatch,
   setConfirmedWriteVersion,
   setPerCaseByVariantId,
@@ -582,6 +583,135 @@ describe('Round 23 regression defects', () => {
       expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Benign')
       // Sibling 12 in annotationCache is untouched
       expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(12)
+    })
+
+    it('Defect 1: bulk refresh reloads open panel variant in the last wave so panel variant remains in cache', async () => {
+      const selectedPanelVariant = ref({
+        id: 11,
+        case_id: 1,
+        chr: coords.chr,
+        pos: coords.pos,
+        ref: coords.ref,
+        alt: coords.alt
+      })
+      const app = createApp({})
+      app.provide(AppStateKey, {
+        selectedPanelVariant,
+        selectedCaseId: ref(1)
+      })
+
+      const items = ref([
+        { id: 11, chr: coords.chr, pos: coords.pos, ref: coords.ref, alt: coords.alt },
+        { id: 12, chr: coords.chr, pos: coords.pos, ref: coords.ref, alt: coords.alt }
+      ])
+
+      const batchGetOrder: number[] = []
+      vi.mocked(api.annotations.batchGet).mockImplementation((_cid, keys) => {
+        const vid = (keys as Array<{ variantId?: number }>)[0]?.variantId
+        if (vid !== undefined) batchGetOrder.push(vid)
+        return Promise.resolve({
+          [key]: {
+            global: null,
+            perCase: mockPerCase(vid, { acmg_classification: vid === 11 ? 'Pathogenic' : 'Benign' })
+          }
+        }) as never
+      })
+      vi.mocked(api.annotations.batchUpsertPerCase).mockResolvedValue({ updatedCount: 2 } as never)
+
+      let bulk!: ReturnType<typeof useBulkTriageSelection>
+      app.runWithContext(() => {
+        bulk = useBulkTriageSelection({
+          items: () => items.value,
+          getItemId: (v: { id: number }) => v.id,
+          caseId: 1
+        })
+      })
+
+      bulk.toggleSelect(11)
+      bulk.toggleSelect(12)
+      await bulk.applyBulkTriage({ starred: true })
+
+      // currentPanel (11) must have been loaded last
+      expect(batchGetOrder).toEqual([12, 11])
+      expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(11)
+      expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Pathogenic')
+    })
+
+    it('Defect 2: null perCase slot in annotationCache for sibling 12 does not supply null baseline to sibling 11', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      // Sibling 12 has perCase: null in annotationCache, but slot owner & cachedVid are 12
+      cacheSet(key, { global: null, perCase: null })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setCachedVariantId(key, 12)
+
+      // Sibling 11 is stored in perCaseByVariantId with starred: 1 and comment: 'old'
+      setPerCaseByVariantId(1, 11, mockPerCase(11, { starred: 1, per_case_comment: 'old' }), key)
+
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      const siblingScope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+
+      // 1. toggleStar on sibling 11 sees wasStarred = true, sends starred: false
+      const dStar = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase).mockReturnValue(dStar.promise as never)
+      const pStar = ops.toggleStar(siblingScope11, coords)
+      expect(api.annotations.upsertPerCase).toHaveBeenCalledWith(1, 11, { starred: false })
+      dStar.resolve(mockPerCase(11, { starred: 0, per_case_comment: 'old' }))
+      await pStar
+
+      // Reset mock state for comment test
+      setPerCaseByVariantId(1, 11, mockPerCase(11, { starred: 1, per_case_comment: 'old' }), key)
+      cacheSet(key, { global: null, perCase: null })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setCachedVariantId(key, 12)
+
+      // 2. Failed comment edit rolls back to base without erasing starred: 1 or old comment
+      const dComment = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase).mockReturnValue(dComment.promise as never)
+      const pComment = ops.upsertComment(siblingScope11, coords, 'new')
+      expect(getPerCaseByVariantId(1, 11, key)?.per_case_comment).toBe('new')
+
+      dComment.reject(new Error('Network error'))
+      const ok = await pComment
+      expect(ok).toBe(false)
+      expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
+      expect(getPerCaseByVariantId(1, 11, key)?.per_case_comment).toBe('old')
+    })
+
+    it('Defect 3: loadBatch on uncached sibling 12 does not evict already loaded sibling 11 from perCaseByVariantId', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      // Row 11 is loaded and cached
+      cacheSet(key, {
+        global: null,
+        perCase: mockPerCase(11, { starred: 1, acmg_classification: 'Pathogenic' })
+      })
+      ensurePerCaseSlotOwner(key, 1, 11)
+      setPerCaseByVariantId(
+        1,
+        11,
+        mockPerCase(11, { starred: 1, acmg_classification: 'Pathogenic' }),
+        key
+      )
+
+      // batchGet fetches sibling 12
+      vi.mocked(api.annotations.batchGet).mockResolvedValue({
+        [key]: {
+          global: null,
+          perCase: mockPerCase(12, { starred: 0, acmg_classification: 'Benign' })
+        }
+      } as never)
+
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      await ops.loadBatch({ kind: 'case', caseId: 1, build: 'GRCh38' }, [
+        { id: 11, chr: coords.chr, pos: coords.pos, ref: coords.ref, alt: coords.alt },
+        { id: 12, chr: coords.chr, pos: coords.pos, ref: coords.ref, alt: coords.alt }
+      ])
+
+      // Sibling 11 must NOT have been evicted from perCaseByVariantId
+      expect(getPerCaseByVariantId(1, 11, key)?.variant_id).toBe(11)
+      expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Pathogenic')
+      // Sibling 12 is also present
+      expect(getPerCaseByVariantId(1, 12, key)?.variant_id).toBe(12)
+      expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Benign')
     })
   })
 })

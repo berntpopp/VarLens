@@ -406,6 +406,19 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   if (changed) triggerRef(annotationCache)
 }
 
+/** Evict a single perCase variant entry without dropping sibling variant data. */
+export function evictPerCaseVariant(caseId: number, variantId: number, key: string): void {
+  perCaseByVariantId.delete(`${caseId}:${variantId}`)
+  if (
+    cachedVariantIds.get(key) === variantId ||
+    annotationCache.value.get(key)?.perCase?.variant_id === variantId
+  ) {
+    if (annotationCache.value.delete(key)) triggerRef(annotationCache)
+    dropKeyMetadata(key)
+    perCaseSlotOwners.delete(key)
+  }
+}
+
 function applyBulkUpdatesPatch(
   slotKey: string,
   fg: 'star' | 'acmg' | 'comment',

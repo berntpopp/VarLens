@@ -14,10 +14,10 @@ import {
   allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
   bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot, cacheSetPerCaseSlot,
   computeOptimisticSlot, confirmedBases, confirmedFieldPatches, dropCacheOfClosedDatabase,
-  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, getAnnotationCacheEpoch, getAnnotationGeneration,
-  getCachedVariantId, getConfirmedWriteVersion, getKeyVersion, getPerCaseSlotOwner,
-  hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild, isKeyLoading,
-  isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad, otherSlot,
+  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant, getAnnotationCacheEpoch,
+  getAnnotationGeneration, getCachedVariantId, getConfirmedWriteVersion, getKeyVersion,
+  getPerCaseSlotOwner, hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild,
+  isKeyLoading, isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad, otherSlot,
   perCaseSlotKey, perCaseVersionSlot, pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation,
   rollBackSlot, setCachedVariantId, setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading,
   setPerCaseByVariantId, perCaseByVariantId, getPerCaseByVariantId, slotIdentity, slotOf, takeAwaited,
@@ -99,12 +99,18 @@ async function mutate(
     scope.kind === 'case' ? getPerCaseByVariantId(scope.caseId, scope.variantId, key) : undefined
   const rawCurrent = annotationCache.value.get(key)
   const pc = rawCurrent?.perCase
+  const cachedVid = getCachedVariantId(key)
+  const slotOwner = getPerCaseSlotOwner(key)
+  // prettier-ignore
   const siblingOccupied =
     scope.kind === 'case' &&
-    pc != null &&
-    (pc.variant_id !== scope.variantId || pc.case_id !== scope.caseId)
+    ((pc != null && (pc.variant_id !== scope.variantId || pc.case_id !== scope.caseId)) ||
+      (pc === null &&
+        ((cachedVid !== undefined && cachedVid !== scope.variantId) ||
+          (slotOwner !== undefined && (slotOwner.variantId !== scope.variantId || slotOwner.caseId !== scope.caseId)))))
   const current = siblingOccupied ? undefined : rawCurrent
-  const curSlot = (current ? readSlot(current, scope) : (rowPerCase ?? null)) ?? null
+  // prettier-ignore
+  const curSlot = (scope.kind === 'case' && rowPerCase !== undefined ? rowPerCase : current ? readSlot(current, scope) : null) ?? null
   const slot = slotOf(scope)
   const slotKey =
     scope.kind === 'case' ? perCaseSlotKey(scope.caseId, scope.variantId, key) : `global:${key}`
@@ -446,26 +452,25 @@ async function loadBatch(
       ) {
         setPerCaseByVariantId(scope.caseId, v.id, cached.perCase, key)
       }
-      const batchHasCachedVid =
-        cachedVid !== undefined && variants.some((o) => o.id === cachedVid && variantKey(o) === key)
       const targetVid = typeof v.id === 'number' ? v.id : cachedVid
       const vSlotKey =
         targetVid !== undefined ? perCaseSlotKey(scope.caseId, targetVid, key) : `perCase:${key}`
       const hasInFlight = inFlightMutations.has(vSlotKey) || inFlightMutations.has(`perCase:${key}`)
-      const stale =
-        (cached !== undefined &&
-          ((typeof v.id === 'number' &&
-            cached.perCase != null &&
-            cached.perCase.variant_id !== v.id &&
-            (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id))) ||
-            (typeof v.is_starred === 'boolean' &&
-              !hasInFlight &&
-              (cached.perCase?.starred === 1) !== v.is_starred))) ||
-        (typeof v.id === 'number' &&
-          cachedVid !== undefined &&
-          cachedVid !== v.id &&
-          (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id)))
-      if (sameCoords && stale) evictAnnotationCacheKeys([key])
+      let starStale = false
+      // prettier-ignore
+      if (typeof v.is_starred === 'boolean' && !hasInFlight) {
+        if (typeof v.id === 'number' && hasPerCaseByVariantId(scope.caseId, v.id)) {
+          starStale = (getPerCaseByVariantId(scope.caseId, v.id)?.starred === 1) !== v.is_starred
+        } else if (cached !== undefined && (v.id === undefined || cached.perCase?.variant_id === v.id || (cached.perCase === null && cachedVid === v.id))) {
+          starStale = (cached.perCase?.starred === 1) !== v.is_starred
+        }
+      }
+      const coordStale = v.id === undefined && cached?.perCase != null
+      const stale = sameCoords && (starStale || coordStale)
+      if (stale) {
+        if (typeof v.id === 'number') evictPerCaseVariant(scope.caseId, v.id, key)
+        else evictAnnotationCacheKeys([key])
+      }
     }
     const needCaseVid =
       scope.kind === 'case' &&
