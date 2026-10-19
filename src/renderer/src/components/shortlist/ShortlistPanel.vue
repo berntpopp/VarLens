@@ -256,6 +256,7 @@ async function handleTriageApplied(): Promise<void> {
 
       <ShortlistTable
         v-else-if="result"
+        :case-id="caseId"
         :read-only="!canWrite"
         :interactive="interactive"
         :rows="result.rows"

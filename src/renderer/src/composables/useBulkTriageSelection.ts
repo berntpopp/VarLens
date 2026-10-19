@@ -5,6 +5,8 @@ import {
   toValue,
   inject,
   hasInjectionContext,
+  getCurrentScope,
+  onScopeDispose,
   type Ref,
   type MaybeRefOrGetter
 } from 'vue'
@@ -15,9 +17,13 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
 import {
   annotationCache,
+  beginAnnotationRequest,
   evictAnnotationCacheKeys,
   getCachedBuild,
+  getCachedCaseId,
+  getCurrentDbPath,
   getGeneration,
+  hasDbSwitchedSince,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -48,6 +54,16 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   const isExecuting = ref(false)
   const coordsById = new Map<number, VariantCoords>()
 
+  let isDisposed = false
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      isDisposed = true
+      scopeGen += 1
+      selectionRev += 1
+      activeApplyId += 1
+    })
+  }
+
   let scopeGen = 0
   let selectionRev = 0
   let activeApplyId = 0
@@ -74,7 +90,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   // Clear selection whenever caseId changes
   watch(
     () => toValue(caseId),
-    () => {
+    (newCid) => {
       scopeGen += 1
       selectionRev += 1
       activeApplyId += 1
@@ -82,8 +98,20 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       selectedIds.value = []
       lastClickedId.value = null
       coordsById.clear()
+      if (newCid != null && getCachedCaseId() !== null && getCachedCaseId() !== newCid) {
+        beginAnnotationRequest(newCid, toValue(options.genomeBuild) ?? getCachedBuild())
+      }
     }
   )
+
+  function isStillActiveCase(cid: number, myDbPath: string | null): boolean {
+    if (isDisposed || hasDbSwitchedSince(myDbPath) || toValue(caseId) !== cid) return false
+    const appCaseId = appState?.selectedCaseId?.value
+    if (appCaseId !== undefined && appCaseId !== null && appCaseId !== cid) return false
+    const cachedCid = getCachedCaseId()
+    if (cachedCid !== null && cachedCid !== cid) return false
+    return true
+  }
 
   const selectedIdSet = computed(() => new Set(selectedIds.value))
   const selectedCount = computed(() => selectedIds.value.length)
@@ -242,6 +270,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     if (cid === undefined || cid === null || selectedIds.value.length === 0 || !api) {
       return 0
     }
+    const myDbPath = getCurrentDbPath()
     const targetIds = [...selectedIds.value]
     const targetSet = new Set(targetIds)
     const myScopeGen = scopeGen
@@ -310,9 +339,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
 
-      // If active case changed away from cid, write has committed in storage
+      // If active case or database changed away from cid, write has committed in storage
       // but we do not touch the active different case's selection or cache.
-      if (toValue(caseId) !== cid) {
+      if (!isStillActiveCase(cid, myDbPath)) {
         return res.updatedCount
       }
 
@@ -323,70 +352,74 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         await invalidateTags(true)
       }
 
-      // Reload annotations for affected visible rows so active case never serves stale cached data
-      const affectedVisible = currentItems.value
-        .map((item) => {
-          const id = getItemId(item)
-          if (!targetSet.has(id)) return null
+      // Reload annotations for affected visible rows and open panel variant so active case never serves stale cached data
+      const toReloadMap = new Map<
+        number,
+        { id: number; chr: string; pos: number; ref: string; alt: string }
+      >()
+      for (const item of currentItems.value) {
+        const id = getItemId(item)
+        if (targetSet.has(id)) {
           const coords = extractCoords(item)
-          if (coords === null) return null
-          return { id, ...coords }
-        })
-        .filter(
-          (v): v is { id: number; chr: string; pos: number; ref: string; alt: string } => v !== null
-        )
-
-      if (affectedVisible.length > 0) {
-        await loadAnnotationsBatch(cid, affectedVisible)
+          if (coords !== null) {
+            toReloadMap.set(id, { id, ...coords })
+          }
+        }
       }
 
-      // Only perform selection cleanup, onTriageApplied, and panel refresh if in the exact same session
-      const isSameSession =
-        scopeGen === myScopeGen && selectionRev === mySelectionRev && getGeneration() === myCacheGen
-
-      if (isSameSession) {
-        clearSelection()
-        await onTriageApplied?.()
-
-        // Ensure open panel variant from another page is refreshed in annotationCache
-        const currentPanel = appState?.selectedPanelVariant?.value
-        if (
-          currentPanel !== null &&
-          typeof currentPanel === 'object' &&
-          'id' in currentPanel &&
-          typeof currentPanel.id === 'number' &&
-          'chr' in currentPanel &&
-          'pos' in currentPanel &&
-          'ref' in currentPanel &&
-          'alt' in currentPanel
-        ) {
-          const panelCaseId =
-            'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
-          if (panelCaseId === undefined || panelCaseId === cid) {
-            const pKey = variantKey({
+      // Ensure open panel variant (even if from another page) is refreshed in annotationCache
+      const currentPanel = appState?.selectedPanelVariant?.value
+      if (
+        currentPanel !== null &&
+        typeof currentPanel === 'object' &&
+        'id' in currentPanel &&
+        typeof currentPanel.id === 'number' &&
+        'chr' in currentPanel &&
+        'pos' in currentPanel &&
+        'ref' in currentPanel &&
+        'alt' in currentPanel
+      ) {
+        const panelCaseId =
+          'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
+        if (panelCaseId === undefined || panelCaseId === cid) {
+          const pKey = variantKey({
+            chr: String(currentPanel.chr),
+            pos: Number(currentPanel.pos),
+            ref: String(currentPanel.ref),
+            alt: String(currentPanel.alt)
+          })
+          if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
+            toReloadMap.set(currentPanel.id, {
+              id: currentPanel.id,
               chr: String(currentPanel.chr),
               pos: Number(currentPanel.pos),
               ref: String(currentPanel.ref),
               alt: String(currentPanel.alt)
             })
-            if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
-              await loadAnnotationsBatch(cid, [
-                {
-                  id: currentPanel.id,
-                  chr: String(currentPanel.chr),
-                  pos: Number(currentPanel.pos),
-                  ref: String(currentPanel.ref),
-                  alt: String(currentPanel.alt)
-                }
-              ])
-            }
           }
         }
       }
 
+      if (toReloadMap.size > 0) {
+        await loadAnnotationsBatch(cid, Array.from(toReloadMap.values()))
+      }
+
+      // Only perform selection cleanup if selection was not modified and session is unchanged
+      if (
+        scopeGen === myScopeGen &&
+        selectionRev === mySelectionRev &&
+        getGeneration() === myCacheGen
+      ) {
+        clearSelection()
+      }
+
+      if (isStillActiveCase(cid, myDbPath)) {
+        await onTriageApplied?.()
+      }
+
       return res.updatedCount
     } catch (error) {
-      if (toValue(caseId) !== cid) return 0
+      if (!isStillActiveCase(cid, myDbPath)) return 0
       const msg = isIpcError(error)
         ? (error.userMessage ?? error.message)
         : error instanceof Error

@@ -42,6 +42,15 @@ describe('useBulkTriageSelection', () => {
   const onTriageApplied = vi.fn()
   let pinia: ReturnType<typeof createPinia>
 
+  const createBulk = (customOptions: Record<string, unknown> = {}) =>
+    useBulkTriageSelection({
+      items: () => items.value,
+      getItemId: (v: { id: number }) => v.id,
+      caseId,
+      onTriageApplied,
+      ...customOptions
+    })
+
   beforeEach(() => {
     vi.clearAllMocks()
     pinia = createPinia()
@@ -61,12 +70,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('initializes with empty selection', () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     expect(bulk.selectedIds.value.length).toBe(0)
     expect(bulk.selectedCount.value).toBe(0)
@@ -75,12 +79,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('selects and deselects single items', () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     bulk.toggleSelect(101)
     expect(bulk.isSelected(101)).toBe(true)
@@ -94,12 +93,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('supports toggleSelectAll', () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     bulk.toggleSelectAll(true)
     expect(bulk.selectedCount.value).toBe(4)
@@ -112,12 +106,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('supports Shift+Click range selection', () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     // Click item at index 0 (101)
     bulk.handleRowCheckboxClick(101, new MouseEvent('click', { shiftKey: false }))
@@ -134,12 +123,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('auto-clears selection on caseId change', async () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     bulk.toggleSelect(101)
     expect(bulk.selectedCount.value).toBe(1)
@@ -151,12 +135,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('dispatches applyBulkTriage with batchUpsertPerCase', async () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     bulk.toggleSelect(101)
     bulk.toggleSelect(102)
@@ -185,12 +164,7 @@ describe('useBulkTriageSelection', () => {
     let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
     const TestComponent = defineComponent({
       setup() {
-        bulkInstance = useBulkTriageSelection({
-          items: () => items.value,
-          getItemId: (v) => v.id,
-          caseId,
-          onTriageApplied
-        })
+        bulkInstance = createBulk()
         return () => null
       }
     })
@@ -223,12 +197,7 @@ describe('useBulkTriageSelection', () => {
   })
 
   it('synchronizes native DOM checkbox .checked state on Shift+Click', () => {
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     const checkbox1 = document.createElement('input')
     checkbox1.type = 'checkbox'
@@ -266,12 +235,7 @@ describe('useBulkTriageSelection', () => {
     annotationCache.value.set('1:100:A:T', mockCacheEntry(1))
     annotationCache.value.set('1:200:G:C', mockCacheEntry(2))
 
-    const bulk = useBulkTriageSelection({
-      items: () => testItems.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk({ items: () => testItems.value })
 
     // Select only Variant B (id 2)
     bulk.toggleSelect(2)
@@ -309,29 +273,25 @@ describe('useBulkTriageSelection', () => {
     window.api.annotations.batchGet = batchGetSpy
 
     let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    const TestComponent = defineComponent({
-      setup() {
-        bulkInstance = useBulkTriageSelection({
-          items: () => currentItemsRef.value,
-          getItemId: (v) => v.id,
-          caseId,
-          onTriageApplied
-        })
-        return () => null
-      }
-    })
-
-    mount(TestComponent, {
-      global: {
-        plugins: [pinia],
-        provide: {
-          [AppStateKey as symbol]: {
-            selectedPanelVariant: panelVariantRef,
-            showSnack: vi.fn()
+    mount(
+      defineComponent({
+        setup() {
+          bulkInstance = createBulk({ items: () => currentItemsRef.value })
+          return () => null
+        }
+      }),
+      {
+        global: {
+          plugins: [pinia],
+          provide: {
+            [AppStateKey as symbol]: {
+              selectedPanelVariant: panelVariantRef,
+              showSnack: vi.fn()
+            }
           }
         }
       }
-    })
+    )
 
     // 1. Select Variant A on Page 1
     bulkInstance.toggleSelect(1)
@@ -385,12 +345,7 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
 
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     // 1. Select items 101 and 102 in Case 42
     bulk.toggleSelect(101)
@@ -477,12 +432,7 @@ describe('useBulkTriageSelection', () => {
       { id: 102, chr: '1', pos: 200, ref: 'C', alt: 'G' }
     ])
 
-    const bulk = useBulkTriageSelection({
-      items: () => page1.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk({ items: () => page1.value })
 
     // Initially nothing selected
     expect(bulk.selectedIds.value).toEqual([])
@@ -525,14 +475,11 @@ describe('useBulkTriageSelection', () => {
     // Pre-populate unselected variant B in annotationCache
     annotationCache.value.set('1:200:G:C', mockCacheEntry(2))
 
-    const bulk = useBulkTriageSelection({
+    const bulk = createBulk({
       items: () => [
         { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' },
         { id: 2, chr: '1', pos: 200, ref: 'G', alt: 'C' }
-      ],
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
+      ]
     })
 
     // Select ONLY variant 1
@@ -554,12 +501,7 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
 
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
-    })
+    const bulk = createBulk()
 
     // 1. On Case 42 (Case A), item 101 has cached Benign classification
     annotationCache.value.set(
@@ -610,13 +552,13 @@ describe('useBulkTriageSelection', () => {
     expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
       'Pathogenic'
     )
-    // 7. But because session changed (scopeGen bumped), selection [103] is preserved and onTriageApplied skipped:
-    expect(onTriageApplied).not.toHaveBeenCalled()
+    // 7. Selection [103] is preserved, and onTriageApplied is called because case 42 is active
+    expect(onTriageApplied).toHaveBeenCalledTimes(1)
     expect(bulk.selectedIds.value).toEqual([103])
     expect(bulk.isExecuting.value).toBe(false)
   })
 
-  it('does not clear newly modified selection when in-flight bulk triage resolves', async () => {
+  it('does not clear newly modified selection when in-flight bulk triage resolves and refreshes panel and table', async () => {
     let resolveUpsert!: (val: unknown) => void
     const deferredUpsert = new Promise((resolve) => {
       resolveUpsert = resolve
@@ -624,31 +566,112 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
 
-    const bulk = useBulkTriageSelection({
-      items: () => items.value,
-      getItemId: (v) => v.id,
-      caseId,
-      onTriageApplied
+    // Open panel variant on an off-page row (id 999)
+    const panelVariantRef = ref({
+      id: 999,
+      case_id: 42,
+      chr: 'chr1',
+      pos: 9990,
+      ref: 'A',
+      alt: 'T'
     })
 
-    bulk.toggleSelect(101)
-    expect(bulk.selectedIds.value).toEqual([101])
+    const batchGetSpy = vi.fn().mockResolvedValue({
+      'chr1:9990:A:T': mockCacheEntry(999, { starred: 1 })
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
 
-    const triagePromise = bulk.applyBulkTriage({ starred: true })
-    expect(bulk.isExecuting.value).toBe(true)
+    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
+    mount(
+      defineComponent({
+        setup() {
+          bulkInstance = createBulk()
+          return () => null
+        }
+      }),
+      {
+        global: {
+          plugins: [pinia],
+          provide: {
+            [AppStateKey as symbol]: {
+              selectedPanelVariant: panelVariantRef,
+              showSnack: vi.fn()
+            }
+          }
+        }
+      }
+    )
+
+    bulkInstance.toggleSelect(101)
+    expect(bulkInstance.selectedIds.value).toEqual([101])
+
+    const triagePromise = bulkInstance.applyBulkTriage({ starred: true })
+    expect(bulkInstance.isExecuting.value).toBe(true)
 
     // User modifies selection mid-flight
-    bulk.toggleSelect(102)
-    expect(bulk.selectedIds.value).toEqual([101, 102])
+    bulkInstance.toggleSelect(102)
+    expect(bulkInstance.selectedIds.value).toEqual([101, 102])
 
     resolveUpsert({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
     // Selection was preserved because selectionRev bumped!
-    expect(bulk.selectedIds.value).toEqual([101, 102])
+    expect(bulkInstance.selectedIds.value).toEqual([101, 102])
+    // Table and panel refreshes still ran:
+    expect(onTriageApplied).toHaveBeenCalledTimes(1)
+    expect(batchGetSpy).toHaveBeenCalled()
+    expect(annotationCache.value.has('chr1:9990:A:T')).toBe(true)
+    expect(bulkInstance.isExecuting.value).toBe(false)
+  })
+
+  it('does not touch cache or trigger batchGet if component unmounts and case switches to Case 2 while write is in flight', async () => {
+    let resolveUpsert!: (val: unknown) => void
+    const deferredUpsert = new Promise((resolve) => {
+      resolveUpsert = resolve
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+    const batchGetSpy = vi.fn().mockResolvedValue({})
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    const { beginAnnotationRequest } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+
+    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          bulkInstance = createBulk()
+          return () => null
+        }
+      }),
+      { global: { plugins: [pinia] } }
+    )
+
+    // Select row 101 on Case 42
+    bulkInstance.toggleSelect(101)
+    const triagePromise = bulkInstance.applyBulkTriage({ starred: true })
+
+    // Component unmounts (e.g. user navigates away)
+    wrapper.unmount()
+
+    // Case 2 establishes its cache
+    beginAnnotationRequest(2, 'GRCh38')
+    annotationCache.value.set('chr2:5000:C:T', mockCacheEntry(501, { case_id: 2 }))
+
+    // Resolve old write for Case 42
+    resolveUpsert({ updatedCount: 1 })
+    const count = await triagePromise
+
+    expect(count).toBe(1)
+    // Case 2 cache was NOT cleared or touched
+    expect(annotationCache.value.has('chr2:5000:C:T')).toBe(true)
+    // No batchGet was triggered for Case 1
+    expect(batchGetSpy).not.toHaveBeenCalled()
     expect(onTriageApplied).not.toHaveBeenCalled()
-    expect(bulk.isExecuting.value).toBe(false)
   })
 
   it('enforces MAX_BULK_TRIAGE_SELECTION cap of 1,000 with warning snack', () => {

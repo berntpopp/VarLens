@@ -226,7 +226,7 @@ function clearEntries(): void {
  * Get current database path safely (returns null if Pinia not available,
  * e.g. in unit tests without a store setup).
  */
-function getCurrentDbPath(): string | null {
+export function getCurrentDbPath(): string | null {
   try {
     const db = useDatabaseStore()
     return db.currentPath
@@ -280,6 +280,11 @@ export function isCacheOfBuild(build: string | null): boolean {
 /** Currently tracked genome build of the cached annotations. */
 export function getCachedBuild(): string | null {
   return lastBuild
+}
+
+/** Currently tracked case ID of the cached annotations. */
+export function getCachedCaseId(): number | null {
+  return lastCaseId
 }
 
 /**

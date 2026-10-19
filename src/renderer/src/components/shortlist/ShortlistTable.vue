@@ -66,6 +66,7 @@ import BulkTriageActionBar from '../variant-table/BulkTriageActionBar.vue'
 
 const props = defineProps<{
   rows: ShortlistRow[]
+  caseId?: number | null
   /** Viewer role: the star is display-only. */
   readOnly?: boolean
   /** False while the tab is hidden (v-show): window keys must not act on unseen rows. */
@@ -163,7 +164,10 @@ function hasCommentFor(item: ShortlistRow): boolean {
 
 const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
 
-const caseId = computed(() => props.rows[0]?.case_id ?? null)
+const appState = inject(AppStateKey, null)
+const caseId = computed(
+  () => props.caseId ?? appState?.selectedCaseId?.value ?? props.rows[0]?.case_id ?? null
+)
 const bulkSelection = useBulkTriageSelection({
   items: () => displayedRows.value,
   getItemId: (r) => r.id,
@@ -178,7 +182,6 @@ watch(
   }
 )
 
-const appState = inject(AppStateKey, null)
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearArrowSyncTimer(): void {
