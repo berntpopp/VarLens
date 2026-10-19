@@ -109,22 +109,3 @@ export function hasCommentFor(
     (global !== undefined && global !== null && global !== '')
   )
 }
-
-export function sortShortlistRows(
-  rows: readonly ShortlistRow[],
-  sorts?: Array<{ key: string; order?: 'asc' | 'desc' }>
-): ShortlistRow[] {
-  if (sorts === undefined || sorts.length === 0) return [...rows]
-  const sort = sorts[0]
-  if (sort === undefined) return [...rows]
-  const { key, order } = sort
-  const mult = order === 'desc' ? -1 : 1
-  return [...rows].sort((a, b) => {
-    const valA = (a as unknown as Record<string, unknown>)[key]
-    const valB = (b as unknown as Record<string, unknown>)[key]
-    if (valA === valB) return 0
-    if (valA === undefined || valA === null) return -1 * mult
-    if (valB === undefined || valB === null) return 1 * mult
-    return valA < valB ? -1 * mult : 1 * mult
-  })
-}

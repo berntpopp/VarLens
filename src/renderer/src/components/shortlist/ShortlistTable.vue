@@ -46,8 +46,7 @@ import {
   typeChipColor,
   targetTabFor,
   displayVariantType,
-  hasCommentFor as hasCommentForHelper,
-  sortShortlistRows
+  hasCommentFor as hasCommentForHelper
 } from './shortlist-table-helpers'
 import {
   useTableKeyboardNav,
@@ -123,10 +122,22 @@ onDeactivated(() => {
   clearArrowSyncTimer()
 })
 
-const rowsRef = computed(() => props.rows)
+const currentItems = ref<ShortlistRow[] | null>(null)
+watch(
+  () => props.rows,
+  () => {
+    currentItems.value = null
+  }
+)
+function onCurrentItems(items: ReadonlyArray<{ raw?: ShortlistRow } | ShortlistRow>): void {
+  currentItems.value = items.map((it) =>
+    it !== null && typeof it === 'object' && 'raw' in it && it.raw ? it.raw : (it as ShortlistRow)
+  )
+}
+const displayedRows = computed(() => currentItems.value ?? props.rows)
 
 const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTableKeyboardNav({
-  items: rowsRef,
+  items: displayedRows,
   getItemId: (item: ShortlistRow) => item.id,
   onSelect: (_item: ShortlistRow) => {}
 })
@@ -155,7 +166,6 @@ function hasCommentFor(item: ShortlistRow): boolean {
 }
 
 const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
-const displayedRows = computed(() => sortShortlistRows(props.rows, sortBy.value))
 
 const caseId = computed(() => props.rows[0]?.case_id ?? null)
 const bulkSelection = useBulkTriageSelection({
@@ -325,6 +335,7 @@ onKeyStroke(
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
     :row-props="getRowProps"
+    @update:current-items="onCurrentItems"
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
     @mouseover="rankTip.onMouseover"
     @mouseout="rankTip.onMouseout"

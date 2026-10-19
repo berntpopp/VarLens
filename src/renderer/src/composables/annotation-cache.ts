@@ -281,6 +281,20 @@ export function isTrackedCase(caseId: number): boolean {
   return lastCaseId === caseId
 }
 
+/** Evict specific variant keys from the cache while preserving unrelated entries. */
+export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
+  let changed = false
+  for (const key of keys) {
+    if (annotationCache.value.delete(key)) changed = true
+    loadingStates.value.delete(key)
+    unloadedSlots.delete(key)
+    globalOnlyLoading.delete(key)
+    awaitedKeys.case.delete(key)
+    awaitedKeys.global.delete(key)
+  }
+  if (changed) triggerRef(annotationCache)
+}
+
 /** Clear cache and forget the tracked scope (call on case switch). */
 export function clearAnnotationCache(): void {
   clearEntries()

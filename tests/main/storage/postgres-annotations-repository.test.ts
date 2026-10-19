@@ -910,15 +910,35 @@ describe('PostgresAnnotationsRepository', () => {
     expect(insertCalls.length).toBe(0)
     expect(release1).toHaveBeenCalledOnce()
 
-    // 2. Query error mid-transaction
+    // 2. Query error mid-transaction with [101, 102] where 101 succeeds and 102 fails
     const release2 = vi.fn()
     const dbError = new Error('simulated disk failure mid-batch')
     const query2 = vi
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // variants lookup
-      .mockResolvedValueOnce({ rows: [] }) // existing annotation
-      .mockRejectedValueOnce(dbError) // upsert fails
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // existing annotation 101
+      .mockResolvedValueOnce({ rows: [] }) // existing annotation 102
+      // Variant 101 succeeds:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            starred: 1,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert 101
+      .mockResolvedValueOnce({ rows: [] }) // audit.append 101
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase 101
+      // Variant 102 fails on upsert:
+      .mockRejectedValueOnce(dbError) // upsert 102 fails
       .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
     const pool2 = {
       connect: vi.fn(async () => ({ query: summaryLockFree(query2), release: release2 }))
@@ -926,13 +946,129 @@ describe('PostgresAnnotationsRepository', () => {
     const repository2 = new PostgresAnnotationsRepository(pool2 as never, 'public')
 
     await expect(
-      repository2.batchUpsertPerCaseAnnotationWithAudit(1, [101], { starred: true })
+      repository2.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], { starred: true })
     ).rejects.toThrow('simulated disk failure mid-batch')
 
     expect(query2).toHaveBeenCalledWith('BEGIN')
     expect(query2).toHaveBeenCalledWith('ROLLBACK')
     expect(query2).not.toHaveBeenCalledWith('COMMIT')
     expect(release2).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit appends both acmg_classify (null) and tag_assign entries for each variant', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 102
+      // variant 101:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            starred: 0,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert for 101
+      .mockResolvedValueOnce({ rows: [] }) // audit.append acmg_classify for 101
+      .mockResolvedValueOnce({ rows: [] }) // audit.append tag_assign for 101
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 101
+      // variant 102:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            case_id: 1,
+            variant_id: 102,
+            starred: 0,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert for 102
+      .mockResolvedValueOnce({ rows: [] }) // audit.append acmg_classify for 102
+      .mockResolvedValueOnce({ rows: [] }) // audit.append tag_assign for 102
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 102
+      // tag inserts:
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 101
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 102
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const res = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      acmg_classification: undefined,
+      tag_id: 7
+    })
+
+    expect(res).toEqual({ updatedCount: 2 })
+    expect(query).toHaveBeenCalledWith('BEGIN')
+    expect(query).toHaveBeenCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+
+    // Find all audit log insert calls
+    const auditCalls = query.mock.calls.filter(([sql]) =>
+      String(sql).includes('varlens_audit."audit_log"')
+    )
+    expect(auditCalls).toHaveLength(4)
+
+    // Variant 101: acmg_classify (null) & tag_assign
+    expect(auditCalls[0][1]).toEqual([
+      'public',
+      'acmg_classify',
+      'case_variant_annotation',
+      'case:1:variant:101',
+      null,
+      JSON.stringify({ acmg_classification: null }),
+      null,
+      null
+    ])
+    expect(auditCalls[1][1]).toEqual([
+      'public',
+      'tag_assign',
+      'case_variant_annotation',
+      'case:1:variant:101',
+      null,
+      JSON.stringify({ tag_id: 7 }),
+      null,
+      null
+    ])
+
+    // Variant 102: acmg_classify (null) & tag_assign
+    expect(auditCalls[2][1]).toEqual([
+      'public',
+      'acmg_classify',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ acmg_classification: null }),
+      null,
+      null
+    ])
+    expect(auditCalls[3][1]).toEqual([
+      'public',
+      'tag_assign',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ tag_id: 7 }),
+      null,
+      null
+    ])
   })
 })
 

@@ -12,7 +12,7 @@ import { getActivePinia } from 'pinia'
 import { useApiService } from './useApiService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
-import { clearAnnotationCache } from './annotation-cache'
+import { evictAnnotationCacheKeys, variantKey, type VariantCoords } from './annotation-cache'
 import { invalidateTags } from '../queries/tags'
 import { logService } from '../services/LogService'
 import { AppStateKey } from './useAppState'
@@ -127,7 +127,36 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       const res = unwrapIpcResult(
         await api.annotations.batchUpsertPerCase(cid, selectedIds.value, updates)
       )
-      clearAnnotationCache()
+      const affectedKeys: string[] = []
+      const itemList = toValue(items)
+      for (const item of itemList) {
+        if (
+          item !== null &&
+          typeof item === 'object' &&
+          selectedIdSet.value.has(getItemId(item)) &&
+          'chr' in item &&
+          'pos' in item &&
+          'ref' in item &&
+          'alt' in item
+        ) {
+          affectedKeys.push(variantKey(item as unknown as VariantCoords))
+        }
+      }
+      const panelVariant = appState?.selectedPanelVariant.value
+      if (
+        panelVariant !== null &&
+        typeof panelVariant === 'object' &&
+        'id' in panelVariant &&
+        typeof panelVariant.id === 'number' &&
+        selectedIdSet.value.has(panelVariant.id) &&
+        'chr' in panelVariant &&
+        'pos' in panelVariant &&
+        'ref' in panelVariant &&
+        'alt' in panelVariant
+      ) {
+        affectedKeys.push(variantKey(panelVariant as unknown as VariantCoords))
+      }
+      evictAnnotationCacheKeys(affectedKeys)
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
       }

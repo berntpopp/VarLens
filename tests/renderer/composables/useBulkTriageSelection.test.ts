@@ -230,4 +230,61 @@ describe('useBulkTriageSelection', () => {
     // Crucially, checkbox1.checked must be resynchronized to true!
     expect(checkbox1.checked).toBe(true)
   })
+
+  it('evicts only selected variant cache entries on bulk triage and preserves unrelated entries', async () => {
+    const testItems = ref([
+      { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' },
+      { id: 2, chr: '1', pos: 200, ref: 'G', alt: 'C' }
+    ])
+
+    annotationCache.value.set('1:100:A:T', {
+      global: null,
+      perCase: {
+        id: 1,
+        case_id: 42,
+        variant_id: 1,
+        is_starred: false,
+        acmg_classification: null,
+        acmg_evidence: null,
+        acmg_override_reason: null,
+        notes: null,
+        created_at: 1000,
+        updated_at: 1000
+      }
+    })
+    annotationCache.value.set('1:200:G:C', {
+      global: null,
+      perCase: {
+        id: 2,
+        case_id: 42,
+        variant_id: 2,
+        is_starred: false,
+        acmg_classification: null,
+        acmg_evidence: null,
+        acmg_override_reason: null,
+        notes: null,
+        created_at: 1000,
+        updated_at: 1000
+      }
+    })
+
+    const bulk = useBulkTriageSelection({
+      items: () => testItems.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    // Select only Variant B (id 2)
+    bulk.toggleSelect(2)
+    expect(bulk.selectedIds.value).toEqual([2])
+
+    await bulk.applyBulkTriage({ starred: true })
+
+    // Variant B was evicted from cache so fresh annotations will be fetched
+    expect(annotationCache.value.has('1:200:G:C')).toBe(false)
+    // Variant A was NOT selected, so its cache entry remains preserved!
+    expect(annotationCache.value.has('1:100:A:T')).toBe(true)
+    expect(annotationCache.value.get('1:100:A:T')?.perCase?.id).toBe(1)
+  })
 })

@@ -693,6 +693,45 @@ describe('ShortlistTable', () => {
       wrapper.unmount()
     })
 
+    it('supports Shift+Click range selection respecting Vuetify localeCompare sorted order (e.g. C1orf21 before C1QA)', async () => {
+      const items = [
+        row({ id: 1, gene_symbol: 'C1QB' }),
+        row({ id: 2, gene_symbol: 'C1orf21' }),
+        row({ id: 3, gene_symbol: 'C1QA' })
+      ]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify, pinia] }
+      })
+
+      const dataTable = wrapper.findComponent({ name: 'VDataTable' })
+
+      // Ascending sort by gene_symbol:
+      // In localeCompare: 'C1orf21' < 'C1QA' < 'C1QB' -> [id 2, id 3, id 1]
+      // (Under naive ASCII sort: 'C1QA' < 'C1QB' < 'C1orf21' -> [id 3, id 1, id 2])
+      await dataTable.vm.$emit('update:sortBy', [{ key: 'gene_symbol', order: 'asc' }])
+      await flushPromises()
+
+      // Click first visible item (id 2, C1orf21)
+      const cb2 = wrapper.get('[data-testid="bulk-select-row-2"]')
+      await cb2.trigger('click')
+      await flushPromises()
+
+      // Shift+Click second visible item (id 3, C1QA)
+      const cb3 = wrapper.get('[data-testid="bulk-select-row-3"]')
+      await cb3.trigger('click', { shiftKey: true })
+      await flushPromises()
+
+      const actionBar = wrapper.findComponent({ name: 'BulkTriageActionBar' })
+      expect(actionBar.exists()).toBe(true)
+      expect(actionBar.props('selectedCount')).toBe(2)
+
+      const cb1 = wrapper.get<HTMLInputElement>('[data-testid="bulk-select-row-1"]')
+      expect(cb1.element.checked).toBe(false)
+
+      wrapper.unmount()
+    })
+
     it('resynchronizes native checkbox DOM state when Shift+Clicking an already-selected row', async () => {
       const items = [row({ id: 1 }), row({ id: 2 }), row({ id: 3 })]
       const wrapper = mount(ShortlistTable, {
