@@ -926,6 +926,7 @@ describe('runExportPipeline — XLSX', () => {
 
         const params = makeXlsxParams({
           outputFilePath: shmOutput,
+          tempFilePath: prep.tempFilePath,
           compiledSql: 'SELECT invalid sql syntax'
         })
 
