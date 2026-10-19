@@ -21,7 +21,7 @@ export interface ExportCohortStartMessage {
   params: CohortSearchParams
   outputFilePath: string
   tempFilePath?: string
-  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  tempFilePrecreated?: { dev: number; ino: number }
 }
 
 export type ExportVariantsStartMessage = {
@@ -34,7 +34,7 @@ export type ExportVariantsStartMessage = {
   compiledParams: readonly unknown[]
   outputFilePath: string
   tempFilePath?: string
-  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  tempFilePrecreated?: { dev: number; ino: number }
   caseName: string
   /** Active filter summary for metadata sheet */
   filterSummary: ExportFilterSummary

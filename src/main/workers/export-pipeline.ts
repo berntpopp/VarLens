@@ -29,6 +29,19 @@ export function defaultExportTempFilePath(outputFilePath: string): string {
   return join(dirname(outputFilePath), `.varlens-export-${randomUUID()}.part`)
 }
 
+export function isDevicePath(filePath: string): boolean {
+  if (/^(?:\\\\\.\\|NUL$)/i.test(filePath)) return true
+  try {
+    const st = statSync(filePath, { throwIfNoEntry: false })
+    return (
+      st !== undefined &&
+      (st.isCharacterDevice() || st.isBlockDevice() || st.isFIFO() || st.isSocket())
+    )
+  } catch {
+    return false
+  }
+}
+
 export function prepareExportFilePath(
   outputFilePath: string,
   customTempFilePath?: string
@@ -39,7 +52,7 @@ export function prepareExportFilePath(
   if (existsSync(outputFilePath)) {
     accessSync(outputFilePath, constants.W_OK)
   }
-  const isDevice = outputFilePath.startsWith('/dev/')
+  const isDevice = isDevicePath(outputFilePath)
   const tempFilePath = isDevice
     ? outputFilePath
     : (customTempFilePath ?? defaultExportTempFilePath(outputFilePath))
@@ -92,7 +105,7 @@ export interface ExportPipelineParams {
   compiledParams: readonly unknown[]
   outputFilePath: string
   tempFilePath?: string
-  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  tempFilePrecreated?: { dev: number; ino: number }
   format: 'csv' | 'xlsx'
   caseName: string
   filterSummary: ExportFilterSummary
@@ -154,7 +167,7 @@ export function* iterateAnnotatedRows(
 export interface StreamToExportFileOptions {
   outputFilePath: string
   customTempFilePath?: string
-  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  tempFilePrecreated?: { dev: number; ino: number }
   encoding?: BufferEncoding
 }
 
@@ -185,31 +198,18 @@ export async function streamToExportFile(
         // Destination does not exist yet; default to 0o600
       }
 
-      if (tempFilePrecreated !== undefined && tempFilePrecreated !== false) {
+      if (tempFilePrecreated !== undefined) {
         if (lstatSync(tempFilePath).isSymbolicLink()) {
           throw new Error('Refusing to write to unexpected or replaced temporary export file')
         }
         const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
         fd = openSync(tempFilePath, openFlags)
         const st = fstatSync(fd)
-        const isObjectExpected =
-          typeof tempFilePrecreated === 'object' && tempFilePrecreated !== null
-        const expectedDev = isObjectExpected
-          ? 'dev' in tempFilePrecreated
-            ? tempFilePrecreated.dev
-            : (tempFilePrecreated as { tempFileDev?: number }).tempFileDev
-          : undefined
-        const expectedIno = isObjectExpected
-          ? 'ino' in tempFilePrecreated
-            ? tempFilePrecreated.ino
-            : (tempFilePrecreated as { tempFileIno?: number }).tempFileIno
-          : undefined
-        const identityMismatch =
+        if (
           !st.isFile() ||
-          (expectedDev !== undefined && st.dev !== expectedDev) ||
-          (expectedIno !== undefined && st.ino !== expectedIno)
-
-        if (identityMismatch) {
+          st.dev !== tempFilePrecreated.dev ||
+          st.ino !== tempFilePrecreated.ino
+        ) {
           throw new Error('Refusing to write to unexpected or replaced temporary export file')
         }
         createdTempFile = true

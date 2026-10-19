@@ -8,7 +8,7 @@ import type {
 } from '../../shared/types/export-worker'
 import type { CohortSearchParams } from '../../shared/types/cohort'
 import { mainLogger } from '../services/MainLogger'
-import { defaultExportTempFilePath } from './export-pipeline'
+import { defaultExportTempFilePath, isDevicePath } from './export-pipeline'
 
 /** Outcome hooks shared by every export kind. */
 export interface ExportWorkerHooks {
@@ -91,7 +91,7 @@ export class ExportWorkerClient {
       throw new Error('Export worker is already running')
     }
 
-    const isDevice = message.outputFilePath.startsWith('/dev/')
+    const isDevice = isDevicePath(message.outputFilePath)
     let tempFilePath: string | undefined
     let tempFilePrecreated: { dev: number; ino: number } | undefined
 
@@ -123,9 +123,11 @@ export class ExportWorkerClient {
     this.hooks = hooks
 
     try {
-      this.worker = new Worker(this.workerPath)
+      const worker = new Worker(this.workerPath)
+      this.worker = worker
 
-      this.worker.on('message', (msg: ExportWorkerMessage) => {
+      worker.on('message', (msg: ExportWorkerMessage) => {
+        if (this.worker !== worker) return
         switch (msg.type) {
           case 'progress':
             hooks.onProgress(msg.current, msg.total)
@@ -142,22 +144,23 @@ export class ExportWorkerClient {
         }
       })
 
-      this.worker.on('error', (err: Error) => {
+      worker.on('error', (err: Error) => {
+        if (this.worker !== worker) return
         mainLogger.error(`Export worker error: ${err.message}`, 'ExportWorkerClient')
-        if (this.worker === null) return
         this.cleanup()
         hooks.onError(err.message)
       })
 
-      this.worker.on('exit', (code) => {
-        if (code !== 0 && this.worker !== null) {
+      worker.on('exit', (code) => {
+        if (this.worker !== worker) return
+        if (code !== 0) {
           mainLogger.error(`Export worker exited with code ${code}`, 'ExportWorkerClient')
           this.cleanup()
           hooks.onError(`Export worker exited with code ${code}`)
         }
       })
 
-      this.worker.postMessage({
+      worker.postMessage({
         ...message,
         ...(tempFilePath !== undefined ? { tempFilePath, tempFilePrecreated } : {})
       })
@@ -203,9 +206,11 @@ export class ExportWorkerClient {
 
   private cleanup(): void {
     this.hooks = null
-    if (this.worker !== null) {
-      const worker = this.worker
-      this.worker = null
+    const worker = this.worker
+    const tempToClean = this.currentTempFilePath
+    this.worker = null
+    this.currentTempFilePath = null
+    if (worker !== null) {
       worker
         .terminate()
         .catch((err: Error) => {
@@ -213,19 +218,37 @@ export class ExportWorkerClient {
           mainLogger.warn(`Export worker terminate failed: ${err.message}`, 'ExportWorkerClient')
         })
         .finally(() => {
-          this.cleanupTempFile()
+          if (tempToClean !== null) {
+            try {
+              rmSync(tempToClean, { force: true })
+            } catch {
+              // ignore cleanup errors
+            }
+          }
         })
-    } else {
-      this.cleanupTempFile()
+    } else if (tempToClean !== null) {
+      try {
+        rmSync(tempToClean, { force: true })
+      } catch {
+        // ignore cleanup errors
+      }
     }
   }
 
   async destroy(): Promise<void> {
     this.hooks = null
-    this.cleanupTempFile()
-    if (this.worker !== null) {
-      const worker = this.worker
-      this.worker = null
+    const worker = this.worker
+    const tempToClean = this.currentTempFilePath
+    this.worker = null
+    this.currentTempFilePath = null
+    if (tempToClean !== null) {
+      try {
+        rmSync(tempToClean, { force: true })
+      } catch {
+        // ignore
+      }
+    }
+    if (worker !== null) {
       try {
         await worker.terminate()
       } catch {

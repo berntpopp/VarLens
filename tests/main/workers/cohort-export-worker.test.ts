@@ -133,6 +133,39 @@ describe('cohort export worker', () => {
     expect(outcome).toBe('cancelled')
   })
 
+  it('cancelling one export and immediately launching another does not delete the second export temp file', async () => {
+    const client = new ExportWorkerClient(exportWorker)
+    const out1 = join(dir, 'cancelled-job.xlsx')
+    const out2 = join(dir, 'subsequent-job.xlsx')
+
+    client.startCohort({
+      dbPath: db.getPath(),
+      params: { genome_build: 'GRCh38' } as never,
+      outputFilePath: out1,
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+      onError: () => undefined,
+      onCancelled: () => undefined
+    })
+
+    client.cancel()
+
+    const outcome = await new Promise<string>((resolvePromise, reject) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath: out2,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (err) => reject(new Error(err)),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(outcome).toBe('complete')
+    expect(existsSync(out2)).toBe(true)
+  })
+
   it('does not delete a pre-existing .part file on cancel', async () => {
     const outputFilePath = join(dir, 'cancelled-part.xlsx')
     const existingPart = `${outputFilePath}.part`

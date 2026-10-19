@@ -18,7 +18,9 @@ import {
   writeFileSync,
   chmodSync,
   statSync,
-  symlinkSync
+  symlinkSync,
+  accessSync,
+  constants
 } from 'node:fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
@@ -30,7 +32,9 @@ import {
   buildMetadataSheet,
   defaultExportTempFilePath,
   iterateAnnotatedRows,
-  EXPORT_COLUMNS
+  EXPORT_COLUMNS,
+  isDevicePath,
+  prepareExportFilePath
 } from '../../../src/main/workers/export-pipeline'
 import { COHORT_EXPORT_COLUMNS } from '../../../src/main/workers/cohort-export'
 import type { ExportPipelineParams } from '../../../src/main/workers/export-pipeline'
@@ -581,10 +585,11 @@ describe('runExportPipeline — CSV', () => {
       symlinkSync(symlinkTarget, tempFilePath)
 
       const output = join(tmpDir, 'symlink-out.csv')
+      const stat = statSync(tempFilePath)
       const params = makeCsvParams({
         outputFilePath: output,
         tempFilePath,
-        tempFilePrecreated: true
+        tempFilePrecreated: { dev: stat.dev, ino: stat.ino }
       })
 
       await expect(runExportPipeline(params)).rejects.toThrow(
@@ -610,24 +615,6 @@ describe('runExportPipeline — CSV', () => {
       )
       expect(existsSync(differentFile)).toBe(true)
       expect(readFileSync(differentFile, 'utf8')).toBe('original file content')
-    })
-
-    it('rejects without modifying or deleting target when tempFilePath has mismatched tempFileDev/tempFileIno', async () => {
-      const differentFile = join(tmpDir, 'different-file-alt-keys.part')
-      writeFileSync(differentFile, 'original file content alt keys')
-
-      const output = join(tmpDir, 'mismatch-out-alt.csv')
-      const params = makeCsvParams({
-        outputFilePath: output,
-        tempFilePath: differentFile,
-        tempFilePrecreated: { tempFileDev: 999999, tempFileIno: 888888 } as never
-      })
-
-      await expect(runExportPipeline(params)).rejects.toThrow(
-        /Refusing to write to unexpected or replaced temporary export file/
-      )
-      expect(existsSync(differentFile)).toBe(true)
-      expect(readFileSync(differentFile, 'utf8')).toBe('original file content alt keys')
     })
 
     it('holds read transaction across entire iterateAnnotatedRows so trailing partial chunk is not polluted by mid-export commits', () => {
@@ -894,5 +881,58 @@ describe('runExportPipeline — XLSX', () => {
     const tempBasename = tempPath.slice(tempPath.lastIndexOf('/') + 1)
     expect(tempBasename.length).toBeLessThan(70)
     expect(tempBasename.startsWith('.varlens-export-')).toBe(true)
+  })
+
+  describe('isDevicePath and device export handling', () => {
+    it('returns false for regular files and non-existent files', () => {
+      const regularFile = join(tmpDir, 'regular.csv')
+      writeFileSync(regularFile, 'data')
+      expect(isDevicePath(regularFile)).toBe(false)
+      expect(isDevicePath(join(tmpDir, 'does-not-exist.csv'))).toBe(false)
+    })
+
+    it('does not classify /dev/shm files as device paths', () => {
+      expect(isDevicePath('/dev/shm/results.csv')).toBe(false)
+    })
+
+    if (process.platform !== 'win32') {
+      it('returns true for POSIX device paths like /dev/null', () => {
+        expect(isDevicePath('/dev/null')).toBe(true)
+      })
+    } else {
+      it('returns true for Windows device paths like NUL and pipe paths', () => {
+        expect(isDevicePath('NUL')).toBe(true)
+        expect(isDevicePath('\\\\.\\pipe\\test')).toBe(true)
+      })
+    }
+
+    it('prepareExportFilePath does not treat /dev/shm paths as devices and uses a .part temp file', () => {
+      const prep = prepareExportFilePath('/dev/shm/results.csv')
+      expect(prep.isDevice).toBe(false)
+      expect(prep.tempFilePath.startsWith('/dev/shm/.varlens-export-')).toBe(true)
+      expect(prep.tempFilePath.endsWith('.part')).toBe(true)
+    })
+
+    if (process.platform === 'linux' && existsSync('/dev/shm')) {
+      it('cleans up .part file on failed export under /dev/shm', async () => {
+        try {
+          accessSync('/dev/shm', constants.W_OK)
+        } catch {
+          return // /dev/shm not writeable in this test environment
+        }
+        const shmOutput = `/dev/shm/varlens-test-shm-${Date.now()}.xlsx`
+        const prep = prepareExportFilePath(shmOutput)
+        expect(prep.isDevice).toBe(false)
+
+        const params = makeXlsxParams({
+          outputFilePath: shmOutput,
+          compiledSql: 'SELECT invalid sql syntax'
+        })
+
+        await expect(runExportPipeline(params)).rejects.toThrow()
+        expect(existsSync(prep.tempFilePath)).toBe(false)
+        expect(existsSync(shmOutput)).toBe(false)
+      })
+    }
   })
 })

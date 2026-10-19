@@ -102,7 +102,7 @@ export async function runCohortExport(
   outputFilePath: string,
   onProgress: (current: number, total: number) => void,
   customTempFilePath?: string,
-  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  tempFilePrecreated?: { dev: number; ino: number }
 ): Promise<CohortExportResult> {
   // The summary is what gets exported: never write a file from a stale one.
   // The main process waited for a pending refresh before starting this job.
