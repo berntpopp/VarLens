@@ -1,4 +1,3 @@
-/* eslint-disable vue/one-component-per-file -- inline test components */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, defineComponent, effectScope } from 'vue'
 import { mount } from '@vue/test-utils'
@@ -59,6 +58,23 @@ describe('useBulkTriageSelection', () => {
       onTriageApplied,
       ...customOptions
     })
+
+  const mountWithBulk = (
+    customOptions: Record<string, unknown> = {},
+    provides: Record<string | symbol, unknown> = {}
+  ) => {
+    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
+    const wrapper = mount(
+      defineComponent({
+        setup: () => {
+          bulkInstance = createBulk(customOptions)
+          return () => null
+        }
+      }),
+      { global: { plugins: [pinia], provide: provides } }
+    )
+    return { wrapper, bulkInstance }
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -161,24 +177,10 @@ describe('useBulkTriageSelection', () => {
       userMessage: 'Override reason required'
     })
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    const TestComponent = defineComponent({
-      setup() {
-        bulkInstance = createBulk()
-        return () => null
-      }
-    })
-
-    mount(TestComponent, {
-      global: {
-        plugins: [pinia],
-        provide: {
-          [AppStateKey as symbol]: {
-            showSnack: showSnackSpy
-          }
-        }
-      }
-    })
+    const { bulkInstance } = mountWithBulk(
+      {},
+      { [AppStateKey as symbol]: { showSnack: showSnackSpy } }
+    )
 
     bulkInstance.toggleSelect(101)
     bulkInstance.toggleSelect(102)
@@ -251,25 +253,9 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    mount(
-      defineComponent({
-        setup() {
-          bulkInstance = createBulk({ items: () => currentItemsRef.value })
-          return () => null
-        }
-      }),
-      {
-        global: {
-          plugins: [pinia],
-          provide: {
-            [AppStateKey as symbol]: {
-              selectedPanelVariant: panelVariantRef,
-              showSnack: vi.fn()
-            }
-          }
-        }
-      }
+    const { bulkInstance } = mountWithBulk(
+      { items: () => currentItemsRef.value },
+      { [AppStateKey as symbol]: { selectedPanelVariant: panelVariantRef, showSnack: vi.fn() } }
     )
 
     bulkInstance.toggleSelect(1)
@@ -504,23 +490,12 @@ describe('useBulkTriageSelection', () => {
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    mount(
-      defineComponent({
-        setup() {
-          bulkInstance = createBulk()
-          return () => null
-        }
-      }),
+    const { bulkInstance } = mountWithBulk(
+      {},
       {
-        global: {
-          plugins: [pinia],
-          provide: {
-            [AppStateKey as symbol]: {
-              selectedPanelVariant: panelVariantRef,
-              showSnack: vi.fn()
-            }
-          }
+        [AppStateKey as symbol]: {
+          selectedPanelVariant: panelVariantRef,
+          showSnack: vi.fn()
         }
       }
     )
@@ -562,16 +537,7 @@ describe('useBulkTriageSelection', () => {
     const { beginAnnotationRequest } =
       await import('../../../src/renderer/src/composables/annotation-cache')
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    const wrapper = mount(
-      defineComponent({
-        setup() {
-          bulkInstance = createBulk()
-          return () => null
-        }
-      }),
-      { global: { plugins: [pinia] } }
-    )
+    const { wrapper, bulkInstance } = mountWithBulk()
 
     // Select row 101 on Case 42
     bulkInstance.toggleSelect(101)
@@ -610,16 +576,7 @@ describe('useBulkTriageSelection', () => {
     const { beginAnnotationRequest } =
       await import('../../../src/renderer/src/composables/annotation-cache')
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    const wrapper = mount(
-      defineComponent({
-        setup() {
-          bulkInstance = createBulk()
-          return () => null
-        }
-      }),
-      { global: { plugins: [pinia] } }
-    )
+    const { wrapper, bulkInstance } = mountWithBulk()
 
     bulkInstance.toggleSelect(101)
     const triagePromise = bulkInstance.applyBulkTriage({ tag_id: 5 })
@@ -639,6 +596,46 @@ describe('useBulkTriageSelection', () => {
     expect(batchGetSpy).not.toHaveBeenCalled()
     expect(annotationCache.value.has('chr2:5000:C:T')).toBe(true)
     expect(onTriageApplied).not.toHaveBeenCalled()
+  })
+
+  it('hands off to committedWriteListeners and reloads evicted annotations if unmounted during invalidateTags await on same case', async () => {
+    let resolveInvalidateTags!: () => void
+    const deferredInvalidate = new Promise<void>((resolve) => {
+      resolveInvalidateTags = resolve
+    })
+    vi.mocked(invalidateTags).mockReturnValueOnce(deferredInvalidate)
+
+    const batchGetSpy = vi.fn().mockResolvedValue({
+      'chr1:1000:A:T': mockCacheEntry(101, { tag_id: 5 })
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    const peerOnTriageApplied = vi.fn()
+    const peerScope = effectScope()
+    peerScope.run(() => {
+      createBulk({ onTriageApplied: peerOnTriageApplied })
+    })
+
+    const { wrapper, bulkInstance } = mountWithBulk()
+    annotationCache.value.set('chr1:1000:A:T', mockCacheEntry(101, { tag_id: null }))
+
+    bulkInstance.toggleSelect(101)
+    const triagePromise = bulkInstance.applyBulkTriage({ tag_id: 5 })
+
+    await vi.waitFor(() => {
+      expect(invalidateTags).toHaveBeenCalled()
+    })
+
+    wrapper.unmount()
+    resolveInvalidateTags()
+    const count = await triagePromise
+
+    expect(count).toBe(2)
+    expect(peerOnTriageApplied).toHaveBeenCalledTimes(1)
+    expect(batchGetSpy).toHaveBeenCalled()
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.tag_id).toBe(5)
+    peerScope.stop()
   })
 
   it('evicts stale cache on round-trip A -> B -> A and reloads fresh annotations even if no peer instance is mounted', async () => {
@@ -686,6 +683,46 @@ describe('useBulkTriageSelection', () => {
     )
   })
 
+  it('reloads fresh annotations via disposed writer recovery on A -> B -> A when annotation read was in-flight at commit time', async () => {
+    let resolveUpsert!: (val: unknown) => void
+    const deferredUpsert = new Promise((resolve) => {
+      resolveUpsert = resolve
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+
+    let bulk1!: ReturnType<typeof useBulkTriageSelection>
+    const scope1 = effectScope()
+    scope1.run(() => {
+      bulk1 = createBulk()
+    })
+
+    bulk1.toggleSelect(101)
+    const triagePromise = bulk1.applyBulkTriage({ acmg_classification: 'Pathogenic' })
+
+    scope1.stop()
+
+    const { beginAnnotationRequest, setLoading } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+    beginAnnotationRequest(42, 'GRCh38')
+    setLoading('chr1:1000:A:T', true)
+
+    const batchGetSpy = vi.fn().mockResolvedValue({
+      'chr1:1000:A:T': mockCacheEntry(101, { acmg_classification: 'Pathogenic' })
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    resolveUpsert({ updatedCount: 1 })
+    const count = await triagePromise
+
+    expect(count).toBe(1)
+    expect(batchGetSpy).toHaveBeenCalled()
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
+      'Pathogenic'
+    )
+  })
+
   it('enforces MAX_BULK_TRIAGE_SELECTION cap of 1,000 with warning snack', () => {
     const showSnackSpy = vi.fn()
     const CAP_MSG = 'Maximum bulk selection of 1,000 variants reached.'
@@ -697,25 +734,10 @@ describe('useBulkTriageSelection', () => {
       alt: 'T'
     }))
 
-    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
-    const TestComponent = defineComponent({
-      setup() {
-        bulkInstance = useBulkTriageSelection({
-          items: () => largeItems,
-          getItemId: (v) => v.id,
-          caseId,
-          onTriageApplied
-        })
-        return () => null
-      }
-    })
-
-    mount(TestComponent, {
-      global: {
-        plugins: [pinia],
-        provide: { [AppStateKey as symbol]: { showSnack: showSnackSpy } }
-      }
-    })
+    const { bulkInstance } = mountWithBulk(
+      { items: () => largeItems },
+      { [AppStateKey as symbol]: { showSnack: showSnackSpy } }
+    )
 
     bulkInstance.toggleSelectAll(true)
     expect(bulkInstance.selectedCount.value).toBe(MAX_BULK_TRIAGE_SELECTION)

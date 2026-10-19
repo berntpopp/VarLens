@@ -24,6 +24,7 @@ import {
   getCurrentDbPath,
   getGeneration,
   hasDbSwitchedSince,
+  isKeyLoading,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -122,6 +123,32 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     return !isDisposed && isCacheStillOnCase(cid, myDbPath)
   }
 
+  function getPanelVariantCoords(targetCid: number): (VariantCoords & { id: number }) | null {
+    const panel = appState?.selectedPanelVariant?.value
+    if (
+      panel !== null &&
+      typeof panel === 'object' &&
+      'id' in panel &&
+      typeof panel.id === 'number' &&
+      'chr' in panel &&
+      'pos' in panel &&
+      'ref' in panel &&
+      'alt' in panel
+    ) {
+      const panelCaseId = 'case_id' in panel ? (panel as { case_id?: unknown }).case_id : undefined
+      if (panelCaseId === undefined || panelCaseId === targetCid) {
+        return {
+          id: panel.id,
+          chr: String(panel.chr),
+          pos: Number(panel.pos),
+          ref: String(panel.ref),
+          alt: String(panel.alt)
+        }
+      }
+    }
+    return null
+  }
+
   const selectedIdSet = computed(() => new Set(selectedIds.value))
   const selectedCount = computed(() => selectedIds.value.length)
   const isSelected = (id: number): boolean => selectedIdSet.value.has(id)
@@ -159,35 +186,11 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }
     }
 
-    const currentPanel = appState?.selectedPanelVariant?.value
-    if (
-      currentPanel !== null &&
-      typeof currentPanel === 'object' &&
-      'id' in currentPanel &&
-      typeof currentPanel.id === 'number' &&
-      'chr' in currentPanel &&
-      'pos' in currentPanel &&
-      'ref' in currentPanel &&
-      'alt' in currentPanel
-    ) {
-      const panelCaseId =
-        'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
-      if (panelCaseId === undefined || panelCaseId === targetCid) {
-        const pKey = variantKey({
-          chr: String(currentPanel.chr),
-          pos: Number(currentPanel.pos),
-          ref: String(currentPanel.ref),
-          alt: String(currentPanel.alt)
-        })
-        if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
-          toReloadMap.set(currentPanel.id, {
-            id: currentPanel.id,
-            chr: String(currentPanel.chr),
-            pos: Number(currentPanel.pos),
-            ref: String(currentPanel.ref),
-            alt: String(currentPanel.alt)
-          })
-        }
+    const currentPanel = getPanelVariantCoords(targetCid)
+    if (currentPanel !== null) {
+      const pKey = variantKey(currentPanel)
+      if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
+        toReloadMap.set(currentPanel.id, currentPanel)
       }
     }
 
@@ -204,13 +207,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     targetCid,
     targetDbPath,
     notifiedTargetSet,
-    notifiedUpdates
+    _notifiedUpdates
   ) => {
     if (!isStillActiveCase(targetCid, targetDbPath)) return
-    if (notifiedUpdates.tag_id !== undefined && getActivePinia()) {
-      await invalidateTags(true)
-      if (!isStillActiveCase(targetCid, targetDbPath)) return
-    }
     const ok = await reloadAffectedAndPanel(targetCid, targetDbPath, notifiedTargetSet)
     if (!ok) return
     if (isStillActiveCase(targetCid, targetDbPath)) {
@@ -428,27 +427,10 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }
 
       // 4. From panelVariant (if selected)
-      const initialPanel = appState?.selectedPanelVariant?.value
-      const isInitialPanelSelected =
-        initialPanel !== null &&
-        typeof initialPanel === 'object' &&
-        'id' in initialPanel &&
-        typeof initialPanel.id === 'number' &&
-        targetSet.has(initialPanel.id) &&
-        'chr' in initialPanel &&
-        'pos' in initialPanel &&
-        'ref' in initialPanel &&
-        'alt' in initialPanel
-
-      if (isInitialPanelSelected) {
-        const pCoords: VariantCoords = {
-          chr: String(initialPanel.chr),
-          pos: Number(initialPanel.pos),
-          ref: String(initialPanel.ref),
-          alt: String(initialPanel.alt)
-        }
-        targetCoords.set(initialPanel.id, pCoords)
-        affectedKeys.add(variantKey(pCoords))
+      const initialPanel = getPanelVariantCoords(cid)
+      if (initialPanel !== null && targetSet.has(initialPanel.id)) {
+        targetCoords.set(initialPanel.id, initialPanel)
+        affectedKeys.add(variantKey(initialPanel))
       }
 
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
@@ -457,6 +439,12 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       // but we do not touch the active different case's selection or cache.
       if (!isCacheStillOnCase(cid, myDbPath)) {
         return res.updatedCount
+      }
+
+      const postWritePanel = getPanelVariantCoords(cid)
+      if (postWritePanel !== null && targetSet.has(postWritePanel.id)) {
+        targetCoords.set(postWritePanel.id, postWritePanel)
+        affectedKeys.add(variantKey(postWritePanel))
       }
 
       const preCachedToReload: Array<{
@@ -468,7 +456,8 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }> = []
       if (getCachedCaseId() === cid) {
         for (const [id, coords] of targetCoords.entries()) {
-          if (annotationCache.value.has(variantKey(coords))) {
+          const k = variantKey(coords)
+          if (annotationCache.value.has(k) || isKeyLoading(k)) {
             preCachedToReload.push({ id, ...coords })
           }
         }
@@ -477,34 +466,54 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       // Evict stale cached keys while cache is still on this case (even if disposed!)
       evictAnnotationCacheKeys(affectedKeys)
 
-      if (isDisposed) {
-        if (updates.tag_id !== undefined && getActivePinia()) {
-          await invalidateTags(true)
-          if (!isCacheStillOnCase(cid, myDbPath)) {
-            return res.updatedCount
-          }
-        }
-        await Promise.allSettled(
-          Array.from(committedWriteListeners).map((fn) => fn(cid, myDbPath, targetSet, updates))
-        )
-        if (isCacheStillOnCase(cid, myDbPath) && getCachedCaseId() === cid) {
-          const missing = preCachedToReload.filter((v) => !annotationCache.value.has(variantKey(v)))
-          if (missing.length > 0) {
-            await loadAnnotationsBatch(cid, missing)
-          }
-        }
-        return res.updatedCount
-      }
-
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
-        if (!isStillActiveCase(cid, myDbPath)) {
+        if (!isCacheStillOnCase(cid, myDbPath)) {
           return res.updatedCount
         }
       }
 
+      async function runDisposedRecovery(targetCid: number): Promise<void> {
+        await Promise.allSettled(
+          Array.from(committedWriteListeners).map((fn) =>
+            fn(targetCid, myDbPath, targetSet, updates)
+          )
+        )
+        if (!isCacheStillOnCase(targetCid, myDbPath)) return
+        const missingMap = new Map<
+          number,
+          { id: number; chr: string; pos: number; ref: string; alt: string }
+        >()
+        if (getCachedCaseId() === targetCid) {
+          for (const v of preCachedToReload) {
+            const k = variantKey(v)
+            if (!annotationCache.value.has(k) && !isKeyLoading(k)) {
+              missingMap.set(v.id, v)
+            }
+          }
+        }
+        const currentPanel = getPanelVariantCoords(targetCid)
+        if (currentPanel !== null) {
+          const pKey = variantKey(currentPanel)
+          if (!annotationCache.value.has(pKey) && !isKeyLoading(pKey)) {
+            missingMap.set(currentPanel.id, currentPanel)
+          }
+        }
+        if (missingMap.size > 0) {
+          await loadAnnotationsBatch(targetCid, Array.from(missingMap.values()))
+        }
+      }
+
+      if (isDisposed) {
+        await runDisposedRecovery(cid)
+        return res.updatedCount
+      }
+
       const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet, preCachedToReload)
       if (!ok) {
+        if (isDisposed && isCacheStillOnCase(cid, myDbPath)) {
+          await runDisposedRecovery(cid)
+        }
         return res.updatedCount
       }
 
