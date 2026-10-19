@@ -671,10 +671,7 @@ export async function runImport(
               currentFileProvisional = provisionalImport
               fileCaseId = provisionalImport.caseId
             } else {
-              const watermark = await repo.captureVariantWatermark(
-                client,
-                caseId
-              )
+              const watermark = await repo.captureVariantWatermark(client, caseId)
               currentFileProvisional = { caseId, watermark, isNew: false }
               fileCaseId = caseId
             }
@@ -713,10 +710,7 @@ export async function runImport(
               await beginFenced()
               beganTransaction = true
               await client.query('SET LOCAL synchronous_commit = OFF')
-              const batchResult = await repo.writeVcfFile(
-                client,
-                request
-              )
+              const batchResult = await repo.writeVcfFile(client, request)
               await client.query('COMMIT')
               beganTransaction = false
               fileVariantCount += batchResult.variantCount
@@ -897,11 +891,7 @@ export async function runImport(
     if (provisionalImport !== null && !publicationCommitAttempted) {
       try {
         const repo = new PostgresVcfImportRepository(start.schema)
-        await repo.cleanupProvisionalImport(
-          client,
-          provisionalImport,
-          { fence }
-        )
+        await repo.cleanupProvisionalImport(client, provisionalImport, { fence })
         provisionalImport = null
       } catch (cleanupError) {
         console.warn(

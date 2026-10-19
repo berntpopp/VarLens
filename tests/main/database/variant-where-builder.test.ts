@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import Database from 'better-sqlite3-multiple-ciphers'
 import { COHORT_FREQUENCY_SQL } from '../../../src/main/database/cohort-frequency-sql'
 import { buildBaseWhere } from '../../../src/main/database/variant-where-builder'
-import { translateBareColumnFilter } from '../../../src/main/database/variant-filter/column-filters'
+import { applyBareColumnFilters } from '../../../src/main/database/variant-filter/column-filters'
+import { createKysely } from '../../../src/main/database/kysely'
+import { addPostgresColumnFilters } from '../../../src/main/storage/postgres/postgres-variant-column-filters'
 import type { ColumnFilter } from '../../../src/shared/types/column-filters'
 
 describe('buildBaseWhere', () => {
@@ -194,59 +197,82 @@ describe('translateColumnFilter branches', () => {
     expect(result.params).toEqual(['HIGH'])
   })
 
-  it('translates bare column filters with SQLite vs Postgres dialect parity', () => {
-    const sqliteParams: unknown[] = []
-    const sqliteSql = translateBareColumnFilter(
-      'gene_symbol',
-      { operator: 'like', value: 'BRCA' },
-      {
-        dialect: 'sqlite',
-        numericColumn: false,
-        bind: (v) => {
-          sqliteParams.push(v)
-          return '?'
-        }
-      }
+  it('maintains full parity across Kysely, raw SQLite, and PostgreSQL for all operators, types, and includeEmpty (#676)', () => {
+    const db = new Database(':memory:')
+    db.exec(
+      'CREATE TABLE variants(id INTEGER PRIMARY KEY, chr TEXT, cadd REAL, sv_length INTEGER);' +
+        "INSERT INTO variants VALUES (1, '1', 0, -10), (2, '7', 20, -100), (3, 'abc_%', 30, -200), (4, '', NULL, NULL), (5, NULL, 0.0012, 0);"
     )
-    const pgParams: unknown[] = []
-    const pgSql = translateBareColumnFilter(
-      'gene_symbol',
-      { operator: 'like', value: 'BRCA' },
-      {
-        dialect: 'postgres',
-        numericColumn: false,
-        bind: (v) => {
-          pgParams.push(v)
-          return `$${pgParams.length}`
-        }
-      }
-    )
-    expect(sqliteSql).toBe("gene_symbol LIKE ? ESCAPE '\\' COLLATE NOCASE")
-    expect(sqliteParams).toEqual(['%BRCA%'])
-    expect(pgSql).toBe("gene_symbol ILIKE $1 ESCAPE '\\'")
-    expect(pgParams).toEqual(['%BRCA%'])
+    const kysely = createKysely(db)
+    try {
+      for (const col of ['chr', 'cadd', 'sv_length'] as const) {
+        for (const operator of [
+          '=',
+          '!=',
+          '<',
+          '>',
+          '<=',
+          '>=',
+          'like',
+          'in',
+          'is_null',
+          'not_null'
+        ] as const) {
+          for (const includeEmpty of [undefined, true, false] as const) {
+            const value =
+              operator === 'in' ? ['0', '7', '20', '100'] : operator === 'like' ? '_%' : '20'
+            const filter = {
+              column_filters: {
+                [col]: {
+                  operator,
+                  value,
+                  ...(includeEmpty === undefined ? {} : { includeEmpty })
+                }
+              }
+            }
+            const k = applyBareColumnFilters(
+              kysely.selectFrom('variants').select('id'),
+              filter as never
+            ).compile()
+            const r = buildBaseWhere(filter as never, { baseAlias: 'variants', scope: 'case' })
+            const kIds = (db.prepare(k.sql).all(...k.parameters) as Array<{ id: number }>)
+              .map((x) => x.id)
+              .sort((a, b) => a - b)
+            const rIds = (
+              db
+                .prepare('SELECT id FROM variants' + (r.sql ? ' WHERE ' + r.sql : ''))
+                .all(...r.params) as Array<{ id: number }>
+            )
+              .map((x) => x.id)
+              .sort((a, b) => a - b)
+            expect(kIds, `${col}:${operator}:${String(includeEmpty)}`).toEqual(rIds)
 
-    // Range comparison parity
-    const sqliteRange = translateBareColumnFilter(
-      'cadd',
-      { operator: '>=', value: 20 },
-      {
-        dialect: 'sqlite',
-        numericColumn: true,
-        bind: () => '?'
+            const pgValues: unknown[] = []
+            const pgSql: string[] = []
+            addPostgresColumnFilters(
+              filter as never,
+              (v) => {
+                pgValues.push(v)
+                return `$${pgValues.length}`
+              },
+              (s) => pgSql.push(s),
+              { impact: 'v.impact_rank', clinvar: 'v.clinvar_rank' }
+            )
+            expect(pgValues, `pg params ${col}:${operator}:${String(includeEmpty)}`).toEqual(
+              r.params
+            )
+            if (col === 'sv_length' && operator === 'in') {
+              expect(pgSql.join(' ')).toContain('ABS(v.sv_length) IN ($1, $2, $3, $4)')
+            }
+            if (col === 'cadd' && operator === 'like') {
+              expect(pgSql.join(' ')).toContain('v.cadd::text ILIKE $1 ESCAPE')
+            }
+          }
+        }
       }
-    )
-    const pgRange = translateBareColumnFilter(
-      'cadd',
-      { operator: '>=', value: 20 },
-      {
-        dialect: 'postgres',
-        numericColumn: true,
-        bind: () => '$1'
-      }
-    )
-    expect(sqliteRange).toBe('(cadd IS NULL OR cadd >= ?)')
-    expect(pgRange).toBe('(cadd IS NULL OR cadd >= $1)')
+    } finally {
+      db.close()
+    }
   })
 })
 

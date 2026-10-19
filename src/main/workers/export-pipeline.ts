@@ -118,11 +118,13 @@ export function* iterateAnnotatedRows(
 ): Generator<Record<string, unknown>> {
   const startedTx = !db.inTransaction
   if (startedTx) db.exec('BEGIN DEFERRED')
-  const stmt = db.prepare(compiledSql)
-  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
-  const batchLookup = createCaseAnnotationBatchLookup(db)
+  let iterator: IterableIterator<Record<string, unknown>> | undefined
 
   try {
+    const stmt = db.prepare(compiledSql)
+    iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
+    const batchLookup = createCaseAnnotationBatchLookup(db)
+
     let chunk: Record<string, unknown>[] = []
     for (const variant of iterator) {
       chunk.push(variant)
@@ -141,7 +143,7 @@ export function* iterateAnnotatedRows(
       }
     }
   } finally {
-    iterator.return?.()
+    iterator?.return?.()
     if (startedTx && db.inTransaction) {
       db.exec('ROLLBACK')
     }

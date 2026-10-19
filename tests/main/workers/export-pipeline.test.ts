@@ -671,6 +671,14 @@ describe('runExportPipeline — CSV', () => {
         if (readerDb.open) readerDb.close()
       }
     })
+
+    it('rejects and leaves db.inTransaction === false when compiledSql has invalid SQL syntax', async () => {
+      const params = makeCsvParams({
+        compiledSql: 'SELECT THIS IS INVALID SQL FROM'
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow()
+      expect(db.inTransaction).toBe(false)
+    })
   })
 })
 
