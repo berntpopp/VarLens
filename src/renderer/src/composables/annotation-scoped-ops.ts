@@ -110,11 +110,14 @@ async function mutate(
     scope.kind === 'case'
       ? perCaseVersionSlot(scope.caseId, scope.variantId, fieldGroup)
       : `global:${fieldGroup}`
-  if (scope.kind === 'case') ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId)
-  const baseSlot = confirmedBases.get(slotKey) ?? curSlot
+  if (scope.kind === 'case' && !siblingOccupied) {
+    ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId)
+  }
+  const baseSlot = confirmedBases.has(slotKey) ? (confirmedBases.get(slotKey) ?? null) : curSlot
   const plan = buildPlan(curSlot, baseSlot)
 
   const writeVer = bumpWriteVersion(key, vSlot)
+  if (scope.kind === 'case') bumpCaseVariantVersion(scope.caseId, scope.variantId)
   const mutationId = allocateMutationId()
 
   const list = inFlightMutations.get(slotKey) ?? []
@@ -126,10 +129,7 @@ async function mutate(
   })
   inFlightMutations.set(slotKey, list)
 
-  const optimistic = computeOptimisticSlot(
-    confirmedBases.get(slotKey) ?? (baseSlot ? { ...baseSlot } : null),
-    list
-  )
+  const optimistic = computeOptimisticSlot(baseSlot ? { ...baseSlot } : null, list)
   if (!confirmedBases.has(slotKey)) {
     confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
   }
@@ -211,6 +211,13 @@ async function mutate(
     if (leftScope(scope, dbPath)) return false
 
     if (hadMutation) {
+      const target =
+        (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
+        current
+      // prettier-ignore
+      const targetHoldsVariant = scope.kind !== 'case' || isOwner ||
+        (target?.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId) ||
+        (target?.perCase == null && getCachedVariantId(key) === scope.variantId)
       if (confirmedBases.has(slotKey)) {
         const remaining = inFlightMutations.get(slotKey)
         const rawBase = confirmedBases.get(slotKey) ?? null
@@ -229,38 +236,32 @@ async function mutate(
         }
         // prettier-ignore
         if (scope.kind === 'case') {
-          if ((!remaining || remaining.length === 0) && !hadPerCase && nextSlot === null) {
+          bumpCaseVariantVersion(scope.caseId, scope.variantId)
+          if ((!remaining || remaining.length === 0) && !hadPerCase && !annotationCache.value.has(key) && nextSlot === null) {
             perCaseByVariantId.delete(`${scope.caseId}:${scope.variantId}`)
           } else {
             setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key)
           }
         }
-        if (isOwner) {
-          const target =
-            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
-            current
-          if (target) {
-            // prettier-ignore
-            const canWriteTarget = scope.kind !== 'case' || (current !== undefined
-              ? (target.perCase == null && (getCachedVariantId(key) === undefined || getCachedVariantId(key) === scope.variantId)) ||
-                (target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId)
-              : target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId &&
-                !(rawBase === null && (!remaining || remaining.length === 0)))
-            if (canWriteTarget) {
-              if (nextSlot !== null) writeSlot(target, scope, nextSlot)
-              else rollBackSlot(target, scope, plan.rollback, null)
-            }
+        if (target && targetHoldsVariant) {
+          // prettier-ignore
+          const canWriteTarget = scope.kind !== 'case' || (current !== undefined
+            ? (target.perCase == null && (getCachedVariantId(key) === undefined || getCachedVariantId(key) === scope.variantId)) ||
+              (target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId)
+            : target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId &&
+              !(rawBase === null && (!remaining || remaining.length === 0)))
+          if (canWriteTarget) {
+            if (nextSlot !== null) writeSlot(target, scope, nextSlot)
+            else rollBackSlot(target, scope, plan.rollback, null)
           }
         }
       } else if (current !== undefined) {
         // prettier-ignore
         if (scope.kind === 'case') {
+          bumpCaseVariantVersion(scope.caseId, scope.variantId)
           setPerCaseByVariantId(scope.caseId, scope.variantId, baseSlot as CaseVariantAnnotation | null, key)
         }
-        if (isOwner) {
-          const target =
-            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
-            current
+        if (target && targetHoldsVariant) {
           rollBackSlot(target, scope, plan.rollback, baseSlot)
         }
       }
@@ -270,18 +271,21 @@ async function mutate(
   }
 }
 
-async function fetchEntry(
-  client: WindowAPI,
-  scope: AnnotationLoadScope,
-  { chr, pos, ref, alt }: VariantCoords
-): Promise<AnnotationCache> {
+// prettier-ignore
+async function fetchEntry(client: WindowAPI, scope: AnnotationLoadScope, { chr, pos, ref, alt }: VariantCoords): Promise<AnnotationCache> {
   if (scope.kind === 'case') {
+    if (typeof scope.variantId === 'number' && typeof client.annotations.batchGet === 'function') {
+      const batchRes = await client.annotations.batchGet(scope.caseId, [{ chr, pos, ref, alt, variantId: scope.variantId }], null)
+      if (batchRes !== undefined) {
+        const map = unwrapIpcResult(batchRes)
+        const k = variantKey({ chr, pos, ref, alt })
+        if (k in map) return map[k] as AnnotationCache
+      }
+    }
     return unwrapIpcResult(await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt))
   }
   if (scope.build === null) return { global: null, perCase: null }
-  const global = unwrapIpcResult(
-    await client.annotations.getGlobal(chr, pos, ref, alt, scope.build)
-  )
+  const global = unwrapIpcResult(await client.annotations.getGlobal(chr, pos, ref, alt, scope.build))
   return { global, perCase: null }
 }
 
@@ -323,9 +327,10 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
 
 // prettier-ignore
 function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: number, reqVid?: number, startVidVer?: number): void {
+  const vidFresh = reqVid === undefined || startVidVer === undefined || getCaseVariantVersion(caseId, reqVid) === startVidVer
   const unloaded = unloadedSlotOf(key)
   if (unloaded === 'global') cacheSetGlobalSlot(key, entry.global)
-  else if (unloaded === 'perCase') {
+  else if (unloaded === 'perCase' && vidFresh) {
     const pc = entry.perCase
     if (reqVid === undefined || pc === null || (pc.variant_id === reqVid && pc.case_id === caseId)) {
       cacheSetPerCaseSlot(key, pc, reqVid)
@@ -333,7 +338,7 @@ function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: numb
       else if (pc !== null) setPerCaseByVariantId(caseId, pc.variant_id, pc, key)
     }
   }
-  if (reqVid !== undefined && startVidVer !== undefined && getCaseVariantVersion(caseId, reqVid) === startVidVer) {
+  if (reqVid !== undefined && startVidVer !== undefined && vidFresh) {
     const pc = entry.perCase
     if (pc === null || (pc.variant_id === reqVid && pc.case_id === caseId)) {
       const sk = perCaseSlotKey(caseId, reqVid, key)
@@ -341,6 +346,7 @@ function applyStalePerCaseSlot(key: string, entry: AnnotationCache, caseId: numb
       const base = pc ? (applyConfirmedFieldPatches(sk, pc) as CaseVariantAnnotation) : null
       const stored = inf && inf.length > 0 ? (computeOptimisticSlot(base, inf) as CaseVariantAnnotation | null) : pc
       setPerCaseByVariantId(caseId, reqVid, stored, key)
+      triggerAnnotationCache()
     }
   }
 }
@@ -368,18 +374,28 @@ async function load(api: WindowAPI | undefined, scope: AnnotationLoadScope, coor
   const vidVer = scope.kind === 'case' && typeof scope.variantId === 'number' ? getCaseVariantVersion(scope.caseId, scope.variantId) : undefined
   const loadingToken = setLoading(key, true, scope.kind)
   try {
-    const entry = await fetchEntry(api, scope, coords)
+    let entry = await fetchEntry(api, scope, coords)
     if (isResponseStale(scope, dbPath)) return
-    const isStale = scope.kind === 'case' ? getKeyVersion(key) !== version : getKeyVersion(key) % 1_000_000 !== version % 1_000_000
+    if (scope.kind === 'case' && typeof scope.variantId === 'number' && entry.perCase !== null && (entry.perCase.variant_id !== scope.variantId || entry.perCase.case_id !== scope.caseId)) {
+      if (entry.perCase.case_id === scope.caseId && !hasPerCaseByVariantId(scope.caseId, entry.perCase.variant_id)) {
+        setPerCaseByVariantId(scope.caseId, entry.perCase.variant_id, entry.perCase, key)
+      }
+      entry = { global: entry.global, perCase: null }
+    }
+    const vidStale = scope.kind === 'case' && typeof scope.variantId === 'number' && vidVer !== undefined && getCaseVariantVersion(scope.caseId, scope.variantId) !== vidVer
+    const isStale = vidStale || (scope.kind === 'case' ? getKeyVersion(key) !== version : getKeyVersion(key) % 1_000_000 !== version % 1_000_000)
     if (isStale) {
       if (scope.kind === 'case' && Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(version / 1_000_000)) {
         applyStalePerCaseSlot(key, entry, scope.caseId, scope.variantId, vidVer)
       }
       return
     }
+    if (scope.kind === 'case' && typeof scope.variantId === 'number') {
+      ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId)
+    }
     storeLoaded(key, scope, entry)
     if (scope.kind === 'case' && typeof scope.variantId === 'number') {
-      ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId); setCachedVariantId(key, scope.variantId)
+      setCachedVariantId(key, scope.variantId)
       setPerCaseByVariantId(scope.caseId, scope.variantId, annotationCache.value.get(key)?.perCase ?? entry.perCase, key)
     }
   } catch (error) {
@@ -511,67 +527,39 @@ async function loadBatch(
       )
       if (isResponseStale(scope, dbPath)) return
       const fromPriorPage = generation !== getAnnotationGeneration(scope.kind)
+      // prettier-ignore
       for (const [key, value] of Object.entries(results)) {
         const startVer = keyVersionsAtStart.get(key)
-        if (startVer !== undefined) {
-          const isStale =
-            scope.kind === 'case'
-              ? getKeyVersion(key) !== startVer
-              : getKeyVersion(key) % 1_000_000 !== startVer % 1_000_000
-          if (isStale) {
-            const sameEpoch =
-              Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(startVer / 1_000_000)
-            if (scope.kind === 'case' && sameEpoch) {
-              const awaited = checkAwaited(key)
-              if (!fromPriorPage || awaited) {
-                applyStalePerCaseSlot(
-                  key,
-                  value as AnnotationCache,
-                  scope.caseId,
-                  requestedVariantIds.get(key),
-                  vidVersionsAtStart.get(key)
-                )
-              }
+        const reqVid = requestedVariantIds.get(key)
+        const startVidVer = vidVersionsAtStart.get(key)
+        const vidStale = scope.kind === 'case' && reqVid !== undefined && startVidVer !== undefined && getCaseVariantVersion(scope.caseId, reqVid) !== startVidVer
+        if (startVer !== undefined || vidStale) {
+          const keyStale = startVer !== undefined && (scope.kind === 'case' ? getKeyVersion(key) !== startVer : getKeyVersion(key) % 1_000_000 !== startVer % 1_000_000)
+          if (keyStale || vidStale) {
+            const sameEpoch = startVer === undefined || Math.floor(getKeyVersion(key) / 1_000_000) === Math.floor(startVer / 1_000_000)
+            if (scope.kind === 'case' && sameEpoch && (!fromPriorPage || checkAwaited(key))) {
+              applyStalePerCaseSlot(key, value as AnnotationCache, scope.caseId, reqVid, startVidVer)
             }
             continue
           }
         }
-        const awaited = checkAwaited(key)
-        if (fromPriorPage && !awaited) continue
-        if (scope.kind === 'case' && requestedVariantIds.has(key)) {
-          ensurePerCaseSlotOwner(key, scope.caseId, requestedVariantIds.get(key)!)
-        }
+        if (fromPriorPage && !checkAwaited(key)) continue
+        if (scope.kind === 'case' && reqVid !== undefined) ensurePerCaseSlotOwner(key, scope.caseId, reqVid)
         storeLoaded(key, scope, value as AnnotationCache)
-        if (scope.kind === 'case' && requestedVariantIds.has(key)) {
+        if (scope.kind === 'case' && reqVid !== undefined) {
           const loaded = (value as AnnotationCache)?.perCase ?? null
-          const reqVid = requestedVariantIds.get(key)!
-          if (
-            loaded === null ||
-            (loaded.variant_id === reqVid && loaded.case_id === scope.caseId)
-          ) {
-            setCachedVariantId(key, reqVid)
-          }
-          const stored = isPerCaseSlotOwner(key, scope.caseId, reqVid)
-            ? (annotationCache.value.get(key)?.perCase ?? loaded)
-            : loaded
+          if (loaded === null || (loaded.variant_id === reqVid && loaded.case_id === scope.caseId)) setCachedVariantId(key, reqVid)
+          const stored = isPerCaseSlotOwner(key, scope.caseId, reqVid) ? (annotationCache.value.get(key)?.perCase ?? loaded) : loaded
           setPerCaseByVariantId(scope.caseId, reqVid, stored, key)
         }
       }
     } catch (error) {
-      logService.warn(
-        `Failed to load ${scopeQualifier(scope)}annotation batch: ` +
-          getTransportErrorMessage(error),
-        'annotations'
-      )
+      logService.warn(`Failed to load ${scopeQualifier(scope)}annotation batch: ` + getTransportErrorMessage(error), 'annotations')
     } finally {
       for (const vk of uncached) {
         const k = variantKey(vk)
-        if (scope.kind === 'case' && typeof vk.variantId === 'number') {
-          setLoadingCaseVariant(scope.caseId, vk.variantId, false)
-        }
-        if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
-          setLoading(k, false, scope.kind, loadingTokensAtStart.get(k))
-        }
+        if (scope.kind === 'case' && typeof vk.variantId === 'number') setLoadingCaseVariant(scope.caseId, vk.variantId, false)
+        if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) setLoading(k, false, scope.kind, loadingTokensAtStart.get(k))
       }
     }
   }

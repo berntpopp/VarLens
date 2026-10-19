@@ -92,14 +92,16 @@ export function mergeServerSlot(
 
 export function rollBackSlot(
   current: AnnotationCache,
-  scope: { kind: 'case' | 'global' },
+  scope: { kind: 'case'; caseId: number; variantId: number } | { kind: 'global' },
   rollback: SlotPatch | 'restore-previous',
   base: SlotValue | null
 ): void {
   const value =
     rollback === 'restore-previous'
       ? base
-      : ({ ...readSlot(current, scope), ...rollback } as SlotValue)
+      : base === null
+        ? ({ ...slotIdentity(scope), ...rollback } as SlotValue)
+        : ({ ...readSlot(current, scope), ...rollback } as SlotValue)
   writeSlot(current, scope, value)
 }
 
@@ -315,13 +317,15 @@ export function getPerCaseByVariantId(
   coordKey?: string
 ): CaseVariantAnnotation | null | undefined {
   void annotationCache.value
+  const k = `${caseId}:${variantId}`
+  if (perCaseByVariantId.has(k)) return perCaseByVariantId.get(k)
   if (typeof coordKey === 'string' && coordKey.length > 0) {
     const cached = annotationCache.value.get(coordKey)?.perCase
     if (cached != null && cached.case_id === caseId && cached.variant_id === variantId) {
       return cached
     }
   }
-  return perCaseByVariantId.get(`${caseId}:${variantId}`)
+  return undefined
 }
 
 /** Drop every cached entry, loading flag and pending expectation, and notify. */

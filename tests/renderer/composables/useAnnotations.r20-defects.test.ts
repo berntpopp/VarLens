@@ -591,6 +591,120 @@ describe('Round 20 regression defects', () => {
     expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
     expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification ?? null).toBeNull()
   })
+
+  it('cold load with variantId uses batchGet with variantId and does not cache a sibling annotation under the requested ID', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    vi.mocked(api.annotations.batchGet).mockResolvedValueOnce({
+      [key]: {
+        global: null,
+        perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' }),
+        perCaseByVariantId: { 12: null }
+      }
+    } as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    await ops.load({ kind: 'case', caseId: 1, variantId: 12, build: 'GRCh38' }, coords)
+
+    expect(api.annotations.batchGet).toHaveBeenCalledWith(
+      1,
+      [{ chr: '1', pos: 100, ref: 'A', alt: 'T', variantId: 12 }],
+      null
+    )
+    expect(getPerCaseByVariantId(1, 12, key)).toBeNull()
+    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Pathogenic')
+  })
+
+  it('older loadBatch resolving after a non-owner sibling write does not overwrite the newly saved sibling annotation', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    setPerCaseByVariantId(1, 11, mockPerCase(11, { starred: 1 }), key)
+    ensurePerCaseSlotOwner(key, 1, 11)
+    cacheSet(key, {
+      global: null,
+      perCase: mockPerCase(11, { starred: 1 })
+    })
+
+    const dBatch = defer<Record<string, unknown>>()
+    vi.mocked(api.annotations.batchGet).mockReturnValueOnce(dBatch.promise as never)
+    vi.mocked(api.annotations.upsertPerCase).mockResolvedValueOnce(
+      mockPerCase(12, { acmg_classification: 'Likely pathogenic' }) as never
+    )
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const pBatch = ops.loadBatch(
+      { kind: 'case', caseId: 1, build: 'GRCh38' },
+      [{ ...coords, id: 12 }]
+    )
+
+    // Non-owner sibling 12 saves while loadBatch is in flight
+    await ops.setAcmgClassification(
+      { kind: 'case', caseId: 1, variantId: 12, build: 'GRCh38' },
+      coords,
+      'Likely pathogenic'
+    )
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Likely pathogenic')
+
+    // Older loadBatch resolves with stale null for sibling 12
+    dBatch.resolve({
+      [key]: {
+        global: null,
+        perCase: mockPerCase(11, { starred: 1 }),
+        perCaseByVariantId: { 12: null }
+      }
+    })
+    await pBatch
+
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Likely pathogenic')
+  })
+
+  it('two overlapping rejected saves on an initially unannotated variant roll back to null instead of retaining Save 1 optimistic state', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    cacheSet(key, { global: null, perCase: null })
+    const d1 = defer<CaseVariantAnnotation>()
+    const d2 = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase)
+      .mockReturnValueOnce(d1.promise as never)
+      .mockReturnValueOnce(d2.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const scope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+    const p1 = ops.setAcmgClassification(scope11, coords, 'Pathogenic')
+    const p2 = ops.setAcmgClassification(scope11, coords, 'Benign')
+
+    d1.reject(new Error('save 1 failed'))
+    d2.reject(new Error('save 2 failed'))
+    await Promise.all([p1, p2])
+
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification ?? null).toBeNull()
+    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification ?? null).toBeNull()
+  })
+
+  it('rolls back coordinate slot when sibling mutation started after coordinate slot was still occupied by first variant', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    cacheSet(key, { global: null, perCase: null })
+    const d11 = defer<CaseVariantAnnotation>()
+    const d12 = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase)
+      .mockReturnValueOnce(d11.promise as never)
+      .mockReturnValueOnce(d12.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const p11 = ops.setAcmgClassification(
+      { kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' },
+      coords,
+      'Pathogenic'
+    )
+    const p12 = ops.setAcmgClassification(
+      { kind: 'case', caseId: 1, variantId: 12, build: 'GRCh38' },
+      coords,
+      'Benign'
+    )
+
+    d11.reject(new Error('11 failed'))
+    d12.reject(new Error('12 failed'))
+    await Promise.all([p11, p12])
+
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification ?? null).toBeNull()
+    expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification ?? null).toBeNull()
+    expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification ?? null).toBeNull()
+  })
 })
-
-
