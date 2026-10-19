@@ -189,7 +189,9 @@ async function mutate(
       (scope.kind === 'case' && epoch !== getAnnotationCacheEpoch()) ||
       writeVer <= confirmedVer
     ) {
-      removeInFlightMutation(slotKey, mutationId)
+      if (epoch === getAnnotationCacheEpoch()) {
+        removeInFlightMutation(slotKey, mutationId)
+      }
       return true
     }
     setConfirmedWriteVersion(key, vSlot, writeVer)
@@ -236,7 +238,9 @@ async function mutate(
     const wasActive =
       (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false) &&
       (scope.kind !== 'case' || isPerCaseSlotOwner(key, scope.caseId, scope.variantId))
-    removeInFlightMutation(slotKey, mutationId)
+    if (epoch === getAnnotationCacheEpoch()) {
+      removeInFlightMutation(slotKey, mutationId)
+    }
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false

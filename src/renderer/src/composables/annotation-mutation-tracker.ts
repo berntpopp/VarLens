@@ -88,6 +88,9 @@ export function setConfirmedWriteVersion(key: string, slot: string, version: num
   if (version > (confirmedWriteVersions.get(k) ?? 0)) {
     confirmedWriteVersions.set(k, version)
   }
+  if (version > (issuedWriteVersions.get(k) ?? 0)) {
+    issuedWriteVersions.set(k, version)
+  }
 }
 
 export function setConfirmedFieldPatch(
@@ -209,7 +212,6 @@ export function pruneInFlightMutationsOnSuccess(
 }
 
 export function clearMutationTracker(): void {
-  nextMutationId = 0
   issuedWriteVersions.clear()
   confirmedWriteVersions.clear()
   maxVariantWriteVersions.clear()

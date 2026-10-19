@@ -422,9 +422,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       // 3. From annotationCache entries matching selected variant IDs
       for (const [key, entry] of annotationCache.value.entries()) {
         const vId = entry.perCase?.variant_id
-        if (vId !== undefined && targetSet.has(vId)) {
-          affectedKeys.add(key)
-        }
+        if (vId !== undefined && targetSet.has(vId)) affectedKeys.add(key)
       }
 
       // 4. From panelVariant (if selected)
@@ -452,20 +450,22 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }
       for (const [k, list] of bulkOwners) {
         const last = list[list.length - 1]
-        if (last) ensurePerCaseSlotOwner(k, last.caseId, last.variantId)
+        if (last !== undefined) ensurePerCaseSlotOwner(k, last.caseId, last.variantId)
       }
 
-      const bulkWriteVersions = new Map<string, Map<'star' | 'acmg' | 'comment', number>>()
+      const bulkWriteVersions = new Map<string, Map<string, number>>()
       for (const k of affectedKeys) {
-        const m = new Map<'star' | 'acmg' | 'comment', number>()
+        const m = new Map<string, number>()
         const list = bulkOwners.get(k)
         for (const fg of touchedFields) {
-          let maxVer = 0
-          const slots = list?.length
-            ? list.map((o) => perCaseVersionSlot(o.caseId, o.variantId, fg))
-            : [`perCase:${fg}` as const]
-          for (const s of slots) maxVer = Math.max(maxVer, bumpWriteVersion(k, s))
-          m.set(fg, maxVer)
+          if (list !== undefined && list.length > 0) {
+            for (const o of list) {
+              const vSlot = perCaseVersionSlot(o.caseId, o.variantId, fg)
+              m.set(vSlot, bumpWriteVersion(k, vSlot))
+            }
+          } else {
+            m.set(fg, bumpWriteVersion(k, `perCase:${fg}`))
+          }
         }
         bulkWriteVersions.set(k, m)
       }

@@ -443,7 +443,7 @@ function applyBulkUpdatesPatch(
 export function evictAnnotationCacheKeysForBulkTriage(
   affectedKeys: Iterable<string>,
   touchedFields: Array<'star' | 'acmg' | 'comment'>,
-  bulkWriteVersions: Map<string, Map<'star' | 'acmg' | 'comment', number>>,
+  bulkWriteVersions: Map<string, Map<string, number>>,
   bulkUpdates?: Record<string, unknown> | object,
   bulkOwners?: Map<
     string,
@@ -472,7 +472,8 @@ export function evictAnnotationCacheKeysForBulkTriage(
       for (const o of targetOwners) {
         const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
         const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
-        const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, vSlot)
+        const verMap = bulkWriteVersions.get(key)
+        const bulkVer = verMap?.get(vSlot) ?? verMap?.get(fg) ?? bumpWriteVersion(key, vSlot)
         const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
         if (bulkVer > prevConfirmed) {
           setConfirmedWriteVersion(key, vSlot, bulkVer)

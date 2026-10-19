@@ -12,7 +12,9 @@ import {
   beginAnnotationRequest,
   bumpWriteVersion,
   cacheSet,
+  clearMutationTracker,
   ensurePerCaseSlotOwner,
+  getConfirmedWriteVersion,
   getPerCaseByVariantId,
   getWriteVersion,
   inFlightMutations,
@@ -283,5 +285,86 @@ describe('Round 20 regression defects', () => {
     expect(verA2).toBe(3)
     expect(getWriteVersion(key, vSlot11)).toBe(3)
     expect(getWriteVersion(key, vSlot12)).toBe(2)
+  })
+
+  it('Round 22 Defect 1: clearMutationTracker preserves monotonic nextMutationId and stale epoch writes do not remove current epoch in-flight mutations', async () => {
+    const id1 = allocateMutationId()
+    clearMutationTracker()
+    const id2 = allocateMutationId()
+    expect(id2).toBeGreaterThan(id1)
+
+    beginAnnotationRequest(1, 'GRCh38')
+    ensurePerCaseSlotOwner(key, 1, 11)
+    const slotKey = perCaseSlotKey(1, 11, key)
+
+    const d1 = defer<CaseVariantAnnotation>()
+    vi.mocked(api.annotations.upsertPerCase).mockReturnValue(d1.promise as never)
+
+    const ops = createScopedAnnotationOps(api, () => undefined)
+    const pSave1 = ops.upsertComment(scope, coords, 'epoch 1 note')
+
+    resetAnnotationState()
+    beginAnnotationRequest(2, 'GRCh38')
+
+    const idNew = allocateMutationId()
+    inFlightMutations.set(slotKey, [
+      { id: idNew, fieldGroup: 'comment', writeVer: 1, patch: { per_case_comment: 'epoch 2 note' } }
+    ])
+
+    d1.resolve(mockPerCase(11, { per_case_comment: 'epoch 1 note' }))
+    await pSave1
+
+    expect(inFlightMutations.get(slotKey)?.some((m) => m.id === idNew)).toBe(true)
+  })
+
+  it('Round 22 Defect 2: bulk triage records owner-specific write versions so siblings with lower versions are not rejected as stale', async () => {
+    beginAnnotationRequest(1, 'GRCh38')
+    const vSlot11 = perCaseVersionSlot(1, 11, 'acmg')
+    const vSlot12 = perCaseVersionSlot(1, 12, 'acmg')
+
+    for (let i = 0; i < 5; i++) {
+      bumpWriteVersion(key, vSlot11)
+    }
+    expect(getWriteVersion(key, vSlot11)).toBe(5)
+    expect(getWriteVersion(key, vSlot12)).toBe(0)
+
+    const eff = effectScope()
+    const app = createApp({})
+    app.provide(AppStateKey, {
+      selectedPanelVariant: ref(null),
+      selectedCaseId: ref(1)
+    })
+    vi.mocked(api.annotations.batchUpsertPerCase).mockResolvedValue({ updatedCount: 2 } as never)
+    vi.mocked(api.annotations.batchGet).mockResolvedValue({
+      [key]: {
+        global: null,
+        perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' })
+      }
+    } as never)
+
+    const bulk = app.runWithContext(() =>
+      eff.run(() =>
+        useBulkTriageSelection({
+          items: () => [
+            { id: 11, ...coords },
+            { id: 12, ...coords }
+          ],
+          getItemId: (r: { id: number }) => r.id,
+          caseId: 1,
+          genomeBuild: 'GRCh38'
+        })
+      )
+    )!
+    bulk.toggleSelectAll(true)
+    await bulk.applyBulkTriage({ acmg_classification: 'Pathogenic' })
+
+    expect(getConfirmedWriteVersion(key, vSlot11)).toBe(6)
+    expect(getConfirmedWriteVersion(key, vSlot12)).toBe(1)
+
+    const nextVer12 = bumpWriteVersion(key, vSlot12)
+    expect(nextVer12).toBe(2)
+    expect(nextVer12).toBeGreaterThan(getConfirmedWriteVersion(key, vSlot12))
+
+    eff.stop()
   })
 })

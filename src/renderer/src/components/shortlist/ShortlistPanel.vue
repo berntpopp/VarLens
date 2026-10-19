@@ -238,10 +238,14 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         )
       }
     } else {
-      removeInFlightMutation(slotKey, toggleToken)
+      if (epoch === getAnnotationCacheEpoch()) {
+        removeInFlightMutation(slotKey, toggleToken)
+      }
     }
   } catch (e) {
-    removeInFlightMutation(slotKey, toggleToken)
+    if (epoch === getAnnotationCacheEpoch()) {
+      removeInFlightMutation(slotKey, toggleToken)
+    }
     if (confirmedBases.has(slotKey)) {
       const base = confirmedBases.get(slotKey) ?? null
       const rolledBack = (applyConfirmedFieldPatches(slotKey, base) ??
@@ -269,7 +273,9 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       'shortlist.panel'
     )
   } finally {
-    removeInFlightMutation(slotKey, toggleToken)
+    if (epoch === getAnnotationCacheEpoch()) {
+      removeInFlightMutation(slotKey, toggleToken)
+    }
     if (pendingStarByRow.get(rowKey)?.token === toggleToken) {
       pendingStarByRow.delete(rowKey)
     }
