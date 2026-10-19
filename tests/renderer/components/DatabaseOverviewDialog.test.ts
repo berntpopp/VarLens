@@ -27,7 +27,8 @@ vi.mock('../../../src/renderer/src/composables/useApiService', () => ({
 }))
 
 vi.mock('../../../src/renderer/src/utils/backend-capabilities', () => ({
-  getCurrentUnsupportedReason: vi.fn().mockResolvedValue(null)
+  getCurrentUnsupportedReason: vi.fn().mockResolvedValue(null),
+  getCurrentUnsupportedReasonSync: vi.fn().mockReturnValue(null)
 }))
 
 vi.mock('../../../src/renderer/src/services/LogService', () => ({

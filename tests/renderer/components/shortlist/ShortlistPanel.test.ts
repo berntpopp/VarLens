@@ -13,7 +13,7 @@
  * Plan: .planning/plans/2026-04-11-unified-shortlist-plan.md (Task 5)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import { createVuetify } from 'vuetify'
@@ -93,12 +93,12 @@ import {
   beginAnnotationRequest,
   bumpWriteVersion,
   cacheSet,
-  clearAnnotationCache,
   confirmedBases,
   evictAnnotationCacheKeysForBulkTriage,
   inFlightMutations,
   isKeyLoading,
   perCaseVersionSlot,
+  resetAnnotationState,
   setConfirmedWriteVersion,
   setLoading,
   variantKey
@@ -114,7 +114,7 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   installCapabilities()
-  clearAnnotationCache()
+  resetAnnotationState()
   batchGetMock.mockReset().mockResolvedValue({})
   getForVariantMock.mockReset().mockResolvedValue({ global: null, perCase: null })
 })
@@ -166,18 +166,27 @@ function resetState(): void {
 }
 
 describe('ShortlistPanel', () => {
+  let activeWrapper: ReturnType<typeof mount> | null = null
+
   beforeEach(() => {
     resetState()
+  })
+
+  afterEach(() => {
+    activeWrapper?.unmount()
+    activeWrapper = null
   })
 
   function mountPanel(
     props: { caseId: number } = { caseId: 1 },
     provide?: Record<string | symbol, unknown>
   ) {
-    return mount(ShortlistPanel, {
+    activeWrapper?.unmount()
+    activeWrapper = mount(ShortlistPanel, {
       props,
       global: { plugins: [vuetify, pinia], provide }
     })
+    return activeWrapper
   }
 
   it('opens the ranking settings on the selected preset', async () => {

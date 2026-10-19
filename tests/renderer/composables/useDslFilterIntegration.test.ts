@@ -49,7 +49,7 @@ describe('useDslFilterIntegration', () => {
   })
 
   it.each([
-    'cadd:>=:20 AND cadd:<=:30',
+    'cadd:>:20 AND cadd:<:30',
     'gene:=:BRCA1 OR cadd:>=:20',
     'gene:=:BRCA1 AND',
     'cadd:<:abc',
