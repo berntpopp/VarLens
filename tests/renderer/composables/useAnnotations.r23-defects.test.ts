@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
+import { createApp, effectScope, ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+import { AppStateKey } from '@renderer/composables/useAppState'
 import { useDatabaseStore } from '@renderer/stores/databaseStore'
+import { useBulkTriageSelection } from '@renderer/composables/useBulkTriageSelection'
 import { createScopedAnnotationOps } from '@renderer/composables/annotation-scoped-ops'
 import {
   allocateMutationId,
@@ -331,7 +333,12 @@ describe('Round 23 regression defects', () => {
       // An unrelated ACMG mutation is already in flight on this slot
       const acmgMutId = allocateMutationId()
       inFlightMutations.set(slotKey, [
-        { id: acmgMutId, fieldGroup: 'acmg', writeVer: 1, patch: { acmg_classification: 'Pathogenic' } }
+        {
+          id: acmgMutId,
+          fieldGroup: 'acmg',
+          writeVer: 1,
+          patch: { acmg_classification: 'Pathogenic' }
+        }
       ])
       confirmedBases.set(slotKey, mockPerCase(11, { starred: 0, acmg_classification: 'Benign' }))
       confirmedFieldPatches.set(slotKey, { acmg: { acmg_classification: 'Pathogenic' } })
@@ -414,6 +421,167 @@ describe('Round 23 regression defects', () => {
       // New database cache and perCaseByVariantId must NOT be rolled back
       expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(1)
       expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+    })
+  })
+
+  // Round 24 Dual Review edge case regression tests
+  describe('Round 24 regression defects', () => {
+    it('Problem 1A: evictAnnotationCacheKeysForBulkTriage prunes in-flight mutation on sibling row and cleans stale perCaseByVariantId', () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      const slotKey11 = perCaseSlotKey(1, 11, key)
+      const mutId11 = allocateMutationId()
+      inFlightMutations.set(slotKey11, [
+        {
+          id: mutId11,
+          fieldGroup: 'acmg',
+          writeVer: 1,
+          patch: { acmg_classification: 'Likely pathogenic' }
+        }
+      ])
+      confirmedBases.set(slotKey11, mockPerCase(11, { acmg_classification: 'Benign' }))
+      confirmedFieldPatches.set(slotKey11, { acmg: { acmg_classification: 'Likely pathogenic' } })
+      setPerCaseByVariantId(
+        1,
+        11,
+        mockPerCase(11, { acmg_classification: 'Likely pathogenic' }),
+        key
+      )
+
+      // Sibling 12 owns the slot in cache
+      cacheSet(key, { global: null, perCase: mockPerCase(12) })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setPerCaseByVariantId(1, 12, mockPerCase(12), key)
+
+      // Evict for bulk triage with bulk write version 5 for ACMG
+      const bulkVerMap = new Map<string, Map<string, number>>([
+        [key, new Map([['perCase:acmg', 5]])]
+      ])
+      const bulkOwners = new Map([
+        [
+          key,
+          [
+            { caseId: 1, variantId: 11 },
+            { caseId: 1, variantId: 12 }
+          ]
+        ]
+      ])
+
+      evictAnnotationCacheKeysForBulkTriage(
+        [key],
+        ['acmg'],
+        bulkVerMap,
+        { acmg_classification: 'Pathogenic' },
+        bulkOwners,
+        true
+      )
+
+      // Row 11 mutation was superseded/pruned by bulkVer 5
+      expect(inFlightMutations.get(slotKey11)?.length ?? 0).toBe(0)
+      // Row 11 perCaseByVariantId must NOT retain the stale 'Likely pathogenic' mutation
+      expect(getPerCaseByVariantId(1, 11, key)).toBeUndefined()
+    })
+
+    it('Problem 1B: reloadAffectedAndPanel retains both sibling variants at same coords in reload batch', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      cacheSet(key, { global: null, perCase: mockPerCase(12) })
+      ensurePerCaseSlotOwner(key, 1, 12)
+
+      const eff = effectScope()
+      const app = createApp({})
+      app.provide(AppStateKey, {
+        selectedPanelVariant: ref({ id: 12, case_id: 1, ...coords }),
+        selectedCaseId: ref(1)
+      })
+
+      const requestedVariantIds: number[] = []
+      vi.mocked(api.annotations.batchUpsertPerCase).mockResolvedValue({ updatedCount: 2 } as never)
+      vi.mocked(api.annotations.batchGet).mockImplementation((_cid, keys) => {
+        for (const k of keys as Array<{ variantId?: number }>) {
+          if (typeof k.variantId === 'number') requestedVariantIds.push(k.variantId)
+        }
+        return Promise.resolve({
+          [key]: { global: null, perCase: mockPerCase(12, { acmg_classification: 'Pathogenic' }) }
+        }) as never
+      })
+
+      const bulk = app.runWithContext(() =>
+        eff.run(() =>
+          useBulkTriageSelection({
+            items: () => [
+              { id: 11, ...coords },
+              { id: 12, ...coords }
+            ],
+            getItemId: (r: { id: number }) => r.id,
+            caseId: 1,
+            genomeBuild: 'GRCh38'
+          })
+        )
+      )!
+
+      bulk.toggleSelectAll(true)
+      await bulk.applyBulkTriage({ acmg_classification: 'Pathogenic' })
+
+      // Both sibling variant 11 and panel variant 12 must be requested in reload
+      expect(requestedVariantIds).toContain(11)
+      expect(requestedVariantIds).toContain(12)
+      eff.stop()
+    })
+
+    it('Problem 2.1: sibling variant with siblingOccupied reads base starred state from perCaseByVariantId and unstars correctly', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      // Sibling 12 occupies annotationCache slot
+      cacheSet(key, { global: null, perCase: mockPerCase(12, { starred: 1 }) })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setPerCaseByVariantId(1, 12, mockPerCase(12, { starred: 1 }), key)
+
+      // Sibling 11 is in perCaseByVariantId with starred: 1
+      setPerCaseByVariantId(1, 11, mockPerCase(11, { starred: 1 }), key)
+
+      const d = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase).mockReturnValue(d.promise as never)
+
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      // Toggle star on sibling 11 (which is currently starred)
+      const siblingScope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+      const pToggle = ops.toggleStar(siblingScope11, coords)
+
+      // Should send updates: { starred: false } because it was starred: 1
+      expect(api.annotations.upsertPerCase).toHaveBeenCalledWith(1, 11, { starred: false })
+
+      d.resolve(mockPerCase(11, { starred: 0 }))
+      await pToggle
+      expect(getPerCaseByVariantId(1, 11, key)?.starred).toBe(0)
+    })
+
+    it('Problem 2.2: failed edit on siblingOccupied variant rolls back perCaseByVariantId to base state', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      // Sibling 12 occupies annotationCache slot
+      cacheSet(key, { global: null, perCase: mockPerCase(12, { starred: 0 }) })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setPerCaseByVariantId(1, 12, mockPerCase(12, { starred: 0 }), key)
+
+      // Sibling 11 has acmg_classification: 'Benign' in perCaseByVariantId
+      setPerCaseByVariantId(1, 11, mockPerCase(11, { acmg_classification: 'Benign' }), key)
+
+      const d = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase).mockReturnValue(d.promise as never)
+
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      const siblingScope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+      const pEdit = ops.setAcmgClassification(siblingScope11, coords, 'Pathogenic')
+
+      // Optimistic edit applied
+      expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Pathogenic')
+
+      // Write rejects
+      d.reject(new Error('Update failed'))
+      const ok = await pEdit
+      expect(ok).toBe(false)
+
+      // Must roll back to 'Benign'
+      expect(getPerCaseByVariantId(1, 11, key)?.acmg_classification).toBe('Benign')
+      // Sibling 12 in annotationCache is untouched
+      expect(annotationCache.value.get(key)?.perCase?.variant_id).toBe(12)
     })
   })
 })

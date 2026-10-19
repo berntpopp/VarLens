@@ -24,6 +24,10 @@ import {
   perCaseSlotKey,
   perCaseVersionSlot,
   perCaseByVariantId,
+  setPerCaseByVariantId,
+  confirmedBases,
+  applyConfirmedFieldPatches,
+  computeOptimisticSlot,
   type SlotValue,
   type SlotPatch,
   perCaseSlotOwners,
@@ -448,7 +452,6 @@ export function evictAnnotationCacheKeysForBulkTriage(
     if (fromCurrentEpoch || !hasInFlightForKey) {
       if (annotationCache.value.delete(key)) changed = true
       dropKeyMetadata(key)
-      deletePerCaseForCoordKey(key)
     }
     const rawOwners = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
     const owners: Array<{ caseId: number; variantId: number }> = Array.isArray(rawOwners)
@@ -496,6 +499,26 @@ export function evictAnnotationCacheKeysForBulkTriage(
             }
           }
         }
+      }
+    }
+    if (fromCurrentEpoch || !hasInFlightForKey) {
+      deletePerCaseForCoordKey(key)
+    }
+    for (const o of owners) {
+      const sk = perCaseSlotKey(o.caseId, o.variantId, key)
+      const rem = inFlightMutations.get(sk)
+      if (rem && rem.length > 0) {
+        setPerCaseByVariantId(
+          o.caseId,
+          o.variantId,
+          computeOptimisticSlot(
+            applyConfirmedFieldPatches(sk, confirmedBases.get(sk) ?? null),
+            rem
+          ) as CaseVariantAnnotation | null,
+          key
+        )
+      } else {
+        perCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
       }
     }
   }

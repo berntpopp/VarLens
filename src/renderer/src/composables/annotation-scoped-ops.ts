@@ -9,6 +9,7 @@ import type { WindowAPI, BatchAnnotationKey } from '../../../shared/types/api'
 import type { CaseVariantAnnotation } from '../../../shared/types/database-entities'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+// prettier-ignore
 import {
   allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
   bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot, cacheSetPerCaseSlot,
@@ -19,8 +20,8 @@ import {
   isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad, otherSlot,
   perCaseSlotKey, perCaseVersionSlot, pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation,
   rollBackSlot, setCachedVariantId, setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading,
-  setPerCaseByVariantId, slotIdentity, slotOf, takeAwaited, triggerAnnotationCache, unloadedSlotOf,
-  variantKey, writeSlot,
+  setPerCaseByVariantId, perCaseByVariantId, getPerCaseByVariantId, slotIdentity, slotOf, takeAwaited,
+  triggerAnnotationCache, unloadedSlotOf, variantKey, writeSlot,
   type AnnotationCache, type AnnotationUpdates, type AnnotationWriteScope, type MutationPlan,
   type SlotValue, type VariantCoords,
   extractFieldGroupPatch, toggleStarPlan, acmgPlan, commentPlan, acmgWithEvidencePlan
@@ -65,17 +66,15 @@ function leftScope(scope: AnnotationWriteScope, requestDbPath: string | null): b
 function upsert(
   client: WindowAPI,
   scope: AnnotationWriteScope,
-  coords: VariantCoords,
+  { chr, pos, ref, alt }: VariantCoords,
   updates: AnnotationUpdates
 ) {
-  if (scope.kind === 'case') {
+  if (scope.kind === 'case')
     return client.annotations.upsertPerCase(scope.caseId, scope.variantId, updates)
-  }
   if (scope.build === null) throw new Error('genome build unknown; global annotation not saved')
   if (!GENOME_BUILDS.some((b) => b.id === scope.build)) {
     throw new UnconfirmedBuildError(BUILD_COPY.globalNotesNeedBuild)
   }
-  const { chr, pos, ref, alt } = coords
   return client.annotations.upsertGlobal(chr, pos, ref, alt, updates, scope.build)
 }
 
@@ -95,6 +94,9 @@ async function mutate(
   const dbPath = beginAnnotationRequest(scopeCaseId(scope), scope.build)
   const epoch = getAnnotationCacheEpoch()
   const key = variantKey(coords)
+  const hadPerCase = scope.kind === 'case' && hasPerCaseByVariantId(scope.caseId, scope.variantId)
+  const rowPerCase =
+    scope.kind === 'case' ? getPerCaseByVariantId(scope.caseId, scope.variantId, key) : undefined
   const rawCurrent = annotationCache.value.get(key)
   const pc = rawCurrent?.perCase
   const siblingOccupied =
@@ -102,7 +104,7 @@ async function mutate(
     pc != null &&
     (pc.variant_id !== scope.variantId || pc.case_id !== scope.caseId)
   const current = siblingOccupied ? undefined : rawCurrent
-  const curSlot = (current ? readSlot(current, scope) : null) ?? null
+  const curSlot = (current ? readSlot(current, scope) : (rowPerCase ?? null)) ?? null
   const slot = slotOf(scope)
   const slotKey =
     scope.kind === 'case' ? perCaseSlotKey(scope.caseId, scope.variantId, key) : `global:${key}`
@@ -130,13 +132,14 @@ async function mutate(
     confirmedBases.get(slotKey) ?? (baseSlot ? { ...baseSlot } : null),
     list
   )
+  if (!confirmedBases.has(slotKey)) {
+    confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
+  }
   if (current) {
-    if (!confirmedBases.has(slotKey)) {
-      confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
-    }
     writeSlot(current, scope, optimistic)
     triggerAnnotationCache()
   }
+  // prettier-ignore
   if (scope.kind === 'case') {
     setPerCaseByVariantId(scope.caseId, scope.variantId, optimistic as CaseVariantAnnotation | null, key)
   }
@@ -209,33 +212,54 @@ async function mutate(
     if (hadMutation) {
       if (confirmedBases.has(slotKey)) {
         const remaining = inFlightMutations.get(slotKey)
-        const base = applyConfirmedFieldPatches(slotKey, confirmedBases.get(slotKey) ?? null)
+        const rawBase = confirmedBases.get(slotKey) ?? null
+        const base = applyConfirmedFieldPatches(slotKey, rawBase)
         const nextSlot =
-          remaining && remaining.length > 0 ? computeOptimisticSlot(base, remaining) : base ? { ...base } : null
+          remaining && remaining.length > 0
+            ? computeOptimisticSlot(base, remaining)
+            : base
+              ? { ...base }
+              : null
         if (!remaining || remaining.length === 0) {
           confirmedBases.delete(slotKey)
           inFlightMutations.delete(slotKey)
           confirmedFieldPatches.delete(slotKey)
           if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
         }
+        // prettier-ignore
         if (scope.kind === 'case') {
-          setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key)
+          if ((!remaining || remaining.length === 0) && !hadPerCase && nextSlot === null) {
+            perCaseByVariantId.delete(`${scope.caseId}:${scope.variantId}`)
+          } else {
+            setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key)
+          }
         }
         if (isOwner) {
           const target =
-            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ?? current
+            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
+            current
           if (target) {
-            if (nextSlot !== null) writeSlot(target, scope, nextSlot)
-            else rollBackSlot(target, scope, plan.rollback, null)
+            const canWriteTarget =
+              (scope.kind !== 'case' ||
+                current !== undefined ||
+                target.perCase == null ||
+                target.perCase.variant_id === scope.variantId) &&
+              !(current === undefined && rawBase === null && (!remaining || remaining.length === 0))
+            if (canWriteTarget) {
+              if (nextSlot !== null) writeSlot(target, scope, nextSlot)
+              else rollBackSlot(target, scope, plan.rollback, null)
+            }
           }
         }
       } else if (current !== undefined) {
+        // prettier-ignore
         if (scope.kind === 'case') {
           setPerCaseByVariantId(scope.caseId, scope.variantId, baseSlot as CaseVariantAnnotation | null, key)
         }
         if (isOwner) {
           const target =
-            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ?? current
+            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
+            current
           rollBackSlot(target, scope, plan.rollback, baseSlot)
         }
       }
@@ -546,6 +570,7 @@ async function loadBatch(
   }
 }
 
+// prettier-ignore
 export function createScopedAnnotationOps(
   api: WindowAPI | undefined,
   getUserName: () => string | undefined,
@@ -553,23 +578,14 @@ export function createScopedAnnotationOps(
 ) {
   return {
     load: (scope: AnnotationLoadScope, coords: VariantCoords) => load(api, scope, coords),
-    loadBatch: (scope: AnnotationLoadScope, variants: BatchLoadVariant[]) =>
-      loadBatch(api, scope, variants),
+    loadBatch: (scope: AnnotationLoadScope, variants: BatchLoadVariant[]) => loadBatch(api, scope, variants),
     toggleStar: (s: AnnotationWriteScope, c: VariantCoords) =>
       mutate(api, onWriteFailed, s, c, 'star', (cur, base) => toggleStarPlan(s, cur, base)),
-    setAcmgClassification: (
-      s: AnnotationWriteScope,
-      c: VariantCoords,
-      cl: AcmgClassification | null
-    ) => mutate(api, onWriteFailed, s, c, 'acmg', (_c, base) => acmgPlan(s, base, cl)),
+    setAcmgClassification: (s: AnnotationWriteScope, c: VariantCoords, cl: AcmgClassification | null) =>
+      mutate(api, onWriteFailed, s, c, 'acmg', (_c, base) => acmgPlan(s, base, cl)),
     upsertComment: (s: AnnotationWriteScope, c: VariantCoords, comment: string | null) =>
       mutate(api, onWriteFailed, s, c, 'comment', (_c, base) => commentPlan(s, base, comment)),
-    setAcmgClassificationWithEvidence: (
-      s: AnnotationWriteScope,
-      c: VariantCoords,
-      cl: AcmgClassification | null,
-      ev: string
-    ) =>
+    setAcmgClassificationWithEvidence: (s: AnnotationWriteScope, c: VariantCoords, cl: AcmgClassification | null, ev: string) =>
       mutate(api, onWriteFailed, s, c, 'acmg', () => acmgWithEvidencePlan(s, cl, ev, getUserName()))
   }
 }

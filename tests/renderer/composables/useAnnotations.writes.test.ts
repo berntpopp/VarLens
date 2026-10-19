@@ -682,12 +682,14 @@ describe('overlapping mutations and rollback', () => {
           deferredBulk = { resolve, reject }
         })
     )
-    window.api.annotations.batchGet = vi.fn().mockImplementation(
-      () =>
-        new Promise((resolve, reject) => {
-          deferredBatchGet = { resolve, reject }
-        })
-    )
+    window.api.annotations.batchGet = vi.fn().mockImplementation((_cid, variants) => {
+      if (Array.isArray(variants) && variants.some((v) => v.variantId === 12)) {
+        return Promise.resolve({ [KEY]: mockPerCase(12, { acmg_classification: 'Pathogenic' }) })
+      }
+      return new Promise((resolve, reject) => {
+        deferredBatchGet = { resolve, reject }
+      })
+    })
 
     let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
     app.runWithContext(() => {
