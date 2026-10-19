@@ -209,6 +209,48 @@ export async function executeSqliteWriteTask(
       return result
     }
 
+    case 'annotations:batchUpsertPerCaseWithAudit': {
+      const [caseId, variantIds, updates] = task.params
+      const uniqueIds = Array.from(new Set(variantIds))
+      if (uniqueIds.length === 0) {
+        return { updatedCount: 0 }
+      }
+
+      return repos.annotations.runInTransaction(() => {
+        repos.annotations.validateVariantsBelongToCase(caseId, uniqueIds)
+
+        const oldAnnotations = new Map<number, Record<string, unknown> | null>()
+        for (const variantId of uniqueIds) {
+          const oldAnnotation = repos.annotations.getPerCaseAnnotation(caseId, variantId)
+          assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+          oldAnnotations.set(variantId, oldAnnotation as Record<string, unknown> | null)
+        }
+
+        for (const variantId of uniqueIds) {
+          const oldAnnotation = oldAnnotations.get(variantId) ?? null
+          for (const entry of perCaseAnnotationAuditEntries(
+            caseId,
+            variantId,
+            updates,
+            oldAnnotation
+          )) {
+            repos.auditLog.appendEntry({
+              ...entry,
+              old_value: serializeAuditValue(entry.old_value),
+              new_value: serializeAuditValue(entry.new_value),
+              user_name: entry.user_name ?? null
+            })
+          }
+        }
+
+        return repos.annotations.batchUpsertPerCaseAnnotation(
+          caseId,
+          uniqueIds,
+          normalizeAnnotationUpdates(updates)
+        )
+      })
+    }
+
     case 'annotations:deletePerCase':
       repos.annotations.deletePerCaseAnnotation(...task.params)
       return undefined

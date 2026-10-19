@@ -460,6 +460,13 @@ export const PerCaseAnnotationUpdatesSchema = z.object({
 })
 
 /**
+ * Schema for batch per-case annotation updates
+ */
+export const BatchPerCaseAnnotationUpdatesSchema = PerCaseAnnotationUpdatesSchema.extend({
+  tag_id: z.number().int().positive().optional()
+})
+
+/**
  * Schema for case ID + variant ID pair
  */
 export const CaseVariantIdSchema = z.object({

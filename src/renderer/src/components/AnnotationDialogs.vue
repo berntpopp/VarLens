@@ -17,12 +17,7 @@
     "
     :per-case-comment="
       effectiveScope === 'case' && selectedVariantForComment
-        ? getPerCaseComment(
-            selectedVariantForComment.chr,
-            selectedVariantForComment.pos,
-            selectedVariantForComment.ref,
-            selectedVariantForComment.alt
-          )
+        ? getPerCaseCommentFor(selectedVariantForComment)
         : null
     "
     :global-timestamps="getGlobalTimestamps(selectedVariantForComment)"
@@ -104,6 +99,7 @@ const {
   hasAcmgEvidence,
   handleAcmgEvidenceChange: persistAcmgEvidenceChange,
   handleCommentSave: persistCommentSave,
+  getPerCaseCommentFor,
   getGlobalTimestamps,
   getPerCaseTimestamps
 } = useAnnotationDialogs(
@@ -128,7 +124,7 @@ const {
 )
 
 // Re-export comment accessors for template
-const { getGlobalComment, getPerCaseComment } = props.annotationActions
+const { getGlobalComment } = props.annotationActions
 
 // Suppress unused ref warning
 void acmgEvidenceDialogRef

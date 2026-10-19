@@ -187,6 +187,8 @@ export function createCoreApi(domains: PreloadDomainApis): CoreWindowApi {
       getPerCase: (caseId, variantId) => annotationsDomain.getPerCase(caseId, variantId),
       upsertPerCase: (caseId, variantId, updates) =>
         annotationsDomain.upsertPerCase(caseId, variantId, updates),
+      batchUpsertPerCase: (caseId, variantIds, updates) =>
+        annotationsDomain.batchUpsertPerCase(caseId, variantIds, updates),
       deletePerCase: (caseId, variantId) => annotationsDomain.deletePerCase(caseId, variantId),
       getForVariant: (caseId, chr, pos, ref, alt) =>
         annotationsDomain.getForVariant(caseId, chr, pos, ref, alt),

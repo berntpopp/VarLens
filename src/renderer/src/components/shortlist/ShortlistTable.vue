@@ -17,9 +17,16 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed } from 'vue'
+import { ref, computed, inject, onUnmounted, watch, onActivated, onDeactivated } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
-import { mdiStar, mdiStarOutline, mdiDotsVertical } from '@mdi/js'
+import {
+  mdiStar,
+  mdiStarOutline,
+  mdiDotsVertical,
+  mdiClipboardCheckOutline,
+  mdiCommentText,
+  mdiCommentTextOutline
+} from '@mdi/js'
 import RankScoreTooltip from './RankScoreTooltip.vue'
 import { formatRankScore } from '../../utils/formatters'
 import { useRowHoverTarget } from './useRowHoverTarget'
@@ -30,9 +37,17 @@ import { resolveRowLinks, useLinkResolvers } from '../../composables/useLinkReso
 import { useVariantLinks } from '../../composables/useVariantLinks'
 import { useSharedMenu } from '../table-cells/shared-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
-import { formatHgvs } from '../../utils/formatters'
-import { EMPTY_VALUE_PLACEHOLDER, UNKNOWN_VALUE_GLYPH } from '../../config/displayConfig'
-import { formatBpLength } from '../../utils/variant-interval'
+import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
+import ShortlistVariantCell from './ShortlistVariantCell.vue'
+import {
+  baseHeaders,
+  variantCell,
+  pinFor,
+  typeChipColor,
+  targetTabFor,
+  displayVariantType,
+  hasCommentFor as hasCommentForHelper
+} from './shortlist-table-helpers'
 import {
   useTableKeyboardNav,
   isControlFocused,
@@ -40,11 +55,18 @@ import {
   hasCommandModifier
 } from '../../composables/useTableKeyboardNav'
 import type { ShortlistRow } from '../../../../shared/types/shortlist'
+import type { AcmgClassification } from '../../../../shared/config/domain.config'
 import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
 import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
+import { AppStateKey } from '../../composables/useAppState'
+import { annotationCache, ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
+import { variantKey, getPerCaseByVariantId } from '../../composables/annotation-cache'
+import { useBulkTriageSelection } from '../../composables/useBulkTriageSelection'
+import BulkTriageActionBar from '../variant-table/BulkTriageActionBar.vue'
 
 const props = defineProps<{
   rows: ShortlistRow[]
+  caseId?: number | null
   /** Viewer role: the star is display-only. */
   readOnly?: boolean
   /** False while the tab is hidden (v-show): window keys must not act on unseen rows. */
@@ -55,21 +77,10 @@ const emit = defineEmits<{
   (e: 'row-click', row: ShortlistRow): void
   (e: 'open-in-tab', variantType: 'snv' | 'sv' | 'cnv' | 'str'): void
   (e: 'toggle-star', row: ShortlistRow): void
+  (e: 'acmg-click', row: ShortlistRow): void
+  (e: 'comment-click', row: ShortlistRow): void
+  (e: 'triage-applied'): void
 }>()
-
-// Widths in rem so headers grow with the text size (no clipping at 200 %)
-const baseHeaders = [
-  { title: '#', key: 'rank', width: '3.75rem', sortable: false },
-  { title: 'Score', key: 'rank_score', width: '5.625rem', sortable: false },
-  { title: 'Type', key: 'variant_type', width: '5rem', sortable: false },
-  { title: 'Gene', key: 'gene_symbol', width: '8.75rem' },
-  { title: 'Variant', key: 'variant_notation', width: '17.5rem', sortable: false },
-  { title: 'Impact', key: 'consequence', width: '6.875rem' },
-  { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
-  { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
-  { title: '★', key: 'is_starred', width: '3.125rem', sortable: false },
-  { title: 'Actions', key: 'actions', width: '5rem', sortable: false }
-] as const
 
 // Link-outs resolve exactly like the case/cohort tables (shared resolvers)
 const { resolvers: linkResolvers, linkOuts } = useLinkResolvers()
@@ -80,99 +91,6 @@ const rowLinks = computed(() => {
   for (const row of props.rows) byId.set(row.id, resolveRowLinks(row, linkResolvers.value))
   return byId
 })
-
-interface VariantCell {
-  /** Always present — genomic/type-specific primary line. */
-  primary: string
-  /** HGVS c. (cDNA) notation, SNV/indel only. */
-  cdna: string | null
-  /** HGVS p. (protein) notation, SNV/indel only. */
-  protein: string | null
-}
-
-/**
- * Build the multi-line variant cell for the shortlist table.
- *
- * - SNV / indel: primary line is `chr:pos ref>alt`, with cDNA (c.) and
- *   protein (p.) HGVS on subsequent lines when available on the row.
- * - SV: primary line is `chr:pos <TYPE> <length>bp`, no HGVS.
- * - CNV: primary line is `chr:pos CNV CN=<copies>`, no HGVS.
- * - STR: primary line is `chr:pos STR <alt_copies> copies`, no HGVS.
- *
- * Fields `cdna` and `aa_change` come straight from the `Variant` row shape.
- * The `c.`/`p.` prefixes are conventional HGVS markers — we only prepend
- * them if the stored value doesn't already start with them (annotators
- * vary — VEP stores `ENST…:c.…`, which is left as is).
- */
-function variantCell(row: ShortlistRow): VariantCell {
-  if (row.variant_type === 'sv') {
-    return {
-      primary: `${row.chr}:${row.pos} ${row.sv_type ?? ''} ${formatBpLength(row.sv_length)}`.trim(),
-      cdna: null,
-      protein: null
-    }
-  }
-  if (row.variant_type === 'cnv') {
-    return {
-      primary: `${row.chr}:${row.pos} CNV CN=${row.cnv_copy_number ?? UNKNOWN_VALUE_GLYPH}`,
-      cdna: null,
-      protein: null
-    }
-  }
-  if (row.variant_type === 'str') {
-    return {
-      primary: `${row.chr}:${row.pos} STR ${row.str_alt_copies ?? UNKNOWN_VALUE_GLYPH} copies`,
-      cdna: null,
-      protein: null
-    }
-  }
-  // SNV / indel — add HGVS c./p. if we have them.
-  return {
-    primary: `${row.chr}:${row.pos} ${row.ref}>${row.alt}`,
-    cdna: row.cdna != null && row.cdna !== '' ? ensureHgvsPrefix(row.cdna, 'c.') : null,
-    protein:
-      row.aa_change != null && row.aa_change !== '' ? ensureHgvsPrefix(row.aa_change, 'p.') : null
-  }
-}
-
-function ensureHgvsPrefix(value: string, prefix: 'c.' | 'p.'): string {
-  const text = formatHgvs(value) ?? value
-  return text.includes(':') || text.startsWith(prefix) ? text : `${prefix}${text}`
-}
-
-function pinFor(row: ShortlistRow): 'starred' | 'clinvar' | null {
-  if (row.rank_starred_pinned) return 'starred'
-  if (row.rank_clinvar_pinned) return 'clinvar'
-  return null
-}
-
-function typeChipColor(t: ShortlistRow['variant_type']): string {
-  // NEVER surface-variant (CLAUDE.md rule). Use explicit palette entries.
-  switch (t) {
-    case 'snv':
-      return 'primary'
-    case 'indel':
-      return 'primary'
-    case 'sv':
-      return 'deep-purple'
-    case 'cnv':
-      return 'teal-darken-2'
-    case 'str':
-      return 'orange-darken-2'
-    default:
-      return 'primary'
-  }
-}
-
-function targetTabFor(t: ShortlistRow['variant_type']): 'snv' | 'sv' | 'cnv' | 'str' {
-  if (t === 'sv' || t === 'cnv' || t === 'str') return t
-  // indel (and any unknown) folds into the SNV tab.
-  return 'snv'
-}
-
-function displayVariantType(t: ShortlistRow['variant_type']): string {
-  return (t ?? 'snv').toUpperCase()
-}
 
 // Shared per-row overlays (one instance per table instead of one per row)
 const rankTip = useRowHoverTarget('data-rank-tip')
@@ -192,56 +110,175 @@ const { rowKey } = useResultSetKeys(
 )
 
 // Keyboard navigation and row selection
-const rowsRef = computed(() => props.rows)
+const isComponentActive = ref(true)
+onActivated(() => {
+  isComponentActive.value = true
+})
+onDeactivated(() => {
+  isComponentActive.value = false
+  clearArrowSyncTimer()
+})
+
+const currentItems = ref<ShortlistRow[] | null>(null)
+watch(
+  () => props.rows,
+  () => {
+    currentItems.value = null
+  }
+)
+function onCurrentItems(items: ReadonlyArray<{ raw?: ShortlistRow } | ShortlistRow>): void {
+  currentItems.value = items.map((it) =>
+    it !== null && typeof it === 'object' && 'raw' in it && it.raw ? it.raw : (it as ShortlistRow)
+  )
+}
+const displayedRows = computed(() => currentItems.value ?? props.rows)
 
 const { selectedItem, selectByClick, moveUp, moveDown, clearSelection } = useTableKeyboardNav({
-  items: rowsRef,
+  items: displayedRows,
   getItemId: (item: ShortlistRow) => item.id,
   onSelect: (_item: ShortlistRow) => {}
 })
 
-useProteinViewShortcut(() => (props.interactive === false ? null : selectedItem.value))
+useProteinViewShortcut(() =>
+  !isComponentActive.value || props.interactive === false ? null : selectedItem.value
+)
 
 function getRowProps({ item }: { item: ShortlistRow }) {
-  const isSelected = selectedItem.value?.id === item.id
-  return {
-    class: {
-      'variant-row--selected': isSelected
-    }
-  }
+  return { class: { 'variant-row--selected': selectedItem.value?.id === item.id } }
 }
 
-function handleRowClick(item: ShortlistRow) {
+function getAcmgFor(item: ShortlistRow): AcmgClassification | null {
+  const k = variantKey(item)
+  const perCase = getPerCaseByVariantId(item.case_id, item.id, k)
+  return (
+    perCase?.acmg_classification ??
+    annotationCache.value.get(k)?.global?.acmg_classification ??
+    null
+  )
+}
+
+function hasCommentFor(item: ShortlistRow): boolean {
+  return hasCommentForHelper(item, annotationCache.value)
+}
+
+function isStarredFor(item: ShortlistRow): boolean {
+  const perCase = getPerCaseByVariantId(item.case_id, item.id, variantKey(item))
+  if (perCase != null) return perCase.starred === 1
+  return item.is_starred
+}
+
+const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
+
+const appState = inject(AppStateKey, null)
+const caseId = computed(
+  () => props.caseId ?? appState?.selectedCaseId?.value ?? props.rows[0]?.case_id ?? null
+)
+const bulkSelection = useBulkTriageSelection({
+  items: () => displayedRows.value,
+  getItemId: (r) => r.id,
+  caseId,
+  onTriageApplied: () => emit('triage-applied')
+})
+
+watch(
+  () => props.readOnly,
+  (ro) => {
+    if (ro) bulkSelection.clearSelection()
+  }
+)
+
+let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
+let arrowSyncGen = 0
+
+function clearArrowSyncTimer(): void {
+  arrowSyncGen++
+  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
+  arrowSyncTimer = null
+}
+
+watch(
+  () => props.interactive,
+  (ok) => {
+    if (!ok) clearArrowSyncTimer()
+  }
+)
+
+if (appState) {
+  watch(
+    () => appState.selectedPanelVariant.value,
+    (variant) => {
+      if (variant && 'id' in variant && props.rows.some((v) => v.id === variant.id)) {
+        selectByClick(variant as ShortlistRow)
+      } else {
+        clearSelection()
+      }
+    },
+    { immediate: true }
+  )
+}
+
+function canSyncDetails(): boolean {
+  return (
+    isComponentActive.value && props.interactive !== false && appState?.panelOpen.value === true
+  )
+}
+
+function triggerDebouncedPanelSync(): void {
+  clearArrowSyncTimer()
+  if (!appState || !canSyncDetails() || !selectedItem.value) return
+  const currentAppState = appState
+  const gen = arrowSyncGen
+  arrowSyncTimer = setTimeout(async () => {
+    arrowSyncTimer = null
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
+    const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
+    if (leavePromise !== null) {
+      const ok = await leavePromise
+      if (gen !== arrowSyncGen) return
+      if (!ok) {
+        if (
+          currentAppState.selectedPanelVariant.value &&
+          'id' in currentAppState.selectedPanelVariant.value
+        ) {
+          selectByClick(currentAppState.selectedPanelVariant.value as ShortlistRow)
+        }
+        return
+      }
+    }
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
+    emit('row-click', selectedItem.value)
+  }, 100)
+}
+
+onUnmounted(clearArrowSyncTimer)
+
+function handleRowClick(item: ShortlistRow): void {
+  clearArrowSyncTimer()
   selectByClick(item)
   emit('row-click', item)
 }
 
-onKeyStroke(
-  'ArrowDown',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused() || props.rows.length === 0) return
-    e.preventDefault()
-    moveDown()
-  },
-  { dedupe: true }
-)
+for (const [key, move] of [
+  ['ArrowDown', moveDown],
+  ['ArrowUp', moveUp]
+] as const) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (!isComponentActive.value || props.interactive === false) return
+      if (isInputFocused() || props.rows.length === 0) return
+      e.preventDefault()
+      move()
+      triggerDebouncedPanelSync()
+    },
+    { dedupe: true }
+  )
+}
 
 onKeyStroke(
-  'ArrowUp',
+  ['Enter', 'i'],
   (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused() || props.rows.length === 0) return
-    e.preventDefault()
-    moveUp()
-  },
-  { dedupe: true }
-)
-
-onKeyStroke(
-  'Enter',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
+    if (!isComponentActive.value || props.interactive === false) return
     if (isInputFocused() || isControlFocused() || !selectedItem.value) return
     e.preventDefault()
     emit('row-click', selectedItem.value)
@@ -249,24 +286,44 @@ onKeyStroke(
   { dedupe: true }
 )
 
-onKeyStroke(
-  's',
-  (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
-    if (props.readOnly === true) return
-    e.preventDefault()
-    emit('toggle-star', selectedItem.value)
+const actionHandlers: Record<string, () => void> = {
+  s: () => {
+    if (!selectedItem.value) return
+    emit('toggle-star', { ...selectedItem.value, is_starred: isStarredFor(selectedItem.value) })
   },
-  { dedupe: true }
-)
+  a: () => emit('acmg-click', selectedItem.value!),
+  c: () => emit('comment-click', selectedItem.value!)
+}
+for (const [key, handler] of Object.entries(actionHandlers)) {
+  onKeyStroke(
+    key,
+    (e: KeyboardEvent) => {
+      if (!isComponentActive.value || props.interactive === false) return
+      if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
+      if (props.readOnly === true) return
+      e.preventDefault()
+      handler()
+    },
+    { dedupe: true }
+  )
+}
 
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused()) return
-    e.preventDefault()
+    if (
+      !isComponentActive.value ||
+      props.interactive === false ||
+      e.defaultPrevented ||
+      isInputFocused()
+    )
+      return
+    if (appState?.panelOpen.value === true) {
+      e.preventDefault()
+      appState.panelOpen.value = false
+      return
+    }
+    bulkSelection.clearSelection()
     clearSelection()
   },
   { dedupe: true }
@@ -275,20 +332,46 @@ onKeyStroke(
 
 <template>
   <v-data-table
+    v-model:sort-by="sortBy"
     :headers="headers"
     :items="props.rows"
     :item-value="rowKey"
     density="compact"
+    :show-select="!props.readOnly"
     :items-per-page="50"
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
     :row-props="getRowProps"
+    @update:current-items="onCurrentItems"
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
     @mouseover="rankTip.onMouseover"
     @mouseout="rankTip.onMouseout"
     @focusin="rankTip.onFocusin"
     @focusout="rankTip.onFocusout"
   >
+    <template #[`header.data-table-select`]>
+      <input
+        type="checkbox"
+        :checked="bulkSelection.isAllSelected.value"
+        :indeterminate="bulkSelection.isSomeSelected.value"
+        aria-label="Select all rows"
+        data-testid="bulk-select-all"
+        class="bulk-select-checkbox"
+        @change="bulkSelection.toggleSelectAll(($event.target as HTMLInputElement).checked)"
+      />
+    </template>
+
+    <template #[`item.data-table-select`]="{ item }">
+      <input
+        type="checkbox"
+        :checked="bulkSelection.isSelected(item.id)"
+        :aria-label="`Select variant ${item.id}`"
+        :data-testid="`bulk-select-row-${item.id}`"
+        class="bulk-select-checkbox"
+        @click.stop="bulkSelection.handleRowCheckboxClick(item.id, $event)"
+      />
+    </template>
+
     <!-- Score breakdown: one shared tooltip (below), not a v-tooltip per row -->
     <template #[`item.rank_score`]="{ item }">
       <span :data-rank-tip="item.id" tabindex="0" @keydown.esc="rankTip.close">{{
@@ -303,23 +386,7 @@ onKeyStroke(
     </template>
 
     <template #[`item.variant_notation`]="{ item }">
-      <div class="variant-cell">
-        <div class="variant-cell__primary">{{ variantCell(item).primary }}</div>
-        <div
-          v-if="variantCell(item).cdna"
-          class="variant-cell__hgvs text-caption text-medium-emphasis"
-          :title="variantCell(item).cdna ?? ''"
-        >
-          {{ variantCell(item).cdna }}
-        </div>
-        <div
-          v-if="variantCell(item).protein"
-          class="variant-cell__hgvs text-caption text-medium-emphasis"
-          :title="variantCell(item).protein ?? ''"
-        >
-          {{ variantCell(item).protein }}
-        </div>
-      </div>
+      <ShortlistVariantCell :cell="variantCell(item)" />
     </template>
 
     <template #[`item.clinvar`]="{ item }">
@@ -332,21 +399,54 @@ onKeyStroke(
 
     <!-- Native buttons + static icons: no VBtn/VIcon instances per row -->
     <template #[`item.is_starred`]="{ item }">
-      <button
-        type="button"
-        class="annotation-btn"
-        :aria-label="item.is_starred ? 'Unstar variant' : 'Star variant'"
-        :aria-pressed="item.is_starred"
-        :data-testid="`shortlist-star-${item.id}`"
-        :disabled="props.readOnly === true"
-        @click.stop="emit('toggle-star', item)"
-      >
-        <CellIcon
-          class="shortlist-row-icon"
-          :color="item.is_starred ? 'primary' : null"
-          :icon="item.is_starred ? mdiStar : mdiStarOutline"
-        />
-      </button>
+      <div class="d-flex align-center ga-1">
+        <button
+          type="button"
+          class="annotation-btn"
+          :aria-label="isStarredFor(item) ? 'Unstar variant' : 'Star variant'"
+          :aria-pressed="isStarredFor(item)"
+          :data-testid="`shortlist-star-${item.id}`"
+          :disabled="props.readOnly === true"
+          @click.stop="emit('toggle-star', { ...item, is_starred: isStarredFor(item) })"
+        >
+          <CellIcon
+            class="shortlist-row-icon"
+            :color="isStarredFor(item) ? 'primary' : null"
+            :icon="isStarredFor(item) ? mdiStar : mdiStarOutline"
+          />
+        </button>
+        <button
+          type="button"
+          class="annotation-btn"
+          :aria-label="getAcmgFor(item) ? `ACMG: ${getAcmgFor(item)}` : 'Set ACMG classification'"
+          :data-testid="`shortlist-acmg-${item.id}`"
+          :disabled="props.readOnly === true"
+          @click.stop="emit('acmg-click', item)"
+        >
+          <CellChip
+            v-if="getAcmgFor(item)"
+            :color="ACMG_COLORS[getAcmgFor(item)!]"
+            size="x-small"
+            label
+          >
+            {{ ACMG_ABBREV[getAcmgFor(item)!] }}
+          </CellChip>
+          <CellIcon v-else :icon="mdiClipboardCheckOutline" size="x-small" color="muted" />
+        </button>
+        <button
+          type="button"
+          class="annotation-btn"
+          :aria-label="hasCommentFor(item) ? 'Edit comment' : 'Add comment'"
+          :data-testid="`shortlist-comment-${item.id}`"
+          @click.stop="emit('comment-click', item)"
+        >
+          <CellIcon
+            :icon="hasCommentFor(item) ? mdiCommentText : mdiCommentTextOutline"
+            :color="hasCommentFor(item) ? 'primary' : 'muted'"
+            size="x-small"
+          />
+        </button>
+      </div>
     </template>
 
     <template #[`item.actions`]="{ item }">
@@ -378,6 +478,12 @@ onKeyStroke(
       <v-list-item @click="emit('row-click', actionsRow)">
         <v-list-item-title>View details</v-list-item-title>
       </v-list-item>
+      <v-list-item :disabled="props.readOnly === true" @click="emit('acmg-click', actionsRow)">
+        <v-list-item-title>Classify ACMG</v-list-item-title>
+      </v-list-item>
+      <v-list-item :disabled="props.readOnly === true" @click="emit('comment-click', actionsRow)">
+        <v-list-item-title>Edit comments</v-list-item-title>
+      </v-list-item>
       <v-list-item @click="emit('open-in-tab', targetTabFor(actionsRow.variant_type))">
         <v-list-item-title>
           View in {{ targetTabFor(actionsRow.variant_type).toUpperCase() }} tab
@@ -406,6 +512,14 @@ onKeyStroke(
       :hpo="rankTipRow.rank_hpo"
     />
   </v-tooltip>
+
+  <BulkTriageActionBar
+    v-if="!props.readOnly"
+    :selected-count="bulkSelection.selectedCount.value"
+    :is-executing="bulkSelection.isExecuting.value"
+    @apply="bulkSelection.applyBulkTriage"
+    @clear="bulkSelection.clearSelection"
+  />
 </template>
 
 <style scoped>
@@ -439,33 +553,6 @@ onKeyStroke(
   flex: 0 0 auto;
 }
 
-/*
- * Multi-line variant cell — primary line (genomic) + optional HGVS c./p.
- * lines in muted caption text. `min-width: 0` lets truncation kick in
- * inside the fixed-width column. HGVS strings can be long for multi-
- * exon indels; we clip with ellipsis and put the full value in a title
- * attribute for hover.
- */
-.variant-cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-  padding: 2px 0;
-}
-.variant-cell__primary {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.variant-cell__hgvs {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
-}
-
 /* A long ClinVar class ends in an ellipsis inside the fixed column (the full
    value is in the chip's tooltip) instead of being clipped mid-word. */
 .shortlist-data-table :deep(td .v-chip[data-tooltip]) {
@@ -496,5 +583,10 @@ onKeyStroke(
 
 .shortlist-data-table :deep(tbody tr.variant-row--selected:hover) {
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 18%, transparent) !important;
+}
+
+.bulk-select-checkbox {
+  cursor: pointer;
+  accent-color: rgb(var(--v-theme-primary));
 }
 </style>

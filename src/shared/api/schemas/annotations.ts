@@ -4,6 +4,7 @@ import { ACMG_CLASSIFICATIONS } from '../../config/domain.config'
 import { GENOME_BUILDS } from '../../config/genome-builds.config'
 import { OVERRIDE_REASON_REQUIRED, overrideReasonMissing } from '../../acmg/acmg-evidence'
 import {
+  BatchPerCaseAnnotationUpdatesSchema as BatchPerCaseAnnotationFieldsSchema,
   CaseVariantIdSchema,
   GlobalAnnotationUpdatesSchema as GlobalAnnotationFieldsSchema,
   PerCaseAnnotationUpdatesSchema as PerCaseAnnotationFieldsSchema,
@@ -34,6 +35,19 @@ export const PerCaseAnnotationUpdatesSchema = z
   .unknown()
   .superRefine(requireOverrideReason)
   .pipe(PerCaseAnnotationFieldsSchema)
+
+/** Batch per-case annotation updates (desktop IPC and web dispatcher). */
+export const BatchPerCaseAnnotationUpdatesSchema = z
+  .unknown()
+  .superRefine(requireOverrideReason)
+  .pipe(BatchPerCaseAnnotationFieldsSchema)
+
+/** Complete input validation for batch per-case annotations. */
+export const BatchPerCaseAnnotationInputSchema = z.object({
+  caseId: CaseVariantIdSchema.shape.caseId,
+  variantIds: z.array(CaseVariantIdSchema.shape.variantId).min(1).max(1000),
+  updates: BatchPerCaseAnnotationUpdatesSchema
+})
 
 /**
  * Genome build of a global annotation: part of its key (#577), so only a
@@ -85,6 +99,10 @@ const PerCaseAnnotationUpdatesInputSchema = z.object({
   user_name: z.string().nullish()
 })
 
+const BatchPerCaseAnnotationUpdatesInputSchema = PerCaseAnnotationUpdatesInputSchema.extend({
+  tag_id: z.number().int().positive().optional()
+})
+
 export const AnnotationCoordsArgsSchema = z
   .tuple([
     VariantCoordsSchema.shape.chr,
@@ -114,6 +132,14 @@ export const AnnotationPerCaseUpsertArgsSchema = z
   ])
   .rest(z.unknown())
 
+export const AnnotationBatchPerCaseUpsertArgsSchema = z
+  .tuple([
+    CaseVariantIdSchema.shape.caseId,
+    BatchPerCaseAnnotationInputSchema.shape.variantIds,
+    BatchPerCaseAnnotationUpdatesInputSchema
+  ])
+  .rest(z.unknown())
+
 export const AnnotationForVariantArgsSchema = z
   .tuple([
     CaseVariantIdSchema.shape.caseId,
@@ -133,6 +159,9 @@ export const AnnotationInvokeBodySchemas = {
   }),
   upsertPerCase: z.object({
     args: AnnotationPerCaseUpsertArgsSchema
+  }),
+  batchUpsertPerCase: z.object({
+    args: AnnotationBatchPerCaseUpsertArgsSchema
   }),
   getForVariant: z.object({
     args: AnnotationForVariantArgsSchema

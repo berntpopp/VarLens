@@ -9,6 +9,7 @@ import {
   GenomeBuildArgSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema,
+  BatchPerCaseAnnotationInputSchema,
   CaseVariantIdSchema,
   VariantKeysSchema
 } from '../../../shared/api/schemas/annotations'
@@ -19,6 +20,7 @@ import {
   upsertGlobalAnnotationViaSession,
   getPerCaseAnnotation,
   upsertPerCaseAnnotationWithEvent,
+  batchUpsertPerCaseAnnotationWithEvent,
   getAnnotationsForVariant,
   batchGetAnnotations
 } from './annotations-logic'
@@ -226,6 +228,37 @@ export function registerAnnotationHandlers({
           validatedIds.data.caseId,
           validatedIds.data.variantId,
           validatedUpdates.data,
+          () => getDbManager().getCurrentSession(),
+          broadcastAnnotationChanged
+        )
+      })
+    }
+  )
+
+  /**
+   * Batch upsert per-case annotations for multiple variants
+   */
+  ipcMain.handle(
+    'annotations:batchUpsertPerCase',
+    async (_event, caseId: unknown, variantIds: unknown, updates: unknown) => {
+      return wrapHandler(async () => {
+        const validated = BatchPerCaseAnnotationInputSchema.safeParse({
+          caseId,
+          variantIds,
+          updates
+        })
+        if (!validated.success) {
+          mainLogger.error(
+            `Invalid annotations:batchUpsertPerCase input: ${validated.error.message}`,
+            'annotations'
+          )
+          throw new Error('Invalid batch per-case annotation input')
+        }
+
+        return await batchUpsertPerCaseAnnotationWithEvent(
+          validated.data.caseId,
+          validated.data.variantIds,
+          validated.data.updates,
           () => getDbManager().getCurrentSession(),
           broadcastAnnotationChanged
         )

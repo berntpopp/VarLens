@@ -11,6 +11,14 @@
 import { inject } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useAnnotations, type UseAnnotationsOptions } from './useAnnotations'
+import {
+  annotationCache,
+  getCachedVariantId,
+  getPerCaseByVariantId,
+  getPerCaseSlotOwner,
+  hasPerCaseByVariantId,
+  variantKey
+} from './annotation-cache'
 import { AppStateKey } from './useAppState'
 import { planAcmgUndo, type AcmgState } from '../utils/acmg/acmg-undo'
 import { logService } from '../services/LogService'
@@ -23,6 +31,42 @@ type Locus = [chr: string, pos: number, ref: string, alt: string]
 export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
   const annotations = useAnnotations(options)
   const appState = inject(AppStateKey, null)
+
+  async function capturePerCasePrevious(
+    caseId: number,
+    variantId: number,
+    chr: string,
+    pos: number,
+    ref: string,
+    alt: string,
+    withEvidence: boolean
+  ): Promise<AcmgState> {
+    const key = variantKey({ chr, pos, ref, alt })
+    let rowPc = getPerCaseByVariantId(caseId, variantId, key)
+    if (rowPc === undefined && typeof annotations.loadAnnotations === 'function') {
+      await annotations.loadAnnotations(caseId, chr, pos, ref, alt, variantId)
+      rowPc = getPerCaseByVariantId(caseId, variantId, key)
+    }
+    const cached = annotationCache.value.get(key)
+    const cachedVid = getCachedVariantId(key)
+    const owner = getPerCaseSlotOwner(key)
+    const hasCoordOrRowState =
+      rowPc !== undefined ||
+      hasPerCaseByVariantId(caseId, variantId) ||
+      cached !== undefined ||
+      cachedVid !== undefined ||
+      owner !== undefined
+    if (hasCoordOrRowState) {
+      return {
+        classification: rowPc?.acmg_classification ?? null,
+        ...(withEvidence ? { evidenceJson: rowPc?.acmg_evidence ?? null } : {})
+      }
+    }
+    return {
+      classification: annotations.getAcmgClassification(chr, pos, ref, alt),
+      ...(withEvidence ? { evidenceJson: annotations.getAcmgEvidence(chr, pos, ref, alt) } : {})
+    }
+  }
 
   function offerUndo(previous: AcmgState, next: AcmgState, restore: () => Promise<boolean>): void {
     const plan = planAcmgUndo(previous, next)
@@ -53,9 +97,7 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     ...rest: [...Locus, AcmgClassification | null]
   ): Promise<boolean> {
     const [chr, pos, ref, alt, classification] = rest
-    const previous: AcmgState = {
-      classification: annotations.getAcmgClassification(chr, pos, ref, alt)
-    }
+    const previous = await capturePerCasePrevious(caseId, variantId, chr, pos, ref, alt, false)
     // Nothing was saved (rolled back and reported): no success message, no Undo.
     if (
       !(await annotations.setAcmgClassification(
@@ -105,10 +147,7 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     ...rest: [...Locus, AcmgClassification | null, string]
   ): Promise<boolean> {
     const [chr, pos, ref, alt, classification, evidenceJson] = rest
-    const previous: AcmgState = {
-      classification: annotations.getAcmgClassification(chr, pos, ref, alt),
-      evidenceJson: annotations.getAcmgEvidence(chr, pos, ref, alt)
-    }
+    const previous = await capturePerCasePrevious(caseId, variantId, chr, pos, ref, alt, true)
     const saved = await annotations.setAcmgClassificationWithEvidence(
       caseId,
       variantId,

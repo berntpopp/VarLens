@@ -83,8 +83,8 @@ export function zygosityColor(gt: string | null | undefined): string | undefined
 }
 
 export function formatFamilyCallMeta(call?: {
-  gq: number | null
-  dp: number | null
+  gq?: number | null
+  dp?: number | null
 }): string | undefined {
   if (!call) return undefined
   const parts: string[] = []

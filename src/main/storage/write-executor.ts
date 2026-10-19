@@ -84,6 +84,14 @@ export type StorageWriteTask =
       type: 'annotations:upsertPerCaseWithAudit'
       params: [caseId: number, variantId: number, updates: PerCaseAnnotationUpdates]
     }
+  | {
+      type: 'annotations:batchUpsertPerCaseWithAudit'
+      params: [
+        caseId: number,
+        variantIds: number[],
+        updates: PerCaseAnnotationUpdates & { tag_id?: number }
+      ]
+    }
   | { type: 'annotations:deletePerCase'; params: [caseId: number, variantId: number] }
   | {
       type: 'case-comments:create'

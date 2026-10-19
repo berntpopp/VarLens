@@ -1,4 +1,5 @@
 import {
+  BatchPerCaseAnnotationInputSchema,
   CaseVariantIdSchema,
   GlobalAnnotationUpdatesSchema,
   GlobalVariantCoordsSchema,
@@ -6,6 +7,7 @@ import {
   VariantCoordsSchema
 } from '../../../shared/api/schemas/annotations'
 import {
+  batchUpsertPerCaseAnnotationWithEvent,
   upsertGlobalAnnotationViaSession,
   upsertPerCaseAnnotationWithEvent
 } from '../../../main/ipc/handlers/annotations-logic'
@@ -84,6 +86,33 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
           validatedIds.data.caseId,
           validatedIds.data.variantId,
           validatedUpdates.data,
+          () => session,
+          (e) => {
+            const userId = request.session?.user?.id
+            if (userId !== undefined) {
+              events.publish(userId, WEB_EVENT_VARIANTS_ANNOTATION_CHANGED, e)
+            }
+          }
+        )
+      }
+    },
+
+    'annotations:batchUpsertPerCase': {
+      async handle(args, request, reply, { session, events }) {
+        const [caseId, variantIds, updates] = args
+        const validated = BatchPerCaseAnnotationInputSchema.safeParse({
+          caseId,
+          variantIds,
+          updates
+        })
+        if (!validated.success) {
+          reply.code(400)
+          return { error: 'invalid-batch-per-case-annotation-upsert' }
+        }
+        return await batchUpsertPerCaseAnnotationWithEvent(
+          validated.data.caseId,
+          validated.data.variantIds,
+          validated.data.updates,
           () => session,
           (e) => {
             const userId = request.session?.user?.id

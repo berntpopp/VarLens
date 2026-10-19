@@ -302,6 +302,7 @@ import {
   type AcmgClassification
 } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
+import { getPerCaseByVariantId, variantKey as toCoordKey } from '../composables/annotation-cache'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { useCapabilityStore } from '../stores/capabilityStore'
@@ -405,7 +406,6 @@ const {
 // Global ACMG classification (for showing in case mode)
 const globalAcmgClassification = computed<AcmgClassification | null>(() => {
   if (props.variant === null) return null
-
   return getGlobalAcmgClassification(
     props.variant.chr,
     props.variant.pos,
@@ -426,30 +426,21 @@ const auditEntityKeys = computed<string[]>(() => {
     : [globalAnnotationEntityKey(props.variant, genomeBuild.value), legacy]
 })
 
-const hasGlobalAcmg = computed(() => {
-  return globalAcmgClassification.value !== null
-})
+const hasGlobalAcmg = computed(() => globalAcmgClassification.value !== null)
 
-// Current evidence JSON for the ACMG panel
+// prettier-ignore
 const currentAcmgEvidence = computed(() => {
   if (!props.variant) return null
+  const { chr, pos, ref: r, alt: a } = props.variant
+  const vid = 'id' in props.variant ? props.variant.id : undefined
   if (props.mode === 'case') {
-    return getAcmgEvidence(
-      props.variant.chr,
-      props.variant.pos,
-      props.variant.ref,
-      props.variant.alt
-    )
+    if (props.caseId !== null && typeof vid === 'number') {
+      return getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_evidence ?? null
+    }
+    return getAcmgEvidence(chr, pos, r, a)
   }
-  return getGlobalAcmgEvidence(
-    props.variant.chr,
-    props.variant.pos,
-    props.variant.ref,
-    props.variant.alt
-  )
+  return getGlobalAcmgEvidence(chr, pos, r, a)
 })
-// Stored evidence with every criterion removed is still a JSON blob; only
-// say "(has evidence)" when criteria, notes or an override remain.
 const hasAcmgEvidence = computed(() => hasMeaningfulAcmgEvidence(currentAcmgEvidence.value))
 const acmgLocked = computed(() => hasDecidingAcmgEvidence(currentAcmgEvidence.value))
 
@@ -467,13 +458,15 @@ const {
   spliceAiFallback: spliceaiMaxDelta
 })
 
-// Current quick classification (from annotation, not evidence-based)
+// prettier-ignore
 const currentQuickClassification = computed<AcmgClassification | null>(() => {
   if (!props.variant) return null
   const { chr, pos, ref: r, alt: a } = props.variant
-  return props.mode === 'case'
-    ? getAcmgClassification(chr, pos, r, a)
-    : getGlobalAcmgClassification(chr, pos, r, a)
+  const vid = 'id' in props.variant ? props.variant.id : undefined
+  if (props.mode === 'case' && props.caseId !== null && typeof vid === 'number') {
+    return getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_classification ?? null
+  }
+  return props.mode === 'case' ? getAcmgClassification(chr, pos, r, a) : getGlobalAcmgClassification(chr, pos, r, a)
 })
 
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
@@ -487,49 +480,25 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
   }
 }
 
-const handleAcmgEvidenceChange = async (payload: {
-  classification: AcmgClassification | null
-  evidenceJson: string
-}): Promise<boolean> => {
+// prettier-ignore
+const handleAcmgEvidenceChange = async (payload: { classification: AcmgClassification | null; evidenceJson: string }): Promise<boolean> => {
   if (props.variant === null) return false
   const { chr, pos, ref: r, alt: a } = props.variant
   return props.mode === 'case' && props.caseId !== null
-    ? setAcmgClassificationWithEvidence(
-        props.caseId,
-        (props.variant as Variant).id,
-        chr,
-        pos,
-        r,
-        a,
-        payload.classification,
-        payload.evidenceJson
-      )
-    : setGlobalAcmgClassificationWithEvidence(
-        chr,
-        pos,
-        r,
-        a,
-        payload.classification,
-        payload.evidenceJson
-      )
+    ? setAcmgClassificationWithEvidence(props.caseId, (props.variant as Variant).id, chr, pos, r, a, payload.classification, payload.evidenceJson)
+    : setGlobalAcmgClassificationWithEvidence(chr, pos, r, a, payload.classification, payload.evidenceJson)
 }
 
 // Load annotations when variant changes
+// prettier-ignore
 watch(
   () => props.variant,
   async (newVariant) => {
     if (newVariant !== null) {
-      // Clear stale VEP data before any async work: never show the previous variant's
       clearVepData()
-
+      const vid = 'id' in newVariant && typeof newVariant.id === 'number' ? newVariant.id : undefined
       if (props.mode === 'case' && props.caseId !== null) {
-        await loadAnnotations(
-          props.caseId,
-          newVariant.chr,
-          newVariant.pos,
-          newVariant.ref,
-          newVariant.alt
-        )
+        await loadAnnotations(props.caseId, newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt, vid)
       } else {
         await loadGlobalAnnotations(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
       }
@@ -543,6 +512,7 @@ appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 // Escape closes the panel, unless a text field or an open menu/dialog owns it
 const handleKeydown = (e: KeyboardEvent): void => {
   if (e.key !== 'Escape' || !props.open || isTextEntryFocused() || isOverlayOpen()) return
+  e.preventDefault()
   emit('update:open', false)
 }
 onMounted(() => window.addEventListener('keydown', handleKeydown))

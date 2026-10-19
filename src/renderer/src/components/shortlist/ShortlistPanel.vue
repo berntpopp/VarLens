@@ -25,24 +25,44 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed, toRef } from 'vue'
+import { computed, inject, ref, toRef, watch } from 'vue'
 import { mdiInformationOutline, mdiRefresh, mdiTuneVariant } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
+import AnnotationDialogs from '../AnnotationDialogs.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import { useShortlistQuery } from '../../composables/useShortlistQuery'
 import { useApiService } from '../../composables/useApiService'
+import { useAnnotations } from '../../composables/useAnnotations'
+import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
-import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import {
+  annotationCache,
+  cacheSet,
+  ensurePerCaseSlotOwner,
+  evictCoordSlotOnly,
+  evictPerCaseVariant,
+  getCachedVariantId,
+  getPerCaseByVariantId,
+  hasLoadedPerCaseByVariantId,
+  inFlightMutations,
+  markAwaited,
+  perCaseSlotKey,
+  setCachedVariantId,
+  unloadedSlotOf,
+  variantKey
+} from '../../composables/annotation-cache'
 import { usePermissions } from '../../composables/usePermissions'
 import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
 import { SHORTLIST_RANKING_EDITOR } from '../../config/shortlistRankingEditor'
+import { AppStateKey } from '../../composables/useAppState'
 
 const { open: openRankingDialog } = useShortlistRankingDialog()
 
 const { canWrite } = usePermissions()
+const appState = inject(AppStateKey, null)
 
 const props = defineProps<{
   caseId: number
@@ -60,6 +80,20 @@ const { api } = useApiService()
 const caseIdRef = toRef(props, 'caseId')
 const { shortlistPresets, selectedPresetId, result, loading, error, refresh, presetsLoading } =
   useShortlistQuery(caseIdRef)
+
+const annotations = useAnnotations()
+const annotationActions = { ...annotations, ...useAcmgUndo() }
+const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+
+watch(
+  () => result.value?.rows,
+  (rows) => {
+    if (rows && rows.length > 0) {
+      void annotations.loadAnnotationsBatch(props.caseId, rows)
+    }
+  },
+  { immediate: true }
+)
 
 // Same loading presentation as the case/cohort tables (stale-while-revalidate)
 const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
@@ -92,7 +126,7 @@ const shortlistExplanation = computed(() => {
 
 /**
  * Toggle the star annotation for a row. Writes through
- * `annotations.upsertPerCase` and relies on the
+ * `annotations.toggleStar` (`annotations.upsertPerCase`) and relies on the
  * `variants:annotationChanged` broadcast to drive the refetch — no
  * manual `refresh()` call here.
  */
@@ -101,27 +135,95 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
     logService.warn('toggle star skipped: API unavailable', 'shortlist.panel')
     return
   }
-  try {
-    unwrapIpcResult(
-      await api.annotations.upsertPerCase(row.case_id, row.id, {
-        starred: !row.is_starred
-      })
+  await annotations.toggleStar(row.case_id, row.id, row.chr, row.pos, row.ref, row.alt, {
+    initialStarred: row.is_starred,
+    logSource: 'shortlist.panel',
+    isStillActive: () =>
+      props.caseId === row.case_id &&
+      (appState?.selectedCaseId?.value == null || appState.selectedCaseId.value === row.case_id)
+  })
+}
+
+let dialogOpenSeq = 0
+
+function isRowAnnotationVerified(row: ShortlistRow): boolean {
+  const key = variantKey(row)
+  const cached = annotationCache.value.get(key)
+  if (cached === undefined || unloadedSlotOf(key) === 'global') return false
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key)
+    return (
+      pc === null || (pc !== undefined && pc.variant_id === row.id && pc.case_id === row.case_id)
     )
-    // No manual refresh — the variants:annotationChanged broadcast
-    // triggers a refetch via useShortlistQuery's subscription.
-  } catch (e) {
-    logService.error(
-      `toggle star failed: ${
-        e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      }`,
-      'shortlist.panel'
-    )
+  }
+  if (inFlightMutations.has(perCaseSlotKey(row.case_id, row.id, key))) return false
+  const cachedVid = getCachedVariantId(key)
+  return (
+    unloadedSlotOf(key) === undefined &&
+    cachedVid === row.id &&
+    (cached.perCase === null ||
+      (cached.perCase.variant_id === row.id && cached.perCase.case_id === row.case_id))
+  )
+}
+
+async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
+  const seq = ++dialogOpenSeq
+  const key = variantKey(row)
+  if (!isRowAnnotationVerified(row)) {
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
+    if (typeof api?.annotations?.batchGet !== 'function') {
+      appState?.showSnack('Failed to load variant annotations.', 'error')
+      return false
+    }
+    markAwaited('case', key)
+    await annotations.loadAnnotationsBatch(row.case_id, [row])
+  }
+  if (seq !== dialogOpenSeq || props.caseId !== row.case_id) {
+    return false
+  }
+  if (!isRowAnnotationVerified(row)) {
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
+    appState?.showSnack('Failed to load variant annotations.', 'error')
+    return false
+  }
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key) ?? null
+    const existing = annotationCache.value.get(key)
+    ensurePerCaseSlotOwner(key, row.case_id, row.id)
+    setCachedVariantId(key, row.id)
+    if (existing !== undefined && (existing.perCase !== pc || unloadedSlotOf(key) === 'perCase')) {
+      cacheSet(key, { global: existing.global, perCase: pc })
+    }
+  }
+  return true
+}
+
+async function onAcmgClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openAcmgEvidenceDialog(row)
+  }
+}
+
+async function onCommentClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openCommentDialog(row)
   }
 }
 
 /** Clear the error banner so the user can dismiss stale failures. */
 function dismissError(): void {
   error.value = null
+}
+
+async function handleTriageApplied(): Promise<void> {
+  await refresh()
+  if (result.value && props.caseId) {
+    await annotations.loadAnnotationsBatch(props.caseId, result.value.rows)
+  }
 }
 </script>
 
@@ -232,14 +334,25 @@ function dismissError(): void {
 
       <ShortlistTable
         v-else-if="result"
+        :case-id="caseId"
         :read-only="!canWrite"
         :interactive="interactive"
         :rows="result.rows"
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"
         @toggle-star="onToggleStar"
+        @acmg-click="onAcmgClick"
+        @comment-click="onCommentClick"
+        @triage-applied="handleTriageApplied"
       />
     </div>
+
+    <AnnotationDialogs
+      ref="annotationDialogsRef"
+      :case-id="caseId"
+      :annotation-actions="annotationActions"
+      @changed="refresh"
+    />
   </div>
 </template>
 

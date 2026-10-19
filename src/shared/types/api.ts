@@ -503,6 +503,10 @@ export interface PerCaseAnnotationUpdates {
   user_name?: string // for audit trail only
 }
 
+export interface BatchPerCaseAnnotationUpdates extends PerCaseAnnotationUpdates {
+  tag_id?: number
+}
+
 export interface VariantKey {
   chr: string
   pos: number

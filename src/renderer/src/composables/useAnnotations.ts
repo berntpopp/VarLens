@@ -119,15 +119,23 @@ export type CaseBatchVariant = VariantCoords & { id: number }
 
 /** Per-case / global load functions. */
 function bindLoads(ops: ScopedOps, build: () => string | null) {
-  // Load annotations for a variant (call on row visible or expand)
   function loadAnnotations(
     caseId: number,
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    variantId?: number
   ): Promise<void> {
-    return ops.load({ kind: 'case', caseId, build: build() }, coordsOf(chr, pos, ref, alt))
+    return ops.load(
+      {
+        kind: 'case',
+        caseId,
+        ...(typeof variantId === 'number' ? { variantId } : {}),
+        build: build()
+      },
+      coordsOf(chr, pos, ref, alt)
+    )
   }
 
   // Bulk load annotations for visible variants. Rows must carry their
@@ -168,11 +176,13 @@ function bindStarsAndComments(ops: ScopedOps, build: () => string | null) {
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    opts?: import('./annotation-cache').ToggleStarOptions
   ): Promise<boolean> {
     return ops.toggleStar(
       { kind: 'case', caseId, variantId, build: build() },
-      coordsOf(chr, pos, ref, alt)
+      coordsOf(chr, pos, ref, alt),
+      opts
     )
   }
 

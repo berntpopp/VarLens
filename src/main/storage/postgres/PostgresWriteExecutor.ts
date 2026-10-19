@@ -63,6 +63,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         | 'upsertPerCaseAnnotation'
         | 'upsertPerCaseAnnotationWithAudit'
         | 'deletePerCaseAnnotation'
+        | 'batchUpsertPerCaseAnnotationWithAudit'
       >
       commentsMetrics: Pick<
         PostgresCommentsMetricsRepository,
@@ -227,6 +228,13 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
 
       case 'annotations:upsertPerCaseWithAudit':
         return await this.workflow.annotations.upsertPerCaseAnnotationWithAudit(
+          task.params[0],
+          task.params[1],
+          normalizeAnnotationUpdates(task.params[2])
+        )
+
+      case 'annotations:batchUpsertPerCaseWithAudit':
+        return await this.workflow.annotations.batchUpsertPerCaseAnnotationWithAudit(
           task.params[0],
           task.params[1],
           normalizeAnnotationUpdates(task.params[2])
