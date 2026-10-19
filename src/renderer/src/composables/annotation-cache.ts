@@ -18,6 +18,7 @@ export interface AnnotationCache {
 
 export * from './annotation-mutation-tracker'
 import {
+  allocateLoadSeq,
   clearMutationTracker,
   resetMutationTracker,
   getPerCaseSlotOwner,
@@ -31,7 +32,10 @@ import {
   deletePerCaseForCoordKey,
   bumpCaseVariantVersion,
   deleteLoadingVariantId,
-  reconcileBulkTriageKey
+  markLoadSeqAccepted,
+  reconcileBulkTriageKey,
+  retireCaseVariantTracking,
+  retireCoordLoadSeqs
 } from './annotation-mutation-tracker'
 
 export type AnnotationSlot = keyof AnnotationCache
@@ -222,6 +226,7 @@ export function cacheSetPerCaseSlot(
 
 let nextLoadingToken = 0
 const loadingTokens = new Map<string, number>()
+const activeKeyLoads = new Map<string, number>()
 
 /** Set loading state and trigger shallowRef reactivity. Returns loading token if set true. */
 export function setLoading(
@@ -232,12 +237,22 @@ export function setLoading(
 ): number {
   if (value) {
     const next = ++nextLoadingToken
+    activeKeyLoads.set(key, (activeKeyLoads.get(key) ?? 0) + 1)
     loadingStates.value.set(key, true)
     loadingTokens.set(key, next)
     if (kind === 'global') globalOnlyLoading.add(key)
     else globalOnlyLoading.delete(key)
     triggerRef(loadingStates)
     return next
+  }
+  const rem = (activeKeyLoads.get(key) ?? 1) - 1
+  if (rem > 0) activeKeyLoads.set(key, rem)
+  else {
+    activeKeyLoads.delete(key)
+    if (!annotationCache.value.has(key)) {
+      keyVersions.delete(key)
+      retireCoordLoadSeqs(key)
+    }
   }
   if (token !== undefined && loadingTokens.get(key) !== token) return 0
   loadingStates.value.delete(key)
@@ -252,16 +267,24 @@ export function isKeyLoading(key: string): boolean {
   return loadingStates.value.get(key) ?? false
 }
 
-const loadingCaseVariants = new Set<string>()
+const loadingCaseVariants = new Map<string, number>()
 
 export function isLoadingCaseVariant(caseId: number, variantId: number): boolean {
-  return loadingCaseVariants.has(`${caseId}:${variantId}`)
+  return (loadingCaseVariants.get(`${caseId}:${variantId}`) ?? 0) > 0
 }
 
 export function setLoadingCaseVariant(caseId: number, variantId: number, loading: boolean): void {
   const k = `${caseId}:${variantId}`
-  if (loading) loadingCaseVariants.add(k)
-  else loadingCaseVariants.delete(k)
+  if (loading) {
+    loadingCaseVariants.set(k, (loadingCaseVariants.get(k) ?? 0) + 1)
+  } else {
+    const rem = (loadingCaseVariants.get(k) ?? 1) - 1
+    if (rem > 0) loadingCaseVariants.set(k, rem)
+    else {
+      loadingCaseVariants.delete(k)
+      if (!perCaseByVariantId.has(k)) retireCaseVariantTracking(caseId, variantId)
+    }
+  }
 }
 
 /**
@@ -322,7 +345,8 @@ export function getPerCaseByVariantId(
 function clearEntries(): void {
   cacheEpoch++
   evictionEpoch++
-  for (const m of [keyVersions, cachedVariantIds, loadingTokens, unloadedSlots]) m.clear()
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens, activeKeyLoads, unloadedSlots])
+    m.clear()
   clearMutationTracker()
   annotationCache.value.clear()
   loadingStates.value.clear()
@@ -388,8 +412,19 @@ export const hasDbSwitchedSince = (requestDbPath: string | null): boolean => {
 }
 export const isTrackedCase = (caseId: number): boolean => lastCaseId === caseId
 
+function shouldKeepVariantLoadGuard(key: string, caseId: number, variantId: number): boolean {
+  return isLoadingCaseVariant(caseId, variantId) || (activeKeyLoads.get(key) ?? 0) > 0
+}
+
 function dropKeyMetadata(key: string): void {
-  keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+  if ((activeKeyLoads.get(key) ?? 0) > 0) {
+    keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+    markLoadSeqAccepted(`case:${key}`, allocateLoadSeq())
+    markLoadSeqAccepted(`global:${key}`, allocateLoadSeq())
+  } else {
+    keyVersions.delete(key)
+    retireCoordLoadSeqs(key)
+  }
   cachedVariantIds.delete(key)
   deleteLoadingVariantId(key)
   loadingStates.value.delete(key)
@@ -402,7 +437,7 @@ function dropKeyMetadata(key: string): void {
 
 function dropKeyState(key: string): void {
   dropKeyMetadata(key)
-  deletePerCaseForCoordKey(key)
+  deletePerCaseForCoordKey(key, (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid))
   perCaseSlotOwners.delete(key)
 }
 
@@ -419,12 +454,16 @@ export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
 /** Evict a single perCase variant entry without dropping sibling variant data. */
 export function evictPerCaseVariant(caseId: number, variantId: number, key: string): void {
   const k = `${caseId}:${variantId}`
-  bumpCaseVariantVersion(caseId, variantId)
   loadedPerCaseByVariantId.delete(k)
   const hasInFlight =
     (inFlightMutations.get(perCaseSlotKey(caseId, variantId, key))?.length ?? 0) > 0
   if (!hasInFlight) {
     perCaseByVariantId.delete(k)
+  }
+  if (hasInFlight || shouldKeepVariantLoadGuard(key, caseId, variantId)) {
+    bumpCaseVariantVersion(caseId, variantId)
+  } else {
+    retireCaseVariantTracking(caseId, variantId)
   }
   if (
     cachedVariantIds.get(key) === variantId ||
@@ -482,7 +521,8 @@ export function evictAnnotationCacheKeysForBulkTriage(
       updates,
       owners,
       fromCurrentEpoch,
-      hasInFlightForKey
+      hasInFlightForKey,
+      (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid)
     )
   }
   if (changed) triggerRef(annotationCache)
@@ -503,7 +543,7 @@ export function resetAnnotationState(): void {
   cacheEpoch = 0
   evictionEpoch = 0
   nextLoadingToken = 0
-  for (const m of [keyVersions, cachedVariantIds, loadingTokens]) m.clear()
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens, activeKeyLoads]) m.clear()
   loadingCaseVariants.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0

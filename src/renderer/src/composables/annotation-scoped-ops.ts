@@ -89,8 +89,6 @@ async function mutate(
   const key = variantKey(coords)
   const hadPerCase = scope.kind === 'case' && hasPerCaseByVariantId(scope.caseId, scope.variantId)
   // prettier-ignore
-  const hadLoadedPerCase = scope.kind === 'case' && hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)
-  // prettier-ignore
   const rowPerCase = scope.kind === 'case' ? getPerCaseByVariantId(scope.caseId, scope.variantId, key) : undefined
   const rawCurrent = annotationCache.value.get(key)
   const pc = rawCurrent?.perCase
@@ -155,7 +153,7 @@ async function mutate(
           const rem = inFlightMutations.get(slotKey)
           if (!rem || rem.length === 0) {
             confirmedBases.delete(slotKey)
-            if (!hadLoadedPerCase) perCaseByVariantId.delete(`${scope.caseId}:${scope.variantId}`)
+            if (!hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)) perCaseByVariantId.delete(`${scope.caseId}:${scope.variantId}`)
           }
         }
       }
@@ -239,10 +237,11 @@ async function mutate(
         // prettier-ignore
         if (scope.kind === 'case') {
           bumpCaseVariantVersion(scope.caseId, scope.variantId)
-          if ((!remaining || remaining.length === 0) && !hadPerCase && !hadLoadedPerCase && nextSlot === null) {
+          const hasLoaded = hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)
+          if ((!remaining || remaining.length === 0) && !hadPerCase && !hasLoaded && nextSlot === null) {
             perCaseByVariantId.delete(`${scope.caseId}:${scope.variantId}`)
           } else {
-            setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key, false)
+            setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key, hasLoaded)
           }
         }
         if (target && targetHoldsVariant) {
@@ -261,7 +260,7 @@ async function mutate(
         // prettier-ignore
         if (scope.kind === 'case') {
           bumpCaseVariantVersion(scope.caseId, scope.variantId)
-          setPerCaseByVariantId(scope.caseId, scope.variantId, baseSlot as CaseVariantAnnotation | null, key, false)
+          setPerCaseByVariantId(scope.caseId, scope.variantId, baseSlot as CaseVariantAnnotation | null, key, hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId))
         }
         if (target && targetHoldsVariant) {
           rollBackSlot(target, scope, plan.rollback, baseSlot)
@@ -365,7 +364,7 @@ async function load(api: WindowAPI | undefined, scope: AnnotationLoadScope, coor
   const reqSeq = allocateLoadSeq()
   if (scope.kind === 'case' && typeof scope.variantId === 'number') {
     const ex = annotationCache.value.get(key)
-    if (ex !== undefined && unloadedSlotOf(key) !== 'global' && hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)) {
+    if (ex !== undefined && unloadedSlotOf(key) !== 'global' && hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId) && hasPerCaseByVariantId(scope.caseId, scope.variantId)) {
       const pc = getPerCaseByVariantId(scope.caseId, scope.variantId, key) ?? null
       markLoadSeqAccepted(`case:${key}`, reqSeq); markLoadSeqAccepted(`caseVar:${scope.caseId}:${scope.variantId}`, reqSeq)
       ensurePerCaseSlotOwner(key, scope.caseId, scope.variantId); setCachedVariantId(key, scope.variantId)
@@ -383,7 +382,7 @@ async function load(api: WindowAPI | undefined, scope: AnnotationLoadScope, coor
   const version = getKeyVersion(key)
   const vidVer = scope.kind === 'case' && typeof scope.variantId === 'number' ? getCaseVariantVersion(scope.caseId, scope.variantId) : undefined
   const loadingToken = setLoading(key, true, scope.kind)
-  if (scope.kind === 'case' && typeof scope.variantId === 'number') setLoadingVariantId(key, scope.variantId)
+  if (scope.kind === 'case' && typeof scope.variantId === 'number') { setLoadingVariantId(key, scope.variantId); setLoadingCaseVariant(scope.caseId, scope.variantId, true) }
   try {
     let entry = await fetchEntry(api, scope, coords)
     if (isResponseStale(scope, dbPath)) return
@@ -414,6 +413,7 @@ async function load(api: WindowAPI | undefined, scope: AnnotationLoadScope, coor
   } catch (error) {
     logService.error(`Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error), 'annotations')
   } finally {
+    if (scope.kind === 'case' && typeof scope.variantId === 'number' && isTrackedCase(scope.caseId)) setLoadingCaseVariant(scope.caseId, scope.variantId, false)
     if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) setLoading(key, false, scope.kind, loadingToken)
   }
 }

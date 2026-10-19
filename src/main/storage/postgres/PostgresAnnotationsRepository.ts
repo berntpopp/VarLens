@@ -12,7 +12,7 @@ import {
   applyAnnotationFlagsPerCase,
   beginAnnotationWrite
 } from './cohort-annotation-flags-sql'
-import { quoteIdentifier, toNumber } from './identifiers'
+import { quoteIdentifier, quoteLiteral, toNumber } from './identifiers'
 // A failed ROLLBACK leaves the summary write lock held: release(failure) destroys the connection.
 import { runOrDestroy } from './long-running-client'
 import { runNamed } from './named-query'
@@ -30,8 +30,13 @@ import {
   toGlobalAnnotation,
   toPerCaseAnnotation,
   variantKey,
+  acquireAnnotationWriteLocks,
+  buildGlobalLockAndGetSql,
+  buildPerCaseLockAndGetSql,
   buildGlobalUpsertSql,
-  buildPerCaseUpsertSql
+  buildPerCaseUpsertSql,
+  buildGlobalDeleteSql,
+  buildPerCaseDeleteSql
 } from './postgres-annotations-types'
 
 export class PostgresAnnotationsRepository {
@@ -40,6 +45,33 @@ export class PostgresAnnotationsRepository {
     private readonly schema: string,
     private readonly summaryLockWaitMs?: number
   ) {}
+
+  private async _withWriteTransaction<T>(
+    lockKeys: string[],
+    fn: (client: PoolClient, flags: Awaited<ReturnType<typeof beginAnnotationWrite>>) => Promise<T>
+  ): Promise<T> {
+    const releaseLocks = await acquireAnnotationWriteLocks(this.pool, this.schema, lockKeys)
+    let client: PoolClient | undefined
+    let rollbackFailure: Error | undefined
+    try {
+      client = await this.connect()
+      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
+      const result = await fn(client, flags)
+      await client.query('COMMIT')
+      return result
+    } catch (error) {
+      if (client) {
+        rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
+      }
+      throw error
+    } finally {
+      try {
+        client?.release(rollbackFailure)
+      } finally {
+        releaseLocks()
+      }
+    }
+  }
 
   async getGlobalAnnotation(
     chr: string,
@@ -63,6 +95,18 @@ export class PostgresAnnotationsRepository {
     return row === undefined ? null : toGlobalAnnotation(row)
   }
 
+  private async _lockAndGetGlobalAnnotation(
+    client: QueryablePool,
+    { chr, pos, ref, alt, genomeBuild }: GlobalKey
+  ): Promise<VariantAnnotation | null> {
+    const result = await client.query(
+      buildGlobalLockAndGetSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
+      [chr, pos, ref, alt, genomeBuild]
+    )
+    const row = result.rows[0]
+    return row === undefined ? null : toGlobalAnnotation(row)
+  }
+
   async upsertGlobalAnnotation(
     chr: string,
     pos: number,
@@ -71,21 +115,15 @@ export class PostgresAnnotationsRepository {
     genomeBuild: string,
     updates: GlobalAnnotationUpdates
   ): Promise<VariantAnnotation> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const key = { chr, pos, ref, alt, genomeBuild }
-      const result = await this._upsertGlobalAnnotationOn(client, key, updates)
-      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
-      await client.query('COMMIT')
-      return result
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    const key = { chr, pos, ref, alt, genomeBuild }
+    return this._withWriteTransaction(
+      [`global:${genomeBuild}:${chr}:${pos}:${ref}:${alt}`],
+      async (client, flags) => {
+        const result = await this._upsertGlobalAnnotationOn(client, key, updates)
+        await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
+        return result
+      }
+    )
   }
 
   // Raw-SQL helper — operates on the passed client/pool, no BEGIN/COMMIT.
@@ -119,7 +157,7 @@ export class PostgresAnnotationsRepository {
 
     const result = await runNamed(client as Pool, {
       name: 'annotations:upsert_global:v2',
-      text: buildGlobalUpsertSql(schemaName),
+      text: buildGlobalUpsertSql(schemaName, quoteLiteral(this.schema)),
       values: params,
       schema: this.schema
     })
@@ -135,32 +173,25 @@ export class PostgresAnnotationsRepository {
     genomeBuild: string,
     updates: GlobalAnnotationUpdates & { user_name?: string | null }
   ): Promise<VariantAnnotation> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const annotations = new PostgresAnnotationsRepository(client, this.schema)
-      const audit = new PostgresAuditLogRepository(client, this.schema)
-      const key = { chr, pos, ref, alt, genomeBuild }
-      const oldAnnotation = await annotations.getGlobalAnnotation(chr, pos, ref, alt, genomeBuild)
-      assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
-      const result = await this._upsertGlobalAnnotationOn(client, key, updates)
-      for (const entry of globalAnnotationAuditEntries(
-        { chr, pos, ref, alt, genome_build: genomeBuild },
-        updates,
-        oldAnnotation as Record<string, unknown> | null
-      )) {
-        await audit.append(entry)
+    const key = { chr, pos, ref, alt, genomeBuild }
+    return this._withWriteTransaction(
+      [`global:${genomeBuild}:${chr}:${pos}:${ref}:${alt}`],
+      async (client, flags) => {
+        const audit = new PostgresAuditLogRepository(client, this.schema)
+        const oldAnnotation = await this._lockAndGetGlobalAnnotation(client, key)
+        assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+        const result = await this._upsertGlobalAnnotationOn(client, key, updates)
+        for (const entry of globalAnnotationAuditEntries(
+          { chr, pos, ref, alt, genome_build: genomeBuild },
+          updates,
+          oldAnnotation as Record<string, unknown> | null
+        )) {
+          await audit.append(entry)
+        }
+        await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
+        return result
       }
-      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
-      await client.query('COMMIT')
-      return result
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    )
   }
 
   async deleteGlobalAnnotation(
@@ -170,20 +201,14 @@ export class PostgresAnnotationsRepository {
     alt: string,
     genomeBuild: string
   ): Promise<void> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const key = { chr, pos, ref, alt, genomeBuild }
-      await this._deleteGlobalAnnotationOn(client, key)
-      await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
-      await client.query('COMMIT')
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    const key = { chr, pos, ref, alt, genomeBuild }
+    await this._withWriteTransaction(
+      [`global:${genomeBuild}:${chr}:${pos}:${ref}:${alt}`],
+      async (client, flags) => {
+        await this._deleteGlobalAnnotationOn(client, key)
+        await applyAnnotationFlagsGlobal(client, { ...flags, ...key })
+      }
+    )
   }
 
   // Raw-SQL helper — operates on the passed client/pool, no BEGIN/COMMIT.
@@ -191,13 +216,9 @@ export class PostgresAnnotationsRepository {
     client: QueryablePool,
     { chr, pos, ref, alt, genomeBuild }: GlobalKey
   ): Promise<void> {
-    const schemaName = quoteIdentifier(this.schema)
     await runNamed(client as Pool, {
       name: 'annotations:delete_global:v2',
-      text: `
-        DELETE FROM ${schemaName}."variant_annotations"
-        WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4 AND genome_build = $5
-      `,
+      text: buildGlobalDeleteSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
       values: [chr, pos, ref, alt, genomeBuild],
       schema: this.schema
     })
@@ -222,25 +243,29 @@ export class PostgresAnnotationsRepository {
     return row === undefined ? null : toPerCaseAnnotation(row)
   }
 
+  private async _lockAndGetPerCaseAnnotation(
+    client: QueryablePool,
+    caseId: number,
+    variantId: number
+  ): Promise<CaseVariantAnnotation | null> {
+    const result = await client.query(
+      buildPerCaseLockAndGetSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
+      [caseId, variantId]
+    )
+    const row = result.rows[0]
+    return row === undefined ? null : toPerCaseAnnotation(row)
+  }
+
   async upsertPerCaseAnnotation(
     caseId: number,
     variantId: number,
     updates: PerCaseAnnotationUpdates
   ): Promise<CaseVariantAnnotation> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
+    return this._withWriteTransaction([`case:${caseId}:${variantId}`], async (client, flags) => {
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
       await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
-      await client.query('COMMIT')
       return result
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    })
   }
 
   // Raw-SQL helper — operates on the passed client/pool, no BEGIN/COMMIT.
@@ -270,7 +295,7 @@ export class PostgresAnnotationsRepository {
 
     const result = await runNamed(client as Pool, {
       name: 'annotations:upsert_per_case:v1',
-      text: buildPerCaseUpsertSql(schemaName),
+      text: buildPerCaseUpsertSql(schemaName, quoteLiteral(this.schema)),
       values: params,
       schema: this.schema
     })
@@ -283,13 +308,9 @@ export class PostgresAnnotationsRepository {
     variantId: number,
     updates: PerCaseAnnotationUpdates & { user_name?: string | null }
   ): Promise<CaseVariantAnnotation> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const annotations = new PostgresAnnotationsRepository(client, this.schema)
+    return this._withWriteTransaction([`case:${caseId}:${variantId}`], async (client, flags) => {
       const audit = new PostgresAuditLogRepository(client, this.schema)
-      const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
+      const oldAnnotation = await this._lockAndGetPerCaseAnnotation(client, caseId, variantId)
       assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
       const result = await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
       for (const entry of perCaseAnnotationAuditEntries(
@@ -301,14 +322,8 @@ export class PostgresAnnotationsRepository {
         await audit.append(entry)
       }
       await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
-      await client.query('COMMIT')
       return result
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    })
   }
 
   async batchUpsertPerCaseAnnotationWithAudit(
@@ -316,88 +331,72 @@ export class PostgresAnnotationsRepository {
     variantIds: number[],
     updates: PerCaseAnnotationUpdates & { tag_id?: number; user_name?: string | null }
   ): Promise<{ updatedCount: number }> {
-    const uniqueIds = Array.from(new Set(variantIds))
+    const uniqueIds = Array.from(new Set(variantIds)).sort((a, b) => a - b)
     if (uniqueIds.length === 0) return { updatedCount: 0 }
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
-      const schemaName = quoteIdentifier(this.schema)
-      const validRows = await client.query<{ id: string | number }>(
-        `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::bigint[])`,
-        [caseId, uniqueIds]
-      )
-      const validIds = validRows.rows.map((r) => toNumber(r.id))
-      if (validIds.length !== uniqueIds.length) {
-        throw new Error(`One or more variants do not belong to case ${caseId}`)
-      }
-
-      const annotations = new PostgresAnnotationsRepository(client, this.schema)
-      const audit = new PostgresAuditLogRepository(client, this.schema)
-      const hasAnnotationUpdates =
-        'starred' in updates ||
-        'acmg_classification' in updates ||
-        'acmg_evidence' in updates ||
-        'per_case_comment' in updates
-
-      const oldAnnotations = new Map<number, CaseVariantAnnotation | null>()
-      for (const variantId of uniqueIds) {
-        const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
-        assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
-        oldAnnotations.set(variantId, oldAnnotation)
-      }
-
-      for (const variantId of uniqueIds) {
-        const oldAnnotation = oldAnnotations.get(variantId) ?? null
-        if (hasAnnotationUpdates) {
-          await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
+    return this._withWriteTransaction(
+      uniqueIds.map((id) => `case:${caseId}:${id}`),
+      async (client, flags) => {
+        const schemaName = quoteIdentifier(this.schema)
+        const validRows = await client.query<{ id: string | number }>(
+          `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::bigint[]) ORDER BY id FOR UPDATE`,
+          [caseId, uniqueIds]
+        )
+        const validIds = validRows.rows.map((r) => toNumber(r.id))
+        if (validIds.length !== uniqueIds.length) {
+          throw new Error(`One or more variants do not belong to case ${caseId}`)
         }
-        for (const entry of perCaseAnnotationAuditEntries(
-          caseId,
-          variantId,
-          updates,
-          oldAnnotation as Record<string, unknown> | null
-        )) {
-          await audit.append(entry)
-        }
-        await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
-      }
 
-      if (updates.tag_id !== undefined) {
+        const audit = new PostgresAuditLogRepository(client, this.schema)
+        const hasAnnotationUpdates =
+          'starred' in updates ||
+          'acmg_classification' in updates ||
+          'acmg_evidence' in updates ||
+          'per_case_comment' in updates
+
+        const oldAnnotations = new Map<number, CaseVariantAnnotation | null>()
         for (const variantId of uniqueIds) {
-          await client.query(
-            `INSERT INTO ${schemaName}."variant_tags" (case_id, variant_id, tag_id, created_at)
-             VALUES ($1, $2, $3, ${nowExpression})
-             ON CONFLICT DO NOTHING`,
-            [caseId, variantId, updates.tag_id]
-          )
+          const oldAnnotation = await this._lockAndGetPerCaseAnnotation(client, caseId, variantId)
+          assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+          oldAnnotations.set(variantId, oldAnnotation)
         }
-      }
 
-      await client.query('COMMIT')
-      return { updatedCount: uniqueIds.length }
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+        for (const variantId of uniqueIds) {
+          const oldAnnotation = oldAnnotations.get(variantId) ?? null
+          if (hasAnnotationUpdates) {
+            await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
+          }
+          for (const entry of perCaseAnnotationAuditEntries(
+            caseId,
+            variantId,
+            updates,
+            oldAnnotation as Record<string, unknown> | null
+          )) {
+            await audit.append(entry)
+          }
+          await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
+        }
+
+        if (updates.tag_id !== undefined) {
+          for (const variantId of uniqueIds) {
+            await client.query(
+              `INSERT INTO ${schemaName}."variant_tags" (case_id, variant_id, tag_id, created_at)
+               VALUES ($1, $2, $3, ${nowExpression})
+               ON CONFLICT DO NOTHING`,
+              [caseId, variantId, updates.tag_id]
+            )
+          }
+        }
+
+        return { updatedCount: uniqueIds.length }
+      }
+    )
   }
 
   async deletePerCaseAnnotation(caseId: number, variantId: number): Promise<void> {
-    const client = await this.connect()
-    let rollbackFailure: Error | undefined
-    try {
-      const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
+    await this._withWriteTransaction([`case:${caseId}:${variantId}`], async (client, flags) => {
       await this._deletePerCaseAnnotationOn(client, caseId, variantId)
       await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
-      await client.query('COMMIT')
-    } catch (error) {
-      rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
-      throw error
-    } finally {
-      client.release(rollbackFailure)
-    }
+    })
   }
 
   // Raw-SQL helper — operates on the passed client/pool, no BEGIN/COMMIT.
@@ -406,13 +405,9 @@ export class PostgresAnnotationsRepository {
     caseId: number,
     variantId: number
   ): Promise<void> {
-    const schemaName = quoteIdentifier(this.schema)
     await runNamed(client as Pool, {
       name: 'annotations:delete_per_case:v1',
-      text: `
-        DELETE FROM ${schemaName}."case_variant_annotations"
-        WHERE case_id = $1 AND variant_id = $2
-      `,
+      text: buildPerCaseDeleteSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
       values: [caseId, variantId],
       schema: this.schema
     })

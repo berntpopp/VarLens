@@ -167,6 +167,11 @@ export function markLoadSeqAccepted(slot: string, seq: number): void {
   }
 }
 
+export function retireCoordLoadSeqs(coordKey: string): void {
+  acceptedLoadSeqs.delete(`case:${coordKey}`)
+  acceptedLoadSeqs.delete(`global:${coordKey}`)
+}
+
 const loadingVariantIds = new Map<string, number>()
 export const getLoadingVariantId = (key: string): number | undefined => loadingVariantIds.get(key)
 export const setLoadingVariantId = (key: string, vid: number): void =>
@@ -181,6 +186,12 @@ export function bumpCaseVariantVersion(caseId: number, variantId: number): void 
   const k = `${caseId}:${variantId}`
   caseVariantVersions.set(k, (caseVariantVersions.get(k) ?? 0) + 1)
   acceptedLoadSeqs.set(`caseVar:${k}`, ++nextLoadSeq)
+}
+
+export function retireCaseVariantTracking(caseId: number, variantId: number): void {
+  const k = `${caseId}:${variantId}`
+  caseVariantVersions.delete(k)
+  acceptedLoadSeqs.delete(`caseVar:${k}`)
 }
 
 export function setPerCaseByVariantId(
@@ -203,16 +214,24 @@ export function setPerCaseByVariantId(
   }
 }
 
-export function deletePerCaseForCoordKey(coordKey: string): void {
+export function deletePerCaseForCoordKey(
+  coordKey: string,
+  shouldKeepLoadGuard?: (caseId: number, variantId: number) => boolean
+): void {
   const set = variantKeysByCoord.get(coordKey)
   if (set) {
     for (const k of Array.from(set)) {
       const [cid, vid] = k.split(':').map(Number)
-      bumpCaseVariantVersion(cid, vid)
       loadedPerCaseByVariantId.delete(k)
-      if (!inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))) {
+      const hasMut = inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))
+      if (!hasMut) {
         perCaseByVariantId.delete(k)
         set.delete(k)
+      }
+      if (hasMut || shouldKeepLoadGuard?.(cid, vid) === true) {
+        bumpCaseVariantVersion(cid, vid)
+      } else {
+        retireCaseVariantTracking(cid, vid)
       }
     }
     if (set.size === 0) variantKeysByCoord.delete(coordKey)
@@ -224,7 +243,8 @@ export function hasPerCaseByVariantId(caseId: number, variantId: number): boolea
 }
 
 export function hasLoadedPerCaseByVariantId(caseId: number, variantId: number): boolean {
-  return loadedPerCaseByVariantId.has(`${caseId}:${variantId}`)
+  const k = `${caseId}:${variantId}`
+  return loadedPerCaseByVariantId.has(k) && perCaseByVariantId.has(k)
 }
 
 export function computeOptimisticSlot(
@@ -426,7 +446,8 @@ export function reconcileBulkTriageKey(
   updates: Record<string, unknown> | undefined,
   owners: Array<{ caseId: number; variantId: number }>,
   fromCurrentEpoch: boolean,
-  hasInFlightForKey: boolean
+  hasInFlightForKey: boolean,
+  shouldKeepLoadGuard?: (caseId: number, variantId: number) => boolean
 ): void {
   if (owners.length > 0) {
     const primary = owners[owners.length - 1]
@@ -471,14 +492,14 @@ export function reconcileBulkTriageKey(
     }
   }
   if (fromCurrentEpoch || !hasInFlightForKey) {
-    deletePerCaseForCoordKey(key)
+    deletePerCaseForCoordKey(key, shouldKeepLoadGuard)
   }
   for (const o of owners) {
-    bumpCaseVariantVersion(o.caseId, o.variantId)
     loadedPerCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
     const sk = perCaseSlotKey(o.caseId, o.variantId, key)
     const rem = inFlightMutations.get(sk)
     if (rem && rem.length > 0) {
+      bumpCaseVariantVersion(o.caseId, o.variantId)
       setPerCaseByVariantId(
         o.caseId,
         o.variantId,
@@ -491,6 +512,11 @@ export function reconcileBulkTriageKey(
       )
     } else {
       perCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
+      if (shouldKeepLoadGuard?.(o.caseId, o.variantId) === true) {
+        bumpCaseVariantVersion(o.caseId, o.variantId)
+      } else {
+        retireCaseVariantTracking(o.caseId, o.variantId)
+      }
     }
   }
 }

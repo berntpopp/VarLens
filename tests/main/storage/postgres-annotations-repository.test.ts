@@ -1070,6 +1070,105 @@ describe('PostgresAnnotationsRepository', () => {
       null
     ])
   })
+
+  it('sorts batch variantIds ascending and serializes concurrent writes on overlapping targets', async () => {
+    const events: string[] = []
+    let releaseFirstBeginGate: () => void = () => {}
+    const firstBeginGate = new Promise<void>((r) => {
+      releaseFirstBeginGate = r
+    })
+
+    let txCount = 0
+    const pool = {
+      connect: vi.fn(async () => {
+        const txId = ++txCount
+        return {
+          query: vi.fn(async (sqlOrObj: unknown, rawValues?: unknown[]) => {
+            const sql =
+              typeof sqlOrObj === 'string'
+                ? sqlOrObj
+                : ((sqlOrObj as { text?: string })?.text ?? '')
+            const values =
+              typeof sqlOrObj === 'object' && sqlOrObj !== null && 'values' in sqlOrObj
+                ? (sqlOrObj as { values?: unknown[] }).values
+                : rawValues
+            if (sql === 'BEGIN') {
+              events.push(`tx${txId}:BEGIN`)
+              if (txId === 1) {
+                await firstBeginGate
+              }
+              return { rows: [] }
+            }
+            if (sql === 'COMMIT') {
+              events.push(`tx${txId}:COMMIT`)
+              return { rows: [] }
+            }
+            if (sql.includes('cohort_variant_summary')) {
+              return { rows: [{ target_resolved: 1 }] }
+            }
+            if (sql.includes('FROM "public"."variants"')) {
+              events.push(`tx${txId}:VARIANTS:${JSON.stringify(values?.[1])}`)
+              return { rows: [{ id: 101 }, { id: 102 }] }
+            }
+            if (sql.includes('pg_advisory_xact_lock') && sql.includes('FOR UPDATE')) {
+              events.push(`tx${txId}:LOCK_READ:${values?.[1]}`)
+              return { rows: [] }
+            }
+            if (sql.includes('INSERT INTO "public"."case_variant_annotations"')) {
+              events.push(`tx${txId}:UPSERT:${values?.[1]}`)
+              return {
+                rows: [
+                  {
+                    id: 1,
+                    case_id: 1,
+                    variant_id: values?.[1],
+                    starred: 1,
+                    acmg_classification: null,
+                    acmg_evidence: null,
+                    per_case_comment: null,
+                    created_at: 1,
+                    updated_at: 1
+                  }
+                ]
+              }
+            }
+            return { rows: [] }
+          }),
+          release: vi.fn()
+        }
+      })
+    }
+
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+    // Start batch in reverse order [102, 101] concurrently with single-row write on 101
+    const p1 = repository.batchUpsertPerCaseAnnotationWithAudit(1, [102, 101], {
+      starred: true
+    })
+    const p2 = repository.upsertPerCaseAnnotationWithAudit(1, 101, {
+      starred: false
+    })
+
+    // Allow microtasks to settle; tx2 must not even BEGIN until tx1 releases the per-target lock
+    await new Promise((r) => setTimeout(r, 10))
+    expect(events).toEqual(['tx1:BEGIN'])
+
+    releaseFirstBeginGate()
+    await Promise.all([p1, p2])
+
+    expect(events).toEqual([
+      'tx1:BEGIN',
+      'tx1:VARIANTS:[101,102]',
+      'tx1:LOCK_READ:101',
+      'tx1:LOCK_READ:102',
+      'tx1:UPSERT:101',
+      'tx1:UPSERT:102',
+      'tx1:COMMIT',
+      'tx2:BEGIN',
+      'tx2:LOCK_READ:101',
+      'tx2:UPSERT:101',
+      'tx2:COMMIT'
+    ])
+  })
 })
 
 interface SeedVariant {
