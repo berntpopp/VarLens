@@ -128,4 +128,13 @@ describe('LruMap', () => {
       ['b', 2]
     ])
   })
+
+  it('invokes onEvict callback when an entry is evicted', () => {
+    const evicted: Array<[string, number]> = []
+    const cache = new LruMap<string, number>(2, (k, v) => evicted.push([k, v]))
+    cache.set('a', 1)
+    cache.set('b', 2)
+    cache.set('c', 3)
+    expect(evicted).toEqual([['a', 1]])
+  })
 })

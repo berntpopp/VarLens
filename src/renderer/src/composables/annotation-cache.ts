@@ -16,9 +16,28 @@ export interface AnnotationCache {
   perCase: CaseVariantAnnotation | null
 }
 
+export * from './annotation-mutation-tracker'
+import {
+  clearMutationTracker,
+  getPerCaseSlotOwner,
+  perCaseSlotKey,
+  perCaseVersionSlot,
+  perCaseByVariantId,
+  type SlotValue,
+  type SlotPatch,
+  perCaseSlotOwners,
+  confirmedBases,
+  inFlightMutations,
+  confirmedFieldPatches,
+  setConfirmedFieldPatch,
+  ensurePerCaseSlotOwner,
+  bumpWriteVersion,
+  getConfirmedWriteVersion,
+  setConfirmedWriteVersion,
+  pruneInFlightMutationsOnSuccess
+} from './annotation-mutation-tracker'
+
 export type AnnotationSlot = keyof AnnotationCache
-export type SlotValue = VariantAnnotation | CaseVariantAnnotation
-export type SlotPatch = Partial<VariantAnnotation> & Partial<CaseVariantAnnotation>
 
 export function otherSlot(slot: AnnotationSlot): AnnotationSlot {
   return slot === 'perCase' ? 'global' : 'perCase'
@@ -91,7 +110,7 @@ export const MAX_CACHE_SIZE = 5000
 // Cache annotations by variant key (chr:pos:ref:alt)
 // shallowRef avoids deep reactive proxies on 5000+ Map entries
 // Exported so useVariantRowViewModel can read it for precomputed row state
-const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE)
+const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE, (key) => dropKeyState(key))
 export const annotationCache = shallowRef<LruMap<string, AnnotationCache>>(lruCache)
 
 // Tracks variant_id mapped to cache key, including for entries whose perCase slot is null
@@ -138,7 +157,7 @@ export function cacheSet(key: string, value: AnnotationCache, unloaded?: Annotat
   annotationCache.value.set(key, value)
   if (value.perCase && typeof value.perCase.variant_id === 'number') {
     cachedVariantIds.set(key, value.perCase.variant_id)
-  } else {
+  } else if (unloaded === 'perCase') {
     cachedVariantIds.delete(key)
   }
   if (unloaded === undefined) unloadedSlots.delete(key)
@@ -272,153 +291,32 @@ export const bumpKeyVersion = (key: string): void => {
   keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
 }
 
-const issuedWriteVersions = new Map<string, number>()
-const confirmedWriteVersions = new Map<string, number>()
-export const confirmedFieldPatches = new Map<
-  string,
-  Partial<Record<'star' | 'acmg' | 'comment', SlotPatch>>
->()
-
-export function bumpWriteVersion(key: string, slot: string = 'perCase'): number {
-  const k = `${slot}:${key}`
-  const next = (issuedWriteVersions.get(k) ?? 0) + 1
-  issuedWriteVersions.set(k, next)
-  return next
-}
-
-export function getWriteVersion(key: string, slot: string = 'perCase'): number {
-  return issuedWriteVersions.get(`${slot}:${key}`) ?? 0
-}
-
-export function getConfirmedWriteVersion(key: string, slot: string = 'perCase'): number {
-  return confirmedWriteVersions.get(`${slot}:${key}`) ?? 0
-}
-
-export function setConfirmedWriteVersion(key: string, slot: string, version: number): void {
-  const k = `${slot}:${key}`
-  if (version > (confirmedWriteVersions.get(k) ?? 0)) {
-    confirmedWriteVersions.set(k, version)
-  }
-}
-
-export function setConfirmedFieldPatch(
-  slotKey: string,
-  fieldGroup: 'star' | 'acmg' | 'comment',
-  patch: SlotPatch
-): void {
-  if (Object.keys(patch).length === 0) return
-  const existing = confirmedFieldPatches.get(slotKey) ?? {}
-  existing[fieldGroup] = patch
-  confirmedFieldPatches.set(slotKey, existing)
-}
-
-export function applyConfirmedFieldPatches(
-  slotKey: string,
-  base: SlotValue | null
-): SlotValue | null {
-  if (base === null) return null
-  const patches = confirmedFieldPatches.get(slotKey)
-  if (!patches) return base
-  let merged: Record<string, unknown> = { ...base }
-  for (const fg of ['star', 'acmg', 'comment'] as const) {
-    if (patches[fg]) merged = { ...merged, ...patches[fg] }
-  }
-  return merged as unknown as SlotValue
-}
-
-export interface InFlightMutation {
-  id: number
-  fieldGroup: 'star' | 'acmg' | 'comment'
-  writeVer: number
-  patch: Record<string, unknown>
-}
-
-export const confirmedBases = new Map<string, VariantAnnotation | CaseVariantAnnotation | null>()
-export const inFlightMutations = new Map<string, InFlightMutation[]>()
-const perCaseSlotOwners = new Map<string, { caseId: number; variantId: number }>()
-
-export function ensurePerCaseSlotOwner(key: string, caseId: number, variantId: number): void {
-  const prev = perCaseSlotOwners.get(key)
-  if (prev && (prev.caseId !== caseId || prev.variantId !== variantId)) {
-    const slotKey = `perCase:${key}`
-    confirmedBases.delete(slotKey)
-    inFlightMutations.delete(slotKey)
-    confirmedFieldPatches.delete(slotKey)
-    for (const fg of ['star', 'acmg', 'comment'] as const) {
-      issuedWriteVersions.delete(`perCase:${fg}:${key}`)
-      confirmedWriteVersions.delete(`perCase:${fg}:${key}`)
+export function getPerCaseByVariantId(
+  caseId: number,
+  variantId: number,
+  coordKey?: string
+): CaseVariantAnnotation | null | undefined {
+  if (typeof coordKey === 'string' && coordKey.length > 0) {
+    const cached = annotationCache.value.get(coordKey)?.perCase
+    if (cached != null && cached.case_id === caseId && cached.variant_id === variantId) {
+      return cached
     }
   }
-  perCaseSlotOwners.set(key, { caseId, variantId })
-}
-
-export function isPerCaseSlotOwner(key: string, caseId: number, variantId: number): boolean {
-  const cur = perCaseSlotOwners.get(key)
-  return !cur || (cur.caseId === caseId && cur.variantId === variantId)
-}
-
-export function computeOptimisticSlot(
-  base: VariantAnnotation | CaseVariantAnnotation | null,
-  mutations: InFlightMutation[]
-): VariantAnnotation | CaseVariantAnnotation | null {
-  if (base === null && mutations.length === 0) return null
-  let result: Record<string, unknown> = base ? { ...base } : {}
-  for (const m of mutations) {
-    result = { ...result, ...m.patch }
-  }
-  return result as unknown as VariantAnnotation | CaseVariantAnnotation
-}
-
-export function removeInFlightMutation(slotKey: string, mutationId: number): void {
-  const list = inFlightMutations.get(slotKey)
-  if (!list) return
-  const filtered = list.filter((m) => m.id !== mutationId)
-  if (filtered.length === 0) {
-    inFlightMutations.delete(slotKey)
-  } else {
-    inFlightMutations.set(slotKey, filtered)
-  }
-}
-
-export function pruneInFlightMutationsOnSuccess(
-  slotKey: string,
-  fieldGroup: string,
-  writeVer: number
-): void {
-  const list = inFlightMutations.get(slotKey)
-  if (!list) return
-  const filtered = list.filter((m) => !(m.fieldGroup === fieldGroup && m.writeVer <= writeVer))
-  if (filtered.length === 0) {
-    inFlightMutations.delete(slotKey)
-    confirmedBases.delete(slotKey)
-  } else {
-    inFlightMutations.set(slotKey, filtered)
-  }
+  return perCaseByVariantId.get(`${caseId}:${variantId}`)
 }
 
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++
   evictionEpoch++
-  for (const m of [
-    keyVersions,
-    cachedVariantIds,
-    perCaseSlotOwners,
-    confirmedBases,
-    inFlightMutations,
-    confirmedWriteVersions,
-    confirmedFieldPatches,
-    loadingTokens,
-    unloadedSlots
-  ])
-    m.clear()
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens, unloadedSlots]) m.clear()
+  clearMutationTracker()
   annotationCache.value.clear()
   loadingStates.value.clear()
   globalOnlyLoading.clear()
   awaitedKeys.case.clear()
   awaitedKeys.global.clear()
   triggerRef(annotationCache)
-  triggerRef(loadingStates)
 }
 
 /** Get current database path safely (returns null if Pinia not available). */
@@ -487,18 +385,29 @@ function dropKeyMetadata(key: string): void {
   awaitedKeys.global.delete(key)
 }
 
+function dropKeyState(key: string): void {
+  dropKeyMetadata(key)
+  const o = getPerCaseSlotOwner(key)
+  if (o) {
+    const sk = perCaseSlotKey(o.caseId, o.variantId, key)
+    confirmedBases.delete(sk)
+    inFlightMutations.delete(sk)
+    confirmedFieldPatches.delete(sk)
+  }
+  perCaseSlotOwners.delete(key)
+  for (const p of ['perCase', 'global']) {
+    confirmedBases.delete(`${p}:${key}`)
+    inFlightMutations.delete(`${p}:${key}`)
+    confirmedFieldPatches.delete(`${p}:${key}`)
+  }
+}
+
 /** Evict specific variant keys from the cache while preserving unrelated entries. */
 export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
   let changed = false
   for (const key of keys) {
     if (annotationCache.value.delete(key)) changed = true
-    dropKeyMetadata(key)
-    perCaseSlotOwners.delete(key)
-    for (const p of ['perCase', 'global']) {
-      confirmedBases.delete(`${p}:${key}`)
-      inFlightMutations.delete(`${p}:${key}`)
-      confirmedFieldPatches.delete(`${p}:${key}`)
-    }
+    dropKeyState(key)
   }
   if (changed) triggerRef(annotationCache)
 }
@@ -541,22 +450,28 @@ export function evictAnnotationCacheKeysForBulkTriage(
   for (const key of affectedKeys) {
     if (annotationCache.value.delete(key)) changed = true
     dropKeyMetadata(key)
-    const o = bulkOwners?.get(key)
+    const o = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
     if (o) ensurePerCaseSlotOwner(key, o.caseId, o.variantId)
-    const slotKey = `perCase:${key}`
+    const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
     for (const fg of touchedFields) {
-      const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, `perCase:${fg}`)
-      const prevConfirmed = getConfirmedWriteVersion(key, `perCase:${fg}`)
+      const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
+      const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, vSlot)
+      const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
       if (bulkVer > prevConfirmed) {
+        setConfirmedWriteVersion(key, vSlot, bulkVer)
         setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
         pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
+        pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
         if (updates) {
           applyBulkUpdatesPatch(slotKey, fg, updates)
+          if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
         } else {
-          const patches = confirmedFieldPatches.get(slotKey)
-          if (patches) {
-            delete patches[fg]
-            if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(slotKey)
+          for (const sk of [slotKey, `perCase:${key}`]) {
+            const patches = confirmedFieldPatches.get(sk)
+            if (patches) {
+              delete patches[fg]
+              if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(sk)
+            }
           }
         }
       }
@@ -576,21 +491,11 @@ export function clearAnnotationCache(): void {
 /** Full reset including the generation counters — test isolation only. */
 export function resetAnnotationState(): void {
   clearAnnotationCache()
+  clearMutationTracker()
   cacheEpoch = 0
   evictionEpoch = 0
   nextLoadingToken = 0
-  for (const m of [
-    keyVersions,
-    issuedWriteVersions,
-    confirmedWriteVersions,
-    confirmedFieldPatches,
-    cachedVariantIds,
-    perCaseSlotOwners,
-    confirmedBases,
-    inFlightMutations,
-    loadingTokens
-  ])
-    m.clear()
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens]) m.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0
 }

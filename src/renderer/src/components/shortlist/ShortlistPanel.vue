@@ -48,6 +48,7 @@ import {
   cacheSet,
   computeOptimisticSlot,
   confirmedBases,
+  confirmedFieldPatches,
   ensurePerCaseSlotOwner,
   evictAnnotationCacheKeys,
   getAnnotationCacheEpoch,
@@ -61,9 +62,12 @@ import {
   inFlightMutations,
   isPerCaseSlotOwner,
   markAwaited,
+  perCaseSlotKey,
+  perCaseVersionSlot,
   pruneInFlightMutationsOnSuccess,
   setConfirmedFieldPatch,
   setConfirmedWriteVersion,
+  setPerCaseByVariantId,
   unloadedSlotOf,
   variantKey
 } from '../../composables/annotation-cache'
@@ -168,7 +172,9 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         : row.is_starred
   const nextStarred = !currentStarred
   ensurePerCaseSlotOwner(key, row.case_id, row.id)
-  const writeVer = bumpWriteVersion(key, 'perCase:star')
+  const vSlot = perCaseVersionSlot(row.case_id, row.id, 'star')
+  const writeVer = bumpWriteVersion(key, vSlot)
+  bumpWriteVersion(key, 'perCase:star')
   const toggleToken = ++nextStarToggleToken
   pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
 
@@ -178,7 +184,12 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         starred: nextStarred
       })
     )
+    setPerCaseByVariantId(row.case_id, row.id, updated)
     const activeCaseId = appState?.selectedCaseId?.value
+    const confirmedVer = Math.max(
+      getConfirmedWriteVersion(key, vSlot),
+      getConfirmedWriteVersion(key, 'perCase:star')
+    )
     const stillOnScope =
       !hasDbSwitchedSince(dbPath) &&
       props.caseId === row.case_id &&
@@ -187,18 +198,23 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       getCachedBuild() === build &&
       (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
       isPerCaseSlotOwner(key, row.case_id, row.id) &&
-      writeVer > getConfirmedWriteVersion(key, 'perCase:star')
+      writeVer > confirmedVer
     if (stillOnScope) {
+      setConfirmedWriteVersion(key, vSlot, writeVer)
       setConfirmedWriteVersion(key, 'perCase:star', writeVer)
-      const slotKey = `perCase:${key}`
+      const slotKey = perCaseSlotKey(row.case_id, row.id, key)
       setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
+      setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
       pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
+      pruneInFlightMutationsOnSuccess(`perCase:${key}`, 'star', writeVer)
       const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
+      setPerCaseByVariantId(row.case_id, row.id, merged)
       const remaining = inFlightMutations.get(slotKey)
       if (remaining && remaining.length > 0) {
         confirmedBases.set(slotKey, merged)
       } else {
         confirmedBases.delete(slotKey)
+        confirmedFieldPatches.delete(slotKey)
       }
       const finalSlot =
         remaining && remaining.length > 0

@@ -515,12 +515,12 @@ if (appState) {
 }
 
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
+let arrowSyncGen = 0
 
 function clearArrowSyncTimer(): void {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
+  arrowSyncGen++
+  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
+  arrowSyncTimer = null
 }
 
 watch(
@@ -538,22 +538,22 @@ function triggerDebouncedPanelSync(): void {
   clearArrowSyncTimer()
   if (!appState || !canSyncDetails() || selectedItem.value === null) return
   const currentAppState = appState
+  const gen = arrowSyncGen
   arrowSyncTimer = setTimeout(async () => {
     arrowSyncTimer = null
-    const itemBeforeAwait = selectedItem.value
-    if (!canSyncDetails() || itemBeforeAwait === null) return
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
     const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
     if (leavePromise !== null) {
       const ok = await leavePromise
+      if (gen !== arrowSyncGen) return
       if (!ok) {
         const panelVar = currentAppState.selectedPanelVariant.value
         if (panelVar && 'id' in panelVar) selectByClick(panelVar as Variant)
         return
       }
     }
-    const currentItem = selectedItem.value
-    if (!canSyncDetails() || currentItem === null) return
-    emit('row-click', currentItem)
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
+    emit('row-click', selectedItem.value)
   }, 100)
 }
 

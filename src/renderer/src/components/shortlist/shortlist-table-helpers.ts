@@ -2,6 +2,7 @@ import type { ShortlistRow } from '../../../../shared/types/shortlist'
 import { formatHgvs } from '../../utils/formatters'
 import { UNKNOWN_VALUE_GLYPH } from '../../config/displayConfig'
 import { formatBpLength } from '../../utils/variant-interval'
+import { getPerCaseByVariantId } from '../../composables/annotation-cache'
 
 export interface VariantCell {
   primary: string
@@ -94,25 +95,15 @@ export function hasCommentFor(
   cache: {
     get(key: string):
       | {
-          perCase?: {
-            variant_id?: number
-            case_id?: number
-            per_case_comment?: string | null
-          } | null
           global?: { global_comment?: string | null } | null
         }
       | undefined
   }
 ): boolean {
   const key = `${item.chr}:${item.pos}:${item.ref}:${item.alt}`
-  const cached = cache.get(key)
-  const perCaseComment =
-    cached?.perCase != null &&
-    cached.perCase.variant_id === item.id &&
-    cached.perCase.case_id === item.case_id
-      ? cached.perCase.per_case_comment
-      : null
-  const global = cached?.global?.global_comment
+  const perCase = getPerCaseByVariantId(item.case_id, item.id, key)
+  const perCaseComment = perCase?.per_case_comment
+  const global = cache.get(key)?.global?.global_comment
   return (
     (perCaseComment !== undefined && perCaseComment !== null && perCaseComment !== '') ||
     (global !== undefined && global !== null && global !== '')

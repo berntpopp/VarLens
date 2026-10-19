@@ -9,7 +9,10 @@ export class LruMap<K, V> {
   private readonly map = new Map<K, V>()
   readonly maxSize: number
 
-  constructor(maxSize: number) {
+  constructor(
+    maxSize: number,
+    private readonly onEvict?: (key: K, value: V) => void
+  ) {
     if (maxSize < 1) throw new RangeError('maxSize must be >= 1')
     this.maxSize = maxSize
   }
@@ -35,7 +38,10 @@ export class LruMap<K, V> {
     while (this.map.size > this.maxSize) {
       const oldest = this.map.keys().next()
       if (oldest.done === true) break
-      this.map.delete(oldest.value)
+      const evictedKey = oldest.value
+      const evictedVal = this.map.get(evictedKey) as V
+      this.map.delete(evictedKey)
+      this.onEvict?.(evictedKey, evictedVal)
     }
   }
 

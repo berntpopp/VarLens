@@ -60,7 +60,7 @@ import ProteinViewMenuItem from '../protein/ProteinViewMenuItem.vue'
 import { useProteinViewShortcut } from '../../composables/useProteinViewShortcut'
 import { AppStateKey } from '../../composables/useAppState'
 import { annotationCache, ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
-import { variantKey } from '../../composables/annotation-cache'
+import { variantKey, getPerCaseByVariantId } from '../../composables/annotation-cache'
 import { useBulkTriageSelection } from '../../composables/useBulkTriageSelection'
 import BulkTriageActionBar from '../variant-table/BulkTriageActionBar.vue'
 
@@ -148,14 +148,13 @@ function getRowProps({ item }: { item: ShortlistRow }) {
 }
 
 function getAcmgFor(item: ShortlistRow): AcmgClassification | null {
-  const cached = annotationCache.value.get(variantKey(item))
-  const perCase =
-    cached?.perCase != null &&
-    cached.perCase.variant_id === item.id &&
-    cached.perCase.case_id === item.case_id
-      ? cached.perCase
-      : null
-  return perCase?.acmg_classification ?? cached?.global?.acmg_classification ?? null
+  const k = variantKey(item)
+  const perCase = getPerCaseByVariantId(item.case_id, item.id, k)
+  return (
+    perCase?.acmg_classification ??
+    annotationCache.value.get(k)?.global?.acmg_classification ??
+    null
+  )
 }
 
 function hasCommentFor(item: ShortlistRow): boolean {
@@ -163,10 +162,8 @@ function hasCommentFor(item: ShortlistRow): boolean {
 }
 
 function isStarredFor(item: ShortlistRow): boolean {
-  const perCase = annotationCache.value.get(variantKey(item))?.perCase
-  if (perCase != null && perCase.variant_id === item.id && perCase.case_id === item.case_id) {
-    return perCase.starred === 1
-  }
+  const perCase = getPerCaseByVariantId(item.case_id, item.id, variantKey(item))
+  if (perCase != null) return perCase.starred === 1
   return item.is_starred
 }
 
@@ -191,12 +188,12 @@ watch(
 )
 
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
+let arrowSyncGen = 0
 
 function clearArrowSyncTimer(): void {
-  if (arrowSyncTimer !== null) {
-    clearTimeout(arrowSyncTimer)
-    arrowSyncTimer = null
-  }
+  arrowSyncGen++
+  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
+  arrowSyncTimer = null
 }
 
 watch(
@@ -230,13 +227,14 @@ function triggerDebouncedPanelSync(): void {
   clearArrowSyncTimer()
   if (!appState || !canSyncDetails() || !selectedItem.value) return
   const currentAppState = appState
+  const gen = arrowSyncGen
   arrowSyncTimer = setTimeout(async () => {
     arrowSyncTimer = null
-    const itemBeforeAwait = selectedItem.value
-    if (!canSyncDetails() || itemBeforeAwait === null) return
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
     const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
     if (leavePromise !== null) {
       const ok = await leavePromise
+      if (gen !== arrowSyncGen) return
       if (!ok) {
         if (
           currentAppState.selectedPanelVariant.value &&
@@ -247,9 +245,8 @@ function triggerDebouncedPanelSync(): void {
         return
       }
     }
-    const currentItem = selectedItem.value
-    if (!canSyncDetails() || currentItem === null) return
-    emit('row-click', currentItem)
+    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
+    emit('row-click', selectedItem.value)
   }, 100)
 }
 
