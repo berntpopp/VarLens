@@ -22,7 +22,9 @@ const summaryLockFree =
   (...args: unknown[]): unknown =>
     String(args[0]).includes('pg_try_advisory_xact_lock')
       ? Promise.resolve({ rows: [{ locked: true }] })
-      : query(...args)
+      : String(args[0]).includes('pg_advisory_xact_lock')
+        ? Promise.resolve({ rows: [] })
+        : query(...args)
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -1110,7 +1112,10 @@ describe('PostgresAnnotationsRepository', () => {
               events.push(`tx${txId}:VARIANTS:${JSON.stringify(values?.[1])}`)
               return { rows: [{ id: 101 }, { id: 102 }] }
             }
-            if (sql.includes('pg_advisory_xact_lock') && sql.includes('FOR UPDATE')) {
+            if (
+              sql.includes('FROM "public"."case_variant_annotations"') &&
+              sql.includes('FOR UPDATE')
+            ) {
               events.push(`tx${txId}:LOCK_READ:${values?.[1]}`)
               return { rows: [] }
             }
@@ -1429,5 +1434,87 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
       `SELECT has_star FROM "${schema}".cohort_variant_summary WHERE chr = '5' AND pos IN (500, 501)`
     )
     expect(summaries.rows).toEqual([{ has_star: false }, { has_star: false }])
+  }, 60_000)
+
+  it('cross-pool concurrent writes serialize via pg_advisory_xact_lock with fresh READ COMMITTED snapshot and without batch/single deadlock (#681)', async () => {
+    const caseA = await seedCase('case-cross-pool')
+    const v1 = await seedVariant({
+      caseId: caseA,
+      chr: '6',
+      pos: 600,
+      ref: 'A',
+      alt: 'G',
+      gtNum: '0/1'
+    })
+    const v2 = await seedVariant({
+      caseId: caseA,
+      chr: '6',
+      pos: 601,
+      ref: 'C',
+      alt: 'T',
+      gtNum: '0/1'
+    })
+    await seedSummaryRow('6', 600, 'A', 'G')
+    await seedSummaryRow('6', 601, 'C', 'T')
+
+    const poolB = new Pool({ connectionString: PG_URL, max: 2 })
+    try {
+      const repoA = new PostgresAnnotationsRepository(pool, schema)
+      const repoB = new PostgresAnnotationsRepository(poolB, schema)
+
+      // 1. Cross-pool first-insert race: repoA inserts PVS1 + Pathogenic while repoB
+      // concurrently tries to set Benign without override_reason on the same unannotated target.
+      // Hold the per-target advisory lock from probe first so both repoA and repoB enter their
+      // transactions and queue behind pg_advisory_xact_lock, then release it.
+      await probe.query('BEGIN')
+      await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
+        schema,
+        `case:${caseA}:${v1}`
+      ])
+
+      const pWriteA = repoA.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        acmg_classification: 'Pathogenic',
+        acmg_evidence: JSON.stringify({
+          pathogenic: ['PVS1', 'PM2', 'PP3'],
+          benign: []
+        }),
+        user_name: 'analyst-a'
+      })
+      // Let repoA wait on the advisory lock first, then start repoB
+      await new Promise((r) => setTimeout(r, 30))
+      const pWriteB = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        acmg_classification: 'Benign',
+        user_name: 'analyst-b'
+      })
+      await new Promise((r) => setTimeout(r, 30))
+
+      // Release probe's lock so repoA commits first, then repoB wakes up with a fresh snapshot
+      await probe.query('COMMIT')
+
+      await expect(pWriteA).resolves.toBeDefined()
+      await expect(pWriteB).rejects.toBeInstanceOf(InvalidParametersError)
+
+      // 2. Cross-pool batch vs single-row under summary-lock contention: must not deadlock
+      await probe.query('BEGIN')
+      await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
+        schema,
+        'cohort_summary_write'
+      ])
+
+      const pBatch = repoA.batchUpsertPerCaseAnnotationWithAudit(caseA, [v2, v1], {
+        starred: true,
+        user_name: 'analyst-a'
+      })
+      const pSingle = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        per_case_comment: 'concurrent comment',
+        user_name: 'analyst-b'
+      })
+      await new Promise((r) => setTimeout(r, 30))
+      await probe.query('COMMIT')
+
+      await expect(Promise.all([pBatch, pSingle])).resolves.toBeDefined()
+    } finally {
+      await poolB.end()
+    }
   }, 60_000)
 })

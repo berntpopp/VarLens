@@ -70,52 +70,32 @@ export function variantKey(key: VariantKey): string {
   return `${key.chr}:${key.pos}:${key.ref}:${key.alt}`
 }
 
-export function buildGlobalLockAndGetSql(schemaName: string, schemaLiteral: string): string {
+export function buildGlobalLockAndGetSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('global:' || $5::text || ':' || $1::text || ':' || ($2::bigint)::text || ':' || $3::text || ':' || $4::text)
-      )
-    )
     SELECT *
     FROM ${schemaName}."variant_annotations"
     WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4 AND genome_build = $5
-      AND EXISTS (SELECT 1 FROM _lock)
     LIMIT 1
     FOR UPDATE
   `
 }
 
-export function buildPerCaseLockAndGetSql(schemaName: string, schemaLiteral: string): string {
+export function buildPerCaseLockAndGetSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('case:' || ($1::bigint)::text || ':' || ($2::bigint)::text)
-      )
-    )
     SELECT *
     FROM ${schemaName}."case_variant_annotations"
     WHERE case_id = $1 AND variant_id = $2
-      AND EXISTS (SELECT 1 FROM _lock)
     LIMIT 1
     FOR UPDATE
   `
 }
 
-export function buildGlobalUpsertSql(schemaName: string, schemaLiteral: string): string {
+export function buildGlobalUpsertSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('global:' || $13::text || ':' || $1::text || ':' || ($2::bigint)::text || ':' || $3::text || ':' || $4::text)
-      )
-    )
     INSERT INTO ${schemaName}."variant_annotations" (
       chr, pos, ref, alt, genome_build, global_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at
     )
-    SELECT $1::text, $2::bigint, $3::text, $4::text, $13::text, $5::text, $6::integer, $7::text, $8::text, ${nowExpression}, ${nowExpression} FROM _lock
+    VALUES ($1, $2, $3, $4, $13, $5, $6, $7, $8, ${nowExpression}, ${nowExpression})
     ON CONFLICT (chr, pos, ref, alt, genome_build) DO UPDATE SET
       global_comment = CASE WHEN $9 THEN EXCLUDED.global_comment ELSE variant_annotations.global_comment END,
       starred = CASE WHEN $10 THEN EXCLUDED.starred ELSE variant_annotations.starred END,
@@ -126,18 +106,12 @@ export function buildGlobalUpsertSql(schemaName: string, schemaLiteral: string):
   `
 }
 
-export function buildPerCaseUpsertSql(schemaName: string, schemaLiteral: string): string {
+export function buildPerCaseUpsertSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('case:' || ($1::bigint)::text || ':' || ($2::bigint)::text)
-      )
-    )
     INSERT INTO ${schemaName}."case_variant_annotations" (
       case_id, variant_id, per_case_comment, starred, acmg_classification, acmg_evidence, created_at, updated_at
     )
-    SELECT $1::bigint, $2::bigint, $3::text, $4::integer, $5::text, $6::text, ${nowExpression}, ${nowExpression} FROM _lock
+    VALUES ($1, $2, $3, $4, $5, $6, ${nowExpression}, ${nowExpression})
     ON CONFLICT (case_id, variant_id) DO UPDATE SET
       per_case_comment = CASE WHEN $7 THEN EXCLUDED.per_case_comment ELSE case_variant_annotations.per_case_comment END,
       starred = CASE WHEN $8 THEN EXCLUDED.starred ELSE case_variant_annotations.starred END,
@@ -148,31 +122,17 @@ export function buildPerCaseUpsertSql(schemaName: string, schemaLiteral: string)
   `
 }
 
-export function buildGlobalDeleteSql(schemaName: string, schemaLiteral: string): string {
+export function buildGlobalDeleteSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('global:' || $5::text || ':' || $1::text || ':' || ($2::bigint)::text || ':' || $3::text || ':' || $4::text)
-      )
-    )
     DELETE FROM ${schemaName}."variant_annotations"
     WHERE chr = $1 AND pos = $2 AND ref = $3 AND alt = $4 AND genome_build = $5
-      AND EXISTS (SELECT 1 FROM _lock)
   `
 }
 
-export function buildPerCaseDeleteSql(schemaName: string, schemaLiteral: string): string {
+export function buildPerCaseDeleteSql(schemaName: string): string {
   return `
-    WITH _lock AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(
-        hashtext(${schemaLiteral}),
-        hashtext('case:' || ($1::bigint)::text || ':' || ($2::bigint)::text)
-      )
-    )
     DELETE FROM ${schemaName}."case_variant_annotations"
     WHERE case_id = $1 AND variant_id = $2
-      AND EXISTS (SELECT 1 FROM _lock)
   `
 }
 
@@ -183,7 +143,9 @@ export async function acquireAnnotationWriteLocks(
   schema: string,
   rawKeys: string[]
 ): Promise<() => void> {
-  const sortedKeys = Array.from(new Set(rawKeys.map((k) => `${schema}:${k}`))).sort()
+  const sortedKeys = Array.from(new Set(rawKeys.map((k) => `${schema}:${k}`))).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true })
+  )
   let lockMap = poolWriteLocks.get(pool)
   if (!lockMap) {
     lockMap = new Map()

@@ -12,7 +12,7 @@ import {
   applyAnnotationFlagsPerCase,
   beginAnnotationWrite
 } from './cohort-annotation-flags-sql'
-import { quoteIdentifier, quoteLiteral, toNumber } from './identifiers'
+import { quoteIdentifier, toNumber } from './identifiers'
 // A failed ROLLBACK leaves the summary write lock held: release(failure) destroys the connection.
 import { runOrDestroy } from './long-running-client'
 import { runNamed } from './named-query'
@@ -50,12 +50,21 @@ export class PostgresAnnotationsRepository {
     lockKeys: string[],
     fn: (client: PoolClient, flags: Awaited<ReturnType<typeof beginAnnotationWrite>>) => Promise<T>
   ): Promise<T> {
-    const releaseLocks = await acquireAnnotationWriteLocks(this.pool, this.schema, lockKeys)
+    const sortedKeys = Array.from(new Set(lockKeys)).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    )
+    const releaseLocks = await acquireAnnotationWriteLocks(this.pool, this.schema, sortedKeys)
     let client: PoolClient | undefined
     let rollbackFailure: Error | undefined
     try {
       client = await this.connect()
       const flags = await beginAnnotationWrite(client, this.schema, this.summaryLockWaitMs)
+      if (sortedKeys.length > 0) {
+        await client.query(
+          'SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext(k)) FROM unnest($2::text[]) AS k',
+          [this.schema, sortedKeys]
+        )
+      }
       const result = await fn(client, flags)
       await client.query('COMMIT')
       return result
@@ -99,10 +108,13 @@ export class PostgresAnnotationsRepository {
     client: QueryablePool,
     { chr, pos, ref, alt, genomeBuild }: GlobalKey
   ): Promise<VariantAnnotation | null> {
-    const result = await client.query(
-      buildGlobalLockAndGetSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
-      [chr, pos, ref, alt, genomeBuild]
-    )
+    const result = await client.query(buildGlobalLockAndGetSql(quoteIdentifier(this.schema)), [
+      chr,
+      pos,
+      ref,
+      alt,
+      genomeBuild
+    ])
     const row = result.rows[0]
     return row === undefined ? null : toGlobalAnnotation(row)
   }
@@ -157,7 +169,7 @@ export class PostgresAnnotationsRepository {
 
     const result = await runNamed(client as Pool, {
       name: 'annotations:upsert_global:v2',
-      text: buildGlobalUpsertSql(schemaName, quoteLiteral(this.schema)),
+      text: buildGlobalUpsertSql(schemaName),
       values: params,
       schema: this.schema
     })
@@ -218,7 +230,7 @@ export class PostgresAnnotationsRepository {
   ): Promise<void> {
     await runNamed(client as Pool, {
       name: 'annotations:delete_global:v2',
-      text: buildGlobalDeleteSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
+      text: buildGlobalDeleteSql(quoteIdentifier(this.schema)),
       values: [chr, pos, ref, alt, genomeBuild],
       schema: this.schema
     })
@@ -248,10 +260,10 @@ export class PostgresAnnotationsRepository {
     caseId: number,
     variantId: number
   ): Promise<CaseVariantAnnotation | null> {
-    const result = await client.query(
-      buildPerCaseLockAndGetSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
-      [caseId, variantId]
-    )
+    const result = await client.query(buildPerCaseLockAndGetSql(quoteIdentifier(this.schema)), [
+      caseId,
+      variantId
+    ])
     const row = result.rows[0]
     return row === undefined ? null : toPerCaseAnnotation(row)
   }
@@ -295,7 +307,7 @@ export class PostgresAnnotationsRepository {
 
     const result = await runNamed(client as Pool, {
       name: 'annotations:upsert_per_case:v1',
-      text: buildPerCaseUpsertSql(schemaName, quoteLiteral(this.schema)),
+      text: buildPerCaseUpsertSql(schemaName),
       values: params,
       schema: this.schema
     })
@@ -407,7 +419,7 @@ export class PostgresAnnotationsRepository {
   ): Promise<void> {
     await runNamed(client as Pool, {
       name: 'annotations:delete_per_case:v1',
-      text: buildPerCaseDeleteSql(quoteIdentifier(this.schema), quoteLiteral(this.schema)),
+      text: buildPerCaseDeleteSql(quoteIdentifier(this.schema)),
       values: [caseId, variantId],
       schema: this.schema
     })

@@ -305,4 +305,54 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     // Now mounted, suggestions must be applied automatically
     expect(lazyApplyMock).toHaveBeenCalledOnce()
   })
+
+  it('does not leak sibling row ACMG classification, evidence, or per-case comment when selected row is not yet in perCaseByVariantId (#684)', async () => {
+    const { _resetAnnotationsForTesting } =
+      await import('../../../src/renderer/src/composables/useAnnotations')
+    const { cacheSet, ensurePerCaseSlotOwner, setCachedVariantId, setPerCaseByVariantId } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+    const CommentsSection = (
+      await import('../../../src/renderer/src/components/CommentsSection.vue')
+    ).default
+
+    _resetAnnotationsForTesting()
+    try {
+      const siblingAnnotation = {
+        id: 50,
+        case_id: 10,
+        variant_id: 101,
+        starred: 1,
+        acmg_classification: 'Pathogenic' as const,
+        acmg_evidence: JSON.stringify({
+          codes: ['PVS1'],
+          calculated_classification: 'Pathogenic'
+        }),
+        per_case_comment: 'Sibling 101 private comment',
+        created_at: 1,
+        updated_at: 1
+      }
+      // Sibling 101 occupies the coordinate slot in annotationCache and perCaseByVariantId;
+      // selected row 102 shares chr1:100:A:G but has NOT been loaded into perCaseByVariantId yet.
+      cacheSet('1:100:A:G', { global: null, perCase: siblingAnnotation })
+      setCachedVariantId('1:100:A:G', 101)
+      ensurePerCaseSlotOwner('1:100:A:G', 10, 101)
+      setPerCaseByVariantId(10, 101, siblingAnnotation, '1:100:A:G')
+
+      const panel = mountPanelWithVariant(
+        { id: 102, chr: '1', pos: 100, ref: 'A', alt: 'G' },
+        { caseId: 10, mode: 'case', customStubs: { CommentsSection } }
+      )
+      await flushPromises()
+
+      // Expand ACMG panel to inspect props passed to AcmgClassificationPanel
+      await panel.find('.v-expansion-panel-title').trigger('click')
+      await flushPromises()
+
+      expect(capturedPanelProps.evidenceJson).toBeNull()
+      expect(panel.text()).not.toContain('Sibling 101 private comment')
+      expect(panel.find('.v-expansion-panel-title').text()).not.toContain('Pathogenic')
+    } finally {
+      _resetAnnotationsForTesting()
+    }
+  })
 })

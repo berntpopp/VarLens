@@ -32,6 +32,20 @@ export function allocateMutationId(): number {
   return ++nextMutationId
 }
 
+const MAX_TRACKED_ENTRIES = 5000
+
+function setBoundedMap<K, V>(map: Map<K, V>, key: K, value: V): void {
+  if (map.has(key)) map.delete(key)
+  else {
+    while (map.size >= MAX_TRACKED_ENTRIES) {
+      const oldest = map.keys().next().value
+      if (oldest === undefined) break
+      map.delete(oldest)
+    }
+  }
+  map.set(key, value)
+}
+
 const issuedWriteVersions = new Map<string, number>()
 const confirmedWriteVersions = new Map<string, number>()
 const maxVariantWriteVersions = new Map<string, number>()
@@ -48,8 +62,9 @@ export function bumpWriteVersion(key: string, slot: string = 'perCase'): number 
     const coordKey = `perCase:${parts[3]}:${key}`
     base = Math.max(base, issuedWriteVersions.get(coordKey) ?? 0)
     const next = base + 1
-    issuedWriteVersions.set(k, next)
-    maxVariantWriteVersions.set(
+    setBoundedMap(issuedWriteVersions, k, next)
+    setBoundedMap(
+      maxVariantWriteVersions,
       coordKey,
       Math.max(maxVariantWriteVersions.get(coordKey) ?? 0, next)
     )
@@ -59,7 +74,7 @@ export function bumpWriteVersion(key: string, slot: string = 'perCase'): number 
     base = Math.max(base, maxVariantWriteVersions.get(k) ?? 0)
   }
   const next = base + 1
-  issuedWriteVersions.set(k, next)
+  setBoundedMap(issuedWriteVersions, k, next)
   return next
 }
 
@@ -86,10 +101,33 @@ export function getConfirmedWriteVersion(key: string, slot: string = 'perCase'):
 export function setConfirmedWriteVersion(key: string, slot: string, version: number): void {
   const k = `${slot}:${key}`
   if (version > (confirmedWriteVersions.get(k) ?? 0)) {
-    confirmedWriteVersions.set(k, version)
+    setBoundedMap(confirmedWriteVersions, k, version)
   }
   if (version > (issuedWriteVersions.get(k) ?? 0)) {
-    issuedWriteVersions.set(k, version)
+    setBoundedMap(issuedWriteVersions, k, version)
+  }
+}
+
+export function retireWriteVersionsForVariant(
+  coordKey: string,
+  caseId: number,
+  variantId: number
+): void {
+  for (const fg of ['star', 'acmg', 'comment'] as const) {
+    const k = `${perCaseVersionSlot(caseId, variantId, fg)}:${coordKey}`
+    issuedWriteVersions.delete(k)
+    confirmedWriteVersions.delete(k)
+  }
+}
+
+export function retireWriteVersionsForCoord(coordKey: string): void {
+  for (const fg of ['star', 'acmg', 'comment'] as const) {
+    for (const prefix of ['perCase', 'global'] as const) {
+      const k = `${prefix}:${fg}:${coordKey}`
+      issuedWriteVersions.delete(k)
+      confirmedWriteVersions.delete(k)
+      maxVariantWriteVersions.delete(k)
+    }
   }
 }
 
@@ -132,7 +170,7 @@ export const inFlightMutations = new Map<string, InFlightMutation[]>()
 export const perCaseSlotOwners = new Map<string, { caseId: number; variantId: number }>()
 
 export function ensurePerCaseSlotOwner(key: string, caseId: number, variantId: number): void {
-  perCaseSlotOwners.set(key, { caseId, variantId })
+  setBoundedMap(perCaseSlotOwners, key, { caseId, variantId })
 }
 
 export function isPerCaseSlotOwner(key: string, caseId: number, variantId: number): boolean {
@@ -163,7 +201,7 @@ export function isLoadSeqStale(slot: string, seq: number): boolean {
 
 export function markLoadSeqAccepted(slot: string, seq: number): void {
   if (seq > (acceptedLoadSeqs.get(slot) ?? 0)) {
-    acceptedLoadSeqs.set(slot, seq)
+    setBoundedMap(acceptedLoadSeqs, slot, seq)
   }
 }
 
@@ -184,8 +222,8 @@ export function getCaseVariantVersion(caseId: number, variantId: number): number
 
 export function bumpCaseVariantVersion(caseId: number, variantId: number): void {
   const k = `${caseId}:${variantId}`
-  caseVariantVersions.set(k, (caseVariantVersions.get(k) ?? 0) + 1)
-  acceptedLoadSeqs.set(`caseVar:${k}`, ++nextLoadSeq)
+  setBoundedMap(caseVariantVersions, k, (caseVariantVersions.get(k) ?? 0) + 1)
+  setBoundedMap(acceptedLoadSeqs, `caseVar:${k}`, ++nextLoadSeq)
 }
 
 export function retireCaseVariantTracking(caseId: number, variantId: number): void {
@@ -202,21 +240,72 @@ export function setPerCaseByVariantId(
   loaded: boolean = true
 ): void {
   const k = `${caseId}:${variantId}`
-  perCaseByVariantId.set(k, pc)
-  if (loaded) loadedPerCaseByVariantId.add(k)
+  setBoundedMap(perCaseByVariantId, k, pc)
+  if (loaded) {
+    loadedPerCaseByVariantId.delete(k)
+    while (loadedPerCaseByVariantId.size >= MAX_TRACKED_ENTRIES) {
+      const oldest = loadedPerCaseByVariantId.values().next().value
+      if (oldest === undefined) break
+      loadedPerCaseByVariantId.delete(oldest)
+    }
+    loadedPerCaseByVariantId.add(k)
+  }
   if (typeof coordKey === 'string' && coordKey.length > 0) {
     let set = variantKeysByCoord.get(coordKey)
     if (!set) {
       set = new Set()
-      variantKeysByCoord.set(coordKey, set)
+      setBoundedMap(variantKeysByCoord, coordKey, set)
     }
     set.add(k)
   }
 }
 
+export function hasInFlightMutationsForCoord(coordKey: string): boolean {
+  if (inFlightMutations.has(`perCase:${coordKey}`) || inFlightMutations.has(`global:${coordKey}`)) {
+    return true
+  }
+  const set = variantKeysByCoord.get(coordKey)
+  if (set) {
+    for (const k of set) {
+      const [cid, vid] = k.split(':').map(Number)
+      if (inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))) return true
+    }
+  }
+  return Array.from(inFlightMutations.keys()).some((sk) => sk.endsWith(`:${coordKey}`))
+}
+
+export function cleanupUnloadedPerCaseVariant(
+  coordKey: string,
+  caseId: number,
+  variantId: number,
+  shouldKeepLoadGuard?: (caseId: number, variantId: number) => boolean,
+  retireVersions: boolean = true
+): void {
+  const k = `${caseId}:${variantId}`
+  loadedPerCaseByVariantId.delete(k)
+  perCaseByVariantId.delete(k)
+  const set = variantKeysByCoord.get(coordKey)
+  if (set) {
+    set.delete(k)
+    if (set.size === 0) variantKeysByCoord.delete(coordKey)
+  }
+  if (shouldKeepLoadGuard?.(caseId, variantId) === true) {
+    bumpCaseVariantVersion(caseId, variantId)
+  } else {
+    retireCaseVariantTracking(caseId, variantId)
+  }
+  if (retireVersions) {
+    retireWriteVersionsForVariant(coordKey, caseId, variantId)
+    if (!hasInFlightMutationsForCoord(coordKey)) {
+      retireWriteVersionsForCoord(coordKey)
+    }
+  }
+}
+
 export function deletePerCaseForCoordKey(
   coordKey: string,
-  shouldKeepLoadGuard?: (caseId: number, variantId: number) => boolean
+  shouldKeepLoadGuard?: (caseId: number, variantId: number) => boolean,
+  retireWriteVersions: boolean = true
 ): void {
   const set = variantKeysByCoord.get(coordKey)
   if (set) {
@@ -227,6 +316,9 @@ export function deletePerCaseForCoordKey(
       if (!hasMut) {
         perCaseByVariantId.delete(k)
         set.delete(k)
+        if (retireWriteVersions) {
+          retireWriteVersionsForVariant(coordKey, cid, vid)
+        }
       }
       if (hasMut || shouldKeepLoadGuard?.(cid, vid) === true) {
         bumpCaseVariantVersion(cid, vid)
@@ -235,6 +327,9 @@ export function deletePerCaseForCoordKey(
       }
     }
     if (set.size === 0) variantKeysByCoord.delete(coordKey)
+  }
+  if (retireWriteVersions && !hasInFlightMutationsForCoord(coordKey)) {
+    retireWriteVersionsForCoord(coordKey)
   }
 }
 
@@ -259,45 +354,43 @@ export function computeOptimisticSlot(
   return result as unknown as VariantAnnotation | CaseVariantAnnotation
 }
 
+// prettier-ignore
 export function removeInFlightMutation(slotKey: string, mutationId: number): void {
   const list = inFlightMutations.get(slotKey)
   if (!list) return
   const filtered = list.filter((m) => m.id !== mutationId)
-  if (filtered.length === 0) {
-    inFlightMutations.delete(slotKey)
-  } else {
-    inFlightMutations.set(slotKey, filtered)
-  }
+  if (filtered.length === 0) inFlightMutations.delete(slotKey)
+  else inFlightMutations.set(slotKey, filtered)
 }
 
-export function pruneInFlightMutationsOnSuccess(
-  slotKey: string,
-  fieldGroup: string,
-  writeVer: number
-): void {
+// prettier-ignore
+export function pruneInFlightMutationsOnSuccess(slotKey: string, fieldGroup: string, writeVer: number): void {
   const list = inFlightMutations.get(slotKey)
   if (!list) return
   const filtered = list.filter((m) => !(m.fieldGroup === fieldGroup && m.writeVer <= writeVer))
   if (filtered.length === 0) {
-    inFlightMutations.delete(slotKey)
-    confirmedBases.delete(slotKey)
+    inFlightMutations.delete(slotKey); confirmedBases.delete(slotKey)
   } else {
     inFlightMutations.set(slotKey, filtered)
   }
 }
 
 export function clearMutationTracker(): void {
-  confirmedWriteVersions.clear()
-  confirmedFieldPatches.clear()
-  confirmedBases.clear()
-  inFlightMutations.clear()
-  perCaseSlotOwners.clear()
-  perCaseByVariantId.clear()
-  loadedPerCaseByVariantId.clear()
-  variantKeysByCoord.clear()
-  caseVariantVersions.clear()
-  acceptedLoadSeqs.clear()
-  loadingVariantIds.clear()
+  for (const m of [
+    confirmedWriteVersions,
+    confirmedFieldPatches,
+    confirmedBases,
+    inFlightMutations,
+    perCaseSlotOwners,
+    perCaseByVariantId,
+    loadedPerCaseByVariantId,
+    variantKeysByCoord,
+    caseVariantVersions,
+    acceptedLoadSeqs,
+    loadingVariantIds
+  ]) {
+    m.clear()
+  }
 }
 
 export function resetMutationTracker(): void {
@@ -365,11 +458,8 @@ export function toggleStarPlan(
   }
 }
 
-export function acmgPlan(
-  scope: AnnotationWriteScope,
-  base: SlotValue | null,
-  classification: AcmgClassification | null
-): MutationPlan {
+// prettier-ignore
+export function acmgPlan(scope: AnnotationWriteScope, base: SlotValue | null, classification: AcmgClassification | null): MutationPlan {
   return {
     optimistic: { acmg_classification: classification },
     updates: { acmg_classification: classification },
@@ -378,64 +468,35 @@ export function acmgPlan(
   }
 }
 
-export function commentPlan(
-  scope: AnnotationWriteScope,
-  base: SlotValue | null,
-  comment: string | null
-): MutationPlan {
+// prettier-ignore
+export function commentPlan(scope: AnnotationWriteScope, base: SlotValue | null, comment: string | null): MutationPlan {
   const isCase = scope.kind === 'case'
   const patch = isCase ? { per_case_comment: comment } : { global_comment: comment }
-  const roll = isCase
-    ? { per_case_comment: (base as CaseVariantAnnotation | null)?.per_case_comment ?? null }
-    : { global_comment: (base as VariantAnnotation | null)?.global_comment ?? null }
-  return {
-    optimistic: patch,
-    updates: patch,
-    rollback: roll,
-    failureMessage: `Failed to upsert ${isCase ? 'per-case' : 'global'} comment: `
-  }
+  const roll = isCase ? { per_case_comment: (base as CaseVariantAnnotation | null)?.per_case_comment ?? null } : { global_comment: (base as VariantAnnotation | null)?.global_comment ?? null }
+  return { optimistic: patch, updates: patch, rollback: roll, failureMessage: `Failed to upsert ${isCase ? 'per-case' : 'global'} comment: ` }
 }
 
-export function acmgWithEvidencePlan(
-  scope: AnnotationWriteScope,
-  classification: AcmgClassification | null,
-  evidenceJson: string,
-  userName: string | undefined
-): MutationPlan {
+// prettier-ignore
+export function acmgWithEvidencePlan(scope: AnnotationWriteScope, classification: AcmgClassification | null, evidenceJson: string, userName: string | undefined): MutationPlan {
   return {
     optimistic: { acmg_classification: classification, acmg_evidence: evidenceJson },
-    updates: {
-      acmg_classification: classification,
-      acmg_evidence: evidenceJson,
-      user_name: userName
-    },
+    updates: { acmg_classification: classification, acmg_evidence: evidenceJson, user_name: userName },
     rollback: 'restore-previous',
     failureMessage: `Failed to set ${scope.kind === 'global' ? 'global ' : ''}ACMG classification with evidence: `
   }
 }
 
-function applyBulkUpdatesPatch(
-  slotKey: string,
-  fg: 'star' | 'acmg' | 'comment',
-  u: Record<string, unknown>
-): void {
+// prettier-ignore
+function applyBulkUpdatesPatch(slotKey: string, fg: 'star' | 'acmg' | 'comment', u: Record<string, unknown>): void {
   if (fg === 'star' && ('starred' in u || 'is_starred' in u)) {
-    const isStarred = Boolean(u.starred ?? u.is_starred)
-    setConfirmedFieldPatch(slotKey, 'star', { starred: isStarred ? 1 : 0 })
+    setConfirmedFieldPatch(slotKey, 'star', { starred: Number(Boolean(u.starred ?? u.is_starred)) })
   } else if (fg === 'acmg' && ('acmg_classification' in u || 'acmg_evidence' in u)) {
     const patch: SlotPatch = { ...(confirmedFieldPatches.get(slotKey)?.acmg ?? {}) }
-    if ('acmg_classification' in u) {
-      patch.acmg_classification =
-        (u.acmg_classification as SlotPatch['acmg_classification']) ?? null
-    }
-    if ('acmg_evidence' in u) {
-      patch.acmg_evidence = (u.acmg_evidence as string | null) ?? null
-    }
+    if ('acmg_classification' in u) patch.acmg_classification = (u.acmg_classification as SlotPatch['acmg_classification']) ?? null
+    if ('acmg_evidence' in u) patch.acmg_evidence = (u.acmg_evidence as string | null) ?? null
     setConfirmedFieldPatch(slotKey, 'acmg', patch)
   } else if (fg === 'comment' && 'per_case_comment' in u) {
-    setConfirmedFieldPatch(slotKey, 'comment', {
-      per_case_comment: (u.per_case_comment as string | null) ?? null
-    })
+    setConfirmedFieldPatch(slotKey, 'comment', { per_case_comment: (u.per_case_comment as string | null) ?? null })
   }
 }
 
@@ -492,7 +553,7 @@ export function reconcileBulkTriageKey(
     }
   }
   if (fromCurrentEpoch || !hasInFlightForKey) {
-    deletePerCaseForCoordKey(key, shouldKeepLoadGuard)
+    deletePerCaseForCoordKey(key, shouldKeepLoadGuard, false)
   }
   for (const o of owners) {
     loadedPerCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
@@ -512,6 +573,11 @@ export function reconcileBulkTriageKey(
       )
     } else {
       perCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
+      const set = variantKeysByCoord.get(key)
+      if (set) {
+        set.delete(`${o.caseId}:${o.variantId}`)
+        if (set.size === 0) variantKeysByCoord.delete(key)
+      }
       if (shouldKeepLoadGuard?.(o.caseId, o.variantId) === true) {
         bumpCaseVariantVersion(o.caseId, o.variantId)
       } else {

@@ -18,7 +18,9 @@ import {
   isKeyLoading,
   evictAnnotationCacheKeys,
   getKeyVersion,
-  getCaseVariantVersion
+  getCaseVariantVersion,
+  getWriteVersion,
+  perCaseVersionSlot
 } from '@renderer/composables/annotation-cache'
 import {
   perCaseByVariantId,
@@ -752,4 +754,42 @@ describe('stale-request guard (annotation generation)', () => {
     expect(isLoadSeqStale('case:chr1:100:A:T', 0)).toBe(false)
     expect(isLoadSeqStale('caseVar:1:100', 0)).toBe(false)
   })
+
+  it('bounds write versions on 20,000 mutations and cleans up unloaded variant state after eviction + failed save', async () => {
+    const { createPinia, setActivePinia } = await import('pinia')
+    setActivePinia(createPinia())
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockImplementation(async (caseId, variantId) => ({
+        id: variantId,
+        case_id: caseId,
+        variant_id: variantId,
+        starred: 1,
+        acmg_classification: null,
+        acmg_evidence: null,
+        per_case_comment: null,
+        created_at: 1,
+        updated_at: 1
+      }))
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+    for (let i = 1; i <= 20_000; i++) {
+      await result.toggleStar(1, i, 'chr1', i, 'A', 'T')
+    }
+    expect(annotationCache.value.size).toBeLessThanOrEqual(MAX_CACHE_SIZE)
+    expect(perCaseByVariantId.size).toBeLessThanOrEqual(MAX_CACHE_SIZE)
+    expect(getWriteVersion('chr1:1:A:T', perCaseVersionSlot(1, 1, 'star'))).toBe(0)
+
+    let rejectSave!: (err: unknown) => void
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockReturnValueOnce(new Promise((_res, rej) => (rejectSave = rej)))
+    const pSave = result.toggleStar(1, 999_999, 'chr9', 999_999, 'A', 'T')
+    evictAnnotationCacheKeys(['chr9:999999:A:T'])
+    rejectSave(new Error('save failed'))
+    await pSave
+    expect(perCaseByVariantId.has('1:999999')).toBe(false)
+    expect(getCaseVariantVersion(1, 999_999)).toBe(0)
+    expect(getWriteVersion('chr9:999999:A:T', perCaseVersionSlot(1, 999_999, 'star'))).toBe(0)
+  }, 30_000)
 })

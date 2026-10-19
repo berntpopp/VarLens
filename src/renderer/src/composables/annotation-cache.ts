@@ -20,6 +20,7 @@ export * from './annotation-mutation-tracker'
 import {
   allocateLoadSeq,
   clearMutationTracker,
+  cleanupUnloadedPerCaseVariant,
   resetMutationTracker,
   getPerCaseSlotOwner,
   perCaseSlotKey,
@@ -412,7 +413,11 @@ export const hasDbSwitchedSince = (requestDbPath: string | null): boolean => {
 }
 export const isTrackedCase = (caseId: number): boolean => lastCaseId === caseId
 
-function shouldKeepVariantLoadGuard(key: string, caseId: number, variantId: number): boolean {
+export function shouldKeepVariantLoadGuard(
+  key: string,
+  caseId: number,
+  variantId: number
+): boolean {
   return isLoadingCaseVariant(caseId, variantId) || (activeKeyLoads.get(key) ?? 0) > 0
 }
 
@@ -458,12 +463,11 @@ export function evictPerCaseVariant(caseId: number, variantId: number, key: stri
   const hasInFlight =
     (inFlightMutations.get(perCaseSlotKey(caseId, variantId, key))?.length ?? 0) > 0
   if (!hasInFlight) {
-    perCaseByVariantId.delete(k)
-  }
-  if (hasInFlight || shouldKeepVariantLoadGuard(key, caseId, variantId)) {
-    bumpCaseVariantVersion(caseId, variantId)
+    cleanupUnloadedPerCaseVariant(key, caseId, variantId, (cid, vid) =>
+      shouldKeepVariantLoadGuard(key, cid, vid)
+    )
   } else {
-    retireCaseVariantTracking(caseId, variantId)
+    bumpCaseVariantVersion(caseId, variantId)
   }
   if (
     cachedVariantIds.get(key) === variantId ||

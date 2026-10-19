@@ -302,11 +302,7 @@ import {
   type AcmgClassification
 } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
-import {
-  getPerCaseByVariantId,
-  hasPerCaseByVariantId,
-  variantKey as toCoordKey
-} from '../composables/annotation-cache'
+import { getPerCaseByVariantId, variantKey as toCoordKey } from '../composables/annotation-cache'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { useCapabilityStore } from '../stores/capabilityStore'
@@ -438,7 +434,7 @@ const currentAcmgEvidence = computed(() => {
   const { chr, pos, ref: r, alt: a } = props.variant
   const vid = 'id' in props.variant ? props.variant.id : undefined
   if (props.mode === 'case') {
-    if (props.caseId !== null && typeof vid === 'number' && hasPerCaseByVariantId(props.caseId, vid)) {
+    if (props.caseId !== null && typeof vid === 'number') {
       return getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_evidence ?? null
     }
     return getAcmgEvidence(chr, pos, r, a)
@@ -467,7 +463,7 @@ const currentQuickClassification = computed<AcmgClassification | null>(() => {
   if (!props.variant) return null
   const { chr, pos, ref: r, alt: a } = props.variant
   const vid = 'id' in props.variant ? props.variant.id : undefined
-  if (props.mode === 'case' && props.caseId !== null && typeof vid === 'number' && hasPerCaseByVariantId(props.caseId, vid)) {
+  if (props.mode === 'case' && props.caseId !== null && typeof vid === 'number') {
     return getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_classification ?? null
   }
   return props.mode === 'case' ? getAcmgClassification(chr, pos, r, a) : getGlobalAcmgClassification(chr, pos, r, a)
