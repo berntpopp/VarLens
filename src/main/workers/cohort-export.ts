@@ -4,26 +4,12 @@
  * Streams query results in pages to an XLSX file using xlsxStream, avoiding
  * blocking the event loop and bounding memory usage.
  */
-import { randomUUID } from 'node:crypto'
-import {
-  accessSync,
-  chmodSync,
-  constants,
-  createWriteStream,
-  existsSync,
-  openSync,
-  statSync,
-  type WriteStream
-} from 'node:fs'
-import { rename, rm } from 'node:fs/promises'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../database/cohort'
 import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
 import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary-refreshing'
 import type { CohortSearchParams } from '../../shared/types/cohort'
-import type { ExportColumn } from './export-pipeline'
+import { streamToExportFile, type ExportColumn } from './export-pipeline'
 import { formatCellValue } from './export-renderer'
 import { COHORT_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
 import { createCohortAnnotationBatchLookup } from '../database/annotation-export-lookup'
@@ -116,7 +102,7 @@ export async function runCohortExport(
   outputFilePath: string,
   onProgress: (current: number, total: number) => void,
   customTempFilePath?: string,
-  tempFilePrecreated?: boolean
+  tempFilePrecreated?: { dev: number; ino: number } | boolean
 ): Promise<CohortExportResult> {
   // The summary is what gets exported: never write a file from a stale one.
   // The main process waited for a pending refresh before starting this job.
@@ -198,37 +184,11 @@ export async function runCohortExport(
         buildCohortMetadata(params, summary.total_cases, res.rowCount)
     }
 
-    if (existsSync(outputFilePath)) {
-      accessSync(outputFilePath, constants.W_OK)
-    }
-    const isDevice = outputFilePath.startsWith('/dev/')
-    const tempFilePath = isDevice
-      ? outputFilePath
-      : (customTempFilePath ?? `${outputFilePath}.${randomUUID()}.part`)
-    let createdTempFile = false
-    let stream: WriteStream
-    if (isDevice) {
-      stream = createWriteStream(tempFilePath)
-    } else {
-      let targetMode = 0o600
-      try {
-        targetMode = statSync(outputFilePath).mode & 0o777
-      } catch {
-        // Destination does not exist yet; default to 0o600
-      }
-      const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
-      createdTempFile = true
-      chmodSync(tempFilePath, targetMode)
-      stream = createWriteStream(tempFilePath, { fd, autoClose: true })
-    }
-    try {
-      await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
-      if (!isDevice) await rename(tempFilePath, outputFilePath)
-    } catch (error) {
-      if (createdTempFile && !isDevice)
-        await rm(tempFilePath, { force: true }).catch(() => undefined)
-      throw error
-    }
+    await streamToExportFile(xlsxStream(sheet, result, info), {
+      outputFilePath,
+      customTempFilePath,
+      tempFilePrecreated
+    })
 
     onProgress(result.rowCount, result.rowCount)
     return { filePath: outputFilePath, rowCount: result.rowCount }

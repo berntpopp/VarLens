@@ -1,7 +1,6 @@
 import { Worker } from 'worker_threads'
 import { resolve } from 'path'
-import { randomUUID } from 'node:crypto'
-import { chmodSync, closeSync, openSync, rmSync, statSync } from 'node:fs'
+import { closeSync, fchmodSync, fstatSync, openSync, rmSync, statSync } from 'node:fs'
 import type {
   ExportMainMessage,
   ExportWorkerMessage,
@@ -9,6 +8,7 @@ import type {
 } from '../../shared/types/export-worker'
 import type { CohortSearchParams } from '../../shared/types/cohort'
 import { mainLogger } from '../services/MainLogger'
+import { defaultExportTempFilePath } from './export-pipeline'
 
 /** Outcome hooks shared by every export kind. */
 export interface ExportWorkerHooks {
@@ -93,10 +93,10 @@ export class ExportWorkerClient {
 
     const isDevice = message.outputFilePath.startsWith('/dev/')
     let tempFilePath: string | undefined
-    let tempFilePrecreated = false
+    let tempFilePrecreated: { dev: number; ino: number } | undefined
 
     if (!isDevice) {
-      tempFilePath = message.tempFilePath ?? `${message.outputFilePath}.${randomUUID()}.part`
+      tempFilePath = message.tempFilePath ?? defaultExportTempFilePath(message.outputFilePath)
       let targetMode = 0o600
       try {
         targetMode = statSync(message.outputFilePath).mode & 0o777
@@ -106,12 +106,13 @@ export class ExportWorkerClient {
       try {
         const fd = openSync(tempFilePath, 'wx', targetMode)
         try {
-          chmodSync(tempFilePath, targetMode)
+          fchmodSync(fd, targetMode)
+          const stat = fstatSync(fd)
+          tempFilePrecreated = { dev: stat.dev, ino: stat.ino }
         } finally {
           closeSync(fd)
         }
         this.currentTempFilePath = tempFilePath
-        tempFilePrecreated = true
       } catch (err) {
         hooks.onError((err as Error).message)
         return

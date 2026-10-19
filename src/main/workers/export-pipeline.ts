@@ -7,12 +7,15 @@
  * in isolation.
  */
 import { randomUUID } from 'node:crypto'
+import { dirname, join } from 'node:path'
 import {
   accessSync,
-  chmodSync,
+  closeSync,
   constants,
   createWriteStream,
   existsSync,
+  fchmodSync,
+  fstatSync,
   openSync,
   statSync,
   type WriteStream
@@ -21,7 +24,11 @@ import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
-function prepareExportFilePath(
+export function defaultExportTempFilePath(outputFilePath: string): string {
+  return join(dirname(outputFilePath), `.varlens-export-${randomUUID()}.part`)
+}
+
+export function prepareExportFilePath(
   outputFilePath: string,
   customTempFilePath?: string
 ): {
@@ -34,7 +41,7 @@ function prepareExportFilePath(
   const isDevice = outputFilePath.startsWith('/dev/')
   const tempFilePath = isDevice
     ? outputFilePath
-    : (customTempFilePath ?? `${outputFilePath}.${randomUUID()}.part`)
+    : (customTempFilePath ?? defaultExportTempFilePath(outputFilePath))
   return { tempFilePath, isDevice }
 }
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
@@ -84,7 +91,7 @@ export interface ExportPipelineParams {
   compiledParams: readonly unknown[]
   outputFilePath: string
   tempFilePath?: string
-  tempFilePrecreated?: boolean
+  tempFilePrecreated?: { dev: number; ino: number } | boolean
   format: 'csv' | 'xlsx'
   caseName: string
   filterSummary: ExportFilterSummary
@@ -101,12 +108,16 @@ export interface ExportPipelineResult {
 /**
  * Shared generator that chunks variants and attaches annotations.
  * stmt.iterate is entered on first pull and always closed in finally.
+ * Holds a DEFERRED read transaction across the entire iteration so that
+ * partial trailing chunks observe a consistent read snapshot.
  */
-function* iterateAnnotatedRows(
+export function* iterateAnnotatedRows(
   db: DatabaseType,
   compiledSql: string,
   compiledParams: readonly unknown[]
 ): Generator<Record<string, unknown>> {
+  const startedTx = !db.inTransaction
+  if (startedTx) db.exec('BEGIN DEFERRED')
   const stmt = db.prepare(compiledSql)
   const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
   const batchLookup = createCaseAnnotationBatchLookup(db)
@@ -131,6 +142,89 @@ function* iterateAnnotatedRows(
     }
   } finally {
     iterator.return?.()
+    if (startedTx && db.inTransaction) {
+      db.exec('ROLLBACK')
+    }
+  }
+}
+
+export interface StreamToExportFileOptions {
+  outputFilePath: string
+  customTempFilePath?: string
+  tempFilePrecreated?: { dev: number; ino: number } | boolean
+  encoding?: BufferEncoding
+}
+
+/**
+ * Shared helper that opens a temporary export file (or device), verifies its
+ * inode identity against client reservations, sets permissions, streams source chunks,
+ * renames atomically to outputFilePath, and safely cleans up partial files on error.
+ */
+export async function streamToExportFile(
+  source: Iterable<unknown> | AsyncIterable<unknown>,
+  options: StreamToExportFileOptions
+): Promise<void> {
+  const { outputFilePath, customTempFilePath, tempFilePrecreated, encoding } = options
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
+
+  let createdTempFile = false
+  let stream: WriteStream
+
+  if (isDevice) {
+    stream = createWriteStream(tempFilePath, encoding !== undefined ? { encoding } : undefined)
+  } else {
+    let targetMode = 0o600
+    try {
+      targetMode = statSync(outputFilePath).mode & 0o777
+    } catch {
+      // Destination does not exist yet; default to 0o600
+    }
+
+    let fd: number
+    if (tempFilePrecreated !== undefined && tempFilePrecreated !== false) {
+      const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
+      fd = openSync(tempFilePath, openFlags)
+      try {
+        const st = fstatSync(fd)
+        const isObjectExpected =
+          typeof tempFilePrecreated === 'object' && tempFilePrecreated !== null
+        const identityMismatch =
+          !st.isFile() ||
+          (isObjectExpected &&
+            (st.dev !== tempFilePrecreated.dev || st.ino !== tempFilePrecreated.ino))
+
+        if (identityMismatch) {
+          throw new Error('Temporary export file identity mismatch')
+        }
+        fchmodSync(fd, targetMode)
+      } catch (err) {
+        closeSync(fd)
+        throw err
+      }
+      createdTempFile = true
+    } else {
+      fd = openSync(tempFilePath, 'wx', targetMode)
+      createdTempFile = true
+      fchmodSync(fd, targetMode)
+    }
+
+    stream = createWriteStream(tempFilePath, {
+      fd,
+      autoClose: true,
+      ...(encoding !== undefined ? { encoding } : {})
+    })
+  }
+
+  try {
+    await pipeline(Readable.from(source), stream)
+    if (!isDevice) {
+      await rename(tempFilePath, outputFilePath)
+    }
+  } catch (error) {
+    if (createdTempFile && !isDevice) {
+      await rm(tempFilePath, { force: true }).catch(() => undefined)
+    }
+    throw error
   }
 }
 
@@ -147,26 +241,8 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
     tempFilePrecreated,
     onProgress
   } = params
-  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
   onProgress?.(0, 0)
-
-  let createdTempFile = false
-  let stream: WriteStream
-  if (isDevice) {
-    stream = createWriteStream(tempFilePath, { encoding: 'utf8' })
-  } else {
-    let targetMode = 0o600
-    try {
-      targetMode = statSync(outputFilePath).mode & 0o777
-    } catch {
-      // Destination does not exist yet; default to 0o600
-    }
-    const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
-    createdTempFile = true
-    chmodSync(tempFilePath, targetMode)
-    stream = createWriteStream(tempFilePath, { fd, autoClose: true, encoding: 'utf8' })
-  }
 
   let rowCount = 0
   function* csvLines(): Generator<string> {
@@ -179,15 +255,14 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
     }
   }
 
-  try {
-    // pipeline() handles backpressure and rejects on an open, write or source error.
-    await pipeline(Readable.from(csvLines()), stream)
-    if (!isDevice) await rename(tempFilePath, outputFilePath)
-  } catch (error) {
-    if (createdTempFile && !isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
-    throw error
-  }
+  await streamToExportFile(csvLines(), {
+    outputFilePath,
+    customTempFilePath,
+    tempFilePrecreated,
+    encoding: 'utf8'
+  })
 
+  onProgress?.(rowCount, rowCount)
   return { rowCount, filePath: outputFilePath }
 }
 
@@ -243,26 +318,8 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
     filterSummary,
     onProgress
   } = params
-  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
 
   onProgress?.(0, 0)
-
-  let createdTempFile = false
-  let stream: WriteStream
-  if (isDevice) {
-    stream = createWriteStream(tempFilePath)
-  } else {
-    let targetMode = 0o600
-    try {
-      targetMode = statSync(outputFilePath).mode & 0o777
-    } catch {
-      // Destination does not exist yet; default to 0o600
-    }
-    const fd = openSync(tempFilePath, tempFilePrecreated === true ? 'w' : 'wx', targetMode)
-    createdTempFile = true
-    chmodSync(tempFilePath, targetMode)
-    stream = createWriteStream(tempFilePath, { fd, autoClose: true })
-  }
 
   const headers = EXPORT_COLUMNS.map((col) => col.header)
   const result: XlsxStreamResult = { rowCount: 0, truncated: false }
@@ -290,13 +347,11 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
     ]
   }
 
-  try {
-    await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
-    if (!isDevice) await rename(tempFilePath, outputFilePath)
-  } catch (error) {
-    if (createdTempFile && !isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
-    throw error
-  }
+  await streamToExportFile(xlsxStream(sheet, result, info), {
+    outputFilePath,
+    customTempFilePath,
+    tempFilePrecreated
+  })
 
   onProgress?.(result.rowCount, result.rowCount)
   return {

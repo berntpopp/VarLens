@@ -17,7 +17,8 @@ import {
   mkdtempSync,
   writeFileSync,
   chmodSync,
-  statSync
+  statSync,
+  symlinkSync
 } from 'node:fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
@@ -27,6 +28,8 @@ import { runMigrations } from '../../../src/main/database/migrations'
 import {
   runExportPipeline,
   buildMetadataSheet,
+  defaultExportTempFilePath,
+  iterateAnnotatedRows,
   EXPORT_COLUMNS
 } from '../../../src/main/workers/export-pipeline'
 import { COHORT_EXPORT_COLUMNS } from '../../../src/main/workers/cohort-export'
@@ -565,6 +568,109 @@ describe('runExportPipeline — CSV', () => {
         if (separateDb.open) separateDb.close()
       }
     })
+
+    it('rejects without modifying or deleting target if precreated tempFilePath is replaced with a symlink', async () => {
+      const symlinkTarget = join(tmpDir, 'symlink-secret.txt')
+      writeFileSync(symlinkTarget, 'secret untouched content')
+
+      const tempFilePath = join(tmpDir, 'symlink-temp.part')
+      symlinkSync(symlinkTarget, tempFilePath)
+
+      const output = join(tmpDir, 'symlink-out.csv')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath,
+        tempFilePrecreated: true
+      })
+
+      await expect(runExportPipeline(params)).rejects.toThrow()
+      expect(existsSync(symlinkTarget)).toBe(true)
+      expect(readFileSync(symlinkTarget, 'utf8')).toBe('secret untouched content')
+    })
+
+    it('rejects without modifying or deleting target if precreated tempFilePath has an inode/device mismatch', async () => {
+      const differentFile = join(tmpDir, 'different-file.part')
+      writeFileSync(differentFile, 'original file content')
+
+      const output = join(tmpDir, 'mismatch-out.csv')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath: differentFile,
+        tempFilePrecreated: { dev: 999999, ino: 888888 }
+      })
+
+      await expect(runExportPipeline(params)).rejects.toThrow(
+        /Temporary export file identity mismatch/
+      )
+      expect(existsSync(differentFile)).toBe(true)
+      expect(readFileSync(differentFile, 'utf8')).toBe('original file content')
+    })
+
+    it('holds read transaction across entire iterateAnnotatedRows so trailing partial chunk is not polluted by mid-export commits', () => {
+      const walDbPath = join(tmpDir, 'wal-isolation.db')
+      const readerDb = new Database(walDbPath)
+      initializeSchema(readerDb)
+      runMigrations(readerDb)
+      readerDb.pragma('journal_mode = WAL')
+      try {
+        const testCaseId = createCase(readerDb, 'WAL Case')
+        readerDb.prepare("UPDATE cases SET genome_build = 'GRCh38' WHERE id = ?").run(testCaseId)
+
+        const insertStmt = readerDb.prepare(
+          `INSERT INTO variants
+            (case_id, chr, pos, ref, alt, gt_num)
+           VALUES (?, '1', ?, 'A', 'T', '0/1')`
+        )
+        for (let i = 1; i <= 250; i++) {
+          insertStmt.run(testCaseId, 1000 + i)
+        }
+
+        const writerDb = new Database(walDbPath)
+        try {
+          const iteratedRows: Record<string, unknown>[] = []
+          for (const row of iterateAnnotatedRows(
+            readerDb,
+            'SELECT * FROM variants WHERE case_id = ? ORDER BY id',
+            [testCaseId]
+          )) {
+            if (row.id === 1) {
+              // Commit annotation for variant 220 (in the final partial chunk of 50 rows) from a second connection
+              writerDb
+                .prepare(
+                  `INSERT INTO case_variant_annotations
+                    (case_id, variant_id, acmg_classification, per_case_comment, created_at, updated_at)
+                   VALUES (?, 220, 'Pathogenic', 'Committed mid-export', ?, ?)`
+                )
+                .run(testCaseId, Date.now(), Date.now())
+            }
+            iteratedRows.push(row)
+          }
+
+          expect(iteratedRows.length).toBe(250)
+          // The annotation for variant 220 was committed while reading was underway.
+          // Because readerDb holds a read transaction across iterateAnnotatedRows,
+          // the trailing batch lookup (rows 201-250) reads from the original read snapshot.
+          const row220 = iteratedRows.find((r) => r.id === 220)
+          expect(row220).toBeDefined()
+          expect(row220?.acmg_classification).toBeNull()
+
+          // After iteration finishes, readerDb released its transaction
+          expect(readerDb.inTransaction).toBe(false)
+
+          // A new query on readerDb now sees the committed annotation
+          const postRow = readerDb
+            .prepare(
+              'SELECT acmg_classification FROM case_variant_annotations WHERE variant_id = 220'
+            )
+            .get() as { acmg_classification: string } | undefined
+          expect(postRow?.acmg_classification).toBe('Pathogenic')
+        } finally {
+          if (writerDb.open) writerDb.close()
+        }
+      } finally {
+        if (readerDb.open) readerDb.close()
+      }
+    })
   })
 })
 
@@ -737,5 +843,24 @@ describe('runExportPipeline — XLSX', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+
+  it('successfully exports when destination filename has a 230-byte basename', async () => {
+    insertVariant(db, caseId, { chr: '1', pos: 100 })
+    const longBasename = 'a'.repeat(225) + '.xlsx'
+    const output = join(tmpDir, longBasename)
+    const params = makeXlsxParams({ outputFilePath: output })
+    const result = await runExportPipeline(params)
+    expect(result.filePath).toBe(output)
+    expect(existsSync(output)).toBe(true)
+    expect(statSync(output).size).toBeGreaterThan(0)
+  })
+
+  it('defaultExportTempFilePath keeps the basename short regardless of output filename length', () => {
+    const longOutput = join(tmpDir, 'a'.repeat(230) + '.xlsx')
+    const tempPath = defaultExportTempFilePath(longOutput)
+    const tempBasename = tempPath.slice(tempPath.lastIndexOf('/') + 1)
+    expect(tempBasename.length).toBeLessThan(70)
+    expect(tempBasename.startsWith('.varlens-export-')).toBe(true)
   })
 })
