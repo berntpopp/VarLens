@@ -83,7 +83,7 @@ export function cacheSet(key: string, value: AnnotationCache, unloaded?: Annotat
   annotationCache.value.set(key, value)
   if (value.perCase && typeof value.perCase.variant_id === 'number') {
     cachedVariantIds.set(key, value.perCase.variant_id)
-  } else if (unloaded === 'perCase') {
+  } else {
     cachedVariantIds.delete(key)
   }
   if (unloaded === undefined) unloadedSlots.delete(key)

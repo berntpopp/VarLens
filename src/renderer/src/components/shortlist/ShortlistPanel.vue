@@ -201,18 +201,25 @@ async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
   const key = variantKey(row)
   const cached = annotationCache.value.get(key)
   const cachedVid = getCachedVariantId(key)
-  const hasMismatch =
+  const alreadyVerified =
     cached !== undefined &&
-    ((cached.perCase !== null &&
-      (cached.perCase.variant_id !== row.id || cached.perCase.case_id !== row.case_id)) ||
-      (cachedVid !== undefined && cachedVid !== row.id) ||
-      (cachedVid === undefined && typeof api?.annotations?.batchGet === 'function'))
-  if (hasMismatch) {
-    evictAnnotationCacheKeys([key])
-  }
-  if (needsLoad(key, 'case') && typeof api?.annotations?.batchGet === 'function') {
-    markAwaited('case', key)
-    await annotations.loadAnnotationsBatch(row.case_id, [row])
+    unloadedSlotOf(key) === undefined &&
+    cachedVid === row.id &&
+    (cached.perCase === null ||
+      (cached.perCase.variant_id === row.id && cached.perCase.case_id === row.case_id))
+  if (!alreadyVerified) {
+    if (
+      typeof api?.annotations?.batchGet === 'function' ||
+      (cached?.perCase != null &&
+        (cached.perCase.variant_id !== row.id || cached.perCase.case_id !== row.case_id)) ||
+      (cachedVid !== undefined && cachedVid !== row.id)
+    ) {
+      evictAnnotationCacheKeys([key])
+    }
+    if (needsLoad(key, 'case') && typeof api?.annotations?.batchGet === 'function') {
+      markAwaited('case', key)
+      await annotations.loadAnnotationsBatch(row.case_id, [row])
+    }
   }
   const after = annotationCache.value.get(key)?.perCase
   if (after && (after.variant_id !== row.id || after.case_id !== row.case_id)) {

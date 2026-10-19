@@ -315,12 +315,7 @@ async function mutate(
     bumpKeyVersion(key)
     cacheSet(
       key,
-      scope.kind === 'case'
-        ? {
-            global: rawCurrent?.global ?? live?.global ?? null,
-            perCase: updated as CaseVariantAnnotation
-          }
-        : mergeServerSlot(live, scope, updated),
+      mergeServerSlot(live, scope, updated),
       unloaded === written ? undefined : unloaded
     )
     return true
@@ -432,16 +427,17 @@ async function loadBatch(
     const key = variantKey(v)
     if (scope.kind === 'case') {
       const cached = annotationCache.value.get(key)
+      const cachedVid = getCachedVariantId(key)
+      const sameCoordsAsGlobal = cached?.global?.chr === undefined || cached.global.chr === v.chr
       if (
-        (cached !== undefined &&
+        sameCoordsAsGlobal &&
+        ((cached !== undefined &&
           ((typeof v.id === 'number' &&
             cached.perCase !== null &&
             cached.perCase.variant_id !== v.id) ||
             (typeof v.is_starred === 'boolean' &&
               (cached.perCase?.starred === 1) !== v.is_starred))) ||
-        (typeof v.id === 'number' &&
-          getCachedVariantId(key) !== undefined &&
-          getCachedVariantId(key) !== v.id)
+          (typeof v.id === 'number' && cachedVid !== undefined && cachedVid !== v.id))
       ) {
         evictAnnotationCacheKeys([key])
       }
