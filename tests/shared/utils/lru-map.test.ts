@@ -114,4 +114,18 @@ describe('LruMap', () => {
     expect(cache.get('null-val')).toBeNull()
     expect(cache.get('other')).toBeUndefined()
   })
+
+  it('entries() and Symbol.iterator return key-value pairs', () => {
+    const cache = new LruMap<string, number>(5)
+    cache.set('a', 1)
+    cache.set('b', 2)
+    expect([...cache.entries()]).toEqual([
+      ['a', 1],
+      ['b', 2]
+    ])
+    expect([...cache]).toEqual([
+      ['a', 1],
+      ['b', 2]
+    ])
+  })
 })

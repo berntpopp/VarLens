@@ -58,4 +58,12 @@ export class LruMap<K, V> {
   keys(): IterableIterator<K> {
     return this.map.keys()
   }
+
+  entries(): IterableIterator<[K, V]> {
+    return this.map.entries()
+  }
+
+  [Symbol.iterator](): IterableIterator<[K, V]> {
+    return this.map.entries()
+  }
 }
