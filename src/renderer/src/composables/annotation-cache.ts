@@ -368,6 +368,21 @@ export function removeInFlightMutation(slotKey: string, mutationId: number): voi
   }
 }
 
+export function pruneInFlightMutationsOnSuccess(
+  slotKey: string,
+  fieldGroup: string,
+  writeVer: number
+): void {
+  const list = inFlightMutations.get(slotKey)
+  if (!list) return
+  const filtered = list.filter((m) => !(m.fieldGroup === fieldGroup && m.writeVer <= writeVer))
+  if (filtered.length === 0) {
+    inFlightMutations.delete(slotKey)
+  } else {
+    inFlightMutations.set(slotKey, filtered)
+  }
+}
+
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++

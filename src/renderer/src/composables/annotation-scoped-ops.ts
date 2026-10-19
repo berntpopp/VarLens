@@ -53,6 +53,7 @@ import {
   mergeServerSlot,
   needsLoad,
   otherSlot,
+  pruneInFlightMutationsOnSuccess,
   readSlot,
   removeInFlightMutation,
   rollBackSlot,
@@ -279,9 +280,15 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    removeInFlightMutation(slotKey, mutationId)
-    if (leftScope(scope, dbPath)) return true
-    if (getWriteVersion(key, `${slot}:${fieldGroup}`) !== writeVer) return true
+    if (leftScope(scope, dbPath)) {
+      removeInFlightMutation(slotKey, mutationId)
+      return true
+    }
+    if (getWriteVersion(key, `${slot}:${fieldGroup}`) !== writeVer) {
+      removeInFlightMutation(slotKey, mutationId)
+      return true
+    }
+    pruneInFlightMutationsOnSuccess(slotKey, fieldGroup, writeVer)
 
     const remaining = inFlightMutations.get(slotKey)
     if (!remaining || remaining.length === 0) {
@@ -305,27 +312,36 @@ async function mutate(
     )
     return true
   } catch (error) {
+    const wasActive =
+      !current || (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false)
     removeInFlightMutation(slotKey, mutationId)
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
 
-    const target =
-      (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ?? current
-    if (target && confirmedBases.has(slotKey)) {
-      const remaining = inFlightMutations.get(slotKey)
-      const base = confirmedBases.get(slotKey) ?? null
-      if (remaining && remaining.length > 0) {
-        writeSlot(target, scope, computeOptimisticSlot(base, remaining))
-      } else {
-        rollBackSlot(target, scope, plan.rollback, base)
-        confirmedBases.delete(slotKey)
-        inFlightMutations.delete(slotKey)
+    if (wasActive) {
+      const target =
+        (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
+        current
+      if (target && confirmedBases.has(slotKey)) {
+        const remaining = inFlightMutations.get(slotKey)
+        const base = confirmedBases.get(slotKey) ?? null
+        if (remaining && remaining.length > 0) {
+          writeSlot(target, scope, computeOptimisticSlot(base, remaining))
+        } else {
+          if (base !== null) {
+            writeSlot(target, scope, { ...base })
+          } else {
+            rollBackSlot(target, scope, plan.rollback, base)
+          }
+          confirmedBases.delete(slotKey)
+          inFlightMutations.delete(slotKey)
+        }
+      } else if (target) {
+        rollBackSlot(target, scope, plan.rollback, baseSlot)
       }
-    } else if (target) {
-      rollBackSlot(target, scope, plan.rollback, baseSlot)
+      triggerAnnotationCache()
     }
-    triggerAnnotationCache()
     return false
   }
 }

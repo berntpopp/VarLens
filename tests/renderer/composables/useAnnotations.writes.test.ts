@@ -347,4 +347,50 @@ describe('overlapping mutations and rollback', () => {
     await p2
     expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Benign')
   })
+
+  it('keeps newer classification when second write resolves first and older write rejects second', async () => {
+    seedEntry()
+    let deferred1!: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+    let deferred2!: { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+    let call = 0
+    window.api.annotations.upsertPerCase = vi.fn().mockImplementation(() => {
+      call++
+      if (call === 1) {
+        return new Promise((resolve, reject) => {
+          deferred1 = { resolve, reject }
+        })
+      }
+      return new Promise((resolve, reject) => {
+        deferred2 = { resolve, reject }
+      })
+    })
+
+    const p1 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Pathogenic')
+    const p2 = a.setAcmgClassification(CASE_ID, VARIANT_ID, ...V, 'Likely pathogenic')
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Likely pathogenic')
+
+    // M2 resolves first
+    deferred2.resolve({
+      id: 6,
+      case_id: CASE_ID,
+      variant_id: VARIANT_ID,
+      starred: 0,
+      acmg_classification: 'Likely pathogenic',
+      acmg_evidence: null,
+      per_case_comment: 'old',
+      created_at: 0,
+      updated_at: 0
+    })
+    await p2
+
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Likely pathogenic')
+
+    // M1 rejects second
+    deferred1.reject(new Error('M1 failed late'))
+    await p1
+
+    // Classification MUST stay 'Likely pathogenic', not rolled back to 'Benign'
+    expect(annotationCache.value.get(KEY)?.perCase?.acmg_classification).toBe('Likely pathogenic')
+  })
 })
