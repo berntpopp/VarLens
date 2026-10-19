@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { registerGeneRefHandlers } from '../../../../src/main/ipc/handlers/gene-ref'
+import {
+  registerGeneRefHandlers,
+  resolveGeneRefRunnerCli
+} from '../../../../src/main/ipc/handlers/gene-ref'
 import type { HandlerDependencies } from '../../../../src/main/ipc/types'
 import { isIpcError } from '../../../../src/shared/types/errors'
 
@@ -209,6 +212,23 @@ describe('gene-ref IPC handlers', () => {
       const result = (await handler({})) as { success: boolean; message: string }
 
       expect(result.success).toBe(true)
+    })
+  })
+
+  describe('resolveGeneRefRunnerCli (#668)', () => {
+    it('resolves an installed runner CLI (tsx or jiti) on real filesystem', async () => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs')
+      vi.mocked(existsSync).mockImplementation(realFs.existsSync)
+      const runner = resolveGeneRefRunnerCli(process.cwd())
+      expect(runner).not.toBeNull()
+      expect(typeof runner).toBe('string')
+      expect(realFs.existsSync(runner!)).toBe(true)
+    })
+
+    it('returns null if neither tsx nor jiti CLI exists', () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      const runner = resolveGeneRefRunnerCli('/nonexistent/app/path')
+      expect(runner).toBeNull()
     })
   })
 })

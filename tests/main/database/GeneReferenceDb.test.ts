@@ -94,7 +94,14 @@ describe('GeneReferenceDb', () => {
 
     it('handles batch size exceeding chunk limit (>500 unique symbols) (#672)', () => {
       // 550 unique unknown symbols + approved symbols to exercise batch chunking across >500 queries
-      const prepareSpy = vi.spyOn(db, 'prepare')
+      const sampleStmt = db.prepare('SELECT 1')
+      const proto = Object.getPrototypeOf(sampleStmt) as {
+        all: (...args: unknown[]) => unknown
+        get: (...args: unknown[]) => unknown
+      }
+      const allSpy = vi.spyOn(proto, 'all')
+      const getSpy = vi.spyOn(proto, 'get')
+
       const largeList = Array.from({ length: 552 }, (_, i) => {
         if (i === 0) return 'BRCA1'
         if (i === 1) return 'TP53'
@@ -107,8 +114,12 @@ describe('GeneReferenceDb', () => {
       for (let i = 2; i < 552; i++) {
         expect(results[i].status).toBe('unknown')
       }
-      expect(prepareSpy.mock.calls.length).toBeLessThanOrEqual(10)
-      prepareSpy.mockRestore()
+      const executedQueries = allSpy.mock.calls.length + getSpy.mock.calls.length
+      expect(executedQueries).toBeGreaterThan(0)
+      expect(executedQueries).toBeLessThanOrEqual(10)
+
+      allSpy.mockRestore()
+      getSpy.mockRestore()
     })
 
     it('matches SQLite COLLATE NOCASE ASCII folding without Unicode collision (Kelvin bug #672)', () => {
@@ -251,7 +262,14 @@ describe('GeneReferenceDb', () => {
     })
 
     it('handles duplicate hgncIds and chunks exceeding 500 items', () => {
-      const prepareSpy = vi.spyOn(db, 'prepare')
+      const sampleStmt = db.prepare('SELECT 1')
+      const proto = Object.getPrototypeOf(sampleStmt) as {
+        all: (...args: unknown[]) => unknown
+        get: (...args: unknown[]) => unknown
+      }
+      const allSpy = vi.spyOn(proto, 'all')
+      const getSpy = vi.spyOn(proto, 'get')
+
       // Pass >500 unique HGNC IDs plus duplicates of HGNC:1100 and HGNC:11998
       const uniqueIds = Array.from({ length: 550 }, (_, i) => `HGNC:FAKE_${i}`)
       const largeList = ['HGNC:1100', 'HGNC:11998', ...uniqueIds, 'HGNC:1100', 'HGNC:11998']
@@ -259,8 +277,13 @@ describe('GeneReferenceDb', () => {
       expect(coords.size).toBe(2)
       expect(coords.has('HGNC:1100')).toBe(true)
       expect(coords.has('HGNC:11998')).toBe(true)
-      expect(prepareSpy.mock.calls.length).toBeLessThanOrEqual(10)
-      prepareSpy.mockRestore()
+
+      const executedQueries = allSpy.mock.calls.length + getSpy.mock.calls.length
+      expect(executedQueries).toBeGreaterThan(0)
+      expect(executedQueries).toBeLessThanOrEqual(10)
+
+      allSpy.mockRestore()
+      getSpy.mockRestore()
     })
 
     it('preserves exact input order of unique hgncIds (#672)', () => {

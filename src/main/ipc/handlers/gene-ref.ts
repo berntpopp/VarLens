@@ -8,6 +8,20 @@ import { app } from 'electron'
 import { existsSync, copyFileSync } from 'fs'
 
 /**
+ * Resolve an installed TypeScript runner CLI (tsx or jiti) to execute build scripts.
+ */
+export function resolveGeneRefRunnerCli(appPath: string): string | null {
+  const candidates = [
+    resolve(appPath, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+    resolve(appPath, 'node_modules', 'jiti', 'lib', 'jiti-cli.mjs')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/**
  * Gene Reference database IPC handlers
  */
 export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void {
@@ -15,8 +29,10 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
     return wrapHandler(async () => {
       const geneRef = getGeneReferenceDb()
       const info = geneRef.getInfo()
-      const scriptPath = resolve(app.getAppPath(), 'scripts', 'build-gene-reference-db.ts')
-      const canUpdate = !app.isPackaged && existsSync(scriptPath)
+      const appPath = app.getAppPath()
+      const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
+      const canUpdate =
+        !app.isPackaged && existsSync(scriptPath) && resolveGeneRefRunnerCli(appPath) !== null
       return {
         ...info,
         canUpdate
@@ -42,8 +58,10 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       const nowMs = Date.now()
       const builtAtMs = info.builtAt * 1000 // builtAt is Unix seconds
       const daysSinceBuilt = Math.floor((nowMs - builtAtMs) / (1000 * 60 * 60 * 24))
-      const scriptPath = resolve(app.getAppPath(), 'scripts', 'build-gene-reference-db.ts')
-      const canUpdate = !app.isPackaged && existsSync(scriptPath)
+      const appPath = app.getAppPath()
+      const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
+      const canUpdate =
+        !app.isPackaged && existsSync(scriptPath) && resolveGeneRefRunnerCli(appPath) !== null
       const needsUpdate = canUpdate && daysSinceBuilt > 90
 
       return {
@@ -68,10 +86,11 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       // Resolve the build script path
       const appPath = app.getAppPath()
       const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
+      const runnerCliPath = resolveGeneRefRunnerCli(appPath)
 
-      if (app.isPackaged || !existsSync(scriptPath)) {
+      if (app.isPackaged || !existsSync(scriptPath) || runnerCliPath === null) {
         mainLogger.warn(
-          `Gene ref build script not available (packaged=${app.isPackaged}, path=${scriptPath})`,
+          `Gene ref build script or runner not available (packaged=${app.isPackaged}, path=${scriptPath}, runner=${runnerCliPath})`,
           'gene-ref'
         )
         return {
@@ -80,10 +99,6 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
             'Gene reference update is not available in the packaged app. A future update will include this feature.'
         }
       }
-
-      // Execute the builder script directly with tsx cli via process.execPath
-      // (avoid npx.cmd / shell: true to prevent DEP0190 and command injection when paths have spaces or special characters)
-      const tsxCliPath = resolve(appPath, 'node_modules', 'tsx', 'dist', 'cli.mjs')
 
       // Destination: always write to userData so it takes precedence on next load
       const userDataDbPath = join(app.getPath('userData'), 'gene_reference.db')
@@ -95,7 +110,7 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       return new Promise<{ success: boolean; message: string }>((resolve_p) => {
         execFile(
           process.execPath,
-          [tsxCliPath, scriptPath],
+          [runnerCliPath, scriptPath],
           {
             cwd: appPath,
             timeout: 5 * 60 * 1000, // 5 minute timeout

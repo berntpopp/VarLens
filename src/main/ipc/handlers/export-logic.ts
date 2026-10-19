@@ -25,6 +25,8 @@ import { EXPORT_COLUMNS, type ExportColumn } from '../../workers/export-pipeline
 import { csvEscape, formatCellValue } from '../../workers/export-renderer'
 import { resolveCohortPanelOnCallingThread } from './panelIntervalHelper'
 import { buildVariantFilter } from './variants-logic'
+import { AppError } from '../errors'
+import { ErrorCode } from '../../../shared/types/errors'
 
 const EXPORT_HARD_LIMIT = 100_000
 
@@ -90,7 +92,7 @@ function runWorkerExport(
       },
       onError: (error) => {
         mainLogger.error(`Export worker error: ${error}`, 'export')
-        reject(new Error(error))
+        reject(new AppError(ErrorCode.UNKNOWN, error, error))
       },
       onCancelled: () => {
         mainLogger.info('Export cancelled by user', 'export')
@@ -135,9 +137,8 @@ export async function prepareVariantExport(
       : db.variants.getExportCount(fullFilter)
 
   if (count > EXPORT_HARD_LIMIT) {
-    throw new Error(
-      `Export limited to ${EXPORT_HARD_LIMIT.toLocaleString()} variants. Current filter matches ${count.toLocaleString()} variants. Please narrow your filters.`
-    )
+    const msg = `Export limited to ${EXPORT_HARD_LIMIT.toLocaleString()} variants. Current filter matches ${count.toLocaleString()} variants. Please narrow your filters.`
+    throw new AppError(ErrorCode.VALIDATION, msg, msg)
   }
 
   const compiled = db.variants.compileExportQuery(fullFilter, EXPORT_HARD_LIMIT)

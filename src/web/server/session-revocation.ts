@@ -37,19 +37,22 @@ export function resolveDefaultRevocationsPath(
   ) {
     return join(recoveryDir.trim(), REVOKED_SESSIONS_FILENAME)
   }
-  if (existsSync('/data')) {
-    return join('/data', REVOKED_SESSIONS_FILENAME)
-  }
   if (env.VITEST !== undefined || env.NODE_ENV === 'test') {
     return undefined
   }
-  const seed =
-    env.VARLENS_SESSION_SECRET_HEX ??
-    env.VARLENS_SESSION_SECRET ??
-    env.VARLENS_PG_URL ??
-    process.cwd()
-  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 16)
-  return join(tmpdir(), `varlens-revocations-${hash}.json`)
+  if (
+    typeof env.VARLENS_SESSION_SECRET_HEX === 'string' &&
+    env.VARLENS_SESSION_SECRET_HEX.trim() !== ''
+  ) {
+    const seed =
+      env.VARLENS_SESSION_SECRET_HEX ??
+      env.VARLENS_SESSION_SECRET ??
+      env.VARLENS_PG_URL ??
+      process.cwd()
+    const hash = createHash('sha256').update(seed).digest('hex').slice(0, 16)
+    return join(tmpdir(), `varlens-revocations-${hash}.json`)
+  }
+  return join('/data', REVOKED_SESSIONS_FILENAME)
 }
 
 export class SessionRevocations {
