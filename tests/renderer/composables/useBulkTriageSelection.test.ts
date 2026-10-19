@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { useBulkTriageSelection } from '../../../src/renderer/src/composables/useBulkTriageSelection'
+import {
+  useBulkTriageSelection,
+  MAX_BULK_TRIAGE_SELECTION
+} from '../../../src/renderer/src/composables/useBulkTriageSelection'
 import {
   annotationCache,
   useAnnotations
@@ -12,6 +15,23 @@ import { evictAnnotationCacheKeys } from '../../../src/renderer/src/composables/
 import { AppStateKey } from '../../../src/renderer/src/composables/useAppState'
 
 describe('useBulkTriageSelection', () => {
+  const mockCacheEntry = (id: number, extraPerCase: Record<string, unknown> = {}) => ({
+    global: null,
+    perCase: {
+      id,
+      case_id: 42,
+      variant_id: id,
+      is_starred: false,
+      acmg_classification: null,
+      acmg_evidence: null,
+      acmg_override_reason: null,
+      notes: null,
+      created_at: 1000,
+      updated_at: 1000,
+      ...extraPerCase
+    }
+  })
+
   const items = ref([
     { id: 101, chr: 'chr1', pos: 1000, ref: 'A', alt: 'T' },
     { id: 102, chr: 'chr1', pos: 2000, ref: 'C', alt: 'G' },
@@ -243,36 +263,8 @@ describe('useBulkTriageSelection', () => {
       { id: 2, chr: '1', pos: 200, ref: 'G', alt: 'C' }
     ])
 
-    annotationCache.value.set('1:100:A:T', {
-      global: null,
-      perCase: {
-        id: 1,
-        case_id: 42,
-        variant_id: 1,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
-    annotationCache.value.set('1:200:G:C', {
-      global: null,
-      perCase: {
-        id: 2,
-        case_id: 42,
-        variant_id: 2,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
+    annotationCache.value.set('1:100:A:T', mockCacheEntry(1))
+    annotationCache.value.set('1:200:G:C', mockCacheEntry(2))
 
     const bulk = useBulkTriageSelection({
       items: () => testItems.value,
@@ -307,56 +299,11 @@ describe('useBulkTriageSelection', () => {
       alt: 'T'
     })
 
-    annotationCache.value.set('1:100:A:T', {
-      global: null,
-      perCase: {
-        id: 1,
-        case_id: 42,
-        variant_id: 1,
-        starred: 0,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
-    annotationCache.value.set('1:999:C:G', {
-      global: null,
-      perCase: {
-        id: 999,
-        case_id: 42,
-        variant_id: 999,
-        starred: 0,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
+    annotationCache.value.set('1:100:A:T', mockCacheEntry(1, { starred: 0 }))
+    annotationCache.value.set('1:999:C:G', mockCacheEntry(999, { starred: 0 }))
 
     const batchGetSpy = vi.fn().mockResolvedValue({
-      '1:100:A:T': {
-        global: null,
-        perCase: {
-          id: 1,
-          case_id: 42,
-          variant_id: 1,
-          starred: 1,
-          is_starred: true,
-          acmg_classification: null,
-          acmg_evidence: null,
-          acmg_override_reason: null,
-          notes: null,
-          created_at: 1000,
-          updated_at: 2000
-        }
-      }
+      '1:100:A:T': mockCacheEntry(1, { starred: 1, is_starred: true, updated_at: 2000 })
     })
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
@@ -451,21 +398,7 @@ describe('useBulkTriageSelection', () => {
     expect(bulk.selectedIds.value).toEqual([101, 102])
 
     // Pre-populate cache for Case 42
-    annotationCache.value.set('chr1:1000:A:T', {
-      global: null,
-      perCase: {
-        id: 101,
-        case_id: 42,
-        variant_id: 101,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
+    annotationCache.value.set('chr1:1000:A:T', mockCacheEntry(101))
 
     // 2. Start bulk triage while on Case 42
     const triagePromise = bulk.applyBulkTriage({ starred: true })
@@ -507,15 +440,7 @@ describe('useBulkTriageSelection', () => {
       .mockReturnValueOnce(firstBatchPromise)
       // Second call (refreshed data, e.g. Benign) resolves immediately
       .mockResolvedValueOnce({
-        '1:100:A:T': {
-          global: null,
-          perCase: {
-            id: 1,
-            case_id: 42,
-            variant_id: 1,
-            acmg_classification: 'Benign'
-          }
-        }
+        '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Benign' })
       })
 
     // @ts-expect-error Mock window.api
@@ -538,15 +463,7 @@ describe('useBulkTriageSelection', () => {
 
     // 4. Now the older in-flight fetch resolves with Pathogenic
     resolveFirstBatch({
-      '1:100:A:T': {
-        global: null,
-        perCase: {
-          id: 1,
-          case_id: 42,
-          variant_id: 1,
-          acmg_classification: 'Pathogenic'
-        }
-      }
+      '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Pathogenic' })
     })
     await initialLoad
 
@@ -606,21 +523,7 @@ describe('useBulkTriageSelection', () => {
     beginAnnotationRequest(42, 'GRCh38')
 
     // Pre-populate unselected variant B in annotationCache
-    annotationCache.value.set('1:200:G:C', {
-      global: null,
-      perCase: {
-        id: 2,
-        case_id: 42,
-        variant_id: 2,
-        is_starred: false,
-        acmg_classification: null,
-        acmg_evidence: null,
-        acmg_override_reason: null,
-        notes: null,
-        created_at: 1000,
-        updated_at: 1000
-      }
-    })
+    annotationCache.value.set('1:200:G:C', mockCacheEntry(2))
 
     const bulk = useBulkTriageSelection({
       items: () => [
@@ -643,7 +546,7 @@ describe('useBulkTriageSelection', () => {
     expect(annotationCache.value.get('1:200:G:C')?.perCase?.id).toBe(2)
   })
 
-  it('discards old completion during an A -> B -> A round-trip case switch while batchUpsertPerCase is in flight', async () => {
+  it('invalidates and refreshes affected visible cache entries while preserving new selection on A -> B -> A round-trip', async () => {
     let resolveUpsert!: (val: unknown) => void
     const deferredUpsert = new Promise((resolve) => {
       resolveUpsert = resolve
@@ -658,12 +561,16 @@ describe('useBulkTriageSelection', () => {
       onTriageApplied
     })
 
-    // 1. On Case 42 (Case A), select item 101
+    // 1. On Case 42 (Case A), item 101 has cached Benign classification
+    annotationCache.value.set(
+      'chr1:1000:A:T',
+      mockCacheEntry(101, { acmg_classification: 'Benign' })
+    )
     bulk.toggleSelect(101)
     expect(bulk.selectedIds.value).toEqual([101])
 
-    // 2. Start bulk triage on Case 42
-    const triagePromise = bulk.applyBulkTriage({ starred: true })
+    // 2. Start bulk triage for item 101 on Case 42 to Pathogenic
+    const triagePromise = bulk.applyBulkTriage({ acmg_classification: 'Pathogenic' })
     expect(bulk.isExecuting.value).toBe(true)
 
     // 3. User navigates Case 42 -> Case 99 (Case B)
@@ -678,22 +585,140 @@ describe('useBulkTriageSelection', () => {
       expect(bulk.selectedIds.value.length).toBe(0)
     })
 
+    // Simulate item 101 having Benign in cache before write finishes
+    annotationCache.value.set(
+      'chr1:1000:A:T',
+      mockCacheEntry(101, { acmg_classification: 'Benign' })
+    )
+
     // User selects item 103 in the new session of Case 42
     bulk.toggleSelect(103)
     expect(bulk.selectedIds.value).toEqual([103])
+
+    // Configure batchGet mock to return committed Pathogenic data for item 101
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = vi.fn().mockResolvedValue({
+      'chr1:1000:A:T': mockCacheEntry(101, { acmg_classification: 'Pathogenic' })
+    })
 
     // 5. In-flight upsert from initial Case 42 resolves
     resolveUpsert({ updatedCount: 1 })
     const count = await triagePromise
 
     expect(count).toBe(1)
-    // Post-await completion was discarded because scopeGen changed:
-    // - onTriageApplied was NOT called
+    // 6. Because toValue(caseId) === 42, affected visible row 101 was refreshed to Pathogenic!
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.acmg_classification).toBe(
+      'Pathogenic'
+    )
+    // 7. But because session changed (scopeGen bumped), selection [103] is preserved and onTriageApplied skipped:
     expect(onTriageApplied).not.toHaveBeenCalled()
-    // - New selection [103] on returned Case 42 was NOT cleared
     expect(bulk.selectedIds.value).toEqual([103])
-    // - isExecuting is false
     expect(bulk.isExecuting.value).toBe(false)
+  })
+
+  it('does not clear newly modified selection when in-flight bulk triage resolves', async () => {
+    let resolveUpsert!: (val: unknown) => void
+    const deferredUpsert = new Promise((resolve) => {
+      resolveUpsert = resolve
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+
+    const bulk = useBulkTriageSelection({
+      items: () => items.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    bulk.toggleSelect(101)
+    expect(bulk.selectedIds.value).toEqual([101])
+
+    const triagePromise = bulk.applyBulkTriage({ starred: true })
+    expect(bulk.isExecuting.value).toBe(true)
+
+    // User modifies selection mid-flight
+    bulk.toggleSelect(102)
+    expect(bulk.selectedIds.value).toEqual([101, 102])
+
+    resolveUpsert({ updatedCount: 1 })
+    const count = await triagePromise
+
+    expect(count).toBe(1)
+    // Selection was preserved because selectionRev bumped!
+    expect(bulk.selectedIds.value).toEqual([101, 102])
+    expect(onTriageApplied).not.toHaveBeenCalled()
+    expect(bulk.isExecuting.value).toBe(false)
+  })
+
+  it('enforces MAX_BULK_TRIAGE_SELECTION cap of 1,000 with warning snack', () => {
+    const showSnackSpy = vi.fn()
+    const largeItems = Array.from({ length: 1005 }, (_, i) => ({
+      id: i + 1,
+      chr: 'chr1',
+      pos: 1000 + i,
+      ref: 'A',
+      alt: 'T'
+    }))
+
+    let bulkInstance!: ReturnType<typeof useBulkTriageSelection>
+    const TestComponent = defineComponent({
+      setup() {
+        bulkInstance = useBulkTriageSelection({
+          items: () => largeItems,
+          getItemId: (v) => v.id,
+          caseId,
+          onTriageApplied
+        })
+        return () => null
+      }
+    })
+
+    mount(TestComponent, {
+      global: {
+        plugins: [pinia],
+        provide: {
+          [AppStateKey as symbol]: {
+            showSnack: showSnackSpy
+          }
+        }
+      }
+    })
+
+    // 1. toggleSelectAll(true) on 1005 items caps at 1000
+    bulkInstance.toggleSelectAll(true)
+    expect(bulkInstance.selectedCount.value).toBe(MAX_BULK_TRIAGE_SELECTION)
+    expect(showSnackSpy).toHaveBeenCalledWith(
+      'Maximum bulk selection of 1,000 variants reached.',
+      'warning'
+    )
+
+    // 2. toggleSelect on an unselected item when at cap does not increase selection
+    showSnackSpy.mockClear()
+    bulkInstance.toggleSelect(1005)
+    expect(bulkInstance.selectedCount.value).toBe(MAX_BULK_TRIAGE_SELECTION)
+    expect(bulkInstance.isSelected(1005)).toBe(false)
+    expect(showSnackSpy).toHaveBeenCalledWith(
+      'Maximum bulk selection of 1,000 variants reached.',
+      'warning'
+    )
+
+    // 3. Range selection (Shift+Click) respects 1000 cap
+    bulkInstance.clearSelection()
+    expect(bulkInstance.selectedCount.value).toBe(0)
+    for (let i = 1; i <= 995; i++) {
+      bulkInstance.toggleSelect(i)
+    }
+    expect(bulkInstance.selectedCount.value).toBe(995)
+
+    showSnackSpy.mockClear()
+    // Shift+Click row 1005 (range 995..1005 has 11 items, would exceed cap)
+    bulkInstance.handleRowCheckboxClick(1005, new MouseEvent('click', { shiftKey: true }))
+    expect(bulkInstance.selectedCount.value).toBe(1000)
+    expect(showSnackSpy).toHaveBeenCalledWith(
+      'Maximum bulk selection of 1,000 variants reached.',
+      'warning'
+    )
   })
 
   it('drops older in-flight batchGet read even after clearAnnotationCache runs before it resolves', async () => {
@@ -708,15 +733,7 @@ describe('useBulkTriageSelection', () => {
       .mockReturnValueOnce(firstBatchPromise)
       // Second call (after round-trip, e.g. Benign) resolves immediately
       .mockResolvedValueOnce({
-        '1:100:A:T': {
-          global: null,
-          perCase: {
-            id: 1,
-            case_id: 42,
-            variant_id: 1,
-            acmg_classification: 'Benign'
-          }
-        }
+        '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Benign' })
       })
 
     // @ts-expect-error Mock window.api
@@ -741,15 +758,7 @@ describe('useBulkTriageSelection', () => {
 
     // 4. Now the delayed first fetch (Pathogenic) finally resolves
     resolveFirstBatch({
-      '1:100:A:T': {
-        global: null,
-        perCase: {
-          id: 1,
-          case_id: 42,
-          variant_id: 1,
-          acmg_classification: 'Pathogenic'
-        }
-      }
+      '1:100:A:T': mockCacheEntry(1, { acmg_classification: 'Pathogenic' })
     })
     await initialLoad
 

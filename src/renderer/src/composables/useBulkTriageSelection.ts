@@ -16,6 +16,7 @@ import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
 import {
   annotationCache,
   evictAnnotationCacheKeys,
+  getCachedBuild,
   getGeneration,
   variantKey,
   type VariantCoords
@@ -24,17 +25,22 @@ import { invalidateTags } from '../queries/tags'
 import { logService } from '../services/LogService'
 import { AppStateKey } from './useAppState'
 
+export const MAX_BULK_TRIAGE_SELECTION = 1000
+
 export interface UseBulkTriageSelectionOptions<T> {
   items: Ref<readonly T[]> | (() => readonly T[])
   getItemId: (item: T) => number
   caseId: MaybeRefOrGetter<number | null | undefined>
+  genomeBuild?: MaybeRefOrGetter<string | null>
   onTriageApplied?: () => void | Promise<void>
 }
 
 export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions<T>) {
   const { items, getItemId, caseId, onTriageApplied } = options
   const { api } = useApiService()
-  const { loadAnnotationsBatch } = useAnnotations()
+  const { loadAnnotationsBatch } = useAnnotations({
+    genomeBuild: () => toValue(options.genomeBuild) ?? getCachedBuild()
+  })
   const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
 
   const selectedIds = ref<number[]>([])
@@ -43,6 +49,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   const coordsById = new Map<number, VariantCoords>()
 
   let scopeGen = 0
+  let selectionRev = 0
   let activeApplyId = 0
 
   function extractCoords(item: T): VariantCoords | null {
@@ -69,6 +76,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     () => toValue(caseId),
     () => {
       scopeGen += 1
+      selectionRev += 1
       activeApplyId += 1
       isExecuting.value = false
       selectedIds.value = []
@@ -96,19 +104,43 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   function toggleSelectAll(checked: boolean): void {
     const list = currentItems.value
     if (checked) {
-      const allIds = list.map(getItemId)
-      selectedIds.value = Array.from(new Set([...selectedIds.value, ...allIds]))
+      const currentSet = new Set(selectedIds.value)
+      let reachedCap = false
+      const toAdd: T[] = []
       for (const item of list) {
-        const coords = extractCoords(item)
-        if (coords) {
-          coordsById.set(getItemId(item), coords)
+        const id = getItemId(item)
+        if (!currentSet.has(id)) {
+          if (currentSet.size + toAdd.length >= MAX_BULK_TRIAGE_SELECTION) {
+            reachedCap = true
+            break
+          }
+          toAdd.push(item)
         }
+      }
+      if (reachedCap) {
+        appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
+      }
+      if (toAdd.length > 0) {
+        selectionRev += 1
+        for (const item of toAdd) {
+          const id = getItemId(item)
+          currentSet.add(id)
+          const coords = extractCoords(item)
+          if (coords !== null) {
+            coordsById.set(id, coords)
+          }
+        }
+        selectedIds.value = Array.from(currentSet)
       }
     } else {
       const currentIdsSet = new Set(list.map(getItemId))
-      selectedIds.value = selectedIds.value.filter((id) => !currentIdsSet.has(id))
-      for (const id of currentIdsSet) {
-        coordsById.delete(id)
+      const nextIds = selectedIds.value.filter((id) => !currentIdsSet.has(id))
+      if (nextIds.length !== selectedIds.value.length) {
+        selectionRev += 1
+        selectedIds.value = nextIds
+        for (const id of currentIdsSet) {
+          coordsById.delete(id)
+        }
       }
     }
   }
@@ -127,16 +159,34 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         const start = Math.min(prevIndex, currentIndex)
         const end = Math.max(prevIndex, currentIndex)
         const rangeSlice = list.slice(start, end + 1)
-        const next = new Set(selectedIds.value)
+        const currentSet = new Set(selectedIds.value)
+        let reachedCap = false
+        const toAdd: T[] = []
         for (const item of rangeSlice) {
           const rId = getItemId(item)
-          next.add(rId)
-          const coords = extractCoords(item)
-          if (coords) {
-            coordsById.set(rId, coords)
+          if (!currentSet.has(rId)) {
+            if (currentSet.size + toAdd.length >= MAX_BULK_TRIAGE_SELECTION) {
+              reachedCap = true
+              break
+            }
+            toAdd.push(item)
           }
         }
-        selectedIds.value = Array.from(next)
+        if (reachedCap) {
+          appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
+        }
+        if (toAdd.length > 0) {
+          selectionRev += 1
+          for (const item of toAdd) {
+            const rId = getItemId(item)
+            currentSet.add(rId)
+            const coords = extractCoords(item)
+            if (coords !== null) {
+              coordsById.set(rId, coords)
+            }
+          }
+          selectedIds.value = Array.from(currentSet)
+        }
       } else {
         toggleSelect(id)
       }
@@ -154,9 +204,17 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   function toggleSelect(id: number): void {
     const next = new Set(selectedIds.value)
     if (next.has(id)) {
+      selectionRev += 1
       next.delete(id)
       coordsById.delete(id)
+      selectedIds.value = Array.from(next)
+      lastClickedId.value = id
     } else {
+      if (next.size >= MAX_BULK_TRIAGE_SELECTION) {
+        appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
+        return
+      }
+      selectionRev += 1
       next.add(id)
       const item = currentItems.value.find((it) => getItemId(it) === id)
       if (item !== undefined) {
@@ -165,12 +223,15 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           coordsById.set(id, coords)
         }
       }
+      selectedIds.value = Array.from(next)
+      lastClickedId.value = id
     }
-    selectedIds.value = Array.from(next)
-    lastClickedId.value = id
   }
 
   function clearSelection(): void {
+    if (selectedIds.value.length > 0) {
+      selectionRev += 1
+    }
     selectedIds.value = []
     lastClickedId.value = null
     coordsById.clear()
@@ -184,10 +245,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     const targetIds = [...selectedIds.value]
     const targetSet = new Set(targetIds)
     const myScopeGen = scopeGen
+    const mySelectionRev = selectionRev
     const myCacheGen = getGeneration()
     const myApplyId = ++activeApplyId
-    const isStale = (): boolean =>
-      scopeGen !== myScopeGen || getGeneration() !== myCacheGen || toValue(caseId) !== cid
 
     isExecuting.value = true
     try {
@@ -196,7 +256,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       // 1. From coordsById for all selected IDs (preserves coords seen on other pages)
       for (const id of targetSet) {
         const coords = coordsById.get(id)
-        if (coords) {
+        if (coords !== undefined) {
           affectedKeys.add(variantKey(coords))
         }
       }
@@ -208,7 +268,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
           const itemId = getItemId(item)
           if (targetSet.has(itemId)) {
             const coords = extractCoords(item)
-            if (coords) {
+            if (coords !== null) {
               coordsById.set(itemId, coords)
               affectedKeys.add(variantKey(coords))
             }
@@ -249,57 +309,84 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       }
 
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
-      if (isStale()) return res.updatedCount
 
+      // If active case changed away from cid, write has committed in storage
+      // but we do not touch the active different case's selection or cache.
+      if (toValue(caseId) !== cid) {
+        return res.updatedCount
+      }
+
+      // cid is currently active (even if scopeGen !== myScopeGen after an A -> B -> A round-trip!)
       evictAnnotationCacheKeys(affectedKeys)
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
       }
-      if (isStale()) return res.updatedCount
 
-      clearSelection()
-      await onTriageApplied?.()
-      if (isStale()) return res.updatedCount
+      // Reload annotations for affected visible rows so active case never serves stale cached data
+      const affectedVisible = currentItems.value
+        .map((item) => {
+          const id = getItemId(item)
+          if (!targetSet.has(id)) return null
+          const coords = extractCoords(item)
+          if (coords === null) return null
+          return { id, ...coords }
+        })
+        .filter(
+          (v): v is { id: number; chr: string; pos: number; ref: string; alt: string } => v !== null
+        )
 
-      // Ensure open panel variant from another page is refreshed in annotationCache
-      const currentPanel = appState?.selectedPanelVariant?.value
-      if (
-        currentPanel !== null &&
-        typeof currentPanel === 'object' &&
-        'id' in currentPanel &&
-        typeof currentPanel.id === 'number' &&
-        'chr' in currentPanel &&
-        'pos' in currentPanel &&
-        'ref' in currentPanel &&
-        'alt' in currentPanel
-      ) {
-        const panelCaseId =
-          'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
-        if (panelCaseId === undefined || panelCaseId === cid) {
-          const pKey = variantKey({
-            chr: String(currentPanel.chr),
-            pos: Number(currentPanel.pos),
-            ref: String(currentPanel.ref),
-            alt: String(currentPanel.alt)
-          })
-          if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
-            await loadAnnotationsBatch(cid, [
-              {
-                id: currentPanel.id,
-                chr: String(currentPanel.chr),
-                pos: Number(currentPanel.pos),
-                ref: String(currentPanel.ref),
-                alt: String(currentPanel.alt)
-              }
-            ])
+      if (affectedVisible.length > 0) {
+        await loadAnnotationsBatch(cid, affectedVisible)
+      }
+
+      // Only perform selection cleanup, onTriageApplied, and panel refresh if in the exact same session
+      const isSameSession =
+        scopeGen === myScopeGen && selectionRev === mySelectionRev && getGeneration() === myCacheGen
+
+      if (isSameSession) {
+        clearSelection()
+        await onTriageApplied?.()
+
+        // Ensure open panel variant from another page is refreshed in annotationCache
+        const currentPanel = appState?.selectedPanelVariant?.value
+        if (
+          currentPanel !== null &&
+          typeof currentPanel === 'object' &&
+          'id' in currentPanel &&
+          typeof currentPanel.id === 'number' &&
+          'chr' in currentPanel &&
+          'pos' in currentPanel &&
+          'ref' in currentPanel &&
+          'alt' in currentPanel
+        ) {
+          const panelCaseId =
+            'case_id' in currentPanel ? (currentPanel as { case_id?: unknown }).case_id : undefined
+          if (panelCaseId === undefined || panelCaseId === cid) {
+            const pKey = variantKey({
+              chr: String(currentPanel.chr),
+              pos: Number(currentPanel.pos),
+              ref: String(currentPanel.ref),
+              alt: String(currentPanel.alt)
+            })
+            if (targetSet.has(currentPanel.id) || !annotationCache.value.has(pKey)) {
+              await loadAnnotationsBatch(cid, [
+                {
+                  id: currentPanel.id,
+                  chr: String(currentPanel.chr),
+                  pos: Number(currentPanel.pos),
+                  ref: String(currentPanel.ref),
+                  alt: String(currentPanel.alt)
+                }
+              ])
+            }
           }
         }
       }
 
       return res.updatedCount
     } catch (error) {
-      if (isStale()) return 0
+      if (toValue(caseId) !== cid) return 0
       const msg = isIpcError(error)
         ? (error.userMessage ?? error.message)
         : error instanceof Error

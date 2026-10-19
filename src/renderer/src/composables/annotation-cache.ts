@@ -277,6 +277,11 @@ export function isCacheOfBuild(build: string | null): boolean {
   return build === null || lastBuild === null || lastBuild === build
 }
 
+/** Currently tracked genome build of the cached annotations. */
+export function getCachedBuild(): string | null {
+  return lastBuild
+}
+
 /**
  * Empty the cache now if it still holds entries of a database that is no
  * longer open. A request does this on its way in; a response that finds the
