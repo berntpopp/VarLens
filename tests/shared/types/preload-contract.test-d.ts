@@ -223,4 +223,3 @@ describe('updater domain — compile-time IpcResult shapes', () => {
     >()
   })
 })
-

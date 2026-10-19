@@ -1,17 +1,9 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import type { UpdateStatus } from '../../../shared/types/api'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { unwrapIpcResult, formatError } from '../utils/ipc-result'
 import { logService } from '../services/LogService'
 import { useApiService } from './useApiService'
-
-function formatError(err: unknown): string {
-  return isIpcError(err)
-    ? (err.userMessage ?? err.message)
-    : err instanceof Error
-      ? err.message
-      : String(err)
-}
 import { useCapabilityStore } from '../stores/capabilityStore'
 
 export interface UseAutoUpdateReturn {

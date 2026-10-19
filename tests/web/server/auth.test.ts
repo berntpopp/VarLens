@@ -48,4 +48,18 @@ describe('resolveDefaultRevocationsPath determinism (#661)', () => {
     const path = resolveDefaultRevocationsPath(env)
     expect(path).toBe(join('/data', 'web-revoked-sessions.json'))
   })
+
+  it('returns /data path even when VARLENS_SESSION_SECRET_HEX is set with various casing/whitespace', () => {
+    expect(
+      resolveDefaultRevocationsPath({
+        VARLENS_SESSION_SECRET_HEX: '0123456789abcdef'
+      } as NodeJS.ProcessEnv)
+    ).toBe(join('/data', 'web-revoked-sessions.json'))
+
+    expect(
+      resolveDefaultRevocationsPath({
+        VARLENS_SESSION_SECRET_HEX: '  ABCDEF0123456789  '
+      } as NodeJS.ProcessEnv)
+    ).toBe(join('/data', 'web-revoked-sessions.json'))
+  })
 })

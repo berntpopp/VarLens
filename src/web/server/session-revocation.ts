@@ -15,8 +15,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join } from 'node:path'
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { tmpdir } from 'node:os'
+import { randomBytes, randomUUID } from 'node:crypto'
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000
 const DEFAULT_MAX_ENTRIES = 50_000
@@ -39,18 +38,6 @@ export function resolveDefaultRevocationsPath(
   }
   if (env.VITEST !== undefined || env.NODE_ENV === 'test') {
     return undefined
-  }
-  if (
-    typeof env.VARLENS_SESSION_SECRET_HEX === 'string' &&
-    env.VARLENS_SESSION_SECRET_HEX.trim() !== ''
-  ) {
-    const seed =
-      env.VARLENS_SESSION_SECRET_HEX ??
-      env.VARLENS_SESSION_SECRET ??
-      env.VARLENS_PG_URL ??
-      process.cwd()
-    const hash = createHash('sha256').update(seed).digest('hex').slice(0, 16)
-    return join(tmpdir(), `varlens-revocations-${hash}.json`)
   }
   return join('/data', REVOKED_SESSIONS_FILENAME)
 }

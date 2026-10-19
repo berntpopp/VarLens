@@ -26,17 +26,15 @@ describe('resolveDefaultRevocationsPath', () => {
     ).toBe(join(dir, 'web-revoked-sessions.json'))
   })
 
-  it('falls back to deterministic tmpdir path when /data is absent and no env set', () => {
+  it('defaults to persistent /data path regardless of VARLENS_SESSION_SECRET_HEX casing/whitespace', () => {
     const path1 = resolveDefaultRevocationsPath({
       VARLENS_SESSION_SECRET_HEX: '0123456789abcdef'
     } as NodeJS.ProcessEnv)
     const path2 = resolveDefaultRevocationsPath({
-      VARLENS_SESSION_SECRET_HEX: '0123456789abcdef'
+      VARLENS_SESSION_SECRET_HEX: '  0123456789ABCDEF  '
     } as NodeJS.ProcessEnv)
-    expect(path1).toBe(path2)
-    expect(path1.startsWith(tmpdir())).toBe(true)
-    expect(path1).toContain('varlens-revocations-')
-    expect(path1.endsWith('.json')).toBe(true)
+    expect(path1).toBe(join('/data', 'web-revoked-sessions.json'))
+    expect(path2).toBe(join('/data', 'web-revoked-sessions.json'))
   })
 
   it('returns undefined in test environment without explicit config', () => {

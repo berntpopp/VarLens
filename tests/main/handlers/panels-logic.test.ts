@@ -37,7 +37,8 @@ describe('panels-logic exports', () => {
   it('routes getPanel through session read executor', async () => {
     const execute = vi.fn().mockImplementation((task) => {
       if (task.type === 'panels:get') return Promise.resolve({ id: 1, name: 'Cardio' })
-      if (task.type === 'panels:getGenes') return Promise.resolve([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
+      if (task.type === 'panels:getGenes')
+        return Promise.resolve([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
       return Promise.resolve(null)
     })
     const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
@@ -55,7 +56,9 @@ describe('panels-logic exports', () => {
     const execute = vi.fn().mockResolvedValue([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
     const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
 
-    await expect(logic.getGenes(1, getSession)).resolves.toEqual([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
+    await expect(logic.getGenes(1, getSession)).resolves.toEqual([
+      { hgncId: 'HGNC:1', symbol: 'TTN' }
+    ])
     expect(execute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [1] })
   })
 

@@ -48,4 +48,22 @@ describe('resolvePanelIntervalsInPlace (#674)', () => {
     )
     expect(computeIntervals).not.toHaveBeenCalled()
   })
+
+  it('looks up case genome_build when not specified on filter and passes it to computeIntervals', () => {
+    const computeIntervals = vi.fn().mockReturnValue([{ chr: '17', start: 1000, end: 2000 }])
+    const getCase = vi.fn().mockReturnValue({ id: 42, genome_build: 'GRCh37' })
+    const repos: PanelResolutionRepositories = {
+      panels: { computeIntervals },
+      cases: { getCase }
+    }
+    const filter: PanelAwareFilter = {
+      active_panel_ids: [5]
+    }
+
+    resolvePanelIntervalsInPlace(filter, repos, dummyGeneRefDb, 42)
+
+    expect(getCase).toHaveBeenCalledWith(42)
+    expect(computeIntervals).toHaveBeenCalledWith([5], 'GRCh37', 5000, dummyGeneRefDb)
+    expect(filter.panel_intervals).toEqual([{ chr: '17', start: 1000, end: 2000 }])
+  })
 })
