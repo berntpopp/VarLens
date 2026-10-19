@@ -12,9 +12,9 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 // prettier-ignore
 import {
   allocateLoadSeq, allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
-  bumpCaseVariantVersion, bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot,
+  beginMutationRpc, bumpCaseVariantVersion, bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot,
   cacheSetPerCaseSlot, cleanupUnloadedPerCaseVariant, computeOptimisticSlot, confirmedBases, confirmedFieldPatches,
-  dropCacheOfClosedDatabase, ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant,
+  dropCacheOfClosedDatabase, endMutationRpc, ensurePerCaseSlotOwner, evictAnnotationCacheKeys, evictPerCaseVariant,
   evictCoordSlotOnly, getAnnotationCacheEpoch, getAnnotationGeneration, getCachedBuild, getCachedVariantId,
   getCaseVariantVersion, getConfirmedWriteVersion, getKeyVersion, getLoadingVariantId, getPerCaseSlotOwner,
   hasDbSwitchedSince, hasInFlightMutationsForCoord, hasLoadedPerCaseByVariantId, hasPerCaseByVariantId,
@@ -119,18 +119,12 @@ async function mutate(
   const mutationId = allocateMutationId()
 
   const list = inFlightMutations.get(slotKey) ?? []
-  list.push({
-    id: mutationId,
-    fieldGroup,
-    writeVer,
-    patch: { ...plan.optimistic, ...slotIdentity(scope) }
-  })
+  // prettier-ignore
+  list.push({ id: mutationId, fieldGroup, writeVer, patch: { ...plan.optimistic, ...slotIdentity(scope) } })
   inFlightMutations.set(slotKey, list)
 
   const optimistic = computeOptimisticSlot(baseSlot ? { ...baseSlot } : null, list)
-  if (!confirmedBases.has(slotKey)) {
-    confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
-  }
+  if (!confirmedBases.has(slotKey)) confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
   if (current) {
     writeSlot(current, scope, optimistic)
     triggerAnnotationCache()
@@ -141,9 +135,11 @@ async function mutate(
     if (siblingOccupied) triggerAnnotationCache()
   }
 
+  beginMutationRpc(slotKey)
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
     const confirmedVer = getConfirmedWriteVersion(key, vSlot)
+    if (epoch === getAnnotationCacheEpoch()) endMutationRpc(slotKey)
     const buildSwitched = scope.build === null && getCachedBuild() !== startBuild
     // prettier-ignore
     if (leftScope(scope, dbPath) || buildSwitched || plan.isStillActive?.() === false || (scope.kind === 'case' && epoch !== getAnnotationCacheEpoch()) || writeVer <= confirmedVer) {
@@ -155,6 +151,8 @@ async function mutate(
           if (scope.kind === 'case' && !hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)) {
             cleanupUnloadedPerCaseVariant(key, scope.caseId, scope.variantId, (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid), confirmedVer === 0)
             if (!annotationCache.value.has(key) && !hasInFlightMutationsForCoord(key)) perCaseSlotOwners.delete(key)
+          } else if (scope.kind === 'global' && !annotationCache.value.has(key) && !hasInFlightMutationsForCoord(key)) {
+            retireWriteVersionsForCoord(key)
           }
         }
       }
@@ -176,25 +174,21 @@ async function mutate(
     const mergedConfirmed = applyConfirmedFieldPatches(slotKey, mergedUpdated)!
     // prettier-ignore
     const finalSlot = remaining && remaining.length > 0 ? computeOptimisticSlot(mergedConfirmed, remaining) : mergedConfirmed
-
     if (scope.kind === 'case') {
       bumpCaseVariantVersion(scope.caseId, scope.variantId)
       setPerCaseByVariantId(scope.caseId, scope.variantId, finalSlot as CaseVariantAnnotation, key)
     }
+    // prettier-ignore
     if (!remaining || remaining.length === 0) {
-      confirmedBases.delete(slotKey)
-      inFlightMutations.delete(slotKey)
-      confirmedFieldPatches.delete(slotKey)
+      confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
       if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
     } else {
       confirmedBases.set(slotKey, mergedConfirmed)
     }
-
     if (scope.kind === 'case' && !isOwner) {
       triggerAnnotationCache()
       return true
     }
-
     const live = annotationCache.value.get(key)
     if (epoch !== getAnnotationCacheEpoch() && !live) return true
     const written = slot
@@ -208,37 +202,37 @@ async function mutate(
     // prettier-ignore
     const hadMutation = epoch === getAnnotationCacheEpoch() && (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false)
     if (epoch === getAnnotationCacheEpoch()) {
+      endMutationRpc(slotKey)
       removeInFlightMutation(slotKey, mutationId)
     }
+    // prettier-ignore
     logService.error(plan.failureMessage + getTransportErrorMessage(error), plan.logSource ?? 'annotations')
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
 
+    // prettier-ignore
     if (hadMutation) {
       const liveTarget = epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined
       const target = liveTarget ?? current
-      // prettier-ignore
       const liveHoldsVariant = scope.kind === 'case' && liveTarget !== undefined &&
         ((liveTarget.perCase != null && liveTarget.perCase.variant_id === scope.variantId && liveTarget.perCase.case_id === scope.caseId) ||
           (liveTarget.perCase == null && getCachedVariantId(key) === scope.variantId))
-      // prettier-ignore
       const targetHoldsVariant = scope.kind !== 'case' || isOwner || liveHoldsVariant ||
         (target?.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId) ||
         (target?.perCase == null && getCachedVariantId(key) === scope.variantId)
       if (confirmedBases.has(slotKey)) {
         const remaining = inFlightMutations.get(slotKey)
         const rawBase = confirmedBases.get(slotKey) ?? null
+        const hadConfirmedPatch = confirmedFieldPatches.has(slotKey)
         const base = applyConfirmedFieldPatches(slotKey, rawBase)
-        // prettier-ignore
         const nextSlot = remaining && remaining.length > 0 ? computeOptimisticSlot(base, remaining) : base ? { ...base } : null
         if (!remaining || remaining.length === 0) {
           confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
           if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
         }
-        // prettier-ignore
         if (scope.kind === 'case') {
           const hasLoaded = hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)
-          if ((!remaining || remaining.length === 0) && !hasLoaded && (nextSlot === null || (current !== undefined && !liveTarget))) {
+          if ((!remaining || remaining.length === 0) && !hasLoaded && !hadConfirmedPatch) {
             cleanupUnloadedPerCaseVariant(key, scope.caseId, scope.variantId, (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid))
             if (!liveTarget && !hasInFlightMutationsForCoord(key)) perCaseSlotOwners.delete(key)
           } else {
@@ -249,7 +243,6 @@ async function mutate(
           retireWriteVersionsForCoord(key)
         }
         if (target && targetHoldsVariant) {
-          // prettier-ignore
           const canWriteTarget = scope.kind !== 'case' || (current !== undefined
             ? (target.perCase == null && (getCachedVariantId(key) === undefined || getCachedVariantId(key) === scope.variantId)) ||
               (target.perCase != null && target.perCase.variant_id === scope.variantId && target.perCase.case_id === scope.caseId)
@@ -260,8 +253,7 @@ async function mutate(
             else rollBackSlot(target, scope, plan.rollback, null)
           }
         }
-      } else if (current !== undefined) {
-        // prettier-ignore
+      } else {
         if (scope.kind === 'case') {
           const hasLoaded = hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)
           if (!hasLoaded && !liveHoldsVariant) {
@@ -274,10 +266,12 @@ async function mutate(
         } else if (!liveTarget && !hasInFlightMutationsForCoord(key)) {
           retireWriteVersionsForCoord(key)
         }
-        if (target && targetHoldsVariant) {
-          rollBackSlot(target, scope, plan.rollback, baseSlot)
-        }
+        if (current !== undefined && target && targetHoldsVariant) rollBackSlot(target, scope, plan.rollback, baseSlot)
       }
+    } else if (epoch === getAnnotationCacheEpoch() && scope.kind === 'case' && !hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId) && !inFlightMutations.has(slotKey)) {
+      cleanupUnloadedPerCaseVariant(key, scope.caseId, scope.variantId, (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid), getConfirmedWriteVersion(key, vSlot) === 0)
+    } else if (epoch === getAnnotationCacheEpoch() && scope.kind === 'global' && !annotationCache.value.has(key) && !hasInFlightMutationsForCoord(key)) {
+      retireWriteVersionsForCoord(key)
     }
     triggerAnnotationCache()
     return false
@@ -290,12 +284,19 @@ async function fetchEntry(client: WindowAPI, scope: AnnotationLoadScope, { chr, 
     if (typeof scope.variantId === 'number' && typeof client.annotations.batchGet === 'function') {
       const batchRes = await client.annotations.batchGet(scope.caseId, [{ chr, pos, ref, alt, variantId: scope.variantId }], null)
       if (batchRes !== undefined) {
-        const map = unwrapIpcResult(batchRes)
+        const map = unwrapIpcResult(batchRes) as Record<string, AnnotationCache & { perCaseByVariantId?: Record<number, CaseVariantAnnotation | null> }>
         const k = variantKey({ chr, pos, ref, alt })
-        if (k in map) return map[k] as AnnotationCache
+        if (k in map) {
+          const raw = map[k]
+          if (raw.perCaseByVariantId !== undefined && scope.variantId in raw.perCaseByVariantId) {
+            return { global: raw.global, perCase: raw.perCaseByVariantId[scope.variantId] ?? null }
+          }
+          return raw
+        }
       }
     }
-    return unwrapIpcResult(await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt))
+    const singleRes = typeof client.annotations.getForVariant === 'function' ? await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt) : undefined
+    return singleRes !== undefined ? unwrapIpcResult(singleRes) : { global: null, perCase: null }
   }
   if (scope.build === null) return { global: null, perCase: null }
   const global = unwrapIpcResult(await client.annotations.getGlobal(chr, pos, ref, alt, scope.build))

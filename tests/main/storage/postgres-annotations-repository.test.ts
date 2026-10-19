@@ -1458,14 +1458,24 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
     await seedSummaryRow('6', 601, 'C', 'T')
 
     const poolB = new Pool({ connectionString: PG_URL, max: 2 })
+    const monitor = new Client({ connectionString: PG_URL })
+    await monitor.connect()
+    const waitForAdvisoryWaiters = async (minWaiters: number): Promise<void> => {
+      for (let i = 0; i < 200; i++) {
+        const res = await pool.query<{ waiting: number }>(
+          `SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`
+        )
+        if ((res.rows[0]?.waiting ?? 0) >= minWaiters) return
+        await new Promise((r) => setTimeout(r, 10))
+      }
+      throw new Error(`Timed out waiting for >= ${minWaiters} advisory lock waiters`)
+    }
     try {
       const repoA = new PostgresAnnotationsRepository(pool, schema)
       const repoB = new PostgresAnnotationsRepository(poolB, schema)
 
       // 1. Cross-pool first-insert race: repoA inserts PVS1 + Pathogenic while repoB
       // concurrently tries to set Benign without override_reason on the same unannotated target.
-      // Hold the per-target advisory lock from probe first so both repoA and repoB enter their
-      // transactions and queue behind pg_advisory_xact_lock, then release it.
       await probe.query('BEGIN')
       await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
         schema,
@@ -1480,40 +1490,50 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
         }),
         user_name: 'analyst-a'
       })
-      // Let repoA wait on the advisory lock first, then start repoB
-      await new Promise((r) => setTimeout(r, 30))
+      await waitForAdvisoryWaiters(1)
+
       const pWriteB = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
         acmg_classification: 'Benign',
         user_name: 'analyst-b'
       })
-      await new Promise((r) => setTimeout(r, 30))
+      await waitForAdvisoryWaiters(2)
 
-      // Release probe's lock so repoA commits first, then repoB wakes up with a fresh snapshot
       await probe.query('COMMIT')
 
       await expect(pWriteA).resolves.toBeDefined()
       await expect(pWriteB).rejects.toBeInstanceOf(InvalidParametersError)
 
-      // 2. Cross-pool batch vs single-row under summary-lock contention: must not deadlock
+      // 2. Cross-pool batch vs single-row under summary-lock + target-lock contention
+      await monitor.query('BEGIN')
+      await monitor.query(
+        `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext('varlens-summary-publish'))`,
+        [schema]
+      )
       await probe.query('BEGIN')
       await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
         schema,
-        'cohort_summary_write'
+        `case:${caseA}:${v1}`
       ])
 
       const pBatch = repoA.batchUpsertPerCaseAnnotationWithAudit(caseA, [v2, v1], {
         starred: true,
         user_name: 'analyst-a'
       })
+      await waitForAdvisoryWaiters(1)
+
       const pSingle = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        starred: false,
         per_case_comment: 'concurrent comment',
         user_name: 'analyst-b'
       })
-      await new Promise((r) => setTimeout(r, 30))
+      await waitForAdvisoryWaiters(2)
+
+      await monitor.query('COMMIT')
       await probe.query('COMMIT')
 
       await expect(Promise.all([pBatch, pSingle])).resolves.toBeDefined()
     } finally {
+      await monitor.end().catch(() => {})
       await poolB.end()
     }
   }, 60_000)

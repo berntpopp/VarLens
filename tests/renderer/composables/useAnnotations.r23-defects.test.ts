@@ -21,10 +21,12 @@ import {
   ensurePerCaseSlotOwner,
   evictAnnotationCacheKeys,
   evictAnnotationCacheKeysForBulkTriage,
+  getCaseVariantVersion,
   getConfirmedWriteVersion,
   getPerCaseByVariantId,
   getWriteVersion,
   inFlightMutations,
+  perCaseByVariantId,
   perCaseSlotKey,
   perCaseVersionSlot,
   resetAnnotationState,
@@ -712,6 +714,64 @@ describe('Round 23 regression defects', () => {
       // Sibling 12 is also present
       expect(getPerCaseByVariantId(1, 12, key)?.variant_id).toBe(12)
       expect(getPerCaseByVariantId(1, 12, key)?.acmg_classification).toBe('Benign')
+    })
+
+    it('Round 34 Defect 1: eviction after newer save resolves does not let older in-flight save overwrite cache and retires versions once older save settles', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      const scope = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+
+      const dSave1 = defer<CaseVariantAnnotation>()
+      const dSave2 = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase)
+        .mockReturnValueOnce(dSave1.promise as never)
+        .mockReturnValueOnce(dSave2.promise as never)
+
+      const p1 = ops.setAcmgClassification(scope, coords, 'Pathogenic')
+      const p2 = ops.setAcmgClassification(scope, coords, 'Benign')
+
+      // Newer Save 2 resolves first
+      dSave2.resolve(mockPerCase(11, { acmg_classification: 'Benign' }))
+      await p2
+      expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Benign')
+
+      // Eviction happens while older Save 1 is still awaiting RPC
+      evictAnnotationCacheKeys([key])
+      expect(annotationCache.value.has(key)).toBe(false)
+
+      // Older Save 1 resolves late — must NOT repopulate cache with stale 'Pathogenic'
+      dSave1.resolve(mockPerCase(11, { acmg_classification: 'Pathogenic' }))
+      await p1
+      expect(annotationCache.value.has(key)).toBe(false)
+      expect(getPerCaseByVariantId(1, 11, key)).toBeUndefined()
+      expect(getConfirmedWriteVersion(key, perCaseVersionSlot(1, 11, 'acmg'))).toBe(0)
+      expect(getWriteVersion(key, perCaseVersionSlot(1, 11, 'acmg'))).toBe(0)
+    })
+
+    it('Round 34 Defect 3: eviction-then-failed-save on cached sibling cleans up perCaseByVariantId and version tracking', async () => {
+      beginAnnotationRequest(1, 'GRCh38')
+      // Sibling 12 owns annotationCache slot; sibling 11 has a cached row in perCaseByVariantId
+      cacheSet(key, { global: null, perCase: mockPerCase(12, { starred: 1 }) })
+      ensurePerCaseSlotOwner(key, 1, 12)
+      setPerCaseByVariantId(1, 11, mockPerCase(11, { starred: 0, per_case_comment: 'old' }), key)
+
+      const ops = createScopedAnnotationOps(api, () => undefined)
+      const scope11 = { kind: 'case' as const, caseId: 1, variantId: 11, build: 'GRCh38' }
+
+      const dComment = defer<CaseVariantAnnotation>()
+      vi.mocked(api.annotations.upsertPerCase).mockReturnValueOnce(dComment.promise as never)
+      const pComment = ops.upsertComment(scope11, coords, 'new')
+
+      // Evict coordinate while sibling 11's save is in flight
+      evictAnnotationCacheKeys([key])
+
+      // Sibling 11's save rejects
+      dComment.reject(new Error('IPC error'))
+      expect(await pComment).toBe(false)
+
+      expect(perCaseByVariantId.has('1:11')).toBe(false)
+      expect(getCaseVariantVersion(1, 11)).toBe(0)
+      expect(getWriteVersion(key, perCaseVersionSlot(1, 11, 'comment'))).toBe(0)
     })
   })
 })

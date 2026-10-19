@@ -2,10 +2,6 @@ export function quoteIdentifier(identifier: string): string {
   return `"${identifier.split('"').join('""')}"`
 }
 
-export function quoteLiteral(value: string): string {
-  return `'${value.split("'").join("''")}'`
-}
-
 export function toNumber(value: unknown): number {
   if (typeof value === 'number') return value
   if (typeof value === 'bigint') return Number(value)

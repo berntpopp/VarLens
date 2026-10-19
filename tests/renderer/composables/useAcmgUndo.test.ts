@@ -118,4 +118,74 @@ describe('useAcmgUndo', () => {
     await acmg.setAcmgClassification(1, 2, 'chrX', 9, 'G', 'A', 'Benign')
     expect(snacks).toHaveLength(0)
   })
+
+  it('does not leak sibling classification into Undo when classifying an unannotated sibling at the same coordinate', async () => {
+    const {
+      resetAnnotationState,
+      beginAnnotationRequest,
+      cacheSet,
+      ensurePerCaseSlotOwner,
+      setPerCaseByVariantId
+    } = await import('../../../src/renderer/src/composables/annotation-cache')
+    resetAnnotationState()
+    beginAnnotationRequest(1, 'GRCh38')
+    const key = 'chr1:100:A:G'
+    const sibling11 = {
+      id: 1,
+      case_id: 1,
+      variant_id: 11,
+      starred: 0,
+      acmg_classification: 'Pathogenic' as const,
+      acmg_evidence: '{"pathogenic":["PVS1"]}',
+      per_case_comment: null,
+      created_at: 0,
+      updated_at: 0
+    }
+    cacheSet(key, { global: null, perCase: sibling11 })
+    ensurePerCaseSlotOwner(key, 1, 11)
+    setPerCaseByVariantId(1, 11, sibling11, key)
+
+    // Coordinate getter returns sibling 11's Pathogenic, while loadAnnotations populates null for sibling 12
+    annotations.getAcmgClassification.mockReturnValue('Pathogenic')
+    annotations.getAcmgEvidence.mockReturnValue('{"pathogenic":["PVS1"]}')
+    ;(annotations as Record<string, unknown>).loadAnnotations = vi.fn(
+      async (
+        caseId: number,
+        _chr: string,
+        _pos: number,
+        _ref: string,
+        _alt: string,
+        vid?: number
+      ) => {
+        if (vid === 12) setPerCaseByVariantId(caseId, 12, null, key)
+      }
+    )
+
+    const { acmg, snacks } = mountWithSnack()
+    await acmg.setAcmgClassification(1, 12, 'chr1', 100, 'A', 'G', 'Benign')
+
+    expect((annotations as Record<string, unknown>).loadAnnotations).toHaveBeenCalledWith(
+      1,
+      'chr1',
+      100,
+      'A',
+      'G',
+      12
+    )
+    expect(snacks).toHaveLength(1)
+    snacks[0][2]!.action!.callback()
+    await Promise.resolve()
+
+    expect(annotations.setAcmgClassification).toHaveBeenLastCalledWith(
+      1,
+      12,
+      'chr1',
+      100,
+      'A',
+      'G',
+      null
+    )
+    delete (annotations as Record<string, unknown>).loadAnnotations
+    resetAnnotationState()
+  })
 })
