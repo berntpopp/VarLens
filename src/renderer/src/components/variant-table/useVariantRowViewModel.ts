@@ -78,7 +78,7 @@ export function buildRowViewModels(
     const key = v.id
     const coordKey = variantKey(v.chr, v.pos, v.ref, v.alt)
     const ann = annotationCache.get(coordKey)
-    const perCase =
+    const perCase: AnnotationEntry['perCase'] =
       isSharedCache &&
       typeof v.case_id === 'number' &&
       typeof v.id === 'number' &&

@@ -628,7 +628,10 @@ describe('Round 20 regression defects', () => {
     const p11Old = ops.load({ kind: 'case', caseId: 1, variantId: 11, build: 'GRCh38' }, coords)
     const p12 = ops.load({ kind: 'case', caseId: 1, variantId: 12, build: 'GRCh38' }, coords)
     d12.resolve({
-      [key]: { global: null, perCase: mockPerCase(12, { acmg_classification: 'Uncertain significance' }) }
+      [key]: {
+        global: null,
+        perCase: mockPerCase(12, { acmg_classification: 'Uncertain significance' })
+      }
     })
     await p12
 
@@ -665,10 +668,9 @@ describe('Round 20 regression defects', () => {
     )
 
     const ops = createScopedAnnotationOps(api, () => undefined)
-    const pBatch = ops.loadBatch(
-      { kind: 'case', caseId: 1, build: 'GRCh38' },
-      [{ ...coords, id: 12 }]
-    )
+    const pBatch = ops.loadBatch({ kind: 'case', caseId: 1, build: 'GRCh38' }, [
+      { ...coords, id: 12 }
+    ])
 
     // Non-owner sibling 12 saves while loadBatch is in flight
     await ops.setAcmgClassification(

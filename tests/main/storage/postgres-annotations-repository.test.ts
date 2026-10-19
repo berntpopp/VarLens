@@ -1273,4 +1273,62 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
     )
     expect(after.rows[0].has_star).toBe(false)
   }, 60_000)
+
+  it('batchUpsertPerCaseAnnotationWithAudit rolls back annotations, tags, audit log, and cohort summary on mid-batch failure (#681)', async () => {
+    const caseA = await seedCase('case-batch-atomic')
+    const v1 = await seedVariant({
+      caseId: caseA,
+      chr: '5',
+      pos: 500,
+      ref: 'A',
+      alt: 'G',
+      gtNum: '0/1'
+    })
+    const v2 = await seedVariant({
+      caseId: caseA,
+      chr: '5',
+      pos: 501,
+      ref: 'C',
+      alt: 'T',
+      gtNum: '0/1'
+    })
+    await seedSummaryRow('5', 500, 'A', 'G')
+    await seedSummaryRow('5', 501, 'C', 'T')
+
+    const repo = new PostgresAnnotationsRepository(pool, schema)
+
+    // Non-existent tag_id triggers a FK constraint failure in variant_tags
+    // after case_variant_annotations, varlens_audit.audit_log, and cohort_variant_summary
+    // have already been mutated inside the transaction.
+    await expect(
+      repo.batchUpsertPerCaseAnnotationWithAudit(caseA, [v1, v2], {
+        starred: true,
+        acmg_classification: 'Pathogenic',
+        tag_id: 999_999,
+        user_name: 'analyst'
+      })
+    ).rejects.toThrow()
+
+    const annos = await probe.query(
+      `SELECT 1 FROM "${schema}".case_variant_annotations WHERE case_id = $1`,
+      [caseA]
+    )
+    expect(annos.rows).toHaveLength(0)
+
+    const tags = await probe.query(`SELECT 1 FROM "${schema}".variant_tags WHERE case_id = $1`, [
+      caseA
+    ])
+    expect(tags.rows).toHaveLength(0)
+
+    const audits = await probe.query(
+      `SELECT 1 FROM varlens_audit."audit_log" WHERE project_schema = $1`,
+      [schema]
+    )
+    expect(audits.rows).toHaveLength(0)
+
+    const summaries = await probe.query<{ has_star: boolean }>(
+      `SELECT has_star FROM "${schema}".cohort_variant_summary WHERE chr = '5' AND pos IN (500, 501)`
+    )
+    expect(summaries.rows).toEqual([{ has_star: false }, { has_star: false }])
+  }, 60_000)
 })

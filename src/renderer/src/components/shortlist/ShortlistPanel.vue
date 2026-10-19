@@ -38,20 +38,21 @@ import { useAnnotations } from '../../composables/useAnnotations'
 import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
-import type { CaseVariantAnnotation } from '../../../../shared/types/database-entities'
-import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
-// prettier-ignore
 import {
-  allocateMutationId, annotationCache, applyConfirmedFieldPatches, bumpCaseVariantVersion,
-  bumpKeyVersion, bumpWriteVersion, cacheSet, computeOptimisticSlot, confirmedBases,
-  confirmedFieldPatches, ensurePerCaseSlotOwner, evictCoordSlotOnly, evictPerCaseVariant,
-  getAnnotationCacheEpoch, getCachedBuild, getCachedCaseId, getCachedVariantId,
-  getConfirmedWriteVersion, getCurrentDbPath, getPerCaseByVariantId, getPerCaseSlotOwner,
-  getWriteVersion, hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild,
-  isPerCaseSlotOwner, markAwaited, perCaseSlotKey, perCaseVersionSlot,
-  pruneInFlightMutationsOnSuccess, removeInFlightMutation, setCachedVariantId,
-  setConfirmedFieldPatch, setConfirmedWriteVersion, setPerCaseByVariantId,
-  triggerAnnotationCache, unloadedSlotOf, variantKey
+  annotationCache,
+  cacheSet,
+  ensurePerCaseSlotOwner,
+  evictCoordSlotOnly,
+  evictPerCaseVariant,
+  getCachedVariantId,
+  getPerCaseByVariantId,
+  hasLoadedPerCaseByVariantId,
+  inFlightMutations,
+  markAwaited,
+  perCaseSlotKey,
+  setCachedVariantId,
+  unloadedSlotOf,
+  variantKey
 } from '../../composables/annotation-cache'
 import { usePermissions } from '../../composables/usePermissions'
 import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
@@ -123,11 +124,9 @@ const shortlistExplanation = computed(() => {
   )
 })
 
-const pendingStarByRow = new Map<string, { target: boolean; token: number; writeVer: number }>()
-
 /**
  * Toggle the star annotation for a row. Writes through
- * `annotations.upsertPerCase` and relies on the
+ * `annotations.toggleStar` (`annotations.upsertPerCase`) and relies on the
  * `variants:annotationChanged` broadcast to drive the refetch — no
  * manual `refresh()` call here.
  */
@@ -136,164 +135,13 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
     logService.warn('toggle star skipped: API unavailable', 'shortlist.panel')
     return
   }
-  const dbPath = getCurrentDbPath()
-  const epoch = getAnnotationCacheEpoch()
-  const build = getCachedBuild()
-  const key = variantKey(row)
-  const rowKey = `${row.case_id}:${row.id}`
-  const vSlot = perCaseVersionSlot(row.case_id, row.id, 'star')
-  const cachedPerCase = getPerCaseByVariantId(row.case_id, row.id, key)
-  const pending = pendingStarByRow.get(rowKey)
-  const currentStarred =
-    pending !== undefined && getWriteVersion(key, vSlot) === pending.writeVer
-      ? pending.target
-      : cachedPerCase &&
-          cachedPerCase.variant_id === row.id &&
-          cachedPerCase.case_id === row.case_id
-        ? cachedPerCase.starred === 1
-        : row.is_starred
-  const nextStarred = !currentStarred
-  const rawCur = annotationCache.value.get(key)
-  const pc = rawCur?.perCase
-  const cVid = getCachedVariantId(key)
-  const sOwn = getPerCaseSlotOwner(key)
-  // prettier-ignore
-  const siblingOccupied =
-    (pc != null && (pc.variant_id !== row.id || pc.case_id !== row.case_id)) ||
-    (pc === null && ((cVid !== undefined && cVid !== row.id) || (sOwn !== undefined && (sOwn.variantId !== row.id || sOwn.caseId !== row.case_id))))
-  if (!siblingOccupied) ensurePerCaseSlotOwner(key, row.case_id, row.id)
-  const writeVer = bumpWriteVersion(key, vSlot)
-  bumpCaseVariantVersion(row.case_id, row.id)
-  const toggleToken = allocateMutationId()
-  pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
-  const slotKey = perCaseSlotKey(row.case_id, row.id, key)
-  const inFlightList = inFlightMutations.get(slotKey) ?? []
-  inFlightList.push({
-    id: toggleToken,
-    fieldGroup: 'star',
-    writeVer,
-    patch: { starred: nextStarred ? 1 : 0, case_id: row.case_id, variant_id: row.id }
-  })
-  inFlightMutations.set(slotKey, inFlightList)
-
-  try {
-    const updated = unwrapIpcResult(
-      await api.annotations.upsertPerCase(row.case_id, row.id, {
-        starred: nextStarred
-      })
-    )
-    const activeCaseId = appState?.selectedCaseId?.value
-    const confirmedVer = getConfirmedWriteVersion(key, vSlot)
-    const stillOnScope =
-      !hasDbSwitchedSince(dbPath) &&
+  await annotations.toggleStar(row.case_id, row.id, row.chr, row.pos, row.ref, row.alt, {
+    initialStarred: row.is_starred,
+    logSource: 'shortlist.panel',
+    isStillActive: () =>
       props.caseId === row.case_id &&
-      (activeCaseId == null || activeCaseId === row.case_id) &&
-      getAnnotationCacheEpoch() === epoch &&
-      getCachedBuild() === build &&
-      (getCachedCaseId() === null || getCachedCaseId() === row.case_id) &&
-      writeVer > confirmedVer
-    if (stillOnScope) {
-      setConfirmedWriteVersion(key, vSlot, writeVer)
-      setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
-      pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
-      const isOwner = isPerCaseSlotOwner(key, row.case_id, row.id)
-      if (isOwner) {
-        setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
-        pruneInFlightMutationsOnSuccess(`perCase:${key}`, 'star', writeVer)
-      }
-      const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
-      const remaining = inFlightMutations.get(slotKey)
-      if (remaining && remaining.length > 0) {
-        confirmedBases.set(slotKey, merged)
-      } else {
-        confirmedBases.delete(slotKey)
-        confirmedFieldPatches.delete(slotKey)
-        if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
-      }
-      const finalSlot =
-        remaining && remaining.length > 0
-          ? (computeOptimisticSlot(merged, remaining) as CaseVariantAnnotation)
-          : merged
-      bumpCaseVariantVersion(row.case_id, row.id)
-      setPerCaseByVariantId(row.case_id, row.id, finalSlot, key)
-      if (isOwner) {
-        const liveEntry = annotationCache.value.get(key)
-        const liveUnloaded = unloadedSlotOf(key)
-        bumpKeyVersion(key)
-        cacheSet(
-          key,
-          { global: liveEntry?.global ?? null, perCase: finalSlot },
-          liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
-        )
-      } else {
-        triggerAnnotationCache()
-      }
-    } else {
-      if (epoch === getAnnotationCacheEpoch()) {
-        removeInFlightMutation(slotKey, toggleToken)
-      }
-    }
-  } catch (e) {
-    const sameScope =
-      !hasDbSwitchedSince(dbPath) &&
-      getAnnotationCacheEpoch() === epoch &&
-      isCacheOfBuild(build) &&
-      (getCachedCaseId() === null || getCachedCaseId() === row.case_id)
-    const hadMutation =
-      epoch === getAnnotationCacheEpoch() &&
-      (inFlightMutations.get(slotKey)?.some((m) => m.id === toggleToken) ?? false)
-    if (epoch === getAnnotationCacheEpoch()) {
-      removeInFlightMutation(slotKey, toggleToken)
-    }
-    if (sameScope && hadMutation && confirmedBases.has(slotKey)) {
-      const base = applyConfirmedFieldPatches(
-        slotKey,
-        confirmedBases.has(slotKey) ? (confirmedBases.get(slotKey) ?? null) : null
-      )
-      const remaining = inFlightMutations.get(slotKey)
-      const rolledBack = (remaining && remaining.length > 0
-        ? computeOptimisticSlot(base, remaining)
-        : base) as CaseVariantAnnotation | null
-      bumpCaseVariantVersion(row.case_id, row.id)
-      setPerCaseByVariantId(row.case_id, row.id, rolledBack, key)
-      const isOwner = isPerCaseSlotOwner(key, row.case_id, row.id)
-      const liveEntry = annotationCache.value.get(key)
-      const holdsVariant =
-        isOwner ||
-        (liveEntry?.perCase != null &&
-          liveEntry.perCase.variant_id === row.id &&
-          liveEntry.perCase.case_id === row.case_id)
-      if (holdsVariant) {
-        const liveUnloaded = unloadedSlotOf(key)
-        bumpKeyVersion(key)
-        cacheSet(
-          key,
-          { global: liveEntry?.global ?? null, perCase: rolledBack },
-          liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
-        )
-      } else {
-        triggerAnnotationCache()
-      }
-      if (!remaining || remaining.length === 0) {
-        confirmedBases.delete(slotKey)
-        confirmedFieldPatches.delete(slotKey)
-        if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
-      }
-    }
-    logService.error(
-      `toggle star failed: ${
-        e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      }`,
-      'shortlist.panel'
-    )
-  } finally {
-    if (epoch === getAnnotationCacheEpoch()) {
-      removeInFlightMutation(slotKey, toggleToken)
-    }
-    if (pendingStarByRow.get(rowKey)?.token === toggleToken) {
-      pendingStarByRow.delete(rowKey)
-    }
-  }
+      (appState?.selectedCaseId?.value == null || appState.selectedCaseId.value === row.case_id)
+  })
 }
 
 let dialogOpenSeq = 0
@@ -302,10 +150,13 @@ function isRowAnnotationVerified(row: ShortlistRow): boolean {
   const key = variantKey(row)
   const cached = annotationCache.value.get(key)
   if (cached === undefined || unloadedSlotOf(key) === 'global') return false
-  if (hasPerCaseByVariantId(row.case_id, row.id)) {
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
     const pc = getPerCaseByVariantId(row.case_id, row.id, key)
-    return pc === null || (pc !== undefined && pc.variant_id === row.id && pc.case_id === row.case_id)
+    return (
+      pc === null || (pc !== undefined && pc.variant_id === row.id && pc.case_id === row.case_id)
+    )
   }
+  if (inFlightMutations.has(perCaseSlotKey(row.case_id, row.id, key))) return false
   const cachedVid = getCachedVariantId(key)
   return (
     unloadedSlotOf(key) === undefined &&
@@ -337,7 +188,7 @@ async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
     appState?.showSnack('Failed to load variant annotations.', 'error')
     return false
   }
-  if (hasPerCaseByVariantId(row.case_id, row.id)) {
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
     const pc = getPerCaseByVariantId(row.case_id, row.id, key) ?? null
     const existing = annotationCache.value.get(key)
     ensurePerCaseSlotOwner(key, row.case_id, row.id)

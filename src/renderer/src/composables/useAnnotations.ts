@@ -176,11 +176,13 @@ function bindStarsAndComments(ops: ScopedOps, build: () => string | null) {
     chr: string,
     pos: number,
     ref: string,
-    alt: string
+    alt: string,
+    opts?: import('./annotation-cache').ToggleStarOptions
   ): Promise<boolean> {
     return ops.toggleStar(
       { kind: 'case', caseId, variantId, build: build() },
-      coordsOf(chr, pos, ref, alt)
+      coordsOf(chr, pos, ref, alt),
+      opts
     )
   }
 

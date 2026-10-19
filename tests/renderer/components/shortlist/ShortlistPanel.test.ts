@@ -617,12 +617,7 @@ describe('ShortlistPanel', () => {
 
   it('prepareRowDialog shows error snackbar and refuses to open dialog if row annotations cannot be verified', async () => {
     const row = minimalRow({ id: 101, case_id: 7, is_starred: true })
-    state.result.value = {
-      rows: [row],
-      totalCandidates: 1,
-      presetUsed: null,
-      elapsedMs: 10
-    }
+    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
     batchGetMock.mockRejectedValueOnce(new Error('Network error'))
 
     const showSnackSpy = vi.fn()
@@ -645,78 +640,40 @@ describe('ShortlistPanel', () => {
 
   it('bulk triage bumping star write version cancels in-flight single toggle and allows next toggle from actual state', async () => {
     const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
-    state.result.value = {
-      rows: [row],
-      totalCandidates: 1,
-      presetUsed: null,
-      elapsedMs: 10
-    }
+    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
     const wrapper = mountPanel({ caseId: 7 })
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     const key = variantKey(row)
 
     let resolveSingleStar!: (val: unknown) => void
-    const singleStarPromise = new Promise((resolve) => {
-      resolveSingleStar = resolve
-    })
-    upsertPerCaseMock.mockImplementationOnce(() => singleStarPromise)
+    upsertPerCaseMock.mockImplementationOnce(() => new Promise((r) => (resolveSingleStar = r)))
 
-    // 1. Single toggle clicked (pending star in flight)
     await table.vm.$emit('toggle-star', row)
-
-    // 2. Bulk triage runs while single toggle is in flight, bumping and confirming write version
     const bulkVer = bumpWriteVersion(key, 'perCase:star')
     setConfirmedWriteVersion(key, 'perCase:star', bulkVer)
 
-    // 3. Single toggle resolves
-    resolveSingleStar({
-      id: 1,
-      case_id: 7,
-      variant_id: 42,
-      starred: 1,
-      per_case_comment: null,
-      acmg_classification: null,
-      acmg_evidence: null,
-      created_at: 0,
-      updated_at: 0
-    })
+    const mkAnno = (id: number, starred: 0 | 1) =>
+      ({ id, case_id: 7, variant_id: 42, starred }) as CaseVariantAnnotation
+    resolveSingleStar(mkAnno(1, 1))
     await flushPromises()
 
-    // 4. Next toggle click should not use stale inverted target
-    upsertPerCaseMock.mockImplementationOnce(async () => ({
-      id: 2,
-      case_id: 7,
-      variant_id: 42,
-      starred: 1,
-      per_case_comment: null,
-      acmg_classification: null,
-      acmg_evidence: null,
-      created_at: 0,
-      updated_at: 0
-    }))
+    upsertPerCaseMock.mockImplementationOnce(async () => mkAnno(2, 1))
     await table.vm.$emit('toggle-star', row)
     await flushPromises()
 
-    // It requested starred = true based on actual state, not stale inverted pending
     expect(upsertPerCaseMock).toHaveBeenLastCalledWith(7, 42, { starred: true })
   })
 
   it('prunes superseded in-flight star mutation on successful toggle-star in ShortlistPanel', async () => {
     const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
-    state.result.value = {
-      rows: [row],
-      totalCandidates: 1,
-      presetUsed: null,
-      elapsedMs: 10
-    }
+    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
     const wrapper = mountPanel({ caseId: 7 })
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ShortlistTable' })
     const key = variantKey(row)
     const slotKey = `perCase:${key}`
 
-    // Seed an in-flight star mutation from an earlier toggle (writeVer 1)
     const writeVer1 = bumpWriteVersion(key, 'perCase:star')
     inFlightMutations.set(slotKey, [
       { id: 99, fieldGroup: 'star', writeVer: writeVer1, patch: { starred: 1 } }
@@ -724,32 +681,14 @@ describe('ShortlistPanel', () => {
     confirmedBases.set(slotKey, { starred: 0 } as never)
 
     let resolveStar!: (val: unknown) => void
-    upsertPerCaseMock.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveStar = resolve
-        })
-    )
+    upsertPerCaseMock.mockImplementationOnce(() => new Promise((r) => (resolveStar = r)))
 
-    // Trigger toggle from ShortlistPanel (writeVer > writeVer1)
     await table.vm.$emit('toggle-star', row)
     expect(inFlightMutations.get(slotKey)?.length).toBe(1)
 
-    // Toggle resolves
-    resolveStar({
-      id: 1,
-      case_id: 7,
-      variant_id: 42,
-      starred: 1,
-      per_case_comment: null,
-      acmg_classification: null,
-      acmg_evidence: null,
-      created_at: 0,
-      updated_at: 0
-    })
+    resolveStar({ id: 1, case_id: 7, variant_id: 42, starred: 1 } as CaseVariantAnnotation)
     await flushPromises()
 
-    // The superseded in-flight mutation is pruned and confirmedBases deleted
     expect(inFlightMutations.has(slotKey)).toBe(false)
     expect(confirmedBases.has(slotKey)).toBe(false)
     expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
@@ -786,5 +725,65 @@ describe('ShortlistPanel', () => {
 
     expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Pathogenic')
     expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+  })
+
+  it('prepareRowDialog loads missing per-case fields when global-only entry has an unconfirmed pending mutation', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    cacheSet(key, { global: null, perCase: null }, 'perCase')
+    let resolveComment!: (val: unknown) => void
+    upsertPerCaseMock.mockImplementationOnce(() => new Promise((r) => (resolveComment = r)))
+    const pendingWrite = useAnnotations().upsertPerCaseComment(
+      7,
+      42,
+      row.chr,
+      row.pos,
+      row.ref,
+      row.alt,
+      'draft comment'
+    )
+
+    batchGetMock.mockClear().mockResolvedValueOnce({
+      [key]: {
+        global: null,
+        perCase: {
+          id: 10,
+          case_id: 7,
+          variant_id: 42,
+          starred: 1,
+          per_case_comment: 'server comment',
+          acmg_classification: 'Pathogenic',
+          acmg_evidence: '{"codes":["PVS1"]}',
+          created_at: 0,
+          updated_at: 0
+        }
+      }
+    })
+
+    await table.vm.$emit('acmg-click', row)
+    await flushPromises()
+
+    expect(batchGetMock).toHaveBeenCalledTimes(1)
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Pathogenic')
+    expect(annotationCache.value.get(key)?.perCase?.acmg_evidence).toBe('{"codes":["PVS1"]}')
+    expect(annotationCache.value.get(key)?.perCase?.per_case_comment).toBe('draft comment')
+
+    resolveComment({
+      id: 10,
+      case_id: 7,
+      variant_id: 42,
+      starred: 1,
+      per_case_comment: 'draft comment',
+      acmg_classification: 'Pathogenic',
+      acmg_evidence: '{"codes":["PVS1"]}',
+      created_at: 0,
+      updated_at: 0
+    })
+    await pendingWrite
   })
 })

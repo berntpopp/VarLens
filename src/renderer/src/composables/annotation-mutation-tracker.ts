@@ -147,6 +147,7 @@ export function getPerCaseSlotOwner(
 }
 
 export const perCaseByVariantId = new Map<string, CaseVariantAnnotation | null>()
+export const loadedPerCaseByVariantId = new Set<string>()
 const variantKeysByCoord = new Map<string, Set<string>>()
 const caseVariantVersions = new Map<string, number>()
 let nextLoadSeq = 0
@@ -186,10 +187,12 @@ export function setPerCaseByVariantId(
   caseId: number,
   variantId: number,
   pc: CaseVariantAnnotation | null,
-  coordKey?: string
+  coordKey?: string,
+  loaded: boolean = true
 ): void {
   const k = `${caseId}:${variantId}`
   perCaseByVariantId.set(k, pc)
+  if (loaded) loadedPerCaseByVariantId.add(k)
   if (typeof coordKey === 'string' && coordKey.length > 0) {
     let set = variantKeysByCoord.get(coordKey)
     if (!set) {
@@ -206,6 +209,7 @@ export function deletePerCaseForCoordKey(coordKey: string): void {
     for (const k of Array.from(set)) {
       const [cid, vid] = k.split(':').map(Number)
       bumpCaseVariantVersion(cid, vid)
+      loadedPerCaseByVariantId.delete(k)
       if (!inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))) {
         perCaseByVariantId.delete(k)
         set.delete(k)
@@ -217,6 +221,10 @@ export function deletePerCaseForCoordKey(coordKey: string): void {
 
 export function hasPerCaseByVariantId(caseId: number, variantId: number): boolean {
   return perCaseByVariantId.has(`${caseId}:${variantId}`)
+}
+
+export function hasLoadedPerCaseByVariantId(caseId: number, variantId: number): boolean {
+  return loadedPerCaseByVariantId.has(`${caseId}:${variantId}`)
 }
 
 export function computeOptimisticSlot(
@@ -265,6 +273,7 @@ export function clearMutationTracker(): void {
   inFlightMutations.clear()
   perCaseSlotOwners.clear()
   perCaseByVariantId.clear()
+  loadedPerCaseByVariantId.clear()
   variantKeysByCoord.clear()
   caseVariantVersions.clear()
   acceptedLoadSeqs.clear()
@@ -303,24 +312,36 @@ export function extractFieldGroupPatch(
 
 export type AnnotationUpdates = GlobalAnnotationUpdates & PerCaseAnnotationUpdates
 
+export interface ToggleStarOptions {
+  initialStarred?: boolean
+  logSource?: string
+  isStillActive?: () => boolean
+}
+
 export interface MutationPlan {
   optimistic: SlotPatch
   updates: AnnotationUpdates
   rollback: SlotPatch | 'restore-previous'
   failureMessage: string
+  logSource?: string
+  isStillActive?: () => boolean
 }
 
 export function toggleStarPlan(
   scope: AnnotationWriteScope,
   cur: SlotValue | null,
-  base: SlotValue | null
+  base: SlotValue | null,
+  opts?: ToggleStarOptions
 ): MutationPlan {
-  const wasStarred = cur?.starred === 1
+  const wasStarred = cur !== null ? cur.starred === 1 : (opts?.initialStarred ?? false)
+  const baseStarred = base !== null ? base.starred === 1 : (opts?.initialStarred ?? false)
   return {
     optimistic: { starred: wasStarred ? 0 : 1 },
     updates: { starred: !wasStarred },
-    rollback: { starred: base?.starred === 1 ? 1 : 0 },
-    failureMessage: `Failed to toggle ${scope.kind === 'global' ? 'global ' : ''}star: `
+    rollback: { starred: baseStarred ? 1 : 0 },
+    failureMessage: `Failed to toggle ${scope.kind === 'global' ? 'global ' : ''}star: `,
+    logSource: opts?.logSource,
+    isStillActive: opts?.isStillActive
   }
 }
 
@@ -370,5 +391,106 @@ export function acmgWithEvidencePlan(
     },
     rollback: 'restore-previous',
     failureMessage: `Failed to set ${scope.kind === 'global' ? 'global ' : ''}ACMG classification with evidence: `
+  }
+}
+
+function applyBulkUpdatesPatch(
+  slotKey: string,
+  fg: 'star' | 'acmg' | 'comment',
+  u: Record<string, unknown>
+): void {
+  if (fg === 'star' && ('starred' in u || 'is_starred' in u)) {
+    const isStarred = Boolean(u.starred ?? u.is_starred)
+    setConfirmedFieldPatch(slotKey, 'star', { starred: isStarred ? 1 : 0 })
+  } else if (fg === 'acmg' && ('acmg_classification' in u || 'acmg_evidence' in u)) {
+    const patch: SlotPatch = { ...(confirmedFieldPatches.get(slotKey)?.acmg ?? {}) }
+    if ('acmg_classification' in u) {
+      patch.acmg_classification =
+        (u.acmg_classification as SlotPatch['acmg_classification']) ?? null
+    }
+    if ('acmg_evidence' in u) {
+      patch.acmg_evidence = (u.acmg_evidence as string | null) ?? null
+    }
+    setConfirmedFieldPatch(slotKey, 'acmg', patch)
+  } else if (fg === 'comment' && 'per_case_comment' in u) {
+    setConfirmedFieldPatch(slotKey, 'comment', {
+      per_case_comment: (u.per_case_comment as string | null) ?? null
+    })
+  }
+}
+
+export function reconcileBulkTriageKey(
+  key: string,
+  touchedFields: Array<'star' | 'acmg' | 'comment'>,
+  bulkWriteVersions: Map<string, Map<string, number>>,
+  updates: Record<string, unknown> | undefined,
+  owners: Array<{ caseId: number; variantId: number }>,
+  fromCurrentEpoch: boolean,
+  hasInFlightForKey: boolean
+): void {
+  if (owners.length > 0) {
+    const primary = owners[owners.length - 1]
+    ensurePerCaseSlotOwner(key, primary.caseId, primary.variantId)
+  }
+  const targetOwners: Array<{ caseId: number; variantId: number } | undefined> =
+    owners.length > 0 ? owners : [undefined]
+  for (const fg of touchedFields) {
+    for (const o of targetOwners) {
+      const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
+      const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
+      const hasCurrentActivity =
+        !fromCurrentEpoch &&
+        (getConfirmedWriteVersion(key, vSlot) > 0 ||
+          (inFlightMutations.get(slotKey)?.some((m) => m.fieldGroup === fg) ?? false) ||
+          (inFlightMutations.get(`perCase:${key}`)?.some((m) => m.fieldGroup === fg) ?? false))
+      if (hasCurrentActivity) continue
+      const verMap = bulkWriteVersions.get(key)
+      const bulkVer = verMap?.get(vSlot) ?? verMap?.get(fg) ?? bumpWriteVersion(key, vSlot)
+      const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
+      if (bulkVer > prevConfirmed) {
+        setConfirmedWriteVersion(key, vSlot, bulkVer)
+        if (!o) setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
+        pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
+        if (!o) pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
+        if (
+          updates &&
+          (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
+        ) {
+          applyBulkUpdatesPatch(slotKey, fg, updates)
+          if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
+        } else {
+          for (const sk of [slotKey, `perCase:${key}`]) {
+            const patches = confirmedFieldPatches.get(sk)
+            if (patches) {
+              delete patches[fg]
+              if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(sk)
+            }
+          }
+        }
+      }
+    }
+  }
+  if (fromCurrentEpoch || !hasInFlightForKey) {
+    deletePerCaseForCoordKey(key)
+  }
+  for (const o of owners) {
+    bumpCaseVariantVersion(o.caseId, o.variantId)
+    loadedPerCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
+    const sk = perCaseSlotKey(o.caseId, o.variantId, key)
+    const rem = inFlightMutations.get(sk)
+    if (rem && rem.length > 0) {
+      setPerCaseByVariantId(
+        o.caseId,
+        o.variantId,
+        computeOptimisticSlot(
+          applyConfirmedFieldPatches(sk, confirmedBases.get(sk) ?? null),
+          rem
+        ) as CaseVariantAnnotation | null,
+        key,
+        false
+      )
+    } else {
+      perCaseByVariantId.delete(`${o.caseId}:${o.variantId}`)
+    }
   }
 }
