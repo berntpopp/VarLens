@@ -12,7 +12,7 @@ import {
 } from '../../../shared/filters/column-null-check'
 import type { VariantFilter } from '../types'
 import type { VariantQueryBuilder } from './query-types'
-import { SORTABLE_COLUMNS } from './sortable-columns'
+import { BASE_FILTERABLE_COLUMNS } from './sortable-columns'
 import { comparedColumnSql } from '../../../shared/sql/unsigned-columns'
 import { casePhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../../shared/sql/phenotype-score-sql'
 
@@ -282,7 +282,7 @@ export function applyBareColumnFilters(
       filtered = applyColumnFilter(filtered, casePhenotypeScoreSql('variants'), filterDef, true)
       continue
     }
-    const baseColumn = SORTABLE_COLUMNS[column]
+    const baseColumn = BASE_FILTERABLE_COLUMNS[column]
     if (baseColumn === undefined) continue
     // Impact and ClinVar match by normalised category, like the cohort view.
     const severity = isSeverityKey(column)

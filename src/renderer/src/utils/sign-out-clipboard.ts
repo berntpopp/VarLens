@@ -1,4 +1,4 @@
-import { genotypeZygosity } from '../../../shared/utils/genotype'
+import { genotypeZygosity, isAssumedHetGenotype } from '../../../shared/utils/genotype'
 import { escapeDelimitedCell } from '../../../shared/utils/delimited-text'
 import type { Variant, VariantAnnotationsResult } from '../../../shared/types/api'
 
@@ -38,6 +38,15 @@ function sanitizeCell(val: unknown, format: 'markdown' | 'tsv'): string {
     return str.replace(/\|/g, '\\|')
   }
   return escapeDelimitedCell(str, '\t')
+}
+
+export function formatZygosity(gt: string | null | undefined): string | null {
+  if (gt == null || gt === '') return null
+  const trimmed = gt.trim()
+  if (isAssumedHetGenotype(trimmed)) {
+    return `assumed het (${trimmed})`
+  }
+  return genotypeZygosity(trimmed) ?? trimmed
 }
 
 export function formatSignOutTable(rows: SignOutRow[], format: 'markdown' | 'tsv'): string {
@@ -86,7 +95,24 @@ export function extractAcmgCriteria(evidenceJson: string | null | undefined): st
   if (evidenceJson == null || evidenceJson === '') return []
   try {
     const parsed: unknown = JSON.parse(evidenceJson)
-    if (parsed == null || typeof parsed !== 'object') return []
+    if (parsed == null) return []
+
+    if (Array.isArray(parsed)) {
+      const criteria: string[] = []
+      for (const item of parsed) {
+        if (typeof item === 'string') {
+          criteria.push(item)
+        } else if (item !== null && typeof item === 'object') {
+          const entry = item as { code?: unknown; confirmed?: unknown }
+          if (entry.confirmed === true && typeof entry.code === 'string') {
+            criteria.push(entry.code)
+          }
+        }
+      }
+      return criteria
+    }
+
+    if (typeof parsed !== 'object') return []
     const record = parsed as Record<string, unknown>
 
     const list: unknown[] = []
@@ -101,7 +127,7 @@ export function extractAcmgCriteria(evidenceJson: string | null | undefined): st
         criteria.push(item)
       } else if (item !== null && typeof item === 'object') {
         const entry = item as { code?: unknown; confirmed?: unknown }
-        if (entry.confirmed !== false && typeof entry.code === 'string') {
+        if (entry.confirmed === true && typeof entry.code === 'string') {
           criteria.push(entry.code)
         }
       }
@@ -149,7 +175,7 @@ export function variantToSignOutRow(
         : variantRecord.comment
   const comment = commentCandidate ?? ''
 
-  const zygosity = genotypeZygosity(variant.gt_num) ?? variant.gt_num ?? null
+  const zygosity = formatZygosity(variant.gt_num)
 
   return {
     gene: variant.gene_symbol ?? null,

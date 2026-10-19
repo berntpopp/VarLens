@@ -27,6 +27,7 @@ import {
   isColumnInScope,
   type FilterScope
 } from './column-registry'
+export { NUMERIC_COLUMN_FILTER_KEYS } from '../filters/column-filter-validation'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../filters/column-filter-validation'
 import { EXTENSION_FILTERABLE_DOTTED_KEYS } from '../types/variant-extension-registry-data'
 import {

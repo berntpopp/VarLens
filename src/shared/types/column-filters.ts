@@ -10,17 +10,7 @@
  * `''`); their SQL comes from `shared/filters/column-null-check.ts`.
  */
 export type ColumnFilterOperator =
-  | '='
-  | '!='
-  | '<'
-  | '>'
-  | '<='
-  | '>='
-  | 'between'
-  | 'like'
-  | 'in'
-  | 'is_null'
-  | 'not_null'
+  '=' | '!=' | '<' | '>' | '<=' | '>=' | 'between' | 'like' | 'in' | 'is_null' | 'not_null'
 
 /** A single typed column filter */
 export interface ColumnFilter {

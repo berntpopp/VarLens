@@ -134,20 +134,6 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     rangeExcludesEmpty: true
   },
   {
-    key: 'ref',
-    label: 'Ref',
-    aliases: ['reference'],
-    type: 'text',
-    operators: TEXT_OPERATORS
-  },
-  {
-    key: 'alt',
-    label: 'Alt',
-    aliases: ['alternate'],
-    type: 'text',
-    operators: TEXT_OPERATORS
-  },
-  {
     key: 'gene_symbol',
     label: 'Gene',
     aliases: ['gene', 'symbol'],
@@ -240,6 +226,20 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     aliases: ['omim', 'mim'],
     type: 'text',
     operators: ['=', '!=', '~']
+  },
+  {
+    key: 'ref',
+    label: 'Ref',
+    aliases: ['reference'],
+    type: 'text',
+    operators: TEXT_OPERATORS
+  },
+  {
+    key: 'alt',
+    label: 'Alt',
+    aliases: ['alternate'],
+    type: 'text',
+    operators: TEXT_OPERATORS
   },
   {
     key: 'zygosity',

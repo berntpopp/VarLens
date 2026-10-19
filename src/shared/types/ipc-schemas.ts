@@ -82,12 +82,7 @@ export const ColumnFilterSchema = z.object({
     'is_null',
     'not_null'
   ]),
-  value: z.union([
-    z.string(),
-    z.number(),
-    z.array(z.string()),
-    z.tuple([z.number(), z.number()])
-  ]),
+  value: z.union([z.string(), z.number(), z.array(z.string()), z.tuple([z.number(), z.number()])]),
   includeEmpty: z.boolean().optional()
 })
 

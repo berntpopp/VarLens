@@ -9,6 +9,7 @@ import type { DslNode, DslFilterRule, DslGroup, DslOperator } from './types'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import { findColumn } from './column-registry'
 import { contigQueryNames } from '../../../shared/utils/contig'
+import { NUMERIC_COLUMN_FILTER_KEYS } from './parser'
 export { normalizeClinicalPaste } from './clinical-paste'
 
 /** Result of translating a DSL AST */
@@ -59,7 +60,10 @@ function setFilter(
   const existing = result.columnFilters[column]
   if (existing !== undefined) {
     const def = findColumn(column, 'cohort')
-    const isNumeric = def?.type === 'numeric' || column.toLowerCase().startsWith('info.')
+    const isNumeric =
+      def?.type === 'numeric' ||
+      NUMERIC_COLUMN_FILTER_KEYS.has(column) ||
+      column.toLowerCase().startsWith('info.')
     if (isNumeric) {
       const isExistingLower = existing.operator === '>='
       const isExistingUpper = existing.operator === '<='
@@ -67,21 +71,23 @@ function setFilter(
       const isNewUpper = filter.operator === '<='
 
       if ((isExistingLower && isNewUpper) || (isExistingUpper && isNewLower)) {
-        const lower = Number(isExistingLower ? existing.value : filter.value)
-        const upper = Number(isExistingUpper ? existing.value : filter.value)
-        if (Number.isFinite(lower) && Number.isFinite(upper)) {
-          if (lower > upper) {
+        const lowerVal = Number(isExistingLower ? existing.value : filter.value)
+        const upperVal = Number(isExistingUpper ? existing.value : filter.value)
+        if (Number.isFinite(lowerVal) && Number.isFinite(upperVal)) {
+          if (lowerVal > upperVal) {
             result.errors.push(
-              `${source}: lower bound (${lower}) cannot exceed upper bound (${upper}) for '${column}'`
+              `${source}: lower bound (${lowerVal}) cannot exceed upper bound (${upperVal}) for '${column}'`
             )
             return
           }
-          const includeEmpty = existing.includeEmpty ?? filter.includeEmpty
-          result.columnFilters[column] = {
+          const betweenFilter: ColumnFilter = {
             operator: 'between',
-            value: [lower, upper],
-            ...(includeEmpty !== undefined ? { includeEmpty } : {})
+            value: [Math.min(lowerVal, upperVal), Math.max(lowerVal, upperVal)]
           }
+          if (def?.type === 'numeric') {
+            betweenFilter.includeEmpty = def.rangeExcludesEmpty !== true
+          }
+          result.columnFilters[column] = betweenFilter
           return
         }
       }
@@ -111,9 +117,8 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
       ? { operator: backendOp, value: '' }
       : { operator: backendOp, value: value ?? '' }
   const def = findColumn(column, 'cohort')
-  const isNumeric = def?.type === 'numeric' || column.toLowerCase().startsWith('info.')
-  if (isNumeric && ['<', '>', '<=', '>='].includes(operator)) {
-    filter.includeEmpty = def?.rangeExcludesEmpty !== true
+  if (def?.type === 'numeric' && ['<', '>', '<=', '>='].includes(operator)) {
+    filter.includeEmpty = def.rangeExcludesEmpty !== true
   }
   // Each build stores its own contig spelling: `chr:1` means chr1 or 1.
   // ponytail: `chr != 1` stays a single-spelling comparison (no NOT IN operator).

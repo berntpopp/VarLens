@@ -7,13 +7,17 @@ import type { FilterState } from '../../../src/shared/types/filters'
 const exportVariants = vi.fn()
 const queryVariants = vi.fn()
 const batchGetAnnotations = vi.fn()
+const getPerCaseAnnotation = vi.fn()
 
 vi.mock('../../../src/renderer/src/composables/useApiService', () => ({
   useApiService: () => ({
     api: {
       export: { variants: exportVariants },
       variants: { query: queryVariants },
-      annotations: { batchGet: batchGetAnnotations }
+      annotations: {
+        batchGet: batchGetAnnotations,
+        getPerCase: getPerCaseAnnotation
+      }
     }
   })
 }))
@@ -42,6 +46,7 @@ describe('useFilterExport', () => {
     exportVariants.mockResolvedValue({ success: true, filePath: '/tmp/case.xlsx' })
     queryVariants.mockReset()
     batchGetAnnotations.mockReset()
+    getPerCaseAnnotation.mockReset()
     Object.defineProperty(navigator, 'clipboard', {
       value: {
         writeText: vi.fn().mockResolvedValue(undefined)
@@ -153,7 +158,10 @@ describe('useFilterExport', () => {
           variant_id: 1,
           acmg_classification: 'Pathogenic',
           acmg_evidence: JSON.stringify({
-            pathogenic: [{ code: 'PVS1' }, { code: 'PM2' }],
+            pathogenic: [
+              { code: 'PVS1', confirmed: true },
+              { code: 'PM2', confirmed: true }
+            ],
             benign: []
           }),
           per_case_comment: 'Case-specific note'
@@ -194,7 +202,10 @@ describe('useFilterExport', () => {
           id: 10,
           acmg_classification: 'Likely pathogenic',
           acmg_evidence: JSON.stringify({
-            pathogenic: [{ code: 'PVS1', confirmed: true }, { code: 'PM2', confirmed: false }],
+            pathogenic: [
+              { code: 'PVS1', confirmed: true },
+              { code: 'PM2', confirmed: false }
+            ],
             benign: []
           }),
           per_case_comment: '   ' // empty whitespace
@@ -202,7 +213,10 @@ describe('useFilterExport', () => {
         global: {
           id: 20,
           acmg_classification: 'Benign',
-          acmg_evidence: JSON.stringify({ pathogenic: [], benign: [{ code: 'BA1', confirmed: true }] }),
+          acmg_evidence: JSON.stringify({
+            pathogenic: [],
+            benign: [{ code: 'BA1', confirmed: true }]
+          }),
           global_comment: 'Global fallback note'
         } as unknown as VariantAnnotation
       }
@@ -232,6 +246,62 @@ describe('useFilterExport', () => {
       ]
       const tsv = formatSignOutTable(rows, 'tsv')
       expect(tsv).toContain("\t'=1+1")
+    })
+
+    it('formats assumed het zygosity for half-calls (#682)', () => {
+      const v = {
+        id: 1,
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'T',
+        gt_num: '1/.'
+      } as unknown as Variant
+      expect(variantToSignOutRow(v).zygosity).toBe('assumed het (1/.)')
+
+      const v2 = { ...v, gt_num: './1' }
+      expect(variantToSignOutRow(v2).zygosity).toBe('assumed het (./1)')
+
+      const v3 = { ...v, gt_num: '0/1' }
+      expect(variantToSignOutRow(v3).zygosity).toBe('het')
+    })
+
+    it('handles legacy array format and excludes unconfirmed criteria without confirmed: true (#682)', () => {
+      const v = {
+        id: 1,
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'T',
+        acmg_classification: 'Pathogenic'
+      } as unknown as Variant
+
+      // Legacy string array
+      const rowLegacyStrings = variantToSignOutRow(v, {
+        perCase: {
+          acmg_evidence: JSON.stringify(['PVS1', 'PM2'])
+        } as unknown as CaseVariantAnnotation
+      })
+      expect(rowLegacyStrings.acmg).toBe('Pathogenic (PVS1, PM2)')
+
+      // Structured items array
+      const rowLegacyItems = variantToSignOutRow(v, {
+        perCase: {
+          acmg_evidence: JSON.stringify({ items: [{ code: 'PVS1', confirmed: true }] })
+        } as unknown as CaseVariantAnnotation
+      })
+      expect(rowLegacyItems.acmg).toBe('Pathogenic (PVS1)')
+
+      // Structured AcmgEvidenceState with missing confirmed: true (should be excluded)
+      const rowUnconfirmed = variantToSignOutRow(v, {
+        perCase: {
+          acmg_evidence: JSON.stringify({
+            pathogenic: [{ code: 'PVS1', confirmed: true }, { code: 'PP3' }],
+            benign: []
+          })
+        } as unknown as CaseVariantAnnotation
+      })
+      expect(rowUnconfirmed.acmg).toBe('Pathogenic (PVS1)')
     })
   })
 
@@ -352,8 +422,98 @@ describe('useFilterExport', () => {
       const result = await copySignOutTable(1, 'tsv')
       expect(result.success).toBe(true)
       expect(result.count).toBe(501)
-      expect(queryVariants).toHaveBeenCalledWith(1, expect.objectContaining({ starred_only: true }), 0, 500)
-      expect(queryVariants).toHaveBeenCalledWith(1, expect.objectContaining({ starred_only: true }), 500, 500)
+      expect(queryVariants).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ starred_only: true }),
+        0,
+        500
+      )
+      expect(queryVariants).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ starred_only: true }),
+        500,
+        500
+      )
+    })
+
+    it('preserves per-row variant identity for duplicate-coordinate variants (#682)', async () => {
+      const dup1: Variant = {
+        id: 101,
+        chr: '17',
+        pos: 43044295,
+        ref: 'G',
+        alt: 'A',
+        gene_symbol: 'BRCA1',
+        cdna: 'c.5266dupC',
+        transcript: 'NM_007294.4',
+        gt_num: '0/1'
+      } as unknown as Variant
+
+      const dup2: Variant = {
+        id: 102,
+        chr: '17',
+        pos: 43044295,
+        ref: 'G',
+        alt: 'A',
+        gene_symbol: 'BRCA1',
+        cdna: 'c.5266dupC',
+        transcript: 'NM_007300.4',
+        gt_num: '0/1'
+      } as unknown as Variant
+
+      queryVariants.mockImplementation((_caseId, filter) => {
+        if (filter.starred_only) {
+          return Promise.resolve({ data: [dup1, dup2], total_count: 2 })
+        }
+        return Promise.resolve({ data: [], total_count: 0 })
+      })
+
+      batchGetAnnotations.mockResolvedValue({
+        '17:43044295:G:A': {
+          global: { acmg_classification: 'VUS', global_comment: 'Global BRCA1 note' },
+          perCase: { acmg_classification: 'Pathogenic', per_case_comment: 'First transcript' }
+        }
+      })
+
+      getPerCaseAnnotation.mockImplementation((_caseId, variantId) => {
+        if (variantId === 101) {
+          return Promise.resolve({
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            acmg_classification: 'Pathogenic',
+            per_case_comment: 'First transcript note'
+          })
+        }
+        if (variantId === 102) {
+          return Promise.resolve({
+            id: 2,
+            case_id: 1,
+            variant_id: 102,
+            acmg_classification: 'Likely pathogenic',
+            per_case_comment: 'Second transcript note'
+          })
+        }
+        return Promise.resolve(null)
+      })
+
+      const { copySignOutTable } = useFilterExport(
+        ref({ ...FILTER_DEFAULTS } as FilterState),
+        ref([]),
+        ref(false)
+      )
+
+      const result = await copySignOutTable(1, 'tsv')
+      expect(result.success).toBe(true)
+      expect(result.count).toBe(2)
+      expect(getPerCaseAnnotation).toHaveBeenCalledWith(1, 101)
+      expect(getPerCaseAnnotation).toHaveBeenCalledWith(1, 102)
+
+      const written = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      const lines = written.split('\n')
+      expect(lines).toHaveLength(3) // header + 2 rows
+      expect(lines[1]).toContain('Pathogenic\tFirst transcript note')
+      expect(lines[2]).toContain('Likely pathogenic\tSecond transcript note')
     })
   })
 })

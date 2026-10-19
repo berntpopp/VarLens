@@ -220,7 +220,10 @@ interface Emits {
   (e: 'reset-sort'): void
   (e: 'clear-column-filters'): void
   (e: 'clear-column-filter', columnKey: string): void
-  (e: 'export-success', data: { filePath: string; action?: { text: string; callback: () => void } }): void
+  (
+    e: 'export-success',
+    data: { filePath: string; action?: { text: string; callback: () => void } }
+  ): void
   (e: 'export-error', error: string): void
 }
 

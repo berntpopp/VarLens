@@ -8,7 +8,7 @@ import {
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
-import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
+import { BASE_FILTERABLE_COLUMNS } from './VariantFilterBuilder'
 import {
   assertNoInfoFieldFilters,
   assertValidColumnFilterValues,
@@ -215,7 +215,7 @@ function severityTarget(
  * `IDENTIFIER_RE` alone blocks metacharacters but not an unintended-but-valid
  * column reference.
  */
-const VARIANTS_TABLE_COLUMN_ALLOWLIST = new Set(Object.values(BASE_SORTABLE_COLUMNS))
+const VARIANTS_TABLE_COLUMN_ALLOWLIST = new Set(Object.values(BASE_FILTERABLE_COLUMNS))
 
 function translateColumnFilter(
   column: string,

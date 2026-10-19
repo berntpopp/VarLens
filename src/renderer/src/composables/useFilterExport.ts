@@ -5,7 +5,13 @@ import { logService } from '../services/LogService'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
-import type { BatchAnnotationKey, Variant, VariantFilter } from '../../../shared/types/api'
+import type {
+  BatchAnnotationKey,
+  Variant,
+  VariantAnnotationsResult,
+  VariantFilter
+} from '../../../shared/types/api'
+import type { CaseVariantAnnotation } from '../../../shared/types/database'
 import {
   formatSignOutTable,
   variantToSignOutRow,
@@ -171,8 +177,38 @@ export function useFilterExport(
       const annotRes = await api.annotations.batchGet(caseId, keys)
       const annotationsMap = unwrapIpcResult(annotRes) ?? {}
 
+      const coordCounts = new Map<string, number>()
+      for (const v of deduped) {
+        const coordKey = `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+        coordCounts.set(coordKey, (coordCounts.get(coordKey) ?? 0) + 1)
+      }
+
+      const collidingVariants = deduped.filter(
+        (v) => (coordCounts.get(`${v.chr}:${v.pos}:${v.ref}:${v.alt}`) ?? 0) > 1
+      )
+
+      const perVariantPerCase = new Map<number, CaseVariantAnnotation | null>()
+      if (collidingVariants.length > 0 && typeof api.annotations?.getPerCase === 'function') {
+        const perCaseResults = await Promise.all(
+          collidingVariants.map(async (v) => {
+            const res = await api.annotations.getPerCase(caseId, v.id)
+            return [v.id, unwrapIpcResult(res) ?? null] as const
+          })
+        )
+        for (const [id, perCase] of perCaseResults) {
+          perVariantPerCase.set(id, perCase)
+        }
+      }
+
       const rows: SignOutRow[] = deduped.map((v) => {
-        const annot = annotationsMap[`${v.chr}:${v.pos}:${v.ref}:${v.alt}`]
+        const coordKey = `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+        const batchAnnot = annotationsMap[coordKey]
+        const annot: VariantAnnotationsResult = perVariantPerCase.has(v.id)
+          ? {
+              global: batchAnnot?.global,
+              perCase: perVariantPerCase.get(v.id) ?? null
+            }
+          : (batchAnnot ?? { global: null, perCase: null })
         return variantToSignOutRow(v, annot)
       })
 

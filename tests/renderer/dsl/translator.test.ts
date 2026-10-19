@@ -190,7 +190,9 @@ describe('translateAst Boolean fidelity (#526)', () => {
   it('does not combine strict < or > bounds into between (#683)', () => {
     const result = translate('pos:>:100 AND pos:<:200')
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toContain("only one condition per field is supported ('pos' is used twice)")
+    expect(result.errors[0]).toContain(
+      "only one condition per field is supported ('pos' is used twice)"
+    )
   })
 
   it('combines info field range bounds into between (#683)', () => {
@@ -198,8 +200,16 @@ describe('translateAst Boolean fidelity (#526)', () => {
     expect(result.errors).toEqual([])
     expect(result.columnFilters['info.DP']).toEqual({
       operator: 'between',
-      value: [10, 50],
-      includeEmpty: true
+      value: [10, 50]
+    })
+  })
+
+  it('combines extension column range bounds into between (#683)', () => {
+    const result = translate('cnv.copy_number:>=:2 AND cnv.copy_number:<=:5')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters['cnv.copy_number']).toEqual({
+      operator: 'between',
+      value: [2, 5]
     })
   })
 

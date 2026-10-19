@@ -20,8 +20,6 @@ import { casePhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../../shared/sql/
 export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr',
   pos: 'pos',
-  ref: 'ref',
-  alt: 'alt',
   gene_symbol: 'gene_symbol',
   omim_mim_number: 'omim_mim_number',
   func: 'func',
@@ -47,6 +45,16 @@ export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
   sv_type: 'sv_type',
   sv_length: 'sv_length',
   caller: 'caller'
+}
+
+/**
+ * Filterable columns on the `variants` table. Extends `BASE_SORTABLE_COLUMNS`
+ * with `ref` and `alt`, which are filterable but not sortable.
+ */
+export const BASE_FILTERABLE_COLUMNS: Record<string, string> = {
+  ...BASE_SORTABLE_COLUMNS,
+  ref: 'ref',
+  alt: 'alt'
 }
 
 /**
