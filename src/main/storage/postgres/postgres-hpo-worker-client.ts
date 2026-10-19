@@ -62,6 +62,7 @@ export class PostgresHpoWorkerClient {
     worker.unref()
 
     worker.on('message', (response: HpoWorkerResponse) => {
+      if (this.worker !== worker) return
       const handler = this.pending.get(response.id)
       if (!handler) return
       this.pending.delete(response.id)
@@ -73,20 +74,25 @@ export class PostgresHpoWorkerClient {
     })
 
     worker.on('error', (err) => {
-      for (const [, handler] of this.pending) {
+      if (this.worker !== worker) return
+      this.worker = null
+      const handlers = Array.from(this.pending.values())
+      this.pending.clear()
+      void worker.terminate().catch(() => undefined)
+      for (const handler of handlers) {
         handler.reject(err)
       }
-      this.pending.clear()
-      this.worker = null
     })
 
     worker.on('exit', (code) => {
+      if (this.worker !== worker) return
       this.worker = null
       if (!this.disposed) {
-        for (const [, handler] of this.pending) {
+        const handlers = Array.from(this.pending.values())
+        this.pending.clear()
+        for (const handler of handlers) {
           handler.reject(new Error(`HPO worker exited (code ${code})`))
         }
-        this.pending.clear()
       }
     })
 

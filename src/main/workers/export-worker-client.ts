@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads'
 import { resolve } from 'path'
+import { rmSync } from 'node:fs'
 import type {
   ExportMainMessage,
   ExportWorkerMessage,
@@ -37,6 +38,7 @@ export interface CohortExportWorkerParams extends ExportWorkerHooks {
 export class ExportWorkerClient {
   private worker: Worker | null = null
   private hooks: ExportWorkerHooks | null = null
+  private currentOutputFilePath: string | null = null
   private readonly workerPath: string
 
   constructor(workerPath?: string) {
@@ -85,6 +87,7 @@ export class ExportWorkerClient {
     }
 
     this.hooks = hooks
+    this.currentOutputFilePath = message.outputFilePath
     this.worker = new Worker(this.workerPath)
 
     this.worker.on('message', (msg: ExportWorkerMessage) => {
@@ -93,6 +96,7 @@ export class ExportWorkerClient {
           hooks.onProgress(msg.current, msg.total)
           break
         case 'complete':
+          this.currentOutputFilePath = null
           this.cleanup()
           hooks.onComplete(msg.filePath, msg.rowCount)
           break
@@ -135,13 +139,31 @@ export class ExportWorkerClient {
 
   private cleanup(): void {
     this.hooks = null
+    const outputPath = this.currentOutputFilePath
+    this.currentOutputFilePath = null
+    const removePartFile = (): void => {
+      if (outputPath !== null) {
+        try {
+          rmSync(`${outputPath}.part`, { force: true })
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
     if (this.worker !== null) {
       const worker = this.worker
       this.worker = null
-      worker.terminate().catch((err: Error) => {
-        // Worker may already be terminated (e.g. after 'exit' event)
-        mainLogger.warn(`Export worker terminate failed: ${err.message}`, 'ExportWorkerClient')
-      })
+      worker
+        .terminate()
+        .catch((err: Error) => {
+          // Worker may already be terminated (e.g. after 'exit' event)
+          mainLogger.warn(`Export worker terminate failed: ${err.message}`, 'ExportWorkerClient')
+        })
+        .finally(() => {
+          removePartFile()
+        })
+    } else {
+      removePartFile()
     }
   }
 
@@ -150,7 +172,19 @@ export class ExportWorkerClient {
       const worker = this.worker
       this.worker = null
       this.hooks = null
-      await worker.terminate()
+      const outputPath = this.currentOutputFilePath
+      this.currentOutputFilePath = null
+      try {
+        await worker.terminate()
+      } finally {
+        if (outputPath !== null) {
+          try {
+            rmSync(`${outputPath}.part`, { force: true })
+          } catch {
+            // ignore
+          }
+        }
+      }
     }
   }
 }

@@ -4,8 +4,8 @@
  * Streams query results in pages to an XLSX file using xlsxStream, avoiding
  * blocking the event loop and bounding memory usage.
  */
-import { createWriteStream } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
+import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
@@ -26,7 +26,7 @@ import {
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
 const PAGE_SIZE = 5_000
-const PROGRESS_EVERY_ROWS = 5_000
+const PROGRESS_EVERY_ROWS = 1_000
 
 /** Cohort export column headers (shared with the PostgreSQL CSV export). */
 export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
@@ -121,6 +121,9 @@ export async function runCohortExport(
     const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
     const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
+    const baseParams = { ...params }
+    delete baseParams.cursor
+    delete (baseParams as Record<string, unknown>)._count_needed
     let totalCount = 0
     let initialProgressReported = false
     let yieldedRows = 0
@@ -130,7 +133,7 @@ export async function runCohortExport(
       while (offset < COHORT_EXPORT_HARD_LIMIT) {
         const pageLimit = Math.min(PAGE_SIZE, COHORT_EXPORT_HARD_LIMIT - offset)
         const page = cohortService.getCohortVariants({
-          ...params,
+          ...baseParams,
           limit: pageLimit,
           offset
         })
@@ -182,13 +185,17 @@ export async function runCohortExport(
         buildCohortMetadata(params, summary.total_cases, res.rowCount)
     }
 
-    const stream = createWriteStream(outputFilePath)
-    let opened = false
-    stream.once('open', () => (opened = true))
+    if (existsSync(outputFilePath)) {
+      accessSync(outputFilePath, constants.W_OK)
+    }
+    const isDevice = outputFilePath.startsWith('/dev/')
+    const tempFilePath = isDevice ? outputFilePath : `${outputFilePath}.part`
+    const stream = createWriteStream(tempFilePath)
     try {
       await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
+      if (!isDevice) await rename(tempFilePath, outputFilePath)
     } catch (error) {
-      if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+      if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
       throw error
     }
 

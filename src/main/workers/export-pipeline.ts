@@ -6,10 +6,22 @@
  * dependencies (parentPort, workerData). This makes the logic testable
  * in isolation.
  */
-import { createWriteStream } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { accessSync, constants, createWriteStream, existsSync } from 'node:fs'
+import { rename, rm } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+
+function prepareExportFilePath(outputFilePath: string): {
+  tempFilePath: string
+  isDevice: boolean
+} {
+  if (existsSync(outputFilePath)) {
+    accessSync(outputFilePath, constants.W_OK)
+  }
+  const isDevice = outputFilePath.startsWith('/dev/')
+  const tempFilePath = isDevice ? outputFilePath : `${outputFilePath}.part`
+  return { tempFilePath, isDevice }
+}
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
 import { formatCellValue, csvEscape } from './export-renderer'
@@ -74,6 +86,7 @@ export interface ExportPipelineResult {
  */
 async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
   const { db, compiledSql, compiledParams, outputFilePath, onProgress } = params
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath)
 
   const stmt = db.prepare(compiledSql)
   const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
@@ -83,11 +96,26 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
   const batchLookup = createCaseAnnotationBatchLookup(db)
   let rowCount = 0
   function* csvLines(): Generator<string> {
-    yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
-    let chunk: Record<string, unknown>[] = []
-    for (const variant of iterator) {
-      chunk.push(variant)
-      if (chunk.length >= 200) {
+    try {
+      yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
+      let chunk: Record<string, unknown>[] = []
+      for (const variant of iterator) {
+        chunk.push(variant)
+        if (chunk.length >= 200) {
+          const annotations = batchLookup(chunk)
+          for (const v of chunk) {
+            const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+            const cells = EXPORT_COLUMNS.map((col) =>
+              csvEscape(formatCellValue(col.key, row[col.key]))
+            )
+            yield cells.join(',') + '\r\n'
+            rowCount++
+            if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
+          }
+          chunk = []
+        }
+      }
+      if (chunk.length > 0) {
         const annotations = batchLookup(chunk)
         for (const v of chunk) {
           const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
@@ -98,31 +126,19 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
           rowCount++
           if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
         }
-        chunk = []
       }
-    }
-    if (chunk.length > 0) {
-      const annotations = batchLookup(chunk)
-      for (const v of chunk) {
-        const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-        const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
-        yield cells.join(',') + '\r\n'
-        rowCount++
-        if (rowCount % 1000 === 0) onProgress?.(rowCount, 0)
-      }
+    } finally {
+      iterator.return?.()
     }
   }
 
-  const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
-  let opened = false
-  stream.once('open', () => (opened = true))
+  const stream = createWriteStream(tempFilePath, { encoding: 'utf8' })
   try {
     // pipeline() handles backpressure and rejects on an open, write or source error.
     await pipeline(Readable.from(csvLines()), stream)
+    if (!isDevice) await rename(tempFilePath, outputFilePath)
   } catch (error) {
-    // Opening truncated the file, so a partial export is removed. A file that
-    // could not be opened (e.g. an existing read-only one) is left untouched.
-    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+    if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
     throw error
   }
 
@@ -172,6 +188,7 @@ export function buildMetadataSheet(
 async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
   const { db, compiledSql, compiledParams, outputFilePath, caseName, filterSummary, onProgress } =
     params
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath)
 
   const stmt = db.prepare(compiledSql)
   const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
@@ -183,10 +200,23 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
   const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
   async function* generateRows(): AsyncGenerator<readonly XlsxCell[]> {
-    let chunk: Record<string, unknown>[] = []
-    for (const variant of iterator) {
-      chunk.push(variant)
-      if (chunk.length >= 200) {
+    try {
+      let chunk: Record<string, unknown>[] = []
+      for (const variant of iterator) {
+        chunk.push(variant)
+        if (chunk.length >= 200) {
+          const annotations = batchLookup(chunk)
+          for (const v of chunk) {
+            const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
+            yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
+            if ((result.rowCount + 1) % 1000 === 0) {
+              onProgress?.(result.rowCount + 1, 0)
+            }
+          }
+          chunk = []
+        }
+      }
+      if (chunk.length > 0) {
         const annotations = batchLookup(chunk)
         for (const v of chunk) {
           const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
@@ -195,18 +225,9 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
             onProgress?.(result.rowCount + 1, 0)
           }
         }
-        chunk = []
       }
-    }
-    if (chunk.length > 0) {
-      const annotations = batchLookup(chunk)
-      for (const v of chunk) {
-        const row: Record<string, unknown> = { ...v, ...annotations.get(v.id) }
-        yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
-        if ((result.rowCount + 1) % 1000 === 0) {
-          onProgress?.(result.rowCount + 1, 0)
-        }
-      }
+    } finally {
+      iterator.return?.()
     }
   }
 
@@ -224,13 +245,12 @@ async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipe
     ]
   }
 
-  const stream = createWriteStream(outputFilePath)
-  let opened = false
-  stream.once('open', () => (opened = true))
+  const stream = createWriteStream(tempFilePath)
   try {
     await pipeline(Readable.from(xlsxStream(sheet, result, info)), stream)
+    if (!isDevice) await rename(tempFilePath, outputFilePath)
   } catch (error) {
-    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
+    if (!isDevice) await rm(tempFilePath, { force: true }).catch(() => undefined)
     throw error
   }
 

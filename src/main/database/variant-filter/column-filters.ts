@@ -50,7 +50,7 @@ export function coerceColumnFilterComparisonValue(
 
 export type ParsedBareColumnFilter =
   | { kind: 'null'; operator: NullCheckOperator; numericColumn: boolean }
-  | { kind: 'in'; values: string[] }
+  | { kind: 'in'; values: Array<string | number> }
   | { kind: 'like'; pattern: string; numericColumn: boolean }
   | { kind: 'compare'; operator: '=' | '!='; value: string | number }
   | {
@@ -75,7 +75,12 @@ export function parseBareColumnFilter(
   }
   if (operator === 'in' && Array.isArray(value)) {
     if (value.length === 0) return null
-    return { kind: 'in', values: value.map((item) => String(item)) }
+    return {
+      kind: 'in',
+      values: value.map((item) =>
+        isComparable(item) ? coerceColumnFilterComparisonValue(item, numericColumn) : String(item)
+      )
+    }
   }
   if (operator === 'like' && typeof value === 'string') {
     if (value.trim() === '') return null
@@ -154,7 +159,7 @@ const target = (sqlColumn: string) =>
 function whereIn(
   query: VariantQueryBuilder,
   sqlColumn: string,
-  values: readonly string[]
+  values: readonly ComparableValue[]
 ): VariantQueryBuilder {
   if (values.length === 0) return query
   const params = sql.join(values.map((v) => sql`${v}`))

@@ -114,6 +114,22 @@ describe('translateColumnFilter branches', () => {
     expect(result.params).toEqual([])
   })
 
+  it('column_filter operator=in preserves numeric operands for numeric columns and coerces text', () => {
+    const numResult = buildBaseWhere(
+      { column_filters: { sv_length: { operator: 'in', value: [1000, '2000'] } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(numResult.sql).toContain('ABS(v.sv_length) IN (?, ?)')
+    expect(numResult.params).toEqual([1000, 2000])
+
+    const textResult = buildBaseWhere(
+      { column_filters: { chr: { operator: 'in', value: [7, '8'] } } },
+      { baseAlias: 'v', scope: 'case' }
+    )
+    expect(textResult.sql).toContain('v.chr IN (?, ?)')
+    expect(textResult.params).toEqual(['7', '8'])
+  })
+
   it('column_filter operator=like produces LIKE with ESCAPE and NOCASE', () => {
     const result = buildBaseWhere(
       { column_filters: { gene_symbol: { operator: 'like', value: 'brca' } } },

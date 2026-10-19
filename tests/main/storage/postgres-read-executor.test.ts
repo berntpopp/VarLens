@@ -495,6 +495,44 @@ describe('PostgresReadExecutor', () => {
     )
   })
 
+  it('allows immediate retry after worker error without old exit disrupting replacement worker', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-hpo-retry-'))
+    const hpoPath = join(dir, 'hpo_similarity.db')
+    const prevEnv = process.env[HPO_DATA_CONFIG.envPath]
+    buildHpoSimilarityDb(
+      { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+      { release: 'v2026-09-01', sha256: {} },
+      hpoPath
+    )
+    process.env[HPO_DATA_CONFIG.envPath] = hpoPath
+
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    const workerClient = executor.getHpoWorker()
+    try {
+      const terms = [{ hpoId: T.C, excluded: false, key: false }]
+      const firstRes = await workerClient.scoreAllGenes(terms, hpoPath)
+      expect(firstRes.length).toBeGreaterThan(0)
+
+      const rawWorker = (
+        workerClient as unknown as {
+          worker: { emit: (event: string, ...args: unknown[]) => boolean }
+        }
+      ).worker
+      rawWorker.emit('error', new Error('simulated worker crash'))
+
+      const retryPromise = workerClient.scoreAllGenes(terms, hpoPath)
+      const retryRes = await retryPromise
+      expect(retryRes).toStrictEqual(firstRes)
+
+      await workerClient.destroy()
+    } finally {
+      await executor.close()
+      if (prevEnv === undefined) delete process.env[HPO_DATA_CONFIG.envPath]
+      else process.env[HPO_DATA_CONFIG.envPath] = prevEnv
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('dispatches hpo:explainGene in a worker thread', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-hpo-explain-'))
     const hpoPath = join(dir, 'hpo_similarity.db')

@@ -18,11 +18,12 @@ import { MARK_STALE_SQL } from '../../../src/shared/sql/cohort-summary-rebuild'
 describe('SQLite cohort export while the summary is stale', () => {
   let dir: string
   let service: DatabaseService
+  let caseId: number
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'varlens-cohort-export-stale-'))
     service = new DatabaseService(join(dir, 'test.db'))
-    const caseId = service.cases.createCase('one', '/tmp/one.json', 0, 'GRCh38')
+    caseId = service.cases.createCase('one', '/tmp/one.json', 0, 'GRCh38')
     service.variants.insertVariantsBatch(caseId, [
       { chr: '1', pos: 100, ref: 'A', alt: 'T', gt_num: '0/1', consequence: 'HIGH' } as never
     ])
@@ -63,20 +64,58 @@ describe('SQLite cohort export while the summary is stale', () => {
   })
 
   it('holds a read snapshot so concurrent delete on another connection does not alter export', async () => {
+    service.database.transaction(() => {
+      const stmt = service.database.prepare(
+        'INSERT INTO variants (case_id, chr, pos, ref, alt, gt_num, consequence) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      for (let i = 1; i <= 5004; i++) {
+        stmt.run(caseId, '1', 1000 + i, 'A', 'T', '0/1', 'HIGH')
+      }
+    })()
+    service.cohortSummary.rebuild()
+
     const file = join(dir, 'snapshot.xlsx')
     const db2 = new Database(join(dir, 'test.db'))
     try {
       let deleted = false
-      const result = await runCohortExport(service.database, {}, file, (_current, total) => {
-        if (!deleted && total > 0) {
+      const result = await runCohortExport(service.database, {}, file, (current) => {
+        if (!deleted && current === 1000) {
           deleted = true
           db2.prepare('DELETE FROM cohort_variant_summary').run()
         }
       })
-      expect(result.rowCount).toBe(1)
+      expect(deleted).toBe(true)
+      expect(result.rowCount).toBe(5005)
       expect(existsSync(file)).toBe(true)
+
+      const remainingOnDb2 = db2
+        .prepare('SELECT count(*) as count FROM cohort_variant_summary')
+        .get() as { count: number }
+      expect(remainingOnDb2.count).toBe(0)
     } finally {
       db2.close()
     }
+  })
+
+  it('strips cursor from search params so multi-page cohort export does not loop on page 1', async () => {
+    service.database.transaction(() => {
+      const stmt = service.database.prepare(
+        'INSERT INTO variants (case_id, chr, pos, ref, alt, gt_num, consequence) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      for (let i = 1; i <= 5004; i++) {
+        stmt.run(caseId, '1', 1000 + i, 'A', 'T', '0/1', 'HIGH')
+      }
+    })()
+    service.cohortSummary.rebuild()
+
+    const file = join(dir, 'cursor-export.xlsx')
+    const result = await runCohortExport(
+      service.database,
+      { cursor: 'some-existing-cursor', _count_needed: true } as never,
+      file,
+      () => undefined
+    )
+    expect(result.rowCount).toBe(5005)
+    expect(existsSync(file)).toBe(true)
   })
 })

@@ -427,6 +427,21 @@ describe('runExportPipeline — CSV', () => {
       await expect(runExportPipeline(params)).rejects.toThrow('source failed')
       expect(existsSync(params.outputFilePath)).toBe(false)
     })
+
+    it('preserves an existing file at outputFilePath untouched if pipeline throws mid-export, leaving no .part file', async () => {
+      for (let i = 0; i < 5000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      const existing = join(tmpDir, 'existing-to-preserve.csv')
+      writeFileSync(existing, 'original content must not be overwritten')
+      const params = makeCsvParams({
+        outputFilePath: existing,
+        onProgress: (rows) => {
+          if (rows === 4000) throw new Error('mid-export failure')
+        }
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow('mid-export failure')
+      expect(readFileSync(existing, 'utf8')).toBe('original content must not be overwritten')
+      expect(existsSync(`${existing}.part`)).toBe(false)
+    })
   })
 })
 

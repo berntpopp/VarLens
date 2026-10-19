@@ -1724,8 +1724,8 @@ exports[`VariantFilterBuilder characterization (compiled SQL + parameters) > col
   "parameters": [
     2,
     2,
-    "1",
-    "2",
+    1,
+    2,
   ],
   "prepareError": null,
   "sql": "select "variants".*, CAST(CAST((SELECT s.carrier_count FROM cohort_variant_summary s
