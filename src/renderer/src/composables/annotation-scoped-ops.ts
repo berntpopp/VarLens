@@ -349,7 +349,12 @@ async function load(
   setLoading(key, true, scope.kind)
   try {
     const entry = await fetchEntry(api, scope, coords)
-    if (isResponseStale(scope, dbPath) || getKeyVersion(key) !== version) return
+    const isStale =
+      isResponseStale(scope, dbPath) ||
+      (scope.kind === 'case'
+        ? getKeyVersion(key) !== version
+        : getKeyVersion(key) % 1_000_000 !== version % 1_000_000)
+    if (isStale) return
     storeLoaded(key, scope, entry)
   } catch (error) {
     logService.error(
@@ -357,7 +362,11 @@ async function load(
       'annotations'
     )
   } finally {
-    if (getKeyVersion(key) === version && (scope.kind !== 'case' || isTrackedCase(scope.caseId))) {
+    const versionMatches =
+      scope.kind === 'case'
+        ? getKeyVersion(key) === version
+        : getKeyVersion(key) % 1_000_000 === version % 1_000_000
+    if (versionMatches && (scope.kind !== 'case' || isTrackedCase(scope.caseId))) {
       setLoading(key, false)
     }
   }
@@ -419,7 +428,13 @@ async function loadBatch(
     const fromPriorPage = generation !== getAnnotationGeneration(scope.kind)
     for (const [key, value] of Object.entries(results)) {
       const startVer = keyVersionsAtStart.get(key)
-      if (startVer !== undefined && getKeyVersion(key) !== startVer) continue
+      if (startVer !== undefined) {
+        const isStale =
+          scope.kind === 'case'
+            ? getKeyVersion(key) !== startVer
+            : getKeyVersion(key) % 1_000_000 !== startVer % 1_000_000
+        if (isStale) continue
+      }
       const awaited = takeAwaited(scope.kind, key)
       if (fromPriorPage && !awaited) continue
       storeLoaded(key, scope, value as AnnotationCache)
@@ -433,7 +448,13 @@ async function loadBatch(
     if (scope.kind !== 'case' || isTrackedCase(scope.caseId)) {
       for (const vk of uncached) {
         const k = variantKey(vk)
-        if (getKeyVersion(k) === keyVersionsAtStart.get(k)) {
+        const startVer = keyVersionsAtStart.get(k)
+        const versionMatches =
+          startVer !== undefined &&
+          (scope.kind === 'case'
+            ? getKeyVersion(k) === startVer
+            : getKeyVersion(k) % 1_000_000 === startVer % 1_000_000)
+        if (versionMatches) {
           setLoading(k, false)
         }
       }

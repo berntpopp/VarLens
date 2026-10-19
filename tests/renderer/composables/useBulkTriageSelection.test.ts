@@ -597,4 +597,163 @@ describe('useBulkTriageSelection', () => {
     // After triage applied, selection is cleared
     expect(bulk.selectedCount.value).toBe(0)
   })
+
+  it('does not wipe unselected cached variants when applyBulkTriage runs after beginAnnotationRequest with known build', async () => {
+    const { beginAnnotationRequest } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+
+    // Simulate page load having established GRCh38 build for Case 42
+    beginAnnotationRequest(42, 'GRCh38')
+
+    // Pre-populate unselected variant B in annotationCache
+    annotationCache.value.set('1:200:G:C', {
+      global: null,
+      perCase: {
+        id: 2,
+        case_id: 42,
+        variant_id: 2,
+        is_starred: false,
+        acmg_classification: null,
+        acmg_evidence: null,
+        acmg_override_reason: null,
+        notes: null,
+        created_at: 1000,
+        updated_at: 1000
+      }
+    })
+
+    const bulk = useBulkTriageSelection({
+      items: () => [
+        { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' },
+        { id: 2, chr: '1', pos: 200, ref: 'G', alt: 'C' }
+      ],
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    // Select ONLY variant 1
+    bulk.toggleSelect(1)
+
+    // Run applyBulkTriage
+    await bulk.applyBulkTriage({ starred: true })
+
+    // Unselected variant 2 MUST still be cached (not wiped by buildUnknown in beginAnnotationRequest)
+    expect(annotationCache.value.has('1:200:G:C')).toBe(true)
+    expect(annotationCache.value.get('1:200:G:C')?.perCase?.id).toBe(2)
+  })
+
+  it('discards old completion during an A -> B -> A round-trip case switch while batchUpsertPerCase is in flight', async () => {
+    let resolveUpsert!: (val: unknown) => void
+    const deferredUpsert = new Promise((resolve) => {
+      resolveUpsert = resolve
+    })
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(deferredUpsert)
+
+    const bulk = useBulkTriageSelection({
+      items: () => items.value,
+      getItemId: (v) => v.id,
+      caseId,
+      onTriageApplied
+    })
+
+    // 1. On Case 42 (Case A), select item 101
+    bulk.toggleSelect(101)
+    expect(bulk.selectedIds.value).toEqual([101])
+
+    // 2. Start bulk triage on Case 42
+    const triagePromise = bulk.applyBulkTriage({ starred: true })
+    expect(bulk.isExecuting.value).toBe(true)
+
+    // 3. User navigates Case 42 -> Case 99 (Case B)
+    caseId.value = 99
+    await vi.waitFor(() => {
+      expect(bulk.selectedIds.value.length).toBe(0)
+    })
+
+    // 4. User navigates back Case 99 -> Case 42 (Case A again)
+    caseId.value = 42
+    await vi.waitFor(() => {
+      expect(bulk.selectedIds.value.length).toBe(0)
+    })
+
+    // User selects item 103 in the new session of Case 42
+    bulk.toggleSelect(103)
+    expect(bulk.selectedIds.value).toEqual([103])
+
+    // 5. In-flight upsert from initial Case 42 resolves
+    resolveUpsert({ updatedCount: 1 })
+    const count = await triagePromise
+
+    expect(count).toBe(1)
+    // Post-await completion was discarded because scopeGen changed:
+    // - onTriageApplied was NOT called
+    expect(onTriageApplied).not.toHaveBeenCalled()
+    // - New selection [103] on returned Case 42 was NOT cleared
+    expect(bulk.selectedIds.value).toEqual([103])
+    // - isExecuting is false
+    expect(bulk.isExecuting.value).toBe(false)
+  })
+
+  it('drops older in-flight batchGet read even after clearAnnotationCache runs before it resolves', async () => {
+    let resolveFirstBatch!: (val: unknown) => void
+    const firstBatchPromise = new Promise((resolve) => {
+      resolveFirstBatch = resolve
+    })
+
+    const batchGetSpy = vi
+      .fn()
+      // First call (older in-flight, e.g. Pathogenic) is deferred
+      .mockReturnValueOnce(firstBatchPromise)
+      // Second call (after round-trip, e.g. Benign) resolves immediately
+      .mockResolvedValueOnce({
+        '1:100:A:T': {
+          global: null,
+          perCase: {
+            id: 1,
+            case_id: 42,
+            variant_id: 1,
+            acmg_classification: 'Benign'
+          }
+        }
+      })
+
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchGet = batchGetSpy
+
+    const { useAnnotations } = await import('../../../src/renderer/src/composables/useAnnotations')
+    const { clearAnnotationCache } =
+      await import('../../../src/renderer/src/composables/annotation-cache')
+    const { loadAnnotationsBatch } = useAnnotations()
+
+    // 1. Initial fetch (Pathogenic) starts at evictionEpoch = 0, startVer = 0
+    const initialLoad = loadAnnotationsBatch(42, [
+      { id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' }
+    ])
+
+    // 2. Clear cache runs (simulates case switch or round-trip A -> B -> A)
+    clearAnnotationCache()
+
+    // 3. New fetch starts on returned case and resolves with Benign
+    await loadAnnotationsBatch(42, [{ id: 1, chr: '1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
+
+    // 4. Now the delayed first fetch (Pathogenic) finally resolves
+    resolveFirstBatch({
+      '1:100:A:T': {
+        global: null,
+        perCase: {
+          id: 1,
+          case_id: 42,
+          variant_id: 1,
+          acmg_classification: 'Pathogenic'
+        }
+      }
+    })
+    await initialLoad
+
+    // 5. Older read must NOT overwrite Benign because evictionEpoch bumped keyVersion!
+    expect(annotationCache.value.get('1:100:A:T')?.perCase?.acmg_classification).toBe('Benign')
+  })
 })

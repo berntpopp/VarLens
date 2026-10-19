@@ -192,17 +192,25 @@ export function getAnnotationCacheEpoch(): number {
   return cacheEpoch
 }
 
+export function getGeneration(): number {
+  return cacheEpoch
+}
+
 // Version counter per variant key — incremented on eviction so in-flight
 // reads that were started before eviction cannot overwrite newer or evicted data.
+// evictionEpoch ensures that clearing the cache during a case round-trip (A -> B -> A)
+// never causes an older in-flight request's keyVersion to collide with a new one.
+let evictionEpoch = 0
 const keyVersions = new Map<string, number>()
 
 export function getKeyVersion(key: string): number {
-  return keyVersions.get(key) ?? 0
+  return evictionEpoch * 1_000_000 + (keyVersions.get(key) ?? 0)
 }
 
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++
+  evictionEpoch++
   keyVersions.clear()
   annotationCache.value.clear()
   loadingStates.value.clear()
@@ -316,6 +324,9 @@ export function clearAnnotationCache(): void {
 /** Full reset including the generation counters — test isolation only. */
 export function resetAnnotationState(): void {
   clearAnnotationCache()
+  cacheEpoch = 0
+  evictionEpoch = 0
+  keyVersions.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0
 }

@@ -15,10 +15,8 @@ import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
 import {
   annotationCache,
-  beginAnnotationRequest,
   evictAnnotationCacheKeys,
-  hasDbSwitchedSince,
-  isTrackedCase,
+  getGeneration,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -44,6 +42,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   const isExecuting = ref(false)
   const coordsById = new Map<number, VariantCoords>()
 
+  let scopeGen = 0
+  let activeApplyId = 0
+
   function extractCoords(item: T): VariantCoords | null {
     if (
       item !== null &&
@@ -67,6 +68,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   watch(
     () => toValue(caseId),
     () => {
+      scopeGen += 1
+      activeApplyId += 1
+      isExecuting.value = false
       selectedIds.value = []
       lastClickedId.value = null
       coordsById.clear()
@@ -179,9 +183,11 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     }
     const targetIds = [...selectedIds.value]
     const targetSet = new Set(targetIds)
-    const requestDbPath = beginAnnotationRequest(cid)
+    const myScopeGen = scopeGen
+    const myCacheGen = getGeneration()
+    const myApplyId = ++activeApplyId
     const isStale = (): boolean =>
-      toValue(caseId) !== cid || hasDbSwitchedSince(requestDbPath) || !isTrackedCase(cid)
+      scopeGen !== myScopeGen || getGeneration() !== myCacheGen || toValue(caseId) !== cid
 
     isExecuting.value = true
     try {
@@ -303,7 +309,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       appState?.showSnack(msg, 'error')
       return 0
     } finally {
-      isExecuting.value = false
+      if (activeApplyId === myApplyId) {
+        isExecuting.value = false
+      }
     }
   }
 
