@@ -4,11 +4,7 @@
  */
 import type { Variant } from '../../../shared/types/api'
 import type { CohortVariant } from '../../../shared/types/cohort'
-import type {
-  ConsequenceCategory,
-  LollipopVariant,
-  ProteinDomain
-} from '../../../shared/types/protein'
+import type { LollipopVariant, ProteinDomain } from '../../../shared/types/protein'
 import {
   getConsequenceCategory,
   getConsequenceColor,
@@ -19,12 +15,21 @@ import { formatHgvs } from './formatters'
 
 type AnyVariant = Variant | CohortVariant
 
-const SEVERITY_ORDER: ConsequenceCategory[] = [
-  'truncating',
-  'inframe',
-  'missense',
-  'splice',
-  'synonymous'
+const SO_SEVERITY_ORDER: readonly string[] = [
+  'splice_acceptor_variant',
+  'splice_donor_variant',
+  'stop_gained',
+  'frameshift_variant',
+  'stop_lost',
+  'start_lost',
+  'inframe_insertion',
+  'inframe_deletion',
+  'missense_variant',
+  'splice_region_variant',
+  'synonymous_variant',
+  'HIGH',
+  'MODERATE',
+  'LOW'
 ]
 
 /**
@@ -43,9 +48,8 @@ export function resolveVariantConsequence(v: AnyVariant): string {
       .map((s) => s.trim())
       .filter(Boolean)
     if (terms.length > 0) {
-      for (const sev of SEVERITY_ORDER) {
-        const match = terms.find((t) => getConsequenceCategory(t) === sev)
-        if (match !== undefined) return match
+      for (const term of SO_SEVERITY_ORDER) {
+        if (terms.includes(term)) return term
       }
     }
   }

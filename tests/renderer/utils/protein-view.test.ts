@@ -147,6 +147,23 @@ describe('buildLollipopVariants (cohort carriers)', () => {
     const resCombinedSplice = buildLollipopVariants(combinedSplice, [], 'THOC5')
     expect(resCombinedSplice[0].consequenceCategory).toBe('splice')
 
+    // Canonical splice consequences rank above inframe and missense (#664)
+    const spliceDonorInframe = row({
+      func: 'splice_donor_variant&inframe_deletion',
+      consequence: 'HIGH'
+    })
+    expect(resolveVariantConsequence(spliceDonorInframe)).toBe('splice_donor_variant')
+    const resSpliceDonorInframe = buildLollipopVariants(spliceDonorInframe, [], 'THOC5')
+    expect(resSpliceDonorInframe[0].consequenceCategory).toBe('splice')
+
+    const spliceAcceptorMissense = row({
+      func: 'splice_acceptor_variant&missense_variant',
+      consequence: 'HIGH'
+    })
+    expect(resolveVariantConsequence(spliceAcceptorMissense)).toBe('splice_acceptor_variant')
+    const resSpliceAcceptorMissense = buildLollipopVariants(spliceAcceptorMissense, [], 'THOC5')
+    expect(resSpliceAcceptorMissense[0].consequenceCategory).toBe('splice')
+
     // Unrecognized func falling back to consequence: custom_unknown_term -> HIGH (truncating)
     const unrecognizedFunc = row({
       func: 'custom_unknown_term',
