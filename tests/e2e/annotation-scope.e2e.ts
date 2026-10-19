@@ -53,6 +53,9 @@ test.beforeAll(async () => {
   // Seed isolated database with frozen perf fixture (perf-case-a, perf-case-b, perf-case-c)
   await createPerfDatabase(launched.app, window, launched.userDataDir)
   await importFrozenPerfFixture(window, launched.app)
+  await window.reload()
+  await waitForAppShell(window)
+  await dismissDisclaimerIfPresent(window)
 })
 
 test.afterAll(async () => {
