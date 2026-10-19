@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { normalizeClinicalPaste } from '../../../src/renderer/src/dsl/clinical-paste'
 import { parseDsl } from '../../../src/renderer/src/dsl/parser'
 import { translateAst } from '../../../src/renderer/src/dsl/translator'
+import { ColumnFilterSchema } from '../../../src/shared/types/ipc-schemas'
 
 describe('normalizeClinicalPaste', () => {
   it('normalizes single genomic coordinates with commas and chr prefix', () => {
@@ -96,6 +97,35 @@ describe('normalizeClinicalPaste', () => {
     expect(translated.columnFilters.gene_symbol).toEqual({
       operator: 'in',
       value: ['BRCA1', 'BRCA2', 'PALB2']
+    })
+  })
+
+  it('integrates with parseDsl, translateAst, and ColumnFilterSchema for VCF variant keys (#683)', () => {
+    const raw = '17-43094464-G-A'
+    const normalized = normalizeClinicalPaste(raw)
+    const parsed = parseDsl(normalized)
+    expect(parsed.errors).toEqual([])
+    const translated = translateAst(parsed.ast!)
+    expect(translated.errors).toEqual([])
+    for (const filter of Object.values(translated.columnFilters)) {
+      const parsedFilter = ColumnFilterSchema.safeParse(filter)
+      expect(parsedFilter.success).toBe(true)
+    }
+    expect(translated.columnFilters.chr).toEqual({
+      operator: 'in',
+      value: ['chr17', '17']
+    })
+    expect(translated.columnFilters.pos).toEqual({
+      operator: '=',
+      value: 43094464
+    })
+    expect(translated.columnFilters.ref).toEqual({
+      operator: '=',
+      value: 'G'
+    })
+    expect(translated.columnFilters.alt).toEqual({
+      operator: '=',
+      value: 'A'
     })
   })
 })

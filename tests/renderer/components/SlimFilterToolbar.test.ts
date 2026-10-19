@@ -131,4 +131,14 @@ describe('SlimFilterToolbar Copy Sign-Out', () => {
     expect(btn.exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('does not render copy-sign-out menu when copyingSignOut is passed without showSignOut', () => {
+    const wrapper = mountToolbar({
+      ...baseProps,
+      copyingSignOut: false
+    })
+    const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
+    expect(btn.exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

@@ -4,6 +4,7 @@ import type { Tag } from '../../../shared/types/database-entities'
 import type { FilterState, ActiveFilter } from '../../../shared/types/filters'
 import { createFilterState } from '../../../shared/filters/filterDefaults'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
+import type { CopySignOutResult } from './useFilterExport'
 export { buildVariantFilterFromState as buildFilterFromState } from '../utils/filters/filterSerialization'
 
 // Re-export for existing consumers
@@ -75,6 +76,7 @@ export interface UseFilterStateReturn {
     format?: ExportFormat,
     tableFilters?: Omit<VariantFilter, 'case_id'>
   ) => Promise<ExportResult | null>
+  copySignOutTable: (caseId: number, format: 'markdown' | 'tsv') => Promise<CopySignOutResult>
 }
 
 /**

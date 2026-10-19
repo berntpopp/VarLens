@@ -105,27 +105,43 @@ export function useFilterExport(
       return { success: false, count: 0, error: 'API not available' }
     }
 
-    try {
-      const [starredRes, acmgRes] = await Promise.all([
-        api.variants.query(
-          caseId,
-          { starred_only: true, annotation_scope: 'all' } as Omit<VariantFilter, 'case_id'>,
-          0,
-          500
-        ),
-        api.variants.query(
-          caseId,
-          {
-            acmg_classifications: ['Pathogenic', 'Likely pathogenic'],
-            annotation_scope: 'all'
-          } as Omit<VariantFilter, 'case_id'>,
-          0,
-          500
-        )
-      ])
+    if (typeof navigator?.clipboard?.writeText !== 'function') {
+      return { success: false, count: 0, error: 'Clipboard API not available' }
+    }
 
-      const starredVariants = unwrapIpcResult(starredRes)?.data ?? []
-      const acmgVariants = unwrapIpcResult(acmgRes)?.data ?? []
+    try {
+      const fetchAllVariants = async (
+        filter: Omit<VariantFilter, 'case_id'>
+      ): Promise<Variant[]> => {
+        const PAGE_SIZE = 500
+        let offset = 0
+        const all: Variant[] = []
+
+        while (true) {
+          const res = await api.variants.query(caseId, filter, offset, PAGE_SIZE)
+          const result = unwrapIpcResult(res)
+          const rows = result?.data ?? []
+          all.push(...rows)
+          const total = result?.total_count ?? all.length
+          if (rows.length === 0 || all.length >= total) {
+            break
+          }
+          offset += rows.length
+        }
+
+        return all
+      }
+
+      const [starredVariants, acmgVariants] = await Promise.all([
+        fetchAllVariants({ starred_only: true, annotation_scope: 'all' } as Omit<
+          VariantFilter,
+          'case_id'
+        >),
+        fetchAllVariants({
+          acmg_classifications: ['Pathogenic', 'Likely pathogenic'],
+          annotation_scope: 'all'
+        } as Omit<VariantFilter, 'case_id'>)
+      ])
 
       const seen = new Set<number>()
       const deduped: Variant[] = []
@@ -161,9 +177,7 @@ export function useFilterExport(
       })
 
       const text = formatSignOutTable(rows, format)
-      if (typeof navigator.clipboard?.writeText === 'function') {
-        await navigator.clipboard.writeText(text)
-      }
+      await navigator.clipboard.writeText(text)
 
       return { success: true, count: deduped.length, format }
     } catch (error) {

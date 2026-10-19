@@ -132,7 +132,7 @@
             </v-tooltip>
           </v-btn>
 
-          <v-menu v-if="showSignOut || copyingSignOut !== undefined">
+          <v-menu v-if="showSignOut">
             <template #activator="{ props: signOutMenuProps }">
               <v-btn
                 v-bind="signOutMenuProps"
@@ -201,7 +201,7 @@
               :disabled="filteredCount === 0 || exportBlockedReason != null"
               @click="emit('export')"
             />
-            <template v-if="showSignOut || copyingSignOut !== undefined">
+            <template v-if="showSignOut">
               <v-list-item
                 :prepend-icon="mdiClipboardTextOutline"
                 title="Copy Sign-Out (Markdown)"

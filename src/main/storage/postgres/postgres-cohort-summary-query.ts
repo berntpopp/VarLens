@@ -170,6 +170,8 @@ export interface BuildSummaryResult {
 const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   chr: 'cvs.chr',
   pos: 'cvs.pos',
+  ref: 'cvs.ref',
+  alt: 'cvs.alt',
   gene_symbol: 'cvs.gene_symbol',
   cdna: 'cvs.cdna',
   aa_change: 'cvs.aa_change',
@@ -369,6 +371,14 @@ function buildColumnFilterCondition(
     const comparison = `${expression} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, isNumeric))}`
     // All summary column filters live in WHERE; mirror the live builder's
     // `includeEmpty` default for base WHERE columns (true).
+    const includeEmpty = filter.includeEmpty ?? true
+    return includeEmpty ? `(${expression} IS NULL OR ${comparison})` : comparison
+  }
+
+  if (operator === 'between' && Array.isArray(value) && value.length === 2) {
+    const low = addParam(normalizePostgresColumnFilterValue(value[0], isNumeric))
+    const high = addParam(normalizePostgresColumnFilterValue(value[1], isNumeric))
+    const comparison = `(${expression} >= ${low} AND ${expression} <= ${high})`
     const includeEmpty = filter.includeEmpty ?? true
     return includeEmpty ? `(${expression} IS NULL OR ${comparison})` : comparison
   }

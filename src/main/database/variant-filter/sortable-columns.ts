@@ -20,6 +20,8 @@ import { casePhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../../shared/sql/
 export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
   chr: 'chr',
   pos: 'pos',
+  ref: 'ref',
+  alt: 'alt',
   gene_symbol: 'gene_symbol',
   omim_mim_number: 'omim_mim_number',
   func: 'func',

@@ -177,6 +177,62 @@ describe('useFilterExport', () => {
       expect(row.acmg).toBe('Pathogenic (PVS1, PM2)')
       expect(row.comment).toBe('Case-specific note')
     })
+
+    it('ignores unconfirmed ACMG criteria and pairs evidence with classification source (#682)', () => {
+      const v = {
+        id: 1,
+        chr: '17',
+        pos: 43044295,
+        ref: 'G',
+        alt: 'A',
+        gene_symbol: 'BRCA1',
+        gt_num: '0/1'
+      } as unknown as Variant
+
+      const annot: VariantAnnotationsResult = {
+        perCase: {
+          id: 10,
+          acmg_classification: 'Likely pathogenic',
+          acmg_evidence: JSON.stringify({
+            pathogenic: [{ code: 'PVS1', confirmed: true }, { code: 'PM2', confirmed: false }],
+            benign: []
+          }),
+          per_case_comment: '   ' // empty whitespace
+        } as unknown as CaseVariantAnnotation,
+        global: {
+          id: 20,
+          acmg_classification: 'Benign',
+          acmg_evidence: JSON.stringify({ pathogenic: [], benign: [{ code: 'BA1', confirmed: true }] }),
+          global_comment: 'Global fallback note'
+        } as unknown as VariantAnnotation
+      }
+
+      const row = variantToSignOutRow(v, annot)
+      // Paired ACMG: uses perCase (Likely pathogenic), ignores global benign BA1
+      // Confirmed only: PM2 has confirmed: false, so only PVS1 is exported
+      expect(row.acmg).toBe('Likely pathogenic (PVS1)')
+      // Comment fallback: whitespace perCaseComment falls back to global_comment
+      expect(row.comment).toBe('Global fallback note')
+    })
+
+    it('escapes formula-leading characters in TSV export (#682)', () => {
+      const rows: SignOutRow[] = [
+        {
+          gene: 'BRCA1',
+          transcript: 'ENST1',
+          hgvs_c: 'c.1A>G',
+          hgvs_p: 'p.M1V',
+          chr_pos_ref_alt: '17:100 G>A',
+          zygosity: 'het',
+          gnomad_af: 0.001,
+          cadd: 25,
+          acmg: 'Pathogenic',
+          comment: '=1+1'
+        }
+      ]
+      const tsv = formatSignOutTable(rows, 'tsv')
+      expect(tsv).toContain("\t'=1+1")
+    })
   })
 
   describe('copySignOutTable', () => {
@@ -247,6 +303,57 @@ describe('useFilterExport', () => {
       expect(result.count).toBe(0)
       expect(result.error).toContain('No starred or Pathogenic / Likely pathogenic variants')
       expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    })
+
+    it('returns error when clipboard API is unavailable (#682)', async () => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {},
+        configurable: true,
+        writable: true
+      })
+
+      const { copySignOutTable } = useFilterExport(
+        ref({ ...FILTER_DEFAULTS } as FilterState),
+        ref([]),
+        ref(false)
+      )
+
+      const result = await copySignOutTable(1, 'markdown')
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Clipboard API not available')
+    })
+
+    it('paginates queries when more than 500 variants exist (#682)', async () => {
+      const page1 = Array.from({ length: 500 }, (_, i) => ({
+        id: i + 1,
+        chr: '1',
+        pos: i + 1,
+        ref: 'A',
+        alt: 'G',
+        gene_symbol: `GENE${i + 1}`
+      })) as unknown as Variant[]
+      const page2 = [{ ...v1, id: 501 }]
+
+      queryVariants.mockImplementation((_caseId, filter, offset) => {
+        if (filter.starred_only) {
+          if (offset === 0) return Promise.resolve({ data: page1, total_count: 501 })
+          return Promise.resolve({ data: page2, total_count: 501 })
+        }
+        return Promise.resolve({ data: [], total_count: 0 })
+      })
+      batchGetAnnotations.mockResolvedValue({})
+
+      const { copySignOutTable } = useFilterExport(
+        ref({ ...FILTER_DEFAULTS } as FilterState),
+        ref([]),
+        ref(false)
+      )
+
+      const result = await copySignOutTable(1, 'tsv')
+      expect(result.success).toBe(true)
+      expect(result.count).toBe(501)
+      expect(queryVariants).toHaveBeenCalledWith(1, expect.objectContaining({ starred_only: true }), 0, 500)
+      expect(queryVariants).toHaveBeenCalledWith(1, expect.objectContaining({ starred_only: true }), 500, 500)
     })
   })
 })

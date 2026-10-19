@@ -68,9 +68,26 @@ const nullishNumberArray = () =>
     .transform((val) => val ?? undefined)
 
 /** Schema for a single typed column filter */
-const ColumnFilterSchema = z.object({
-  operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'like', 'in', 'is_null', 'not_null']),
-  value: z.union([z.string(), z.number(), z.array(z.string())]),
+export const ColumnFilterSchema = z.object({
+  operator: z.enum([
+    '=',
+    '!=',
+    '<',
+    '>',
+    '<=',
+    '>=',
+    'between',
+    'like',
+    'in',
+    'is_null',
+    'not_null'
+  ]),
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.array(z.string()),
+    z.tuple([z.number(), z.number()])
+  ]),
   includeEmpty: z.boolean().optional()
 })
 

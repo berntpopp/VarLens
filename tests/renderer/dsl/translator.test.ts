@@ -186,6 +186,34 @@ describe('translateAst Boolean fidelity (#526)', () => {
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0]).toContain("lower bound (30) cannot exceed upper bound (20) for 'cadd'")
   })
+
+  it('does not combine strict < or > bounds into between (#683)', () => {
+    const result = translate('pos:>:100 AND pos:<:200')
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain("only one condition per field is supported ('pos' is used twice)")
+  })
+
+  it('combines info field range bounds into between (#683)', () => {
+    const result = translate('info.DP:>=:10 AND info.DP:<=:50')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters['info.DP']).toEqual({
+      operator: 'between',
+      value: [10, 50],
+      includeEmpty: true
+    })
+  })
+
+  it('combines cohort-only numeric column bounds into between (#683)', () => {
+    const parsed = parseDsl('carrier_count:>=:2 AND carrier_count:<=:5', 'cohort')
+    expect(parsed.errors).toEqual([])
+    const result = translateAst(parsed.ast!)
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.carrier_count).toEqual({
+      operator: 'between',
+      value: [2, 5],
+      includeEmpty: true
+    })
+  })
 })
 
 describe('translateAst — chromosome', () => {

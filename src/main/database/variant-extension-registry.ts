@@ -305,5 +305,11 @@ function translateExtensionFilter(
     params.push(value)
     return nullBranch ? `(${col} IS NULL OR ${col} ${operator} ?)` : `${col} ${operator} ?`
   }
+  if (operator === 'between' && Array.isArray(value) && value.length === 2) {
+    params.push(value[0], value[1])
+    return nullBranch
+      ? `(${col} IS NULL OR (${col} >= ? AND ${col} <= ?))`
+      : `(${col} >= ? AND ${col} <= ?)`
+  }
   return null
 }

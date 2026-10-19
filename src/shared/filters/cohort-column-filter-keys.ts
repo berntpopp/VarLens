@@ -21,6 +21,8 @@ import { infoFieldKey } from './info-field-filter'
 export const COHORT_SUMMARY_FILTER_COLUMNS: Readonly<Record<string, string>> = {
   chr: 'chr',
   pos: 'pos',
+  ref: 'ref',
+  alt: 'alt',
   gene_symbol: 'gene_symbol',
   cdna: 'cdna',
   aa_change: 'aa_change',

@@ -134,6 +134,20 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     rangeExcludesEmpty: true
   },
   {
+    key: 'ref',
+    label: 'Ref',
+    aliases: ['reference'],
+    type: 'text',
+    operators: TEXT_OPERATORS
+  },
+  {
+    key: 'alt',
+    label: 'Alt',
+    aliases: ['alternate'],
+    type: 'text',
+    operators: TEXT_OPERATORS
+  },
+  {
     key: 'gene_symbol',
     label: 'Gene',
     aliases: ['gene', 'symbol'],
@@ -439,8 +453,16 @@ for (const col of FILTER_COLUMNS) {
 }
 
 /** Find a column definition by key or alias (case-insensitive) */
-export function findColumn(nameOrAlias: string): FilterColumnDef | undefined {
-  return columnMap.get(nameOrAlias.toLowerCase())
+export function findColumn(nameOrAlias: string, scope?: FilterScope): FilterColumnDef | undefined {
+  const direct = columnMap.get(nameOrAlias.toLowerCase())
+  if (direct) return direct
+  if (scope === 'cohort') {
+    const lower = nameOrAlias.toLowerCase()
+    return COHORT_ONLY_COLUMNS.find(
+      (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
+    )
+  }
+  return undefined
 }
 
 /** Get valid operators for a column (empty array if unknown) */

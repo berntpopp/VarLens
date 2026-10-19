@@ -40,7 +40,7 @@ const options = computed<string[]>(() => props.meta?.distinctValues ?? [])
 
 const selectedValues = computed<string[]>(() => {
   if (props.modelValue?.operator === 'in' && Array.isArray(props.modelValue.value)) {
-    return props.modelValue.value
+    return props.modelValue.value.map(String)
   }
   return []
 })

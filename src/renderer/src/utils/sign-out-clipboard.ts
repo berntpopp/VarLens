@@ -1,5 +1,5 @@
-import { parseAcmgEvidence } from '../../../shared/acmg/acmg-evidence'
 import { genotypeZygosity } from '../../../shared/utils/genotype'
+import { escapeDelimitedCell } from '../../../shared/utils/delimited-text'
 import type { Variant, VariantAnnotationsResult } from '../../../shared/types/api'
 
 export interface SignOutRow {
@@ -33,7 +33,11 @@ function sanitizeCell(val: unknown, format: 'markdown' | 'tsv'): string {
   const str = String(val)
     .replace(/[\t\r\n]+/g, ' ')
     .trim()
-  return format === 'markdown' ? str.replace(/\|/g, '\\|') : str
+  if (str === '') return '-'
+  if (format === 'markdown') {
+    return str.replace(/\|/g, '\\|')
+  }
+  return escapeDelimitedCell(str, '\t')
 }
 
 export function formatSignOutTable(rows: SignOutRow[], format: 'markdown' | 'tsv'): string {
@@ -78,28 +82,73 @@ export function formatSignOutTable(rows: SignOutRow[], format: 'markdown' | 'tsv
   return [header, separator, ...lines].join('\n')
 }
 
+export function extractAcmgCriteria(evidenceJson: string | null | undefined): string[] {
+  if (evidenceJson == null || evidenceJson === '') return []
+  try {
+    const parsed: unknown = JSON.parse(evidenceJson)
+    if (parsed == null || typeof parsed !== 'object') return []
+    const record = parsed as Record<string, unknown>
+
+    const list: unknown[] = []
+    if (Array.isArray(record.pathogenic)) list.push(...record.pathogenic)
+    if (Array.isArray(record.benign)) list.push(...record.benign)
+    if (Array.isArray(record.codes)) list.push(...record.codes)
+    if (Array.isArray(record.items)) list.push(...record.items)
+
+    const criteria: string[] = []
+    for (const item of list) {
+      if (typeof item === 'string') {
+        criteria.push(item)
+      } else if (item !== null && typeof item === 'object') {
+        const entry = item as { code?: unknown; confirmed?: unknown }
+        if (entry.confirmed !== false && typeof entry.code === 'string') {
+          criteria.push(entry.code)
+        }
+      }
+    }
+    return criteria
+  } catch {
+    return []
+  }
+}
+
 export function variantToSignOutRow(
   variant: Variant,
   annotation?: VariantAnnotationsResult | null
 ): SignOutRow {
+  const variantRecord = variant as Variant & {
+    acmg_classification?: string | null
+    comment?: string | null
+  }
+  const perCase = annotation?.perCase
+  const global = annotation?.global
+  const usePerCase = perCase?.acmg_classification != null || perCase?.acmg_evidence != null
+  const acmgSource = usePerCase ? perCase : global
+
   const classification =
-    annotation?.perCase?.acmg_classification ?? annotation?.global?.acmg_classification ?? null
-  const evidenceJson =
-    annotation?.perCase?.acmg_evidence ?? annotation?.global?.acmg_evidence ?? null
-  const evidence = parseAcmgEvidence(evidenceJson)
-  const criteria = evidence ? [...evidence.pathogenic, ...evidence.benign].map((e) => e.code) : []
+    acmgSource?.acmg_classification ?? variantRecord.acmg_classification ?? null
+  const evidenceJson = acmgSource?.acmg_evidence ?? null
+  const criteria = extractAcmgCriteria(evidenceJson)
 
   let acmg: string | null = null
-  if (classification && criteria.length > 0) {
+  if (classification !== null && criteria.length > 0) {
     acmg = `${classification} (${criteria.join(', ')})`
-  } else if (classification) {
+  } else if (classification !== null) {
     acmg = classification
   } else if (criteria.length > 0) {
     acmg = `(${criteria.join(', ')})`
   }
 
-  const comment =
-    annotation?.perCase?.per_case_comment ?? annotation?.global?.global_comment ?? null
+  const perCaseComment = annotation?.perCase?.per_case_comment?.trim()
+  const globalComment = annotation?.global?.global_comment?.trim()
+  const commentCandidate =
+    perCaseComment !== undefined && perCaseComment !== ''
+      ? perCaseComment
+      : globalComment !== undefined && globalComment !== ''
+        ? globalComment
+        : variantRecord.comment
+  const comment = commentCandidate ?? ''
+
   const zygosity = genotypeZygosity(variant.gt_num) ?? variant.gt_num ?? null
 
   return {

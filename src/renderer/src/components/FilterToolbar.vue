@@ -11,6 +11,7 @@
     :export-formats="isWebRuntime()"
     :columns="columns"
     :copying-sign-out="copyingSignOut"
+    show-sign-out
     @clear-all="handleClearAll"
     @clear-filter="handleClearFilter"
     @open-filter-drawer="filterDrawerOpen = true"
@@ -219,10 +220,7 @@ interface Emits {
   (e: 'reset-sort'): void
   (e: 'clear-column-filters'): void
   (e: 'clear-column-filter', columnKey: string): void
-  (
-    e: 'export-success',
-    data: { filePath: string; action?: { text: string; callback: () => void } }
-  ): void
+  (e: 'export-success', data: { filePath: string; action?: { text: string; callback: () => void } }): void
   (e: 'export-error', error: string): void
 }
 
@@ -232,9 +230,7 @@ const { api } = useApiService()
 const { fields: caseInfoFields } = useCaseInfoFields(() => props.caseId)
 const { canUse } = useCapabilityStore()
 
-function warnUnsupported(reason: string): void {
-  logService.warn(reason, 'backend-capabilities')
-}
+const warnUnsupported = (reason: string): void => logService.warn(reason, 'backend-capabilities')
 
 async function canUseOrWarn(path: CapabilityPath): Promise<boolean> {
   const reason = await getCurrentUnsupportedReason(path)
@@ -561,7 +557,6 @@ const exportToExcel = async (format?: ExportFormat) => {
   const result = await composableExportToExcel(props.caseId, props.caseName, format, tableFilters)
 
   if (result === null) return
-
   if (!result.success && result.error !== undefined && result.error !== '') {
     emit('export-error', result.error)
   } else if (result.success && result.filePath !== undefined && result.filePath !== '') {
@@ -579,6 +574,10 @@ const handleCopySignOut = async (format: 'markdown' | 'tsv'): Promise<void> => {
   copyingSignOut.value = true
   try {
     const res = await copySignOutTable(props.caseId, format)
+    if (!res.success) {
+      emit('export-error', res.error ?? 'Failed to copy sign-out table')
+      return
+    }
     emit('export-success', { filePath: `clipboard (${res.count} variants)` })
   } catch (err) {
     emit('export-error', formatError(err))
