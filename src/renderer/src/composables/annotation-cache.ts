@@ -19,6 +19,7 @@ export interface AnnotationCache {
 export * from './annotation-mutation-tracker'
 import {
   clearMutationTracker,
+  resetMutationTracker,
   getPerCaseSlotOwner,
   perCaseSlotKey,
   perCaseVersionSlot,
@@ -26,7 +27,6 @@ import {
   type SlotValue,
   type SlotPatch,
   perCaseSlotOwners,
-  confirmedBases,
   inFlightMutations,
   confirmedFieldPatches,
   setConfirmedFieldPatch,
@@ -389,19 +389,7 @@ function dropKeyMetadata(key: string): void {
 function dropKeyState(key: string): void {
   dropKeyMetadata(key)
   deletePerCaseForCoordKey(key)
-  const o = getPerCaseSlotOwner(key)
-  if (o) {
-    const sk = perCaseSlotKey(o.caseId, o.variantId, key)
-    confirmedBases.delete(sk)
-    inFlightMutations.delete(sk)
-    confirmedFieldPatches.delete(sk)
-  }
   perCaseSlotOwners.delete(key)
-  for (const p of ['perCase', 'global']) {
-    confirmedBases.delete(`${p}:${key}`)
-    inFlightMutations.delete(`${p}:${key}`)
-    confirmedFieldPatches.delete(`${p}:${key}`)
-  }
 }
 
 /** Evict specific variant keys from the cache while preserving unrelated entries. */
@@ -448,14 +436,20 @@ export function evictAnnotationCacheKeysForBulkTriage(
   bulkOwners?: Map<
     string,
     { caseId: number; variantId: number } | Array<{ caseId: number; variantId: number }>
-  >
+  >,
+  fromCurrentEpoch: boolean = true
 ): void {
   let changed = false
   const updates = bulkUpdates as Record<string, unknown> | undefined
   for (const key of affectedKeys) {
-    if (annotationCache.value.delete(key)) changed = true
-    dropKeyMetadata(key)
-    deletePerCaseForCoordKey(key)
+    const hasInFlightForKey =
+      inFlightMutations.has(`perCase:${key}`) ||
+      Array.from(inFlightMutations.keys()).some((sk) => sk.endsWith(`:${key}`))
+    if (fromCurrentEpoch || !hasInFlightForKey) {
+      if (annotationCache.value.delete(key)) changed = true
+      dropKeyMetadata(key)
+      deletePerCaseForCoordKey(key)
+    }
     const rawOwners = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
     const owners: Array<{ caseId: number; variantId: number }> = Array.isArray(rawOwners)
       ? rawOwners
@@ -472,6 +466,12 @@ export function evictAnnotationCacheKeysForBulkTriage(
       for (const o of targetOwners) {
         const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
         const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
+        const hasCurrentActivity =
+          !fromCurrentEpoch &&
+          (getConfirmedWriteVersion(key, vSlot) > 0 ||
+            (inFlightMutations.get(slotKey)?.some((m) => m.fieldGroup === fg) ?? false) ||
+            (inFlightMutations.get(`perCase:${key}`)?.some((m) => m.fieldGroup === fg) ?? false))
+        if (hasCurrentActivity) continue
         const verMap = bulkWriteVersions.get(key)
         const bulkVer = verMap?.get(vSlot) ?? verMap?.get(fg) ?? bumpWriteVersion(key, vSlot)
         const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
@@ -513,7 +513,7 @@ export function clearAnnotationCache(): void {
 /** Full reset including the generation counters — test isolation only. */
 export function resetAnnotationState(): void {
   clearAnnotationCache()
-  clearMutationTracker()
+  resetMutationTracker()
   cacheEpoch = 0
   evictionEpoch = 0
   nextLoadingToken = 0

@@ -10,67 +10,20 @@ import type { CaseVariantAnnotation } from '../../../shared/types/database-entit
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import {
-  allocateMutationId,
-  annotationCache,
-  applyConfirmedFieldPatches,
-  beginAnnotationRequest,
-  bumpKeyVersion,
-  bumpWriteVersion,
-  cacheSet,
-  cacheSetGlobalSlot,
-  cacheSetPerCaseSlot,
-  computeOptimisticSlot,
-  confirmedBases,
-  confirmedFieldPatches,
-  dropCacheOfClosedDatabase,
-  ensurePerCaseSlotOwner,
-  evictAnnotationCacheKeys,
-  getAnnotationCacheEpoch,
-  getAnnotationGeneration,
-  getCachedVariantId,
-  getConfirmedWriteVersion,
-  getKeyVersion,
-  getPerCaseSlotOwner,
-  hasDbSwitchedSince,
-  hasPerCaseByVariantId,
-  inFlightMutations,
-  isCacheOfBuild,
-  isKeyLoading,
-  isPerCaseSlotOwner,
-  isTrackedCase,
-  markAwaited,
-  mergeServerSlot,
-  needsLoad,
-  otherSlot,
-  perCaseSlotKey,
-  perCaseVersionSlot,
-  pruneInFlightMutationsOnSuccess,
-  readSlot,
-  removeInFlightMutation,
-  rollBackSlot,
-  setCachedVariantId,
-  setConfirmedFieldPatch,
-  setConfirmedWriteVersion,
-  setLoading,
-  setPerCaseByVariantId,
-  slotIdentity,
-  slotOf,
-  takeAwaited,
-  triggerAnnotationCache,
-  unloadedSlotOf,
-  variantKey,
-  writeSlot,
-  type AnnotationCache,
-  type AnnotationUpdates,
-  type AnnotationWriteScope,
-  type MutationPlan,
-  type SlotValue,
-  type VariantCoords,
-  extractFieldGroupPatch,
-  toggleStarPlan,
-  acmgPlan,
-  commentPlan,
-  acmgWithEvidencePlan
+  allocateMutationId, annotationCache, applyConfirmedFieldPatches, beginAnnotationRequest,
+  bumpKeyVersion, bumpWriteVersion, cacheSet, cacheSetGlobalSlot, cacheSetPerCaseSlot,
+  computeOptimisticSlot, confirmedBases, confirmedFieldPatches, dropCacheOfClosedDatabase,
+  ensurePerCaseSlotOwner, evictAnnotationCacheKeys, getAnnotationCacheEpoch, getAnnotationGeneration,
+  getCachedVariantId, getConfirmedWriteVersion, getKeyVersion, getPerCaseSlotOwner,
+  hasDbSwitchedSince, hasPerCaseByVariantId, inFlightMutations, isCacheOfBuild, isKeyLoading,
+  isPerCaseSlotOwner, isTrackedCase, markAwaited, mergeServerSlot, needsLoad, otherSlot,
+  perCaseSlotKey, perCaseVersionSlot, pruneInFlightMutationsOnSuccess, readSlot, removeInFlightMutation,
+  rollBackSlot, setCachedVariantId, setConfirmedFieldPatch, setConfirmedWriteVersion, setLoading,
+  setPerCaseByVariantId, slotIdentity, slotOf, takeAwaited, triggerAnnotationCache, unloadedSlotOf,
+  variantKey, writeSlot,
+  type AnnotationCache, type AnnotationUpdates, type AnnotationWriteScope, type MutationPlan,
+  type SlotValue, type VariantCoords,
+  extractFieldGroupPatch, toggleStarPlan, acmgPlan, commentPlan, acmgWithEvidencePlan
 } from './annotation-cache'
 
 /** Scope of a load: one case, or global. */
@@ -173,12 +126,19 @@ async function mutate(
   })
   inFlightMutations.set(slotKey, list)
 
+  const optimistic = computeOptimisticSlot(
+    confirmedBases.get(slotKey) ?? (baseSlot ? { ...baseSlot } : null),
+    list
+  )
   if (current) {
     if (!confirmedBases.has(slotKey)) {
       confirmedBases.set(slotKey, baseSlot ? { ...baseSlot } : null)
     }
-    writeSlot(current, scope, computeOptimisticSlot(confirmedBases.get(slotKey) ?? null, list))
+    writeSlot(current, scope, optimistic)
     triggerAnnotationCache()
+  }
+  if (scope.kind === 'case') {
+    setPerCaseByVariantId(scope.caseId, scope.variantId, optimistic as CaseVariantAnnotation | null, key)
   }
 
   try {
@@ -235,9 +195,10 @@ async function mutate(
     )
     return true
   } catch (error) {
-    const wasActive =
-      (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false) &&
-      (scope.kind !== 'case' || isPerCaseSlotOwner(key, scope.caseId, scope.variantId))
+    const isOwner = scope.kind !== 'case' || isPerCaseSlotOwner(key, scope.caseId, scope.variantId)
+    const hadMutation =
+      epoch === getAnnotationCacheEpoch() &&
+      (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false)
     if (epoch === getAnnotationCacheEpoch()) {
       removeInFlightMutation(slotKey, mutationId)
     }
@@ -245,24 +206,38 @@ async function mutate(
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
     if (leftScope(scope, dbPath)) return false
 
-    if (wasActive) {
-      const target =
-        (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ??
-        current
-      if (target && confirmedBases.has(slotKey)) {
+    if (hadMutation) {
+      if (confirmedBases.has(slotKey)) {
         const remaining = inFlightMutations.get(slotKey)
         const base = applyConfirmedFieldPatches(slotKey, confirmedBases.get(slotKey) ?? null)
-        if (remaining && remaining.length > 0) {
-          writeSlot(target, scope, computeOptimisticSlot(base, remaining))
-        } else {
-          if (base !== null) writeSlot(target, scope, { ...base })
-          else rollBackSlot(target, scope, plan.rollback, null)
+        const nextSlot =
+          remaining && remaining.length > 0 ? computeOptimisticSlot(base, remaining) : base ? { ...base } : null
+        if (!remaining || remaining.length === 0) {
           confirmedBases.delete(slotKey)
           inFlightMutations.delete(slotKey)
           confirmedFieldPatches.delete(slotKey)
+          if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
         }
-      } else if (target && current) {
-        rollBackSlot(target, scope, plan.rollback, baseSlot)
+        if (scope.kind === 'case') {
+          setPerCaseByVariantId(scope.caseId, scope.variantId, nextSlot as CaseVariantAnnotation | null, key)
+        }
+        if (isOwner) {
+          const target =
+            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ?? current
+          if (target) {
+            if (nextSlot !== null) writeSlot(target, scope, nextSlot)
+            else rollBackSlot(target, scope, plan.rollback, null)
+          }
+        }
+      } else if (current !== undefined) {
+        if (scope.kind === 'case') {
+          setPerCaseByVariantId(scope.caseId, scope.variantId, baseSlot as CaseVariantAnnotation | null, key)
+        }
+        if (isOwner) {
+          const target =
+            (epoch === getAnnotationCacheEpoch() ? annotationCache.value.get(key) : undefined) ?? current
+          rollBackSlot(target, scope, plan.rollback, baseSlot)
+        }
       }
     }
     triggerAnnotationCache()
@@ -319,11 +294,15 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
       confirmedBases.set(slotKey, basePerCase)
       const perCase = computeOptimisticSlot(basePerCase, inFlight) as CaseVariantAnnotation | null
       cacheSet(key, { global: entry.global, perCase })
+      if (owner) setPerCaseByVariantId(owner.caseId, owner.variantId, perCase, key)
     } else {
       confirmedBases.delete(slotKey)
       inFlightMutations.delete(slotKey)
       confirmedFieldPatches.delete(slotKey)
-      confirmedFieldPatches.delete(`perCase:${key}`)
+      const hasOther = Array.from(inFlightMutations.keys()).some(
+        (k) => k.endsWith(`:${key}`) && k !== slotKey
+      )
+      if (!hasOther) confirmedFieldPatches.delete(`perCase:${key}`)
       cacheSet(key, { global: entry.global, perCase: entry.perCase })
     }
   } else {
@@ -544,7 +523,10 @@ async function loadBatch(
           ) {
             setCachedVariantId(key, reqVid)
           }
-          setPerCaseByVariantId(scope.caseId, reqVid, loaded, key)
+          const stored = isPerCaseSlotOwner(key, scope.caseId, reqVid)
+            ? (annotationCache.value.get(key)?.perCase ?? loaded)
+            : loaded
+          setPerCaseByVariantId(scope.caseId, reqVid, stored, key)
         }
       }
     } catch (error) {

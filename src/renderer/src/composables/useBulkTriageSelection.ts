@@ -22,6 +22,7 @@ import {
   ensurePerCaseSlotOwner,
   evictAnnotationCacheKeys,
   evictAnnotationCacheKeysForBulkTriage,
+  getAnnotationCacheEpoch,
   getCachedBuild,
   getCachedCaseId,
   getCurrentDbPath,
@@ -470,6 +471,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         bulkWriteVersions.set(k, m)
       }
 
+      const myCacheEpoch = getAnnotationCacheEpoch()
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
 
       // If active case or database changed away from cid, write has committed in storage
@@ -489,9 +491,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       const preCachedToReload: Array<VariantCoords & { id: number }> = []
       for (const [id, coords] of targetCoords.entries()) {
         const k = variantKey(coords)
-        if (annotationCache.value.has(k) || isKeyLoading(k)) {
-          preCachedToReload.push({ id, ...coords })
-        }
+        if (annotationCache.value.has(k) || isKeyLoading(k)) preCachedToReload.push({ id, ...coords })
       }
 
       evictAnnotationCacheKeysForBulkTriage(
@@ -499,14 +499,13 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         touchedFields,
         bulkWriteVersions,
         updates,
-        bulkOwners
+        bulkOwners,
+        myCacheEpoch === getAnnotationCacheEpoch()
       )
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
-        if (!isCacheStillOnCase(cid, myDbPath)) {
-          return res.updatedCount
-        }
+        if (!isCacheStillOnCase(cid, myDbPath)) return res.updatedCount
       }
 
       async function runDisposedRecovery(targetCid: number): Promise<void> {

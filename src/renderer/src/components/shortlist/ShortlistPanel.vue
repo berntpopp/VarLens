@@ -62,6 +62,7 @@ import {
   getWriteVersion,
   hasDbSwitchedSince,
   inFlightMutations,
+  isCacheOfBuild,
   isPerCaseSlotOwner,
   markAwaited,
   perCaseSlotKey,
@@ -243,15 +244,26 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       }
     }
   } catch (e) {
+    const sameScope =
+      !hasDbSwitchedSince(dbPath) &&
+      getAnnotationCacheEpoch() === epoch &&
+      isCacheOfBuild(build) &&
+      (getCachedCaseId() === null || getCachedCaseId() === row.case_id)
+    const hadMutation =
+      epoch === getAnnotationCacheEpoch() &&
+      (inFlightMutations.get(slotKey)?.some((m) => m.id === toggleToken) ?? false)
     if (epoch === getAnnotationCacheEpoch()) {
       removeInFlightMutation(slotKey, toggleToken)
     }
-    if (confirmedBases.has(slotKey)) {
-      const base = confirmedBases.get(slotKey) ?? null
-      const rolledBack = (applyConfirmedFieldPatches(slotKey, base) ??
-        base) as CaseVariantAnnotation | null
+    if (sameScope && hadMutation && confirmedBases.has(slotKey)) {
+      const base = applyConfirmedFieldPatches(slotKey, confirmedBases.get(slotKey) ?? null)
+      const remaining = inFlightMutations.get(slotKey)
+      const rolledBack = (remaining && remaining.length > 0
+        ? computeOptimisticSlot(base, remaining)
+        : base) as CaseVariantAnnotation | null
       setPerCaseByVariantId(row.case_id, row.id, rolledBack, key)
-      if (isPerCaseSlotOwner(key, row.case_id, row.id)) {
+      const isOwner = isPerCaseSlotOwner(key, row.case_id, row.id)
+      if (isOwner) {
         const liveEntry = annotationCache.value.get(key)
         const liveUnloaded = unloadedSlotOf(key)
         bumpKeyVersion(key)
@@ -261,9 +273,10 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
           liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
         )
       }
-      if (!inFlightMutations.has(slotKey)) {
+      if (!remaining || remaining.length === 0) {
         confirmedBases.delete(slotKey)
         confirmedFieldPatches.delete(slotKey)
+        if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
       }
     }
     logService.error(

@@ -161,10 +161,14 @@ export function setPerCaseByVariantId(
 export function deletePerCaseForCoordKey(coordKey: string): void {
   const set = variantKeysByCoord.get(coordKey)
   if (set) {
-    for (const k of set) {
-      perCaseByVariantId.delete(k)
+    for (const k of Array.from(set)) {
+      const [cid, vid] = k.split(':').map(Number)
+      if (!inFlightMutations.has(perCaseSlotKey(cid, vid, coordKey))) {
+        perCaseByVariantId.delete(k)
+        set.delete(k)
+      }
     }
-    variantKeysByCoord.delete(coordKey)
+    if (set.size === 0) variantKeysByCoord.delete(coordKey)
   }
 }
 
@@ -212,15 +216,19 @@ export function pruneInFlightMutationsOnSuccess(
 }
 
 export function clearMutationTracker(): void {
-  issuedWriteVersions.clear()
   confirmedWriteVersions.clear()
-  maxVariantWriteVersions.clear()
   confirmedFieldPatches.clear()
   confirmedBases.clear()
   inFlightMutations.clear()
   perCaseSlotOwners.clear()
   perCaseByVariantId.clear()
   variantKeysByCoord.clear()
+}
+
+export function resetMutationTracker(): void {
+  issuedWriteVersions.clear()
+  maxVariantWriteVersions.clear()
+  clearMutationTracker()
 }
 
 export type AnnotationWriteScope =
