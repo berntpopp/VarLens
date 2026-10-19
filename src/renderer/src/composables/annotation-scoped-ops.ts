@@ -308,7 +308,8 @@ async function mutate(
     return true
   } catch (error) {
     const wasActive =
-      !current || (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false)
+      (inFlightMutations.get(slotKey)?.some((m) => m.id === mutationId) ?? false) &&
+      (scope.kind !== 'case' || isPerCaseSlotOwner(key, scope.caseId, scope.variantId))
     removeInFlightMutation(slotKey, mutationId)
     logService.error(plan.failureMessage + getTransportErrorMessage(error), 'annotations')
     onWriteFailed(error instanceof UnconfirmedBuildError ? error.message : undefined)
@@ -332,8 +333,8 @@ async function mutate(
       } else if (target) {
         rollBackSlot(target, scope, plan.rollback, baseSlot)
       }
-      triggerAnnotationCache()
     }
+    triggerAnnotationCache()
     return false
   }
 }

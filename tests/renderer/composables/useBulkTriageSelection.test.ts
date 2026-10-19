@@ -740,7 +740,6 @@ describe('useBulkTriageSelection', () => {
     const bulkDef = defer()
     const batchGetDef = defer()
     const acmgDef = defer()
-
     // @ts-expect-error Mock window.api
     window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(bulkDef.promise)
     // @ts-expect-error Mock window.api

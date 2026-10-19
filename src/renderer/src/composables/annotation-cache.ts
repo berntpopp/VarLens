@@ -249,16 +249,14 @@ export function needsLoad(key: string, kind: AnnotationBatchKind): boolean {
   return kind === 'case' || unloaded === 'global'
 }
 
-export const invalidateAnnotationGeneration = (kind: AnnotationBatchKind): void => {
-  annotationGenerations[kind]++
-}
+export const invalidateAnnotationGeneration = (kind: AnnotationBatchKind): void =>
+  void annotationGenerations[kind]++
 export const getAnnotationGeneration = (kind: AnnotationBatchKind): number =>
   annotationGenerations[kind]
 
 const awaitedKeys: Record<AnnotationBatchKind, Set<string>> = { case: new Set(), global: new Set() }
-export const markAwaited = (kind: AnnotationBatchKind, key: string): void => {
-  awaitedKeys[kind].add(key)
-}
+export const markAwaited = (kind: AnnotationBatchKind, key: string): void =>
+  void awaitedKeys[kind].add(key)
 export const takeAwaited = (kind: AnnotationBatchKind, key: string): boolean =>
   awaitedKeys[kind].delete(key)
 
@@ -535,13 +533,16 @@ export function evictAnnotationCacheKeysForBulkTriage(
   affectedKeys: Iterable<string>,
   touchedFields: Array<'star' | 'acmg' | 'comment'>,
   bulkWriteVersions: Map<string, Map<'star' | 'acmg' | 'comment', number>>,
-  bulkUpdates?: Record<string, unknown> | object
+  bulkUpdates?: Record<string, unknown> | object,
+  bulkOwners?: Map<string, { caseId: number; variantId: number }>
 ): void {
   let changed = false
   const updates = bulkUpdates as Record<string, unknown> | undefined
   for (const key of affectedKeys) {
     if (annotationCache.value.delete(key)) changed = true
     dropKeyMetadata(key)
+    const o = bulkOwners?.get(key)
+    if (o) ensurePerCaseSlotOwner(key, o.caseId, o.variantId)
     const slotKey = `perCase:${key}`
     for (const fg of touchedFields) {
       const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, `perCase:${fg}`)
