@@ -130,6 +130,26 @@
     {
       "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
       "callerFunction": "execute",
+      "type": "panels:activeForCase"
+    },
+    {
+      "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
+      "callerFunction": "execute",
+      "type": "panels:get"
+    },
+    {
+      "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
+      "callerFunction": "execute",
+      "type": "panels:getGenes"
+    },
+    {
+      "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
+      "callerFunction": "execute",
+      "type": "panels:list"
+    },
+    {
+      "file": "src/main/storage/sqlite/SqliteReadExecutor.ts",
+      "callerFunction": "execute",
       "type": "region-files:list"
     },
     {
