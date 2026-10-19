@@ -5,38 +5,52 @@
  *
  * Run with: npx playwright test tests/e2e/annotation-scope.e2e.ts
  */
+import { test, expect, type Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import {
-  test,
-  expect,
-  _electron as electron,
-  type ElectronApplication,
-  type Page
-} from '@playwright/test'
+  launchElectronApp,
+  type LaunchElectronAppResult,
+  waitForAppShell,
+  dismissDisclaimerIfPresent
+} from './helpers/electron-app'
+import {
+  createPerfDatabase,
+  importFrozenPerfFixture,
+  selectCaseByName
+} from './helpers/perf-fixture'
 
-let app: ElectronApplication
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+const BLOCKING_IMPACTS = new Set(['serious', 'critical'])
+
+let launched: LaunchElectronAppResult
 let window: Page
+let disclaimerViolations: unknown[] = []
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: ['./out/main/index.js'],
-    env: {
-      ...process.env,
-      NODE_ENV: 'production'
-    }
-  })
-  window = await app.firstWindow()
-  await window.waitForSelector('.v-application', { timeout: 15000 })
+  launched = await launchElectronApp({ perfMode: true })
+  window = launched.window
+  await waitForAppShell(window)
 
-  // Dismiss disclaimer dialog if present
-  const disclaimerBtn = window.locator('button:has-text("I Understand")')
-  if ((await disclaimerBtn.count()) > 0) {
-    await disclaimerBtn.click()
-    await window.waitForTimeout(500)
+  // Capture axe scan on initial DisclaimerDialog before dismissing (#669)
+  const disclaimerDialog = window.locator('.v-overlay--active .v-dialog')
+  if ((await disclaimerDialog.count()) > 0 && (await disclaimerDialog.isVisible())) {
+    const results = await new AxeBuilder({ page: window })
+      .include('.v-overlay--active')
+      .withTags(WCAG_TAGS)
+      .analyze()
+    disclaimerViolations = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
   }
+  await dismissDisclaimerIfPresent(window)
+
+  // Seed isolated database with frozen perf fixture (perf-case-a, perf-case-b, perf-case-c)
+  await createPerfDatabase(launched.app, window, launched.userDataDir)
+  await importFrozenPerfFixture(window, launched.app)
 })
 
 test.afterAll(async () => {
-  if (app) await app.close()
+  if (launched) {
+    await launched.cleanup()
+  }
 })
 
 test.describe('Annotation Scope Toggle - Case View', () => {
@@ -47,27 +61,9 @@ test.describe('Annotation Scope Toggle - Case View', () => {
     await caseBtn.click()
     await window.waitForTimeout(300)
 
-    // Open sidebar and select a case
-    const sidebar = window.locator('.v-navigation-drawer--left')
-    if (!(await sidebar.isVisible())) {
-      const toggleBtn = window.locator('.sidebar-toggle-btn')
-      await toggleBtn.click()
-      await window.waitForTimeout(300)
-    }
-
-    // Click first case in list
-    const caseItem = window
-      .locator('.v-list-item')
-      .filter({ hasText: /variants/ })
-      .first()
-
-    if ((await caseItem.count()) === 0) {
-      test.skip()
-      return
-    }
-
-    await caseItem.click()
-    await window.waitForTimeout(1500)
+    // Select perf-case-a from seeded fixture
+    await selectCaseByName(window, 'perf-case-a')
+    await window.waitForTimeout(1000)
 
     // The annotation scope toggle should be visible in the filter toolbar
     const scopeToggle = window.locator('.annotation-scope-toggle')
@@ -220,46 +216,48 @@ test.describe('Annotation Scope - Cohort View', () => {
   // eslint-disable-next-line no-empty-pattern
   test('cohort view expands carrier subtable with non-zero cell and button widths (#662)', async ({}, testInfo) => {
     const table = window.locator('.v-data-table-server')
-    if ((await table.count()) === 0 || !(await table.isVisible())) {
-      test.skip()
-      return
-    }
+    await expect(table).toBeVisible({ timeout: 10000 })
 
     const expandBtn = window
       .locator('.v-data-table-server button[aria-label*="Show carriers" i]')
       .first()
 
-    if ((await expandBtn.count()) === 0) {
-      test.skip()
-      return
-    }
-
+    await expect(expandBtn).toBeVisible({ timeout: 5000 })
     await expandBtn.click()
+
     const subtable = window.locator('.carrier-subtable')
     await expect(subtable).toBeVisible({ timeout: 5000 })
 
-    // Verify all rendered headers and data cells have non-zero width (#662)
-    const cellWidths = await window
-      .locator('.carrier-subtable th, .carrier-subtable td')
+    const carrierRows = subtable.locator('tbody tr')
+    await expect(carrierRows.first()).toBeVisible({ timeout: 5000 })
+    await expect(subtable).toContainText('perf-case-a')
+
+    // Verify all rendered headers have non-zero width (#662)
+    const headerWidths = await subtable
+      .locator('thead th')
       .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width))
 
-    expect(cellWidths.length).toBeGreaterThan(0)
-    for (const w of cellWidths) {
+    expect(headerWidths.length).toBeGreaterThanOrEqual(5)
+    for (const w of headerWidths) {
+      expect(w).toBeGreaterThan(0)
+    }
+
+    // Verify all rendered data cells have non-zero width (#662)
+    const dataCellWidths = await subtable
+      .locator('tbody td')
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width))
+
+    expect(dataCellWidths.length).toBeGreaterThanOrEqual(5)
+    for (const w of dataCellWidths) {
       expect(w).toBeGreaterThan(0)
     }
 
     // Verify "View in Case" button is rendered and has positive width
-    const viewBtn = window
-      .locator('.carrier-subtable')
-      .getByRole('button', { name: /View in Case/i })
-      .first()
-
-    if ((await viewBtn.count()) > 0) {
-      await expect(viewBtn).toBeVisible()
-      const box = await viewBtn.boundingBox()
-      expect(box).not.toBeNull()
-      expect(box!.width).toBeGreaterThan(0)
-    }
+    const viewBtn = subtable.getByRole('button', { name: /View in Case/i }).first()
+    await expect(viewBtn).toBeVisible()
+    const box = await viewBtn.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.width).toBeGreaterThan(0)
 
     await window.screenshot({ path: testInfo.outputPath('cohort-carrier-subtable.png') })
   })
@@ -300,5 +298,118 @@ test.describe('Cross-view Navigation', () => {
     const caseButton = scopeToggle.locator('.v-btn').nth(0)
     await caseButton.click()
     await window.waitForTimeout(300)
+  })
+})
+
+test.describe('A11y WCAG 2.2 A/AA Checks (#669)', () => {
+  // eslint-disable-next-line no-empty-pattern
+  test('DisclaimerDialog has 0 serious/critical axe violations (#669)', async ({}, testInfo) => {
+    expect(disclaimerViolations).toEqual([])
+
+    // Also verify when re-opened from footer
+    const openDisclaimerBtn = window.locator('button[aria-label*="disclaimer" i]').first()
+    if ((await openDisclaimerBtn.count()) > 0 && (await openDisclaimerBtn.isVisible())) {
+      await openDisclaimerBtn.click()
+      const dialog = window.locator('.v-overlay--active .v-dialog')
+      await expect(dialog).toBeVisible({ timeout: 5000 })
+
+      const results = await new AxeBuilder({ page: window })
+        .include('.v-overlay--active')
+        .withTags(WCAG_TAGS)
+        .analyze()
+      const blocking = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
+      expect(blocking).toEqual([])
+
+      await window.screenshot({ path: testInfo.outputPath('disclaimer-dialog-axe.png') })
+      const ackBtn = dialog.locator('button:has-text("I Understand")')
+      await ackBtn.click()
+      await window.waitForTimeout(300)
+    }
+  })
+
+  // eslint-disable-next-line no-empty-pattern
+  test('DatabaseOverviewDialog has 0 serious/critical axe violations (#669)', async ({}, testInfo) => {
+    const settingsBtn = window.locator('[data-testid="app-settings-menu"]')
+    await expect(settingsBtn).toBeVisible({ timeout: 5000 })
+    await settingsBtn.click()
+    await window.waitForTimeout(300)
+
+    const overviewItem = window.locator('.v-list-item:has-text("Database Overview")')
+    await expect(overviewItem).toBeVisible({ timeout: 5000 })
+    await overviewItem.click()
+
+    const dialog = window.locator('.v-overlay--active [aria-label="Database Overview"]')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+
+    const results = await new AxeBuilder({ page: window })
+      .include('.v-overlay--active')
+      .withTags(WCAG_TAGS)
+      .analyze()
+    const blocking = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
+    expect(blocking).toEqual([])
+
+    await window.screenshot({ path: testInfo.outputPath('database-overview-dialog-axe.png') })
+
+    // Close dialog
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(300)
+  })
+
+  // eslint-disable-next-line no-empty-pattern
+  test('CaseMetadataModal has 0 serious/critical axe violations (#669)', async ({}, testInfo) => {
+    // Ensure we're in Case view with perf-case-a selected
+    const caseBtn = window.locator('.mode-toggle .v-btn').nth(0)
+    await caseBtn.click()
+    await window.waitForTimeout(300)
+    await selectCaseByName(window, 'perf-case-a')
+    await window.waitForTimeout(500)
+
+    const detailsBtn = window.locator('button[aria-label="Case details"]').first()
+    await expect(detailsBtn).toBeVisible({ timeout: 5000 })
+    await detailsBtn.click()
+
+    const dialog = window.locator('.v-overlay--active [aria-label="Case Metadata"]')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+
+    const results = await new AxeBuilder({ page: window })
+      .include('.v-overlay--active')
+      .withTags(WCAG_TAGS)
+      .analyze()
+    const blocking = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
+    expect(blocking).toEqual([])
+
+    await window.screenshot({ path: testInfo.outputPath('case-metadata-modal-axe.png') })
+
+    // Close modal
+    await window.keyboard.press('Escape')
+    await window.waitForTimeout(300)
+  })
+
+  // eslint-disable-next-line no-empty-pattern
+  test('ShortlistTable has 0 serious/critical axe violations (#669)', async ({}, testInfo) => {
+    // Ensure we're in Case view with perf-case-a selected
+    const caseBtn = window.locator('.mode-toggle .v-btn').nth(0)
+    await caseBtn.click()
+    await window.waitForTimeout(300)
+    await selectCaseByName(window, 'perf-case-a')
+    await window.waitForTimeout(500)
+
+    // Switch to Shortlist tab
+    const shortlistTab = window.locator('.v-tab:has-text("Shortlist"), .shortlist-tab').first()
+    await expect(shortlistTab).toBeVisible({ timeout: 5000 })
+    await shortlistTab.click()
+    await window.waitForTimeout(1000)
+
+    const shortlistPanel = window.locator('.shortlist-panel')
+    await expect(shortlistPanel).toBeVisible({ timeout: 5000 })
+
+    const results = await new AxeBuilder({ page: window })
+      .include('.shortlist-panel')
+      .withTags(WCAG_TAGS)
+      .analyze()
+    const blocking = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
+    expect(blocking).toEqual([])
+
+    await window.screenshot({ path: testInfo.outputPath('shortlist-table-axe.png') })
   })
 })
