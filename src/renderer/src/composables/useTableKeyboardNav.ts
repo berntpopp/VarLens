@@ -36,7 +36,11 @@ export function isTextEntryFocused(): boolean {
   const el = document.activeElement
   if (!el) return false
   const tag = el.tagName.toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  if (tag === 'textarea' || tag === 'select') return true
+  if (tag === 'input') {
+    const type = (el as HTMLInputElement).type?.toLowerCase()
+    return type !== 'checkbox' && type !== 'radio' && type !== 'button'
+  }
   return el.getAttribute('contenteditable') === 'true'
 }
 

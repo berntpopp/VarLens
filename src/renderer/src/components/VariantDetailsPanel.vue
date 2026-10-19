@@ -543,6 +543,7 @@ appState?.setPanelLeaveGuard(() => acmgPanelRef.value?.confirmLeave() ?? null)
 // Escape closes the panel, unless a text field or an open menu/dialog owns it
 const handleKeydown = (e: KeyboardEvent): void => {
   if (e.key !== 'Escape' || !props.open || isTextEntryFocused() || isOverlayOpen()) return
+  e.preventDefault()
   emit('update:open', false)
 }
 onMounted(() => window.addEventListener('keydown', handleKeydown))

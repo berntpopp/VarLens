@@ -19,6 +19,11 @@ import { formatFamilyCallMeta, zygosityColor } from './columns'
 import { EmptyPlaceholder } from '../table-cells'
 
 defineProps<{
-  call?: { gt_num?: string | null; [key: string]: unknown } | null
+  call?: {
+    gt_num?: string | null
+    gq?: number | null
+    dp?: number | null
+    [key: string]: unknown
+  } | null
 }>()
 </script>

@@ -1,14 +1,19 @@
 import { createPinia } from 'pinia'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { ref, computed } from 'vue'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
-import { AppStateKey, type AppState } from '../../../../src/renderer/src/composables/useAppState'
+import {
+  AppStateKey,
+  type AppStateReturn
+} from '../../../../src/renderer/src/composables/useAppState'
 
 const moveDownSpy = vi.fn()
 const moveUpSpy = vi.fn()
+const selectByClickSpy = vi.fn()
+const clearSelectionSpy = vi.fn()
 const fakeSelectedItem = ref<Record<string, unknown> | null>({
   id: 42,
   chr: '1',
@@ -27,10 +32,10 @@ vi.mock('../../../../src/renderer/src/composables/useTableKeyboardNav', async (i
     selectedIndex: ref(0),
     selectedItem: computed(() => fakeSelectedItem.value),
     selectIndex: vi.fn(),
-    selectByClick: vi.fn(),
+    selectByClick: selectByClickSpy,
     moveUp: moveUpSpy,
     moveDown: moveDownSpy,
-    clearSelection: vi.fn(),
+    clearSelection: clearSelectionSpy,
     isInputFocused: () => false
   }),
   isControlFocused: () => false,
@@ -168,16 +173,17 @@ import VariantTable from '../../../../src/renderer/src/components/VariantTable.v
 const vuetify = createVuetify({ components, directives })
 const mountedWrappers: VueWrapper[] = []
 
-function mountTable(appStateOverride?: Partial<AppState>): VueWrapper {
-  const defaultAppState: AppState = {
+function mountTable(appStateOverride?: Partial<AppStateReturn>): VueWrapper {
+  const defaultAppState = {
     selectedCaseId: ref(1),
     selectedVariantId: ref(null),
     selectedPanelVariant: ref(null),
     panelOpen: ref(false),
     detailsTab: ref('details'),
     tableActive: ref(true),
-    shortlistActive: ref(false)
-  }
+    shortlistActive: ref(false),
+    confirmPanelLeave: undefined
+  } as unknown as AppStateReturn
   const appState = { ...defaultAppState, ...appStateOverride }
 
   const wrapper = mount(VariantTable, {
@@ -217,6 +223,8 @@ describe('VariantTable live keyboard sync & triage shortcuts', () => {
     vi.useFakeTimers()
     moveDownSpy.mockClear()
     moveUpSpy.mockClear()
+    selectByClickSpy.mockClear()
+    clearSelectionSpy.mockClear()
   })
 
   afterEach(() => {
@@ -266,5 +274,67 @@ describe('VariantTable live keyboard sync & triage shortcuts', () => {
     expect(wrapper.emitted('row-click')).toBeTruthy()
     expect(wrapper.emitted('row-click')!.length).toBe(1)
     expect(wrapper.emitted('row-click')![0]).toEqual([fakeSelectedItem.value])
+  })
+
+  it('cancels sync and reverts selection when confirmPanelLeave resolves false', async () => {
+    const selectedVariant = { id: 10, chr: '1', pos: 50, ref: 'C', alt: 'G' }
+    const wrapper = mountTable({
+      panelOpen: ref(true),
+      selectedPanelVariant: ref(selectedVariant),
+      confirmPanelLeave: vi.fn().mockResolvedValue(false)
+    })
+    selectByClickSpy.mockClear()
+
+    dispatchKey('ArrowDown')
+    vi.advanceTimersByTime(110)
+    await flushPromises()
+
+    expect(selectByClickSpy).toHaveBeenCalledWith(selectedVariant)
+    expect(wrapper.emitted('row-click')).toBeFalsy()
+  })
+
+  it('proceeds with sync when confirmPanelLeave resolves true', async () => {
+    const wrapper = mountTable({
+      panelOpen: ref(true),
+      confirmPanelLeave: vi.fn().mockResolvedValue(true)
+    })
+
+    dispatchKey('ArrowDown')
+    vi.advanceTimersByTime(110)
+    await flushPromises()
+
+    expect(wrapper.emitted('row-click')).toBeTruthy()
+    expect(wrapper.emitted('row-click')![0]).toEqual([fakeSelectedItem.value])
+  })
+
+  it('performs two-stage Escape: closes panel on first Escape, clears selection on second Escape', () => {
+    const panelOpen = ref(true)
+    const wrapper = mountTable({ panelOpen })
+    clearSelectionSpy.mockClear()
+
+    // First Escape: closes panel, preserves row selection
+    dispatchKey('Escape')
+    expect(panelOpen.value).toBe(false)
+    expect(clearSelectionSpy).not.toHaveBeenCalled()
+    expect(wrapper.emitted('deselect')).toBeFalsy()
+
+    // Second Escape: panel already closed, clears row selection
+    dispatchKey('Escape')
+    expect(clearSelectionSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('deselect')).toBeTruthy()
+  })
+
+  it('ignores Escape when event was already defaultPrevented by a modal or child', () => {
+    const panelOpen = ref(true)
+    const wrapper = mountTable({ panelOpen })
+    clearSelectionSpy.mockClear()
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    event.preventDefault()
+    window.dispatchEvent(event)
+
+    expect(panelOpen.value).toBe(true)
+    expect(clearSelectionSpy).not.toHaveBeenCalled()
+    expect(wrapper.emitted('deselect')).toBeFalsy()
   })
 })

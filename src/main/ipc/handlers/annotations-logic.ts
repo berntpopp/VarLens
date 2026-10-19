@@ -224,8 +224,8 @@ export async function batchUpsertPerCaseAnnotationWithEvent(
       params: [caseId, variantIds, updates]
     })) as { updatedCount: number }
   const kind = detectAnnotationChangeKind(updates)
-  for (const variantId of variantIds) {
-    onChange({ caseId, variantId, kind })
+  if (variantIds.length > 0) {
+    onChange({ caseId, variantId: variantIds[0], kind })
   }
   return result
 }

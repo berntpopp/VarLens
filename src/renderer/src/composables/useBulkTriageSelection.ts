@@ -1,13 +1,27 @@
-import { ref, computed, watch, toValue, type Ref, type MaybeRefOrGetter } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  toValue,
+  inject,
+  hasInjectionContext,
+  type Ref,
+  type MaybeRefOrGetter
+} from 'vue'
+import { getActivePinia } from 'pinia'
 import { useApiService } from './useApiService'
-import { unwrapIpcResult } from '../../../shared/types/errors'
+import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
 import type { BatchPerCaseAnnotationUpdates } from '../../../shared/types/api'
+import { clearAnnotationCache } from './annotation-cache'
+import { invalidateTags } from '../queries/tags'
+import { logService } from '../services/LogService'
+import { AppStateKey } from './useAppState'
 
 export interface UseBulkTriageSelectionOptions<T> {
   items: Ref<readonly T[]> | (() => readonly T[])
   getItemId: (item: T) => number
   caseId: MaybeRefOrGetter<number | null | undefined>
-  onTriageApplied?: () => void
+  onTriageApplied?: () => void | Promise<void>
 }
 
 export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions<T>) {
@@ -99,14 +113,31 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     if (cid === undefined || cid === null || selectedIds.value.length === 0 || !api) {
       return 0
     }
+    const appState = hasInjectionContext() ? inject(AppStateKey, null) : null
     isExecuting.value = true
     try {
       const res = unwrapIpcResult(
         await api.annotations.batchUpsertPerCase(cid, selectedIds.value, updates)
       )
+      clearAnnotationCache()
+      if (updates.tag_id !== undefined && getActivePinia()) {
+        await invalidateTags(true)
+      }
       clearSelection()
-      onTriageApplied?.()
+      await onTriageApplied?.()
       return res.updatedCount
+    } catch (error) {
+      logService.error(
+        `Bulk triage failed: ${error instanceof Error ? error.message : String(error)}`,
+        'useBulkTriageSelection'
+      )
+      const msg = isIpcError(error)
+        ? (error.userMessage ?? error.message)
+        : error instanceof Error
+          ? error.message
+          : String(error)
+      appState?.showSnack(msg, 'error')
+      return 0
     } finally {
       isExecuting.value = false
     }

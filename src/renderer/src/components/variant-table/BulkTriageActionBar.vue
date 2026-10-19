@@ -140,15 +140,16 @@ const emit = defineEmits<{
   (e: 'clear'): void
 }>()
 
-const tags = computed<Tag[]>(() => {
-  if (props.tags) return props.tags
-  if (!getActivePinia()) return []
+let tagComposable: ReturnType<typeof useTags> | null = null
+if (getActivePinia()) {
   try {
-    return useTags().tags.value
+    tagComposable = useTags()
+    void tagComposable.loadTags()
   } catch {
-    return []
+    tagComposable = null
   }
-})
+}
+const tags = computed<Tag[]>(() => props.tags ?? tagComposable?.getTags() ?? [])
 
 const acmgOptions: Array<{
   value: AcmgClassification
@@ -157,14 +158,14 @@ const acmgOptions: Array<{
   color: string
 }> = [
   { value: 'Pathogenic', title: 'Pathogenic', short: 'P', color: 'error' },
-  { value: 'Likely Pathogenic', title: 'Likely Pathogenic', short: 'LP', color: 'deep-orange' },
+  { value: 'Likely pathogenic', title: 'Likely pathogenic', short: 'LP', color: 'deep-orange' },
   {
-    value: 'Uncertain Significance',
-    title: 'Uncertain Significance',
+    value: 'Uncertain significance',
+    title: 'Uncertain significance',
     short: 'VUS',
     color: 'warning'
   },
-  { value: 'Likely Benign', title: 'Likely Benign', short: 'LB', color: 'light-green' },
+  { value: 'Likely benign', title: 'Likely benign', short: 'LB', color: 'light-green' },
   { value: 'Benign', title: 'Benign', short: 'B', color: 'success' }
 ]
 </script>

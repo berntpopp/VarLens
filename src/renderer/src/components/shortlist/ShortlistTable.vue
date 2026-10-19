@@ -17,7 +17,7 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed, inject, onUnmounted } from 'vue'
+import { ref, computed, inject, onUnmounted, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import {
   mdiStar,
@@ -38,12 +38,17 @@ import { useVariantLinks } from '../../composables/useVariantLinks'
 import { useSharedMenu } from '../table-cells/shared-menu'
 import { useResultSetKeys } from '../table-state/useResultSetKeys'
 import { EMPTY_VALUE_PLACEHOLDER } from '../../config/displayConfig'
+import ShortlistVariantCell from './ShortlistVariantCell.vue'
 import {
+  baseHeaders,
   variantCell,
   pinFor,
   typeChipColor,
   targetTabFor,
-  displayVariantType
+  displayVariantType,
+  hasCommentFor as hasCommentForHelper,
+  sortShortlistRows,
+  parseCurrentItems
 } from './shortlist-table-helpers'
 import {
   useTableKeyboardNav,
@@ -81,20 +86,6 @@ const emit = defineEmits<{
   (e: 'comment-click', row: ShortlistRow): void
   (e: 'triage-applied'): void
 }>()
-
-// Widths in rem so headers grow with the text size (no clipping at 200 %)
-const baseHeaders = [
-  { title: '#', key: 'rank', width: '3.75rem', sortable: false },
-  { title: 'Score', key: 'rank_score', width: '5.625rem', sortable: false },
-  { title: 'Type', key: 'variant_type', width: '5rem', sortable: false },
-  { title: 'Gene', key: 'gene_symbol', width: '8.75rem' },
-  { title: 'Variant', key: 'variant_notation', width: '17.5rem', sortable: false },
-  { title: 'Impact', key: 'consequence', width: '6.875rem' },
-  { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
-  { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
-  { title: '★', key: 'is_starred', width: '6.5rem', sortable: false },
-  { title: 'Actions', key: 'actions', width: '5rem', sortable: false }
-] as const
 
 // Link-outs resolve exactly like the case/cohort tables (shared resolvers)
 const { resolvers: linkResolvers, linkOuts } = useLinkResolvers()
@@ -150,19 +141,30 @@ function getAcmgFor(item: ShortlistRow): AcmgClassification | null {
 }
 
 function hasCommentFor(item: ShortlistRow): boolean {
-  const key = variantKey({ chr: item.chr, pos: item.pos, ref: item.ref, alt: item.alt })
-  const cached = annotationCache.value.get(key)
-  const perCase = cached?.perCase?.per_case_comment
-  const global = cached?.global?.global_comment
-  return (
-    (perCase !== undefined && perCase !== null && perCase !== '') ||
-    (global !== undefined && global !== null && global !== '')
-  )
+  return hasCommentForHelper(item, annotationCache.value)
+}
+
+const sortBy = ref<Array<{ key: string; order?: 'asc' | 'desc' }>>([])
+const displayedRows = ref<ShortlistRow[]>([...props.rows])
+
+watch(
+  [() => props.rows, sortBy],
+  ([rows, sorts]) => {
+    displayedRows.value = sortShortlistRows(rows, sorts)
+  },
+  { immediate: true }
+)
+
+function onCurrentItemsUpdate(items: unknown[]): void {
+  const parsed = parseCurrentItems(items)
+  if (parsed.length > 0) {
+    displayedRows.value = parsed
+  }
 }
 
 const caseId = computed(() => props.rows[0]?.case_id ?? null)
 const bulkSelection = useBulkTriageSelection({
-  items: () => props.rows,
+  items: () => displayedRows.value,
   getItemId: (r) => r.id,
   caseId,
   onTriageApplied: () => emit('triage-applied')
@@ -171,15 +173,42 @@ const bulkSelection = useBulkTriageSelection({
 const appState = inject(AppStateKey, null)
 let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
 
+if (appState) {
+  watch(
+    () => appState.selectedPanelVariant.value,
+    (variant) => {
+      if (variant && 'id' in variant && props.rows.some((v) => v.id === variant.id)) {
+        selectByClick(variant as ShortlistRow)
+      } else {
+        clearSelection()
+      }
+    },
+    { immediate: true }
+  )
+}
+
 function triggerDebouncedPanelSync() {
   if (arrowSyncTimer !== null) {
     clearTimeout(arrowSyncTimer)
     arrowSyncTimer = null
   }
   if (appState?.panelOpen.value === true && selectedItem.value) {
-    arrowSyncTimer = setTimeout(() => {
+    arrowSyncTimer = setTimeout(async () => {
       arrowSyncTimer = null
       if (appState?.panelOpen.value === true && selectedItem.value) {
+        const leavePromise = appState.confirmPanelLeave?.() ?? null
+        if (leavePromise !== null) {
+          const ok = await leavePromise
+          if (!ok) {
+            if (
+              appState.selectedPanelVariant.value &&
+              'id' in appState.selectedPanelVariant.value
+            ) {
+              selectByClick(appState.selectedPanelVariant.value as ShortlistRow)
+            }
+            return
+          }
+        }
         emit('row-click', selectedItem.value)
       }
     }, 100)
@@ -276,9 +305,13 @@ onKeyStroke(
 onKeyStroke(
   'Escape',
   (e: KeyboardEvent) => {
-    if (props.interactive === false) return
-    if (isInputFocused()) return
-    e.preventDefault()
+    if (e.defaultPrevented || props.interactive === false || isInputFocused()) return
+    if (appState?.panelOpen.value === true) {
+      e.preventDefault()
+      appState.panelOpen.value = false
+      return
+    }
+    bulkSelection.clearSelection()
     clearSelection()
   },
   { dedupe: true }
@@ -287,6 +320,7 @@ onKeyStroke(
 
 <template>
   <v-data-table
+    v-model:sort-by="sortBy"
     :headers="headers"
     :items="props.rows"
     :item-value="rowKey"
@@ -296,6 +330,7 @@ onKeyStroke(
     :items-per-page-options="[25, 50, 100, 250, 500]"
     class="shortlist-data-table"
     :row-props="getRowProps"
+    @update:current-items="onCurrentItemsUpdate"
     @click:row="(_: MouseEvent, { item }: { item: ShortlistRow }) => handleRowClick(item)"
     @mouseover="rankTip.onMouseover"
     @mouseout="rankTip.onMouseout"
@@ -339,23 +374,7 @@ onKeyStroke(
     </template>
 
     <template #[`item.variant_notation`]="{ item }">
-      <div class="variant-cell">
-        <div class="variant-cell__primary">{{ variantCell(item).primary }}</div>
-        <div
-          v-if="variantCell(item).cdna"
-          class="variant-cell__hgvs text-caption text-medium-emphasis"
-          :title="variantCell(item).cdna ?? ''"
-        >
-          {{ variantCell(item).cdna }}
-        </div>
-        <div
-          v-if="variantCell(item).protein"
-          class="variant-cell__hgvs text-caption text-medium-emphasis"
-          :title="variantCell(item).protein ?? ''"
-        >
-          {{ variantCell(item).protein }}
-        </div>
-      </div>
+      <ShortlistVariantCell :cell="variantCell(item)" />
     </template>
 
     <template #[`item.clinvar`]="{ item }">
@@ -519,33 +538,6 @@ onKeyStroke(
 
 .shortlist-data-table :deep(.v-data-table-footer) {
   flex: 0 0 auto;
-}
-
-/*
- * Multi-line variant cell — primary line (genomic) + optional HGVS c./p.
- * lines in muted caption text. `min-width: 0` lets truncation kick in
- * inside the fixed-width column. HGVS strings can be long for multi-
- * exon indels; we clip with ellipsis and put the full value in a title
- * attribute for hover.
- */
-.variant-cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-  padding: 2px 0;
-}
-.variant-cell__primary {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.variant-cell__hgvs {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
 }
 
 /* A long ClinVar class ends in an ellipsis inside the fixed column (the full

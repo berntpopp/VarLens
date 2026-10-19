@@ -1,10 +1,7 @@
 import type { Pool, PoolClient } from 'pg'
 
 import type { BatchAnnotationKey } from '../../../shared/types/api'
-import type {
-  CaseVariantAnnotation,
-  VariantAnnotation
-} from '../../../shared/types/database'
+import type { CaseVariantAnnotation, VariantAnnotation } from '../../../shared/types/database'
 import {
   assertOverrideReason,
   globalAnnotationAuditEntries,
@@ -319,7 +316,8 @@ export class PostgresAnnotationsRepository {
     variantIds: number[],
     updates: PerCaseAnnotationUpdates & { tag_id?: number; user_name?: string | null }
   ): Promise<{ updatedCount: number }> {
-    if (variantIds.length === 0) return { updatedCount: 0 }
+    const uniqueIds = Array.from(new Set(variantIds))
+    if (uniqueIds.length === 0) return { updatedCount: 0 }
     const client = await this.connect()
     let rollbackFailure: Error | undefined
     try {
@@ -327,12 +325,11 @@ export class PostgresAnnotationsRepository {
       const schemaName = quoteIdentifier(this.schema)
       const validRows = await client.query<{ id: number }>(
         `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::int[])`,
-        [caseId, variantIds]
+        [caseId, uniqueIds]
       )
       const validIds = validRows.rows.map((r) => r.id)
-      if (validIds.length === 0) {
-        await client.query('COMMIT')
-        return { updatedCount: 0 }
+      if (validIds.length !== uniqueIds.length) {
+        throw new Error(`One or more variants do not belong to case ${caseId}`)
       }
 
       const annotations = new PostgresAnnotationsRepository(client, this.schema)
@@ -343,9 +340,15 @@ export class PostgresAnnotationsRepository {
         'acmg_evidence' in updates ||
         'per_case_comment' in updates
 
-      for (const variantId of validIds) {
+      const oldAnnotations = new Map<number, CaseVariantAnnotation | null>()
+      for (const variantId of uniqueIds) {
         const oldAnnotation = await annotations.getPerCaseAnnotation(caseId, variantId)
         assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+        oldAnnotations.set(variantId, oldAnnotation)
+      }
+
+      for (const variantId of uniqueIds) {
+        const oldAnnotation = oldAnnotations.get(variantId) ?? null
         if (hasAnnotationUpdates) {
           await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
         }
@@ -361,7 +364,7 @@ export class PostgresAnnotationsRepository {
       }
 
       if (updates.tag_id !== undefined) {
-        for (const variantId of validIds) {
+        for (const variantId of uniqueIds) {
           await client.query(
             `INSERT INTO ${schemaName}."variant_tags" (case_id, variant_id, tag_id, created_at)
              VALUES ($1, $2, $3, ${nowExpression})
@@ -372,7 +375,7 @@ export class PostgresAnnotationsRepository {
       }
 
       await client.query('COMMIT')
-      return { updatedCount: validIds.length }
+      return { updatedCount: uniqueIds.length }
     } catch (error) {
       rollbackFailure = await runOrDestroy(client, 'ROLLBACK')
       throw error

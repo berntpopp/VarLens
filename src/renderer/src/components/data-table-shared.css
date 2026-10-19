@@ -256,3 +256,8 @@
     rgb(var(--v-theme-surface))
   ) !important;
 }
+
+.table-container .bulk-select-checkbox {
+  cursor: pointer;
+  accent-color: rgb(var(--v-theme-primary));
+}

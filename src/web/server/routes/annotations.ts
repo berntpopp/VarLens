@@ -1,7 +1,5 @@
-import { z } from 'zod'
-import { CaseIdSchema } from '../../../shared/types/ipc-schemas'
 import {
-  BatchPerCaseAnnotationUpdatesSchema,
+  BatchPerCaseAnnotationInputSchema,
   CaseVariantIdSchema,
   GlobalAnnotationUpdatesSchema,
   GlobalVariantCoordsSchema,
@@ -102,20 +100,19 @@ export function buildAnnotationOverrides(): Record<string, OverrideHandler> {
     'annotations:batchUpsertPerCase': {
       async handle(args, request, reply, { session, events }) {
         const [caseId, variantIds, updates] = args
-        const validatedCase = CaseIdSchema.safeParse(caseId)
-        const validatedVariantIds = z
-          .array(z.number().int().positive())
-          .min(1)
-          .safeParse(variantIds)
-        const validatedUpdates = BatchPerCaseAnnotationUpdatesSchema.safeParse(updates)
-        if (!validatedCase.success || !validatedVariantIds.success || !validatedUpdates.success) {
+        const validated = BatchPerCaseAnnotationInputSchema.safeParse({
+          caseId,
+          variantIds,
+          updates
+        })
+        if (!validated.success) {
           reply.code(400)
           return { error: 'invalid-batch-per-case-annotation-upsert' }
         }
         return await batchUpsertPerCaseAnnotationWithEvent(
-          validatedCase.data,
-          validatedVariantIds.data,
-          validatedUpdates.data,
+          validated.data.caseId,
+          validated.data.variantIds,
+          validated.data.updates,
           () => session,
           (e) => {
             const userId = request.session?.user?.id

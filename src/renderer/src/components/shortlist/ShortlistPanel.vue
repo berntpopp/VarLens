@@ -140,6 +140,13 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
 function dismissError(): void {
   error.value = null
 }
+
+async function handleTriageApplied(): Promise<void> {
+  await refresh()
+  if (result.value && props.caseId) {
+    await annotations.loadAnnotationsBatch(props.caseId, result.value.rows)
+  }
+}
 </script>
 
 <template>
@@ -257,7 +264,7 @@ function dismissError(): void {
         @toggle-star="onToggleStar"
         @acmg-click="(row) => annotationDialogsRef?.openAcmgEvidenceDialog(row)"
         @comment-click="(row) => annotationDialogsRef?.openCommentDialog(row)"
-        @triage-applied="refresh"
+        @triage-applied="handleTriageApplied"
       />
     </div>
 

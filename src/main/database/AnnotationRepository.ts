@@ -165,6 +165,24 @@ export class AnnotationRepository extends BaseRepository {
     })
   }
 
+  runInTransaction<T>(fn: () => T): T {
+    return this.runTransaction(fn)
+  }
+
+  validateVariantsBelongToCase(caseId: number, variantIds: number[]): number[] {
+    const uniqueIds = Array.from(new Set(variantIds))
+    if (uniqueIds.length === 0) return []
+    const placeholders = uniqueIds.map(() => '?').join(', ')
+    const validRows = this.db
+      .prepare(`SELECT id FROM variants WHERE case_id = ? AND id IN (${placeholders})`)
+      .all(caseId, ...uniqueIds) as Array<{ id: number }>
+    const validIds = validRows.map((r) => r.id)
+    if (validIds.length !== uniqueIds.length) {
+      throw new Error(`One or more variants do not belong to case ${caseId}`)
+    }
+    return validIds
+  }
+
   batchUpsertPerCaseAnnotation(
     caseId: number,
     variantIds: number[],
@@ -172,35 +190,27 @@ export class AnnotationRepository extends BaseRepository {
       Omit<CaseVariantAnnotation, 'id' | 'case_id' | 'variant_id' | 'created_at' | 'updated_at'>
     > & { tag_id?: number }
   ): { updatedCount: number } {
-    if (variantIds.length === 0) return { updatedCount: 0 }
+    const uniqueIds = Array.from(new Set(variantIds))
+    if (uniqueIds.length === 0) return { updatedCount: 0 }
     return this.runTransaction(() => {
-      const placeholders = variantIds.map(() => '?').join(', ')
-      const validRows = this.db
-        .prepare(`SELECT id FROM variants WHERE case_id = ? AND id IN (${placeholders})`)
-        .all(caseId, ...variantIds) as Array<{ id: number }>
-      const validIds = validRows.map((r) => r.id)
-      if (validIds.length !== variantIds.length) {
-        throw new Error(`One or more variants do not belong to case ${caseId}`)
-      }
+      const validIds = this.validateVariantsBelongToCase(caseId, uniqueIds)
 
       const now = Date.now()
       const acmgClassProvided = 'acmg_classification' in updates
       const acmgEvidenceProvided = 'acmg_evidence' in updates
       const commentProvided = 'per_case_comment' in updates
-      const starredProvided =
-        updates.starred !== undefined ||
-        (updates as { is_starred?: boolean }).is_starred !== undefined
+      const rawStarred =
+        updates.starred !== undefined
+          ? updates.starred
+          : (updates as { is_starred?: boolean | number }).is_starred
+      const starredProvided = rawStarred !== undefined
 
       if (acmgClassProvided || acmgEvidenceProvided || commentProvided || starredProvided) {
         const commentVal = updates.per_case_comment ?? null
         const starredVal = starredProvided
-          ? updates.starred !== undefined
-            ? updates.starred === true
-              ? 1
-              : 0
-            : (updates as { is_starred?: boolean }).is_starred === true
-              ? 1
-              : 0
+          ? rawStarred === true || rawStarred === 1
+            ? 1
+            : 0
           : null
         const acmgClassVal = updates.acmg_classification ?? null
         const acmgEvidenceVal = updates.acmg_evidence ?? null

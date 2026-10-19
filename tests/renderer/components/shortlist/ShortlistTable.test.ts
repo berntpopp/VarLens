@@ -28,8 +28,11 @@ import {
 } from '../../../../src/renderer/src/composables/useAnnotations'
 import { triggerRef } from 'vue'
 
-// ShortlistTable resolves its Links column through the external-links store
-beforeEach(() => setActivePinia(createPinia()))
+let pinia: ReturnType<typeof createPinia>
+beforeEach(() => {
+  pinia = createPinia()
+  setActivePinia(pinia)
+})
 
 const vuetify = createVuetify({ components, directives })
 
@@ -67,7 +70,7 @@ describe('ShortlistTable', () => {
   it('renders one row per input item', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row({ id: 1 }), row({ id: 2, rank: 2 })] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     // v-data-table renders each item as a <tr>
     expect(wrapper.findAll('tbody tr').length).toBe(2)
@@ -76,7 +79,7 @@ describe('ShortlistTable', () => {
   it('displays rank, gene_symbol, and score', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('1') // rank
@@ -96,7 +99,7 @@ describe('ShortlistTable', () => {
           row({ id: 2, rank: 2, rank_score: 0.734 })
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     expect(wrapper.find('[data-rank-tip="1"]').text()).toBe('+12.5')
     expect(wrapper.find('[data-rank-tip="2"]').text()).toBe('0.73')
@@ -121,7 +124,7 @@ describe('ShortlistTable', () => {
         ]
       },
       attachTo: document.body,
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const cell = wrapper.get('[data-rank-tip="1"]')
     expect(cell.attributes('tabindex')).toBe('0')
@@ -141,7 +144,7 @@ describe('ShortlistTable', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row({ rank_evidence: [] })] },
       attachTo: document.body,
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const cell = wrapper.get('[data-rank-tip="1"]')
     // Browsers match :focus-visible only for keyboard focus; happy-dom always does.
@@ -155,7 +158,7 @@ describe('ShortlistTable', () => {
   it('renders the merged Links column as keyboard-reachable anchors (case/cohort parity)', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     expect(wrapper.findAll('th').some((th) => th.text() === 'Links')).toBe(true)
     const varsome = wrapper.find('a[aria-label="Open in VarSome (opens in a new tab)"]')
@@ -166,7 +169,7 @@ describe('ShortlistTable', () => {
   it('emits row-click when a row is clicked', async () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     await wrapper.find('tbody tr').trigger('click')
     const emitted = wrapper.emitted('row-click')
@@ -177,7 +180,7 @@ describe('ShortlistTable', () => {
   it('emits toggle-star when star icon is clicked', async () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const star = wrapper.find('[data-testid="shortlist-star-1"]')
     await star.trigger('click')
@@ -187,7 +190,7 @@ describe('ShortlistTable', () => {
   it('variant_notation for SNV is chr:pos ref>alt', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     expect(wrapper.text()).toContain('1:1000 A>T')
   })
@@ -205,7 +208,7 @@ describe('ShortlistTable', () => {
           })
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     expect(wrapper.text()).toContain('2:5000 DEL 1.00 kb')
   })
@@ -221,7 +224,7 @@ describe('ShortlistTable', () => {
           } as Partial<ShortlistRow>)
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('1:1000 A>T')
@@ -240,7 +243,7 @@ describe('ShortlistTable', () => {
           } as Partial<ShortlistRow>)
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('c.456C>T')
@@ -253,7 +256,7 @@ describe('ShortlistTable', () => {
   it('renders ClinVar with the shared ClinVar cell, not the raw token', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row({ clinvar: 'Uncertain_significance' } as Partial<ShortlistRow>)] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     expect(wrapper.text()).toContain(clinvarDisplayText('Uncertain_significance'))
     expect(wrapper.text()).not.toContain('Uncertain_significance')
@@ -270,7 +273,7 @@ describe('ShortlistTable', () => {
           } as Partial<ShortlistRow>)
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('ENST00000361682.4:c.186C>T')
@@ -290,7 +293,7 @@ describe('ShortlistTable', () => {
           } as Partial<ShortlistRow>)
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('1:1000 A>T')
@@ -314,7 +317,7 @@ describe('ShortlistTable', () => {
           } as Partial<ShortlistRow>)
         ]
       },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const text = wrapper.text()
     expect(text).toContain('3:2000 INS 500 bp')
@@ -325,7 +328,7 @@ describe('ShortlistTable', () => {
   it('ignores window keys while not interactive (hidden tab)', async () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()], interactive: false },
-      global: { plugins: [vuetify] },
+      global: { plugins: [vuetify, pinia] },
       attachTo: document.body
     })
     for (const key of ['ArrowDown', 's', 'Enter']) {
@@ -340,7 +343,7 @@ describe('ShortlistTable', () => {
   it('handles window keys while interactive', async () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [row()], interactive: true },
-      global: { plugins: [vuetify] },
+      global: { plugins: [vuetify, pinia] },
       attachTo: document.body
     })
     for (const key of ['ArrowDown', 's']) {
@@ -357,7 +360,7 @@ describe('ShortlistTable', () => {
     const item = row({ aa_change: 'p.Met180Val' })
     const wrapper = mount(ShortlistTable, {
       props: { rows: [item] },
-      global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+      global: { plugins: [vuetify, pinia], provide: { [AppStateKey as symbol]: state } },
       attachTo: document.body
     })
     await wrapper.get('[data-testid="shortlist-actions-1"]').trigger('click')
@@ -373,7 +376,7 @@ describe('ShortlistTable', () => {
   it('renders accessible title for the actions column header (#669)', () => {
     const wrapper = mount(ShortlistTable, {
       props: { rows: [] },
-      global: { plugins: [vuetify] }
+      global: { plugins: [vuetify, pinia] }
     })
     const headers = wrapper.findComponent({ name: 'VDataTable' }).props('headers') as {
       key: string
@@ -389,7 +392,7 @@ describe('ShortlistTable', () => {
       const item = row({ id: 10 })
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify] },
+        global: { plugins: [vuetify, pinia] },
         attachTo: document.body
       })
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
@@ -407,7 +410,7 @@ describe('ShortlistTable', () => {
       const item = row({ id: 20 })
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify] },
+        global: { plugins: [vuetify, pinia] },
         attachTo: document.body
       })
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
@@ -425,7 +428,7 @@ describe('ShortlistTable', () => {
       const item = row({ id: 30 })
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify] },
+        global: { plugins: [vuetify, pinia] },
         attachTo: document.body
       })
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
@@ -446,7 +449,7 @@ describe('ShortlistTable', () => {
       const item = row({ id: 40 })
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+        global: { plugins: [vuetify, pinia], provide: { [AppStateKey as symbol]: state } },
         attachTo: document.body
       })
 
@@ -473,7 +476,7 @@ describe('ShortlistTable', () => {
       const item = row({ id: 50 })
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify], provide: { [AppStateKey as symbol]: state } },
+        global: { plugins: [vuetify, pinia], provide: { [AppStateKey as symbol]: state } },
         attachTo: document.body
       })
 
@@ -509,7 +512,7 @@ describe('ShortlistTable', () => {
 
       const wrapper = mount(ShortlistTable, {
         props: { rows: [item] },
-        global: { plugins: [vuetify] }
+        global: { plugins: [vuetify, pinia] }
       })
 
       expect(wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).exists()).toBe(true)
@@ -524,7 +527,7 @@ describe('ShortlistTable', () => {
       const items = [row({ id: 101 }), row({ id: 102 })]
       const wrapper = mount(ShortlistTable, {
         props: { rows: items },
-        global: { plugins: [vuetify] }
+        global: { plugins: [vuetify, pinia] }
       })
 
       const selectAll = wrapper.get('[data-testid="bulk-select-all"]')
@@ -540,7 +543,7 @@ describe('ShortlistTable', () => {
       const items = [row({ id: 201 }), row({ id: 202 })]
       const wrapper = mount(ShortlistTable, {
         props: { rows: items },
-        global: { plugins: [vuetify] }
+        global: { plugins: [vuetify, pinia] }
       })
 
       const rowCheckbox = wrapper.get('[data-testid="bulk-select-row-201"]')
@@ -548,6 +551,41 @@ describe('ShortlistTable', () => {
       await flushPromises()
 
       expect(wrapper.findComponent({ name: 'BulkTriageActionBar' }).props('selectedCount')).toBe(1)
+      wrapper.unmount()
+    })
+
+    it('supports Shift+Click range selection respecting sorted order', async () => {
+      // In raw order: id 10 ('Z'), id 20 ('A'), id 30 ('M')
+      const items = [
+        row({ id: 10, gene_symbol: 'Z' }),
+        row({ id: 20, gene_symbol: 'A' }),
+        row({ id: 30, gene_symbol: 'M' })
+      ]
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: items },
+        global: { plugins: [vuetify, pinia] }
+      })
+
+      // Sort by gene_symbol asc -> order becomes id 20 ('A'), id 30 ('M'), id 10 ('Z')
+      const dataTable = wrapper.findComponent({ name: 'VDataTable' })
+      await dataTable.vm.$emit('update:sortBy', [{ key: 'gene_symbol', order: 'asc' }])
+      await flushPromises()
+
+      // Click first sorted item (id 20)
+      const cb20 = wrapper.get('[data-testid="bulk-select-row-20"]')
+      await cb20.trigger('click')
+      await flushPromises()
+
+      // Shift+Click last sorted item (id 10)
+      // In sorted order [20, 30, 10], range includes all 3 items (20, 30, 10).
+      // (In raw order [10, 20, 30], range between 20 and 10 would only include 2 items).
+      const cb10 = wrapper.get('[data-testid="bulk-select-row-10"]')
+      await cb10.trigger('click', { shiftKey: true })
+      await flushPromises()
+
+      const actionBar = wrapper.findComponent({ name: 'BulkTriageActionBar' })
+      expect(actionBar.exists()).toBe(true)
+      expect(actionBar.props('selectedCount')).toBe(3)
       wrapper.unmount()
     })
   })

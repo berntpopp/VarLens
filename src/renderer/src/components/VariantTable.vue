@@ -161,9 +161,9 @@
         <EmptyPlaceholder v-else />
       </template>
 
-      <template #[`item.consequence`]="{ value }"
-        ><ConsequenceCell :consequence="value"
-      /></template>
+      <template v-for="key in ['consequence', 'func']" :key="key" #[`item.${key}`]="{ value }">
+        <ConsequenceCell :consequence="value" />
+      </template>
 
       <template #[`item.gt_num`]="{ item, value }">
         <GenotypeCell :item="item" :value="value" />
@@ -176,8 +176,6 @@
       >
         <FamilyMemberCell :call="item.family_calls?.[member.case_id]" />
       </template>
-
-      <template #[`item.func`]="{ value }"><ConsequenceCell :consequence="value" /></template>
 
       <template #[`item.qual`]="{ value }">
         <span v-if="typeof value === 'number'">{{ value.toFixed(1) }}</span>
@@ -417,7 +415,13 @@ const bulkSelection = useBulkTriageSelection<Variant>({
   items: () => variants.value,
   getItemId: (v) => v.id,
   caseId: toRef(props, 'caseId'),
-  onTriageApplied: () => loadVariants()
+  onTriageApplied: async () => {
+    await reloadCurrentPage()
+    if (variants.value.length > 0 && props.caseId) {
+      annotationActions.invalidateAnnotationGeneration()
+      await annotationActions.loadAnnotationsBatch(props.caseId, variants.value)
+    }
+  }
 })
 
 // Page size incl. "Auto (fit)": as many rows as fit the visible table body
@@ -523,9 +527,22 @@ function triggerDebouncedPanelSync(): void {
     arrowSyncTimer = null
   }
   if (appState?.panelOpen.value === true && selectedItem.value) {
-    arrowSyncTimer = setTimeout(() => {
+    arrowSyncTimer = setTimeout(async () => {
       arrowSyncTimer = null
       if (appState?.panelOpen.value === true && selectedItem.value) {
+        const leavePromise = appState.confirmPanelLeave?.() ?? null
+        if (leavePromise !== null) {
+          const ok = await leavePromise
+          if (!ok) {
+            if (
+              appState.selectedPanelVariant.value &&
+              'id' in appState.selectedPanelVariant.value
+            ) {
+              selectByClick(appState.selectedPanelVariant.value as Variant)
+            }
+            return
+          }
+        }
         emit('row-click', selectedItem.value)
       }
     }, 100)
@@ -596,12 +613,13 @@ onKeyStroke(
 onKeyStroke(
   SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
-    if (!props.interactive || !viewActive.value || isInputFocused()) return
-    e.preventDefault()
+    if (e.defaultPrevented || !props.interactive || !viewActive.value || isInputFocused()) return
     if (appState?.panelOpen.value === true) {
+      e.preventDefault()
       appState.panelOpen.value = false
       return
     }
+    bulkSelection.clearSelection()
     clearSelection()
     selectedVariantId.value = null
     emit('deselect')
@@ -670,9 +688,7 @@ defineExpose({
   resetSort,
   refresh: loadVariants,
   buildQueryFilters,
-  columns: computed(() =>
-    headers.value.map((h) => ({ key: h.key, title: h.title, width: h.width }))
-  ),
+  columns: computed(() => headers.value.map(({ key, title, width }) => ({ key, title, width }))),
   hasColumnFilters,
   columnFilterCount,
   clearAllColumnFilters,
@@ -682,9 +698,3 @@ defineExpose({
 </script>
 
 <style src="./data-table-shared.css"></style>
-<style scoped>
-.bulk-select-checkbox {
-  cursor: pointer;
-  accent-color: rgb(var(--v-theme-primary));
-}
-</style>

@@ -9,6 +9,20 @@ export interface VariantCell {
   protein: string | null
 }
 
+// Widths in rem so headers grow with the text size (no clipping at 200 %)
+export const baseHeaders = [
+  { title: '#', key: 'rank', width: '3.75rem', sortable: false },
+  { title: 'Score', key: 'rank_score', width: '5.625rem', sortable: false },
+  { title: 'Type', key: 'variant_type', width: '5rem', sortable: false },
+  { title: 'Gene', key: 'gene_symbol', width: '8.75rem' },
+  { title: 'Variant', key: 'variant_notation', width: '17.5rem', sortable: false },
+  { title: 'Impact', key: 'consequence', width: '6.875rem' },
+  { title: 'AF', key: 'gnomad_af', width: '5.625rem' },
+  { title: 'ClinVar', key: 'clinvar', width: '8.125rem' },
+  { title: '★', key: 'is_starred', width: '6.5rem', sortable: false },
+  { title: 'Actions', key: 'actions', width: '5rem', sortable: false }
+] as const
+
 export function ensureHgvsPrefix(value: string, prefix: 'c.' | 'p.'): string {
   const text = formatHgvs(value) ?? value
   return text.includes(':') || text.startsWith(prefix) ? text : `${prefix}${text}`
@@ -73,4 +87,53 @@ export function targetTabFor(t: ShortlistRow['variant_type']): 'snv' | 'sv' | 'c
 
 export function displayVariantType(t: ShortlistRow['variant_type']): string {
   return (t ?? 'snv').toUpperCase()
+}
+
+export function hasCommentFor(
+  item: ShortlistRow,
+  cache: {
+    get(key: string):
+      | {
+          perCase?: { per_case_comment?: string | null } | null
+          global?: { global_comment?: string | null } | null
+        }
+      | undefined
+  }
+): boolean {
+  const key = `${item.chr}:${item.pos}:${item.ref}:${item.alt}`
+  const cached = cache.get(key)
+  const perCase = cached?.perCase?.per_case_comment
+  const global = cached?.global?.global_comment
+  return (
+    (perCase !== undefined && perCase !== null && perCase !== '') ||
+    (global !== undefined && global !== null && global !== '')
+  )
+}
+
+export function sortShortlistRows(
+  rows: readonly ShortlistRow[],
+  sorts?: Array<{ key: string; order?: 'asc' | 'desc' }>
+): ShortlistRow[] {
+  if (sorts === undefined || sorts.length === 0) return [...rows]
+  const sort = sorts[0]
+  if (sort === undefined) return [...rows]
+  const { key, order } = sort
+  const mult = order === 'desc' ? -1 : 1
+  return [...rows].sort((a, b) => {
+    const valA = (a as unknown as Record<string, unknown>)[key]
+    const valB = (b as unknown as Record<string, unknown>)[key]
+    if (valA === valB) return 0
+    if (valA === undefined || valA === null) return 1
+    if (valB === undefined || valB === null) return -1
+    return valA < valB ? -1 * mult : 1 * mult
+  })
+}
+
+export function parseCurrentItems(items: unknown[]): ShortlistRow[] {
+  if (!Array.isArray(items) || items.length === 0) return []
+  return items.map((it) =>
+    it !== null && typeof it === 'object' && 'raw' in it
+      ? (it as { raw: ShortlistRow }).raw
+      : (it as ShortlistRow)
+  )
 }

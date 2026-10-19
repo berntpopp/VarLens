@@ -9,7 +9,7 @@ import {
   GenomeBuildArgSchema,
   GlobalAnnotationUpdatesSchema,
   PerCaseAnnotationUpdatesSchema,
-  BatchPerCaseAnnotationUpdatesSchema,
+  BatchPerCaseAnnotationInputSchema,
   CaseVariantIdSchema,
   VariantKeysSchema
 } from '../../../shared/api/schemas/annotations'
@@ -242,32 +242,23 @@ export function registerAnnotationHandlers({
     'annotations:batchUpsertPerCase',
     async (_event, caseId: unknown, variantIds: unknown, updates: unknown) => {
       return wrapHandler(async () => {
-        const validatedCase = CaseIdSchema.safeParse(caseId)
-        const validatedVariantIds = z
-          .array(z.number().int().positive())
-          .min(1)
-          .safeParse(variantIds)
-        if (!validatedCase.success || !validatedVariantIds.success) {
+        const validated = BatchPerCaseAnnotationInputSchema.safeParse({
+          caseId,
+          variantIds,
+          updates
+        })
+        if (!validated.success) {
           mainLogger.error(
-            `Invalid annotations:batchUpsertPerCase ids: caseId=${caseId}`,
+            `Invalid annotations:batchUpsertPerCase input: ${validated.error.message}`,
             'annotations'
           )
-          throw new Error('Invalid case/variant IDs')
-        }
-
-        const validatedUpdates = BatchPerCaseAnnotationUpdatesSchema.safeParse(updates)
-        if (!validatedUpdates.success) {
-          mainLogger.error(
-            `Invalid annotations:batchUpsertPerCase updates: ${validatedUpdates.error.message}`,
-            'annotations'
-          )
-          throw new Error('Invalid annotation updates')
+          throw new Error('Invalid batch per-case annotation input')
         }
 
         return await batchUpsertPerCaseAnnotationWithEvent(
-          validatedCase.data,
-          validatedVariantIds.data,
-          validatedUpdates.data,
+          validated.data.caseId,
+          validated.data.variantIds,
+          validated.data.updates,
           () => getDbManager().getCurrentSession(),
           broadcastAnnotationChanged
         )

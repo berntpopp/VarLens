@@ -130,11 +130,11 @@ describe('useBulkTriageSelection', () => {
     bulk.toggleSelect(102)
 
     await bulk.applyBulkTriage({
-      is_starred: true
+      starred: true
     })
 
     expect(window.api.annotations.batchUpsertPerCase).toHaveBeenCalledWith(42, [101, 102], {
-      is_starred: true
+      starred: true
     })
 
     expect(onTriageApplied).toHaveBeenCalledTimes(1)

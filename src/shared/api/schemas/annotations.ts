@@ -42,6 +42,13 @@ export const BatchPerCaseAnnotationUpdatesSchema = z
   .superRefine(requireOverrideReason)
   .pipe(BatchPerCaseAnnotationFieldsSchema)
 
+/** Complete input validation for batch per-case annotations. */
+export const BatchPerCaseAnnotationInputSchema = z.object({
+  caseId: CaseVariantIdSchema.shape.caseId,
+  variantIds: z.array(CaseVariantIdSchema.shape.variantId).min(1).max(1000),
+  updates: BatchPerCaseAnnotationUpdatesSchema
+})
+
 /**
  * Genome build of a global annotation: part of its key (#577), so only a
  * configured build id as cases store it ("grch38" would store a row no case

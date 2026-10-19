@@ -63,6 +63,7 @@ export class PostgresWriteExecutor implements StorageWriteExecutor {
         | 'upsertPerCaseAnnotation'
         | 'upsertPerCaseAnnotationWithAudit'
         | 'deletePerCaseAnnotation'
+        | 'batchUpsertPerCaseAnnotationWithAudit'
       >
       commentsMetrics: Pick<
         PostgresCommentsMetricsRepository,
