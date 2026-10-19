@@ -59,6 +59,12 @@ export type ParsedBareColumnFilter =
       value: string | number
       includeEmpty: boolean
     }
+  | {
+      kind: 'between'
+      min: string | number
+      max: string | number
+      includeEmpty: boolean
+    }
 
 /**
  * Shared bare column filter parser. Normalizes operator and value shapes across
@@ -104,6 +110,20 @@ export function parseBareColumnFilter(
       includeEmpty: filterDef.includeEmpty ?? includeEmptyDefault
     }
   }
+  if (
+    operator === 'between' &&
+    Array.isArray(value) &&
+    value.length === 2 &&
+    isComparable(value[0]) &&
+    isComparable(value[1])
+  ) {
+    return {
+      kind: 'between',
+      min: coerceColumnFilterComparisonValue(value[0], numericColumn),
+      max: coerceColumnFilterComparisonValue(value[1], numericColumn),
+      includeEmpty: filterDef.includeEmpty ?? includeEmptyDefault
+    }
+  }
   return null
 }
 
@@ -142,6 +162,12 @@ export function translateBareColumnFilter(
       return `${sqlColumn} ${parsed.operator} ${options.bind(parsed.value)}`
     case 'range': {
       const comparison = `${sqlColumn} ${parsed.operator} ${options.bind(parsed.value)}`
+      return parsed.includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison
+    }
+    case 'between': {
+      const low = options.bind(parsed.min)
+      const high = options.bind(parsed.max)
+      const comparison = `(${sqlColumn} >= ${low} AND ${sqlColumn} <= ${high})`
       return parsed.includeEmpty ? `(${sqlColumn} IS NULL OR ${comparison})` : comparison
     }
   }
@@ -206,6 +232,15 @@ function applyColumnFilter(
       return query.where(target(sqlColumn), parsed.operator, parsed.value)
     case 'range':
       return whereRange(query, sqlColumn, parsed.operator, parsed.value, parsed.includeEmpty)
+    case 'between': {
+      const col = target(sqlColumn)
+      if (parsed.includeEmpty) {
+        return query.where(({ or, and, eb }) =>
+          or([eb(col, 'is', null), and([eb(col, '>=', parsed.min), eb(col, '<=', parsed.max)])])
+        )
+      }
+      return query.where(col, '>=', parsed.min).where(col, '<=', parsed.max)
+    }
   }
 }
 

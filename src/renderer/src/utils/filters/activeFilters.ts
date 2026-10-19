@@ -71,9 +71,13 @@ const COLUMN_LABELS: Record<string, string> = {
  */
 function formatColumnFilterValue(
   operator: string,
-  value: string | number | string[],
+  value: string | number | string[] | number[],
   includeEmpty?: boolean
 ): string {
+  if (operator === 'between' && Array.isArray(value) && value.length === 2) {
+    const range = `${value[0]}..${value[1]}`
+    return includeEmpty === true ? `${range} or missing` : range
+  }
   if (operator === 'in' && Array.isArray(value)) {
     return `${value.length} selected`
   }

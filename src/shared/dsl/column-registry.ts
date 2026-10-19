@@ -130,7 +130,8 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     label: 'Position',
     aliases: ['position'],
     type: 'numeric',
-    operators: NUMERIC_OPERATORS
+    operators: NUMERIC_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'gene_symbol',

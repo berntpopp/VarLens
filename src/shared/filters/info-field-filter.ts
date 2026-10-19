@@ -58,6 +58,16 @@ export function infoFieldFilterProblem(column: string, filter: ColumnFilter): st
   if (RANGE_OPERATORS.has(filter.operator) && numericValue(filter.value) === null) {
     return `INFO field ${key}: '${filter.operator}' needs a number, got ${JSON.stringify(filter.value)}`
   }
+  if (filter.operator === 'between') {
+    if (
+      !Array.isArray(filter.value) ||
+      filter.value.length !== 2 ||
+      numericValue(filter.value[0]) === null ||
+      numericValue(filter.value[1]) === null
+    ) {
+      return `INFO field ${key}: 'between' needs two numbers, got ${JSON.stringify(filter.value)}`
+    }
+  }
   if (filter.operator !== 'like' && values.some((v) => typeof v === 'string' && v.includes(','))) {
     return `INFO field ${key}: list values (Number other than 1) cannot be filtered yet`
   }
@@ -132,6 +142,10 @@ export function infoFieldFilterSql(
       if (values.length === 0) return null
       const hasValue = present() // before equals(): binds must follow text order
       return `(${hasValue} AND NOT COALESCE(${equals()}, FALSE))`
+    }
+    case 'between': {
+      if (nums.length < 2) return null
+      return `(${num()} >= ${bindNum(nums[0])} AND ${num()} <= ${bindNum(nums[1])})`
     }
     default:
       // Range: validated to carry a number.
