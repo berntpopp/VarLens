@@ -140,10 +140,6 @@
   width: 100% !important;
 }
 
-.table-container :is(.nested-carriers-table, .carrier-subtable) :is(td, th) {
-  max-width: none !important;
-}
-
 /* Stale-while-revalidate: rows stay visible while a refetch runs and are
    dimmed (after a short delay, see useTableLoadingState) instead of being
    replaced by a skeleton. */

@@ -53,10 +53,11 @@ const vuetify = createVuetify({
 const AXE_OPTIONS = {
   runOnly: {
     type: 'tag' as const,
-    values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+    values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']
   },
   rules: {
-    'color-contrast': { enabled: false }
+    'color-contrast': { enabled: false },
+    region: { enabled: false }
   }
 }
 

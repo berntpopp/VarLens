@@ -299,16 +299,10 @@ describe('CarrierExpandedRow', () => {
     expect(innerStyle.tableLayout).toBe('auto')
     expect(innerStyle.width).toBe('100%')
 
-    // Inner table elements have carrier-subtable class
+    // Inner table elements have carrier-subtable class and cells exist
     expect(wrapper.find('.carrier-subtable').exists()).toBe(true)
-
-    // Every th and td has max-width: none
     const cells = wrapper.findAll('.carrier-subtable th, .carrier-subtable td')
     expect(cells.length).toBeGreaterThan(0)
-    for (const cell of cells) {
-      const cellStyle = window.getComputedStyle(cell.element)
-      expect(cellStyle.maxWidth).toBe('none')
-    }
 
     // Renders Case, Zygosity, GQ, DP and visible View in Case button
     const tableText = wrapper.find('.carrier-subtable').text()
