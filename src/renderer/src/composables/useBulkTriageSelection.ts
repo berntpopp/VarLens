@@ -30,6 +30,7 @@ import {
   isKeyLoading,
   isPerCaseSlotOwner,
   markAwaited,
+  perCaseVersionSlot,
   variantKey,
   type VariantCoords
 } from './annotation-cache'
@@ -450,8 +451,10 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       const bulkWriteVersions = new Map<string, Map<'star' | 'acmg' | 'comment', number>>()
       for (const k of affectedKeys) {
         const m = new Map<'star' | 'acmg' | 'comment', number>()
+        const o = bulkOwners.get(k)
         for (const fg of touchedFields) {
-          m.set(fg, bumpWriteVersion(k, `perCase:${fg}`))
+          const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
+          m.set(fg, bumpWriteVersion(k, vSlot))
         }
         bulkWriteVersions.set(k, m)
       }

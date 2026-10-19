@@ -36,17 +36,36 @@ export const confirmedFieldPatches = new Map<
 
 export function bumpWriteVersion(key: string, slot: string = 'perCase'): number {
   const k = `${slot}:${key}`
-  const next = (issuedWriteVersions.get(k) ?? 0) + 1
+  let base = issuedWriteVersions.get(k) ?? 0
+  const parts = slot.split(':')
+  if (parts.length === 4 && parts[0] === 'perCase') {
+    const coordKey = `perCase:${parts[3]}:${key}`
+    base = Math.max(base, issuedWriteVersions.get(coordKey) ?? 0)
+    issuedWriteVersions.set(coordKey, base + 1)
+  }
+  const next = base + 1
   issuedWriteVersions.set(k, next)
   return next
 }
 
 export function getWriteVersion(key: string, slot: string = 'perCase'): number {
-  return issuedWriteVersions.get(`${slot}:${key}`) ?? 0
+  const v = issuedWriteVersions.get(`${slot}:${key}`) ?? 0
+  const parts = slot.split(':')
+  if (parts.length === 4 && parts[0] === 'perCase') {
+    const coordKey = `perCase:${parts[3]}:${key}`
+    return Math.max(v, issuedWriteVersions.get(coordKey) ?? 0)
+  }
+  return v
 }
 
 export function getConfirmedWriteVersion(key: string, slot: string = 'perCase'): number {
-  return confirmedWriteVersions.get(`${slot}:${key}`) ?? 0
+  const v = confirmedWriteVersions.get(`${slot}:${key}`) ?? 0
+  const parts = slot.split(':')
+  if (parts.length === 4 && parts[0] === 'perCase') {
+    const coordKey = `perCase:${parts[3]}:${key}`
+    return Math.max(v, confirmedWriteVersions.get(coordKey) ?? 0)
+  }
+  return v
 }
 
 export function setConfirmedWriteVersion(key: string, slot: string, version: number): void {
@@ -101,13 +120,34 @@ export function getPerCaseSlotOwner(
 }
 
 export const perCaseByVariantId = new Map<string, CaseVariantAnnotation | null>()
+const variantKeysByCoord = new Map<string, Set<string>>()
 
 export function setPerCaseByVariantId(
   caseId: number,
   variantId: number,
-  pc: CaseVariantAnnotation | null
+  pc: CaseVariantAnnotation | null,
+  coordKey?: string
 ): void {
-  perCaseByVariantId.set(`${caseId}:${variantId}`, pc)
+  const k = `${caseId}:${variantId}`
+  perCaseByVariantId.set(k, pc)
+  if (typeof coordKey === 'string' && coordKey.length > 0) {
+    let set = variantKeysByCoord.get(coordKey)
+    if (!set) {
+      set = new Set()
+      variantKeysByCoord.set(coordKey, set)
+    }
+    set.add(k)
+  }
+}
+
+export function deletePerCaseForCoordKey(coordKey: string): void {
+  const set = variantKeysByCoord.get(coordKey)
+  if (set) {
+    for (const k of set) {
+      perCaseByVariantId.delete(k)
+    }
+    variantKeysByCoord.delete(coordKey)
+  }
 }
 
 export function hasPerCaseByVariantId(caseId: number, variantId: number): boolean {
@@ -161,6 +201,7 @@ export function clearMutationTracker(): void {
   inFlightMutations.clear()
   perCaseSlotOwners.clear()
   perCaseByVariantId.clear()
+  variantKeysByCoord.clear()
 }
 
 export type AnnotationWriteScope =

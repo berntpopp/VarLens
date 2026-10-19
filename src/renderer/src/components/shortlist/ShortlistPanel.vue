@@ -160,10 +160,11 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const build = getCachedBuild()
   const key = variantKey(row)
   const rowKey = `${row.case_id}:${row.id}`
+  const vSlot = perCaseVersionSlot(row.case_id, row.id, 'star')
   const cachedPerCase = annotationCache.value.get(key)?.perCase
   const pending = pendingStarByRow.get(rowKey)
   const currentStarred =
-    pending !== undefined && getWriteVersion(key, 'perCase:star') === pending.writeVer
+    pending !== undefined && getWriteVersion(key, vSlot) === pending.writeVer
       ? pending.target
       : cachedPerCase &&
           cachedPerCase.variant_id === row.id &&
@@ -172,9 +173,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         : row.is_starred
   const nextStarred = !currentStarred
   ensurePerCaseSlotOwner(key, row.case_id, row.id)
-  const vSlot = perCaseVersionSlot(row.case_id, row.id, 'star')
   const writeVer = bumpWriteVersion(key, vSlot)
-  bumpWriteVersion(key, 'perCase:star')
   const toggleToken = ++nextStarToggleToken
   pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
 
@@ -184,12 +183,9 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         starred: nextStarred
       })
     )
-    setPerCaseByVariantId(row.case_id, row.id, updated)
+    setPerCaseByVariantId(row.case_id, row.id, updated, key)
     const activeCaseId = appState?.selectedCaseId?.value
-    const confirmedVer = Math.max(
-      getConfirmedWriteVersion(key, vSlot),
-      getConfirmedWriteVersion(key, 'perCase:star')
-    )
+    const confirmedVer = getConfirmedWriteVersion(key, vSlot)
     const stillOnScope =
       !hasDbSwitchedSince(dbPath) &&
       props.caseId === row.case_id &&
@@ -201,20 +197,20 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       writeVer > confirmedVer
     if (stillOnScope) {
       setConfirmedWriteVersion(key, vSlot, writeVer)
-      setConfirmedWriteVersion(key, 'perCase:star', writeVer)
       const slotKey = perCaseSlotKey(row.case_id, row.id, key)
       setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
       setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
       pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
       pruneInFlightMutationsOnSuccess(`perCase:${key}`, 'star', writeVer)
       const merged = applyConfirmedFieldPatches(slotKey, updated) as CaseVariantAnnotation
-      setPerCaseByVariantId(row.case_id, row.id, merged)
+      setPerCaseByVariantId(row.case_id, row.id, merged, key)
       const remaining = inFlightMutations.get(slotKey)
       if (remaining && remaining.length > 0) {
         confirmedBases.set(slotKey, merged)
       } else {
         confirmedBases.delete(slotKey)
         confirmedFieldPatches.delete(slotKey)
+        confirmedFieldPatches.delete(`perCase:${key}`)
       }
       const finalSlot =
         remaining && remaining.length > 0

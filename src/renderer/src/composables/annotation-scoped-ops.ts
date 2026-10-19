@@ -163,7 +163,6 @@ async function mutate(
   const plan = buildPlan(curSlot, baseSlot)
 
   const writeVer = bumpWriteVersion(key, vSlot)
-  if (scope.kind === 'case') bumpWriteVersion(key, `perCase:${fieldGroup}`)
   const mutationId = ++nextMutationId
 
   if (current) {
@@ -185,12 +184,9 @@ async function mutate(
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
     if (scope.kind === 'case') {
-      setPerCaseByVariantId(scope.caseId, scope.variantId, updated as CaseVariantAnnotation)
+      setPerCaseByVariantId(scope.caseId, scope.variantId, updated as CaseVariantAnnotation, key)
     }
-    const confirmedVer = Math.max(
-      getConfirmedWriteVersion(key, vSlot),
-      scope.kind === 'case' ? getConfirmedWriteVersion(key, `perCase:${fieldGroup}`) : 0
-    )
+    const confirmedVer = getConfirmedWriteVersion(key, vSlot)
     if (
       leftScope(scope, dbPath) ||
       (scope.kind === 'case' && !isPerCaseSlotOwner(key, scope.caseId, scope.variantId)) ||
@@ -200,7 +196,6 @@ async function mutate(
       return true
     }
     setConfirmedWriteVersion(key, vSlot, writeVer)
-    if (scope.kind === 'case') setConfirmedWriteVersion(key, `perCase:${fieldGroup}`, writeVer)
     const patch = extractFieldGroupPatch(scope, fieldGroup, updated)
     setConfirmedFieldPatch(slotKey, fieldGroup, patch)
     if (scope.kind === 'case') setConfirmedFieldPatch(`perCase:${key}`, fieldGroup, patch)
@@ -209,11 +204,18 @@ async function mutate(
     const remaining = inFlightMutations.get(slotKey)
     const mergedConfirmed = applyConfirmedFieldPatches(slotKey, updated)!
     if (scope.kind === 'case') {
-      setPerCaseByVariantId(scope.caseId, scope.variantId, mergedConfirmed as CaseVariantAnnotation)
+      setPerCaseByVariantId(
+        scope.caseId,
+        scope.variantId,
+        mergedConfirmed as CaseVariantAnnotation,
+        key
+      )
     }
     if (!remaining || remaining.length === 0) {
       confirmedBases.delete(slotKey)
       inFlightMutations.delete(slotKey)
+      confirmedFieldPatches.delete(slotKey)
+      if (scope.kind === 'case') confirmedFieldPatches.delete(`perCase:${key}`)
     } else {
       confirmedBases.set(slotKey, mergedConfirmed)
     }
@@ -289,29 +291,26 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
       ? { caseId: entry.perCase.case_id, variantId: entry.perCase.variant_id }
       : getPerCaseSlotOwner(key)
     const slotKey = owner ? perCaseSlotKey(owner.caseId, owner.variantId, key) : `perCase:${key}`
+    const inFlight = inFlightMutations.get(slotKey)
     if (entry.perCase !== null) {
       ensurePerCaseSlotOwner(key, entry.perCase.case_id, entry.perCase.variant_id)
-      setPerCaseByVariantId(entry.perCase.case_id, entry.perCase.variant_id, entry.perCase)
-      const inFlight = inFlightMutations.get(slotKey)
-      const writeScope: AnnotationWriteScope = {
-        kind: 'case',
-        caseId: entry.perCase.case_id,
-        variantId: entry.perCase.variant_id,
-        build: scope.build
-      }
-      for (const fg of ['star', 'acmg', 'comment'] as const) {
-        if (
-          !inFlight ||
-          inFlight.length === 0 ||
-          confirmedFieldPatches.get(slotKey)?.[fg] === undefined
-        ) {
-          const p = extractFieldGroupPatch(writeScope, fg, entry.perCase)
-          setConfirmedFieldPatch(slotKey, fg, p)
-          setConfirmedFieldPatch(`perCase:${key}`, fg, p)
+      setPerCaseByVariantId(entry.perCase.case_id, entry.perCase.variant_id, entry.perCase, key)
+      if (inFlight && inFlight.length > 0) {
+        const writeScope: AnnotationWriteScope = {
+          kind: 'case',
+          caseId: entry.perCase.case_id,
+          variantId: entry.perCase.variant_id,
+          build: scope.build
+        }
+        for (const fg of ['star', 'acmg', 'comment'] as const) {
+          if (confirmedFieldPatches.get(slotKey)?.[fg] === undefined) {
+            const p = extractFieldGroupPatch(writeScope, fg, entry.perCase)
+            setConfirmedFieldPatch(slotKey, fg, p)
+            setConfirmedFieldPatch(`perCase:${key}`, fg, p)
+          }
         }
       }
     }
-    const inFlight = inFlightMutations.get(slotKey)
     if (inFlight && inFlight.length > 0) {
       const basePerCase = entry.perCase
         ? (applyConfirmedFieldPatches(slotKey, entry.perCase) as CaseVariantAnnotation)
@@ -322,10 +321,8 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
     } else {
       confirmedBases.delete(slotKey)
       inFlightMutations.delete(slotKey)
-      if (entry.perCase === null) {
-        confirmedFieldPatches.delete(slotKey)
-        confirmedFieldPatches.delete(`perCase:${key}`)
-      }
+      confirmedFieldPatches.delete(slotKey)
+      confirmedFieldPatches.delete(`perCase:${key}`)
       cacheSet(key, { global: entry.global, perCase: entry.perCase })
     }
   } else {
@@ -350,9 +347,9 @@ function applyStalePerCaseSlot(
     ) {
       cacheSetPerCaseSlot(key, pc, reqVid)
       if (reqVid !== undefined) {
-        setPerCaseByVariantId(caseId, reqVid, pc)
+        setPerCaseByVariantId(caseId, reqVid, pc, key)
       } else if (pc !== null) {
-        setPerCaseByVariantId(caseId, pc.variant_id, pc)
+        setPerCaseByVariantId(caseId, pc.variant_id, pc, key)
       }
     }
   }
@@ -386,6 +383,9 @@ async function load(
       return
     }
     storeLoaded(key, scope, entry)
+    if (scope.kind === 'case' && entry.perCase) {
+      setPerCaseByVariantId(scope.caseId, entry.perCase.variant_id, entry.perCase, key)
+    }
   } catch (error) {
     logService.error(
       `Failed to load ${scopeQualifier(scope)}annotations: ` + getTransportErrorMessage(error),
@@ -427,27 +427,39 @@ async function loadBatch(
     const ident = scope.kind === 'case' && typeof v.id === 'number' ? `${key}:${v.id}` : key
     if (seenVariantIdentifiers.has(ident)) continue
     seenVariantIdentifiers.add(ident)
-
     if (scope.kind === 'case') {
       const cached = annotationCache.value.get(key)
       const cachedVid = getCachedVariantId(key)
       const sameCoords = cached?.global?.chr === undefined || cached.global.chr === v.chr
+      if (typeof v.id === 'number' && cached !== undefined) {
+        if (cached.perCase === null || cached.perCase.variant_id === v.id || !sameCoords) {
+          setPerCaseByVariantId(scope.caseId, v.id, cached.perCase, key)
+        }
+      }
+      const batchHasCachedVid =
+        cachedVid !== undefined && variants.some((o) => o.id === cachedVid && variantKey(o) === key)
       const stale =
         (cached !== undefined &&
           ((typeof v.id === 'number' &&
             cached.perCase != null &&
             cached.perCase.variant_id !== v.id &&
-            !hasPerCaseByVariantId(scope.caseId, v.id)) ||
+            (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id))) ||
             (typeof v.is_starred === 'boolean' &&
               !inFlightMutations.has(`perCase:${key}`) &&
               (cached.perCase?.starred === 1) !== v.is_starred))) ||
         (typeof v.id === 'number' &&
           cachedVid !== undefined &&
           cachedVid !== v.id &&
-          !hasPerCaseByVariantId(scope.caseId, v.id))
+          (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id)))
       if (sameCoords && stale) evictAnnotationCacheKeys([key])
     }
-    if (needsLoad(key, scope.kind)) {
+    if (
+      needsLoad(key, scope.kind) ||
+      (scope.kind === 'case' &&
+        typeof v.id === 'number' &&
+        !hasPerCaseByVariantId(scope.caseId, v.id) &&
+        !isKeyLoading(key))
+    ) {
       neededVariants.push(v)
     } else if (isKeyLoading(key)) {
       markAwaited(scope.kind, key)
@@ -524,7 +536,7 @@ async function loadBatch(
           ) {
             setCachedVariantId(key, reqVid)
           }
-          setPerCaseByVariantId(scope.caseId, reqVid, loaded)
+          setPerCaseByVariantId(scope.caseId, reqVid, loaded, key)
         }
       }
     } catch (error) {

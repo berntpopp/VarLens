@@ -534,9 +534,7 @@ describe('overlapping mutations and rollback', () => {
       .fn()
       .mockResolvedValue(mockPerCase(11, { per_case_comment: 'variant 11 comment' }).perCase)
     await a.upsertPerCaseComment(CASE_ID, 11, ...V, 'variant 11 comment')
-    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toEqual({
-      per_case_comment: 'variant 11 comment'
-    })
+    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toBeUndefined()
 
     window.api.annotations.batchGet = vi.fn().mockResolvedValue({
       [KEY]: mockPerCase(12, { acmg_classification: 'Benign' })
@@ -545,9 +543,7 @@ describe('overlapping mutations and rollback', () => {
 
     expect(annotationCache.value.get(KEY)?.perCase?.variant_id).toBe(12)
     expect(annotationCache.value.get(KEY)?.perCase?.per_case_comment).toBeNull()
-    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toEqual({
-      per_case_comment: null
-    })
+    expect(confirmedFieldPatches.get(`perCase:${KEY}`)?.comment).toBeUndefined()
   })
 
   it('preserves bulk ACMG when delayed single-row comment resolves with older server snapshot', async () => {

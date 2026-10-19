@@ -682,7 +682,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
+  clearArrowSyncTimer()
   cleanupAnnotationChanged?.()
 })
 

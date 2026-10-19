@@ -34,7 +34,8 @@ import {
   bumpWriteVersion,
   getConfirmedWriteVersion,
   setConfirmedWriteVersion,
-  pruneInFlightMutationsOnSuccess
+  pruneInFlightMutationsOnSuccess,
+  deletePerCaseForCoordKey
 } from './annotation-mutation-tracker'
 
 export type AnnotationSlot = keyof AnnotationCache
@@ -387,6 +388,7 @@ function dropKeyMetadata(key: string): void {
 
 function dropKeyState(key: string): void {
   dropKeyMetadata(key)
+  deletePerCaseForCoordKey(key)
   const o = getPerCaseSlotOwner(key)
   if (o) {
     const sk = perCaseSlotKey(o.caseId, o.variantId, key)
@@ -450,6 +452,7 @@ export function evictAnnotationCacheKeysForBulkTriage(
   for (const key of affectedKeys) {
     if (annotationCache.value.delete(key)) changed = true
     dropKeyMetadata(key)
+    deletePerCaseForCoordKey(key)
     const o = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
     if (o) ensurePerCaseSlotOwner(key, o.caseId, o.variantId)
     const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
@@ -462,7 +465,10 @@ export function evictAnnotationCacheKeysForBulkTriage(
         setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
         pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
         pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
-        if (updates) {
+        if (
+          updates &&
+          (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
+        ) {
           applyBulkUpdatesPatch(slotKey, fg, updates)
           if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
         } else {
