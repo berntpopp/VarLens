@@ -21,6 +21,7 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import type { ShortlistResult, ShortlistRow } from '../../../../src/shared/types/shortlist'
 import type { FilterPreset } from '../../../../src/shared/types/filter-presets'
+import type { CaseVariantAnnotation } from '../../../../src/shared/types/database-entities'
 
 // ─── Mock useShortlistQuery ────────────────────────────────────────────────
 //
@@ -91,10 +92,13 @@ import {
   annotationCache,
   beginAnnotationRequest,
   bumpWriteVersion,
+  cacheSet,
   clearAnnotationCache,
   confirmedBases,
+  evictAnnotationCacheKeysForBulkTriage,
   inFlightMutations,
   isKeyLoading,
+  perCaseVersionSlot,
   setConfirmedWriteVersion,
   setLoading,
   variantKey
@@ -748,6 +752,39 @@ describe('ShortlistPanel', () => {
     // The superseded in-flight mutation is pruned and confirmedBases deleted
     expect(inFlightMutations.has(slotKey)).toBe(false)
     expect(confirmedBases.has(slotKey)).toBe(false)
+    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
+  })
+
+  it('delayed shortlist star response does not overwrite newer bulk classification', async () => {
+    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
+    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
+    const wrapper = mountPanel({ caseId: 7 })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ShortlistTable' })
+    const key = variantKey(row)
+
+    let resolveStar!: (val: unknown) => void
+    upsertPerCaseMock.mockImplementationOnce(() => new Promise((r) => (resolveStar = r)))
+    await table.vm.$emit('toggle-star', row)
+
+    const ver = bumpWriteVersion(key, perCaseVersionSlot(7, 42, 'acmg'))
+    const writeVers = new Map([[key, new Map([['acmg', ver]])]])
+    const owners = new Map([[key, { caseId: 7, variantId: 42 }]])
+    evictAnnotationCacheKeysForBulkTriage(
+      [key],
+      ['acmg'],
+      writeVers,
+      { acmg_classification: 'Pathogenic' },
+      owners
+    )
+    const mkAnno = (extra: Partial<CaseVariantAnnotation>) =>
+      ({ id: 1, case_id: 7, variant_id: 42, starred: 0, ...extra }) as CaseVariantAnnotation
+    cacheSet(key, { global: null, perCase: mkAnno({ acmg_classification: 'Pathogenic' }) })
+
+    resolveStar(mkAnno({ starred: 1, acmg_classification: 'Benign' }))
+    await flushPromises()
+
+    expect(annotationCache.value.get(key)?.perCase?.acmg_classification).toBe('Pathogenic')
     expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
   })
 })

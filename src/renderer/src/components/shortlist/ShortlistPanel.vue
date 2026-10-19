@@ -65,6 +65,7 @@ import {
   perCaseSlotKey,
   perCaseVersionSlot,
   pruneInFlightMutationsOnSuccess,
+  removeInFlightMutation,
   setConfirmedFieldPatch,
   setConfirmedWriteVersion,
   setPerCaseByVariantId,
@@ -176,6 +177,15 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
   const writeVer = bumpWriteVersion(key, vSlot)
   const toggleToken = ++nextStarToggleToken
   pendingStarByRow.set(rowKey, { target: nextStarred, token: toggleToken, writeVer })
+  const slotKey = perCaseSlotKey(row.case_id, row.id, key)
+  const inFlightList = inFlightMutations.get(slotKey) ?? []
+  inFlightList.push({
+    id: toggleToken,
+    fieldGroup: 'star',
+    writeVer,
+    patch: { starred: nextStarred ? 1 : 0, case_id: row.case_id, variant_id: row.id }
+  })
+  inFlightMutations.set(slotKey, inFlightList)
 
   try {
     const updated = unwrapIpcResult(
@@ -183,7 +193,6 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         starred: nextStarred
       })
     )
-    setPerCaseByVariantId(row.case_id, row.id, updated, key)
     const activeCaseId = appState?.selectedCaseId?.value
     const confirmedVer = getConfirmedWriteVersion(key, vSlot)
     const stillOnScope =
@@ -197,7 +206,6 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       writeVer > confirmedVer
     if (stillOnScope) {
       setConfirmedWriteVersion(key, vSlot, writeVer)
-      const slotKey = perCaseSlotKey(row.case_id, row.id, key)
       setConfirmedFieldPatch(slotKey, 'star', { starred: updated.starred })
       setConfirmedFieldPatch(`perCase:${key}`, 'star', { starred: updated.starred })
       pruneInFlightMutationsOnSuccess(slotKey, 'star', writeVer)
@@ -224,8 +232,11 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
         { global: liveEntry?.global ?? null, perCase: finalSlot },
         liveEntry !== undefined && liveUnloaded !== 'global' ? undefined : 'global'
       )
+    } else {
+      removeInFlightMutation(slotKey, toggleToken)
     }
   } catch (e) {
+    removeInFlightMutation(slotKey, toggleToken)
     logService.error(
       `toggle star failed: ${
         e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
@@ -233,6 +244,7 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
       'shortlist.panel'
     )
   } finally {
+    removeInFlightMutation(slotKey, toggleToken)
     if (pendingStarByRow.get(rowKey)?.token === toggleToken) {
       pendingStarByRow.delete(rowKey)
     }

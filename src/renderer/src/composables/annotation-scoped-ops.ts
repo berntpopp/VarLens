@@ -183,13 +183,10 @@ async function mutate(
 
   try {
     const updated = unwrapIpcResult<SlotValue>(await upsert(api, scope, coords, plan.updates))
-    if (scope.kind === 'case') {
-      setPerCaseByVariantId(scope.caseId, scope.variantId, updated as CaseVariantAnnotation, key)
-    }
     const confirmedVer = getConfirmedWriteVersion(key, vSlot)
     if (
       leftScope(scope, dbPath) ||
-      (scope.kind === 'case' && !isPerCaseSlotOwner(key, scope.caseId, scope.variantId)) ||
+      (scope.kind === 'case' && epoch !== getAnnotationCacheEpoch()) ||
       writeVer <= confirmedVer
     ) {
       removeInFlightMutation(slotKey, mutationId)
@@ -218,6 +215,10 @@ async function mutate(
       if (scope.kind === 'case') confirmedFieldPatches.delete(`perCase:${key}`)
     } else {
       confirmedBases.set(slotKey, mergedConfirmed)
+    }
+
+    if (scope.kind === 'case' && !isPerCaseSlotOwner(key, scope.caseId, scope.variantId)) {
+      return true
     }
 
     const live = annotationCache.value.get(key)
@@ -444,6 +445,10 @@ async function loadBatch(
       }
       const batchHasCachedVid =
         cachedVid !== undefined && variants.some((o) => o.id === cachedVid && variantKey(o) === key)
+      const targetVid = typeof v.id === 'number' ? v.id : cachedVid
+      const vSlotKey =
+        targetVid !== undefined ? perCaseSlotKey(scope.caseId, targetVid, key) : `perCase:${key}`
+      const hasInFlight = inFlightMutations.has(vSlotKey) || inFlightMutations.has(`perCase:${key}`)
       const stale =
         (cached !== undefined &&
           ((typeof v.id === 'number' &&
@@ -451,7 +456,7 @@ async function loadBatch(
             cached.perCase.variant_id !== v.id &&
             (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id))) ||
             (typeof v.is_starred === 'boolean' &&
-              !inFlightMutations.has(`perCase:${key}`) &&
+              !hasInFlight &&
               (cached.perCase?.starred === 1) !== v.is_starred))) ||
         (typeof v.id === 'number' &&
           cachedVid !== undefined &&
@@ -459,14 +464,13 @@ async function loadBatch(
           (!batchHasCachedVid || !hasPerCaseByVariantId(scope.caseId, v.id)))
       if (sameCoords && stale) evictAnnotationCacheKeys([key])
     }
-    if (
-      needsLoad(key, scope.kind) ||
-      (scope.kind === 'case' &&
-        typeof v.id === 'number' &&
-        sameCoords &&
-        !hasPerCaseByVariantId(scope.caseId, v.id) &&
-        !isKeyLoading(key))
-    ) {
+    const needCaseVid =
+      scope.kind === 'case' &&
+      typeof v.id === 'number' &&
+      sameCoords &&
+      !hasPerCaseByVariantId(scope.caseId, v.id) &&
+      !isKeyLoading(key)
+    if (needsLoad(key, scope.kind) || needCaseVid) {
       neededVariants.push(v)
     } else if (isKeyLoading(key)) {
       markAwaited(scope.kind, key)
@@ -480,10 +484,7 @@ async function loadBatch(
     const bk = batchKey(scope, v)
     const k = variantKey(bk)
     let targetWave = waves.find((w) => !w.some((item) => variantKey(item) === k))
-    if (!targetWave) {
-      targetWave = []
-      waves.push(targetWave)
-    }
+    if (!targetWave) waves.push((targetWave = []))
     targetWave.push(bk)
   }
 

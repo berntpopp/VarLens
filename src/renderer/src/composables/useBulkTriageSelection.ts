@@ -439,22 +439,33 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       if ('acmg_classification' in updates || 'acmg_evidence' in updates) touchedFields.push('acmg')
       if ('per_case_comment' in updates) touchedFields.push('comment')
 
-      const bulkOwners = new Map<string, { caseId: number; variantId: number }>()
+      const bulkOwners = new Map<string, Array<{ caseId: number; variantId: number }>>()
       for (const [id, coords] of targetCoords.entries()) {
         const k = variantKey(coords)
-        if (!bulkOwners.has(k) || isPerCaseSlotOwner(k, cid, id)) {
-          bulkOwners.set(k, { caseId: cid, variantId: id })
+        const list = bulkOwners.get(k) ?? []
+        if (!list.some((o) => o.variantId === id)) {
+          const entry = { caseId: cid, variantId: id }
+          if (isPerCaseSlotOwner(k, cid, id)) list.push(entry)
+          else list.unshift(entry)
+          bulkOwners.set(k, list)
         }
       }
-      for (const [k, o] of bulkOwners) ensurePerCaseSlotOwner(k, o.caseId, o.variantId)
+      for (const [k, list] of bulkOwners) {
+        const last = list[list.length - 1]
+        if (last) ensurePerCaseSlotOwner(k, last.caseId, last.variantId)
+      }
 
       const bulkWriteVersions = new Map<string, Map<'star' | 'acmg' | 'comment', number>>()
       for (const k of affectedKeys) {
         const m = new Map<'star' | 'acmg' | 'comment', number>()
-        const o = bulkOwners.get(k)
+        const list = bulkOwners.get(k)
         for (const fg of touchedFields) {
-          const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
-          m.set(fg, bumpWriteVersion(k, vSlot))
+          let maxVer = 0
+          const slots = list?.length
+            ? list.map((o) => perCaseVersionSlot(o.caseId, o.variantId, fg))
+            : [`perCase:${fg}` as const]
+          for (const s of slots) maxVer = Math.max(maxVer, bumpWriteVersion(k, s))
+          m.set(fg, maxVer)
         }
         bulkWriteVersions.set(k, m)
       }
@@ -463,27 +474,19 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
       // If active case or database changed away from cid, write has committed in storage
       // but we do not touch the active different case's selection or cache.
-      if (!isCacheStillOnCase(cid, myDbPath)) {
-        return res.updatedCount
-      }
+      if (!isCacheStillOnCase(cid, myDbPath)) return res.updatedCount
 
       const postWritePanel = getPanelVariantCoords(cid)
       if (postWritePanel !== null && targetSet.has(postWritePanel.id)) {
         targetCoords.set(postWritePanel.id, postWritePanel)
         const pKey = variantKey(postWritePanel)
         affectedKeys.add(pKey)
-        if (!bulkOwners.has(pKey) || isPerCaseSlotOwner(pKey, cid, postWritePanel.id)) {
-          bulkOwners.set(pKey, { caseId: cid, variantId: postWritePanel.id })
-        }
+        const list = (bulkOwners.get(pKey) ?? []).filter((o) => o.variantId !== postWritePanel.id)
+        list.push({ caseId: cid, variantId: postWritePanel.id })
+        bulkOwners.set(pKey, list)
       }
 
-      const preCachedToReload: Array<{
-        id: number
-        chr: string
-        pos: number
-        ref: string
-        alt: string
-      }> = []
+      const preCachedToReload: Array<VariantCoords & { id: number }> = []
       for (const [id, coords] of targetCoords.entries()) {
         const k = variantKey(coords)
         if (annotationCache.value.has(k) || isKeyLoading(k)) {

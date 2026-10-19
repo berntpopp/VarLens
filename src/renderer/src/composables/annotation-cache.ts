@@ -445,7 +445,10 @@ export function evictAnnotationCacheKeysForBulkTriage(
   touchedFields: Array<'star' | 'acmg' | 'comment'>,
   bulkWriteVersions: Map<string, Map<'star' | 'acmg' | 'comment', number>>,
   bulkUpdates?: Record<string, unknown> | object,
-  bulkOwners?: Map<string, { caseId: number; variantId: number }>
+  bulkOwners?: Map<
+    string,
+    { caseId: number; variantId: number } | Array<{ caseId: number; variantId: number }>
+  >
 ): void {
   let changed = false
   const updates = bulkUpdates as Record<string, unknown> | undefined
@@ -453,30 +456,42 @@ export function evictAnnotationCacheKeysForBulkTriage(
     if (annotationCache.value.delete(key)) changed = true
     dropKeyMetadata(key)
     deletePerCaseForCoordKey(key)
-    const o = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
-    if (o) ensurePerCaseSlotOwner(key, o.caseId, o.variantId)
-    const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
+    const rawOwners = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
+    const owners: Array<{ caseId: number; variantId: number }> = Array.isArray(rawOwners)
+      ? rawOwners
+      : rawOwners
+        ? [rawOwners]
+        : []
+    if (owners.length > 0) {
+      const primary = owners[owners.length - 1]
+      ensurePerCaseSlotOwner(key, primary.caseId, primary.variantId)
+    }
+    const targetOwners: Array<{ caseId: number; variantId: number } | undefined> =
+      owners.length > 0 ? owners : [undefined]
     for (const fg of touchedFields) {
-      const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
-      const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, vSlot)
-      const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
-      if (bulkVer > prevConfirmed) {
-        setConfirmedWriteVersion(key, vSlot, bulkVer)
-        if (!o) setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
-        pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
-        if (!o) pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
-        if (
-          updates &&
-          (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
-        ) {
-          applyBulkUpdatesPatch(slotKey, fg, updates)
-          if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
-        } else {
-          for (const sk of [slotKey, `perCase:${key}`]) {
-            const patches = confirmedFieldPatches.get(sk)
-            if (patches) {
-              delete patches[fg]
-              if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(sk)
+      for (const o of targetOwners) {
+        const slotKey = o ? perCaseSlotKey(o.caseId, o.variantId, key) : `perCase:${key}`
+        const vSlot = o ? perCaseVersionSlot(o.caseId, o.variantId, fg) : `perCase:${fg}`
+        const bulkVer = bulkWriteVersions.get(key)?.get(fg) ?? bumpWriteVersion(key, vSlot)
+        const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
+        if (bulkVer > prevConfirmed) {
+          setConfirmedWriteVersion(key, vSlot, bulkVer)
+          if (!o) setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
+          pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
+          if (!o) pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
+          if (
+            updates &&
+            (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
+          ) {
+            applyBulkUpdatesPatch(slotKey, fg, updates)
+            if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
+          } else {
+            for (const sk of [slotKey, `perCase:${key}`]) {
+              const patches = confirmedFieldPatches.get(sk)
+              if (patches) {
+                delete patches[fg]
+                if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(sk)
+              }
             }
           }
         }
