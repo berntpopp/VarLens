@@ -124,7 +124,11 @@ describe.skipIf(!HAS_PG)('parity P-C reference services (web/Postgres)', () => {
     const status = (await driver.api('referenceServices', 'status')).json() as {
       services: Array<{ id: string; enabled: boolean }>
     }
-    expect(status.services.every((s) => !s.enabled)).toBe(true)
+    expect(
+      status.services.every((s) =>
+        s.id === 'protein' || s.id === 'gnomad' ? s.enabled : !s.enabled
+      )
+    ).toBe(true)
 
     const refused = await driver.api('vep', 'fetch', 'chr17', 43_050_000, 'A', 'T')
     expect(refused.statusCode).toBe(403)

@@ -33,7 +33,15 @@ export interface ExternalLookupPolicySource {
 }
 
 export function defaultExternalLookupPolicy(): ExternalLookupPolicy {
-  return { services: uniformReferenceServicePolicy(false), updatedAt: null, updatedBy: null }
+  return {
+    services: {
+      ...uniformReferenceServicePolicy(false),
+      protein: true,
+      gnomad: true
+    },
+    updatedAt: null,
+    updatedBy: null
+  }
 }
 
 /** Parse the stored JSON; anything malformed falls back to all-off. */
