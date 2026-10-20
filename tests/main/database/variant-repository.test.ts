@@ -314,6 +314,24 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
     })
 
+    it('adds no tables or triggers to the database (no per-row import cost)', () => {
+      const schemaNames = (): string[] =>
+        (
+          service.database
+            .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
+            .all() as { name: string }[]
+        ).map((r) => r.name)
+      const caseId = createTestCase(service, 'cache-no-schema')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+      const before = schemaNames()
+      service.variants.getAllColumnMetas(caseId)
+      service.variants.clearColumnMetaCache()
+      service.variants.getAllColumnMetas(caseId)
+      expect(schemaNames()).toEqual(before)
+    })
+
     it('invalidates cache when clearColumnMetaCache is called', () => {
       const caseId = createTestCase(service, 'cache-clear')
       service.variants.insertVariantsBatch(caseId, [

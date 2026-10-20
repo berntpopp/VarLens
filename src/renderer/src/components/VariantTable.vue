@@ -24,7 +24,7 @@
       multi-sort
       :show-select="canBulkWrite"
       class="elevation-1 variant-table--sticky"
-      :class="{ 'table--stale': showStale }"
+      :class="{ 'table--stale': showStale, 'variant-table--selectable': canBulkWrite }"
       :row-props="getRowProps"
       @update:options="loadVariants"
       @click:row="handleRowClick"

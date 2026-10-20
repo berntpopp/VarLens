@@ -281,3 +281,15 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     }
   })
 })
+
+describe('local Postgres volume is tied to the image major', () => {
+  // A data dir from another major (e.g. PG18's `18/docker` layout) makes the
+  // container run initdb on a non-empty folder and crash-loop forever.
+  test('the data volume name carries the postgres image major', () => {
+    const compose = readFileSync(resolve(ROOT, 'docker-compose.postgres.yml'), 'utf8')
+    const major = /image:\s*postgres:(\d+)/.exec(compose)?.[1]
+    const volume = /-\s*(\S+):\/var\/lib\/postgresql\/data/.exec(compose)?.[1]
+    expect(major).toBeDefined()
+    expect(volume).toContain(`pg${major}`)
+  })
+})

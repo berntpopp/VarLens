@@ -118,7 +118,7 @@
                 :key="cls"
                 role="button"
                 :aria-pressed="currentQuickClassification === cls"
-                :aria-label="cls"
+                :aria-label="`${ACMG_ABBREV[cls]} (${cls})`"
                 :color="currentQuickClassification === cls ? ACMG_COLORS[cls] : undefined"
                 :variant="currentQuickClassification === cls ? 'flat' : 'outlined'"
                 size="small"

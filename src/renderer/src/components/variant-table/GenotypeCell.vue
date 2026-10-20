@@ -29,6 +29,6 @@ import { EmptyPlaceholder } from '../table-cells'
 // prop would keep the same identity and never re-render the chip.
 defineProps<{
   value: string | null | undefined
-  phase?: CompHetPhase | null
+  phase: CompHetPhase | null | undefined
 }>()
 </script>

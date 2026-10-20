@@ -207,6 +207,36 @@
   z-index: 3;
 }
 
+/* Bulk-select column (Vuetify's 48px action column) shifts the lead columns:
+   pin select | annotations (| 3rd from sm up; on phones 280px of pinned lead
+   would leave little room and cover the cells scrolled into view). */
+.table-container .variant-table--selectable th:nth-child(2),
+.table-container .variant-table--selectable td:nth-child(2) {
+  left: 48px;
+}
+
+@media (min-width: 600px) {
+  .table-container .variant-table--selectable th:nth-child(2),
+  .table-container .variant-table--selectable td:nth-child(2) {
+    box-shadow: none;
+    border-right: 0;
+  }
+
+  .table-container .variant-table--selectable th:nth-child(3),
+  .table-container .variant-table--selectable td:nth-child(3) {
+    position: sticky;
+    left: calc(48px + 8.25rem);
+    z-index: 2;
+    background-color: rgb(var(--v-theme-surface));
+    box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.12);
+    border-right: 1px solid rgba(var(--v-border-color), 0.12);
+  }
+
+  .table-container .variant-table--selectable th:nth-child(3) {
+    z-index: 3;
+  }
+}
+
 /* Vuetify's sticky thead (z-index 2) is a stacking context, so the header
    cells' z-index 3 counts only inside it; lift the whole header above the
    sticky body cells (z-index 2) or they paint over the lead header cells. */
@@ -216,7 +246,8 @@
 
 /* Maintain background color in sticky cells during hover, zebra, selected states */
 .table-container .variant-table--sticky tbody tr.variant-row--striped td:first-child,
-.table-container .variant-table--sticky tbody tr.variant-row--striped td:nth-child(2) {
+.table-container .variant-table--sticky tbody tr.variant-row--striped td:nth-child(2),
+.table-container .variant-table--selectable tbody tr.variant-row--striped td:nth-child(3) {
   background-color: color-mix(
     in srgb,
     rgb(var(--v-theme-on-surface)) 3.5%,
@@ -225,7 +256,8 @@
 }
 
 .table-container .variant-table--sticky tbody tr:hover td:first-child,
-.table-container .variant-table--sticky tbody tr:hover td:nth-child(2) {
+.table-container .variant-table--sticky tbody tr:hover td:nth-child(2),
+.table-container .variant-table--selectable tbody tr:hover td:nth-child(3) {
   background-color: color-mix(
     in srgb,
     rgb(var(--v-theme-primary)) 8%,
@@ -234,7 +266,8 @@
 }
 
 .table-container .variant-table--sticky tbody tr.variant-row--selected td:first-child,
-.table-container .variant-table--sticky tbody tr.variant-row--selected td:nth-child(2) {
+.table-container .variant-table--sticky tbody tr.variant-row--selected td:nth-child(2),
+.table-container .variant-table--selectable tbody tr.variant-row--selected td:nth-child(3) {
   background-color: color-mix(
     in srgb,
     rgb(var(--v-theme-primary)) 12%,
@@ -243,7 +276,8 @@
 }
 
 .table-container .variant-table--sticky tbody tr.variant-row--selected:hover td:first-child,
-.table-container .variant-table--sticky tbody tr.variant-row--selected:hover td:nth-child(2) {
+.table-container .variant-table--sticky tbody tr.variant-row--selected:hover td:nth-child(2),
+.table-container .variant-table--selectable tbody tr.variant-row--selected:hover td:nth-child(3) {
   background-color: color-mix(
     in srgb,
     rgb(var(--v-theme-primary)) 18%,

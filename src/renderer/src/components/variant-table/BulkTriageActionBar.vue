@@ -7,7 +7,7 @@
       role="region"
       aria-label="Bulk Triage Bar"
     >
-      <span class="text-body-2 font-weight-bold" data-testid="bulk-selected-count">
+      <span class="text-body-2 font-weight-bold text-no-wrap" data-testid="bulk-selected-count">
         {{ selectedCount }} selected
       </span>
 
