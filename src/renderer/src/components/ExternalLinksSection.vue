@@ -93,6 +93,7 @@ import { useCapabilityStore } from '../stores/capabilityStore'
 import { resolveUrlTemplate } from '../utils/externalLinks'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 import { igvGenomeId, igvLocus, sendToIgv } from '../utils/igv-desktop'
 import { normalizeBuild } from '../utils/variant-interval'
 import { IGV_COPY } from '../config/uiCopyConfig'
@@ -206,7 +207,7 @@ async function openLink(linkId: string): Promise<void> {
   if (link === undefined || link.resolvedUrl === null) return
 
   try {
-    await api!.shell.openExternal(link.resolvedUrl)
+    unwrapIpcResult(await api!.shell.openExternal(link.resolvedUrl))
   } catch (e) {
     logService.warn('Failed to open external link: ' + formatError(e), 'links')
   }

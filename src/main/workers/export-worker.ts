@@ -9,13 +9,20 @@ function postMsg(msg: ExportWorkerMessage): void {
   parentPort?.postMessage(msg)
 }
 
-function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): void {
+async function runCohort(msg: ExportMainMessage & { type: 'start-cohort' }): Promise<void> {
   let db: DatabaseType | null = null
   try {
     db = openWorkerDatabaseReadOnly(msg.dbPath, msg.encryptionKey)
-    const result = runCohortExport(db, msg.params, msg.outputFilePath, (current, total) => {
-      postMsg({ type: 'progress', current, total })
-    })
+    const result = await runCohortExport(
+      db,
+      msg.params,
+      msg.outputFilePath,
+      (current, total) => {
+        postMsg({ type: 'progress', current, total })
+      },
+      msg.tempFilePath,
+      msg.tempFilePrecreated
+    )
     postMsg({ type: 'complete', filePath: result.filePath, rowCount: result.rowCount })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
@@ -36,6 +43,8 @@ async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
       compiledSql: msg.compiledSql,
       compiledParams: msg.compiledParams,
       outputFilePath: msg.outputFilePath,
+      tempFilePath: msg.tempFilePath,
+      tempFilePrecreated: msg.tempFilePrecreated,
       format: msg.format,
       caseName: msg.caseName,
       filterSummary: msg.filterSummary,
@@ -47,7 +56,8 @@ async function run(msg: ExportMainMessage & { type: 'start' }): Promise<void> {
     postMsg({
       type: 'complete',
       filePath: result.filePath,
-      rowCount: result.rowCount
+      rowCount: result.rowCount,
+      ...(result.truncated !== undefined ? { truncated: result.truncated } : {})
     })
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))

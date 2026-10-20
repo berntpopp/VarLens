@@ -10,6 +10,8 @@ export const POSTGRES_VARIANT_COLUMN_DEFINITIONS: Record<string, PostgresVariant
   {
     chr: { key: 'chr', sql: 'v.chr', kind: 'categorical' },
     pos: { key: 'pos', sql: 'v.pos', kind: 'numeric' },
+    ref: { key: 'ref', sql: 'v.ref', kind: 'categorical' },
+    alt: { key: 'alt', sql: 'v.alt', kind: 'categorical' },
     gene_symbol: { key: 'gene_symbol', sql: 'v.gene_symbol', kind: 'categorical' },
     omim_mim_number: { key: 'omim_mim_number', sql: 'v.omim_mim_number', kind: 'categorical' },
     func: { key: 'func', sql: 'v.func', kind: 'categorical' },

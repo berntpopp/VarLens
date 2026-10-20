@@ -6,7 +6,7 @@ import {
   quantile
 } from '../../../../scripts/shortlist-sim/stats/bootstrap'
 import { geneFolds } from '../../../../scripts/shortlist-sim/stats/folds'
-import { mulberry32 } from '../../../../scripts/shortlist-sim/stats/prng'
+import { rng } from '../../../../scripts/shortlist-sim/common/rng'
 
 const meanOf = (xs: Array<{ v: number }>): number => xs.reduce((s, x) => s + x.v, 0) / xs.length
 
@@ -59,10 +59,10 @@ describe('clusterBootstrap', () => {
   })
 })
 
-describe('mulberry32 and geneFolds', () => {
+describe('rng and geneFolds', () => {
   it('generates uniform-ish values deterministically', () => {
-    const r1 = mulberry32(1)
-    const r2 = mulberry32(1)
+    const r1 = rng(1)
+    const r2 = rng(1)
     const xs = Array.from({ length: 1000 }, () => r1())
     expect(xs).toEqual(Array.from({ length: 1000 }, () => r2()))
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(0)

@@ -46,7 +46,8 @@ vi.mock('../../../../src/main/ipc/handlers/database-logic', async () => {
     createDatabase: vi
       .fn()
       .mockResolvedValue({ success: true, info: { path: '', name: '', encrypted: false } }),
-    removeRecentDatabase: vi.fn().mockReturnValue({ success: true })
+    removeRecentDatabase: vi.fn().mockReturnValue({ success: true }),
+    deleteDbFile: vi.fn().mockResolvedValue({ success: true })
   }
 })
 
@@ -55,7 +56,8 @@ import { registerDatabaseHandlers } from '../../../../src/main/ipc/handlers/data
 import {
   openDatabase,
   createDatabase,
-  removeRecentDatabase
+  removeRecentDatabase,
+  deleteDbFile
 } from '../../../../src/main/ipc/handlers/database-logic'
 import {
   addAllowedImportPath,
@@ -433,6 +435,62 @@ describe('database path-authority gate', () => {
 
       expectInvalidParametersResult(result)
       expect(shell.showItemInFolder).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('database:deleteFile', () => {
+    it('rejects a path with no authority', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:deleteFile', UNAUTHORIZED_PATH)
+
+      expectInvalidParametersResult(result)
+      expect(deleteDbFile).not.toHaveBeenCalled()
+    })
+
+    it('accepts a path already in the recent databases list', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain, { recentPaths: [UNAUTHORIZED_PATH] }) as never)
+
+      const result = await invokeHandler(ipcMain, 'database:deleteFile', UNAUTHORIZED_PATH)
+
+      expect(isIpcError(result)).toBe(false)
+      expect(deleteDbFile).toHaveBeenCalled()
+    })
+
+    it('rejects a home path that was never dialog-enrolled', async () => {
+      const ipcMain = makeIpcMain()
+      registerDatabaseHandlers(makeDeps(ipcMain) as never)
+
+      const result = await invokeHandler(
+        ipcMain,
+        'database:deleteFile',
+        '/nonexistent-electron-app-path/leaked.db'
+      )
+
+      expectInvalidParametersResult(result)
+      expect(deleteDbFile).not.toHaveBeenCalled()
+    })
+
+    it('rejects a symlink path even if present in recent databases list (#659)', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'varlens-delete-symlink-'))
+      const realDb = join(dir, 'real.db')
+      const symlinkDb = join(dir, 'symlink.db')
+      writeFileSync(realDb, 'data')
+      symlinkSync(realDb, symlinkDb)
+
+      try {
+        const ipcMain = makeIpcMain()
+        registerDatabaseHandlers(makeDeps(ipcMain, { recentPaths: [symlinkDb] }) as never)
+
+        const result = await invokeHandler(ipcMain, 'database:deleteFile', symlinkDb)
+
+        expectInvalidParametersResult(result)
+        expect(deleteDbFile).not.toHaveBeenCalled()
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
     })
   })
 })

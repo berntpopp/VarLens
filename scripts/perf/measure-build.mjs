@@ -21,7 +21,7 @@ export const STAGES = [
   {
     id: 'format-cold',
     cmd: 'npm run format:check',
-    before: () => rm('node_modules', '.cache', 'prettier')
+    before: () => rm('.cache', 'prettier')
   },
   { id: 'format-warm', cmd: 'npm run format:check' },
   { id: 'typecheck', cmd: 'npm run typecheck' },

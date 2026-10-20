@@ -10,7 +10,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync, existsSync, rmSync, mkdtempSync, writeFileSync, chmodSync } from 'node:fs'
+import {
+  readFileSync,
+  existsSync,
+  rmSync,
+  mkdtempSync,
+  writeFileSync,
+  chmodSync,
+  statSync,
+  symlinkSync,
+  accessSync,
+  constants
+} from 'node:fs'
 import Database from 'better-sqlite3-multiple-ciphers'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import * as XLSX from 'xlsx'
@@ -19,10 +30,15 @@ import { runMigrations } from '../../../src/main/database/migrations'
 import {
   runExportPipeline,
   buildMetadataSheet,
-  EXPORT_COLUMNS
+  defaultExportTempFilePath,
+  iterateAnnotatedRows,
+  EXPORT_COLUMNS,
+  isDevicePath,
+  prepareExportFilePath
 } from '../../../src/main/workers/export-pipeline'
 import { COHORT_EXPORT_COLUMNS } from '../../../src/main/workers/cohort-export'
 import type { ExportPipelineParams } from '../../../src/main/workers/export-pipeline'
+import * as xlsxStreamModule from '../../../src/web/server/downloads/xlsx-stream'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -426,6 +442,254 @@ describe('runExportPipeline — CSV', () => {
       await expect(runExportPipeline(params)).rejects.toThrow('source failed')
       expect(existsSync(params.outputFilePath)).toBe(false)
     })
+
+    it('preserves an existing file at outputFilePath untouched if pipeline throws mid-export, leaving no .part file', async () => {
+      for (let i = 0; i < 5000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      const existing = join(tmpDir, 'existing-to-preserve.csv')
+      writeFileSync(existing, 'original content must not be overwritten')
+      const params = makeCsvParams({
+        outputFilePath: existing,
+        onProgress: (rows) => {
+          if (rows === 4000) throw new Error('mid-export failure')
+        }
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow('mid-export failure')
+      expect(readFileSync(existing, 'utf8')).toBe('original content must not be overwritten')
+      expect(existsSync(`${existing}.part`)).toBe(false)
+    })
+
+    it('preserves an existing <outputFilePath>.part file untouched when export succeeds', async () => {
+      const output = join(tmpDir, 'export-success.csv')
+      const existingPart = `${output}.part`
+      writeFileSync(existingPart, 'pre-existing part content must not be touched')
+      const params = makeCsvParams({ outputFilePath: output })
+      await runExportPipeline(params)
+      expect(existsSync(output)).toBe(true)
+      expect(existsSync(existingPart)).toBe(true)
+      expect(readFileSync(existingPart, 'utf8')).toBe(
+        'pre-existing part content must not be touched'
+      )
+    })
+
+    it('preserves an existing <outputFilePath>.part file untouched when export fails', async () => {
+      for (let i = 0; i < 5000; i++) insertVariant(db, caseId, { chr: '1', pos: 100 + i })
+      const output = join(tmpDir, 'export-fail.csv')
+      const existingPart = `${output}.part`
+      writeFileSync(existingPart, 'pre-existing part content must not be touched')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        onProgress: (rows) => {
+          if (rows === 4000) throw new Error('mid-export failure')
+        }
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow('mid-export failure')
+      expect(existsSync(output)).toBe(false)
+      expect(existsSync(existingPart)).toBe(true)
+      expect(readFileSync(existingPart, 'utf8')).toBe(
+        'pre-existing part content must not be touched'
+      )
+    })
+
+    it('rejects with EEXIST when customTempFilePath already exists and preserves it', async () => {
+      const output = join(tmpDir, 'export-eexist.csv')
+      const existingTemp = join(tmpDir, 'existing-temp.part')
+      writeFileSync(existingTemp, 'do not overwrite me')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath: existingTemp
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow()
+      expect(existsSync(existingTemp)).toBe(true)
+      expect(readFileSync(existingTemp, 'utf8')).toBe('do not overwrite me')
+    })
+
+    it('creates new export file with 0o600 permissions and preserves existing 0o600 permissions', async () => {
+      const output = join(tmpDir, 'perms-test.csv')
+      const params = makeCsvParams({ outputFilePath: output })
+      await runExportPipeline(params)
+      expect(existsSync(output)).toBe(true)
+      const stat1 = statSync(output)
+      if (process.platform !== 'win32') {
+        expect(stat1.mode & 0o777).toBe(0o600)
+      }
+
+      // Overwrite existing file
+      await runExportPipeline(params)
+      const stat2 = statSync(output)
+      if (process.platform !== 'win32') {
+        expect(stat2.mode & 0o777).toBe(0o600)
+      }
+    })
+
+    it('closes db cleanly without busy query error after runExportPipeline rejects with EEXIST (CSV and XLSX)', async () => {
+      const dbPath = join(tmpDir, 'test-busy.db')
+      const separateDb = new Database(dbPath)
+      try {
+        separateDb.exec(
+          'CREATE TABLE variants (id INTEGER PRIMARY KEY, case_id INTEGER, chr TEXT, pos INTEGER, ref TEXT, alt TEXT)'
+        )
+        separateDb
+          .prepare(
+            "INSERT INTO variants (case_id, chr, pos, ref, alt) VALUES (1, '1', 100, 'A', 'T')"
+          )
+          .run()
+
+        // CSV test
+        const csvOutput = join(tmpDir, 'test-busy.csv')
+        const csvTemp = join(tmpDir, 'busy-temp.csv.part')
+        writeFileSync(csvTemp, 'already exists')
+
+        await expect(
+          runExportPipeline({
+            db: separateDb,
+            compiledSql: 'SELECT * FROM variants WHERE case_id = ?',
+            compiledParams: [1],
+            outputFilePath: csvOutput,
+            tempFilePath: csvTemp,
+            format: 'csv',
+            caseName: 'case1',
+            filterSummary: {}
+          })
+        ).rejects.toThrow()
+
+        // XLSX test
+        const xlsxOutput = join(tmpDir, 'test-busy.xlsx')
+        const xlsxTemp = join(tmpDir, 'busy-temp.xlsx.part')
+        writeFileSync(xlsxTemp, 'already exists')
+
+        await expect(
+          runExportPipeline({
+            db: separateDb,
+            compiledSql: 'SELECT * FROM variants WHERE case_id = ?',
+            compiledParams: [1],
+            outputFilePath: xlsxOutput,
+            tempFilePath: xlsxTemp,
+            format: 'xlsx',
+            caseName: 'case1',
+            filterSummary: {}
+          })
+        ).rejects.toThrow()
+
+        // db.close() must succeed immediately without throwing
+        expect(() => separateDb.close()).not.toThrow()
+      } finally {
+        if (separateDb.open) separateDb.close()
+      }
+    })
+
+    it('rejects without modifying or deleting target if precreated tempFilePath is replaced with a symlink', async () => {
+      const symlinkTarget = join(tmpDir, 'symlink-secret.txt')
+      writeFileSync(symlinkTarget, 'secret untouched content')
+
+      const tempFilePath = join(tmpDir, 'symlink-temp.part')
+      symlinkSync(symlinkTarget, tempFilePath)
+
+      const output = join(tmpDir, 'symlink-out.csv')
+      const stat = statSync(tempFilePath)
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath,
+        tempFilePrecreated: { dev: stat.dev, ino: stat.ino }
+      })
+
+      await expect(runExportPipeline(params)).rejects.toThrow(
+        /Refusing to write to unexpected or replaced temporary export file/
+      )
+      expect(existsSync(symlinkTarget)).toBe(true)
+      expect(readFileSync(symlinkTarget, 'utf8')).toBe('secret untouched content')
+    })
+
+    it('rejects without modifying or deleting target if precreated tempFilePath has an inode/device mismatch', async () => {
+      const differentFile = join(tmpDir, 'different-file.part')
+      writeFileSync(differentFile, 'original file content')
+
+      const output = join(tmpDir, 'mismatch-out.csv')
+      const params = makeCsvParams({
+        outputFilePath: output,
+        tempFilePath: differentFile,
+        tempFilePrecreated: { dev: 999999, ino: 888888 }
+      })
+
+      await expect(runExportPipeline(params)).rejects.toThrow(
+        /Refusing to write to unexpected or replaced temporary export file/
+      )
+      expect(existsSync(differentFile)).toBe(true)
+      expect(readFileSync(differentFile, 'utf8')).toBe('original file content')
+    })
+
+    it('holds read transaction across entire iterateAnnotatedRows so trailing partial chunk is not polluted by mid-export commits', () => {
+      const walDbPath = join(tmpDir, 'wal-isolation.db')
+      const readerDb = new Database(walDbPath)
+      initializeSchema(readerDb)
+      runMigrations(readerDb)
+      readerDb.pragma('journal_mode = WAL')
+      try {
+        const testCaseId = createCase(readerDb, 'WAL Case')
+        readerDb.prepare("UPDATE cases SET genome_build = 'GRCh38' WHERE id = ?").run(testCaseId)
+
+        const insertStmt = readerDb.prepare(
+          `INSERT INTO variants
+            (case_id, chr, pos, ref, alt, gt_num)
+           VALUES (?, '1', ?, 'A', 'T', '0/1')`
+        )
+        for (let i = 1; i <= 250; i++) {
+          insertStmt.run(testCaseId, 1000 + i)
+        }
+
+        const writerDb = new Database(walDbPath)
+        try {
+          const iteratedRows: Record<string, unknown>[] = []
+          for (const row of iterateAnnotatedRows(
+            readerDb,
+            'SELECT * FROM variants WHERE case_id = ? ORDER BY id',
+            [testCaseId]
+          )) {
+            if (row.id === 1) {
+              // Commit annotation for variant 220 (in the final partial chunk of 50 rows) from a second connection
+              writerDb
+                .prepare(
+                  `INSERT INTO case_variant_annotations
+                    (case_id, variant_id, acmg_classification, per_case_comment, created_at, updated_at)
+                   VALUES (?, 220, 'Pathogenic', 'Committed mid-export', ?, ?)`
+                )
+                .run(testCaseId, Date.now(), Date.now())
+            }
+            iteratedRows.push(row)
+          }
+
+          expect(iteratedRows.length).toBe(250)
+          // The annotation for variant 220 was committed while reading was underway.
+          // Because readerDb holds a read transaction across iterateAnnotatedRows,
+          // the trailing batch lookup (rows 201-250) reads from the original read snapshot.
+          const row220 = iteratedRows.find((r) => r.id === 220)
+          expect(row220).toBeDefined()
+          expect(row220?.acmg_classification).toBeNull()
+
+          // After iteration finishes, readerDb released its transaction
+          expect(readerDb.inTransaction).toBe(false)
+
+          // A new query on readerDb now sees the committed annotation
+          const postRow = readerDb
+            .prepare(
+              'SELECT acmg_classification FROM case_variant_annotations WHERE variant_id = 220'
+            )
+            .get() as { acmg_classification: string } | undefined
+          expect(postRow?.acmg_classification).toBe('Pathogenic')
+        } finally {
+          if (writerDb.open) writerDb.close()
+        }
+      } finally {
+        if (readerDb.open) readerDb.close()
+      }
+    })
+
+    it('rejects and leaves db.inTransaction === false when compiledSql has invalid SQL syntax', async () => {
+      const params = makeCsvParams({
+        compiledSql: 'SELECT THIS IS INVALID SQL FROM'
+      })
+      await expect(runExportPipeline(params)).rejects.toThrow()
+      expect(db.inTransaction).toBe(false)
+    })
   })
 })
 
@@ -570,5 +834,106 @@ describe('runExportPipeline — XLSX', () => {
 
     expect(result.rowCount).toBe(1)
     expect(result.filePath).toBe(params.outputFilePath)
+  })
+
+  it('surfaces truncation note on Export Info sheet and returns truncated: true when row limit is reached', async () => {
+    insertVariant(db, caseId, { chr: '1', pos: 100 })
+    const params = makeXlsxParams()
+
+    const originalXlsxStream = xlsxStreamModule.xlsxStream
+    const spy = vi
+      .spyOn(xlsxStreamModule, 'xlsxStream')
+      .mockImplementation((sheet, result, info) => {
+        result.truncated = true
+        return originalXlsxStream(sheet, result, info)
+      })
+
+    try {
+      const result = await runExportPipeline(params)
+      expect(result.truncated).toBe(true)
+
+      const wb = readXlsxFile(params.outputFilePath)
+      const metaWs = wb.Sheets['Export Info']
+      const metaData = XLSX.utils.sheet_to_json<string[]>(metaWs, { header: 1 }) as string[][]
+      expect(metaData).toContainEqual([
+        'Truncated',
+        'Excel row limit reached; use CSV for all rows'
+      ])
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('successfully exports when destination filename has a 230-byte basename', async () => {
+    insertVariant(db, caseId, { chr: '1', pos: 100 })
+    const longBasename = 'a'.repeat(225) + '.xlsx'
+    const output = join(tmpDir, longBasename)
+    const params = makeXlsxParams({ outputFilePath: output })
+    const result = await runExportPipeline(params)
+    expect(result.filePath).toBe(output)
+    expect(existsSync(output)).toBe(true)
+    expect(statSync(output).size).toBeGreaterThan(0)
+  })
+
+  it('defaultExportTempFilePath keeps the basename short regardless of output filename length', () => {
+    const longOutput = join(tmpDir, 'a'.repeat(230) + '.xlsx')
+    const tempPath = defaultExportTempFilePath(longOutput)
+    const tempBasename = tempPath.slice(tempPath.lastIndexOf('/') + 1)
+    expect(tempBasename.length).toBeLessThan(70)
+    expect(tempBasename.startsWith('.varlens-export-')).toBe(true)
+  })
+
+  describe('isDevicePath and device export handling', () => {
+    it('returns false for regular files and non-existent files', () => {
+      const regularFile = join(tmpDir, 'regular.csv')
+      writeFileSync(regularFile, 'data')
+      expect(isDevicePath(regularFile)).toBe(false)
+      expect(isDevicePath(join(tmpDir, 'does-not-exist.csv'))).toBe(false)
+    })
+
+    it('does not classify /dev/shm files as device paths', () => {
+      expect(isDevicePath('/dev/shm/results.csv')).toBe(false)
+    })
+
+    if (process.platform !== 'win32') {
+      it('returns true for POSIX device paths like /dev/null', () => {
+        expect(isDevicePath('/dev/null')).toBe(true)
+      })
+    } else {
+      it('returns true for Windows device paths like NUL and pipe paths', () => {
+        expect(isDevicePath('NUL')).toBe(true)
+        expect(isDevicePath('\\\\.\\pipe\\test')).toBe(true)
+      })
+    }
+
+    it('prepareExportFilePath does not treat /dev/shm paths as devices and uses a .part temp file', () => {
+      const prep = prepareExportFilePath('/dev/shm/results.csv')
+      expect(prep.isDevice).toBe(false)
+      expect(prep.tempFilePath.startsWith('/dev/shm/.varlens-export-')).toBe(true)
+      expect(prep.tempFilePath.endsWith('.part')).toBe(true)
+    })
+
+    if (process.platform === 'linux' && existsSync('/dev/shm')) {
+      it('cleans up .part file on failed export under /dev/shm', async () => {
+        try {
+          accessSync('/dev/shm', constants.W_OK)
+        } catch {
+          return // /dev/shm not writeable in this test environment
+        }
+        const shmOutput = `/dev/shm/varlens-test-shm-${Date.now()}.xlsx`
+        const prep = prepareExportFilePath(shmOutput)
+        expect(prep.isDevice).toBe(false)
+
+        const params = makeXlsxParams({
+          outputFilePath: shmOutput,
+          tempFilePath: prep.tempFilePath,
+          compiledSql: 'SELECT invalid sql syntax'
+        })
+
+        await expect(runExportPipeline(params)).rejects.toThrow()
+        expect(existsSync(prep.tempFilePath)).toBe(false)
+        expect(existsSync(shmOutput)).toBe(false)
+      })
+    }
   })
 })

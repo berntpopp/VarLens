@@ -201,3 +201,28 @@ export async function upsertPerCaseAnnotationWithEvent(
   onChange({ caseId, variantId, kind: detectAnnotationChangeKind(updates) })
   return result
 }
+
+export interface BatchPerCaseAnnotationUpdates extends PerCaseAnnotationUpdates {
+  tag_id?: number
+}
+
+/**
+ * Batch upsert per-case annotations via a StorageSession write executor, then
+ * invoke `onChange` once per batch (listeners refetch by `caseId`).
+ */
+export async function batchUpsertPerCaseAnnotationWithEvent(
+  caseId: number,
+  variantIds: number[],
+  updates: BatchPerCaseAnnotationUpdates,
+  getSession: () => StorageSession,
+  onChange: (e: AnnotationChangeEvent) => void
+): Promise<{ updatedCount: number }> {
+  const result = (await getSession()
+    .getWriteExecutor()
+    .execute({
+      type: 'annotations:batchUpsertPerCaseWithAudit',
+      params: [caseId, variantIds, updates]
+    })) as { updatedCount: number }
+  onChange({ caseId, variantId: variantIds[0], kind: detectAnnotationChangeKind(updates) })
+  return result
+}

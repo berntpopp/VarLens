@@ -236,4 +236,64 @@ describe('DslSearchBar', () => {
     await press(wrapper, 'Enter')
     expect(applied.value).toEqual(['cadd:>=:20', 'cadd:>=:20'])
   })
+
+  it('normalizes clinical coordinates on paste and applies immediately', async () => {
+    const { wrapper, applied } = harness()
+    current = wrapper
+    await focusBar(wrapper)
+    await wrapper.find('input').trigger('paste', {
+      clipboardData: { getData: () => 'chr17:43,094,464' }
+    })
+    expect(applied.value).toEqual(['chr:=:17 AND pos:=:43094464'])
+    expect(input(wrapper).value).toBe('chr:=:17 AND pos:=:43094464')
+  })
+
+  it('normalizes clinical intervals and gene lists on paste', async () => {
+    const { wrapper, applied } = harness()
+    current = wrapper
+    await focusBar(wrapper)
+    await wrapper.find('input').trigger('paste', {
+      clipboardData: { getData: () => 'chr17:43,044,295-43,125,483' }
+    })
+    expect(applied.value).toEqual(['chr:=:17 AND pos:>=:43044295 AND pos:<=:43125483'])
+
+    await wrapper.find('input').setValue('')
+    await wrapper.find('input').trigger('paste', {
+      clipboardData: { getData: () => 'BRCA1, BRCA2, PALB2' }
+    })
+    expect(applied.value).toContain(
+      '(gene_symbol:=:BRCA1 OR gene_symbol:=:BRCA2 OR gene_symbol:=:PALB2)'
+    )
+  })
+
+  it('does not normalize clinical paste if condition prop is true or input already has text', async () => {
+    const { wrapper, applied } = harness()
+    current = wrapper
+    await wrapper.find('input').setValue('existing')
+    const el = input(wrapper)
+    el.selectionStart = 8
+    el.selectionEnd = 8
+    await wrapper.find('input').trigger('paste', {
+      clipboardData: { getData: () => 'chr17:43,094,464' }
+    })
+    expect(applied.value).toEqual([])
+
+    // Mounted with condition: true
+    const condWrapper = mount(DslSearchBar, {
+      props: {
+        rawInput: '',
+        suggestions: [],
+        isDslMode: false,
+        errors: [],
+        condition: true
+      },
+      global: { plugins: [vuetify] },
+      attachTo: document.body
+    })
+    await condWrapper.find('input').trigger('paste', {
+      clipboardData: { getData: () => 'chr17:43,094,464' }
+    })
+    expect(condWrapper.emitted('apply')).toBeUndefined()
+    condWrapper.unmount()
+  })
 })

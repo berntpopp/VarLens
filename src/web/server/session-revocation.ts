@@ -13,19 +13,48 @@
  * evicted beyond `maxEntries`. A multi-process deployment would need a shared
  * store; VarLens web runs one process per deployment today.
  */
-import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join } from 'node:path'
+import { randomBytes, randomUUID } from 'node:crypto'
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000
 const DEFAULT_MAX_ENTRIES = 50_000
+const REVOKED_SESSIONS_FILENAME = 'web-revoked-sessions.json'
+
+export function resolveDefaultRevocationsPath(
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  const fromEnv = env.VARLENS_REVOKED_SESSIONS_PATH
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+    return fromEnv.trim()
+  }
+  const recoveryDir = env.VARLENS_RECOVERY_KEY_DIR
+  if (
+    typeof recoveryDir === 'string' &&
+    recoveryDir.trim() !== '' &&
+    isAbsolute(recoveryDir.trim())
+  ) {
+    return join(recoveryDir.trim(), REVOKED_SESSIONS_FILENAME)
+  }
+  if (env.VITEST !== undefined || env.NODE_ENV === 'test') {
+    return undefined
+  }
+  return join('/data', REVOKED_SESSIONS_FILENAME)
+}
 
 export class SessionRevocations {
   private readonly revoked = new Map<string, number>()
+  private readonly storagePath?: string
 
   constructor(
     private readonly ttlMs = DEFAULT_TTL_MS,
     private readonly maxEntries = DEFAULT_MAX_ENTRIES,
-    private readonly now: () => number = Date.now
-  ) {}
+    private readonly now: () => number = Date.now,
+    storagePath?: string
+  ) {
+    this.storagePath = storagePath ?? resolveDefaultRevocationsPath()
+    this.load()
+  }
 
   revoke(sid: string | undefined): void {
     if (sid === undefined) return
@@ -37,6 +66,7 @@ export class SessionRevocations {
       if (oldest === undefined) break
       this.revoked.delete(oldest)
     }
+    this.save()
   }
 
   isRevoked(sid: string | undefined): boolean {
@@ -55,6 +85,55 @@ export class SessionRevocations {
     for (const [sid, expiresAt] of this.revoked) {
       if (expiresAt > now) break
       this.revoked.delete(sid)
+    }
+  }
+
+  private load(): void {
+    if (this.storagePath === undefined || this.storagePath === '') return
+    try {
+      const raw = readFileSync(this.storagePath, 'utf8')
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      const now = this.now()
+      for (const [sid, expiresAt] of Object.entries(parsed)) {
+        if (typeof expiresAt === 'number' && expiresAt > now) {
+          this.revoked.set(sid, expiresAt)
+        }
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        return
+      }
+      throw new Error(
+        `Failed to load revoked sessions from ${this.storagePath}: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      )
+    }
+  }
+
+  private save(): void {
+    if (this.storagePath === undefined || this.storagePath === '') return
+    const dir = dirname(this.storagePath)
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+    }
+    const data: Record<string, number> = {}
+    for (const [sid, expiresAt] of this.revoked) {
+      data[sid] = expiresAt
+    }
+    const tmp = `${this.storagePath}.${randomBytes(4).toString('hex')}.tmp`
+    try {
+      writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 })
+      renameSync(tmp, this.storagePath)
+    } catch (err) {
+      try {
+        if (existsSync(tmp)) rmSync(tmp, { force: true })
+      } catch {
+        // ignore cleanup error
+      }
+      throw new Error(
+        `Failed to persist revoked sessions to ${this.storagePath}: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      )
     }
   }
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { AnnotationRepository } from '../../../src/main/database/AnnotationRepository'
 import { createKysely } from '../../../src/main/database/kysely'
+import { InvalidParametersError } from '../../../src/main/ipc/errors'
 
 describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)', () => {
   let db: Database.Database
@@ -32,10 +33,21 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
         case_id INTEGER, variant_id INTEGER,
         starred INTEGER DEFAULT 0,
         comment TEXT,
+        per_case_comment TEXT,
+        acmg_classification TEXT,
+        acmg_evidence TEXT,
+        created_at INTEGER,
+        updated_at INTEGER,
         acmg_class TEXT,
         UNIQUE(case_id, variant_id)
       );
+      CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE variant_tags (
+        case_id INTEGER, variant_id INTEGER, tag_id INTEGER REFERENCES tags(id), created_at INTEGER,
+        PRIMARY KEY (case_id, variant_id, tag_id)
+      );
       CREATE INDEX idx_variants_chr_pos_ref_alt ON variants(chr, pos, ref, alt);
+      PRAGMA foreign_keys = ON;
     `)
 
     // Build the Kysely instance BEFORE wrapping db.prepare so its construction
@@ -203,5 +215,83 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
     expect(res2['chr3:30000:A:C'].perCase).toEqual(
       expect.objectContaining({ variant_id: v2, comment: 'v2-note' })
     )
+  })
+
+  describe('batchUpsertPerCaseAnnotation — atomic transactions & rollback', () => {
+    it('deduplicates variant IDs and returns updated count', () => {
+      const res = repo.batchUpsertPerCaseAnnotation(1, [1, 1, 2, 2], { starred: true })
+      expect(res.updatedCount).toBe(2)
+    })
+
+    it('rejects when variants do not belong to case and performs atomic rollback', () => {
+      let thrown: unknown
+      try {
+        repo.batchUpsertPerCaseAnnotation(1, [1, 99999], {
+          starred: false,
+          per_case_comment: 'mutated comment'
+        })
+      } catch (err) {
+        thrown = err
+      }
+      expect(thrown).toBeInstanceOf(InvalidParametersError)
+      expect((thrown as Error).message).toMatch(/do not belong to case 1/)
+
+      // Variant 1's annotation remains unchanged from seed (starred = 1, per_case_comment = null)
+      const row = db
+        .prepare(
+          'SELECT starred, per_case_comment FROM case_variant_annotations WHERE variant_id = 1'
+        )
+        .get() as { starred: number; per_case_comment: string | null }
+      expect(row.starred).toBe(1)
+      expect(row.per_case_comment).toBeNull()
+    })
+
+    it('rolls back mid-write on foreign key violation leaving 0 new rows', () => {
+      // Seed two fresh variants 60 and 61 with no existing annotations or tags
+      db.prepare(
+        'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+      ).run(60, 'chr4', 40000, 'A', 'T')
+      db.prepare(
+        'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
+      ).run(61, 'chr4', 40001, 'G', 'C')
+
+      // Attempt to batch-upsert [1, 60, 61] (mutating variant 1's starred=1 -> false and per_case_comment)
+      // with non-existent tag_id 999999 under PRAGMA foreign_keys = ON
+      let thrown: unknown
+      try {
+        repo.batchUpsertPerCaseAnnotation(1, [1, 60, 61], {
+          starred: false,
+          per_case_comment: 'test comment',
+          tag_id: 999999
+        })
+      } catch (err) {
+        thrown = err
+      }
+      expect(thrown).toBeInstanceOf(Error)
+      expect((thrown as Error).message).toBe('Transaction failed')
+      expect((thrown as { cause?: Error }).cause?.message).toMatch(/FOREIGN KEY constraint failed/)
+
+      // Verify transaction rollback: variant 1's mutation was rolled back
+      const v1Row = db
+        .prepare(
+          'SELECT starred, per_case_comment FROM case_variant_annotations WHERE variant_id = 1'
+        )
+        .get() as { starred: number; per_case_comment: string | null }
+      expect(v1Row.starred).toBe(1)
+      expect(v1Row.per_case_comment).toBeNull()
+
+      // And 0 rows inserted into case_variant_annotations or variant_tags for 60, 61
+      const cvaCount = db
+        .prepare(
+          'SELECT count(*) as count FROM case_variant_annotations WHERE variant_id IN (60, 61)'
+        )
+        .get() as { count: number }
+      expect(cvaCount.count).toBe(0)
+
+      const tagCount = db
+        .prepare('SELECT count(*) as count FROM variant_tags WHERE variant_id IN (1, 60, 61)')
+        .get() as { count: number }
+      expect(tagCount.count).toBe(0)
+    })
   })
 })

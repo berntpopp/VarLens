@@ -7,7 +7,7 @@
  * tests in variants.test.ts.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DatabaseService } from '../../../src/main/database'
 
 function createTestCase(db: DatabaseService, name: string): number {
@@ -280,6 +280,170 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       const types = service.variants.getVariantTypesPresent({ caseIds: [caseA, caseB] })
       expect(types.has('snv')).toBe(true)
       expect(types.has('cnv')).toBe(true)
+    })
+  })
+
+  describe('getAllColumnMetas caching and invalidation (#671)', () => {
+    it('returns identical cached array on repeated calls', () => {
+      const caseId = createTestCase(service, 'cache-hit')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1', gnomad_af: 0.01 },
+        { chr: '1', pos: 200, ref: 'A', alt: 'T', gene_symbol: 'TP53', gnomad_af: 0.05 }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1).toBe(meta2) // exact same cached reference
+    })
+
+    it('invalidates cache when new variants are inserted via insertVariantsBatch', () => {
+      const caseId = createTestCase(service, 'cache-invalidation-batch')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1', gnomad_af: 0.01 }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 200, ref: 'A', alt: 'T', gene_symbol: 'TP53', gnomad_af: 0.05 }
+      ])
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
+    })
+
+    it('adds no tables or triggers to the database (no per-row import cost)', () => {
+      const schemaNames = (): string[] =>
+        (
+          service.database
+            .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
+            .all() as { name: string }[]
+        ).map((r) => r.name)
+      const caseId = createTestCase(service, 'cache-no-schema')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+      const before = schemaNames()
+      service.variants.getAllColumnMetas(caseId)
+      service.variants.clearColumnMetaCache()
+      service.variants.getAllColumnMetas(caseId)
+      expect(schemaNames()).toEqual(before)
+    })
+
+    it('invalidates cache when clearColumnMetaCache is called', () => {
+      const caseId = createTestCase(service, 'cache-clear')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      service.variants.clearColumnMetaCache(caseId)
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2).toEqual(meta1)
+    })
+
+    it('invalidates cache when variants table is mutated directly in SQLite', () => {
+      const caseId = createTestCase(service, 'cache-direct-sql')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+
+      service.database
+        .prepare(
+          "INSERT INTO variants (case_id, chr, pos, ref, alt, gene_symbol) VALUES (?, '1', 200, 'A', 'G', 'TP53')"
+        )
+        .run(caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1', 'TP53'])
+    })
+
+    it('invalidates cache when variants table is updated directly in SQLite (#671)', () => {
+      const caseId = createTestCase(service, 'cache-direct-update')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      service.database
+        .prepare("UPDATE variants SET gene_symbol = 'TP53' WHERE case_id = ? AND pos = 100")
+        .run(caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
+    })
+
+    it('invalidates cache on INSERT OR REPLACE under same rowid/count', () => {
+      const caseId = createTestCase(service, 'cache-direct-replace')
+      service.variants.insertVariantsBatch(caseId, [
+        { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
+      ])
+
+      const meta1 = service.variants.getAllColumnMetas(caseId)
+      expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
+
+      // Warm cache hit & DDL assertion: zero CREATE or INSERT statements
+      const execSpy = vi.spyOn(service.database, 'exec')
+      const prepareSpy = vi.spyOn(service.database, 'prepare')
+
+      const warm = service.variants.getAllColumnMetas(caseId)
+
+      expect(warm).toBe(meta1)
+
+      const ddlExecs = execSpy.mock.calls.filter(([sql]) => /CREATE|INSERT/i.test(String(sql)))
+      const ddlPrepares = prepareSpy.mock.calls.filter(([sql]) =>
+        /CREATE|INSERT/i.test(String(sql))
+      )
+      expect(ddlExecs.length).toBe(0)
+      expect(ddlPrepares.length).toBe(0)
+
+      execSpy.mockRestore()
+      prepareSpy.mockRestore()
+
+      const row = service.database
+        .prepare('SELECT id FROM variants WHERE case_id = ?')
+        .get(caseId) as { id: number }
+
+      // Direct INSERT OR REPLACE with the same id and count
+      service.database
+        .prepare(
+          "INSERT OR REPLACE INTO variants (id, case_id, chr, pos, ref, alt, gene_symbol) VALUES (?, ?, '1', 100, 'A', 'T', 'TP53')"
+        )
+        .run(row.id, caseId)
+
+      const meta2 = service.variants.getAllColumnMetas(caseId)
+      expect(meta2).not.toBe(meta1)
+      expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
+    })
+
+    it('evicts oldest entries when cache exceeds MAX_META_CACHE_SIZE (50)', () => {
+      const caseIds: number[] = []
+      for (let i = 0; i < 55; i++) {
+        const id = createTestCase(service, `case-${i}`)
+        service.variants.insertVariantsBatch(id, [
+          { chr: '1', pos: 100 + i, ref: 'A', alt: 'T', gene_symbol: `GENE${i}` }
+        ])
+        caseIds.push(id)
+      }
+
+      // Query all 55 cases into cache
+      const cachedFirst = service.variants.getAllColumnMetas(caseIds[0])
+      for (let i = 1; i < 55; i++) {
+        service.variants.getAllColumnMetas(caseIds[i])
+      }
+
+      // caseIds[0] should have been evicted (oldest of >50)
+      const reFetchedFirst = service.variants.getAllColumnMetas(caseIds[0])
+      expect(reFetchedFirst).not.toBe(cachedFirst) // newly computed
     })
   })
 })

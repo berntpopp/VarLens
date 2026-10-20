@@ -11,7 +11,11 @@ import type { StorageWriteExecutor } from '../write-executor'
 import { SqliteImportExecutor } from './SqliteImportExecutor'
 import { SqliteReadExecutor } from './SqliteReadExecutor'
 import { SqliteWriteExecutor } from './SqliteWriteExecutor'
-import { withPhenotypeScores } from '../phenotype-score-executor'
+import {
+  withPhenotypeScores,
+  withPhenotypeWriteScores,
+  type PhenotypeScoreReadExecutor
+} from '../phenotype-score-executor'
 
 interface SqliteStorageSessionOptions {
   databaseService: DatabaseService
@@ -95,8 +99,9 @@ export class SqliteStorageSession implements StorageSession {
 
   private readonly databaseService: DatabaseService
   private readonly dbPool: DbPool | null
-  private readonly readExecutor: StorageReadExecutor
+  private readonly readExecutor: PhenotypeScoreReadExecutor
   private readonly writeExecutor: SqliteWriteExecutor
+  private readonly publicWriteExecutor: StorageWriteExecutor
   private readonly importExecutor: StorageImportExecutor
 
   constructor(options: SqliteStorageSessionOptions) {
@@ -110,6 +115,7 @@ export class SqliteStorageSession implements StorageSession {
       new SqliteReadExecutor(this.databaseService, this.dbPool),
       this.writeExecutor
     )
+    this.publicWriteExecutor = withPhenotypeWriteScores(this.writeExecutor, this.readExecutor)
     // Auth writes (failed-login counters, user admin) join the writer thread.
     this.databaseService.auth.setWriter((op) => this.writeExecutor.executeAuthWrite(op))
     this.importExecutor = new SqliteImportExecutor({
@@ -141,7 +147,7 @@ export class SqliteStorageSession implements StorageSession {
   }
 
   getWriteExecutor(): StorageWriteExecutor {
-    return this.writeExecutor
+    return this.publicWriteExecutor
   }
 
   getImportExecutor(): StorageImportExecutor {

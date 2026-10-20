@@ -179,13 +179,13 @@ describe('carrier cap (#455), SQLite', () => {
     })
   })
   describe('cohort export', () => {
-    it('holds the rows of the table and names the cap', () => {
+    it('holds the rows of the table and names the cap', async () => {
       importThreeCases()
       service.cohortSummary.rebuild()
       const dir = mkdtempSync(join(tmpdir(), 'varlens-max-carriers-'))
       try {
         const file = join(dir, 'cohort.xlsx')
-        const result = runCohortExport(service.db, { carrier_count_max: 1 }, file, () => {})
+        const result = await runCohortExport(service.db, { carrier_count_max: 1 }, file, () => {})
         const book = XLSX.read(readFileSync(file))
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
           book.Sheets['Cohort Variants']

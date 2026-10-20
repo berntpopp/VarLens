@@ -1,9 +1,6 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
-import {
-  explainCaseGene,
-  prewarmHpoIndex,
-  scoreAllGenes
-} from '../../services/phenotype/hpo-similarity-db'
+import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
+import { PostgresHpoWorkerClient } from './postgres-hpo-worker-client'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
 import type { PostgresBuildReviewRepository } from './PostgresBuildReviewRepository'
@@ -96,7 +93,22 @@ interface PostgresReadExecutorRepositories {
 }
 
 export class PostgresReadExecutor implements StorageReadExecutor {
-  constructor(private readonly repositories: PostgresReadExecutorRepositories) {}
+  private readonly hpoWorker: PostgresHpoWorkerClient
+
+  constructor(
+    private readonly repositories: PostgresReadExecutorRepositories,
+    hpoWorker?: PostgresHpoWorkerClient
+  ) {
+    this.hpoWorker = hpoWorker ?? new PostgresHpoWorkerClient()
+  }
+
+  getHpoWorker(): PostgresHpoWorkerClient {
+    return this.hpoWorker
+  }
+
+  async close(): Promise<void> {
+    await this.hpoWorker.destroy()
+  }
 
   async execute(task: StorageReadTask): Promise<unknown> {
     switch (task.type) {
@@ -172,25 +184,23 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         return await this.repositories.shortlist.getShortlist(task.params[0])
 
       case 'hpo:prewarm':
-        // ponytail: on desktop Postgres (experimental) this loads the index on the Electron main
-        // thread and freezes the window briefly; move it to a worker if this backend ships.
+        // shortcut: warms both worker and main-thread HPO indexes (~2x 145 MB), remove once PostgresShortlistService scores in the worker
         prewarmHpoIndex()
-        return null
+        return await this.hpoWorker.prewarm()
 
-      // ponytail: in-process like the shortlist's scorer: the web server scores here
-      // (~0.1-1 s per case, once per profile); desktop Postgres blocks its main thread.
       case 'hpo:caseScores':
-        return scoreAllGenes(task.params[0])
+        return await this.hpoWorker.scoreAllGenes(task.params[0])
 
-      case 'hpo:explainGene':
-        return explainCaseGene(
-          (await this.repositories.caseMetadata.getCaseHpoTerms(task.params[0])) as Array<{
-            hpo_id: string
-            excluded: unknown
-            key: unknown
-          }>,
-          task.params[1]
-        )
+      case 'hpo:explainGene': {
+        const caseTerms = (await this.repositories.caseMetadata.getCaseHpoTerms(
+          task.params[0]
+        )) as Array<{
+          hpo_id: string
+          excluded: unknown
+          key: unknown
+        }>
+        return await this.hpoWorker.explainGene(caseTerms, task.params[1])
+      }
 
       case 'phenotype:profiles':
         return await this.repositories.caseMetadata.getPhenotypeProfiles(task.params[0])

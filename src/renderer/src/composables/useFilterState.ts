@@ -115,7 +115,11 @@ export function useFilterState(
 
   // Export state
   const exporting = ref(false)
-  const { exportToExcel } = useFilterExport(filters, selectedImpactPresets, exporting)
+  const { exportToExcel, copySignOutTable } = useFilterExport(
+    filters,
+    selectedImpactPresets,
+    exporting
+  )
 
   // Available tags for filter
   const availableTags = computed(() => getTags())
@@ -208,6 +212,7 @@ export function useFilterState(
     loadFilterOptions: loadFilterOptionsPublic,
     resetForCaseSwitch,
     setInitialSearch,
-    exportToExcel
+    exportToExcel,
+    copySignOutTable
   }
 }

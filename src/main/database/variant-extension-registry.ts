@@ -13,14 +13,13 @@
  */
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
-import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
 import {
   VARIANT_EXTENSION_REGISTRY,
   resolveExtensionColumnKey,
   type ExtensionTypeKey
 } from '../../shared/types/variant-extension-registry-data'
 import { carrierRowSql } from '../../shared/sql/genotype-dosage'
-import { escapeLikePattern } from './search/search-clause-emitter'
+import { translateBareColumnFilter } from './variant-filter/column-filters'
 
 export * from '../../shared/types/variant-extension-registry-data'
 
@@ -280,30 +279,13 @@ function translateExtensionFilter(
   params: (string | number)[],
   numeric: boolean
 ): string | null {
-  const { operator, value, includeEmpty } = filter
-  // Extensions default to EXCLUDE NULLs (opposite of base filters).
-  const nullBranch = includeEmpty === true
-
-  if (isNullCheckOperator(operator)) return buildNullCheckSql(col, operator, numeric, 'sqlite')
-
-  if (operator === 'in' && Array.isArray(value)) {
-    if (value.length === 0) return null
-    const ph = value.map(() => '?').join(', ')
-    params.push(...value)
-    return `${col} IN (${ph})`
-  }
-  if (operator === 'like' && typeof value === 'string') {
-    if (value.trim() === '') return null
-    params.push(`%${escapeLikePattern(value)}%`)
-    return `${col} LIKE ? ESCAPE '\\' COLLATE NOCASE`
-  }
-  if ((operator === '=' || operator === '!=') && !Array.isArray(value)) {
-    params.push(value)
-    return `${col} ${operator} ?`
-  }
-  if (['<', '>', '<=', '>='].includes(operator) && !Array.isArray(value)) {
-    params.push(value)
-    return nullBranch ? `(${col} IS NULL OR ${col} ${operator} ?)` : `${col} ${operator} ?`
-  }
-  return null
+  return translateBareColumnFilter(col, filter, {
+    dialect: 'sqlite',
+    numericColumn: numeric,
+    includeEmptyDefault: false,
+    bind: (value) => {
+      params.push(value as string | number)
+      return '?'
+    }
+  })
 }

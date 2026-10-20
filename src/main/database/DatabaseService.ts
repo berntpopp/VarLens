@@ -206,6 +206,7 @@ export class DatabaseService {
   private _deferredInit(): void {
     process.nextTick(() => {
       try {
+        if (!this.db.open || this.db.inTransaction) return
         // Clean up expired API cache entries
         this.db.prepare('DELETE FROM api_cache WHERE expires_at < ?').run(Date.now())
       } catch (e) {

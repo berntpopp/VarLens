@@ -20,6 +20,8 @@ export interface ExportCohortStartMessage {
   encryptionKey?: string
   params: CohortSearchParams
   outputFilePath: string
+  tempFilePath?: string
+  tempFilePrecreated?: { dev: number; ino: number }
 }
 
 export type ExportVariantsStartMessage = {
@@ -31,6 +33,8 @@ export type ExportVariantsStartMessage = {
   /** Parameterized values for the compiled SQL */
   compiledParams: readonly unknown[]
   outputFilePath: string
+  tempFilePath?: string
+  tempFilePrecreated?: { dev: number; ino: number }
   caseName: string
   /** Active filter summary for metadata sheet */
   filterSummary: ExportFilterSummary
@@ -52,5 +56,5 @@ export interface ExportFilterSummary {
 /** Worker → main thread */
 export type ExportWorkerMessage =
   | { type: 'progress'; current: number; total: number }
-  | { type: 'complete'; filePath: string; rowCount: number }
+  | { type: 'complete'; filePath: string; rowCount: number; truncated?: boolean }
   | { type: 'error'; error: string; stack?: string }

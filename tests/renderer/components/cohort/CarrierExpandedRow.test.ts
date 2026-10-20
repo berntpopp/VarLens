@@ -248,4 +248,72 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).toContain('Case GRCh37')
     expect(wrapper.text()).not.toContain('Case GRCh38')
   })
+
+  it('keeps the shared fixed-layout table rule off the nested carriers table (#662)', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const cssPath = path.resolve(
+      __dirname,
+      '../../../../src/renderer/src/components/data-table-shared.css'
+    )
+    const cssContent = fs.readFileSync(cssPath, 'utf-8')
+
+    const styleEl = document.createElement('style')
+    styleEl.textContent = cssContent
+    document.head.appendChild(styleEl)
+
+    const container = document.createElement('div')
+    container.className = 'table-container'
+    container.innerHTML = `
+      <div class="v-data-table">
+        <div class="v-table__wrapper">
+          <table class="outer-table">
+            <tbody id="outer-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `
+    document.body.appendChild(container)
+    const tbody = container.querySelector('#outer-tbody')!
+
+    const wrapper = mount(CarrierExpandedRow, {
+      global: { plugins: [vuetify, ...queryPlugins(pinia)] },
+      props: { colspan: 5, variant: variant(100) },
+      attachTo: tbody
+    })
+    wrappers.push(wrapper)
+    await flushPromises()
+
+    const outerTable = container.querySelector('.outer-table') as HTMLElement
+    const innerTableWrapper = wrapper.find('.nested-carriers-table .v-table__wrapper > table')
+    expect(innerTableWrapper.exists()).toBe(true)
+    const innerTable = innerTableWrapper.element as HTMLElement
+
+    // Outer table preserves fixed layout and zero width
+    const outerStyle = window.getComputedStyle(outerTable)
+    expect(outerStyle.tableLayout).toBe('fixed')
+    expect(outerStyle.width).toBe('0px')
+
+    // The outer fixed/zero-width rule must not reach the nested subtable
+    const innerStyle = window.getComputedStyle(innerTable)
+    expect(innerStyle.tableLayout).not.toBe('fixed')
+    expect(innerStyle.width).not.toBe('0px')
+
+    const cells = wrapper.findAll('.nested-carriers-table th, .nested-carriers-table td')
+    expect(cells.length).toBeGreaterThan(0)
+
+    // Renders Case, Zygosity, GQ, DP and visible View in Case button
+    const tableText = wrapper.find('.nested-carriers-table').text()
+    expect(tableText).toContain('Case')
+    expect(tableText).toContain('Zygosity')
+    expect(tableText).toContain('GQ')
+    expect(tableText).toContain('DP')
+    const viewBtn = wrapper.find('tbody tr .v-btn')
+    expect(viewBtn.exists()).toBe(true)
+    expect(viewBtn.text()).toContain('View in Case')
+
+    // Clean up DOM
+    styleEl.remove()
+    container.remove()
+  })
 })

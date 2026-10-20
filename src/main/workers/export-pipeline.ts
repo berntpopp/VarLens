@@ -6,17 +6,69 @@
  * dependencies (parentPort, workerData). This makes the logic testable
  * in isolation.
  */
-import { createWriteStream } from 'node:fs'
-import { writeFileSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { dirname, join } from 'node:path'
+import {
+  accessSync,
+  closeSync,
+  constants,
+  createWriteStream,
+  existsSync,
+  fchmodSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  rmSync,
+  statSync
+} from 'node:fs'
+import { rename } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import * as XLSX from 'xlsx'
+
+export function defaultExportTempFilePath(outputFilePath: string): string {
+  return join(dirname(outputFilePath), `.varlens-export-${randomUUID()}.part`)
+}
+
+export function isDevicePath(filePath: string): boolean {
+  if (/^(?:\\\\\.\\|NUL$)/i.test(filePath)) return true
+  try {
+    const st = statSync(filePath, { throwIfNoEntry: false })
+    return (
+      st !== undefined &&
+      (st.isCharacterDevice() || st.isBlockDevice() || st.isFIFO() || st.isSocket())
+    )
+  } catch {
+    return false
+  }
+}
+
+export function prepareExportFilePath(
+  outputFilePath: string,
+  customTempFilePath?: string
+): {
+  tempFilePath: string
+  isDevice: boolean
+} {
+  if (existsSync(outputFilePath)) {
+    accessSync(outputFilePath, constants.W_OK)
+  }
+  const isDevice = isDevicePath(outputFilePath)
+  const tempFilePath = isDevice
+    ? outputFilePath
+    : (customTempFilePath ?? defaultExportTempFilePath(outputFilePath))
+  return { tempFilePath, isDevice }
+}
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import type { ExportFilterSummary } from '../../shared/types/export-worker'
 import { formatCellValue, csvEscape } from './export-renderer'
 import { CASE_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
-import { caseRowAnnotations } from '../database/annotation-export-lookup'
+import { createCaseAnnotationBatchLookup } from '../database/annotation-export-lookup'
+import {
+  xlsxStream,
+  type XlsxSheetSpec,
+  type XlsxStreamResult,
+  type XlsxCell
+} from '../../web/server/downloads/xlsx-stream'
 
 /** Column definition for export output. */
 export interface ExportColumn {
@@ -52,6 +104,8 @@ export interface ExportPipelineParams {
   compiledSql: string
   compiledParams: readonly unknown[]
   outputFilePath: string
+  tempFilePath?: string
+  tempFilePrecreated?: { dev: number; ino: number }
   format: 'csv' | 'xlsx'
   caseName: string
   filterSummary: ExportFilterSummary
@@ -62,25 +116,162 @@ export interface ExportPipelineParams {
 export interface ExportPipelineResult {
   rowCount: number
   filePath: string
+  truncated?: boolean
+}
+
+/**
+ * Shared generator that chunks variants and attaches annotations.
+ * stmt.iterate is entered on first pull and always closed in finally.
+ * Holds a DEFERRED read transaction across the entire iteration so that
+ * partial trailing chunks observe a consistent read snapshot.
+ */
+export function* iterateAnnotatedRows(
+  db: DatabaseType,
+  compiledSql: string,
+  compiledParams: readonly unknown[]
+): Generator<Record<string, unknown>> {
+  const startedTx = !db.inTransaction
+  if (startedTx) db.exec('BEGIN DEFERRED')
+  let iterator: IterableIterator<Record<string, unknown>> | undefined
+
+  try {
+    const stmt = db.prepare(compiledSql)
+    iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
+    const batchLookup = createCaseAnnotationBatchLookup(db)
+
+    let chunk: Record<string, unknown>[] = []
+    for (const variant of iterator) {
+      chunk.push(variant)
+      if (chunk.length >= 200) {
+        const annotations = batchLookup(chunk)
+        for (const v of chunk) {
+          yield { ...v, ...annotations.get(v.id) }
+        }
+        chunk = []
+      }
+    }
+    if (chunk.length > 0) {
+      const annotations = batchLookup(chunk)
+      for (const v of chunk) {
+        yield { ...v, ...annotations.get(v.id) }
+      }
+    }
+  } finally {
+    iterator?.return?.()
+    if (startedTx && db.inTransaction) {
+      db.exec('ROLLBACK')
+    }
+  }
+}
+
+export interface StreamToExportFileOptions {
+  outputFilePath: string
+  customTempFilePath?: string
+  tempFilePrecreated?: { dev: number; ino: number }
+  encoding?: BufferEncoding
+}
+
+/**
+ * Shared helper that opens a temporary export file (or device), verifies its
+ * inode identity against client reservations, sets permissions, streams source chunks,
+ * renames atomically to outputFilePath, and safely cleans up partial files on error.
+ */
+export async function streamToExportFile(
+  source: Iterable<unknown> | AsyncIterable<unknown>,
+  options: StreamToExportFileOptions
+): Promise<void> {
+  const { outputFilePath, customTempFilePath, tempFilePrecreated, encoding } = options
+  const { tempFilePath, isDevice } = prepareExportFilePath(outputFilePath, customTempFilePath)
+
+  let fd: number | null = null
+  let createdTempFile = false
+  let stream: ReturnType<typeof createWriteStream> | null = null
+
+  try {
+    if (isDevice) {
+      stream = createWriteStream(tempFilePath, encoding !== undefined ? { encoding } : undefined)
+    } else {
+      let targetMode = 0o600
+      try {
+        targetMode = statSync(outputFilePath).mode & 0o777
+      } catch {
+        // Destination does not exist yet; default to 0o600
+      }
+
+      if (tempFilePrecreated !== undefined) {
+        if (lstatSync(tempFilePath).isSymbolicLink()) {
+          throw new Error('Refusing to write to unexpected or replaced temporary export file')
+        }
+        const openFlags = constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)
+        fd = openSync(tempFilePath, openFlags)
+        const st = fstatSync(fd)
+        if (
+          !st.isFile() ||
+          st.dev !== tempFilePrecreated.dev ||
+          st.ino !== tempFilePrecreated.ino
+        ) {
+          throw new Error('Refusing to write to unexpected or replaced temporary export file')
+        }
+        createdTempFile = true
+        fchmodSync(fd, targetMode)
+      } else {
+        fd = openSync(tempFilePath, 'wx', targetMode)
+        createdTempFile = true
+        fchmodSync(fd, targetMode)
+      }
+
+      stream = createWriteStream(tempFilePath, {
+        fd,
+        autoClose: true,
+        ...(encoding !== undefined ? { encoding } : {})
+      })
+    }
+
+    await pipeline(Readable.from(source), stream)
+    if (!isDevice) {
+      await rename(tempFilePath, outputFilePath)
+    }
+  } catch (error) {
+    if (stream !== null) {
+      stream.destroy()
+    } else if (fd !== null) {
+      try {
+        closeSync(fd)
+      } catch {
+        // ignore
+      }
+    }
+    if (createdTempFile && !isDevice) {
+      try {
+        rmSync(tempFilePath, { force: true })
+      } catch {
+        // ignore
+      }
+    }
+    throw error
+  }
 }
 
 /**
  * Run the CSV export pipeline: stream query results to a CSV file.
  */
 async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
-  const { db, compiledSql, compiledParams, outputFilePath, onProgress } = params
-
-  const stmt = db.prepare(compiledSql)
-  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
+  const {
+    db,
+    compiledSql,
+    compiledParams,
+    outputFilePath,
+    tempFilePath: customTempFilePath,
+    tempFilePrecreated,
+    onProgress
+  } = params
 
   onProgress?.(0, 0)
 
-  const annotationsOf = caseRowAnnotations(db)
   let rowCount = 0
   function* csvLines(): Generator<string> {
     yield EXPORT_COLUMNS.map((col) => csvEscape(col.header)).join(',') + '\r\n'
-    for (const variant of iterator) {
-      const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
+    for (const row of iterateAnnotatedRows(db, compiledSql, compiledParams)) {
       const cells = EXPORT_COLUMNS.map((col) => csvEscape(formatCellValue(col.key, row[col.key])))
       yield cells.join(',') + '\r\n'
       rowCount++
@@ -88,19 +279,14 @@ async function runCsvPipeline(params: ExportPipelineParams): Promise<ExportPipel
     }
   }
 
-  const stream = createWriteStream(outputFilePath, { encoding: 'utf8' })
-  let opened = false
-  stream.once('open', () => (opened = true))
-  try {
-    // pipeline() handles backpressure and rejects on an open, write or source error.
-    await pipeline(Readable.from(csvLines()), stream)
-  } catch (error) {
-    // Opening truncated the file, so a partial export is removed. A file that
-    // could not be opened (e.g. an existing read-only one) is left untouched.
-    if (opened) await rm(outputFilePath, { force: true }).catch(() => undefined)
-    throw error
-  }
+  await streamToExportFile(csvLines(), {
+    outputFilePath,
+    customTempFilePath,
+    tempFilePrecreated,
+    encoding: 'utf8'
+  })
 
+  onProgress?.(rowCount, rowCount)
   return { rowCount, filePath: outputFilePath }
 }
 
@@ -142,50 +328,61 @@ export function buildMetadataSheet(
 }
 
 /**
- * Run the XLSX export pipeline: build worksheets in memory and write to file.
+ * Run the XLSX export pipeline: stream worksheets incrementally to file.
  */
-function runXlsxPipeline(params: ExportPipelineParams): ExportPipelineResult {
-  const { db, compiledSql, compiledParams, outputFilePath, caseName, filterSummary, onProgress } =
-    params
-
-  const stmt = db.prepare(compiledSql)
-  const iterator = stmt.iterate(...compiledParams) as IterableIterator<Record<string, unknown>>
+async function runXlsxPipeline(params: ExportPipelineParams): Promise<ExportPipelineResult> {
+  const {
+    db,
+    compiledSql,
+    compiledParams,
+    outputFilePath,
+    tempFilePath: customTempFilePath,
+    tempFilePrecreated,
+    caseName,
+    filterSummary,
+    onProgress
+  } = params
 
   onProgress?.(0, 0)
 
   const headers = EXPORT_COLUMNS.map((col) => col.header)
-  const rows: (string | number | null)[][] = []
-  const annotationsOf = caseRowAnnotations(db)
+  const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
-  let i = 0
-  for (const variant of iterator) {
-    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
-    rows.push(EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key])))
-    i++
-
-    if (i % 1000 === 0) {
-      onProgress?.(i, 0)
+  async function* generateRows(): AsyncGenerator<readonly XlsxCell[]> {
+    for (const row of iterateAnnotatedRows(db, compiledSql, compiledParams)) {
+      yield EXPORT_COLUMNS.map((col) => formatCellValue(col.key, row[col.key]))
+      if ((result.rowCount + 1) % 1000 === 0) {
+        onProgress?.(result.rowCount + 1, 0)
+      }
     }
   }
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-  ws['!cols'] = EXPORT_COLUMNS.map((col) => ({
-    wch: col.key === 'aa_change' ? 20 : 15
-  }))
+  const sheet: XlsxSheetSpec = {
+    name: 'Variants',
+    header: headers,
+    rows: generateRows()
+  }
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Variants')
+  const info = {
+    name: 'Export Info',
+    rows: (res: XlsxStreamResult) => [
+      ...buildMetadataSheet(caseName, res.rowCount, filterSummary),
+      ...(res.truncated ? [['Truncated', 'Excel row limit reached; use CSV for all rows']] : [])
+    ]
+  }
 
-  // Metadata sheet (includes active filter summary)
-  const metaData = buildMetadataSheet(caseName, i, filterSummary)
-  const metaWs = XLSX.utils.aoa_to_sheet(metaData)
-  XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
+  await streamToExportFile(xlsxStream(sheet, result, info), {
+    outputFilePath,
+    customTempFilePath,
+    tempFilePrecreated
+  })
 
-  // Write file — use XLSX.write + writeFileSync for ESM compatibility
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
-  writeFileSync(outputFilePath, buf)
-
-  return { rowCount: i, filePath: outputFilePath }
+  onProgress?.(result.rowCount, result.rowCount)
+  return {
+    rowCount: result.rowCount,
+    filePath: outputFilePath,
+    ...(result.truncated ? { truncated: true } : {})
+  }
 }
 
 /**

@@ -32,23 +32,13 @@ const GREEN_AMBER_LEVELS = new Set(['2', '3', '4', 'green', 'amber'])
 // Panel CRUD
 // ============================================================
 
-export function listPanels(getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.listPanels()
-}
-
-export function getPanel(id: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  const panel = db.panels.getPanel(id)
-  if (!panel) return null
-  const genes = db.panels.getGenes(id)
-  return { ...panel, genes }
+export function listPanels(getSession: () => StorageSession): Promise<unknown> {
+  return getSession().getReadExecutor().execute({ type: 'panels:list', params: [] })
 }
 
 /**
- * Session-based variant of getPanel: fetches panel + genes via the storage
- * executor so it works on both the Postgres and SQLite backends without
- * branching on session.capabilities.backend.
+ * Fetches panel + genes via the storage executor so it works on both the
+ * Postgres and SQLite backends without branching on session.capabilities.backend.
  */
 export async function getPanelWithGenes(
   id: number,
@@ -102,9 +92,10 @@ export function setGenes(
   return { success: true }
 }
 
-export function getGenes(panelId: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.getGenes(panelId)
+export function getGenes(panelId: number, getSession: () => StorageSession): Promise<unknown> {
+  return getSession()
+    .getReadExecutor()
+    .execute({ type: 'panels:getGenes', params: [panelId] })
 }
 
 // ============================================================
@@ -132,9 +123,13 @@ export function deactivatePanel(
   return { success: true }
 }
 
-export function getActivePanelsForCase(caseId: number, getDb: () => DatabaseService): unknown {
-  const db = getDb()
-  return db.panels.getActivePanelsForCase(caseId)
+export function getActivePanelsForCase(
+  caseId: number,
+  getSession: () => StorageSession
+): Promise<unknown> {
+  return getSession()
+    .getReadExecutor()
+    .execute({ type: 'panels:activeForCase', params: [caseId] })
 }
 
 // ============================================================

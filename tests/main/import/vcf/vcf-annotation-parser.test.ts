@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseAnnotation,
-  parseAnnotationsForAlleles
+  parseAnnotationsForAlleles,
+  parseCsqEntry,
+  extractFromCsq,
+  parseFiniteFloat
 } from '../../../../src/main/import/vcf/vcf-annotation-parser'
 import type { VcfHeader } from '../../../../src/main/import/vcf/types'
 import {
@@ -13,6 +16,10 @@ import {
   MAX_VCF_ANNOTATIONS,
   VcfResourceLimitError
 } from '../../../../src/main/import/vcf/vcf-resource-limits'
+import {
+  applyInfoFieldRegistry,
+  DEFAULT_INFO_FIELD_MAPPINGS
+} from '../../../../src/main/import/vcf/info-field-registry'
 
 function makeHeader(overrides: Partial<VcfHeader> = {}): VcfHeader {
   return {
@@ -85,6 +92,27 @@ describe('vcf-annotation-parser', () => {
       // the same split already used on the top-level `variants` row.
       expect(result.transcripts[0].consequence).toBe('LOW')
       expect(result.transcripts[0].func).toBe('synonymous_variant')
+    })
+
+    it('rejects malformed float prefixes instead of parsing partial numbers', () => {
+      expect(parseFiniteFloat('0.2oops')).toBeNull()
+      expect(parseFiniteFloat('1e+')).toBeNull()
+
+      const csqFieldsWithGnomadG = [...csqFields.slice(0, 20), 'gnomADg_AF', ...csqFields.slice(20)]
+      const headerWithGnomadG = makeHeader({
+        annotationType: 'csq',
+        csqFields: csqFieldsWithGnomadG
+      })
+      const info = new Map([
+        [
+          'CSQ',
+          'T|synonymous_variant|LOW|COMT|ENSG00000093010|Transcript|ENST00000361682|protein_coding|2/6|.|ENST00000361682.4:c.186C>T|ENSP00000354346.4:p.Ala62=|336|186|62|A|gcC/gcT|YES|NM_000754.4|0.2oops|0.0012|20oops||tolerated(0.8)|benign(0.05)'
+        ]
+      ])
+
+      const result = parseAnnotation(info, headerWithGnomadG, 'T')
+      expect(result.gnomadAf).toBe(0.0012)
+      expect(result.cadd).toBeNull()
     })
 
     it('decodes the %3D escape VEP writes into HGVSp (variant and transcript rows)', () => {
@@ -624,6 +652,118 @@ describe('vcf-annotation-parser', () => {
       expect(() =>
         parseAnnotationsForAlleles(new Map([['CSQ', annotations]]), csqHeader, deletionAlts, 'AA')
       ).toThrow(VcfResourceLimitError)
+    })
+  })
+
+  describe('numeric CSQ normalization (#658)', () => {
+    it('parseCsqEntry treats "." as missing', () => {
+      const fieldNames = ['Allele', 'gnomADe_AF', 'gnomADg_AF', 'CADD_PHRED']
+      const map = parseCsqEntry(['A', '.', '.', '.'], fieldNames)
+      expect(map.get('Allele')).toBe('A')
+      expect(map.has('gnomADe_AF')).toBe(false)
+      expect(map.has('gnomADg_AF')).toBe(false)
+      expect(map.has('CADD_PHRED')).toBe(false)
+    })
+
+    it('extractFromCsq returns null (never NaN) on non-numeric or missing values', () => {
+      const res = extractFromCsq({
+        fields: new Map([
+          ['gnomADe_AF', '.'],
+          ['gnomADg_AF', '.'],
+          ['CADD_PHRED', 'invalid']
+        ])
+      })
+      expect(res.gnomadAf).toBeNull()
+      expect(res.cadd).toBeNull()
+    })
+
+    it('extractFromCsq falls back across gnomADe_AF, gnomADg_AF, and gnomAD_AF when "."', () => {
+      const res = extractFromCsq({
+        fields: new Map([
+          ['gnomADe_AF', '.'],
+          ['gnomADg_AF', '.'],
+          ['gnomAD_AF', '0.002'],
+          ['ClinVar_CLNSIG', 'Pathogenic']
+        ])
+      })
+      expect(res.gnomadAf).toBe(0.002)
+      expect(res.clinvar).toBe('Pathogenic')
+    })
+
+    it('ignores lowercase custom clinvar record ID so INFO CLNSIG is not shadowed', () => {
+      const csqFields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'clinvar']
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([
+        ['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|12345'],
+        ['CLNSIG', 'Pathogenic']
+      ])
+      const annotation = parseAnnotation(info, csqHeader, 'T')
+      expect(annotation.clinvar).toBeNull()
+
+      const infoResult = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+      expect(infoResult.mappedValues.get('clinvar')).toBe('Pathogenic')
+    })
+
+    it('parseAnnotation normalizes "." and falls back between exomes and genomes', () => {
+      const csqFields = [
+        'Allele',
+        'Consequence',
+        'IMPACT',
+        'SYMBOL',
+        'Feature',
+        'gnomADe_AF',
+        'gnomADg_AF',
+        'CADD_PHRED'
+      ]
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|.|0.0012|.']])
+      const result = parseAnnotation(info, csqHeader, 'T')
+      expect(result.gnomadAf).toBe(0.0012)
+      expect(result.cadd).toBeNull()
+    })
+
+    it('extractFromCsq preserves numeric zero ("0" and "0.0") and treats empty string as null', () => {
+      const resZero = extractFromCsq({
+        fields: new Map([
+          ['gnomADe_AF', '0'],
+          ['gnomADg_AF', '0.0'],
+          ['CADD_PHRED', '0']
+        ])
+      })
+      expect(resZero.gnomadAf).toBe(0)
+      expect(resZero.cadd).toBe(0)
+
+      const resEmpty = extractFromCsq({
+        fields: new Map([
+          ['gnomADe_AF', ''],
+          ['gnomADg_AF', ''],
+          ['CADD_PHRED', '']
+        ])
+      })
+      expect(resEmpty.gnomadAf).toBeNull()
+      expect(resEmpty.cadd).toBeNull()
+    })
+
+    it('does not use MAX_AF as fallback for gnomadAf so standalone INFO gnomAD_AF is not suppressed', () => {
+      const csqFields = [
+        'Allele',
+        'Consequence',
+        'IMPACT',
+        'SYMBOL',
+        'Feature',
+        'gnomADe_AF',
+        'MAX_AF'
+      ]
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([
+        ['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|.|0.2'],
+        ['gnomAD_AF', '0.0001']
+      ])
+      const annotation = parseAnnotation(info, csqHeader, 'T')
+      expect(annotation.gnomadAf).toBeNull()
+
+      const infoResult = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+      expect(infoResult.mappedValues.get('gnomad_af')).toBe(0.0001)
     })
   })
 })

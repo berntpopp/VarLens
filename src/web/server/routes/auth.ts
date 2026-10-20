@@ -81,20 +81,25 @@ export function buildAuthOverrides(): Record<string, OverrideHandler> {
     'auth:logout': {
       async handle(_args, request, _reply, deps) {
         const username = request.session.user?.username
-        // Stateless cookie: revoke its sid so a copy of the cookie is dead too,
-        // and end the SSE streams this browser session opened.
-        deps.sessions?.revoke(request.session.sid)
-        deps.events.closeSession(request.session.sid)
-        if (username !== undefined) {
-          deps.authService.invalidateUser(username)
-          await recordAuthAudit(deps, {
-            action_type: 'auth_logout',
-            username,
-            actor: username,
-            success: true
-          })
+        const sid = request.session.sid
+        // Stateless cookie: end the SSE streams this browser session opened,
+        // clear the cookie and record the audit entry before revoking `sid`
+        // (whose disk write may throw).
+        deps.events.closeSession(sid)
+        try {
+          if (username !== undefined) {
+            deps.authService.invalidateUser(username)
+            await recordAuthAudit(deps, {
+              action_type: 'auth_logout',
+              username,
+              actor: username,
+              success: true
+            })
+          }
+        } finally {
+          request.session.delete()
+          deps.sessions?.revoke(sid)
         }
-        request.session.delete()
         return { ok: true }
       }
     },

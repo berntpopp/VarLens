@@ -28,7 +28,8 @@ export default defineConfig({
           'write-worker': resolve(__dirname, 'src/main/workers/write-worker.ts'),
           'zip-worker': resolve(__dirname, 'src/main/import/zip-worker.ts'),
           'migration-worker': resolve(__dirname, 'src/main/workers/migration-worker.ts'),
-          'hpo-build-worker': resolve(__dirname, 'src/main/workers/hpo-build-worker.ts')
+          'hpo-build-worker': resolve(__dirname, 'src/main/workers/hpo-build-worker.ts'),
+          'hpo-similarity-worker': resolve(__dirname, 'src/main/workers/hpo-similarity-worker.ts')
         }
       }
     }

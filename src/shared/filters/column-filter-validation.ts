@@ -99,6 +99,7 @@ const COLUMN_FILTER_OPERATORS: ReadonlySet<string> = new Set<ColumnFilterOperato
   '>',
   '<=',
   '>=',
+  'between',
   'like',
   'in',
   'is_null',
@@ -135,6 +136,19 @@ export function assertValidColumnFilterValues(filters: ColumnFiltersParam | unde
     const { operator, value } = filter
     // Null checks carry no value to validate.
     if (operator === 'like' || isNullCheckOperator(operator)) continue
+
+    if (operator === 'between') {
+      if (!Array.isArray(value) || value.length !== 2) {
+        throw new ColumnFilterValueError(
+          column,
+          value,
+          `Between operator for column filter "${column}" requires a 2-element array [min, max]`
+        )
+      }
+      if (!isNumericFilterValue(value[0])) throw new ColumnFilterValueError(column, value[0])
+      if (!isNumericFilterValue(value[1])) throw new ColumnFilterValueError(column, value[1])
+      continue
+    }
 
     const values = Array.isArray(value) ? value : [value]
     for (const item of values) {

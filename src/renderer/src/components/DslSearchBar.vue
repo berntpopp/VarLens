@@ -28,6 +28,7 @@
       @keydown="onKeydown"
       @focus="showMenu = true"
       @blur="onBlur"
+      @paste="onPaste"
     >
       <!-- Append inner: mode indicator -->
       <template v-if="!condition" #append-inner>
@@ -115,6 +116,7 @@
 import { ref, computed, watch, onBeforeUnmount, onMounted, useId } from 'vue'
 import type { VTextField } from 'vuetify/components'
 import type { Suggestion } from '../dsl/autocomplete'
+import { normalizeClinicalPaste } from '../dsl/clinical-paste'
 import { mdiMagnify } from '@mdi/js'
 
 // The suggestion menu is anchored to the field wrapper <div>; VMenu would put
@@ -282,6 +284,31 @@ function onKeydown(event: KeyboardEvent): void {
     event.stopPropagation()
     showMenu.value = false
     highlightedIndex.value = -1
+  }
+}
+
+function onPaste(event: ClipboardEvent): void {
+  if (props.condition) return
+  const text = event.clipboardData?.getData('text')
+  if (text === undefined || text === '') return
+  const target = event.target as HTMLInputElement | null
+  const isAllSelected = Boolean(
+    target &&
+    typeof target.selectionStart === 'number' &&
+    typeof target.selectionEnd === 'number' &&
+    target.selectionStart === 0 &&
+    target.selectionEnd === target.value.length
+  )
+  const isEmpty = localInput.value.trim() === ''
+  if (!isEmpty && !isAllSelected) return
+
+  const normalized = normalizeClinicalPaste(text)
+  if (normalized !== text.trim()) {
+    event.preventDefault()
+    localInput.value = normalized
+    emit('update:rawInput', normalized)
+    showMenu.value = false
+    emit('apply')
   }
 }
 

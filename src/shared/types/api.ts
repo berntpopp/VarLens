@@ -1,3 +1,5 @@
+import type { IpcResult } from './errors'
+
 // Auto-update types
 export type UpdateState =
   'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -18,10 +20,10 @@ export interface UpdateStatus {
 }
 
 export interface UpdaterAPI {
-  checkForUpdate: () => Promise<void>
-  downloadUpdate: () => Promise<void>
-  installUpdate: () => Promise<void>
-  getStatus: () => Promise<UpdateStatus>
+  checkForUpdate: () => Promise<IpcResult<void>>
+  downloadUpdate: () => Promise<IpcResult<void>>
+  installUpdate: () => Promise<IpcResult<void>>
+  getStatus: () => Promise<IpcResult<UpdateStatus>>
   onStatusChange: (callback: (status: UpdateStatus) => void) => () => void
 }
 
@@ -60,7 +62,6 @@ import type {
   RegionFile
 } from './database'
 import type { ProgressUpdate, ImportResult } from './import'
-import type { IpcResult } from './errors'
 import type { BuildConfidence } from '../genome/genome-build'
 import type {
   CohortVariant,
@@ -285,8 +286,8 @@ export interface ShellOpenExternalResult {
 }
 
 export interface ShellAPI {
-  openExternal: (url: string) => Promise<ShellOpenExternalResult>
-  updateDomains: (domains: string[]) => Promise<void>
+  openExternal: (url: string) => Promise<IpcResult<ShellOpenExternalResult>>
+  updateDomains: (domains: string[]) => Promise<IpcResult<void>>
 }
 
 /** Successful export result */
@@ -294,6 +295,7 @@ export interface ExportResult {
   success: boolean
   filePath?: string
   error?: string
+  cancelled?: boolean
 }
 
 export interface ExportAPI {
@@ -499,6 +501,10 @@ export interface PerCaseAnnotationUpdates {
   acmg_classification?: AcmgClassification | null
   acmg_evidence?: string | null
   user_name?: string // for audit trail only
+}
+
+export interface BatchPerCaseAnnotationUpdates extends PerCaseAnnotationUpdates {
+  tag_id?: number
 }
 
 export interface VariantKey {
@@ -732,13 +738,14 @@ export interface PanelsAPI {
     panelId: number,
     assembly: string,
     paddingBp: number
-  ) => Promise<IpcResult<{ success: boolean; path?: string }>>
+  ) => Promise<IpcResult<{ success: boolean; path?: string; cancelled?: boolean }>>
 }
 
 export interface GeneRefCheckUpdatesResult {
   currentBuiltAt: number
   daysSinceBuilt: number
   needsUpdate: boolean
+  canUpdate?: boolean
 }
 
 export interface GeneRefUpdateResult {

@@ -16,12 +16,14 @@ import {
   usePhenotypeRefresh,
   withPhenotypeDefault
 } from '@renderer/components/variant-table/usePhenotypeColumn'
+import { buildVariantRenderRows } from '@renderer/components/variant-table/useVariantRenderRows'
 import { notifyPhenotypeChanged } from '@renderer/composables/phenotypeChanges'
 import { phenotypeLines } from '@renderer/components/shortlist/rank-tooltip-phenotype'
 import { baseHeaders as caseHeaders } from '@renderer/components/variant-table/columns'
 import { baseHeaders as cohortHeaders } from '@renderer/components/cohort/useCohortColumns'
 import { EMPTY_VALUE_PLACEHOLDER } from '@renderer/config/displayConfig'
 import type { HpoExplanation } from '../../../../src/shared/types/hpo-profile'
+import type { Variant } from '../../../../src/shared/types/api'
 
 const vuetify = createVuetify({ components, directives })
 
@@ -95,6 +97,32 @@ describe('PhenotypeScoreCell', () => {
     expect(explainGene).toHaveBeenCalledTimes(2)
   })
 
+  it('resets armed explanation state and re-renders when row phenotype_score changes', async () => {
+    const wrapper = mountCell({
+      gene_symbol: 'SCN1A',
+      phenotype_score: 0.65,
+      phenotype_disease: 'Dravet syndrome'
+    })
+    await wrapper.get('.phenotype-cell').trigger('mouseenter')
+    await flushPromises()
+    expect(explainGene).toHaveBeenCalledTimes(1)
+
+    notifyPhenotypeChanged(1)
+    await wrapper.setProps({
+      row: {
+        gene_symbol: 'SCN1A',
+        phenotype_score: 0.82,
+        phenotype_disease: 'GEFS+'
+      }
+    })
+    expect(wrapper.text()).toContain('0.82')
+    expect(wrapper.get('.phenotype-cell__disease').text()).toBe('GEFS+')
+
+    await wrapper.get('.phenotype-cell').trigger('mouseenter')
+    await flushPromises()
+    expect(explainGene).toHaveBeenCalledTimes(2)
+  })
+
   it('has no explanation in the cohort view and renders the carrier count hint', async () => {
     const wrapper = mountCell(
       { gene_symbol: 'SCN1A', phenotype_score: 0.65, phenotype_disease: '2 carriers scored' },
@@ -103,6 +131,55 @@ describe('PhenotypeScoreCell', () => {
     expect(wrapper.get('.phenotype-cell__disease').text()).toBe('2 carriers scored')
     await wrapper.get('.phenotype-cell').trigger('mouseenter')
     expect(explainGene).not.toHaveBeenCalled()
+  })
+})
+
+describe('buildVariantRenderRows phenotype score reactivity', () => {
+  it('returns a new row reference when phenotype_score or phenotype_disease changes', () => {
+    const cache = new Map()
+    const viewModels = new Map()
+    const initial = [
+      {
+        id: 10,
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        phenotype_score: null,
+        phenotype_disease: null
+      }
+    ] as unknown as Variant[]
+    const [firstRow] = buildVariantRenderRows(initial, viewModels, cache)
+
+    const unchanged = [
+      {
+        id: 10,
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        phenotype_score: null,
+        phenotype_disease: null
+      }
+    ] as unknown as Variant[]
+    const [sameRow] = buildVariantRenderRows(unchanged, viewModels, cache)
+    expect(sameRow).toBe(firstRow)
+
+    const updated = [
+      {
+        id: 10,
+        chr: '1',
+        pos: 100,
+        ref: 'A',
+        alt: 'G',
+        phenotype_score: 0.74,
+        phenotype_disease: 'Dravet syndrome'
+      }
+    ] as unknown as Variant[]
+    const [updatedRow] = buildVariantRenderRows(updated, viewModels, cache)
+    expect(updatedRow).not.toBe(firstRow)
+    expect(updatedRow.phenotype_score).toBe(0.74)
+    expect(updatedRow.phenotype_disease).toBe('Dravet syndrome')
   })
 })
 

@@ -114,8 +114,8 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
       for (const v of fixture.variants) {
         await pool.query(
           `INSERT INTO "${schema}".variants
-             (case_id, chr, pos, ref, alt, variant_type, end_pos, gene_symbol, gnomad_af, cadd, gt_num)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+             (case_id, chr, pos, ref, alt, variant_type, end_pos, gene_symbol, gnomad_af, cadd, gt_num, sv_length)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             caseId,
             v.chr,
@@ -127,7 +127,8 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
             v.gene_symbol,
             v.gnomad_af,
             v.cadd,
-            v.gt_num
+            v.gt_num,
+            v.sv_length ?? null
           ]
         )
       }
@@ -756,6 +757,146 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
       }),
       ok([A.afterEnd, A.symbolOnly])
     )
+
+    // Operators !=, <, <=, >, >=, like, in (sv_length), is_null, not_null with includeEmpty across casePaths & cohortPaths (#676)
+    await expectAll(
+      casePaths(0, { column_filters: { chr: { operator: '!=', value: '7' } } }),
+      ok([A.otherChr])
+    )
+    await expectAll(
+      cohortPaths({ ...grch38, column_filters: { chr: { operator: '!=', value: '7' } } }),
+      ok([A.otherChr, B.unrelated])
+    )
+
+    await expectAll(
+      casePaths(0, { column_filters: { sv_length: { operator: 'in', value: [120_000] } } }),
+      ok([A.spanningCnv])
+    )
+    await expectAll(
+      cohortPaths({
+        ...grch38,
+        column_filters: { sv_length: { operator: 'in', value: [120_000] } }
+      }),
+      ok([A.spanningCnv])
+    )
+
+    await expectAll(
+      casePaths(0, { column_filters: { cadd: { operator: 'like', value: '25' } } }),
+      ok([A.inGene])
+    )
+    await expectAll(
+      cohortPaths({
+        ...grch38,
+        column_filters: { cadd_phred: { operator: 'like', value: '25' } }
+      }),
+      ok([A.inGene])
+    )
+    await expectAll(
+      casePaths(0, { column_filters: { gene_symbol: { operator: 'like', value: 'PARITY' } } }),
+      ok([A.inGene, A.symbolOnly])
+    )
+    await expectAll(
+      cohortPaths({
+        ...grch38,
+        column_filters: { gene_symbol: { operator: 'like', value: 'PARITY' } }
+      }),
+      ok([A.inGene, A.symbolOnly])
+    )
+
+    const withoutCaddCohort = [...withoutCadd, B.padding]
+    for (const includeEmpty of [false, true]) {
+      const extraCase = includeEmpty ? withoutCadd : []
+      const extraCohort = includeEmpty ? withoutCaddCohort : []
+
+      await expectAll(
+        casePaths(0, { column_filters: { cadd: { operator: '>', value: 15, includeEmpty } } }),
+        ok([A.inGene, A.otherChr, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: '>', value: 15, includeEmpty } }
+        }),
+        ok([A.inGene, A.otherChr, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, { column_filters: { cadd: { operator: '>=', value: 15, includeEmpty } } }),
+        ok([A.startEdge, A.inGene, A.otherChr, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: '>=', value: 15, includeEmpty } }
+        }),
+        ok([A.startEdge, A.inGene, A.otherChr, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, { column_filters: { cadd: { operator: '<', value: 15, includeEmpty } } }),
+        ok([A.symbolOnly, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: '<', value: 15, includeEmpty } }
+        }),
+        ok([A.symbolOnly, B.unrelated, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, { column_filters: { cadd: { operator: '<=', value: 15, includeEmpty } } }),
+        ok([A.symbolOnly, A.startEdge, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: '<=', value: 15, includeEmpty } }
+        }),
+        ok([A.symbolOnly, A.startEdge, B.unrelated, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, {
+          column_filters: { cadd: { operator: 'between', value: [15, 25], includeEmpty } }
+        }),
+        ok([A.startEdge, A.inGene, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: 'between', value: [15, 25], includeEmpty } }
+        }),
+        ok([A.startEdge, A.inGene, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, {
+          column_filters: { cadd: { operator: 'is_null', value: '', includeEmpty } }
+        }),
+        ok(withoutCadd)
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: 'is_null', value: '', includeEmpty } }
+        }),
+        ok(withoutCaddCohort)
+      )
+      await expectAll(
+        casePaths(0, {
+          column_filters: { cadd: { operator: 'not_null', value: '', includeEmpty } }
+        }),
+        ok([A.symbolOnly, A.startEdge, A.inGene, A.otherChr])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: 'not_null', value: '', includeEmpty } }
+        }),
+        ok([A.symbolOnly, A.startEdge, A.inGene, A.otherChr, B.unrelated])
+      )
+    }
   }, 120_000)
 
   // ── Null checks (DSL is:null / is:notnull) ────────────────────────────────

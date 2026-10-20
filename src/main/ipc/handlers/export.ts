@@ -72,12 +72,7 @@ export function registerExportHandlers({
 
   ipcMain.handle(
     'export:variants',
-    async (
-      _event,
-      caseId: unknown,
-      filters: unknown,
-      caseName: unknown
-    ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
+    async (_event, caseId: unknown, filters: unknown, caseName: unknown) => {
       return wrapHandler(async () => {
         // ANTI-07: Runtime validation at IPC boundary
         const validated = VariantExportParamsSchema.safeParse({ caseId, filters, caseName })
@@ -104,9 +99,6 @@ export function registerExportHandlers({
               validated.data.filters,
               getDbPool
             )
-        if (preparation !== null && 'success' in preparation) {
-          return preparation
-        }
 
         const defaultFileName = `${validated.data.caseName.replace(/[^a-z0-9]/gi, '_')}_variants.${isPostgres ? 'csv' : 'xlsx'}`
         let outputFilePath = automatedExportPath(defaultFileName)
@@ -114,7 +106,7 @@ export function registerExportHandlers({
 
         if (outputFilePath === null) {
           if (mainWindow === undefined || mainWindow.isDestroyed()) {
-            return { success: false, error: 'No window available for export dialog' }
+            throw new Error('No window available for export dialog')
           }
 
           const result = await dialog.showSaveDialog(mainWindow, {
@@ -132,7 +124,7 @@ export function registerExportHandlers({
           })
 
           if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
-            return { success: false, error: 'Export cancelled' }
+            return { success: false, cancelled: true }
           }
           assertNotDatabaseFile(result.filePath, getDbManager)
           outputFilePath = result.filePath
@@ -176,87 +168,81 @@ export function registerExportHandlers({
         )
         if (result.success) addAllowedExportRevealPath(outputFilePath)
         return result
-      }) as Promise<{ success: boolean; filePath?: string; error?: string }>
+      })
     }
   )
 
-  ipcMain.handle(
-    'export:cohort',
-    async (
-      _event,
-      params: unknown
-    ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
-      return wrapHandler(async () => {
-        // ANTI-07: Runtime validation at IPC boundary
-        const validated = CohortSearchParamsSchema.safeParse(params)
-        if (!validated.success) {
-          mainLogger.error(`Invalid export:cohort params: ${validated.error.message}`, 'export')
-          throw new Error('Invalid parameters')
+  ipcMain.handle('export:cohort', async (_event, params: unknown) => {
+    return wrapHandler(async () => {
+      // ANTI-07: Runtime validation at IPC boundary
+      const validated = CohortSearchParamsSchema.safeParse(params)
+      if (!validated.success) {
+        mainLogger.error(`Invalid export:cohort params: ${validated.error.message}`, 'export')
+        throw new Error('Invalid parameters')
+      }
+
+      mainLogger.debug(
+        `Cohort export handler called with params: ${JSON.stringify(validated.data)}`,
+        'export'
+      )
+      const session = getDbManager().getCurrentSession()
+      const isPostgres = session.capabilities.backend === 'postgres'
+      const defaultFileName = `cohort_variants_${new Date().toISOString().slice(0, 10)}.${isPostgres ? 'csv' : 'xlsx'}`
+      let outputFilePath = automatedExportPath(defaultFileName)
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+
+      if (outputFilePath === null) {
+        if (mainWindow === undefined || mainWindow.isDestroyed()) {
+          mainLogger.warn(
+            'Window closed before cohort export dialog, cannot show save dialog',
+            'export'
+          )
+          throw new Error('No window available for export dialog')
         }
 
-        mainLogger.debug(
-          `Cohort export handler called with params: ${JSON.stringify(validated.data)}`,
-          'export'
-        )
-        const session = getDbManager().getCurrentSession()
-        const isPostgres = session.capabilities.backend === 'postgres'
-        const defaultFileName = `cohort_variants_${new Date().toISOString().slice(0, 10)}.${isPostgres ? 'csv' : 'xlsx'}`
-        let outputFilePath = automatedExportPath(defaultFileName)
-        const mainWindow = BrowserWindow.getAllWindows()[0]
+        const result = await dialog.showSaveDialog(mainWindow, {
+          title: isPostgres ? 'Export Cohort Variants to CSV' : 'Export Cohort Variants to Excel',
+          defaultPath: defaultFileName,
+          filters: isPostgres
+            ? [
+                { name: 'CSV Files', extensions: ['csv'] },
+                { name: 'All Files', extensions: ['*'] }
+              ]
+            : [
+                { name: 'Excel Files', extensions: ['xlsx'] },
+                { name: 'All Files', extensions: ['*'] }
+              ]
+        })
 
-        if (outputFilePath === null) {
-          if (mainWindow === undefined || mainWindow.isDestroyed()) {
-            mainLogger.warn(
-              'Window closed before cohort export dialog, cannot show save dialog',
-              'export'
-            )
-            return { success: false, error: 'No window available for export dialog' }
-          }
-
-          const result = await dialog.showSaveDialog(mainWindow, {
-            title: isPostgres ? 'Export Cohort Variants to CSV' : 'Export Cohort Variants to Excel',
-            defaultPath: defaultFileName,
-            filters: isPostgres
-              ? [
-                  { name: 'CSV Files', extensions: ['csv'] },
-                  { name: 'All Files', extensions: ['*'] }
-                ]
-              : [
-                  { name: 'Excel Files', extensions: ['xlsx'] },
-                  { name: 'All Files', extensions: ['*'] }
-                ]
-          })
-
-          if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
-            return { success: false, error: 'Export cancelled' }
-          }
-          assertNotDatabaseFile(result.filePath, getDbManager)
-          outputFilePath = result.filePath
+        if (result.canceled === true || result.filePath === undefined || result.filePath === '') {
+          return { success: false, cancelled: true }
         }
+        assertNotDatabaseFile(result.filePath, getDbManager)
+        outputFilePath = result.filePath
+      }
 
-        /** Wire progress events to renderer via safeEmit. */
-        const exportCallbacks: ExportCallbacks = {
-          onProgress: (data) => {
-            if (mainWindow !== undefined && !mainWindow.isDestroyed()) {
-              safeEmit('export:progress', data)
-            }
+      /** Wire progress events to renderer via safeEmit. */
+      const exportCallbacks: ExportCallbacks = {
+        onProgress: (data) => {
+          if (mainWindow !== undefined && !mainWindow.isDestroyed()) {
+            safeEmit('export:progress', data)
           }
         }
+      }
 
-        if (isPostgres) {
-          const rows = (await session.getReadExecutor().execute({
-            type: 'export:cohort',
-            params: [validated.data]
-          })) as AsyncIterable<Record<string, unknown>>
-          const result = await exportPostgresCohort(rows, outputFilePath, exportCallbacks)
-          if (result.success) addAllowedExportRevealPath(outputFilePath)
-          return result
-        }
-
-        const result = await exportCohort(getDb, validated.data, outputFilePath, exportCallbacks)
+      if (isPostgres) {
+        const rows = (await session.getReadExecutor().execute({
+          type: 'export:cohort',
+          params: [validated.data]
+        })) as AsyncIterable<Record<string, unknown>>
+        const result = await exportPostgresCohort(rows, outputFilePath, exportCallbacks)
         if (result.success) addAllowedExportRevealPath(outputFilePath)
         return result
-      }) as Promise<{ success: boolean; filePath?: string; error?: string }>
-    }
-  )
+      }
+
+      const result = await exportCohort(getDb, validated.data, outputFilePath, exportCallbacks)
+      if (result.success) addAllowedExportRevealPath(outputFilePath)
+      return result
+    })
+  })
 }

@@ -16,7 +16,7 @@ import type {
 import type { BinSupport, ScenarioId } from '../common/types'
 import { quantile } from './bootstrap'
 import { estimatePoints, type BinCount } from './points'
-import { mulberry32 } from './prng'
+import { rng } from '../common/rng'
 
 /** First-match assignment of one row: its mode and, per group, the rule that fired. */
 export interface Assignment {
@@ -166,7 +166,7 @@ function bootstrapCells(
   seed: number
 ): Array<[number, number]> {
   const genes = [...byGene.keys()].sort().map((g) => byGene.get(g)!)
-  const rnd = mulberry32(seed)
+  const rnd = rng(seed)
   const draws: number[][] = cells.map(() => [])
   for (let r = 0; r < reps; r++) {
     const sample = Array.from(

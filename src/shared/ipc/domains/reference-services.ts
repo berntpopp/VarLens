@@ -5,8 +5,9 @@ import { CAPABILITY_FEATURES, type CapabilityFeature } from '../capability-featu
  * External reference services: every outbound lookup VarLens can make on a
  * user's behalf. Desktop calls them directly (the user's machine, the user's
  * decision). The web server makes them from a shared clinical server, so each
- * one is an instance setting that an administrator must switch on; all are
- * off by default and every outbound call is audited (user, service,
+ * one is an instance setting that an administrator can switch on or off
+ * (`protein` and `gnomad` default to on; variant-coordinate and panel services
+ * default to off), and every outbound call is audited (user, service,
  * identifier). See src/web/server/reference-services/.
  */
 export const REFERENCE_SERVICE_IDS = [
@@ -181,7 +182,7 @@ export function buildReferenceServicesStatus(
   }
 }
 
-/** Every service on (desktop) or off (the web default). */
+/** Build a policy map with every service set to `on`. */
 export function uniformReferenceServicePolicy(on: boolean): Record<ReferenceServiceId, boolean> {
   return Object.fromEntries(REFERENCE_SERVICE_IDS.map((id) => [id, on])) as Record<
     ReferenceServiceId,

@@ -33,7 +33,11 @@ export function buildVariantRenderRows(
     const render = rowViewModels.get(key) ?? EMPTY_RENDER
     const cached = cache.get(key)
 
-    if (cached) {
+    if (
+      cached &&
+      cached.phenotype_score === variant.phenotype_score &&
+      cached.phenotype_disease === variant.phenotype_disease
+    ) {
       cached.comphet_phase = undefined
       cached.family_calls = undefined
       Object.assign(cached, variant)

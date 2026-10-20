@@ -13,7 +13,7 @@ import { contigQueryNames } from '../../../shared/utils/contig'
 /** Result of translating a DSL AST */
 export interface TranslationResult {
   /** Column filters to merge into the query (key = column name) */
-  columnFilters: Record<string, ColumnFilter & { includeEmpty?: boolean }>
+  columnFilters: Record<string, ColumnFilter>
   /** Names of @preset references found in the expression */
   presetNames: string[]
   /**
@@ -55,10 +55,39 @@ function setFilter(
   filter: ColumnFilter,
   source: string
 ): void {
-  if (result.columnFilters[column] !== undefined) {
+  const existing = result.columnFilters[column]
+  if (existing !== undefined) {
+    const isExistingLower = existing.operator === '>='
+    const isExistingUpper = existing.operator === '<='
+    const isNewLower = filter.operator === '>='
+    const isNewUpper = filter.operator === '<='
+
+    if ((isExistingLower && isNewUpper) || (isExistingUpper && isNewLower)) {
+      const lowerVal = Number(isExistingLower ? existing.value : filter.value)
+      const upperVal = Number(isExistingUpper ? existing.value : filter.value)
+      if (Number.isFinite(lowerVal) && Number.isFinite(upperVal)) {
+        if (lowerVal > upperVal) {
+          result.errors.push(
+            `${source}: lower bound (${lowerVal}) cannot exceed upper bound (${upperVal}) for '${column}'`
+          )
+          return
+        }
+        const def = findColumn(column, 'cohort')
+        const betweenFilter: ColumnFilter = {
+          operator: 'between',
+          value: [lowerVal, upperVal]
+        }
+        if (def?.type === 'numeric') {
+          betweenFilter.includeEmpty = def.rangeExcludesEmpty !== true
+        }
+        result.columnFilters[column] = betweenFilter
+        return
+      }
+    }
+
     // A flat map holds one condition per field: overwriting would drop a bound
     result.errors.push(
-      `${source}: only one condition per field is supported ('${column}' is used twice)`
+      `${source}: only one condition per field is supported ('${column}' is used twice) — use >= and <= for a range`
     )
     return
   }
@@ -79,7 +108,7 @@ function translateRule(rule: DslFilterRule, result: TranslationResult): void {
     backendOp === 'is_null' || backendOp === 'not_null'
       ? { operator: backendOp, value: '' }
       : { operator: backendOp, value: value ?? '' }
-  const def = findColumn(column)
+  const def = findColumn(column, 'cohort')
   if (def?.type === 'numeric' && ['<', '>', '<=', '>='].includes(operator)) {
     filter.includeEmpty = def.rangeExcludesEmpty !== true
   }
@@ -162,6 +191,7 @@ const DSL_OPERATORS: Record<ColumnFilter['operator'], string> = {
   '>': '>',
   '<=': '<=',
   '>=': '>=',
+  between: '=',
   like: '~',
   in: '=',
   is_null: 'is:null',
@@ -182,6 +212,9 @@ function quoteValue(value: string | number): string {
 export function serializeColumnFilters(columnFilters: Record<string, ColumnFilter>): string {
   return Object.entries(columnFilters)
     .map(([column, { operator, value }]) => {
+      if (operator === 'between' && Array.isArray(value)) {
+        return `${column}:>=:${value[0]} AND ${column}:<=:${value[1]}`
+      }
       const op = DSL_OPERATORS[operator]
       if (operator === 'is_null' || operator === 'not_null') return `${column}:${op}`
       if (Array.isArray(value)) {

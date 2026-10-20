@@ -10,12 +10,12 @@
  * `''`); their SQL comes from `shared/filters/column-null-check.ts`.
  */
 export type ColumnFilterOperator =
-  '=' | '!=' | '<' | '>' | '<=' | '>=' | 'like' | 'in' | 'is_null' | 'not_null'
+  '=' | '!=' | '<' | '>' | '<=' | '>=' | 'between' | 'like' | 'in' | 'is_null' | 'not_null'
 
 /** A single typed column filter */
 export interface ColumnFilter {
   operator: ColumnFilterOperator
-  value: string | number | string[]
+  value: string | number | string[] | number[]
   /**
    * Whether to include NULL/empty values.
    *

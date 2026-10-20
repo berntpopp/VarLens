@@ -318,7 +318,9 @@ const capabilities = useCapabilityStore()
 const canImportPanelApp = computed(() => capabilities.canUse('panelAppImport'))
 const canGenerateStringDb = computed(() => capabilities.canUse('stringDbPanels'))
 const canExportBed = computed(() => capabilities.canUse('panelBedExport'))
-const canUpdateGeneRef = computed(() => capabilities.canUse('geneRefUpdate'))
+const canUpdateGeneRef = computed(
+  () => capabilities.canUse('geneRefUpdate') && (geneRefInfo.value?.canUpdate ?? false)
+)
 const externalLookupNotes = computed(() => {
   const notes = [
     capabilities.capabilityReason('panelAppImport'),
@@ -457,9 +459,13 @@ function exportBed(panel: PanelListItem): void {
 async function doExportBed(): Promise<void> {
   if (!exportingPanel.value || !api || !canExportBed.value) return
   try {
-    unwrapIpcResult(
+    const result = unwrapIpcResult(
       await api.panels.exportBed(exportingPanel.value.id, exportAssembly.value, exportPadding.value)
     )
+    if (result.success === false && result.cancelled !== true) {
+      errorSnackbarText.value = 'Failed to export BED file'
+      errorSnackbar.value = true
+    }
   } catch (e) {
     errorSnackbarText.value =
       e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)

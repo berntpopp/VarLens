@@ -9,6 +9,7 @@ WEB_DEV_PORT ?= 8787
 WEB_DEV_SCHEMA_SLUG ?= $(shell basename "$$(pwd)" | tr '[:upper:].-' '[:lower:]__' | sed 's/[^a-z0-9_]/_/g; s/^[^a-z_]/web_/')
 WEB_DEV_SCHEMA ?= web_dev_$(WEB_DEV_SCHEMA_SLUG)
 WEB_DEV_RECOVERY_KEY_DIR ?= /tmp/varlens-web-dev
+WEB_DEV_HPO_DB_PATH ?= $(CURDIR)/.cache/hpo/hpo_similarity.db
 WEB_DEV_API_LATENCY_MS ?= 75
 WEB_DEV_ADMIN_USERNAME ?= admin
 WEB_DEV_ENV_FILE ?= .env.web.local
@@ -84,6 +85,12 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 		node -e "const { Client } = require('pg'); const client = new Client({ connectionString: process.env.VARLENS_PG_URL }); client.connect().then(() => client.end()).then(() => process.exit(0)).catch(() => process.exit(1));" \
 		&& echo "Postgres reachable at $$(node -e 'const url = new URL(process.env.VARLENS_PG_URL); console.log(url.host)') - skipping pg-up." \
 		|| $(MAKE) pg-up
+	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; \
+		hpo_db="$${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}"; \
+		if [ ! -f "$$hpo_db" ]; then \
+			echo "Building HPO similarity DB at $$hpo_db..."; \
+			npm run rebuild:node && npm run build:hpo-db -- --out "$$hpo_db"; \
+		fi
 	VARLENS_WEB_BASE=/ npm run build:web
 	@echo ""
 	@echo "Starting VarLens web mode:"
@@ -92,6 +99,7 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 	@echo "  Postgres: .env.postgres.local"
 	@if [ -f "$(WEB_DEV_ENV_FILE)" ]; then echo "  Web env:  $(WEB_DEV_ENV_FILE)"; else echo "  Web env:  $(WEB_DEV_ENV_FILE) (not present; using defaults)"; fi
 	@echo "  Schema:   $(WEB_DEV_SCHEMA)"
+	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  HPO DB:   $${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}"
 	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  Secrets:  $${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}"
 	@set -a; . ./.env.postgres.local; if [ -f "$(WEB_DEV_ENV_FILE)" ]; then . "./$(WEB_DEV_ENV_FILE)"; fi; set +a; echo "  API delay: $${VARLENS_WEB_API_LATENCY_MS:-$(WEB_DEV_API_LATENCY_MS)}ms"
 	@echo "  Dev admin bootstrap: set VARLENS_ADMIN_PASSWORD_HASH for first run"
@@ -104,6 +112,7 @@ web-dev: ## Start local Postgres-backed web mode at http://localhost:$(WEB_DEV_P
 		VARLENS_WEB_API_LATENCY_MS="$${VARLENS_WEB_API_LATENCY_MS:-$(WEB_DEV_API_LATENCY_MS)}" \
 		VARLENS_PG_SCHEMA="$(WEB_DEV_SCHEMA)" \
 		VARLENS_RECOVERY_KEY_DIR="$${VARLENS_RECOVERY_KEY_DIR:-$(WEB_DEV_RECOVERY_KEY_DIR)}" \
+		VARLENS_HPO_DB_PATH="$${VARLENS_HPO_DB_PATH:-$(WEB_DEV_HPO_DB_PATH)}" \
 		VARLENS_ADMIN_USERNAME="$${VARLENS_ADMIN_USERNAME:-$(WEB_DEV_ADMIN_USERNAME)}" \
 		VARLENS_ADMIN_PASSWORD_HASH="$${VARLENS_ADMIN_PASSWORD_HASH:-}" \
 		node out/web/server.cjs
@@ -181,7 +190,7 @@ typecheck: ## Run TypeScript type checking
 # Testing
 #---------------------------------------------------------------------------
 
-test: ## Run tests once (VARLENS_WEB=1 adds explicit web checks; requires PostgreSQL)
+test: rebuild-node ## Run tests once (VARLENS_WEB=1 adds explicit web checks; requires PostgreSQL)
 	npm run test
 ifeq ($(VARLENS_WEB),1)
 	$(MAKE) build-web
@@ -189,10 +198,10 @@ ifeq ($(VARLENS_WEB),1)
 	$(MAKE) web-gate-integration
 endif
 
-test-watch: ## Run tests in watch mode
+test-watch: rebuild-node ## Run tests in watch mode
 	npm run test:watch
 
-test-coverage: ## Run tests with coverage report
+test-coverage: rebuild-node ## Run tests with coverage report
 	npm run test:coverage
 
 perf-build: ## Measure build pipeline stage timings (LABEL=name, optional ONLY=id,id)
@@ -238,14 +247,14 @@ web-gate-parity: web-data-verify ## Run Layer 3 parity scenarios (opt-in; boots 
 	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-gate-parity. This validates desktop↔web parity against PostgreSQL."; exit 2; fi
 	@if [ ! -f out/main/index.js ]; then echo "out/main/index.js missing — running 'make build' first"; npm run build; fi
 	npm run rebuild:electron
-	VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity
+	status=0; VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity || status=$$?; npm run rebuild:node || status=$$?; exit $$status
 
 web-parity-e2e: web-data-verify ## Run manifest-backed desktop↔web parity E2E (requires VARLENS_PG_URL)
 	@if [ -z "$$VARLENS_PG_URL" ]; then echo "VARLENS_PG_URL is required for web-parity-e2e. This is opt-in and never part of default desktop CI."; exit 2; fi
 	@echo "=== web-parity-e2e (opt-in; switches native module to Electron ABI) ==="
 	npm run rebuild:electron
 	npm run build
-	VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity/data-manifest-parity.test.ts tests/web-gate/parity/ipc-fixture-parity.test.ts
+	status=0; VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity/data-manifest-parity.test.ts tests/web-gate/parity/ipc-fixture-parity.test.ts || status=$$?; npm run rebuild:node || status=$$?; exit $$status
 
 web-test-report: ## Generate web test report artifacts (VARLENS_WEB=1 runs full parity; uses VARLENS_PG_URL or .env.postgres.local)
 	node scripts/reports/run-web-test-report.mjs
@@ -318,7 +327,6 @@ ci: ## Run all CI checks (lint, format, typecheck, rebuild, test). Set VARLENS_W
 	$(MAKE) lint-check
 	$(MAKE) format-check
 	$(MAKE) typecheck
-	$(MAKE) rebuild-node
 	$(MAKE) test
 
 quick: ## Optional edit feedback; insufficient for push readiness

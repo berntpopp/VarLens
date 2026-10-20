@@ -4,9 +4,10 @@
  *
  * External lookups are served by the web server's ReferenceServices facade
  * behind the admin egress policy (src/web/server/reference-services/). Each
- * service is an instance feature that is OFF until an administrator enables
- * it, so the capability document (not the manifest) disables the feature and
- * carries the reason. HPO search uses the bundled ontology (no egress).
+ * service is an instance feature controlled by that policy (`protein` and
+ * `gnomad` default to on; the rest default to off), so the capability document
+ * (not the manifest) disables turned-off features and carries the reason.
+ * HPO search uses the bundled ontology (no egress).
  * See ../parity-manifest.ts for how to flip an entry.
  */
 import {

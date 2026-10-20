@@ -7,9 +7,8 @@ import {
 } from '../../shared/filters/severity-filter'
 import type { ColumnFilter, ColumnFiltersParam } from '../../shared/types/column-filters'
 import { isExtensionColumnKey } from './variant-extension-registry'
-import { buildNullCheckSql, isNullCheckOperator } from '../../shared/filters/column-null-check'
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
-import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
+import { BASE_FILTERABLE_COLUMNS } from './VariantFilterBuilder'
 import {
   assertNoInfoFieldFilters,
   assertValidColumnFilterValues,
@@ -17,7 +16,7 @@ import {
 } from '../../shared/filters/column-filter-validation'
 import { COHORT_FREQUENCY_KEY, COHORT_FREQUENCY_SQL } from './cohort-frequency-sql'
 import { cohortPhenotypeScoreSql, PHENOTYPE_SCORE_KEY } from '../../shared/sql/phenotype-score-sql'
-import { escapeLikePattern } from './search/search-clause-emitter'
+import { translateBareColumnFilter } from './variant-filter/column-filters'
 
 export interface BuildBaseWhereContext {
   /** SQL alias for base columns: 'v' for variants-backed paths, 'cvs' for cohort listing. */
@@ -216,7 +215,7 @@ function severityTarget(
  * `IDENTIFIER_RE` alone blocks metacharacters but not an unintended-but-valid
  * column reference.
  */
-const VARIANTS_TABLE_COLUMN_ALLOWLIST = new Set(Object.values(BASE_SORTABLE_COLUMNS))
+const VARIANTS_TABLE_COLUMN_ALLOWLIST = new Set(Object.values(BASE_FILTERABLE_COLUMNS))
 
 function translateColumnFilter(
   column: string,
@@ -245,46 +244,19 @@ function translateColumnFilter(
       : scope === 'cohort-listing' && column === PHENOTYPE_SCORE_KEY
         ? cohortPhenotypeScoreSql(baseAlias, 'sqlite')
         : comparedColumnSql(column, `${baseAlias}.${column}`)
-  const { operator, value, includeEmpty } = filter
-  const nullBranch = includeEmpty !== false
-
-  if (isNullCheckOperator(operator)) {
-    return buildNullCheckSql(col, operator, NUMERIC_COLUMN_FILTER_KEYS.has(column), 'sqlite')
-  }
+  const { operator, value } = filter
   const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
   if (isSeverityKey(column) && severity !== null) {
     const target = severityTarget(column, baseAlias, params)
     return severityFilterSql(column, severity.values, target, severity.negate)
   }
-  if (operator === 'in' && Array.isArray(value)) {
-    if (value.length === 0) return null
-    const ph = value.map(() => '?').join(', ')
-    params.push(...value)
-    return `${col} IN (${ph})`
-  }
-  if (operator === 'like' && typeof value === 'string') {
-    if (value.trim() === '') return null
-    params.push(`%${escapeLikePattern(value)}%`)
-    return `${col} LIKE ? ESCAPE '\\' COLLATE NOCASE`
-  }
-  if ((operator === '=' || operator === '!=') && !Array.isArray(value)) {
-    params.push(bindComparisonValue(column, value))
-    return `${col} ${operator} ?`
-  }
-  if (['<', '>', '<=', '>='].includes(operator) && !Array.isArray(value)) {
-    params.push(bindComparisonValue(column, value))
-    return nullBranch ? `(${col} IS NULL OR ${col} ${operator} ?)` : `${col} ${operator} ?`
-  }
-  return null
-}
 
-/**
- * Text columns get a text parameter. better-sqlite3 binds every JS number as a
- * REAL, which SQLite renders as `'7.0'` before comparing it with a TEXT
- * column — so an unconverted `chr = 7` could never match the stored `'7'`.
- * Numeric columns keep the caller's value: SQLite applies the column's numeric
- * affinity to a text parameter such as `'20'`.
- */
-function bindComparisonValue(column: string, value: string | number): string | number {
-  return NUMERIC_COLUMN_FILTER_KEYS.has(column) ? value : String(value)
+  return translateBareColumnFilter(col, filter, {
+    dialect: 'sqlite',
+    numericColumn: NUMERIC_COLUMN_FILTER_KEYS.has(column),
+    bind: (val) => {
+      params.push(val as string | number)
+      return '?'
+    }
+  })
 }

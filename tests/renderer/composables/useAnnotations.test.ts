@@ -13,7 +13,19 @@ import {
   annotationCache,
   _resetAnnotationsForTesting
 } from '@renderer/composables/useAnnotations'
-import { setLoading, isKeyLoading } from '@renderer/composables/annotation-cache'
+import {
+  setLoading,
+  isKeyLoading,
+  evictAnnotationCacheKeys,
+  getKeyVersion,
+  getCaseVariantVersion,
+  getWriteVersion,
+  perCaseVersionSlot
+} from '@renderer/composables/annotation-cache'
+import {
+  perCaseByVariantId,
+  isLoadSeqStale
+} from '@renderer/composables/annotation-mutation-tracker'
 
 describe('useAnnotations', () => {
   let app: { unmount: () => void }
@@ -611,4 +623,173 @@ describe('stale-request guard (annotation generation)', () => {
 
     expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(false)
   })
+
+  it('superseded batch does not clear newer batch loading flag', async () => {
+    let resolveBatch1: (val: unknown) => void = () => {}
+    const p1 = new Promise((r) => {
+      resolveBatch1 = r
+    })
+    let resolveBatch2: (val: unknown) => void = () => {}
+    const p2 = new Promise((r) => {
+      resolveBatch2 = r
+    })
+
+    window.api.annotations.batchGet = vi.fn().mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+
+    // Start batch 1
+    const pLoad1 = result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Force evict key and start batch 2 for the same key
+    evictAnnotationCacheKeys(['chr1:100:A:T'])
+    const pLoad2 = result.loadAnnotationsBatch(1, [{ chr: 'chr1', pos: 100, ref: 'A', alt: 'T' }])
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Batch 1 finishes first
+    resolveBatch1({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad1
+
+    // Key should STILL be loading because batch 2 owns the newer loading token!
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(true)
+
+    // Batch 2 finishes
+    resolveBatch2({ 'chr1:100:A:T': { global: null, perCase: null } })
+    await pLoad2
+
+    expect(result.isLoading('chr1', 100, 'A', 'T')).toBe(false)
+  })
+
+  it('superseded per-case write resolving after a newer confirmed write preserves loadedPerCaseByVariantId and does not trigger redundant refetch', async () => {
+    let resolveW1: (val: unknown) => void = () => {}
+    let resolveW2: (val: unknown) => void = () => {}
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((r) => (resolveW1 = r)))
+      .mockImplementationOnce(() => new Promise((r) => (resolveW2 = r)))
+    window.api.annotations.getForVariant = vi.fn().mockResolvedValue({
+      global: null,
+      perCase: {
+        id: 1,
+        case_id: 1,
+        variant_id: 101,
+        acmg_classification: 'Likely benign',
+        acmg_evidence: null,
+        per_case_comment: null,
+        starred: 0,
+        created_at: 1,
+        updated_at: 1
+      }
+    })
+
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+
+    await result.loadGlobalAnnotations('chr1', 100, 'A', 'T')
+    const w1 = result.setAcmgClassification(1, 101, 'chr1', 100, 'A', 'T', 'Likely benign')
+    const w2 = result.setAcmgClassification(1, 101, 'chr1', 100, 'A', 'T', 'Pathogenic')
+
+    resolveW2({
+      id: 2,
+      case_id: 1,
+      variant_id: 101,
+      acmg_classification: 'Pathogenic',
+      acmg_evidence: null,
+      per_case_comment: null,
+      starred: 0,
+      created_at: 1,
+      updated_at: 2
+    })
+    await w2
+
+    resolveW1({
+      id: 1,
+      case_id: 1,
+      variant_id: 101,
+      acmg_classification: 'Likely benign',
+      acmg_evidence: null,
+      per_case_comment: null,
+      starred: 0,
+      created_at: 1,
+      updated_at: 1
+    })
+    await w1
+
+    await result.loadAnnotations(1, 'chr1', 100, 'A', 'T', 101)
+    expect(window.api.annotations.getForVariant).not.toHaveBeenCalled()
+    expect(result.getAcmgClassification('chr1', 100, 'A', 'T')).toBe('Pathogenic')
+    expect(perCaseByVariantId.get('1:101')?.acmg_classification).toBe('Pathogenic')
+  })
+
+  it('retires keyVersions, caseVariantVersions, and acceptedLoadSeqs when idle entries are evicted', async () => {
+    window.api.annotations.getForVariant = vi.fn().mockImplementation(async (_caseId, _c, pos) => ({
+      global: null,
+      perCase: {
+        id: pos,
+        case_id: 1,
+        variant_id: pos,
+        acmg_classification: 'Pathogenic',
+        acmg_evidence: null,
+        per_case_comment: null,
+        starred: 0,
+        created_at: 1,
+        updated_at: 1
+      }
+    }))
+
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+
+    await result.loadAnnotations(1, 'chr1', 100, 'A', 'T', 100)
+    await result.loadAnnotations(1, 'chr1', 200, 'A', 'T', 200)
+    expect(isLoadSeqStale('case:chr1:100:A:T', 0)).toBe(true)
+    expect(isLoadSeqStale('caseVar:1:100', 0)).toBe(true)
+
+    evictAnnotationCacheKeys(['chr1:100:A:T', 'chr1:200:A:T'])
+    expect(annotationCache.value.size).toBe(0)
+    expect(getKeyVersion('chr1:100:A:T')).toBe(0)
+    expect(getCaseVariantVersion(1, 100)).toBe(0)
+    expect(isLoadSeqStale('case:chr1:100:A:T', 0)).toBe(false)
+    expect(isLoadSeqStale('caseVar:1:100', 0)).toBe(false)
+  })
+
+  it('bounds write versions on 20,000 mutations and cleans up unloaded variant state after eviction + failed save', async () => {
+    const { createPinia, setActivePinia } = await import('pinia')
+    setActivePinia(createPinia())
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockImplementation(async (caseId, variantId) => ({
+        id: variantId,
+        case_id: caseId,
+        variant_id: variantId,
+        starred: 1,
+        acmg_classification: null,
+        acmg_evidence: null,
+        per_case_comment: null,
+        created_at: 1,
+        updated_at: 1
+      }))
+    const [result, appInstance] = withSetup(() => useAnnotations({ genomeBuild: 'GRCh38' }))
+    app = appInstance
+    for (let i = 1; i <= 20_000; i++) {
+      await result.toggleStar(1, i, 'chr1', i, 'A', 'T')
+    }
+    expect(annotationCache.value.size).toBeLessThanOrEqual(MAX_CACHE_SIZE)
+    expect(perCaseByVariantId.size).toBeLessThanOrEqual(MAX_CACHE_SIZE)
+    expect(getWriteVersion('chr1:1:A:T', perCaseVersionSlot(1, 1, 'star'))).toBe(0)
+
+    let rejectSave!: (err: unknown) => void
+    window.api.annotations.upsertPerCase = vi
+      .fn()
+      .mockReturnValueOnce(new Promise((_res, rej) => (rejectSave = rej)))
+    const pSave = result.toggleStar(1, 999_999, 'chr9', 999_999, 'A', 'T')
+    evictAnnotationCacheKeys(['chr9:999999:A:T'])
+    rejectSave(new Error('save failed'))
+    await pSave
+    expect(perCaseByVariantId.has('1:999999')).toBe(false)
+    expect(getCaseVariantVersion(1, 999_999)).toBe(0)
+    expect(getWriteVersion('chr9:999999:A:T', perCaseVersionSlot(1, 999_999, 'star'))).toBe(0)
+  }, 30_000)
 })

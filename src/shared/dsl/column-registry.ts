@@ -130,7 +130,8 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     label: 'Position',
     aliases: ['position'],
     type: 'numeric',
-    operators: NUMERIC_OPERATORS
+    operators: NUMERIC_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'gene_symbol',
@@ -225,6 +226,20 @@ export const FILTER_COLUMNS: readonly FilterColumnDef[] = [
     aliases: ['omim', 'mim'],
     type: 'text',
     operators: ['=', '!=', '~']
+  },
+  {
+    key: 'ref',
+    label: 'Ref',
+    aliases: ['reference'],
+    type: 'text',
+    operators: TEXT_OPERATORS
+  },
+  {
+    key: 'alt',
+    label: 'Alt',
+    aliases: ['alternate'],
+    type: 'text',
+    operators: TEXT_OPERATORS
   },
   {
     key: 'zygosity',
@@ -382,28 +397,32 @@ export const COHORT_ONLY_COLUMNS: readonly FilterColumnDef[] = [
     label: 'Carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'cohort_frequency',
     label: 'Cohort frequency',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'het_count',
     label: 'Heterozygous carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'hom_count',
     label: 'Homozygous carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'acmg_best',
@@ -438,8 +457,16 @@ for (const col of FILTER_COLUMNS) {
 }
 
 /** Find a column definition by key or alias (case-insensitive) */
-export function findColumn(nameOrAlias: string): FilterColumnDef | undefined {
-  return columnMap.get(nameOrAlias.toLowerCase())
+export function findColumn(nameOrAlias: string, scope?: FilterScope): FilterColumnDef | undefined {
+  const direct = columnMap.get(nameOrAlias.toLowerCase())
+  if (direct) return direct
+  if (scope === 'cohort') {
+    const lower = nameOrAlias.toLowerCase()
+    return COHORT_ONLY_COLUMNS.find(
+      (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
+    )
+  }
+  return undefined
 }
 
 /** Get valid operators for a column (empty array if unknown) */
@@ -449,14 +476,7 @@ export function getOperatorsForColumn(nameOrAlias: string): DslOperator[] {
 
 /** Get common value suggestions for a column (empty array if none) */
 export function getCommonValues(nameOrAlias: string): CommonValue[] {
-  const lower = nameOrAlias.toLowerCase()
-  return (
-    findColumn(nameOrAlias)?.commonValues ??
-    COHORT_ONLY_COLUMNS.find(
-      (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
-    )?.commonValues ??
-    []
-  )
+  return findColumn(nameOrAlias, 'cohort')?.commonValues ?? []
 }
 
 /**

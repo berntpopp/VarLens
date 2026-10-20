@@ -7,7 +7,12 @@
 
 import type { VcfHeader, AnnotationResult } from './types'
 import { IMPACT_RANK_BY_LEVEL } from '../../../shared/config/severity.config'
-import { VEP_CSQ_VALUE_ESCAPES } from '../../../shared/config/vep.config'
+import {
+  decodeCsqValue,
+  parseFiniteFloat,
+  parseCsqEntry,
+  extractFromCsq
+} from './vcf-csq-extractor'
 import {
   canonicalizeTranscriptSemantics,
   type TranscriptInsertRow
@@ -145,11 +150,7 @@ function parseCsqForAlleles(
         `CSQ has more than ${MAX_VCF_TOTAL_ANNOTATION_VALUES} total values`
       )
     }
-    const fields = new Map<string, string>()
-
-    for (let i = 0; i < csqFieldNames.length && i < parts.length; i++) {
-      if (parts[i] !== '') fields.set(csqFieldNames[i], decodeCsqValue(parts[i]))
-    }
+    const fields = parseCsqEntry(parts, csqFieldNames)
 
     parsed.push({ fields, allele: fields.get('Allele') ?? '' })
   }
@@ -196,13 +197,7 @@ function parseCsqForAlleles(
   return grouped.map((filtered) => buildCsqResult(filtered, impactFirst))
 }
 
-const CSQ_ESCAPE_PATTERN = /%(?:3B|3D|2C|7C|20|25)/gi
-
-/** Undo VEP's CSQ escapes after splitting on `,` and `|`; unknown `%xx` and `&` stay as written. */
-function decodeCsqValue(value: string): string {
-  if (!value.includes('%')) return value
-  return value.replace(CSQ_ESCAPE_PATTERN, (escape) => VEP_CSQ_VALUE_ESCAPES[escape.toUpperCase()])
-}
+export { decodeCsqValue, parseFiniteFloat, parseCsqEntry, extractFromCsq }
 
 function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): AnnotationResult {
   if (filtered.length === 0) return emptyResult()
@@ -245,9 +240,7 @@ function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): Annota
     best?.fields.get('Consequence') ?? null
   )
 
-  const gnomadAfStr = best?.fields.get('gnomADe_AF') ?? best?.fields.get('gnomADg_AF') ?? null
-  const caddStr = best?.fields.get('CADD_PHRED') ?? null
-  const clinvarStr = best?.fields.get('ClinVar_CLNSIG') ?? null
+  const extracted = extractFromCsq(best)
 
   return {
     geneSymbol: best?.fields.get('SYMBOL') ?? null,
@@ -256,10 +249,10 @@ function buildCsqResult(filtered: CsqTranscript[], impactFirst: boolean): Annota
     transcript: best?.fields.get('Feature') ?? null,
     cdna: best?.fields.get('HGVSc') ?? null,
     aaChange: best?.fields.get('HGVSp') ?? null,
-    gnomadAf: gnomadAfStr != null && gnomadAfStr !== '' ? parseFloat(gnomadAfStr) : null,
-    cadd: caddStr != null && caddStr !== '' ? parseFloat(caddStr) : null,
-    clinvar: clinvarStr ?? null,
-    vepClinSig: best?.fields.get('CLIN_SIG') ?? null,
+    gnomadAf: extracted.gnomadAf,
+    cadd: extracted.cadd,
+    clinvar: extracted.clinvar,
+    vepClinSig: extracted.vepClinSig,
     selectedFields: best?.fields,
     transcripts
   }

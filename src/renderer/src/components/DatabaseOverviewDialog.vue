@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="800" scrollable>
+  <v-dialog v-model="isOpen" max-width="800" scrollable aria-label="Database Overview">
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon class="mr-2" :icon="mdiChartBoxOutline" />

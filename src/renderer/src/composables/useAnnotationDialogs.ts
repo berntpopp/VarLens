@@ -11,6 +11,13 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type AcmgEvidenceDialog from '../components/AcmgEvidenceDialog.vue'
 import type { AnnotationScope, AnnotationTarget } from '../../../shared/types/annotations'
 import { hasDecidingAcmgEvidence } from '../utils/acmg/acmg-undo'
+import {
+  annotationCache,
+  getPerCaseByVariantId,
+  hasPerCaseByVariantId,
+  variantKey
+} from './annotation-cache'
+import type { CaseVariantAnnotation } from '../../../shared/types/database-entities'
 
 type DialogVariant = Variant | AnnotationTarget
 
@@ -106,11 +113,31 @@ export function useAnnotationDialogs(
   const acmgEvidenceDialogRef = ref<InstanceType<typeof AcmgEvidenceDialog> | null>(null)
   const selectedVariantForAcmg = ref<DialogVariant | null>(null)
 
+  const resolveCaseId = (v: DialogVariant | null): number | null =>
+    v && 'case_id' in v && typeof v.case_id === 'number' ? v.case_id : caseId.value
+
+  const perCaseOf = (v: DialogVariant): CaseVariantAnnotation | null | undefined => {
+    const cid = resolveCaseId(v)
+    if (typeof cid !== 'number' || typeof v.id !== 'number') return undefined
+    const coordKey = variantKey(v)
+    if (hasPerCaseByVariantId(cid, v.id) || annotationCache.value.has(coordKey)) {
+      return getPerCaseByVariantId(cid, v.id, coordKey) ?? null
+    }
+    return undefined
+  }
+
   /** Evidence JSON of the slot the current scope reads and writes. */
-  const evidenceFor = (v: DialogVariant): string | null =>
-    (scope?.value ?? 'case') === 'all' && annotations.getGlobalAcmgEvidence
-      ? annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+  const evidenceFor = (v: DialogVariant): string | null => {
+    if ((scope?.value ?? 'case') === 'all') {
+      return annotations.getGlobalAcmgEvidence
+        ? annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+        : annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+    }
+    const pc = perCaseOf(v)
+    return pc !== undefined
+      ? (pc?.acmg_evidence ?? null)
       : annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+  }
 
   const acmgEvidenceJson = computed(() => {
     const v = selectedVariantForAcmg.value
@@ -258,14 +285,22 @@ export function useAnnotationDialogs(
     commentDialogOpen.value = false
   }
 
+  /** Get per-case comment for a variant, returning null if mismatched case variant */
+  const getPerCaseCommentFor = (v: DialogVariant | null): string | null => {
+    if (!v) return null
+    const pc = perCaseOf(v)
+    return pc !== undefined
+      ? (pc?.per_case_comment ?? null)
+      : (annotations.getPerCaseComment?.(v.chr, v.pos, v.ref, v.alt) ?? null)
+  }
+
   /** Get global timestamps from annotation cache */
   const getGlobalTimestamps = (
     item: DialogVariant | null
   ): { created_at: number; updated_at: number } | null => {
     if (!item) return null
-    const ann = annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)
-    if (!ann?.global) return null
-    return { created_at: ann.global.created_at, updated_at: ann.global.updated_at }
+    const g = annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)?.global
+    return g ? { created_at: g.created_at, updated_at: g.updated_at } : null
   }
 
   /** Get per-case timestamps from annotation cache */
@@ -273,9 +308,12 @@ export function useAnnotationDialogs(
     item: DialogVariant | null
   ): { created_at: number; updated_at: number } | null => {
     if (!item) return null
-    const ann = annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)
-    if (!ann?.perCase) return null
-    return { created_at: ann.perCase.created_at, updated_at: ann.perCase.updated_at }
+    const pc = perCaseOf(item)
+    const src =
+      pc !== undefined
+        ? pc
+        : (annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)?.perCase ?? null)
+    return src ? { created_at: src.created_at, updated_at: src.updated_at } : null
   }
 
   return {
@@ -293,6 +331,7 @@ export function useAnnotationDialogs(
     hasAcmgEvidence,
     handleAcmgEvidenceChange,
     handleCommentSave,
+    getPerCaseCommentFor,
     getGlobalTimestamps,
     getPerCaseTimestamps
   }

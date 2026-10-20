@@ -14,7 +14,7 @@ import {
 import { analyze } from '../../../../scripts/shortlist-sim/report/analysis'
 import { pointsSection } from '../../../../scripts/shortlist-sim/report/markdown'
 import { renderReport } from '../../../../scripts/shortlist-sim/report/report'
-import { mulberry32 } from '../../../../scripts/shortlist-sim/stats/prng'
+import { rng } from '../../../../scripts/shortlist-sim/common/rng'
 
 const SCORERS = [
   { id: 'tier1', label: 'Tier 1 candidates', base: 12 },
@@ -23,7 +23,7 @@ const SCORERS = [
 ]
 
 function synthResults(genes: number, seed: number): CaseResult[] {
-  const rnd = mulberry32(seed)
+  const rnd = rng(seed)
   const out: CaseResult[] = []
   for (let g = 0; g < genes; g++) {
     const mode = CASE_MODES[g % 3] // AD, AR_HOM, AR_COMPHET; XLD stays below 30 cases

@@ -211,7 +211,7 @@ const numericInitialIncludeEmpty = computed<boolean>(() => {
 
 const categoricalInitialSelected = computed<string[]>(() => {
   if (props.currentFilter && props.filterMode === 'categorical') {
-    return Array.isArray(props.currentFilter.value) ? props.currentFilter.value : []
+    return Array.isArray(props.currentFilter.value) ? props.currentFilter.value.map(String) : []
   }
   return []
 })

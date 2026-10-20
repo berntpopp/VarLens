@@ -11,6 +11,7 @@ import type { StorageCapabilities } from '../../../shared/types/storage-capabili
 import { mockReferenceServicesApi } from './referenceServicesMock'
 import { mockHpoDataApi } from './hpoDataMock'
 import { mockPanelResolutionStatus } from './panelResolutionMock'
+import { mockPresetsApi, resetMockPresets } from './presetsMock'
 import {
   addMockCarrier,
   mockAvailableBuilds,
@@ -27,10 +28,22 @@ import { mockVariants, mockFilterOptions } from './fixtures/variants'
 
 // Mutable state for interactive development
 let cases = [...mockCases]
-const variants = [...mockVariants]
+let variants = [...mockVariants]
+
 // Drop matching mock cases; returns how many were removed.
-const removeCases = (match: (id: number) => boolean): number =>
-  cases.length - (cases = cases.filter((c) => !match(c.id))).length
+const removeCases = (match: (id: number) => boolean): number => {
+  const prevLen = cases.length
+  cases = cases.filter((c) => !match(c.id))
+  const survivingIds = new Set(cases.map((c) => c.id))
+  variants = variants.filter((v) => survivingIds.has(v.case_id))
+  return prevLen - cases.length
+}
+
+export function resetMockData(): void {
+  cases = [...mockCases]
+  variants = [...mockVariants]
+  resetMockPresets()
+}
 
 export const MOCK_SQLITE_CAPABILITIES: StorageCapabilities = {
   backend: 'sqlite',
@@ -347,27 +360,24 @@ export const mockApi: WindowAPI = {
     recentList: async () => [
       { path: '/mock/database.db', name: 'Mock Database', lastOpened: Date.now() }
     ],
-    getOverview: async () => ({
-      summary: {
-        total_cases: 0,
-        total_variants: 0,
-        unique_variants: 0,
-        avg_variants_per_case: 0,
-        genes_with_variants: 0,
-        starred_variants: 0,
-        acmg_counts: {
-          pathogenic: 0,
-          likely_pathogenic: 0,
-          vus: 0,
-          likely_benign: 0,
-          benign: 0
-        }
-      },
-      cases: [],
-      cohortGroups: [],
-      tags: [],
-      topPhenotypes: []
-    }),
+    getOverview: async () => {
+      const casesList = cases.map((c) => ({
+        id: c.id,
+        name: c.name,
+        variant_count: variants.filter((v) => v.case_id === c.id).length,
+        created_at: c.created_at,
+        affected_status: null
+      }))
+      const summaryResult = await mockApi.cohort.getSummary()
+      if ('code' in summaryResult) return summaryResult
+      return {
+        summary: summaryResult,
+        cases: casesList,
+        cohortGroups: [],
+        tags: [],
+        topPhenotypes: []
+      }
+    },
     removeRecent: async () => ({ success: true }),
     deleteFile: async () => ({ success: true }),
     showInFolder: async () => ({ success: true })
@@ -743,6 +753,9 @@ export const mockApi: WindowAPI = {
       created_at: Date.now(),
       updated_at: Date.now()
     }),
+    batchUpsertPerCase: async (_caseId, variantIds) => ({
+      updatedCount: variantIds.length
+    }),
     deletePerCase: async () => {},
     getForVariant: async () => ({ global: null, perCase: null }),
     batchGet: async () => ({})
@@ -1107,35 +1120,7 @@ export const mockApi: WindowAPI = {
     changePassword: async () => {}
   },
 
-  presets: {
-    list: async () => [],
-    create: async (params) => ({
-      id: 1,
-      name: params.name,
-      description: params.description ?? null,
-      filterJson: params.filterJson,
-      kind: params.kind ?? 'filter',
-      isBuiltIn: false,
-      isVisible: true,
-      sortOrder: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }),
-    update: async (_id, updates) => ({
-      id: _id,
-      name: updates.name ?? 'Preset',
-      description: updates.description ?? null,
-      filterJson: updates.filterJson ?? {},
-      kind: updates.kind ?? 'filter',
-      isBuiltIn: false,
-      isVisible: updates.isVisible ?? true,
-      sortOrder: updates.sortOrder ?? 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }),
-    delete: async () => {},
-    reorder: async () => {}
-  },
+  presets: mockPresetsApi,
 
   analysisGroups: {
     list: async () => [],

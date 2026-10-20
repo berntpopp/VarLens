@@ -15,6 +15,10 @@ export const APP_CONFIG = {
   SNACKBAR_SUCCESS_MS: 3000,
   /** Snackbar timeout for error messages (-1 = manual close) */
   SNACKBAR_ERROR_MS: -1,
+  /** Max variants per bulk triage write (UI selection cap and IPC schema limit) */
+  BULK_TRIAGE_MAX: 1000,
+  /** Arrow-key pause (ms) before an open details panel follows the selected row */
+  DETAILS_LIVE_SYNC_MS: 100,
   /** Default items-per-page options */
   ITEMS_PER_PAGE_OPTIONS: [10, 25, 50, 100] as readonly number[],
   /** External URLs */

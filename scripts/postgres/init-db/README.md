@@ -8,12 +8,12 @@ Runtime PostgreSQL schema creation is owned by
 Docker bootstrap compatibility and must not be updated independently from
 migrations.
 
-They run only when Docker initializes a fresh `varlens_postgres_data` volume.
+They run only when Docker initializes a fresh `varlens_pg16_data` volume.
 If the named volume already exists, PostgreSQL skips these scripts on startup.
 
-The Compose file mounts the named volume at `/var/lib/postgresql`, not
-`/var/lib/postgresql/data`. PostgreSQL 18's Docker image expects that parent
-mount layout so it can manage the versioned data directory correctly.
+The Compose file mounts `varlens_pg16_data` at `/var/lib/postgresql/data`, matching
+the PostgreSQL 16 default `PGDATA` directory layout. Any old `varlens_postgres_data`
+volume holds PG18 data; dump it with a `postgres:18` container, or `docker volume rm` it.
 
 VarLens uses a nonstandard default host port for local PostgreSQL development.
 The checked-in example sets `VARLENS_PG_PORT=55432` so multiple projects can run

@@ -83,12 +83,12 @@ export const encodeInteger: CopyColumnEncoder = (value) => {
 export const encodeFloat: CopyColumnEncoder = (value) => {
   if (value === null || value === undefined) return NULL_TOKEN
   if (typeof value === 'number') {
-    if (Number.isNaN(value)) return 'NaN'
-    if (value === Infinity) return 'Infinity'
-    if (value === -Infinity) return '-Infinity'
+    if (!Number.isFinite(value)) return NULL_TOKEN
     return String(value)
   }
-  return String(value)
+  const trimmed = String(value).trim()
+  if (trimmed === '' || trimmed === '.') return NULL_TOKEN
+  return Number.isFinite(Number(trimmed)) ? trimmed : NULL_TOKEN
 }
 
 export interface CopyColumn {

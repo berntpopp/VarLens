@@ -131,6 +131,35 @@
               }}
             </v-tooltip>
           </v-btn>
+
+          <v-menu v-if="showSignOut">
+            <template #activator="{ props: signOutMenuProps }">
+              <v-btn
+                v-bind="signOutMenuProps"
+                :loading="copyingSignOut"
+                variant="tonal"
+                data-testid="copy-sign-out-menu"
+              >
+                <v-icon start size="small" :icon="mdiClipboardTextOutline" />
+                Copy Sign-Out
+                <v-tooltip activator="parent" location="bottom">
+                  Copy starred and pathogenic variants for report sign-out
+                </v-tooltip>
+              </v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item
+                title="Copy as Markdown table"
+                data-testid="copy-sign-out-markdown"
+                @click="emit('copy-sign-out', 'markdown')"
+              />
+              <v-list-item
+                title="Copy as TSV (Spreadsheet)"
+                data-testid="copy-sign-out-tsv"
+                @click="emit('copy-sign-out', 'tsv')"
+              />
+            </v-list>
+          </v-menu>
         </template>
 
         <!-- At narrow widths: overflow menu -->
@@ -172,6 +201,22 @@
               :disabled="filteredCount === 0 || exportBlockedReason != null"
               @click="emit('export')"
             />
+            <template v-if="showSignOut">
+              <v-list-item
+                :prepend-icon="mdiClipboardTextOutline"
+                title="Copy Sign-Out (Markdown)"
+                :disabled="copyingSignOut"
+                data-testid="overflow-copy-sign-out-markdown"
+                @click="emit('copy-sign-out', 'markdown')"
+              />
+              <v-list-item
+                :prepend-icon="mdiClipboardTextOutline"
+                title="Copy Sign-Out (TSV)"
+                :disabled="copyingSignOut"
+                data-testid="overflow-copy-sign-out-tsv"
+                @click="emit('copy-sign-out', 'tsv')"
+              />
+            </template>
           </v-list>
         </v-menu>
       </v-toolbar>
@@ -235,6 +280,7 @@ import { FILTER_TOOLBAR_COPY } from '../config/uiCopyConfig'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
 import PanelUnmappedGenesWarning from './panels/PanelUnmappedGenesWarning.vue'
 import {
+  mdiClipboardTextOutline,
   mdiDotsVertical,
   mdiFilterCheck,
   mdiFilterOff,
@@ -268,6 +314,9 @@ interface Props {
   exportBlockedReason?: string | null
   /** Offer a CSV / Excel choice (web: the browser download has no save dialog). */
   exportFormats?: boolean
+  /** Whether copying sign-out table is in progress */
+  copyingSignOut?: boolean
+  showSignOut?: boolean
 }
 
 const EXPORT_FORMAT_OPTIONS = [
@@ -302,6 +351,7 @@ const emit = defineEmits<{
   'open-filter-drawer': []
   'open-columns-drawer': []
   export: [format?: 'csv' | 'xlsx']
+  'copy-sign-out': [format: 'markdown' | 'tsv']
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)

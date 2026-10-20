@@ -16,8 +16,9 @@ vi.mock('../../../../src/main/utils/url-validation', () => ({
   isUrlSafeForExternal: vi.fn(() => true)
 }))
 
+import { shell } from 'electron'
 import { registerShellHandlers } from '../../../../src/main/ipc/handlers/shell'
-import { setUserDomains } from '../../../../src/main/utils/url-validation'
+import { setUserDomains, isUrlSafeForExternal } from '../../../../src/main/utils/url-validation'
 
 type HandlerCallback = (event: unknown, ...args: unknown[]) => Promise<unknown>
 
@@ -63,6 +64,44 @@ describe('shell IPC handlers', () => {
       expect(result.code).toBe(ErrorCode.UNKNOWN)
     }
     expect(setUserDomains).not.toHaveBeenCalled()
+  })
+
+  it('opens external URL and returns { success: true } when valid and safe', async () => {
+    vi.mocked(isUrlSafeForExternal).mockReturnValueOnce(true)
+    const ipcMain = makeIpcMain()
+    registerShellHandlers({ ipcMain } as never)
+
+    const result = await invokeHandler(ipcMain, 'shell:openExternal', 'https://example.org')
+
+    expect(result).toEqual({ success: true })
+    expect(shell.openExternal).toHaveBeenCalledWith('https://example.org')
+  })
+
+  it('returns an IPC error when shell:openExternal receives an unsafe URL', async () => {
+    vi.mocked(isUrlSafeForExternal).mockReturnValueOnce(false)
+    const ipcMain = makeIpcMain()
+    registerShellHandlers({ ipcMain } as never)
+
+    const result = await invokeHandler(ipcMain, 'shell:openExternal', 'http://untrusted-site.com')
+
+    expect(isIpcError(result)).toBe(true)
+    if (isIpcError(result)) {
+      expect(result.message).toBe('URL not allowed')
+    }
+    expect(shell.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('returns an IPC error when shell:openExternal receives invalid params', async () => {
+    const ipcMain = makeIpcMain()
+    registerShellHandlers({ ipcMain } as never)
+
+    const result = await invokeHandler(ipcMain, 'shell:openExternal', 12345)
+
+    expect(isIpcError(result)).toBe(true)
+    if (isIpcError(result)) {
+      expect(result.message).toBe('Invalid parameters')
+    }
+    expect(shell.openExternal).not.toHaveBeenCalled()
   })
 
   it('does not expose a generic file-reveal channel', () => {

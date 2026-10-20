@@ -15,3 +15,5 @@
 !scripts/web/**
 !resources/
 !resources/gene_reference.db
+!resources/brand/
+!resources/brand/**

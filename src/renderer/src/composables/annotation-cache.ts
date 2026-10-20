@@ -1,11 +1,6 @@
 /**
  * Module-level annotation cache shared by every `useAnnotations()` caller.
- *
- * Owns the LRU cache, the per-variant loading flags, the stale-request
- * generation counter and the db/case/build scope tracking that clears stale
- * data when the user switches database, case or genome build. Global
- * annotations are keyed by build (#577): entries of one build are never
- * served to a view of another.
+ * Owns the LRU cache, loading flags, generation counters and db/case/build scope tracking.
  */
 
 import { shallowRef, triggerRef } from 'vue'
@@ -21,7 +16,90 @@ export interface AnnotationCache {
   perCase: CaseVariantAnnotation | null
 }
 
+export * from './annotation-mutation-tracker'
+import {
+  allocateLoadSeq,
+  clearMutationTracker,
+  cleanupUnloadedPerCaseVariant,
+  resetMutationTracker,
+  getPerCaseSlotOwner,
+  perCaseSlotKey,
+  perCaseByVariantId,
+  loadedPerCaseByVariantId,
+  type SlotValue,
+  type SlotPatch,
+  perCaseSlotOwners,
+  inFlightMutations,
+  deletePerCaseForCoordKey,
+  bumpCaseVariantVersion,
+  deleteLoadingVariantId,
+  markLoadSeqAccepted,
+  reconcileBulkTriageKey,
+  retireCaseVariantTracking,
+  retireCoordLoadSeqs
+} from './annotation-mutation-tracker'
+
 export type AnnotationSlot = keyof AnnotationCache
+
+export function otherSlot(slot: AnnotationSlot): AnnotationSlot {
+  return slot === 'perCase' ? 'global' : 'perCase'
+}
+
+export function readSlot(
+  entry: AnnotationCache,
+  slot: AnnotationSlot | { kind: 'case' | 'global' }
+): SlotValue | null {
+  return (typeof slot === 'string' ? slot : slotOf(slot)) === 'perCase'
+    ? entry.perCase
+    : entry.global
+}
+
+export function writeSlot(
+  entry: AnnotationCache,
+  slot: AnnotationSlot | { kind: 'case' | 'global' },
+  value: SlotValue | null
+): void {
+  if ((typeof slot === 'string' ? slot : slotOf(slot)) === 'perCase') {
+    entry.perCase = value as CaseVariantAnnotation | null
+  } else {
+    entry.global = value as VariantAnnotation | null
+  }
+}
+
+export function slotOf(scope: { kind: 'case' | 'global' }): AnnotationSlot {
+  return scope.kind === 'case' ? 'perCase' : 'global'
+}
+
+export function slotIdentity(
+  scope: { kind: 'case'; caseId: number; variantId: number } | { kind: 'global' }
+): SlotPatch {
+  return scope.kind === 'case' ? { case_id: scope.caseId, variant_id: scope.variantId } : {}
+}
+
+export function mergeServerSlot(
+  current: AnnotationCache | undefined,
+  scope: { kind: 'case' | 'global' },
+  updated: SlotValue
+): AnnotationCache {
+  return scope.kind === 'case'
+    ? { global: current?.global ?? null, perCase: updated as CaseVariantAnnotation }
+    : { global: updated as VariantAnnotation, perCase: current?.perCase ?? null }
+}
+
+export function rollBackSlot(
+  current: AnnotationCache,
+  scope: { kind: 'case'; caseId: number; variantId: number } | { kind: 'global' },
+  rollback: SlotPatch | 'restore-previous',
+  base: SlotValue | null
+): void {
+  const value =
+    rollback === 'restore-previous'
+      ? base
+      : base === null
+        ? ({ ...slotIdentity(scope), ...rollback } as SlotValue)
+        : ({ ...readSlot(current, scope), ...rollback } as SlotValue)
+  writeSlot(current, scope, value)
+}
 
 export interface VariantCoords {
   chr: string
@@ -36,8 +114,19 @@ export const MAX_CACHE_SIZE = 5000
 // Cache annotations by variant key (chr:pos:ref:alt)
 // shallowRef avoids deep reactive proxies on 5000+ Map entries
 // Exported so useVariantRowViewModel can read it for precomputed row state
-const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE)
+const lruCache = new LruMap<string, AnnotationCache>(MAX_CACHE_SIZE, (key) => dropKeyState(key))
 export const annotationCache = shallowRef<LruMap<string, AnnotationCache>>(lruCache)
+
+// Tracks variant_id mapped to cache key, including for entries whose perCase slot is null
+const cachedVariantIds = new Map<string, number>()
+
+export function getCachedVariantId(key: string): number | undefined {
+  return annotationCache.value.get(key)?.perCase?.variant_id ?? cachedVariantIds.get(key)
+}
+
+export function setCachedVariantId(key: string, variantId: number): void {
+  cachedVariantIds.set(key, variantId)
+}
 
 // Loading states per variant key
 const loadingStates = shallowRef<Map<string, boolean>>(new Map())
@@ -70,6 +159,11 @@ export function variantKey({ chr, pos, ref, alt }: VariantCoords): string {
 let pendingCacheTrigger = false
 export function cacheSet(key: string, value: AnnotationCache, unloaded?: AnnotationSlot): void {
   annotationCache.value.set(key, value)
+  if (value.perCase && typeof value.perCase.variant_id === 'number') {
+    cachedVariantIds.set(key, value.perCase.variant_id)
+  } else if (unloaded === 'perCase') {
+    cachedVariantIds.delete(key)
+  }
   if (unloaded === undefined) unloadedSlots.delete(key)
   else rememberUnloadedSlot(key, unloaded)
   if (!pendingCacheTrigger) {
@@ -86,15 +180,8 @@ export function triggerAnnotationCache(): void {
   triggerRef(annotationCache)
 }
 
-// The cohort table (global scope) and the case table (per-case scope) share
-// this cache. An entry is not always filled for both: a global load or write
-// knows nothing about the per-case slot, and a per-case write on a row that
-// was never loaded knows nothing about the global one. The slot that was never
-// fetched holds `null` like a real "no annotation", so it is tracked here —
-// otherwise the other table would take the entry as loaded and never ask.
-// Entries without a mark (including ones set directly on the map) are complete.
+// Tracks un-fetched slots so views know whether an entry is complete.
 const unloadedSlots = new Map<string, AnnotationSlot>()
-// Keys whose in-flight request will only bring the global slot.
 const globalOnlyLoading = new Set<string>()
 
 function rememberUnloadedSlot(key: string, slot: AnnotationSlot): void {
@@ -112,13 +199,8 @@ export function unloadedSlotOf(key: string): AnnotationSlot | undefined {
   return annotationCache.value.has(key) ? unloadedSlots.get(key) : undefined
 }
 
-/**
- * Store the result of a global load. It only knows the global slot, so a
- * per-case slot the cache already holds is kept.
- */
 export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null): void {
-  const cache = annotationCache.value
-  const existing = cache.has(key) ? cache.get(key) : undefined
+  const existing = annotationCache.value.get(key)
   const perCaseKnown = existing !== undefined && unloadedSlots.get(key) !== 'perCase'
   cacheSet(
     key,
@@ -127,21 +209,83 @@ export function cacheSetGlobalSlot(key: string, global: VariantAnnotation | null
   )
 }
 
-/** Set loading state and trigger shallowRef reactivity. */
-export function setLoading(key: string, value: boolean, kind: AnnotationBatchKind = 'case'): void {
+export function cacheSetPerCaseSlot(
+  key: string,
+  perCase: CaseVariantAnnotation | null,
+  requestedVariantId?: number
+): void {
+  const existing = annotationCache.value.get(key)
+  const globalKnown = existing !== undefined && unloadedSlots.get(key) !== 'global'
+  cacheSet(key, { global: existing?.global ?? null, perCase }, globalKnown ? undefined : 'global')
+  if (
+    requestedVariantId !== undefined &&
+    (perCase === null || perCase.variant_id === requestedVariantId)
+  ) {
+    cachedVariantIds.set(key, requestedVariantId)
+  }
+}
+
+let nextLoadingToken = 0
+const loadingTokens = new Map<string, number>()
+const activeKeyLoads = new Map<string, number>()
+
+/** Set loading state and trigger shallowRef reactivity. Returns loading token if set true. */
+export function setLoading(
+  key: string,
+  value: boolean,
+  kind: AnnotationBatchKind = 'case',
+  token?: number
+): number {
   if (value) {
+    const next = ++nextLoadingToken
+    activeKeyLoads.set(key, (activeKeyLoads.get(key) ?? 0) + 1)
     loadingStates.value.set(key, true)
+    loadingTokens.set(key, next)
     if (kind === 'global') globalOnlyLoading.add(key)
     else globalOnlyLoading.delete(key)
-  } else {
-    loadingStates.value.delete(key)
-    globalOnlyLoading.delete(key)
+    triggerRef(loadingStates)
+    return next
   }
+  const rem = (activeKeyLoads.get(key) ?? 1) - 1
+  if (rem > 0) activeKeyLoads.set(key, rem)
+  else {
+    activeKeyLoads.delete(key)
+    if (!annotationCache.value.has(key)) {
+      keyVersions.delete(key)
+      retireCoordLoadSeqs(key)
+    }
+  }
+  if (token !== undefined && loadingTokens.get(key) !== token) return 0
+  loadingStates.value.delete(key)
+  loadingTokens.delete(key)
+  deleteLoadingVariantId(key)
+  globalOnlyLoading.delete(key)
   triggerRef(loadingStates)
+  return 0
 }
 
 export function isKeyLoading(key: string): boolean {
   return loadingStates.value.get(key) ?? false
+}
+
+const loadingCaseVariants = new Map<string, number>()
+
+export function isLoadingCaseVariant(caseId: number, variantId: number): boolean {
+  return (loadingCaseVariants.get(`${caseId}:${variantId}`) ?? 0) > 0
+}
+
+export function setLoadingCaseVariant(caseId: number, variantId: number, loading: boolean): void {
+  const k = `${caseId}:${variantId}`
+  if (loading) {
+    loadingCaseVariants.set(k, (loadingCaseVariants.get(k) ?? 0) + 1)
+  } else {
+    const rem = (loadingCaseVariants.get(k) ?? 1) - 1
+    if (rem > 0) loadingCaseVariants.set(k, rem)
+    else {
+      loadingCaseVariants.delete(k)
+      if (!perCaseByVariantId.has(k)) retireCaseVariantTracking(caseId, variantId)
+    }
+  }
 }
 
 /**
@@ -158,72 +302,72 @@ export function needsLoad(key: string, kind: AnnotationBatchKind): boolean {
   return kind === 'case' || unloaded === 'global'
 }
 
-export function invalidateAnnotationGeneration(kind: AnnotationBatchKind): void {
-  annotationGenerations[kind]++
-}
+export const invalidateAnnotationGeneration = (kind: AnnotationBatchKind): void =>
+  void annotationGenerations[kind]++
+export const getAnnotationGeneration = (kind: AnnotationBatchKind): number =>
+  annotationGenerations[kind]
 
-export function getAnnotationGeneration(kind: AnnotationBatchKind): number {
-  return annotationGenerations[kind]
-}
+const awaitedKeys: Record<AnnotationBatchKind, Set<string>> = { case: new Set(), global: new Set() }
+export const markAwaited = (kind: AnnotationBatchKind, key: string): void =>
+  void awaitedKeys[kind].add(key)
+export const takeAwaited = (kind: AnnotationBatchKind, key: string): boolean =>
+  awaitedKeys[kind].delete(key)
 
-// Keys a batch load skipped because an earlier batch already had them in
-// flight. If that earlier batch turns out to be from a previous page it is
-// discarded — except for these keys, which the current page is waiting for.
-const awaitedKeys: Record<AnnotationBatchKind, Set<string>> = {
-  case: new Set(),
-  global: new Set()
-}
-
-/** Record that the current page of `kind` relies on an in-flight request for `key`. */
-export function markAwaited(kind: AnnotationBatchKind, key: string): void {
-  awaitedKeys[kind].add(key)
-}
-
-/** True (once) when the current page of `kind` is waiting for `key`. */
-export function takeAwaited(kind: AnnotationBatchKind, key: string): boolean {
-  return awaitedKeys[kind].delete(key)
-}
-
-// Incremented every time the cache is emptied. A request that captured an
-// older epoch started against entries that no longer exist.
 let cacheEpoch = 0
+export const getAnnotationCacheEpoch = (): number => cacheEpoch
 
-export function getAnnotationCacheEpoch(): number {
-  return cacheEpoch
+let evictionEpoch = 0
+const keyVersions = new Map<string, number>()
+export const getKeyVersion = (key: string): number =>
+  evictionEpoch * 1_000_000 + (keyVersions.get(key) ?? 0)
+export const bumpKeyVersion = (key: string): void => {
+  keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+}
+
+export function getPerCaseByVariantId(
+  caseId: number,
+  variantId: number,
+  coordKey?: string
+): CaseVariantAnnotation | null | undefined {
+  void annotationCache.value
+  const k = `${caseId}:${variantId}`
+  if (perCaseByVariantId.has(k)) return perCaseByVariantId.get(k)
+  if (typeof coordKey === 'string' && coordKey.length > 0) {
+    const cached = annotationCache.value.get(coordKey)?.perCase
+    if (cached != null && cached.case_id === caseId && cached.variant_id === variantId) {
+      return cached
+    }
+  }
+  return undefined
 }
 
 /** Drop every cached entry, loading flag and pending expectation, and notify. */
 function clearEntries(): void {
   cacheEpoch++
+  evictionEpoch++
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens, activeKeyLoads, unloadedSlots])
+    m.clear()
+  clearMutationTracker()
   annotationCache.value.clear()
   loadingStates.value.clear()
-  unloadedSlots.clear()
+  loadingCaseVariants.clear()
   globalOnlyLoading.clear()
   awaitedKeys.case.clear()
   awaitedKeys.global.clear()
   triggerRef(annotationCache)
-  triggerRef(loadingStates)
 }
 
-/**
- * Get current database path safely (returns null if Pinia not available,
- * e.g. in unit tests without a store setup).
- */
-function getCurrentDbPath(): string | null {
+/** Get current database path safely (returns null if Pinia not available). */
+export function getCurrentDbPath(): string | null {
   try {
     const db = useDatabaseStore()
     return db.currentPath
   } catch {
-    // Pinia not available (e.g. in unit tests without store setup)
     return null
   }
 }
 
-/**
- * Check if the scope (dbPath + caseId) has changed and clear cache if so.
- * Called before cache reads/writes to ensure stale data from a previous
- * database or case is never served.
- */
+/** Check if the scope (dbPath + caseId + build) has changed and clear cache if so. */
 function ensureScopeOrClear(
   dbPath: string | null,
   caseId: number | null,
@@ -232,20 +376,19 @@ function ensureScopeOrClear(
   const dbChanged = dbPath !== null && lastDbPath !== null && dbPath !== lastDbPath
   const caseChanged = caseId !== null && lastCaseId !== null && caseId !== lastCaseId
   const buildChanged = build !== null && lastBuild !== null && build !== lastBuild
-  // A case whose build is not known yet must not read entries of a known build.
   const buildUnknown = caseId !== null && build === null && lastBuild !== null
 
-  if (dbChanged || caseChanged || buildChanged || buildUnknown) clearEntries()
+  if (dbChanged || caseChanged || buildChanged || buildUnknown) {
+    clearEntries()
+    if (caseId === null) lastCaseId = null
+  }
 
   if (dbPath !== null) lastDbPath = dbPath
   if (caseId !== null) lastCaseId = caseId
   if (build !== null || buildUnknown) lastBuild = build
 }
 
-/**
- * Start a request for the given case (null = global scope): clears the cache
- * if the db/case changed and returns the database path the request belongs to.
- */
+/** Start a request: clears the cache if scope changed and returns db path. */
 export function beginAnnotationRequest(
   caseId: number | null,
   build: string | null = null
@@ -255,30 +398,137 @@ export function beginAnnotationRequest(
   return dbPath
 }
 
-/** False while the cache holds another build's entries (a view of `build` must not read them). */
+/** False while the cache holds another build's entries. */
 export function isCacheOfBuild(build: string | null): boolean {
   return build === null || lastBuild === null || lastBuild === build
 }
 
-/**
- * Empty the cache now if it still holds entries of a database that is no
- * longer open. A request does this on its way in; a response that finds the
- * database switched under it must do the same, or its optimistic value would
- * keep being served until the next request.
- */
-export function dropCacheOfClosedDatabase(): void {
-  ensureScopeOrClear(getCurrentDbPath(), null)
-}
-
-/** Guard against a database switch while a request was awaiting. */
-export function hasDbSwitchedSince(requestDbPath: string | null): boolean {
+export const getCachedBuild = (): string | null => lastBuild
+export const getCachedCaseId = (): number | null => lastCaseId
+export const dropCacheOfClosedDatabase = (): void => ensureScopeOrClear(getCurrentDbPath(), null)
+export const hasDbSwitchedSince = (requestDbPath: string | null): boolean => {
   const currentDbPath = getCurrentDbPath()
   return currentDbPath !== null && requestDbPath !== null && currentDbPath !== requestDbPath
 }
+export const isTrackedCase = (caseId: number): boolean => lastCaseId === caseId
 
-/** Guard against a case switch while a per-case request was awaiting. */
-export function isTrackedCase(caseId: number): boolean {
-  return lastCaseId === caseId
+export function shouldKeepVariantLoadGuard(
+  key: string,
+  caseId: number,
+  variantId: number
+): boolean {
+  return isLoadingCaseVariant(caseId, variantId) || (activeKeyLoads.get(key) ?? 0) > 0
+}
+
+function dropKeyMetadata(key: string): void {
+  if ((activeKeyLoads.get(key) ?? 0) > 0) {
+    keyVersions.set(key, (keyVersions.get(key) ?? 0) + 1)
+    markLoadSeqAccepted(`case:${key}`, allocateLoadSeq())
+    markLoadSeqAccepted(`global:${key}`, allocateLoadSeq())
+  } else {
+    keyVersions.delete(key)
+    retireCoordLoadSeqs(key)
+  }
+  cachedVariantIds.delete(key)
+  deleteLoadingVariantId(key)
+  loadingStates.value.delete(key)
+  loadingTokens.delete(key)
+  unloadedSlots.delete(key)
+  globalOnlyLoading.delete(key)
+  awaitedKeys.case.delete(key)
+  awaitedKeys.global.delete(key)
+}
+
+function dropKeyState(key: string): void {
+  dropKeyMetadata(key)
+  deletePerCaseForCoordKey(key, (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid))
+  perCaseSlotOwners.delete(key)
+}
+
+/** Evict specific variant keys from the cache while preserving unrelated entries. */
+export function evictAnnotationCacheKeys(keys: Iterable<string>): void {
+  let changed = false
+  for (const key of keys) {
+    if (annotationCache.value.delete(key)) changed = true
+    dropKeyState(key)
+  }
+  if (changed) triggerRef(annotationCache)
+}
+
+/** Evict a single perCase variant entry without dropping sibling variant data. */
+export function evictPerCaseVariant(caseId: number, variantId: number, key: string): void {
+  const k = `${caseId}:${variantId}`
+  loadedPerCaseByVariantId.delete(k)
+  const hasInFlight =
+    (inFlightMutations.get(perCaseSlotKey(caseId, variantId, key))?.length ?? 0) > 0
+  if (!hasInFlight) {
+    cleanupUnloadedPerCaseVariant(key, caseId, variantId, (cid, vid) =>
+      shouldKeepVariantLoadGuard(key, cid, vid)
+    )
+  } else {
+    bumpCaseVariantVersion(caseId, variantId)
+  }
+  if (
+    cachedVariantIds.get(key) === variantId ||
+    annotationCache.value.get(key)?.perCase?.variant_id === variantId
+  ) {
+    if (annotationCache.value.delete(key)) triggerRef(annotationCache)
+    dropKeyMetadata(key)
+    if (!hasInFlight) perCaseSlotOwners.delete(key)
+  }
+}
+
+/** Evict only the coordinate slot in annotationCache without touching perCaseByVariantId. */
+export function evictCoordSlotOnly(key: string): void {
+  if (annotationCache.value.delete(key)) triggerRef(annotationCache)
+  dropKeyMetadata(key)
+  const owner = perCaseSlotOwners.get(key)
+  const hasInFlight =
+    owner !== undefined &&
+    (inFlightMutations.get(perCaseSlotKey(owner.caseId, owner.variantId, key))?.length ?? 0) > 0
+  if (!hasInFlight) perCaseSlotOwners.delete(key)
+}
+
+/** Evict keys for bulk triage while preserving newer and untouched single-row mutations. */
+export function evictAnnotationCacheKeysForBulkTriage(
+  affectedKeys: Iterable<string>,
+  touchedFields: Array<'star' | 'acmg' | 'comment'>,
+  bulkWriteVersions: Map<string, Map<string, number>>,
+  bulkUpdates?: Record<string, unknown> | object,
+  bulkOwners?: Map<
+    string,
+    { caseId: number; variantId: number } | Array<{ caseId: number; variantId: number }>
+  >,
+  fromCurrentEpoch: boolean = true
+): void {
+  let changed = false
+  const updates = bulkUpdates as Record<string, unknown> | undefined
+  for (const key of affectedKeys) {
+    const hasInFlightForKey = Array.from(inFlightMutations.keys()).some((sk) =>
+      sk.endsWith(`:${key}`)
+    )
+    if (fromCurrentEpoch || !hasInFlightForKey) {
+      if (annotationCache.value.delete(key)) changed = true
+      dropKeyMetadata(key)
+    }
+    const rawOwners = bulkOwners?.get(key) ?? getPerCaseSlotOwner(key)
+    const owners: Array<{ caseId: number; variantId: number }> = Array.isArray(rawOwners)
+      ? rawOwners
+      : rawOwners
+        ? [rawOwners]
+        : []
+    reconcileBulkTriageKey(
+      key,
+      touchedFields,
+      bulkWriteVersions,
+      updates,
+      owners,
+      fromCurrentEpoch,
+      hasInFlightForKey,
+      (cid, vid) => shouldKeepVariantLoadGuard(key, cid, vid)
+    )
+  }
+  if (changed) triggerRef(annotationCache)
 }
 
 /** Clear cache and forget the tracked scope (call on case switch). */
@@ -292,6 +542,12 @@ export function clearAnnotationCache(): void {
 /** Full reset including the generation counters — test isolation only. */
 export function resetAnnotationState(): void {
   clearAnnotationCache()
+  resetMutationTracker()
+  cacheEpoch = 0
+  evictionEpoch = 0
+  nextLoadingToken = 0
+  for (const m of [keyVersions, cachedVariantIds, loadingTokens, activeKeyLoads]) m.clear()
+  loadingCaseVariants.clear()
   annotationGenerations.case = 0
   annotationGenerations.global = 0
 }

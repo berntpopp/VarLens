@@ -129,23 +129,32 @@ const DISABLED_CALLS: Array<{ key: string; args: unknown[]; service: string; ide
   ]
 
 describe('web reference services egress policy', () => {
-  test('policy defaults to every service off; malformed stored JSON stays off', () => {
-    expect(Object.values(defaultExternalLookupPolicy().services).every((v) => v === false)).toBe(
-      true
-    )
+  test('policy defaults to protein and gnomad on, other services off; malformed stored JSON keeps defaults', () => {
+    expect(defaultExternalLookupPolicy().services).toEqual({
+      vep: false,
+      myvariant: false,
+      spliceai: false,
+      gnomad: true,
+      protein: true,
+      panelapp: false,
+      stringdb: false
+    })
     expect(parseExternalLookupPolicy('not json').services.vep).toBe(false)
+    expect(parseExternalLookupPolicy('not json').services.protein).toBe(true)
+    expect(parseExternalLookupPolicy('not json').services.gnomad).toBe(true)
     expect(
       parseExternalLookupPolicy(JSON.stringify({ services: { vep: true, bogus: true } })).services
-    ).toMatchObject({ vep: true, myvariant: false })
+    ).toMatchObject({ vep: true, myvariant: false, protein: true, gnomad: true })
     expect(
-      parseExternalLookupPolicy(JSON.stringify({ services: { vep: 'yes' } })).services.vep
-    ).toBe(false)
+      parseExternalLookupPolicy(JSON.stringify({ services: { vep: 'yes', protein: false } }))
+        .services
+    ).toMatchObject({ vep: false, protein: false })
   })
 
   test.each(DISABLED_CALLS)(
     '$key with $service disabled: 403 + reason, no outbound request, audited as blocked',
     async ({ key, args, service, identifier }) => {
-      const { call, auditRows } = harness()
+      const { call, auditRows } = harness({ protein: false, gnomad: false })
       const { result, reply } = await call(key, args)
 
       expect(reply.code).toHaveBeenCalledWith(403)
@@ -219,7 +228,7 @@ describe('web reference services egress policy', () => {
     expect(auditRows()).toEqual([])
   })
 
-  test('status is readable by any user and lists every service off by default', async () => {
+  test('status is readable by any user and lists protein and gnomad on by default', async () => {
     const { call } = harness()
     const { result } = await call('reference-services:status', [])
     const status = result as {
@@ -238,7 +247,13 @@ describe('web reference services egress policy', () => {
       'panelapp',
       'stringdb'
     ])
-    expect(status.services.every((s) => !s.enabled && s.reason !== null)).toBe(true)
+    expect(
+      status.services.every((s) =>
+        s.id === 'protein' || s.id === 'gnomad'
+          ? s.enabled && s.reason === null
+          : !s.enabled && s.reason !== null
+      )
+    ).toBe(true)
   })
 
   test('setPolicy is admin-only, validated, persisted and audited', async () => {

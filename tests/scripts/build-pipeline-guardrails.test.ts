@@ -148,17 +148,26 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
   })
 
   test('keys native caches on runtime, Node ABI, os, arch, Electron and the native module version without partial restores', () => {
-    // Task 7 (build.yml, web-ci.yml, publish-web.yml, docs.yml) and release.yml
+    // Task 7 (build.yml, web-ci.yml, publish-web.yml, docs.yml, setup-web-ci action) and release.yml
     // (which must have none — it promotes build.yml's artifacts, it never
     // rebuilds) are all scanned. A per-file "at least one" minimum would be
     // wrong here because release.yml legitimately has zero; the vacuous-pass
     // guard below is instead "at least one across the whole set", with
     // release.yml's zero asserted separately and explicitly further down.
-    const workflowNames = ['build.yml', 'web-ci.yml', 'publish-web.yml', 'docs.yml', 'release.yml']
+    const targets = [
+      { name: 'build.yml', yaml: readWorkflow('build.yml') },
+      { name: 'web-ci.yml', yaml: readWorkflow('web-ci.yml') },
+      { name: 'publish-web.yml', yaml: readWorkflow('publish-web.yml') },
+      { name: 'docs.yml', yaml: readWorkflow('docs.yml') },
+      {
+        name: 'setup-web-ci/action.yml',
+        yaml: readFileSync(resolve(ROOT, '.github/actions/setup-web-ci/action.yml'), 'utf8')
+      },
+      { name: 'release.yml', yaml: readWorkflow('release.yml') }
+    ]
     let totalKeys = 0
 
-    for (const name of workflowNames) {
-      const yaml = readWorkflow(name)
+    for (const { name, yaml } of targets) {
       const keys = [...yaml.matchAll(/key:\s*(native-[^\n]*)/g)].map((m) => m[1])
       totalKeys += keys.length
 
@@ -270,5 +279,17 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
         'if-no-files-found: error'
       )
     }
+  })
+})
+
+describe('local Postgres volume is tied to the image major', () => {
+  // A data dir from another major (e.g. PG18's `18/docker` layout) makes the
+  // container run initdb on a non-empty folder and crash-loop forever.
+  test('the data volume name carries the postgres image major', () => {
+    const compose = readFileSync(resolve(ROOT, 'docker-compose.postgres.yml'), 'utf8')
+    const major = /image:\s*postgres:(\d+)/.exec(compose)?.[1]
+    const volume = /-\s*(\S+):\/var\/lib\/postgresql\/data/.exec(compose)?.[1]
+    expect(major).toBeDefined()
+    expect(volume).toContain(`pg${major}`)
   })
 })

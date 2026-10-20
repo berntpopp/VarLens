@@ -1,0 +1,68 @@
+name: Setup Web CI
+description: Sets up Node, native ABI cache, dependencies, and runs web CI gates
+
+inputs:
+  run-ui-gates:
+    description: Whether to run UI quality gates (axe + Lighthouse)
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # actions/setup-node@v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+
+    - name: Resolve native toolchain identity
+      id: electron-ver
+      shell: bash
+      run: |
+        {
+          echo "ver=$(node -p "require('./package-lock.json').packages['node_modules/electron'].version")"
+          echo "node-abi=$(node -p 'process.versions.modules')"
+          echo "mod=$(node -p "require('./package-lock.json').packages['node_modules/better-sqlite3-multiple-ciphers'].version")"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore native ABI cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # actions/cache@v6.1.0
+      with:
+        path: .cache/native
+        key: native-${{ env.VARLENS_NATIVE_RUNTIME }}-${{ runner.os }}-${{ runner.arch }}-node${{ steps.electron-ver.outputs.node-abi }}-electron${{ steps.electron-ver.outputs.ver }}-mod${{ steps.electron-ver.outputs.mod }}-${{ hashFiles('.nvmrc', 'scripts/native/**') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Assert native ABI
+      shell: bash
+      run: node scripts/native/assert-native-abi.mjs node
+
+    - name: Run opt-in web gate
+      shell: bash
+      run: make web-ci
+
+    - name: Install Playwright Chromium
+      if: ${{ inputs.run-ui-gates == 'true' }}
+      shell: bash
+      run: npx playwright install --with-deps chromium
+
+    - name: Allow Chrome to use unprivileged user namespaces (Ubuntu 24.04)
+      if: ${{ inputs.run-ui-gates == 'true' }}
+      shell: bash
+      run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+    - name: Run UI quality gates (axe + Lighthouse)
+      if: ${{ inputs.run-ui-gates == 'true' }}
+      shell: bash
+      run: make ui-gates
+
+    - name: Upload UI gate reports
+      if: ${{ inputs.run-ui-gates == 'true' && always() }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # actions/upload-artifact@v7.0.2
+      with:
+        name: ui-gates
+        path: test-results/ui-gates/
+        if-no-files-found: ignore

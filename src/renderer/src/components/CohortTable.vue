@@ -417,7 +417,7 @@ const exportToExcel = async (format?: 'csv' | 'xlsx'): Promise<void> => {
             void api.export.revealInFolder(result.filePath)
         }
       }
-    } else if (result?.error != null && result.error !== '') {
+    } else if (result?.cancelled !== true && result?.error != null && result.error !== '') {
       snackbar.value = {
         visible: true,
         message: `Export failed: ${result.error}`,

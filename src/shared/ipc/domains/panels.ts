@@ -70,5 +70,5 @@ export interface PanelsDomainContract {
     panelId: number,
     assembly: string,
     paddingBp: number
-  ) => Promise<IpcResult<{ success: boolean; path?: string }>>
+  ) => Promise<IpcResult<{ success: boolean; path?: string; cancelled?: boolean }>>
 }

@@ -10,6 +10,7 @@ import { useApiService } from './useApiService'
 import { useExternalLinksStore, type ExternalLinkConfig } from '../stores/externalLinksStore'
 import { logService } from '../services/LogService'
 import { formatError } from '../utils/ipc-result'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 import { resolveUrlTemplate, buildOmimUrl, type VariantLinkData } from '../utils/externalLinks'
 import type { Variant } from '../../../shared/types/api'
 
@@ -76,7 +77,7 @@ export function useVariantLinks() {
 
     if (api) {
       try {
-        const result = await api.shell.openExternal(url)
+        const result = unwrapIpcResult(await api.shell.openExternal(url))
         if (!result.success) {
           snackbar.value = { visible: true, message: 'Could not open link', color: 'error' }
         }

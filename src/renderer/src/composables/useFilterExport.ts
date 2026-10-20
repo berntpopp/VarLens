@@ -2,17 +2,36 @@ import { type Ref } from 'vue'
 import { useApiService } from './useApiService'
 import { buildFilterFromState, type FilterState, type ExportResult } from './filter-types'
 import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
+import { ACMG_CLASSIFICATIONS } from '../../../shared/config/domain.config'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
-import type { VariantFilter } from '../../../shared/types/api'
+import type {
+  BatchAnnotationKey,
+  Variant,
+  VariantAnnotationsResult,
+  VariantFilter
+} from '../../../shared/types/api'
+import type { CaseVariantAnnotation } from '../../../shared/types/database'
+import {
+  formatSignOutTable,
+  variantToSignOutRow,
+  type SignOutRow
+} from '../utils/sign-out-clipboard'
+
+export interface CopySignOutResult {
+  success: boolean
+  count: number
+  error?: string
+}
 
 async function getVariantExportBlockReason(): Promise<string | null> {
   return getCurrentUnsupportedReason('export.variants')
 }
 
 /**
- * Composable for variant export functionality.
+ * Composable for variant export and clinical sign-out clipboard functionality.
  * Extracted from useFilterState to separate export concerns.
  */
 export function useFilterExport(
@@ -65,22 +84,135 @@ export function useFilterExport(
         return { success: false, error: result.error }
       }
 
-      return result?.error === 'Export cancelled' ? { success: false, cancelled: true } : null
+      return result?.error === 'Export cancelled' || result?.cancelled === true
+        ? { success: false, cancelled: true }
+        : null
     } catch (error) {
-      logService.error(
-        'Export error: ' +
-          (error instanceof Error
-            ? error.message
-            : isIpcError(error)
-              ? (error.userMessage ?? error.message)
-              : String(error)),
-        'export'
-      )
-      return null
+      const message = formatError(error)
+      logService.error('Export error: ' + message, 'export')
+      return { success: false, error: message }
     } finally {
       exporting.value = false
     }
   }
 
-  return { exportToExcel }
+  const copySignOutTable = async (
+    caseId: number,
+    format: 'markdown' | 'tsv'
+  ): Promise<CopySignOutResult> => {
+    if (!api) {
+      logService.warn('API not available - running outside Electron', 'export')
+      return { success: false, count: 0, error: 'API not available' }
+    }
+
+    if (typeof navigator?.clipboard?.writeText !== 'function') {
+      return { success: false, count: 0, error: 'Clipboard API not available' }
+    }
+
+    try {
+      const fetchAllVariants = async (
+        filter: Omit<VariantFilter, 'case_id'>
+      ): Promise<Variant[]> => {
+        const PAGE_SIZE = 500
+        let offset = 0
+        const all: Variant[] = []
+
+        while (true) {
+          const res = await api.variants.query(caseId, filter, offset, PAGE_SIZE)
+          const result = unwrapIpcResult(res)
+          const rows = result?.data ?? []
+          all.push(...rows)
+          const total = result?.total_count ?? all.length
+          if (rows.length === 0 || all.length >= total) {
+            break
+          }
+          offset += rows.length
+        }
+
+        return all
+      }
+
+      const [starredVariants, acmgVariants] = await Promise.all([
+        fetchAllVariants({ starred_only: true, annotation_scope: 'all' }),
+        fetchAllVariants({
+          acmg_classifications: ACMG_CLASSIFICATIONS.slice(0, 2),
+          annotation_scope: 'all'
+        })
+      ])
+
+      const seen = new Set<number>()
+      const deduped: Variant[] = []
+      for (const v of [...starredVariants, ...acmgVariants]) {
+        if (!seen.has(v.id)) {
+          seen.add(v.id)
+          deduped.push(v)
+        }
+      }
+
+      if (deduped.length === 0) {
+        return {
+          success: false,
+          count: 0,
+          error: 'No starred or Pathogenic / Likely pathogenic variants found for this case.'
+        }
+      }
+
+      const keys: BatchAnnotationKey[] = deduped.map((v) => ({
+        variantId: v.id,
+        chr: v.chr,
+        pos: v.pos,
+        ref: v.ref,
+        alt: v.alt
+      }))
+
+      const annotRes = await api.annotations.batchGet(caseId, keys)
+      const annotationsMap = unwrapIpcResult(annotRes) ?? {}
+
+      const coordCounts = new Map<string, number>()
+      for (const v of deduped) {
+        const coordKey = `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+        coordCounts.set(coordKey, (coordCounts.get(coordKey) ?? 0) + 1)
+      }
+
+      const collidingVariants = deduped.filter(
+        (v) => (coordCounts.get(`${v.chr}:${v.pos}:${v.ref}:${v.alt}`) ?? 0) > 1
+      )
+
+      const perVariantPerCase = new Map<number, CaseVariantAnnotation | null>()
+      if (collidingVariants.length > 0) {
+        const perCaseResults = await Promise.all(
+          collidingVariants.map(async (v) => {
+            const res = await api.annotations.getPerCase(caseId, v.id)
+            return [v.id, unwrapIpcResult(res) ?? null] as const
+          })
+        )
+        for (const [id, perCase] of perCaseResults) {
+          perVariantPerCase.set(id, perCase)
+        }
+      }
+
+      const rows: SignOutRow[] = deduped.map((v) => {
+        const coordKey = `${v.chr}:${v.pos}:${v.ref}:${v.alt}`
+        const batchAnnot = annotationsMap[coordKey]
+        const annot: VariantAnnotationsResult = perVariantPerCase.has(v.id)
+          ? {
+              global: batchAnnot?.global,
+              perCase: perVariantPerCase.get(v.id) ?? null
+            }
+          : (batchAnnot ?? { global: null, perCase: null })
+        return variantToSignOutRow(v, annot)
+      })
+
+      const text = formatSignOutTable(rows, format)
+      await navigator.clipboard.writeText(text)
+
+      return { success: true, count: deduped.length }
+    } catch (error) {
+      const message = formatError(error)
+      logService.error('Copy sign-out error: ' + message, 'export')
+      return { success: false, count: 0, error: message }
+    }
+  }
+
+  return { exportToExcel, copySignOutTable }
 }

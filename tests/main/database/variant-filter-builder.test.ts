@@ -391,6 +391,39 @@ describe('VariantFilterBuilder', () => {
       expect(results).toHaveLength(2)
     })
 
+    it('preserves numeric operands for numeric IN filters and coerces text columns', () => {
+      db.prepare(
+        `INSERT INTO variants (case_id, chr, pos, ref, alt, sv_length)
+         VALUES (?, '1', 5000, 'A', '<DEL>', -1000)`
+      ).run(caseId)
+
+      // sv_length is wrapped by ABS(variants.sv_length) in SORTABLE_COLUMNS / comparedColumnSql
+      const resNumeric = executeQuery({
+        case_id: caseId,
+        column_filters: {
+          sv_length: { operator: 'in', value: [1000] }
+        }
+      })
+      expect(resNumeric.some((v) => v.sv_length === -1000)).toBe(true)
+
+      const resString = executeQuery({
+        case_id: caseId,
+        column_filters: {
+          sv_length: { operator: 'in', value: ['1000'] }
+        }
+      })
+      expect(resString.some((v) => v.sv_length === -1000)).toBe(true)
+
+      // text column chr: numeric 1 in value array matches '1'
+      const resChr = executeQuery({
+        case_id: caseId,
+        column_filters: {
+          chr: { operator: 'in', value: [1] }
+        }
+      })
+      expect(resChr.some((v) => v.chr === '1')).toBe(true)
+    })
+
     it('applies range column filter with NULL inclusion', () => {
       const results = executeQuery({
         case_id: caseId,

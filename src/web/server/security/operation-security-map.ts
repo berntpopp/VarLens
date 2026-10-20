@@ -139,6 +139,7 @@ export const DISPATCHER_SECURITY_MAP: Readonly<Record<string, OperationPolicy>> 
   'annotations:upsertGlobal': write(),
   'annotations:deleteGlobal': write(),
   'annotations:upsertPerCase': write(),
+  'annotations:batchUpsertPerCase': write(),
   'annotations:deletePerCase': write(),
   'tags:list': read(),
   'tags:getUsageCount': read(),

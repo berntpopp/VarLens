@@ -38,6 +38,7 @@ RUN npm ci --ignore-scripts \
  && npm rebuild better-sqlite3-multiple-ciphers @node-rs/argon2
 
 COPY resources/gene_reference.db ./resources/gene_reference.db
+COPY resources/brand/ ./resources/brand/
 COPY src/ ./src/
 COPY scripts/web/ ./scripts/web/
 COPY vite.web.config.ts vite.web-renderer.config.ts tsconfig*.json ./

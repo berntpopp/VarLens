@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="open" max-width="700px" scrollable>
+  <v-dialog v-model="open" max-width="700px" scrollable aria-label="Case Metadata">
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ caseName }}</span>

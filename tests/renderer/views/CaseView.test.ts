@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, ref, nextTick } from 'vue'
 import { createVuetify } from 'vuetify'
 import { setActivePinia, createPinia } from 'pinia'
 import * as components from 'vuetify/components'
@@ -130,6 +130,10 @@ import { AppStateKey, createAppState } from '../../../src/renderer/src/composabl
 import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
+
+/** Per-type counts as the tabs show them (the shortlist tab has no count). */
+const tabCounts = (vm: { tabItems: Array<{ type: string; count: number | null }> }) =>
+  Object.fromEntries(vm.tabItems.filter((t) => t.count !== null).map((t) => [t.type, t.count]))
 
 /**
  * Mount CaseView with a fresh AppState provide. Returns the wrapper and
@@ -514,6 +518,127 @@ describe('CaseView — Shortlist tab integration', () => {
     expect((wrapper.vm as unknown as { selectedVariantType: string }).selectedVariantType).toBe(
       'sv'
     )
+  })
+
+  it('guards loadTypeCounts against out-of-order responses during A -> B case switch (#665)', async () => {
+    let resolveCase1!: (counts: Record<string, number>) => void
+    let resolveCase2!: (counts: Record<string, number>) => void
+
+    typeCountsMock.mockImplementation((id: number) => {
+      if (id === 1) {
+        return new Promise((resolve) => {
+          resolveCase1 = resolve
+        })
+      }
+      if (id === 2) {
+        return new Promise((resolve) => {
+          resolveCase2 = resolve
+        })
+      }
+      return Promise.resolve({})
+    })
+
+    const { wrapper, state } = mountCaseView(1)
+    await nextTick()
+
+    // Switch to case 2 while case 1 is still pending
+    state.selectedCaseId.value = 2
+    await flushPromises()
+
+    // Case 2 resolves first with SV variants
+    resolveCase2({ sv: 5 })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      tabItems: Array<{ type: string; count: number | null }>
+      selectedVariantType: string
+    }
+    expect(tabCounts(vm)).toEqual({ sv: 5 })
+
+    const expectedVariantType = vm.selectedVariantType
+
+    // Now Case 1 slow response arrives out-of-order
+    resolveCase1({ snv: 42 })
+    await flushPromises()
+
+    // Stale Case 1 response must NOT overwrite Case 2 counts or change active tab!
+    expect(tabCounts(vm)).toEqual({ sv: 5 })
+    expect(vm.selectedVariantType).toBe(expectedVariantType)
+  })
+
+  it('guards loadTypeCounts against out-of-order responses during A -> B -> A case switch (#665)', async () => {
+    let resolveCase1a!: (counts: Record<string, number>) => void
+    let resolveCase1b!: (counts: Record<string, number>) => void
+    let callCount = 0
+
+    typeCountsMock.mockImplementation((id: number) => {
+      callCount++
+      if (id === 1 && callCount === 1) {
+        return new Promise((resolve) => {
+          resolveCase1a = resolve
+        })
+      }
+      if (id === 2) {
+        return Promise.resolve({ cnv: 1 })
+      }
+      if (id === 1 && callCount > 2) {
+        return new Promise((resolve) => {
+          resolveCase1b = resolve
+        })
+      }
+      return Promise.resolve({})
+    })
+
+    const { wrapper, state } = mountCaseView(1)
+    await nextTick()
+
+    // Switch to case 2
+    state.selectedCaseId.value = 2
+    await flushPromises()
+
+    // Switch back to case 1
+    state.selectedCaseId.value = 1
+    await flushPromises()
+
+    // First request 1a resolves late
+    resolveCase1a({ snv: 999 })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as { tabItems: Array<{ type: string; count: number | null }> }
+    // Must NOT accept 1a
+    expect(tabCounts(vm)).not.toEqual({ snv: 999 })
+
+    // Second request 1b resolves
+    resolveCase1b({ snv: 12, sv: 3 })
+    await flushPromises()
+    expect(tabCounts(vm)).toEqual({ snv: 12, sv: 3 })
+  })
+
+  it('resets countsLoading to false when switching from in-flight case to null or 0 (#665)', async () => {
+    let resolveCase!: (counts: Record<string, number>) => void
+    typeCountsMock.mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolveCase = resolve
+      })
+    })
+
+    const { wrapper, state } = mountCaseView(1)
+    await nextTick()
+
+    const vm = wrapper.vm as unknown as { countsLoading: boolean }
+    expect(vm.countsLoading).toBe(true)
+
+    // Clear case selection while request is in-flight
+    state.selectedCaseId.value = null
+    await flushPromises()
+
+    // countsLoading must reset to false immediately
+    expect(vm.countsLoading).toBe(false)
+
+    // Resolve the in-flight request late
+    resolveCase({ snv: 5 })
+    await flushPromises()
+    expect(vm.countsLoading).toBe(false)
   })
 })
 

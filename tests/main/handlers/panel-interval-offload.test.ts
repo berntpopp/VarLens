@@ -94,10 +94,11 @@ describe('variants:query — pool available path', () => {
     const task = poolRunCalls[0]
     expect(task.type).toBe('variants:query')
 
-    // The filter passed to the pool should still carry active_panel_ids and genome_build
+    // The filter passed to the pool carries active_panel_ids; genome_build is left
+    // undefined so the worker resolves it off-thread without blocking the main thread (#674)
     const passedFilter = task.params[0] as Record<string, unknown>
     expect(passedFilter.active_panel_ids).toEqual([1, 2])
-    expect(passedFilter.genome_build).toBe('GRCh38')
+    expect(passedFilter.genome_build).toBeUndefined()
 
     // panel_intervals should NOT be pre-computed on the main thread
     expect(passedFilter.panel_intervals).toBeUndefined()

@@ -137,7 +137,11 @@ export default defineConfig({
         test: {
           name: 'web-gate',
           environment: 'node',
-          include: ['tests/web-gate/*.test.ts', 'tests/web-gate/integration/**/*.test.ts']
+          include: [
+            'tests/web-gate/*.test.ts',
+            'tests/web-gate/integration/**/*.test.ts',
+            'tests/web/**/*.test.ts'
+          ]
         }
       },
       {

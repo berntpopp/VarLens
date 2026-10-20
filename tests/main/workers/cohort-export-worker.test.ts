@@ -4,7 +4,7 @@
  * cancellation. Uses the real bundled import + export workers.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
@@ -131,5 +131,114 @@ describe('cohort export worker', () => {
     })
 
     expect(outcome).toBe('cancelled')
+  })
+
+  it('cancelling one export and immediately launching another does not delete the second export temp file', async () => {
+    const client = new ExportWorkerClient(exportWorker)
+    const out1 = join(dir, 'cancelled-job.xlsx')
+    const out2 = join(dir, 'subsequent-job.xlsx')
+
+    client.startCohort({
+      dbPath: db.getPath(),
+      params: { genome_build: 'GRCh38' } as never,
+      outputFilePath: out1,
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+      onError: () => undefined,
+      onCancelled: () => undefined
+    })
+
+    client.cancel()
+
+    const outcome = await new Promise<string>((resolvePromise, reject) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath: out2,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (err) => reject(new Error(err)),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(outcome).toBe('complete')
+    expect(existsSync(out2)).toBe(true)
+  })
+
+  it('does not delete a pre-existing .part file on cancel', async () => {
+    const outputFilePath = join(dir, 'cancelled-part.xlsx')
+    const existingPart = `${outputFilePath}.part`
+    writeFileSync(existingPart, 'pre-existing partial file')
+
+    await new Promise<void>((resolvePromise) => {
+      const client = new ExportWorkerClient(exportWorker)
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise(),
+        onError: () => resolvePromise(),
+        onCancelled: () => resolvePromise()
+      })
+      client.cancel()
+    })
+
+    expect(existsSync(existingPart)).toBe(true)
+    expect(readFileSync(existingPart, 'utf8')).toBe('pre-existing partial file')
+  })
+
+  it('calls onError with EEXIST and does not delete existing file when tempFilePath already exists', async () => {
+    const outputFilePath = join(dir, 'eexist-test.xlsx')
+    const existingTemp = join(dir, 'already-taken.part')
+    writeFileSync(existingTemp, 'pre-existing file content')
+
+    const client = new ExportWorkerClient(exportWorker)
+    const err = await new Promise<string>((resolvePromise) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        tempFilePath: existingTemp,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (e) => resolvePromise(e),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(err).toContain('EEXIST')
+    expect(existsSync(existingTemp)).toBe(true)
+    expect(readFileSync(existingTemp, 'utf8')).toBe('pre-existing file content')
+
+    client.cancel()
+    expect(existsSync(existingTemp)).toBe(true)
+
+    await client.destroy()
+    expect(existsSync(existingTemp)).toBe(true)
+    expect(readFileSync(existingTemp, 'utf8')).toBe('pre-existing file content')
+  })
+
+  it('cleans up reserved temp file and invokes onError when Worker initialization throws synchronously', async () => {
+    const outputFilePath = join(dir, 'fail-launch.xlsx')
+    const tempFilePath = join(dir, 'fail-launch.part')
+
+    const client = new ExportWorkerClient('invalid-worker-path')
+    const err = await new Promise<string>((resolvePromise) => {
+      client.startCohort({
+        dbPath: db.getPath(),
+        params: { genome_build: 'GRCh38' } as never,
+        outputFilePath,
+        tempFilePath,
+        onProgress: () => undefined,
+        onComplete: () => resolvePromise('complete'),
+        onError: (e) => resolvePromise(e),
+        onCancelled: () => resolvePromise('cancelled')
+      })
+    })
+
+    expect(err).toBeTruthy()
+    expect(existsSync(tempFilePath)).toBe(false)
   })
 })

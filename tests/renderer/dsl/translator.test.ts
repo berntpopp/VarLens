@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { translateAst, serializeColumnFilters } from '../../../src/renderer/src/dsl/translator'
+import { normalizeClinicalPaste } from '../../../src/renderer/src/dsl/clinical-paste'
 import { parseDsl } from '../../../src/renderer/src/dsl/parser'
 import type { DslNode } from '../../../src/renderer/src/dsl/types'
 
@@ -97,13 +98,13 @@ describe('translateAst', () => {
       type: 'group',
       combinator: 'AND',
       children: [
-        { type: 'rule', column: 'cadd', operator: '>=', value: 20 },
-        { type: 'rule', column: 'cadd', operator: '<=', value: 30 }
+        { type: 'rule', column: 'gene', operator: '=', value: 'BRCA1' },
+        { type: 'rule', column: 'gene', operator: '=', value: 'BRCA2' }
       ]
     }
     const result = translateAst(ast)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toContain('cadd:<=:30')
+    expect(result.errors[0]).toContain('gene:=:BRCA2')
   })
 })
 
@@ -115,7 +116,7 @@ describe('translateAst Boolean fidelity (#526)', () => {
   }
 
   it.each([
-    ['cadd:>=:20 AND cadd:<=:30', 'only one condition per field'],
+    ['cadd:>=:20 AND cadd:>=:30', 'only one condition per field'],
     ['cadd:<:10 OR cadd:>:20', "OR is only supported between '=' conditions"],
     ['gene:=:BRCA1 OR cadd:>=:20', "OR is only supported between '=' conditions"],
     ['gene:=:BRCA1 OR gene:~:TP', "OR is only supported between '=' conditions"],
@@ -137,6 +138,12 @@ describe('translateAst Boolean fidelity (#526)', () => {
         cadd: { operator: '>=', value: 20, includeEmpty: true }
       }
     ],
+    [
+      'cadd:>=:20 AND cadd:<=:30',
+      {
+        cadd: { operator: 'between', value: [20, 30], includeEmpty: true }
+      }
+    ],
     ['gnomad_af:is:null', { gnomad_af: { operator: 'is_null', value: '' } }],
     ['cnv.copy_number:<:2', { 'cnv.copy_number': { operator: '<', value: 2 } }],
     ['clinvar:~:"Likely pathogenic"', { clinvar: { operator: 'like', value: 'Likely pathogenic' } }]
@@ -144,6 +151,75 @@ describe('translateAst Boolean fidelity (#526)', () => {
     const result = translate(input)
     expect(result.errors).toEqual([])
     expect(result.columnFilters).toEqual(expected)
+  })
+
+  it('combines pos lower and upper bounds into a single range filter (#683)', () => {
+    const result = translate('pos:>=:43044295 AND pos:<=:43125483')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.pos).toEqual({
+      operator: 'between',
+      value: [43044295, 43125483],
+      includeEmpty: false
+    })
+  })
+
+  it('translates normalized clinical coordinate interval to chr and pos bounds (#683)', () => {
+    const input = normalizeClinicalPaste('chr17:43,044,295-43,125,483')
+    const result = translate(input)
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.chr).toEqual({
+      operator: 'in',
+      value: ['chr17', '17']
+    })
+    expect(result.columnFilters.pos).toEqual({
+      operator: 'between',
+      value: [43044295, 43125483],
+      includeEmpty: false
+    })
+  })
+
+  it('rejects lower bound exceeding upper bound on numeric columns', () => {
+    const result = translate('cadd:>=:30 AND cadd:<=:20')
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain("lower bound (30) cannot exceed upper bound (20) for 'cadd'")
+  })
+
+  it('does not combine strict < or > bounds into between (#683)', () => {
+    const result = translate('pos:>:100 AND pos:<:200')
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain(
+      "only one condition per field is supported ('pos' is used twice) — use >= and <= for a range"
+    )
+  })
+
+  it('combines info field range bounds into between (#683)', () => {
+    const result = translate('info.DP:>=:10 AND info.DP:<=:50')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters['info.DP']).toEqual({
+      operator: 'between',
+      value: [10, 50]
+    })
+  })
+
+  it('combines extension column range bounds into between (#683)', () => {
+    const result = translate('cnv.copy_number:>=:2 AND cnv.copy_number:<=:5')
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters['cnv.copy_number']).toEqual({
+      operator: 'between',
+      value: [2, 5]
+    })
+  })
+
+  it('combines cohort-only numeric column bounds into between (#683)', () => {
+    const parsed = parseDsl('carrier_count:>=:2 AND carrier_count:<=:5', 'cohort')
+    expect(parsed.errors).toEqual([])
+    const result = translateAst(parsed.ast!)
+    expect(result.errors).toEqual([])
+    expect(result.columnFilters.carrier_count).toEqual({
+      operator: 'between',
+      value: [2, 5],
+      includeEmpty: false
+    })
   })
 })
 
@@ -183,5 +259,20 @@ describe('serializeColumnFilters', () => {
     const second = parseDsl(text)
     expect(second.errors).toEqual([])
     expect(translateAst(second.ast!).columnFilters).toEqual(first.columnFilters)
+  })
+
+  it('round-trips clinical interval with between operator (#683)', () => {
+    const filters = {
+      chr: { operator: 'in' as const, value: ['chr17', '17'] },
+      pos: {
+        operator: 'between' as const,
+        value: [43044295, 43125483] as [number, number],
+        includeEmpty: false
+      }
+    }
+    const text = serializeColumnFilters(filters)
+    const second = parseDsl(text)
+    expect(second.errors).toEqual([])
+    expect(translateAst(second.ast!).columnFilters).toEqual(filters)
   })
 })

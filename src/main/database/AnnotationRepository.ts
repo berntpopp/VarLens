@@ -1,5 +1,6 @@
 import { BaseRepository } from './BaseRepository'
 import { sql } from 'kysely'
+import { InvalidParametersError } from '../ipc/errors'
 import type { VariantAnnotation, CaseVariantAnnotation } from './types'
 import type { BatchAnnotationKey } from '../../shared/types/api'
 
@@ -119,11 +120,14 @@ export class AnnotationRepository extends BaseRepository {
     caseId: number,
     variantId: number,
     updates: Partial<
-      Pick<
-        CaseVariantAnnotation,
-        'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+      Omit<
+        Pick<
+          CaseVariantAnnotation,
+          'per_case_comment' | 'starred' | 'acmg_classification' | 'acmg_evidence'
+        >,
+        'starred'
       >
-    >
+    > & { starred?: number | boolean }
   ): CaseVariantAnnotation {
     return this.runTransaction(() => {
       const now = Date.now()
@@ -133,7 +137,12 @@ export class AnnotationRepository extends BaseRepository {
       const commentProvided = 'per_case_comment' in updates
 
       const commentVal = updates.per_case_comment ?? null
-      const starredVal = updates.starred !== undefined ? (updates.starred ? 1 : 0) : null
+      const starredVal =
+        updates.starred !== undefined
+          ? updates.starred === true || updates.starred === 1
+            ? 1
+            : 0
+          : null
       const acmgClassVal = updates.acmg_classification ?? null
       const acmgEvidenceVal = updates.acmg_evidence ?? null
 
@@ -162,6 +171,66 @@ export class AnnotationRepository extends BaseRepository {
         .prepare(compiled.sql)
         .get(...compiled.parameters) as CaseVariantAnnotation
       return result
+    })
+  }
+
+  runInTransaction<T>(fn: () => T): T {
+    return this.runTransaction(fn)
+  }
+
+  validateVariantsBelongToCase(caseId: number, variantIds: number[]): number[] {
+    const uniqueIds = Array.from(new Set(variantIds))
+    if (uniqueIds.length === 0) return []
+    const placeholders = uniqueIds.map(() => '?').join(', ')
+    const validRows = this.db
+      .prepare(`SELECT id FROM variants WHERE case_id = ? AND id IN (${placeholders})`)
+      .all(caseId, ...uniqueIds) as Array<{ id: number }>
+    const validIds = validRows.map((r) => r.id)
+    if (validIds.length !== uniqueIds.length) {
+      throw new InvalidParametersError(`One or more variants do not belong to case ${caseId}`)
+    }
+    return validIds
+  }
+
+  batchUpsertPerCaseAnnotation(
+    caseId: number,
+    variantIds: number[],
+    updates: Partial<
+      Omit<
+        CaseVariantAnnotation,
+        'id' | 'case_id' | 'variant_id' | 'created_at' | 'updated_at' | 'starred'
+      >
+    > & { starred?: number | boolean; tag_id?: number }
+  ): { updatedCount: number } {
+    const uniqueIds = Array.from(new Set(variantIds))
+    if (uniqueIds.length === 0) return { updatedCount: 0 }
+    const validIds = this.validateVariantsBelongToCase(caseId, uniqueIds)
+    return this.runTransaction(() => {
+      const hasAnnotationUpdates =
+        'acmg_classification' in updates ||
+        'acmg_evidence' in updates ||
+        'per_case_comment' in updates ||
+        updates.starred !== undefined
+
+      if (hasAnnotationUpdates) {
+        for (const vId of validIds) {
+          this.upsertPerCaseAnnotation(caseId, vId, updates)
+        }
+      }
+
+      if (updates.tag_id !== undefined) {
+        const now = Date.now()
+        const tagStmt = this.db.prepare(`
+          INSERT INTO variant_tags (case_id, variant_id, tag_id, created_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT DO NOTHING
+        `)
+        for (const vId of validIds) {
+          tagStmt.run(caseId, vId, updates.tag_id, now)
+        }
+      }
+
+      return { updatedCount: validIds.length }
     })
   }
 

@@ -1,5 +1,6 @@
 import type { Database as DatabaseType, Statement } from 'better-sqlite3-multiple-ciphers'
 import { mainLogger } from '../services/MainLogger'
+import { sqlPlaceholders } from './sql-utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,6 +65,15 @@ interface CountRow {
 // ---------------------------------------------------------------------------
 
 /**
+ * Case-folding key matching SQLite COLLATE NOCASE behavior.
+ * SQLite COLLATE NOCASE only folds ASCII 26 letters (A-Z to a-z) and does
+ * not fold Unicode characters (e.g. Kelvin sign '\u212A' is not folded to 'k').
+ */
+export function sqliteNocaseKey(value: string): string {
+  return value.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32))
+}
+
+/**
  * Read-only service for querying the bundled gene reference database.
  *
  * Uses prepared statements cached in the constructor for performance.
@@ -71,10 +81,6 @@ interface CountRow {
  */
 export class GeneReferenceDb {
   // Prepared statements
-  private readonly stmtGeneBySymbol: Statement
-  private readonly stmtAliasByAlias: Statement
-  private readonly stmtGeneByHgncId: Statement
-  private readonly stmtCoordsByHgncAssembly: Statement
   private readonly stmtAssemblies: Statement
   private readonly stmtGeneCount: Statement
   private readonly stmtAliasCount: Statement
@@ -87,22 +93,6 @@ export class GeneReferenceDb {
   }
 
   constructor(private readonly db: DatabaseType) {
-    // Validate / autocomplete
-    this.stmtGeneBySymbol = db.prepare(
-      'SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE symbol = ? COLLATE NOCASE'
-    )
-    this.stmtAliasByAlias = db.prepare(
-      'SELECT alias, hgnc_id, alias_type FROM gene_aliases WHERE alias = ? COLLATE NOCASE'
-    )
-    this.stmtGeneByHgncId = db.prepare(
-      'SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE hgnc_id = ?'
-    )
-
-    // Coordinates
-    this.stmtCoordsByHgncAssembly = db.prepare(
-      'SELECT hgnc_id, assembly, chromosome, start_pos, end_pos, strand FROM gene_coordinates WHERE hgnc_id = ? AND assembly = ?'
-    )
-
     // Assemblies & info
     this.stmtAssemblies = db.prepare(
       'SELECT id, display_name, aliases, source_version, built_at FROM assemblies'
@@ -113,62 +103,140 @@ export class GeneReferenceDb {
     this.stmtBuiltAt = db.prepare('SELECT built_at FROM assemblies LIMIT 1')
   }
 
+  private allInChunks<T>(
+    sqlFor: (placeholders: string) => string,
+    values: readonly string[],
+    ...leadParams: unknown[]
+  ): T[] {
+    const rows: T[] = []
+    for (let i = 0; i < values.length; i += 500) {
+      const chunk = values.slice(i, i + 500)
+      const sql = sqlFor(sqlPlaceholders(chunk.length))
+      rows.push(...(this.db.prepare(sql).all(...leadParams, ...chunk) as T[]))
+    }
+    return rows
+  }
+
   // -------------------------------------------------------------------------
   // Validation
   // -------------------------------------------------------------------------
 
   validateSymbol(input: string): GeneValidationResult {
-    const trimmed = input.trim()
-
-    // Step 1: exact match on genes.symbol (case-insensitive via COLLATE NOCASE)
-    const gene = this.stmtGeneBySymbol.get(trimmed) as GeneRow | undefined
-    if (gene) {
-      return {
-        input: trimmed,
-        status: 'approved',
-        symbol: gene.symbol,
-        hgncId: gene.hgnc_id,
-        name: gene.name ?? undefined,
-        locusGroup: gene.locus_group ?? undefined
-      }
-    }
-
-    // Step 2-3: search gene_aliases (covers both alias_symbol and prev_symbol)
-    const aliases = this.stmtAliasByAlias.all(trimmed) as AliasRow[]
-    if (aliases.length === 1) {
-      const alias = aliases[0]
-      const resolvedGene = this.stmtGeneByHgncId.get(alias.hgnc_id) as GeneRow | undefined
-      return {
-        input: trimmed,
-        status: 'alias',
-        symbol: resolvedGene?.symbol,
-        hgncId: alias.hgnc_id,
-        name: resolvedGene?.name ?? undefined,
-        locusGroup: resolvedGene?.locus_group ?? undefined,
-        currentSymbol: resolvedGene?.symbol,
-        aliasType: alias.alias_type
-      }
-    }
-
-    // Step 4: multiple aliases → ambiguous
-    if (aliases.length > 1) {
-      const candidates = aliases.map((a) => {
-        const g = this.stmtGeneByHgncId.get(a.hgnc_id) as GeneRow | undefined
-        return { symbol: g?.symbol ?? a.hgnc_id, hgncId: a.hgnc_id }
-      })
-      return {
-        input: trimmed,
-        status: 'ambiguous',
-        candidates
-      }
-    }
-
-    // Step 5: no match
-    return { input: trimmed, status: 'unknown' }
+    return this.validateSymbols([input])[0]
   }
 
   validateSymbols(inputs: string[]): GeneValidationResult[] {
-    return inputs.map((input) => this.validateSymbol(input))
+    if (inputs.length === 0) return []
+
+    // Deduplicate case-insensitively for database queries matching SQLite COLLATE NOCASE
+    const keyToTrimmed = new Map<string, string>()
+    for (const input of inputs) {
+      const trimmed = input.trim()
+      const key = sqliteNocaseKey(trimmed)
+      if (!keyToTrimmed.has(key)) {
+        keyToTrimmed.set(key, trimmed)
+      }
+    }
+    const deduplicatedQueries = Array.from(keyToTrimmed.values())
+
+    const genesBySymbolKey = new Map<string, GeneRow>()
+
+    // Step 1: Batch lookup on genes.symbol (COLLATE NOCASE)
+    for (const row of this.allInChunks<GeneRow>(
+      (p) =>
+        `SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE symbol COLLATE NOCASE IN (${p})`,
+      deduplicatedQueries
+    )) {
+      genesBySymbolKey.set(sqliteNocaseKey(row.symbol), row)
+    }
+
+    // Step 2: Search gene_aliases for any symbols not matched to an approved gene
+    const unmatched = deduplicatedQueries.filter(
+      (sym) => !genesBySymbolKey.has(sqliteNocaseKey(sym))
+    )
+    const aliasesByKey = new Map<string, AliasRow[]>()
+    const hgncIdsToFetch = new Set<string>()
+
+    for (const row of this.allInChunks<AliasRow>(
+      (p) =>
+        `SELECT alias, hgnc_id, alias_type FROM gene_aliases WHERE alias COLLATE NOCASE IN (${p})`,
+      unmatched
+    )) {
+      const key = sqliteNocaseKey(row.alias)
+      let list = aliasesByKey.get(key)
+      if (list === undefined) {
+        list = []
+        aliasesByKey.set(key, list)
+      }
+      list.push(row)
+      hgncIdsToFetch.add(row.hgnc_id)
+    }
+
+    // Step 3: Fetch gene info for any alias-referenced HGNC IDs
+    const genesByHgncId = new Map<string, GeneRow>()
+    for (const row of this.allInChunks<GeneRow>(
+      (p) => `SELECT hgnc_id, symbol, name, status, locus_group FROM genes WHERE hgnc_id IN (${p})`,
+      Array.from(hgncIdsToFetch)
+    )) {
+      genesByHgncId.set(row.hgnc_id, row)
+    }
+
+    // Pre-resolve result per unique SQLite NOCASE key
+    const resultByKey = new Map<string, Omit<GeneValidationResult, 'input'>>()
+    for (const key of keyToTrimmed.keys()) {
+      const gene = genesBySymbolKey.get(key)
+      if (gene !== undefined) {
+        resultByKey.set(key, {
+          status: 'approved',
+          symbol: gene.symbol,
+          hgncId: gene.hgnc_id,
+          name: gene.name ?? undefined,
+          locusGroup: gene.locus_group ?? undefined
+        })
+        continue
+      }
+
+      const aliases = aliasesByKey.get(key)
+      if (aliases !== undefined && aliases.length === 1) {
+        const alias = aliases[0]
+        const resolvedGene = genesByHgncId.get(alias.hgnc_id)
+        resultByKey.set(key, {
+          status: 'alias',
+          symbol: resolvedGene?.symbol,
+          hgncId: alias.hgnc_id,
+          name: resolvedGene?.name ?? undefined,
+          locusGroup: resolvedGene?.locus_group ?? undefined,
+          currentSymbol: resolvedGene?.symbol,
+          aliasType: alias.alias_type
+        })
+        continue
+      }
+
+      if (aliases !== undefined && aliases.length > 1) {
+        const candidates = aliases.map((a) => {
+          const g = genesByHgncId.get(a.hgnc_id)
+          return { symbol: g?.symbol ?? a.hgnc_id, hgncId: a.hgnc_id }
+        })
+        resultByKey.set(key, {
+          status: 'ambiguous',
+          candidates
+        })
+        continue
+      }
+
+      resultByKey.set(key, { status: 'unknown' })
+    }
+
+    // Map back in exact original input order
+    return inputs.map((input) => {
+      const trimmed = input.trim()
+      const key = sqliteNocaseKey(trimmed)
+      const res = resultByKey.get(key)!
+      return {
+        input: trimmed,
+        ...res
+      } as GeneValidationResult
+    })
   }
 
   // -------------------------------------------------------------------------
@@ -266,26 +334,40 @@ export class GeneReferenceDb {
   // -------------------------------------------------------------------------
 
   getGeneCoordinates(hgncId: string, assembly: string): GeneCoordinates | null {
-    const row = this.stmtCoordsByHgncAssembly.get(hgncId, assembly) as CoordinateRow | undefined
-    if (!row) return null
-    return {
-      hgncId: row.hgnc_id,
-      assembly: row.assembly,
-      chromosome: row.chromosome,
-      start_pos: row.start_pos,
-      end_pos: row.end_pos,
-      strand: row.strand
-    }
+    return this.getCoordinatesForGenes([hgncId], assembly).get(hgncId) ?? null
   }
 
   getCoordinatesForGenes(hgncIds: string[], assembly: string): Map<string, GeneCoordinates> {
     const result = new Map<string, GeneCoordinates>()
-    for (const hgncId of hgncIds) {
-      const coords = this.getGeneCoordinates(hgncId, assembly)
-      if (coords) {
-        result.set(hgncId, coords)
+    if (hgncIds.length === 0) return result
+
+    const uniqueHgncIds = Array.from(new Set(hgncIds))
+    const fetched = new Map<string, GeneCoordinates>()
+
+    for (const row of this.allInChunks<CoordinateRow>(
+      (p) =>
+        `SELECT hgnc_id, assembly, chromosome, start_pos, end_pos, strand FROM gene_coordinates WHERE assembly = ? AND hgnc_id IN (${p})`,
+      uniqueHgncIds,
+      assembly
+    )) {
+      fetched.set(row.hgnc_id, {
+        hgncId: row.hgnc_id,
+        assembly: row.assembly,
+        chromosome: row.chromosome,
+        start_pos: row.start_pos,
+        end_pos: row.end_pos,
+        strand: row.strand
+      })
+    }
+
+    // Preserve exact input order from uniqueHgncIds
+    for (const id of uniqueHgncIds) {
+      const coord = fetched.get(id)
+      if (coord !== undefined) {
+        result.set(id, coord)
       }
     }
+
     return result
   }
 

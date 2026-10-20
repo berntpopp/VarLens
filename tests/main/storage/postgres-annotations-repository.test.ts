@@ -22,7 +22,9 @@ const summaryLockFree =
   (...args: unknown[]): unknown =>
     String(args[0]).includes('pg_try_advisory_xact_lock')
       ? Promise.resolve({ rows: [{ locked: true }] })
-      : query(...args)
+      : String(args[0]).includes('pg_advisory_xact_lock')
+        ? Promise.resolve({ rows: [] })
+        : query(...args)
 
 const RUN = process.env.VARLENS_RUN_POSTGRES_E2E === '1'
 const PG_URL =
@@ -787,6 +789,421 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).not.toHaveBeenCalledWith('COMMIT')
     expect(release).toHaveBeenCalledOnce()
   })
+
+  it('batchUpsertPerCaseAnnotationWithAudit deduplicates variant IDs and handles BIGINT IDs with $2::bigint[]', async () => {
+    const release = vi.fn()
+    const bigintId = 2147483648
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: String(bigintId) }] }) // SELECT id FROM variants ... WHERE id = ANY($2::bigint[])
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for bigintId (none)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            case_id: 1,
+            variant_id: bigintId,
+            starred: true,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: '1714060800000',
+            updated_at: '1714060800000'
+          }
+        ]
+      }) // _upsertPerCaseAnnotationOn
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase
+      .mockResolvedValueOnce({ rows: [] }) // audit.appendMany
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const result = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [bigintId, bigintId], {
+      starred: true,
+      user_name: 'analyst'
+    })
+
+    expect(result).toEqual({ updatedCount: 1 })
+    expect(query).toHaveBeenNthCalledWith(1, 'BEGIN')
+    // Check variant lookup uses $2::bigint[] and FOR KEY SHARE, and received deduplicated IDs
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        'WHERE case_id = $1 AND id = ANY($2::bigint[]) ORDER BY id FOR KEY SHARE'
+      ),
+      [1, [bigintId]]
+    )
+    expect(query).toHaveBeenLastCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit rejects and rolls back when variants do not belong to case', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // only 1 of 2 IDs belongs to case
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const promise = repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      starred: true
+    })
+    await expect(promise).rejects.toBeInstanceOf(InvalidParametersError)
+    await expect(promise).rejects.toThrow('One or more variants do not belong to case 1')
+
+    expect(query).toHaveBeenCalledWith('BEGIN')
+    expect(query).toHaveBeenCalledWith('ROLLBACK')
+    expect(query).not.toHaveBeenCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit rejects and rolls back on assertOverrideReason failure or mid-write query error', async () => {
+    // 1. assertOverrideReason failure
+    const release1 = vi.fn()
+    const query1 = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }] }) // variants lookup
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            case_id: '1',
+            variant_id: '101',
+            acmg_classification: 'Pathogenic',
+            acmg_evidence: JSON.stringify({
+              pathogenic: ['PVS1'],
+              benign: []
+            }),
+            starred: false,
+            per_case_comment: null,
+            created_at: '1714060800000',
+            updated_at: '1714060800000'
+          }
+        ]
+      }) // existing annotation with deciding pathogenic evidence
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool1 = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query1), release: release1 }))
+    }
+    const repository1 = new PostgresAnnotationsRepository(pool1 as never, 'public')
+
+    // Updating to Benign without override_reason must fail assertOverrideReason
+    await expect(
+      repository1.batchUpsertPerCaseAnnotationWithAudit(1, [101], {
+        acmg_classification: 'Benign'
+      })
+    ).rejects.toThrow(/overrid.*reason/i)
+
+    expect(query1).toHaveBeenCalledWith('BEGIN')
+    expect(query1).toHaveBeenCalledWith('ROLLBACK')
+    expect(query1).not.toHaveBeenCalledWith('COMMIT')
+    // Assert no insert/upsert query was executed on case_variant_annotations
+    const insertCalls = query1.mock.calls.filter(([arg]) => {
+      const text =
+        typeof arg === 'string'
+          ? arg
+          : ((arg as { text?: string })?.text ?? (arg as { name?: string })?.name ?? '')
+      return text.includes('INSERT INTO') || text.includes('upsert_per_case')
+    })
+    expect(insertCalls.length).toBe(0)
+    expect(release1).toHaveBeenCalledOnce()
+
+    // 2. Query error mid-transaction with [101, 102] where 101 succeeds and 102 fails
+    const release2 = vi.fn()
+    const dbError = new Error('simulated disk failure mid-batch')
+    const query2 = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // existing annotation 101
+      .mockResolvedValueOnce({ rows: [] }) // existing annotation 102
+      // Variant 101 succeeds:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            starred: 1,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert 101
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase 101
+      // Variant 102 fails on upsert:
+      .mockRejectedValueOnce(dbError) // upsert 102 fails
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+    const pool2 = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query2), release: release2 }))
+    }
+    const repository2 = new PostgresAnnotationsRepository(pool2 as never, 'public')
+
+    await expect(
+      repository2.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], { starred: true })
+    ).rejects.toThrow('simulated disk failure mid-batch')
+
+    expect(query2).toHaveBeenCalledWith('BEGIN')
+    expect(query2).toHaveBeenCalledWith('ROLLBACK')
+    expect(query2).not.toHaveBeenCalledWith('COMMIT')
+    expect(release2).toHaveBeenCalledOnce()
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit appends both acmg_classify (null) and tag_assign entries in a single appendMany call', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 102
+      // variant 101:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            case_id: 1,
+            variant_id: 101,
+            starred: 0,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert for 101
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 101
+      // variant 102:
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            case_id: 1,
+            variant_id: 102,
+            starred: 0,
+            acmg_classification: null,
+            acmg_evidence: null,
+            per_case_comment: null,
+            created_at: 1714060800000,
+            updated_at: 1714060800000
+          }
+        ]
+      }) // upsert for 102
+      .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 102
+      // batched audit.appendMany:
+      .mockResolvedValueOnce({ rows: [] })
+      // tag inserts:
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 101
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 102
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const res = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      acmg_classification: undefined,
+      tag_id: 7
+    })
+
+    expect(res).toEqual({ updatedCount: 2 })
+    expect(query).toHaveBeenCalledWith('BEGIN')
+    expect(query).toHaveBeenCalledWith('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+
+    // Find all audit log insert calls (must be batched into 1 appendMany call)
+    const auditCalls = query.mock.calls.filter(([sql]) =>
+      String(sql).includes('varlens_audit."audit_log"')
+    )
+    expect(auditCalls).toHaveLength(1)
+
+    expect(auditCalls[0][1]).toEqual([
+      // Variant 101: acmg_classify (null)
+      'public',
+      'acmg_classify',
+      'case_variant_annotation',
+      'case:1:variant:101',
+      null,
+      JSON.stringify({ acmg_classification: null }),
+      null,
+      null,
+      null,
+      // Variant 101: tag_assign
+      'public',
+      'tag_assign',
+      'case_variant_annotation',
+      'case:1:variant:101',
+      null,
+      JSON.stringify({ tag_id: 7 }),
+      null,
+      null,
+      null,
+      // Variant 102: acmg_classify (null)
+      'public',
+      'acmg_classify',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ acmg_classification: null }),
+      null,
+      null,
+      null,
+      // Variant 102: tag_assign
+      'public',
+      'tag_assign',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ tag_id: 7 }),
+      null,
+      null,
+      null
+    ])
+  })
+
+  it('batchUpsertPerCaseAnnotationWithAudit skips applyAnnotationFlagsPerCase on tag-only updates', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 102
+      .mockResolvedValueOnce({ rows: [] }) // audit.appendMany
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 101
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 102
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const res = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      tag_id: 7
+    })
+
+    expect(res).toEqual({ updatedCount: 2 })
+    const flagCalls = query.mock.calls.filter(([arg]) => {
+      const name = (arg as { name?: string })?.name ?? ''
+      const text = typeof arg === 'string' ? arg : ((arg as { text?: string })?.text ?? '')
+      return name.includes('annotation_flags') || text.includes('cohort_variant_summary')
+    })
+    expect(flagCalls).toHaveLength(0)
+  })
+
+  it('sorts batch variantIds ascending and serializes concurrent writes on overlapping targets', async () => {
+    const events: string[] = []
+    let releaseFirstBeginGate: () => void = () => {}
+    const firstBeginGate = new Promise<void>((r) => {
+      releaseFirstBeginGate = r
+    })
+
+    let txCount = 0
+    const pool = {
+      connect: vi.fn(async () => {
+        const txId = ++txCount
+        return {
+          query: vi.fn(async (sqlOrObj: unknown, rawValues?: unknown[]) => {
+            const sql =
+              typeof sqlOrObj === 'string'
+                ? sqlOrObj
+                : ((sqlOrObj as { text?: string })?.text ?? '')
+            const values =
+              typeof sqlOrObj === 'object' && sqlOrObj !== null && 'values' in sqlOrObj
+                ? (sqlOrObj as { values?: unknown[] }).values
+                : rawValues
+            if (sql === 'BEGIN') {
+              events.push(`tx${txId}:BEGIN`)
+              if (txId === 1) {
+                await firstBeginGate
+              }
+              return { rows: [] }
+            }
+            if (sql === 'COMMIT') {
+              events.push(`tx${txId}:COMMIT`)
+              return { rows: [] }
+            }
+            if (sql.includes('cohort_variant_summary')) {
+              return { rows: [{ target_resolved: 1 }] }
+            }
+            if (sql.includes('FROM "public"."variants"')) {
+              events.push(`tx${txId}:VARIANTS:${JSON.stringify(values?.[1])}`)
+              return { rows: [{ id: 101 }, { id: 102 }] }
+            }
+            if (
+              sql.includes('FROM "public"."case_variant_annotations"') &&
+              sql.includes('FOR UPDATE')
+            ) {
+              events.push(`tx${txId}:LOCK_READ:${values?.[1]}`)
+              return { rows: [] }
+            }
+            if (sql.includes('INSERT INTO "public"."case_variant_annotations"')) {
+              events.push(`tx${txId}:UPSERT:${values?.[1]}`)
+              return {
+                rows: [
+                  {
+                    id: 1,
+                    case_id: 1,
+                    variant_id: values?.[1],
+                    starred: 1,
+                    acmg_classification: null,
+                    acmg_evidence: null,
+                    per_case_comment: null,
+                    created_at: 1,
+                    updated_at: 1
+                  }
+                ]
+              }
+            }
+            return { rows: [] }
+          }),
+          release: vi.fn()
+        }
+      })
+    }
+
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+    // Start batch in reverse order [102, 101] concurrently with single-row write on 101
+    const p1 = repository.batchUpsertPerCaseAnnotationWithAudit(1, [102, 101], {
+      starred: true
+    })
+    const p2 = repository.upsertPerCaseAnnotationWithAudit(1, 101, {
+      starred: false
+    })
+
+    // Allow microtasks to settle; tx2 must not even BEGIN until tx1 releases the per-target lock
+    await new Promise((r) => setTimeout(r, 10))
+    expect(events).toEqual(['tx1:BEGIN'])
+
+    releaseFirstBeginGate()
+    await Promise.all([p1, p2])
+
+    expect(events).toEqual([
+      'tx1:BEGIN',
+      'tx1:VARIANTS:[101,102]',
+      'tx1:LOCK_READ:101',
+      'tx1:LOCK_READ:102',
+      'tx1:UPSERT:101',
+      'tx1:UPSERT:102',
+      'tx1:COMMIT',
+      'tx2:BEGIN',
+      'tx2:LOCK_READ:101',
+      'tx2:UPSERT:101',
+      'tx2:COMMIT'
+    ])
+  })
 })
 
 interface SeedVariant {
@@ -989,5 +1406,165 @@ describe.skipIf(!RUN)('annotation-flag write-hooks — Sprint A C5a', () => {
          WHERE chr = '3' AND pos = 300 AND ref = 'G' AND alt = 'A'`
     )
     expect(after.rows[0].has_star).toBe(false)
+  }, 60_000)
+
+  it('batchUpsertPerCaseAnnotationWithAudit rolls back annotations, tags, audit log, and cohort summary on mid-batch failure (#681)', async () => {
+    const caseA = await seedCase('case-batch-atomic')
+    const v1 = await seedVariant({
+      caseId: caseA,
+      chr: '5',
+      pos: 500,
+      ref: 'A',
+      alt: 'G',
+      gtNum: '0/1'
+    })
+    const v2 = await seedVariant({
+      caseId: caseA,
+      chr: '5',
+      pos: 501,
+      ref: 'C',
+      alt: 'T',
+      gtNum: '0/1'
+    })
+    await seedSummaryRow('5', 500, 'A', 'G')
+    await seedSummaryRow('5', 501, 'C', 'T')
+
+    const repo = new PostgresAnnotationsRepository(pool, schema)
+
+    // Non-existent tag_id triggers a FK constraint failure in variant_tags
+    // after case_variant_annotations, varlens_audit.audit_log, and cohort_variant_summary
+    // have already been mutated inside the transaction.
+    await expect(
+      repo.batchUpsertPerCaseAnnotationWithAudit(caseA, [v1, v2], {
+        starred: true,
+        acmg_classification: 'Pathogenic',
+        tag_id: 999_999,
+        user_name: 'analyst'
+      })
+    ).rejects.toThrow()
+
+    const annos = await probe.query(
+      `SELECT 1 FROM "${schema}".case_variant_annotations WHERE case_id = $1`,
+      [caseA]
+    )
+    expect(annos.rows).toHaveLength(0)
+
+    const tags = await probe.query(`SELECT 1 FROM "${schema}".variant_tags WHERE case_id = $1`, [
+      caseA
+    ])
+    expect(tags.rows).toHaveLength(0)
+
+    const audits = await probe.query(
+      `SELECT 1 FROM varlens_audit."audit_log" WHERE project_schema = $1`,
+      [schema]
+    )
+    expect(audits.rows).toHaveLength(0)
+
+    const summaries = await probe.query<{ has_star: boolean }>(
+      `SELECT has_star FROM "${schema}".cohort_variant_summary WHERE chr = '5' AND pos IN (500, 501)`
+    )
+    expect(summaries.rows).toEqual([{ has_star: false }, { has_star: false }])
+  }, 60_000)
+
+  it('cross-pool concurrent writes serialize via pg_advisory_xact_lock with fresh READ COMMITTED snapshot and without batch/single deadlock (#681)', async () => {
+    const caseA = await seedCase('case-cross-pool')
+    const v1 = await seedVariant({
+      caseId: caseA,
+      chr: '6',
+      pos: 600,
+      ref: 'A',
+      alt: 'G',
+      gtNum: '0/1'
+    })
+    const v2 = await seedVariant({
+      caseId: caseA,
+      chr: '6',
+      pos: 601,
+      ref: 'C',
+      alt: 'T',
+      gtNum: '0/1'
+    })
+    await seedSummaryRow('6', 600, 'A', 'G')
+    await seedSummaryRow('6', 601, 'C', 'T')
+
+    const poolB = new Pool({ connectionString: PG_URL, max: 2 })
+    const monitor = new Client({ connectionString: PG_URL })
+    await monitor.connect()
+    const waitForAdvisoryWaiters = async (minWaiters: number): Promise<void> => {
+      for (let i = 0; i < 200; i++) {
+        const res = await pool.query<{ waiting: number }>(
+          `SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`
+        )
+        if ((res.rows[0]?.waiting ?? 0) >= minWaiters) return
+        await new Promise((r) => setTimeout(r, 10))
+      }
+      throw new Error(`Timed out waiting for >= ${minWaiters} advisory lock waiters`)
+    }
+    try {
+      const repoA = new PostgresAnnotationsRepository(pool, schema)
+      const repoB = new PostgresAnnotationsRepository(poolB, schema)
+
+      // 1. Cross-pool first-insert race: repoA inserts PVS1 + Pathogenic while repoB
+      // concurrently tries to set Benign without override_reason on the same unannotated target.
+      await probe.query('BEGIN')
+      await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
+        schema,
+        `case:${caseA}:${v1}`
+      ])
+
+      const pWriteA = repoA.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        acmg_classification: 'Pathogenic',
+        acmg_evidence: JSON.stringify({
+          pathogenic: ['PVS1', 'PM2', 'PP3'],
+          benign: []
+        }),
+        user_name: 'analyst-a'
+      })
+      await waitForAdvisoryWaiters(1)
+
+      const pWriteB = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        acmg_classification: 'Benign',
+        user_name: 'analyst-b'
+      })
+      await waitForAdvisoryWaiters(2)
+
+      await probe.query('COMMIT')
+
+      await expect(pWriteA).resolves.toBeDefined()
+      await expect(pWriteB).rejects.toBeInstanceOf(InvalidParametersError)
+
+      // 2. Cross-pool batch vs single-row under summary-lock + target-lock contention
+      await monitor.query('BEGIN')
+      await monitor.query(
+        `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext('varlens-summary-publish'))`,
+        [schema]
+      )
+      await probe.query('BEGIN')
+      await probe.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', [
+        schema,
+        `case:${caseA}:${v1}`
+      ])
+
+      const pBatch = repoA.batchUpsertPerCaseAnnotationWithAudit(caseA, [v2, v1], {
+        starred: true,
+        user_name: 'analyst-a'
+      })
+      await waitForAdvisoryWaiters(1)
+
+      const pSingle = repoB.upsertPerCaseAnnotationWithAudit(caseA, v1, {
+        starred: false,
+        per_case_comment: 'concurrent comment',
+        user_name: 'analyst-b'
+      })
+      await waitForAdvisoryWaiters(2)
+
+      await monitor.query('COMMIT')
+      await probe.query('COMMIT')
+
+      await expect(Promise.all([pBatch, pSingle])).resolves.toBeDefined()
+    } finally {
+      await monitor.end().catch(() => {})
+      await poolB.end()
+    }
   }, 60_000)
 })

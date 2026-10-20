@@ -31,6 +31,7 @@ import { resolveSortColumn } from './variant-filter/sortable-columns'
 
 export type { VariantQueryBuilder } from './variant-filter/query-types'
 export {
+  BASE_FILTERABLE_COLUMNS,
   BASE_SORTABLE_COLUMNS,
   SORTABLE_COLUMNS,
   resolveSortColumn

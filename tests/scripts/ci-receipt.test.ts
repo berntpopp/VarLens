@@ -156,6 +156,9 @@ describe('receipt readiness boundaries', () => {
     expect(installs).toBe(1)
     mkdirSync(join(cwd, 'node_modules/.vitest'), { recursive: true })
     writeFileSync(join(cwd, 'node_modules/.vitest/cache'), 'generated')
+    // Vitest 5's default fsModuleCache directory
+    mkdirSync(join(cwd, 'node_modules/.vitest-cache'), { recursive: true })
+    writeFileSync(join(cwd, 'node_modules/.vitest-cache/0a1b'), 'generated')
     mkdirSync(join(cwd, 'node_modules/vitest/dist'), { recursive: true })
     writeFileSync(
       join(cwd, 'node_modules/vitest/dist/tsconfig.tmp.tsbuildinfo'),

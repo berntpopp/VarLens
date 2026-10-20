@@ -120,7 +120,7 @@ describe('SQLite cohort frequency is derived at read time', () => {
 
   it.each(['NULL', '0.123'] as const)(
     'lists, sorts, filters and exports the right frequency with the stored column = %s',
-    (garbage) => {
+    async (garbage) => {
       const ids = seedFourCases()
       corruptStored(garbage)
       expect(frequencies()).toEqual({ 100: 1, 200: 0.5, 300: 0.25 })
@@ -166,7 +166,7 @@ describe('SQLite cohort frequency is derived at read time', () => {
 
       // Export takes its rows from the same reader.
       const file = join(dir, 'cohort.xlsx')
-      runCohortExport(db, { sort_by: 'cohort_frequency', sort_order: 'desc' }, file, () => {})
+      await runCohortExport(db, { sort_by: 'cohort_frequency', sort_order: 'desc' }, file, () => {})
       const book = XLSX.read(readFileSync(file))
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(book.Sheets['Cohort Variants'])
       expect(rows.map((row) => row['Cohort Frequency'])).toEqual(['100.0%', '66.7%', '33.3%'])

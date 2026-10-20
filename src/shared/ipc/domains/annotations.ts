@@ -1,5 +1,6 @@
 import type {
   BatchAnnotationKey,
+  BatchPerCaseAnnotationUpdates,
   GlobalAnnotationUpdates,
   PerCaseAnnotationUpdates,
   VariantAnnotationsResult
@@ -40,6 +41,11 @@ export interface AnnotationsDomainContract {
     variantId: number,
     updates: PerCaseAnnotationUpdates
   ) => Promise<IpcResult<CaseVariantAnnotation>>
+  batchUpsertPerCase: (
+    caseId: number,
+    variantIds: number[],
+    updates: BatchPerCaseAnnotationUpdates
+  ) => Promise<IpcResult<{ updatedCount: number }>>
   deletePerCase: (caseId: number, variantId: number) => Promise<IpcResult<void>>
   getForVariant: (
     caseId: number,

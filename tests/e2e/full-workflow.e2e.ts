@@ -5,38 +5,51 @@
  *
  * Run with: npx playwright test tests/e2e/full-workflow.e2e.ts
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   test,
   expect,
-  _electron as electron,
-  type ElectronApplication,
   type Page
 } from '@playwright/test'
+import {
+  launchElectronApp,
+  type LaunchElectronAppResult,
+  waitForAppShell,
+  dismissDisclaimerIfPresent
+} from './helpers/electron-app'
+import {
+  createPerfDatabase,
+  importFrozenPerfFixture,
+  selectCaseByName,
+  PERF_CASE_NAMES
+} from './helpers/perf-fixture'
 
-let app: ElectronApplication
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, '../../package.json'), 'utf8')
+) as { version: string }
+
+let appInstance: LaunchElectronAppResult
 let window: Page
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: ['./out/main/index.js'],
-    env: {
-      ...process.env,
-      NODE_ENV: 'production'
-    }
-  })
-  window = await app.firstWindow()
-  await window.waitForSelector('.v-application', { timeout: 15000 })
+  appInstance = await launchElectronApp()
+  window = appInstance.window
+  await waitForAppShell(window)
+  await dismissDisclaimerIfPresent(window)
 
-  // Dismiss disclaimer dialog if present
-  const disclaimerBtn = window.locator('button:has-text("I Understand")')
-  if ((await disclaimerBtn.count()) > 0) {
-    await disclaimerBtn.click()
-    await window.waitForTimeout(500)
-  }
+  // Seed deterministic database and fixture cases
+  await createPerfDatabase(appInstance.app, window, appInstance.userDataDir)
+  await importFrozenPerfFixture(window, appInstance.app)
+
+  // Reload renderer to sync store with raw IPC imported fixture cases
+  await window.reload()
+  await waitForAppShell(window)
+  await dismissDisclaimerIfPresent(window)
 })
 
 test.afterAll(async () => {
-  if (app) await app.close()
+  if (appInstance) await appInstance.cleanup()
 })
 
 test.describe('App Shell', () => {
@@ -113,55 +126,35 @@ test.describe('Case View', () => {
 
   // eslint-disable-next-line no-empty-pattern
   test('selecting a case loads variant table', async ({}, testInfo) => {
-    // Open sidebar
-    const sidebar = window.locator('.v-navigation-drawer--left')
-    if (!(await sidebar.isVisible())) {
-      const toggleBtn = window.locator('.sidebar-toggle-btn')
-      await toggleBtn.click()
-      await window.waitForTimeout(300)
-    }
+    // Select the first imported case
+    await selectCaseByName(window, PERF_CASE_NAMES[0])
+    const snvTab = window.locator('.v-tab').filter({ hasText: /SNV\/Indel/i }).first()
+    await expect(snvTab).toBeVisible()
+    await snvTab.click()
 
-    // Click first case in list
-    const caseItem = window
-      .locator('.v-list-item')
-      .filter({ hasText: /variants/ })
-      .first()
-    if ((await caseItem.count()) > 0) {
-      await caseItem.click()
-      await window.waitForTimeout(1000)
+    // Context indicator should show case name
+    const contextIndicator = window.locator('.context-indicator')
+    await expect(contextIndicator).toBeVisible()
 
-      // Variant table or filter toolbar should appear
-      const hasTable = await window
-        .locator('.v-data-table-server, .filter-bar-container')
-        .first()
-        .isVisible()
-        .catch(() => false)
+    const table = window.locator('.variant-table--sticky.v-data-table')
+    await expect(table).toBeVisible()
 
-      await window.screenshot({ path: testInfo.outputPath('case-selected.png') })
-
-      if (hasTable) {
-        // Context indicator should show case name
-        const contextIndicator = window.locator('.context-indicator')
-        await expect(contextIndicator).toBeVisible()
-      }
-    } else {
-      // No cases available - take screenshot of current state
-      await window.screenshot({ path: testInfo.outputPath('no-cases-available.png') })
-    }
+    await window.screenshot({ path: testInfo.outputPath('case-selected.png') })
   })
 
   // eslint-disable-next-line no-empty-pattern
   test('variant table shows data columns', async ({}, testInfo) => {
     // Check if we have a variant table visible
-    const table = window.locator('.v-data-table-server')
-    if ((await table.count()) > 0 && (await table.isVisible())) {
-      // Should have column headers
-      const headers = window.locator('.v-data-table-server th')
-      const headerCount = await headers.count()
-      expect(headerCount).toBeGreaterThan(3)
+    const table = window.locator('.variant-table--sticky.v-data-table')
+    await expect(table).toBeVisible()
 
-      await window.screenshot({ path: testInfo.outputPath('variant-table.png') })
-    }
+    // Should have column headers
+    const headers = table.locator('th')
+    await expect(headers.first()).toBeVisible()
+    const headerCount = await headers.count()
+    expect(headerCount).toBeGreaterThan(3)
+
+    await window.screenshot({ path: testInfo.outputPath('variant-table.png') })
   })
 })
 
@@ -239,7 +232,7 @@ test.describe('Navigation', () => {
 test.describe('Footer', () => {
   // eslint-disable-next-line no-empty-pattern
   test('footer shows version', async ({}, testInfo) => {
-    await expect(window.locator('text=VarLens v0.21.0')).toBeVisible()
+    await expect(window.locator(`text=VarLens v${pkg.version}`)).toBeVisible()
 
     await window.screenshot({ path: testInfo.outputPath('footer.png') })
   })

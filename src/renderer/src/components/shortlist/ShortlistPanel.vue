@@ -25,24 +25,44 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { computed, toRef } from 'vue'
+import { computed, inject, ref, toRef, watch } from 'vue'
 import { mdiInformationOutline, mdiRefresh, mdiTuneVariant } from '@mdi/js'
 import IconButton from '../common/IconButton.vue'
 import ShortlistTable from './ShortlistTable.vue'
+import AnnotationDialogs from '../AnnotationDialogs.vue'
 import TableLoadIndicator from '../table-state/TableLoadIndicator.vue'
 import { useTableLoadingState } from '../../composables/useTableLoadingState'
 import { useShortlistQuery } from '../../composables/useShortlistQuery'
 import { useApiService } from '../../composables/useApiService'
+import { useAnnotations } from '../../composables/useAnnotations'
+import { useAcmgUndo } from '../../composables/useAcmgUndo'
 import { logService } from '../../services/LogService'
 import type { ShortlistRow, PerTypeTab } from '../../../../shared/types/shortlist'
-import { isIpcError, unwrapIpcResult } from '../../../../shared/types/errors'
+import {
+  annotationCache,
+  cacheSet,
+  ensurePerCaseSlotOwner,
+  evictCoordSlotOnly,
+  evictPerCaseVariant,
+  getCachedVariantId,
+  getPerCaseByVariantId,
+  hasLoadedPerCaseByVariantId,
+  inFlightMutations,
+  markAwaited,
+  perCaseSlotKey,
+  setCachedVariantId,
+  unloadedSlotOf,
+  variantKey
+} from '../../composables/annotation-cache'
 import { usePermissions } from '../../composables/usePermissions'
 import { useShortlistRankingDialog } from '../../composables/useShortlistRankingDialog'
 import { SHORTLIST_RANKING_EDITOR } from '../../config/shortlistRankingEditor'
+import { AppStateKey } from '../../composables/useAppState'
 
 const { open: openRankingDialog } = useShortlistRankingDialog()
 
 const { canWrite } = usePermissions()
+const appState = inject(AppStateKey, null)
 
 const props = defineProps<{
   caseId: number
@@ -58,17 +78,39 @@ const emit = defineEmits<{
 const { api } = useApiService()
 
 const caseIdRef = toRef(props, 'caseId')
-const { shortlistPresets, selectedPresetId, result, loading, error, refresh } =
+const { shortlistPresets, selectedPresetId, result, loading, error, refresh, presetsLoading } =
   useShortlistQuery(caseIdRef)
+
+const annotations = useAnnotations()
+const annotationActions = { ...annotations, ...useAcmgUndo() }
+const annotationDialogsRef = ref<InstanceType<typeof AnnotationDialogs> | null>(null)
+
+watch(
+  () => result.value?.rows,
+  (rows) => {
+    if (rows && rows.length > 0) {
+      void annotations.loadAnnotationsBatch(props.caseId, rows)
+    }
+  },
+  { immediate: true }
+)
 
 // Same loading presentation as the case/cohort tables (stale-while-revalidate)
 const { showStale, ariaBusy, liveMessage } = useTableLoadingState({
   loading,
   totalCount: computed(() => result.value?.rows.length ?? null)
 })
+
+const hasNoPresets = computed(
+  () => !loading.value && !presetsLoading?.value && shortlistPresets.value.length === 0
+)
+
 // Skeleton until the first result, not only while `loading`: the query starts
 // asynchronously, so gating on loading left the body empty for a frame or two.
-const showSkeleton = computed(() => result.value === null && error.value === null)
+const showSkeleton = computed(() => {
+  if (hasNoPresets.value) return false
+  return result.value === null && error.value === null
+})
 
 // Plain-language explanation of how the shortlist is built: every matching
 // variant is scored, the best N are shown (#537).
@@ -84,7 +126,7 @@ const shortlistExplanation = computed(() => {
 
 /**
  * Toggle the star annotation for a row. Writes through
- * `annotations.upsertPerCase` and relies on the
+ * `annotations.toggleStar` (`annotations.upsertPerCase`) and relies on the
  * `variants:annotationChanged` broadcast to drive the refetch — no
  * manual `refresh()` call here.
  */
@@ -93,21 +135,78 @@ async function onToggleStar(row: ShortlistRow): Promise<void> {
     logService.warn('toggle star skipped: API unavailable', 'shortlist.panel')
     return
   }
-  try {
-    unwrapIpcResult(
-      await api.annotations.upsertPerCase(row.case_id, row.id, {
-        starred: !row.is_starred
-      })
+  await annotations.toggleStar(row.case_id, row.id, row.chr, row.pos, row.ref, row.alt, {
+    initialStarred: row.is_starred,
+    logSource: 'shortlist.panel',
+    isStillActive: () =>
+      props.caseId === row.case_id &&
+      (appState?.selectedCaseId?.value == null || appState.selectedCaseId.value === row.case_id)
+  })
+}
+
+let dialogOpenSeq = 0
+
+function isRowAnnotationVerified(row: ShortlistRow): boolean {
+  const key = variantKey(row)
+  const cached = annotationCache.value.get(key)
+  if (cached === undefined || unloadedSlotOf(key) === 'global') return false
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key)
+    return (
+      pc === null || (pc !== undefined && pc.variant_id === row.id && pc.case_id === row.case_id)
     )
-    // No manual refresh — the variants:annotationChanged broadcast
-    // triggers a refetch via useShortlistQuery's subscription.
-  } catch (e) {
-    logService.error(
-      `toggle star failed: ${
-        e instanceof Error ? e.message : isIpcError(e) ? (e.userMessage ?? e.message) : String(e)
-      }`,
-      'shortlist.panel'
-    )
+  }
+  if (inFlightMutations.has(perCaseSlotKey(row.case_id, row.id, key))) return false
+  const cachedVid = getCachedVariantId(key)
+  return (
+    unloadedSlotOf(key) === undefined &&
+    cachedVid === row.id &&
+    (cached.perCase === null ||
+      (cached.perCase.variant_id === row.id && cached.perCase.case_id === row.case_id))
+  )
+}
+
+async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
+  const seq = ++dialogOpenSeq
+  const key = variantKey(row)
+  if (!isRowAnnotationVerified(row)) {
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
+    markAwaited('case', key)
+    await annotations.loadAnnotationsBatch(row.case_id, [row])
+  }
+  if (seq !== dialogOpenSeq || props.caseId !== row.case_id) {
+    return false
+  }
+  if (!isRowAnnotationVerified(row)) {
+    evictPerCaseVariant(row.case_id, row.id, key)
+    evictCoordSlotOnly(key)
+    appState?.showSnack('Failed to load variant annotations.', 'error')
+    return false
+  }
+  if (hasLoadedPerCaseByVariantId(row.case_id, row.id)) {
+    const pc = getPerCaseByVariantId(row.case_id, row.id, key) ?? null
+    const existing = annotationCache.value.get(key)
+    ensurePerCaseSlotOwner(key, row.case_id, row.id)
+    setCachedVariantId(key, row.id)
+    if (existing !== undefined && (existing.perCase !== pc || unloadedSlotOf(key) === 'perCase')) {
+      cacheSet(key, { global: existing.global, perCase: pc })
+    }
+  }
+  return true
+}
+
+async function onAcmgClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openAcmgEvidenceDialog(row)
+  }
+}
+
+async function onCommentClick(row: ShortlistRow): Promise<void> {
+  const ready = await prepareRowDialog(row)
+  if (ready) {
+    annotationDialogsRef.value?.openCommentDialog(row)
   }
 }
 
@@ -195,6 +294,27 @@ function dismissError(): void {
       </v-alert>
 
       <div
+        v-else-if="hasNoPresets"
+        class="pa-6 text-center text-medium-emphasis"
+        data-testid="shortlist-empty-presets"
+      >
+        <v-icon size="large" class="mb-2" :icon="mdiTuneVariant" />
+        <div class="text-body-1 font-weight-medium">No shortlist presets available</div>
+        <div class="text-caption mt-1 mb-3">
+          Configure a shortlist ranking preset to score and rank candidate variants.
+        </div>
+        <v-btn
+          v-if="canWrite"
+          variant="outlined"
+          size="small"
+          :prepend-icon="mdiTuneVariant"
+          @click="openRankingDialog(null)"
+        >
+          {{ SHORTLIST_RANKING_EDITOR.actions.editRanking }}
+        </v-btn>
+      </div>
+
+      <div
         v-else-if="result && result.rows.length === 0"
         class="pa-6 text-center text-medium-emphasis"
       >
@@ -203,14 +323,24 @@ function dismissError(): void {
 
       <ShortlistTable
         v-else-if="result"
+        :key="selectedPresetId ?? 'none'"
+        :case-id="caseId"
         :read-only="!canWrite"
         :interactive="interactive"
         :rows="result.rows"
         @row-click="(row) => emit('row-click', row)"
         @open-in-tab="(t) => emit('open-in-tab', t)"
         @toggle-star="onToggleStar"
+        @acmg-click="onAcmgClick"
+        @comment-click="onCommentClick"
       />
     </div>
+
+    <AnnotationDialogs
+      ref="annotationDialogsRef"
+      :case-id="caseId"
+      :annotation-actions="annotationActions"
+    />
   </div>
 </template>
 

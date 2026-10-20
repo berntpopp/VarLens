@@ -1,25 +1,27 @@
 /**
  * Cohort XLSX export — runs inside the export worker.
  *
- * Previously this ran on the Electron main thread (audit 05 finding M-3): a
- * 100k-row cohort query, `aoa_to_sheet` and `XLSX.write` all blocked the
- * event loop with no progress or cancel. It now receives an open read-only
- * connection inside the worker; the main thread only relays progress and can
- * terminate the worker to cancel.
+ * Streams query results in pages to an XLSX file using xlsxStream, avoiding
+ * blocking the event loop and bounding memory usage.
  */
-import { writeFileSync } from 'node:fs'
-import * as XLSX from 'xlsx'
 import type { Database as DatabaseType } from 'better-sqlite3-multiple-ciphers'
 import { CohortService } from '../database/cohort'
 import { isCohortSummaryStale } from '../database/cohort-summary-case-removal'
 import { CohortSummaryRefreshingError } from '../../shared/errors/cohort-summary-refreshing'
 import type { CohortSearchParams } from '../../shared/types/cohort'
-import type { ExportColumn } from './export-pipeline'
+import { streamToExportFile, type ExportColumn } from './export-pipeline'
 import { formatCellValue } from './export-renderer'
 import { COHORT_ANNOTATION_EXPORT_COLUMNS } from '../../shared/config/export.config'
-import { cohortRowAnnotations } from '../database/annotation-export-lookup'
+import { createCohortAnnotationBatchLookup } from '../database/annotation-export-lookup'
+import {
+  xlsxStream,
+  type XlsxSheetSpec,
+  type XlsxStreamResult,
+  type XlsxCell
+} from '../../web/server/downloads/xlsx-stream'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
+const PROGRESS_EVERY_ROWS = 1_000
 
 /** Cohort export column headers (shared with the PostgreSQL CSV export). */
 export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
@@ -44,20 +46,18 @@ export const COHORT_EXPORT_COLUMNS: readonly ExportColumn[] = [
   ...COHORT_ANNOTATION_EXPORT_COLUMNS
 ]
 
-const PROGRESS_EVERY_ROWS = 5_000
-
-function formatCohortCell(key: string, value: unknown): unknown {
+function formatCohortCell(key: string, value: unknown): XlsxCell {
   if (key === 'cohort_frequency' && typeof value === 'number') {
     return `${(value * 100).toFixed(1)}%`
   }
-  return formatCellValue(key, value)
+  return formatCellValue(key, value) as XlsxCell
 }
 
 function buildCohortMetadata(
   params: CohortSearchParams,
   totalCases: number,
   exported: number
-): unknown[][] {
+): (string | number)[][] {
   const has = (v: string | undefined): v is string => v !== undefined && v !== ''
   const hasList = (v: string[] | undefined): v is string[] => v !== undefined && v.length > 0
   return [
@@ -92,50 +92,84 @@ export interface CohortExportResult {
 }
 
 /**
- * Query the cohort (capped at {@link COHORT_EXPORT_HARD_LIMIT}) and write an
- * XLSX workbook. `onProgress(current, total)` fires after the query, every
- * {@link PROGRESS_EVERY_ROWS} rows while building, and once written.
+ * Query the cohort (capped at {@link COHORT_EXPORT_HARD_LIMIT})
+ * and stream an XLSX workbook incrementally.
  */
-export function runCohortExport(
+export async function runCohortExport(
   db: DatabaseType,
   params: CohortSearchParams,
   outputFilePath: string,
-  onProgress: (current: number, total: number) => void
-): CohortExportResult {
-  // The summary is what gets exported: never write a file from a stale one.
-  // The main process waited for a pending refresh before starting this job.
-  if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
-  const cohortService = new CohortService(db)
-  onProgress(0, 0)
-  const variants = cohortService.getCohortVariants({
-    ...params,
-    limit: COHORT_EXPORT_HARD_LIMIT
-  }).data
-  const total = variants.length
-  onProgress(0, total)
+  onProgress: (current: number, total: number) => void,
+  customTempFilePath?: string,
+  tempFilePrecreated?: { dev: number; ino: number }
+): Promise<CohortExportResult> {
+  const startedTx = !db.inTransaction
+  if (startedTx) db.exec('BEGIN DEFERRED')
 
-  const rows: unknown[][] = []
-  const annotationsOf = cohortRowAnnotations(db)
-  for (const [index, variant] of variants.entries()) {
-    const row: Record<string, unknown> = { ...variant, ...annotationsOf(variant) }
-    rows.push(COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key])))
-    if ((index + 1) % PROGRESS_EVERY_ROWS === 0) onProgress(index + 1, total)
+  try {
+    // The summary is what gets exported: never write a file from a stale one.
+    // The main process waited for a pending refresh before starting this job.
+    if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
+
+    const cohortService = new CohortService(db)
+    const summary = cohortService.getCohortSummary()
+    onProgress(0, 0)
+    const batchLookup = createCohortAnnotationBatchLookup(db)
+    const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
+    const result: XlsxStreamResult = { rowCount: 0, truncated: false }
+
+    const baseParams = { ...params, cursor: undefined, offset: 0 }
+
+    async function* generateCohortRows(): AsyncGenerator<readonly XlsxCell[]> {
+      const { data: variants } = cohortService.getCohortVariants({
+        ...baseParams,
+        limit: COHORT_EXPORT_HARD_LIMIT
+      })
+      const totalCount = variants.length
+      onProgress(0, totalCount)
+      let yieldedRows = 0
+
+      for (let i = 0; i < variants.length; i += 200) {
+        const chunk = variants.slice(i, i + 200)
+        const annotations = batchLookup(chunk)
+        for (const variant of chunk) {
+          const key =
+            (variant as { id?: unknown }).id ??
+            `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
+          const ann = annotations.get(key)
+          const row: Record<string, unknown> = { ...variant, ...ann }
+          yield COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
+          yieldedRows += 1
+          if (yieldedRows % PROGRESS_EVERY_ROWS === 0) {
+            onProgress(yieldedRows, totalCount)
+          }
+        }
+      }
+    }
+
+    const sheet: XlsxSheetSpec = {
+      name: 'Cohort Variants',
+      header: headers,
+      rows: generateCohortRows()
+    }
+
+    const info = {
+      name: 'Export Info',
+      rows: (res: XlsxStreamResult) =>
+        buildCohortMetadata(params, summary.total_cases, res.rowCount)
+    }
+
+    await streamToExportFile(xlsxStream(sheet, result, info), {
+      outputFilePath,
+      customTempFilePath,
+      tempFilePrecreated
+    })
+
+    onProgress(result.rowCount, result.rowCount)
+    return { filePath: outputFilePath, rowCount: result.rowCount }
+  } finally {
+    if (startedTx && db.inTransaction) {
+      db.exec('ROLLBACK')
+    }
   }
-
-  const ws = XLSX.utils.aoa_to_sheet([COHORT_EXPORT_COLUMNS.map((col) => col.header), ...rows])
-  ws['!cols'] = COHORT_EXPORT_COLUMNS.map((col) => ({
-    wch: col.key === 'aa_change' || col.key === 'cdna' ? 20 : 15
-  }))
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Cohort Variants')
-
-  const summary = cohortService.getCohortSummary()
-  const metaWs = XLSX.utils.aoa_to_sheet(buildCohortMetadata(params, summary.total_cases, total))
-  XLSX.utils.book_append_sheet(wb, metaWs, 'Export Info')
-
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
-  writeFileSync(outputFilePath, buffer)
-  onProgress(total, total)
-
-  return { filePath: outputFilePath, rowCount: total }
 }

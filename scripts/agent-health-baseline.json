@@ -44,13 +44,6 @@
       "reason": "existing large renderer component; must not grow before component split"
     },
     {
-      "path": "src/renderer/src/components/cohort/CohortFilterDrawer.vue",
-      "lines": 680,
-      "threshold": 600,
-      "category": "source",
-      "reason": "existing large renderer component; must not grow before component split"
-    },
-    {
       "path": "src/renderer/src/components/CohortTable.vue",
       "lines": 817,
       "threshold": 600,

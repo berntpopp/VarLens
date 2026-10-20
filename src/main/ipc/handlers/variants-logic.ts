@@ -10,6 +10,7 @@ import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import type { StorageSession } from '../../storage/session'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
+import { panelStatusGenomeBuild } from '../../../shared/filters/panel-intervals'
 import { computePanelIntervals } from './panelIntervalHelper'
 
 type GetSession = () => StorageSession
@@ -87,20 +88,11 @@ export function buildVariantFilter(
     }
 
     const pool = getDbPool?.()
-    if (pool) {
-      // Pool path: let the worker resolve intervals off the main thread.
-      // Attach genome_build so the worker can look up coordinates in the
-      // correct assembly without making an extra IPC-side DB call.
-      const dbRef = getDb()
-      const caseData = dbRef.cases.getCase(fullFilter.case_id)
-      ;(fullFilter as VariantFilter & { genome_build?: string }).genome_build =
-        caseData?.genome_build ?? 'GRCh38'
-      // active_panel_ids and panel_padding_bp are forwarded as-is
-    } else {
+    if (!pool) {
       // Fallback (no pool): compute on the main thread synchronously
       const dbRef = getDb()
       const caseData = dbRef.cases.getCase(fullFilter.case_id)
-      const genomeBuild = caseData?.genome_build ?? 'GRCh38'
+      const genomeBuild = panelStatusGenomeBuild(undefined, caseData?.genome_build)
 
       // Throws if the computation itself fails — never treat that as "no
       // panel configured" (see panelIntervalHelper.ts for the contract).

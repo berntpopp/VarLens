@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  buildHpoSimilarityDb,
+  scoreAllGenes,
+  resetHpoCaseScoreCacheHits
+} from '../../../src/main/services/phenotype/hpo-similarity-db'
+import { HPO_DATA_CONFIG } from '../../../src/shared/config/hpo-data.config'
+import { GENES_TO_PHENOTYPE, HP_JSON, PHENOTYPE_HPOA, T } from '../../shared/phenotype/hpo-fixture'
 import { PostgresReadExecutor } from '../../../src/main/storage/postgres/PostgresReadExecutor'
 
 function workflowRepositories() {
@@ -402,5 +411,156 @@ describe('PostgresReadExecutor', () => {
       executor.execute({ type: 'panels:resolutionStatus', params: [request] })
     ).resolves.toBe(expected)
     expect(panelStatus.getResolutionStatus).toHaveBeenCalledWith(request)
+  })
+
+  it('dispatches hpo:caseScores in a worker thread (threadId !== 0) with empty terms', async () => {
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    try {
+      const res = await executor.execute({ type: 'hpo:caseScores', params: [[]] })
+      expect(res).toEqual([])
+      const threadId = await executor.getHpoWorker().getThreadId()
+      expect(threadId).toBeGreaterThan(0)
+    } finally {
+      await executor.close()
+    }
+  })
+
+  it('dispatches hpo:prewarm in a worker thread (threadId !== 0)', async () => {
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    try {
+      const prewarmRes = (await executor.execute({ type: 'hpo:prewarm', params: [] })) as {
+        threadId: number
+        result: boolean
+      }
+      expect(prewarmRes.threadId).toBeGreaterThan(0)
+    } finally {
+      await executor.close()
+    }
+  })
+
+  it('dispatches hpo:caseScores with non-empty terms, matches SQLite score parity, asserts threadId !== 0, and verifies canonical LRU caching', async () => {
+    resetHpoCaseScoreCacheHits()
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-hpo-'))
+    const hpoPath = join(dir, 'hpo_similarity.db')
+    const prevEnv = process.env[HPO_DATA_CONFIG.envPath]
+    buildHpoSimilarityDb(
+      { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+      { release: 'v2026-09-01', sha256: {} },
+      hpoPath
+    )
+    process.env[HPO_DATA_CONFIG.envPath] = hpoPath
+
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    try {
+      const termsA = [
+        { hpoId: T.C, excluded: false, key: false },
+        { hpoId: T.E, excluded: false, key: false }
+      ]
+      const termsB = [
+        { hpoId: T.E, excluded: false, key: false },
+        { hpoId: T.C, excluded: false, key: false }
+      ]
+
+      // Baseline SQLite scoreAllGenes output
+      const sqliteBaseline = scoreAllGenes(termsA, hpoPath)
+      expect(sqliteBaseline.length).toBeGreaterThan(0)
+
+      // First run in Postgres worker
+      const workerRes = await executor.getHpoWorker().scoreAllGenesWithThread(termsA, hpoPath)
+      expect(workerRes.threadId).toBeGreaterThan(0)
+      expect(workerRes.scores).toStrictEqual(sqliteBaseline)
+
+      // Second run with reversed term order: profile.hash matches, canonical cache hit!
+      const workerRes2 = await executor.getHpoWorker().scoreAllGenesWithThread(termsB, hpoPath)
+      expect(workerRes2.scores).toStrictEqual(sqliteBaseline)
+      expect(workerRes2.cacheHits).toBeGreaterThanOrEqual(1)
+
+      // Parity check via standard executor.execute
+      const execRes = await executor.execute({ type: 'hpo:caseScores', params: [termsA] })
+      expect(execRes).toStrictEqual(sqliteBaseline)
+    } finally {
+      await executor.close()
+      if (prevEnv === undefined) delete process.env[HPO_DATA_CONFIG.envPath]
+      else process.env[HPO_DATA_CONFIG.envPath] = prevEnv
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects pending and new requests when PostgresHpoWorkerClient is destroyed', async () => {
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    const workerClient = executor.getHpoWorker()
+    await executor.close()
+    await expect(workerClient.getThreadId()).rejects.toThrow(
+      'PostgresHpoWorkerClient has been destroyed'
+    )
+  })
+
+  it('allows immediate retry after worker error without old exit disrupting replacement worker', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-hpo-retry-'))
+    const hpoPath = join(dir, 'hpo_similarity.db')
+    const prevEnv = process.env[HPO_DATA_CONFIG.envPath]
+    buildHpoSimilarityDb(
+      { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+      { release: 'v2026-09-01', sha256: {} },
+      hpoPath
+    )
+    process.env[HPO_DATA_CONFIG.envPath] = hpoPath
+
+    const executor = new PostgresReadExecutor({ ...workflowRepositories() } as never)
+    const workerClient = executor.getHpoWorker()
+    try {
+      const terms = [{ hpoId: T.C, excluded: false, key: false }]
+      const firstRes = await workerClient.scoreAllGenes(terms, hpoPath)
+      expect(firstRes.length).toBeGreaterThan(0)
+
+      const rawWorker = (
+        workerClient as unknown as {
+          worker: { emit: (event: string, ...args: unknown[]) => boolean }
+        }
+      ).worker
+      rawWorker.emit('error', new Error('simulated worker crash'))
+
+      const retryPromise = workerClient.scoreAllGenes(terms, hpoPath)
+      const retryRes = await retryPromise
+      expect(retryRes).toStrictEqual(firstRes)
+
+      await workerClient.destroy()
+    } finally {
+      await executor.close()
+      if (prevEnv === undefined) delete process.env[HPO_DATA_CONFIG.envPath]
+      else process.env[HPO_DATA_CONFIG.envPath] = prevEnv
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('dispatches hpo:explainGene in a worker thread', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'varlens-pg-hpo-explain-'))
+    const hpoPath = join(dir, 'hpo_similarity.db')
+    const prevEnv = process.env[HPO_DATA_CONFIG.envPath]
+    buildHpoSimilarityDb(
+      { ontology: HP_JSON, annotations: PHENOTYPE_HPOA, genes: GENES_TO_PHENOTYPE },
+      { release: 'v2026-09-01', sha256: {} },
+      hpoPath
+    )
+    process.env[HPO_DATA_CONFIG.envPath] = hpoPath
+
+    const caseMetadata = {
+      getCaseHpoTerms: vi.fn().mockResolvedValue([{ hpo_id: T.C, excluded: false, key: false }])
+    }
+    const executor = new PostgresReadExecutor({
+      ...workflowRepositories(),
+      caseMetadata: caseMetadata as never
+    } as never)
+
+    try {
+      const explanation = await executor.execute({ type: 'hpo:explainGene', params: [1, 'GENE1'] })
+      expect(explanation).not.toBeNull()
+      expect(caseMetadata.getCaseHpoTerms).toHaveBeenCalledWith(1)
+    } finally {
+      await executor.close()
+      if (prevEnv === undefined) delete process.env[HPO_DATA_CONFIG.envPath]
+      else process.env[HPO_DATA_CONFIG.envPath] = prevEnv
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

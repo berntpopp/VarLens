@@ -48,6 +48,16 @@ export const BASE_SORTABLE_COLUMNS: Record<string, string> = {
 }
 
 /**
+ * Filterable columns on the `variants` table. Extends `BASE_SORTABLE_COLUMNS`
+ * with `ref` and `alt`, which are filterable but not sortable.
+ */
+export const BASE_FILTERABLE_COLUMNS: Record<string, string> = {
+  ...BASE_SORTABLE_COLUMNS,
+  ref: 'ref',
+  alt: 'alt'
+}
+
+/**
  * Legacy alias — kept for back-compat with callers that imported
  * `SORTABLE_COLUMNS` before the base/extension split. Points at the same
  * object as `BASE_SORTABLE_COLUMNS`.

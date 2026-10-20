@@ -290,8 +290,17 @@ let cached: { key: string; index: PhenotypeIndex | null } | null = null
 interface Memo {
   scores: CaseScores
   explained: Map<number, HpoExplanation>
+  allGenes?: GenePhenotypeScore[]
 }
 const results = new Map<string, Memo>()
+
+let caseScoreHits = 0
+export function getHpoCaseScoreCacheHits(): number {
+  return caseScoreHits
+}
+export function resetHpoCaseScoreCacheHits(): void {
+  caseScoreHits = 0
+}
 
 const rows = <T>(db: Database.Database, sql: string): T[] => db.prepare(sql).raw().all() as T[]
 
@@ -376,6 +385,7 @@ function caseScores(
   const memoKey = `${key}\0${JSON.stringify(options)}\0${profile.hash}`
   let hit = results.get(memoKey)
   if (hit !== undefined) {
+    caseScoreHits += 1
     results.delete(memoKey)
   } else {
     hit = { scores: scoreProfile(index, profile, options), explained: new Map() }
@@ -414,12 +424,13 @@ export function scoreAllGenes(
     const index = loaded?.index ?? null
     const profile = index === null ? null : prepareProfile(index, terms)
     if (loaded === null || index === null || profile === null) return []
-    const { scores } = caseScores(loaded.key, index, profile, {})
-    return [...index.genes].map(([gene, g]) => ({
+    const memo = caseScores(loaded.key, index, profile, {})
+    if (memo.allGenes !== undefined) return memo.allGenes
+    return (memo.allGenes = [...index.genes].map(([gene, g]) => ({
       gene,
-      score: scores.geneScore[g],
-      disease: index.diseaseLabels[scores.geneBest[g]]
-    }))
+      score: memo.scores.geneScore[g],
+      disease: index.diseaseLabels[memo.scores.geneBest[g]]
+    })))
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     mainLogger.warn(`HPO similarity unavailable: ${message}`, 'hpo-data')
