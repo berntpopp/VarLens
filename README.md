@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/berntpopp/VarLens/actions/workflows/build.yml"><img src="https://github.com/berntpopp/VarLens/actions/workflows/build.yml/badge.svg" alt="Build" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-40-47848F.svg" alt="Electron" /></a>
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-43-47848F.svg" alt="Electron" /></a>
   <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D.svg" alt="Vue" /></a>
 </p>
 
