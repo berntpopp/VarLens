@@ -11,7 +11,7 @@ import { hashValue, readReceipt, writeReceipt, digestPaths } from './receipt.mjs
 // first preflight after every reinstall.
 const excluded = (path) =>
   path === 'vitest/dist/tsconfig.tmp.tsbuildinfo' ||
-  /(^|\/)(\.cache|\.vite|\.vitest|\.vite-temp|__pycache__)(\/|$)/.test(path) ||
+  /(^|\/)(\.cache|\.vite|\.vitest|\.vitest-cache|\.vite-temp|__pycache__)(\/|$)/.test(path) ||
   /^better-sqlite3-multiple-ciphers\/(build|bin|\.forge-meta)(\/|$)/.test(path)
 export async function installedFingerprint(cwd, cacheFile) {
   const root = join(cwd, 'node_modules')
