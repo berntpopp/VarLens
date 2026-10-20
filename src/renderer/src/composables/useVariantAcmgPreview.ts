@@ -1,29 +1,20 @@
 import { ref, computed, watch, type Ref } from 'vue'
-import type { Variant } from '../../../../shared/types/api'
-import type { CohortVariant } from '../../../../shared/types/cohort'
-import { generateSuggestions, type VariantAnnotationData } from './acmg-suggestions'
+import type { Variant } from '../../../shared/types/api'
+import type { CohortVariant } from '../../../shared/types/cohort'
+import { generateSuggestions, type VariantAnnotationData } from '../utils/acmg/acmg-suggestions'
 
 export function buildAcmgVariantData(
   variant: Variant | CohortVariant | null,
-  revelFallback?: number | null,
-  spliceAiFallback?: number | null
+  revel?: number | null,
+  spliceAi?: number | null
 ): VariantAnnotationData | null {
   if (!variant) return null
-  const v = variant as unknown as Record<string, unknown>
   return {
     gnomad_af: variant.gnomad_af ?? null,
     cadd: 'cadd' in variant ? (variant.cadd ?? null) : (variant.cadd_phred ?? null),
     clinvar: variant.clinvar ?? null,
-    revel:
-      ('revel' in v && v.revel !== undefined ? (v.revel as number | null) : null) ??
-      revelFallback ??
-      null,
-    spliceai_max:
-      ('spliceai_max' in v && v.spliceai_max !== undefined
-        ? (v.spliceai_max as number | null)
-        : null) ??
-      spliceAiFallback ??
-      null
+    revel: revel ?? null,
+    spliceai_max: spliceAi ?? null
   }
 }
 
@@ -32,8 +23,9 @@ export function buildAcmgVariantKey(
   caseId?: number | null
 ): string | null {
   if (!variant) return null
+  const id = 'id' in variant && typeof variant.id === 'number' ? variant.id : ''
   const build = 'genome_build' in variant ? (variant.genome_build ?? '') : ''
-  return `${caseId ?? ''}:${build}:${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}`
+  return `${caseId ?? ''}:${id}:${build}:${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}`
 }
 
 export interface UseVariantAcmgPreviewOptions {

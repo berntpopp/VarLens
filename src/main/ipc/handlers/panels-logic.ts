@@ -32,38 +32,13 @@ const GREEN_AMBER_LEVELS = new Set(['2', '3', '4', 'green', 'amber'])
 // Panel CRUD
 // ============================================================
 
-function isStorageSession(value: unknown): value is StorageSession {
-  return typeof value === 'object' && value !== null && 'getReadExecutor' in value
-}
-
-export function listPanels(
-  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
-): unknown | Promise<unknown> {
-  const target = getDbOrSession()
-  if (isStorageSession(target)) {
-    return target.getReadExecutor().execute({ type: 'panels:list', params: [] })
-  }
-  return target.panels.listPanels()
-}
-
-export function getPanel(
-  id: number,
-  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
-): unknown | Promise<unknown> {
-  const target = getDbOrSession()
-  if (isStorageSession(target)) {
-    return getPanelWithGenes(id, () => target)
-  }
-  const panel = target.panels.getPanel(id)
-  if (!panel) return null
-  const genes = target.panels.getGenes(id)
-  return { ...panel, genes }
+export function listPanels(getSession: () => StorageSession): Promise<unknown> {
+  return getSession().getReadExecutor().execute({ type: 'panels:list', params: [] })
 }
 
 /**
- * Session-based variant of getPanel: fetches panel + genes via the storage
- * executor so it works on both the Postgres and SQLite backends without
- * branching on session.capabilities.backend.
+ * Fetches panel + genes via the storage executor so it works on both the
+ * Postgres and SQLite backends without branching on session.capabilities.backend.
  */
 export async function getPanelWithGenes(
   id: number,
@@ -117,15 +92,10 @@ export function setGenes(
   return { success: true }
 }
 
-export function getGenes(
-  panelId: number,
-  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
-): unknown | Promise<unknown> {
-  const target = getDbOrSession()
-  if (isStorageSession(target)) {
-    return target.getReadExecutor().execute({ type: 'panels:getGenes', params: [panelId] })
-  }
-  return target.panels.getGenes(panelId)
+export function getGenes(panelId: number, getSession: () => StorageSession): Promise<unknown> {
+  return getSession()
+    .getReadExecutor()
+    .execute({ type: 'panels:getGenes', params: [panelId] })
 }
 
 // ============================================================
@@ -155,13 +125,11 @@ export function deactivatePanel(
 
 export function getActivePanelsForCase(
   caseId: number,
-  getDbOrSession: (() => DatabaseService) | (() => StorageSession)
-): unknown | Promise<unknown> {
-  const target = getDbOrSession()
-  if (isStorageSession(target)) {
-    return target.getReadExecutor().execute({ type: 'panels:activeForCase', params: [caseId] })
-  }
-  return target.panels.getActivePanelsForCase(caseId)
+  getSession: () => StorageSession
+): Promise<unknown> {
+  return getSession()
+    .getReadExecutor()
+    .execute({ type: 'panels:activeForCase', params: [caseId] })
 }
 
 // ============================================================

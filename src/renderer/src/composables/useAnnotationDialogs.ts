@@ -11,7 +11,13 @@ import type { AcmgClassification } from '../../../shared/config/domain.config'
 import type AcmgEvidenceDialog from '../components/AcmgEvidenceDialog.vue'
 import type { AnnotationScope, AnnotationTarget } from '../../../shared/types/annotations'
 import { hasDecidingAcmgEvidence } from '../utils/acmg/acmg-undo'
-import { getPerCaseByVariantId, hasPerCaseByVariantId, variantKey } from './annotation-cache'
+import {
+  annotationCache,
+  getPerCaseByVariantId,
+  hasPerCaseByVariantId,
+  variantKey
+} from './annotation-cache'
+import type { CaseVariantAnnotation } from '../../../shared/types/database-entities'
 
 type DialogVariant = Variant | AnnotationTarget
 
@@ -69,12 +75,7 @@ interface AnnotationFunctions {
   ) =>
     | {
         global: { created_at: number; updated_at: number } | null
-        perCase: {
-          created_at: number
-          updated_at: number
-          variant_id?: number
-          case_id?: number
-        } | null
+        perCase: { created_at: number; updated_at: number } | null
       }
     | undefined
   // Global variants (used when scope === 'all' or in cohort mode)
@@ -115,40 +116,26 @@ export function useAnnotationDialogs(
   const resolveCaseId = (v: DialogVariant | null): number | null =>
     v && 'case_id' in v && typeof v.case_id === 'number' ? v.case_id : caseId.value
 
-  const isMismatchedCaseVariant = (
-    v: DialogVariant | null,
-    perCase: { variant_id?: number; case_id?: number } | null | undefined
-  ): boolean => {
-    if (!v || !perCase) return false
-    if (
-      typeof v.id === 'number' &&
-      typeof perCase.variant_id === 'number' &&
-      perCase.variant_id !== v.id
-    ) {
-      return true
+  const perCaseOf = (v: DialogVariant): CaseVariantAnnotation | null | undefined => {
+    const cid = resolveCaseId(v)
+    if (typeof cid !== 'number' || typeof v.id !== 'number') return undefined
+    const coordKey = variantKey(v)
+    if (hasPerCaseByVariantId(cid, v.id) || annotationCache.value.has(coordKey)) {
+      return getPerCaseByVariantId(cid, v.id, coordKey) ?? null
     }
-    if (
-      caseId.value !== null &&
-      typeof perCase.case_id === 'number' &&
-      perCase.case_id !== caseId.value
-    ) {
-      return true
-    }
-    return false
+    return undefined
   }
 
   /** Evidence JSON of the slot the current scope reads and writes. */
   const evidenceFor = (v: DialogVariant): string | null => {
-    if ((scope?.value ?? 'case') !== 'all') {
-      const cid = resolveCaseId(v)
-      if (typeof cid === 'number' && typeof v.id === 'number' && hasPerCaseByVariantId(cid, v.id)) {
-        return getPerCaseByVariantId(cid, v.id, variantKey(v))?.acmg_evidence ?? null
-      }
-      const ann = annotations.getAnnotations?.(v.chr, v.pos, v.ref, v.alt)
-      if (isMismatchedCaseVariant(v, ann?.perCase)) return null
+    if ((scope?.value ?? 'case') === 'all') {
+      return annotations.getGlobalAcmgEvidence
+        ? annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+        : annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
     }
-    return (scope?.value ?? 'case') === 'all' && annotations.getGlobalAcmgEvidence
-      ? annotations.getGlobalAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
+    const pc = perCaseOf(v)
+    return pc !== undefined
+      ? (pc?.acmg_evidence ?? null)
       : annotations.getAcmgEvidence(v.chr, v.pos, v.ref, v.alt)
   }
 
@@ -301,13 +288,10 @@ export function useAnnotationDialogs(
   /** Get per-case comment for a variant, returning null if mismatched case variant */
   const getPerCaseCommentFor = (v: DialogVariant | null): string | null => {
     if (!v) return null
-    const cid = resolveCaseId(v)
-    if (typeof cid === 'number' && typeof v.id === 'number' && hasPerCaseByVariantId(cid, v.id)) {
-      return getPerCaseByVariantId(cid, v.id, variantKey(v))?.per_case_comment ?? null
-    }
-    const ann = annotations.getAnnotations?.(v.chr, v.pos, v.ref, v.alt)
-    if (isMismatchedCaseVariant(v, ann?.perCase)) return null
-    return annotations.getPerCaseComment?.(v.chr, v.pos, v.ref, v.alt) ?? null
+    const pc = perCaseOf(v)
+    return pc !== undefined
+      ? (pc?.per_case_comment ?? null)
+      : (annotations.getPerCaseComment?.(v.chr, v.pos, v.ref, v.alt) ?? null)
   }
 
   /** Get global timestamps from annotation cache */
@@ -315,9 +299,8 @@ export function useAnnotationDialogs(
     item: DialogVariant | null
   ): { created_at: number; updated_at: number } | null => {
     if (!item) return null
-    const ann = annotations.getAnnotations?.(item.chr, item.pos, item.ref, item.alt)
-    if (!ann?.global) return null
-    return { created_at: ann.global.created_at, updated_at: ann.global.updated_at }
+    const g = annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)?.global
+    return g ? { created_at: g.created_at, updated_at: g.updated_at } : null
   }
 
   /** Get per-case timestamps from annotation cache */
@@ -325,19 +308,12 @@ export function useAnnotationDialogs(
     item: DialogVariant | null
   ): { created_at: number; updated_at: number } | null => {
     if (!item) return null
-    const cid = resolveCaseId(item)
-    if (
-      typeof cid === 'number' &&
-      typeof item.id === 'number' &&
-      hasPerCaseByVariantId(cid, item.id)
-    ) {
-      const pc = getPerCaseByVariantId(cid, item.id, variantKey(item))
-      return pc ? { created_at: pc.created_at, updated_at: pc.updated_at } : null
-    }
-    const ann = annotations.getAnnotations?.(item.chr, item.pos, item.ref, item.alt)
-    if (!ann?.perCase) return null
-    if (isMismatchedCaseVariant(item, ann.perCase)) return null
-    return { created_at: ann.perCase.created_at, updated_at: ann.perCase.updated_at }
+    const pc = perCaseOf(item)
+    const src =
+      pc !== undefined
+        ? pc
+        : (annotations.getAnnotations(item.chr, item.pos, item.ref, item.alt)?.perCase ?? null)
+    return src ? { created_at: src.created_at, updated_at: src.updated_at } : null
   }
 
   return {

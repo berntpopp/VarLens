@@ -143,9 +143,7 @@ export async function acquireAnnotationWriteLocks(
   schema: string,
   rawKeys: string[]
 ): Promise<() => void> {
-  const sortedKeys = Array.from(new Set(rawKeys.map((k) => `${schema}:${k}`))).sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true })
-  )
+  const sortedKeys = Array.from(new Set(rawKeys.map((k) => `${schema}:${k}`))).sort()
   let lockMap = poolWriteLocks.get(pool)
   if (!lockMap) {
     lockMap = new Map()

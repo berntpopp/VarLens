@@ -858,6 +858,20 @@ describe.skipIf(!RUN)('variant filter backend parity — issue #447', () => {
 
       await expectAll(
         casePaths(0, {
+          column_filters: { cadd: { operator: 'between', value: [15, 25], includeEmpty } }
+        }),
+        ok([A.startEdge, A.inGene, ...extraCase])
+      )
+      await expectAll(
+        cohortPaths({
+          ...grch38,
+          column_filters: { cadd_phred: { operator: 'between', value: [15, 25], includeEmpty } }
+        }),
+        ok([A.startEdge, A.inGene, ...extraCohort])
+      )
+
+      await expectAll(
+        casePaths(0, {
           column_filters: { cadd: { operator: 'is_null', value: '', includeEmpty } }
         }),
         ok(withoutCadd)

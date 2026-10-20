@@ -658,7 +658,7 @@ describe('vcf-annotation-parser', () => {
   describe('numeric CSQ normalization (#658)', () => {
     it('parseCsqEntry treats "." as missing', () => {
       const fieldNames = ['Allele', 'gnomADe_AF', 'gnomADg_AF', 'CADD_PHRED']
-      const map = parseCsqEntry('A|.|.|.', fieldNames)
+      const map = parseCsqEntry(['A', '.', '.', '.'], fieldNames)
       expect(map.get('Allele')).toBe('A')
       expect(map.has('gnomADe_AF')).toBe(false)
       expect(map.has('gnomADg_AF')).toBe(false)
@@ -667,31 +667,41 @@ describe('vcf-annotation-parser', () => {
 
     it('extractFromCsq returns null (never NaN) on non-numeric or missing values', () => {
       const res = extractFromCsq({
-        gnomad_af_exomes: '.',
-        gnomad_af_genomes: '.',
-        cadd: 'invalid'
+        fields: new Map([
+          ['gnomADe_AF', '.'],
+          ['gnomADg_AF', '.'],
+          ['CADD_PHRED', 'invalid']
+        ])
       })
       expect(res.gnomadAf).toBeNull()
       expect(res.cadd).toBeNull()
     })
 
-    it('extractFromCsq falls back to alias key when primary key is "."', () => {
+    it('extractFromCsq falls back across gnomADe_AF, gnomADg_AF, and gnomAD_AF when "."', () => {
       const res = extractFromCsq({
-        gnomADe_AF: '.',
-        gnomad_af_exomes: '0.002',
-        ClinVar_CLNSIG: '.',
-        clinvar: 'Pathogenic'
+        fields: new Map([
+          ['gnomADe_AF', '.'],
+          ['gnomADg_AF', '.'],
+          ['gnomAD_AF', '0.002'],
+          ['ClinVar_CLNSIG', 'Pathogenic']
+        ])
       })
       expect(res.gnomadAf).toBe(0.002)
       expect(res.clinvar).toBe('Pathogenic')
     })
 
-    it('extractFromCsq falls back to gnomad_af_genomes when gnomad_af_exomes is "."', () => {
-      const res = extractFromCsq({
-        gnomad_af_exomes: '.',
-        gnomad_af_genomes: '0.0012'
-      })
-      expect(res.gnomadAf).toBe(0.0012)
+    it('ignores lowercase custom clinvar record ID so INFO CLNSIG is not shadowed', () => {
+      const csqFields = ['Allele', 'Consequence', 'IMPACT', 'SYMBOL', 'Feature', 'clinvar']
+      const csqHeader = makeHeader({ annotationType: 'csq', csqFields })
+      const info = new Map([
+        ['CSQ', 'T|missense_variant|MODERATE|GENE1|NM_123|12345'],
+        ['CLNSIG', 'Pathogenic']
+      ])
+      const annotation = parseAnnotation(info, csqHeader, 'T')
+      expect(annotation.clinvar).toBeNull()
+
+      const infoResult = applyInfoFieldRegistry(info, DEFAULT_INFO_FIELD_MAPPINGS, annotation)
+      expect(infoResult.mappedValues.get('clinvar')).toBe('Pathogenic')
     })
 
     it('parseAnnotation normalizes "." and falls back between exomes and genomes', () => {
@@ -714,17 +724,21 @@ describe('vcf-annotation-parser', () => {
 
     it('extractFromCsq preserves numeric zero ("0" and "0.0") and treats empty string as null', () => {
       const resZero = extractFromCsq({
-        gnomADe_AF: '0',
-        gnomADg_AF: '0.0',
-        CADD_PHRED: '0'
+        fields: new Map([
+          ['gnomADe_AF', '0'],
+          ['gnomADg_AF', '0.0'],
+          ['CADD_PHRED', '0']
+        ])
       })
       expect(resZero.gnomadAf).toBe(0)
       expect(resZero.cadd).toBe(0)
 
       const resEmpty = extractFromCsq({
-        gnomADe_AF: '',
-        gnomADg_AF: '',
-        CADD_PHRED: ''
+        fields: new Map([
+          ['gnomADe_AF', ''],
+          ['gnomADg_AF', ''],
+          ['CADD_PHRED', '']
+        ])
       })
       expect(resEmpty.gnomadAf).toBeNull()
       expect(resEmpty.cadd).toBeNull()

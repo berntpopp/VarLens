@@ -21,7 +21,6 @@ import {
 } from '../../web/server/downloads/xlsx-stream'
 
 export const COHORT_EXPORT_HARD_LIMIT = 100_000
-const PAGE_SIZE = 5_000
 const PROGRESS_EVERY_ROWS = 1_000
 
 /** Cohort export column headers (shared with the PostgreSQL CSV export). */
@@ -93,7 +92,7 @@ export interface CohortExportResult {
 }
 
 /**
- * Query the cohort in pages of 5 000 (capped at {@link COHORT_EXPORT_HARD_LIMIT})
+ * Query the cohort (capped at {@link COHORT_EXPORT_HARD_LIMIT})
  * and stream an XLSX workbook incrementally.
  */
 export async function runCohortExport(
@@ -104,14 +103,14 @@ export async function runCohortExport(
   customTempFilePath?: string,
   tempFilePrecreated?: { dev: number; ino: number }
 ): Promise<CohortExportResult> {
-  // The summary is what gets exported: never write a file from a stale one.
-  // The main process waited for a pending refresh before starting this job.
-  if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
-
   const startedTx = !db.inTransaction
   if (startedTx) db.exec('BEGIN DEFERRED')
 
   try {
+    // The summary is what gets exported: never write a file from a stale one.
+    // The main process waited for a pending refresh before starting this job.
+    if (isCohortSummaryStale(db)) throw new CohortSummaryRefreshingError()
+
     const cohortService = new CohortService(db)
     const summary = cohortService.getCohortSummary()
     onProgress(0, 0)
@@ -119,56 +118,32 @@ export async function runCohortExport(
     const headers = COHORT_EXPORT_COLUMNS.map((col) => col.header)
     const result: XlsxStreamResult = { rowCount: 0, truncated: false }
 
-    const baseParams = { ...params }
-    delete baseParams.cursor
-    delete (baseParams as Record<string, unknown>)._count_needed
-    let totalCount = 0
-    let initialProgressReported = false
-    let yieldedRows = 0
+    const baseParams = { ...params, cursor: undefined, offset: 0 }
 
     async function* generateCohortRows(): AsyncGenerator<readonly XlsxCell[]> {
-      let offset = 0
-      while (offset < COHORT_EXPORT_HARD_LIMIT) {
-        const pageLimit = Math.min(PAGE_SIZE, COHORT_EXPORT_HARD_LIMIT - offset)
-        const page = cohortService.getCohortVariants({
-          ...baseParams,
-          limit: pageLimit,
-          offset,
-          _count_needed: offset === 0
-        })
+      const { data: variants } = cohortService.getCohortVariants({
+        ...baseParams,
+        limit: COHORT_EXPORT_HARD_LIMIT
+      })
+      const totalCount = variants.length
+      onProgress(0, totalCount)
+      let yieldedRows = 0
 
-        if (!initialProgressReported) {
-          totalCount = Math.min(page.total_count, COHORT_EXPORT_HARD_LIMIT)
-          onProgress(0, totalCount)
-          initialProgressReported = true
-        }
-
-        const variants = page.data
-        if (variants.length === 0) break
-
-        for (let i = 0; i < variants.length; i += 200) {
-          const chunk = variants.slice(i, i + 200)
-          const annotations = batchLookup(chunk)
-          for (const variant of chunk) {
-            const key =
-              (variant as { id?: unknown }).id ??
-              `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
-            const ann = annotations.get(key)
-            const row: Record<string, unknown> = { ...variant, ...ann }
-            yield COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
-            yieldedRows += 1
-            if (yieldedRows % PROGRESS_EVERY_ROWS === 0) {
-              onProgress(yieldedRows, totalCount)
-            }
+      for (let i = 0; i < variants.length; i += 200) {
+        const chunk = variants.slice(i, i + 200)
+        const annotations = batchLookup(chunk)
+        for (const variant of chunk) {
+          const key =
+            (variant as { id?: unknown }).id ??
+            `${variant.chr}:${variant.pos}:${variant.ref}:${variant.alt}:${variant.genome_build}`
+          const ann = annotations.get(key)
+          const row: Record<string, unknown> = { ...variant, ...ann }
+          yield COHORT_EXPORT_COLUMNS.map((col) => formatCohortCell(col.key, row[col.key]))
+          yieldedRows += 1
+          if (yieldedRows % PROGRESS_EVERY_ROWS === 0) {
+            onProgress(yieldedRows, totalCount)
           }
         }
-
-        offset += variants.length
-        if (variants.length < pageLimit) break
-      }
-
-      if (!initialProgressReported) {
-        onProgress(0, 0)
       }
     }
 

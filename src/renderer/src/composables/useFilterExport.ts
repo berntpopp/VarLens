@@ -2,8 +2,10 @@ import { type Ref } from 'vue'
 import { useApiService } from './useApiService'
 import { buildFilterFromState, type FilterState, type ExportResult } from './filter-types'
 import { logService } from '../services/LogService'
-import { isIpcError, unwrapIpcResult } from '../../../shared/types/errors'
+import { formatError } from '../utils/ipc-result'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 import { getCurrentUnsupportedReason } from '../utils/backend-capabilities'
+import { ACMG_CLASSIFICATIONS } from '../../../shared/config/domain.config'
 import type { ExportFormat } from '../../../shared/ipc/domains/export'
 import type {
   BatchAnnotationKey,
@@ -18,12 +20,9 @@ import {
   type SignOutRow
 } from '../utils/sign-out-clipboard'
 
-export { formatSignOutTable, variantToSignOutRow, type SignOutRow }
-
 export interface CopySignOutResult {
   success: boolean
   count: number
-  format?: 'markdown' | 'tsv'
   error?: string
 }
 
@@ -89,12 +88,7 @@ export function useFilterExport(
         ? { success: false, cancelled: true }
         : null
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : isIpcError(error)
-            ? (error.userMessage ?? error.message)
-            : String(error)
+      const message = formatError(error)
       logService.error('Export error: ' + message, 'export')
       return { success: false, error: message }
     } finally {
@@ -139,14 +133,11 @@ export function useFilterExport(
       }
 
       const [starredVariants, acmgVariants] = await Promise.all([
-        fetchAllVariants({ starred_only: true, annotation_scope: 'all' } as Omit<
-          VariantFilter,
-          'case_id'
-        >),
+        fetchAllVariants({ starred_only: true, annotation_scope: 'all' }),
         fetchAllVariants({
-          acmg_classifications: ['Pathogenic', 'Likely pathogenic'],
+          acmg_classifications: ACMG_CLASSIFICATIONS.slice(0, 2),
           annotation_scope: 'all'
-        } as Omit<VariantFilter, 'case_id'>)
+        })
       ])
 
       const seen = new Set<number>()
@@ -188,7 +179,7 @@ export function useFilterExport(
       )
 
       const perVariantPerCase = new Map<number, CaseVariantAnnotation | null>()
-      if (collidingVariants.length > 0 && typeof api.annotations?.getPerCase === 'function') {
+      if (collidingVariants.length > 0) {
         const perCaseResults = await Promise.all(
           collidingVariants.map(async (v) => {
             const res = await api.annotations.getPerCase(caseId, v.id)
@@ -215,14 +206,9 @@ export function useFilterExport(
       const text = formatSignOutTable(rows, format)
       await navigator.clipboard.writeText(text)
 
-      return { success: true, count: deduped.length, format }
+      return { success: true, count: deduped.length }
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : isIpcError(error)
-            ? (error.userMessage ?? error.message)
-            : String(error)
+      const message = formatError(error)
       logService.error('Copy sign-out error: ' + message, 'export')
       return { success: false, count: 0, error: message }
     }

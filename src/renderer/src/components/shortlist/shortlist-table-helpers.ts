@@ -2,7 +2,7 @@ import type { ShortlistRow } from '../../../../shared/types/shortlist'
 import { formatHgvs } from '../../utils/formatters'
 import { UNKNOWN_VALUE_GLYPH } from '../../config/displayConfig'
 import { formatBpLength } from '../../utils/variant-interval'
-import { getPerCaseByVariantId } from '../../composables/annotation-cache'
+import { getPerCaseByVariantId, variantKey } from '../../composables/annotation-cache'
 
 export interface VariantCell {
   primary: string
@@ -100,7 +100,7 @@ export function hasCommentFor(
       | undefined
   }
 ): boolean {
-  const key = `${item.chr}:${item.pos}:${item.ref}:${item.alt}`
+  const key = variantKey(item)
   const perCase = getPerCaseByVariantId(item.case_id, item.id, key)
   const perCaseComment = perCase?.per_case_comment
   const global = cache.get(key)?.global?.global_comment

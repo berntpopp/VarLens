@@ -30,11 +30,6 @@ import { mockVariants, mockFilterOptions } from './fixtures/variants'
 let cases = [...mockCases]
 let variants = [...mockVariants]
 
-const activeVariants = () => {
-  const caseIds = new Set(cases.map((c) => c.id))
-  return variants.filter((v) => caseIds.has(v.case_id))
-}
-
 // Drop matching mock cases; returns how many were removed.
 const removeCases = (match: (id: number) => boolean): number => {
   const prevLen = cases.length
@@ -366,11 +361,10 @@ export const mockApi: WindowAPI = {
       { path: '/mock/database.db', name: 'Mock Database', lastOpened: Date.now() }
     ],
     getOverview: async () => {
-      const active = activeVariants()
       const casesList = cases.map((c) => ({
         id: c.id,
         name: c.name,
-        variant_count: active.filter((v) => v.case_id === c.id).length || c.variant_count || 0,
+        variant_count: variants.filter((v) => v.case_id === c.id).length,
         created_at: c.created_at,
         affected_status: null
       }))
@@ -651,18 +645,17 @@ export const mockApi: WindowAPI = {
     },
 
     getSummary: async () => {
-      const active = activeVariants()
       // Calculate unique variants (distinct chr:pos:ref:alt)
-      const uniqueKeys = new Set(active.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`))
+      const uniqueKeys = new Set(variants.map((v) => `${v.chr}:${v.pos}:${v.ref}:${v.alt}`))
       const uniqueGenes = new Set(
-        active.map((v) => v.gene_symbol).filter((g): g is string => g !== undefined && g !== null)
+        variants.map((v) => v.gene_symbol).filter((g): g is string => g !== undefined && g !== null)
       )
 
       return {
         total_cases: cases.length,
-        total_variants: active.length,
+        total_variants: variants.length,
         unique_variants: uniqueKeys.size,
-        avg_variants_per_case: cases.length > 0 ? active.length / cases.length : 0,
+        avg_variants_per_case: cases.length > 0 ? variants.length / cases.length : 0,
         genes_with_variants: uniqueGenes.size,
         starred_variants: 0,
         acmg_counts: {
@@ -675,7 +668,7 @@ export const mockApi: WindowAPI = {
       }
     },
 
-    getCarriers: async (variant) => mockCohortCarriers(variant, activeVariants(), cases),
+    getCarriers: async (variant) => mockCohortCarriers(variant, variants, cases),
 
     getGeneBurden: async () => {
       // Aggregate per-gene statistics

@@ -8,6 +8,7 @@
  * `shared/filters/panel-intervals.ts`.
  */
 import { mainLogger } from '../services/MainLogger'
+import { panelStatusGenomeBuild } from '../../shared/filters/panel-intervals'
 import type { CaseRepository } from './CaseRepository'
 import type { GeneReferenceDb } from './GeneReferenceDb'
 import type { PanelRepository } from './PanelRepository'
@@ -86,23 +87,15 @@ export function resolvePanelIntervalsInPlace(
   }
 
   const paddingBp = filter.panel_padding_bp ?? 5000
-  let genomeBuild = filter.genome_build
-  if (genomeBuild === undefined && caseId !== undefined && repos.cases !== undefined) {
+  let caseBuild: string | undefined
+  if (filter.genome_build === undefined && caseId !== undefined && repos.cases !== undefined) {
     try {
-      const caseRow = repos.cases.getCase(caseId)
-      if (
-        caseRow?.genome_build !== undefined &&
-        caseRow.genome_build !== null &&
-        caseRow.genome_build !== ''
-      ) {
-        genomeBuild = caseRow.genome_build
-      }
+      caseBuild = repos.cases.getCase(caseId)?.genome_build
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err
-      // Fall back to default GRCh38 if case is not found
     }
   }
-  genomeBuild = genomeBuild ?? 'GRCh38'
+  const genomeBuild = panelStatusGenomeBuild(filter.genome_build, caseBuild)
 
   // A panel IS active here (panelIds is non-empty and geneRefDb is available),
   // so a thrown error means the computation itself failed — it must propagate

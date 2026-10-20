@@ -92,9 +92,7 @@ function ico(sizes) {
     header.writeUInt32LE(offset, entry + 12)
     offset += png.length
   })
-  const file = Buffer.concat([header, ...images])
-  if (file.readUInt16LE(4) !== sizes.length) throw new Error('ICO self-check failed')
-  return file
+  return Buffer.concat([header, ...images])
 }
 
 // ICNS with PNG payloads. Small slots use the pixel-grid drawings, the rest the macOS grid.
@@ -147,7 +145,6 @@ try {
   }
   write('resources/icon.ico', windowsIco)
   write('resources/icon.png', tiered(512))
-  copyFileSync(join(BRAND, 'varlens-full.svg'), join(ROOT, 'resources/icon.svg'))
 
   // Web app + desktop renderer (favicons, PWA, iOS, login wall).
   copyFileSync(join(BRAND, 'varlens-s.svg'), join(PUBLIC, 'favicon.svg'))

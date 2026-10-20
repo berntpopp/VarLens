@@ -65,28 +65,6 @@ describe('variants-logic exports', () => {
     expect(getDb).not.toHaveBeenCalled()
   })
 
-  it('does not call getDb while preparing active panel filters when genome_build is provided', () => {
-    const getDb = vi.fn(() => {
-      throw new Error('getDb should not be called when genome_build is provided')
-    })
-    const getDbPool = () => ({}) as never
-
-    expect(
-      buildVariantFilter(
-        1,
-        { active_panel_ids: [1], panel_padding_bp: 50, genome_build: 'GRCh38' },
-        getDb,
-        getDbPool
-      )
-    ).toMatchObject({
-      case_id: 1,
-      active_panel_ids: [1],
-      panel_padding_bp: 50,
-      genome_build: 'GRCh38'
-    })
-    expect(getDb).not.toHaveBeenCalled()
-  })
-
   it('does not call getDb while preparing active panel filters when genome_build is omitted and pool is present (#674)', () => {
     const getDb = vi.fn(() => {
       throw new Error('getDb should not be called when pool is present')

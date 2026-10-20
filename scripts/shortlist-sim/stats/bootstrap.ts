@@ -1,6 +1,6 @@
 // Cluster bootstrap over gene clusters (spec §5.4): every observation of a cluster is
 // resampled together; 95 % percentile interval; deterministic per seed.
-import { mulberry32 } from '../common/rng'
+import { rng } from '../common/rng'
 
 export interface Interval {
   estimate: number
@@ -32,7 +32,7 @@ function groupBy<T>(items: T[], clusterOf: (t: T) => string): Map<string, T[]> {
 
 /** Draws reps resamples (with replacement) of the cluster ids; ids are sorted so the draw depends only on the id set and seed. */
 function* resamples(ids: string[], reps: number, seed: number): Generator<string[]> {
-  const rnd = mulberry32(seed)
+  const rnd = rng(seed)
   for (let r = 0; r < reps; r++) {
     const draw = new Array<string>(ids.length)
     for (let i = 0; i < ids.length; i++) draw[i] = ids[Math.floor(rnd() * ids.length)]

@@ -213,6 +213,7 @@ describe('translateColumnFilter branches', () => {
           '>',
           '<=',
           '>=',
+          'between',
           'like',
           'in',
           'is_null',
@@ -220,7 +221,13 @@ describe('translateColumnFilter branches', () => {
         ] as const) {
           for (const includeEmpty of [undefined, true, false] as const) {
             const value =
-              operator === 'in' ? ['0', '7', '20', '100'] : operator === 'like' ? '_%' : '20'
+              operator === 'in'
+                ? ['0', '7', '20', '100']
+                : operator === 'between'
+                  ? ['0', '20']
+                  : operator === 'like'
+                    ? '_%'
+                    : '20'
             const filter = {
               column_filters: {
                 [col]: {

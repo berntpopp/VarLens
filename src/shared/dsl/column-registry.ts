@@ -397,28 +397,32 @@ export const COHORT_ONLY_COLUMNS: readonly FilterColumnDef[] = [
     label: 'Carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'cohort_frequency',
     label: 'Cohort frequency',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'het_count',
     label: 'Heterozygous carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'hom_count',
     label: 'Homozygous carriers',
     aliases: [],
     type: 'numeric',
-    operators: COUNT_OPERATORS
+    operators: COUNT_OPERATORS,
+    rangeExcludesEmpty: true
   },
   {
     key: 'acmg_best',
@@ -472,14 +476,7 @@ export function getOperatorsForColumn(nameOrAlias: string): DslOperator[] {
 
 /** Get common value suggestions for a column (empty array if none) */
 export function getCommonValues(nameOrAlias: string): CommonValue[] {
-  const lower = nameOrAlias.toLowerCase()
-  return (
-    findColumn(nameOrAlias)?.commonValues ??
-    COHORT_ONLY_COLUMNS.find(
-      (c) => c.key === lower || c.aliases.some((a) => a.toLowerCase() === lower)
-    )?.commonValues ??
-    []
-  )
+  return findColumn(nameOrAlias, 'cohort')?.commonValues ?? []
 }
 
 /**

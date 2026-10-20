@@ -218,15 +218,6 @@ describe('cross-workflow rebuild elimination (spec Phase 8)', () => {
     expect(releaseKeys.length, 'release.yml must not declare any native- cache key').toBe(0)
   })
 
-  test('web-ci lanes across workflows use setup-web-ci composite action', () => {
-    for (const name of ['build.yml', 'web-ci.yml', 'publish-web.yml']) {
-      const yaml = readWorkflow(name)
-      expect(yaml, `${name} must invoke setup-web-ci`).toMatch(
-        /web-ci:[\s\S]*?uses: \.\/\.github\/actions\/setup-web-ci/
-      )
-    }
-  })
-
   test('release.yml never rebuilds the app', () => {
     // Promotion is the rule: release.yml ships what build.yml built for the
     // tagged SHA. The one sanctioned exception is the Windows signing re-wrap

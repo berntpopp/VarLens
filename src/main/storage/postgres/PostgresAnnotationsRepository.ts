@@ -2,6 +2,8 @@ import type { Pool, PoolClient } from 'pg'
 
 import type { BatchAnnotationKey } from '../../../shared/types/api'
 import type { CaseVariantAnnotation, VariantAnnotation } from '../../../shared/types/database'
+import { InvalidParametersError } from '../../ipc/errors'
+import type { AuditAppendParams } from '../audit-log-types'
 import {
   assertOverrideReason,
   globalAnnotationAuditEntries,
@@ -50,9 +52,7 @@ export class PostgresAnnotationsRepository {
     lockKeys: string[],
     fn: (client: PoolClient, flags: Awaited<ReturnType<typeof beginAnnotationWrite>>) => Promise<T>
   ): Promise<T> {
-    const sortedKeys = Array.from(new Set(lockKeys)).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true })
-    )
+    const sortedKeys = Array.from(new Set(lockKeys)).sort()
     const releaseLocks = await acquireAnnotationWriteLocks(this.pool, this.schema, sortedKeys)
     let client: PoolClient | undefined
     let rollbackFailure: Error | undefined
@@ -350,12 +350,12 @@ export class PostgresAnnotationsRepository {
       async (client, flags) => {
         const schemaName = quoteIdentifier(this.schema)
         const validRows = await client.query<{ id: string | number }>(
-          `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::bigint[]) ORDER BY id FOR UPDATE`,
+          `SELECT id FROM ${schemaName}."variants" WHERE case_id = $1 AND id = ANY($2::bigint[]) ORDER BY id FOR KEY SHARE`,
           [caseId, uniqueIds]
         )
         const validIds = validRows.rows.map((r) => toNumber(r.id))
         if (validIds.length !== uniqueIds.length) {
-          throw new Error(`One or more variants do not belong to case ${caseId}`)
+          throw new InvalidParametersError(`One or more variants do not belong to case ${caseId}`)
         }
 
         const audit = new PostgresAuditLogRepository(client, this.schema)
@@ -372,21 +372,23 @@ export class PostgresAnnotationsRepository {
           oldAnnotations.set(variantId, oldAnnotation)
         }
 
+        const auditEntries: AuditAppendParams[] = []
         for (const variantId of uniqueIds) {
           const oldAnnotation = oldAnnotations.get(variantId) ?? null
           if (hasAnnotationUpdates) {
             await this._upsertPerCaseAnnotationOn(client, caseId, variantId, updates)
+            await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
           }
-          for (const entry of perCaseAnnotationAuditEntries(
-            caseId,
-            variantId,
-            updates,
-            oldAnnotation as Record<string, unknown> | null
-          )) {
-            await audit.append(entry)
-          }
-          await applyAnnotationFlagsPerCase(client, { ...flags, caseId, variantId })
+          auditEntries.push(
+            ...perCaseAnnotationAuditEntries(
+              caseId,
+              variantId,
+              updates,
+              oldAnnotation as Record<string, unknown> | null
+            )
+          )
         }
+        await audit.appendMany(auditEntries)
 
         if (updates.tag_id !== undefined) {
           for (const variantId of uniqueIds) {

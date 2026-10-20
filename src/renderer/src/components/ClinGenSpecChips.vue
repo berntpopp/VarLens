@@ -24,7 +24,8 @@ import CSPEC from '../assets/data/clingen-cspec.json'
 import { CLINGEN_SPEC_COPY } from '../config/uiCopyConfig'
 import { useApiService } from '../composables/useApiService'
 import { logService } from '../services/LogService'
-import { formatError, unwrapIpcResult } from '../utils/ipc-result'
+import { formatError } from '../utils/ipc-result'
+import { unwrapIpcResult } from '../../../shared/types/errors'
 
 interface ClinGenSpec {
   id: string

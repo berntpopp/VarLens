@@ -315,7 +315,6 @@ export const takeAwaited = (kind: AnnotationBatchKind, key: string): boolean =>
 
 let cacheEpoch = 0
 export const getAnnotationCacheEpoch = (): number => cacheEpoch
-export const getGeneration = (): number => cacheEpoch
 
 let evictionEpoch = 0
 const keyVersions = new Map<string, number>()
@@ -505,9 +504,9 @@ export function evictAnnotationCacheKeysForBulkTriage(
   let changed = false
   const updates = bulkUpdates as Record<string, unknown> | undefined
   for (const key of affectedKeys) {
-    const hasInFlightForKey =
-      inFlightMutations.has(`perCase:${key}`) ||
-      Array.from(inFlightMutations.keys()).some((sk) => sk.endsWith(`:${key}`))
+    const hasInFlightForKey = Array.from(inFlightMutations.keys()).some((sk) =>
+      sk.endsWith(`:${key}`)
+    )
     if (fromCurrentEpoch || !hasInFlightForKey) {
       if (annotationCache.value.delete(key)) changed = true
       dropKeyMetadata(key)

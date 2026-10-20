@@ -172,10 +172,6 @@ async function prepareRowDialog(row: ShortlistRow): Promise<boolean> {
   if (!isRowAnnotationVerified(row)) {
     evictPerCaseVariant(row.case_id, row.id, key)
     evictCoordSlotOnly(key)
-    if (typeof api?.annotations?.batchGet !== 'function') {
-      appState?.showSnack('Failed to load variant annotations.', 'error')
-      return false
-    }
     markAwaited('case', key)
     await annotations.loadAnnotationsBatch(row.case_id, [row])
   }
@@ -217,13 +213,6 @@ async function onCommentClick(row: ShortlistRow): Promise<void> {
 /** Clear the error banner so the user can dismiss stale failures. */
 function dismissError(): void {
   error.value = null
-}
-
-async function handleTriageApplied(): Promise<void> {
-  await refresh()
-  if (result.value && props.caseId) {
-    await annotations.loadAnnotationsBatch(props.caseId, result.value.rows)
-  }
 }
 </script>
 
@@ -334,6 +323,7 @@ async function handleTriageApplied(): Promise<void> {
 
       <ShortlistTable
         v-else-if="result"
+        :key="selectedPresetId ?? 'none'"
         :case-id="caseId"
         :read-only="!canWrite"
         :interactive="interactive"
@@ -343,7 +333,6 @@ async function handleTriageApplied(): Promise<void> {
         @toggle-star="onToggleStar"
         @acmg-click="onAcmgClick"
         @comment-click="onCommentClick"
-        @triage-applied="handleTriageApplied"
       />
     </div>
 
@@ -351,7 +340,6 @@ async function handleTriageApplied(): Promise<void> {
       ref="annotationDialogsRef"
       :case-id="caseId"
       :annotation-actions="annotationActions"
-      @changed="refresh"
     />
   </div>
 </template>

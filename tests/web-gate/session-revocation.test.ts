@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { buildAuthOverrides } from '../../src/web/server/routes/auth'
 import {
   resolveDefaultRevocationsPath,
   SessionRevocations
@@ -142,5 +143,47 @@ describe('SessionRevocations fail-closed persistence', () => {
       }
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  it('closes SSE streams, records audit, and deletes cookie before revoke throws', async () => {
+    const closeSession = vi.fn()
+    const invalidateUser = vi.fn()
+    const writeExecute = vi.fn().mockResolvedValue(undefined)
+    const session: {
+      sid?: string
+      user?: { id: number; username: string; role: string; passwordChangedAt: null }
+      delete: () => void
+    } = {
+      sid: 'sid-logout-1',
+      user: { id: 1, username: 'alice', role: 'analyst', passwordChangedAt: null },
+      delete: vi.fn(() => {
+        session.sid = undefined
+        session.user = undefined
+      })
+    }
+    const revoke = vi.fn(() => {
+      throw new Error('Failed to persist revoked sessions')
+    })
+
+    const overrides = buildAuthOverrides()
+    await expect(
+      overrides['auth:logout'].handle(
+        [],
+        { session } as never,
+        {} as never,
+        {
+          events: { closeSession },
+          authService: { invalidateUser },
+          session: { getWriteExecutor: () => ({ execute: writeExecute }) },
+          sessions: { revoke }
+        } as never
+      )
+    ).rejects.toThrow('Failed to persist revoked sessions')
+
+    expect(closeSession).toHaveBeenCalledWith('sid-logout-1')
+    expect(invalidateUser).toHaveBeenCalledWith('alice')
+    expect(writeExecute).toHaveBeenCalledWith(expect.objectContaining({ type: 'audit:append' }))
+    expect(session.delete).toHaveBeenCalledTimes(1)
+    expect(revoke).toHaveBeenCalledWith('sid-logout-1')
   })
 })

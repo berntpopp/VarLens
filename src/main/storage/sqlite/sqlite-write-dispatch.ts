@@ -216,16 +216,16 @@ export async function executeSqliteWriteTask(
         return { updatedCount: 0 }
       }
 
+      repos.annotations.validateVariantsBelongToCase(caseId, uniqueIds)
+
+      const oldAnnotations = new Map<number, Record<string, unknown> | null>()
+      for (const variantId of uniqueIds) {
+        const oldAnnotation = repos.annotations.getPerCaseAnnotation(caseId, variantId)
+        assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
+        oldAnnotations.set(variantId, oldAnnotation as Record<string, unknown> | null)
+      }
+
       return repos.annotations.runInTransaction(() => {
-        repos.annotations.validateVariantsBelongToCase(caseId, uniqueIds)
-
-        const oldAnnotations = new Map<number, Record<string, unknown> | null>()
-        for (const variantId of uniqueIds) {
-          const oldAnnotation = repos.annotations.getPerCaseAnnotation(caseId, variantId)
-          assertOverrideReason(updates, oldAnnotation as Record<string, unknown> | null)
-          oldAnnotations.set(variantId, oldAnnotation as Record<string, unknown> | null)
-        }
-
         for (const variantId of uniqueIds) {
           const oldAnnotation = oldAnnotations.get(variantId) ?? null
           for (const entry of perCaseAnnotationAuditEntries(

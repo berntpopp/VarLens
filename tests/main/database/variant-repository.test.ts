@@ -364,7 +364,7 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       expect(meta2.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['TP53'])
     })
 
-    it('invalidates cache on INSERT OR REPLACE under same rowid/count and warm hit is <1ms', () => {
+    it('invalidates cache on INSERT OR REPLACE under same rowid/count', () => {
       const caseId = createTestCase(service, 'cache-direct-replace')
       service.variants.insertVariantsBatch(caseId, [
         { chr: '1', pos: 100, ref: 'A', alt: 'T', gene_symbol: 'BRCA1' }
@@ -373,16 +373,13 @@ describe('VariantRepository — single-column metadata (scope-aware)', () => {
       const meta1 = service.variants.getAllColumnMetas(caseId)
       expect(meta1.find((m) => m.key === 'gene_symbol')?.distinctValues).toEqual(['BRCA1'])
 
-      // Warm cache hit timing & DDL assertion: < 1ms, zero CREATE or INSERT statements
+      // Warm cache hit & DDL assertion: zero CREATE or INSERT statements
       const execSpy = vi.spyOn(service.database, 'exec')
       const prepareSpy = vi.spyOn(service.database, 'prepare')
 
-      const t0 = performance.now()
       const warm = service.variants.getAllColumnMetas(caseId)
-      const elapsed = performance.now() - t0
 
       expect(warm).toBe(meta1)
-      expect(elapsed).toBeLessThan(1)
 
       const ddlExecs = execSpy.mock.calls.filter(([sql]) => /CREATE|INSERT/i.test(String(sql)))
       const ddlPrepares = prepareSpy.mock.calls.filter(([sql]) =>

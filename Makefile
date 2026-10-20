@@ -254,7 +254,7 @@ web-parity-e2e: web-data-verify ## Run manifest-backed desktop↔web parity E2E 
 	@echo "=== web-parity-e2e (opt-in; switches native module to Electron ABI) ==="
 	npm run rebuild:electron
 	npm run build
-	VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity/data-manifest-parity.test.ts tests/web-gate/parity/ipc-fixture-parity.test.ts
+	status=0; VARLENS_RUN_WEB_GATE_PARITY=1 VARLENS_RUN_WEB_PARITY_E2E=1 npx vitest run --project web-gate-parity tests/web-gate/parity/data-manifest-parity.test.ts tests/web-gate/parity/ipc-fixture-parity.test.ts || status=$$?; npm run rebuild:node || status=$$?; exit $$status
 
 web-test-report: ## Generate web test report artifacts (VARLENS_WEB=1 runs full parity; uses VARLENS_PG_URL or .env.postgres.local)
 	node scripts/reports/run-web-test-report.mjs
@@ -327,7 +327,6 @@ ci: ## Run all CI checks (lint, format, typecheck, rebuild, test). Set VARLENS_W
 	$(MAKE) lint-check
 	$(MAKE) format-check
 	$(MAKE) typecheck
-	$(MAKE) rebuild-node
 	$(MAKE) test
 
 quick: ## Optional edit feedback; insufficient for push readiness

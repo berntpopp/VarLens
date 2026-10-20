@@ -126,13 +126,16 @@ import { mdiStar, mdiStarOutline, mdiClipboardCheck, mdiTagOutline, mdiClose } f
 import { CellChip } from '../table-cells/cell-components'
 import { useTags } from '../../composables/useTags'
 import type { BatchPerCaseAnnotationUpdates } from '../../../../shared/types/api'
-import type { AcmgClassification } from '../../../../shared/config/domain.config'
+import {
+  ACMG_ABBREV,
+  ACMG_CLASSIFICATIONS,
+  ACMG_COLORS
+} from '../../../../shared/config/domain.config'
 import type { Tag } from '../../../../shared/types/database-entities'
 
-const props = defineProps<{
+defineProps<{
   selectedCount: number
   isExecuting?: boolean
-  tags?: Tag[]
 }>()
 
 const emit = defineEmits<{
@@ -149,25 +152,14 @@ if (getActivePinia()) {
     tagComposable = null
   }
 }
-const tags = computed<Tag[]>(() => props.tags ?? tagComposable?.getTags() ?? [])
+const tags = computed<Tag[]>(() => tagComposable?.getTags() ?? [])
 
-const acmgOptions: Array<{
-  value: AcmgClassification
-  title: string
-  short: string
-  color: string
-}> = [
-  { value: 'Pathogenic', title: 'Pathogenic', short: 'P', color: 'error' },
-  { value: 'Likely pathogenic', title: 'Likely pathogenic', short: 'LP', color: 'deep-orange' },
-  {
-    value: 'Uncertain significance',
-    title: 'Uncertain significance',
-    short: 'VUS',
-    color: 'warning'
-  },
-  { value: 'Likely benign', title: 'Likely benign', short: 'LB', color: 'light-green' },
-  { value: 'Benign', title: 'Benign', short: 'B', color: 'success' }
-]
+const acmgOptions = ACMG_CLASSIFICATIONS.map((value) => ({
+  value,
+  title: value,
+  short: ACMG_ABBREV[value],
+  color: ACMG_COLORS[value]
+}))
 </script>
 
 <style scoped>

@@ -425,24 +425,6 @@ describe('ShortlistTable', () => {
       wrapper.unmount()
     })
 
-    it('dispatches "i" shortcut to emit row-click on selected row', async () => {
-      const item = row({ id: 30 })
-      const wrapper = mount(ShortlistTable, {
-        props: { rows: [item], interactive: true },
-        global: { plugins: [vuetify, pinia] },
-        attachTo: document.body
-      })
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-      await wrapper.vm.$nextTick()
-
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i' }))
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.emitted('row-click')).toHaveLength(1)
-      expect(wrapper.emitted('row-click')![0]).toEqual([item])
-      wrapper.unmount()
-    })
-
     it('debounces live details sync on arrow keys when panelOpen is true', async () => {
       vi.useFakeTimers()
       const state = createAppState()
@@ -540,6 +522,48 @@ describe('ShortlistTable', () => {
       siblingWrapper.unmount()
       annotationCache.value.delete(key)
       triggerRef(annotationCache)
+    })
+
+    it("does not show the global ACMG class as this case's class", async () => {
+      const item = row({ chr: '1', pos: 6666, ref: 'C', alt: 'A' })
+      const key = variantKey(item)
+      annotationCache.value.set(key, {
+        global: { acmg_classification: 'Pathogenic' } as never,
+        perCase: mockPerCase(1, 0)
+      })
+      triggerRef(annotationCache)
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item] },
+        global: { plugins: [vuetify, pinia] }
+      })
+      expect(
+        wrapper.find(`[data-testid="shortlist-acmg-${item.id}"]`).attributes('aria-label')
+      ).toBe('Set ACMG classification')
+      wrapper.unmount()
+      annotationCache.value.delete(key)
+      triggerRef(annotationCache)
+    })
+
+    it('lets viewers open comments by key but not set ACMG, and hides bulk selection', async () => {
+      const item = row({ id: 60 })
+      const wrapper = mount(ShortlistTable, {
+        props: { rows: [item], interactive: true, readOnly: true },
+        global: { plugins: [vuetify, pinia] },
+        attachTo: document.body
+      })
+      expect(wrapper.find('[data-testid="bulk-select-all"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="bulk-select-row-60"]').exists()).toBe(false)
+      expect(wrapper.findComponent({ name: 'BulkTriageActionBar' }).exists()).toBe(false)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      await wrapper.vm.$nextTick()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.emitted('acmg-click')).toBeUndefined()
+      expect(wrapper.emitted('comment-click')).toHaveLength(1)
+      wrapper.unmount()
     })
 
     it('cancels debounced live sync and ignores arrow keys when deactivated via KeepAlive', async () => {

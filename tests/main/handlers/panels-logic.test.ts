@@ -8,7 +8,7 @@ import * as logic from '../../../src/main/ipc/handlers/panels-logic'
 describe('panels-logic exports', () => {
   it('exports expected functions', () => {
     expect(typeof logic.listPanels).toBe('function')
-    expect(typeof logic.getPanel).toBe('function')
+    expect(typeof logic.getPanelWithGenes).toBe('function')
     expect(typeof logic.createPanel).toBe('function')
     expect(typeof logic.updatePanel).toBe('function')
     expect(typeof logic.deletePanel).toBe('function')
@@ -32,24 +32,6 @@ describe('panels-logic exports', () => {
 
     await expect(logic.listPanels(getSession)).resolves.toEqual([{ id: 1, name: 'Cardio' }])
     expect(execute).toHaveBeenCalledWith({ type: 'panels:list', params: [] })
-  })
-
-  it('routes getPanel through session read executor', async () => {
-    const execute = vi.fn().mockImplementation((task) => {
-      if (task.type === 'panels:get') return Promise.resolve({ id: 1, name: 'Cardio' })
-      if (task.type === 'panels:getGenes')
-        return Promise.resolve([{ hgncId: 'HGNC:1', symbol: 'TTN' }])
-      return Promise.resolve(null)
-    })
-    const getSession = () => ({ getReadExecutor: () => ({ execute }) }) as never
-
-    await expect(logic.getPanel(1, getSession)).resolves.toEqual({
-      id: 1,
-      name: 'Cardio',
-      genes: [{ hgncId: 'HGNC:1', symbol: 'TTN' }]
-    })
-    expect(execute).toHaveBeenCalledWith({ type: 'panels:get', params: [1] })
-    expect(execute).toHaveBeenCalledWith({ type: 'panels:getGenes', params: [1] })
   })
 
   it('routes getGenes through session read executor', async () => {

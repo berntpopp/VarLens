@@ -26,6 +26,14 @@ vi.mock('../../../src/renderer/src/composables/useAnnotations', async (importOri
     })
   }
 })
+// A case row with an id reads its evidence by variant id, not by coordinates
+vi.mock('../../../src/renderer/src/composables/annotation-cache', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../../src/renderer/src/composables/annotation-cache')
+  >()),
+  getPerCaseByVariantId: () =>
+    evidence.json === null ? undefined : { acmg_evidence: evidence.json }
+}))
 vi.mock('../../../src/renderer/src/composables/useAcmgUndo', () => ({
   useAcmgUndo: () => ({
     setAcmgClassification,

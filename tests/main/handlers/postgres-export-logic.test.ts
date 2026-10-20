@@ -26,7 +26,10 @@ describe('postgres export logic', () => {
           setTimeout(() => reject(new Error('export did not settle')), 1000)
         )
       ])
-    ).rejects.toThrow(/ENOENT/)
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/ENOENT/),
+      userMessage: expect.stringMatching(/ENOENT/)
+    })
   })
 
   it('streams postgres cohort rows to CSV with cohort export columns', async () => {

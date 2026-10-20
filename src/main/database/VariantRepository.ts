@@ -33,10 +33,8 @@ interface VariantExtensionFields {
   _str?: StrExtensionRow
 }
 
-import { DATABASE_CONFIG, annotationSeverityRanks, withOfferedValues } from '../../shared/config'
-import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
-import { VariantFilterBuilder, BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
-import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
+import { DATABASE_CONFIG, annotationSeverityRanks } from '../../shared/config'
+import { VariantFilterBuilder } from './VariantFilterBuilder'
 import { attachCaseTagIds, caseTagIdsSql, idListParam } from '../../shared/sql/variant-tag-ids-sql'
 import { attachCasePhenotype, casePhenotypePageSql } from '../../shared/sql/phenotype-score-sql'
 import { attachFamilyCalls, familyCallsPageSql } from '../../shared/sql/family-calls-sql'
@@ -46,8 +44,7 @@ import {
   type CompHetCandidateRow
 } from '../../shared/utils/phasing'
 import { VariantSearchService } from './VariantSearchService'
-import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
-import { COMPUTED_COLUMNS, VariantColumnMetaCache } from './variant-column-meta'
+import { computeColumnMeta, VariantColumnMetaCache } from './variant-column-meta'
 
 const BATCH_SIZE = DATABASE_CONFIG.BATCH_INSERT_SIZE
 
@@ -93,7 +90,6 @@ export class VariantRepository extends BaseRepository {
    * Must be paired with a subsequent call to `finishBulkInsert()`.
    */
   beginBulkInsert(): void {
-    this.clearColumnMetaCache()
     this.ftsSnapshot = tearDownFtsTriggers(this.db)
   }
 
@@ -107,7 +103,6 @@ export class VariantRepository extends BaseRepository {
       VariantExtensionFields & { _transcripts?: TranscriptInsertRow[] })[],
     caseId: number
   ): void {
-    this.clearColumnMetaCache(caseId)
     const runTransaction = this.db.transaction(
       (
         batch: (Omit<Variant, 'id' | 'case_id'> &
@@ -202,7 +197,6 @@ export class VariantRepository extends BaseRepository {
    * `finishBulkInsert()`.
    */
   finishBulkInsertNoCount(): void {
-    this.clearColumnMetaCache()
     try {
       rebuildAllFtsIndexes(this.db)
     } catch (error) {
@@ -234,7 +228,6 @@ export class VariantRepository extends BaseRepository {
    * Call this once after all `insertBatch()` calls to complete a bulk insert session.
    */
   finishBulkInsert(caseId: number, totalInserted: number): void {
-    this.clearColumnMetaCache(caseId)
     this.cases.updateCaseVariantCount(caseId, totalInserted)
     this.finishBulkInsertNoCount()
   }
@@ -470,147 +463,7 @@ export class VariantRepository extends BaseRepository {
     scope: { caseId: number } | { caseIds: number[] },
     columnKey: string
   ): ColumnFilterMeta {
-    if (isExtensionColumnKey(columnKey)) {
-      return this.getExtensionColumnMeta(scope, columnKey)
-    }
-    return this.getBaseColumnMeta(scope, columnKey)
-  }
-
-  /**
-   * Per-column metadata aggregation for a single base column.
-   *
-   * Mirrors the single-column slice of `getAllColumnMetas` but scoped to an
-   * arbitrary case set (cohort path) rather than always a single case.
-   */
-  private getBaseColumnMeta(
-    scope: { caseId: number } | { caseIds: number[] },
-    columnKey: string
-  ): ColumnFilterMeta {
-    const sqlCol = BASE_SORTABLE_COLUMNS[columnKey]
-    if (sqlCol === undefined || COMPUTED_COLUMNS.has(columnKey)) {
-      return { key: columnKey, dataType: 'text', distinctCount: 0 }
-    }
-
-    const DISTINCT_THRESHOLD = 50
-    const isNumeric = NUMERIC_COLUMN_FILTER_KEYS.has(columnKey)
-    const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
-    if (caseIds.length === 0) {
-      return {
-        key: columnKey,
-        dataType: isNumeric ? 'numeric' : 'text',
-        distinctCount: 0
-      }
-    }
-    const placeholders = caseIds.map(() => '?').join(', ')
-
-    const aggParts = [`COUNT(DISTINCT "${sqlCol}") AS distinctCount`]
-    if (isNumeric) {
-      const compared = comparedColumnSql(columnKey, `"${sqlCol}"`)
-      aggParts.push(`MIN(${compared}) AS min`, `MAX(${compared}) AS max`)
-    }
-    const aggSql = `SELECT ${aggParts.join(', ')} FROM variants WHERE case_id IN (${placeholders})`
-    const aggRow = this.db.prepare(aggSql).get(...caseIds) as {
-      distinctCount: number | null
-      min?: number | null
-      max?: number | null
-    }
-
-    const entry: ColumnFilterMeta = {
-      key: columnKey,
-      dataType: isNumeric ? 'numeric' : 'text',
-      distinctCount: aggRow.distinctCount ?? 0
-    }
-    if (isNumeric) {
-      entry.min = aggRow.min ?? undefined
-      entry.max = aggRow.max ?? undefined
-    }
-
-    if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
-      // SAFETY: sqlCol comes from hardcoded BASE_SORTABLE_COLUMNS
-      const valRows = this.db
-        .prepare(
-          `SELECT DISTINCT CAST("${sqlCol}" AS TEXT) AS v
-           FROM variants
-           WHERE case_id IN (${placeholders}) AND "${sqlCol}" IS NOT NULL
-           ORDER BY "${sqlCol}"`
-        )
-        .all(...caseIds) as { v: string }[]
-      entry.distinctValues = valRows.map((r) => r.v)
-    }
-
-    return withOfferedValues(entry)
-  }
-
-  /**
-   * Per-column metadata aggregation for a single extension column (e.g.
-   * `cnv.copy_number`, `sv.support`, `str.disease`).
-   *
-   * Runs against the extension table (variant_sv / variant_cnv / variant_str)
-   * joined back through variant_id → variants.case_id IN (...). For number
-   * kinds, returns min/max; for text/enum kinds, returns distinctValues when
-   * below the cardinality threshold.
-   *
-   * SAFETY: `def.table` and `column` come from the registry (never user
-   * input), so interpolating them into the SQL string is safe.
-   */
-  private getExtensionColumnMeta(
-    scope: { caseId: number } | { caseIds: number[] },
-    columnKey: string
-  ): ColumnFilterMeta {
-    const resolved = resolveExtensionColumnKey(columnKey)
-    if (resolved === null) {
-      return { key: columnKey, dataType: 'text', distinctCount: 0 }
-    }
-    const DISTINCT_THRESHOLD = 50
-    const { def, column, columnDef } = resolved
-    const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
-    if (caseIds.length === 0) {
-      const type = columnDef.kind === 'number' ? 'numeric' : 'text'
-      return { key: columnKey, dataType: type, distinctCount: 0 }
-    }
-    const placeholders = caseIds.map(() => '?').join(', ')
-    // Driven from the small extension table (CROSS JOIN fixes the loop order),
-    // each row's case looked up by primary key (#560).
-    const scoped = `FROM ${def.table} e CROSS JOIN variants v ON v.id = e.variant_id
-           WHERE v.case_id IN (${placeholders})`
-
-    if (columnDef.kind === 'number') {
-      const row = this.db
-        .prepare(
-          `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max, COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`
-        )
-        .get(...caseIds) as { min: number | null; max: number | null; distinctCount: number }
-      return {
-        key: columnKey,
-        dataType: 'numeric',
-        distinctCount: row.distinctCount ?? 0,
-        min: row.min ?? undefined,
-        max: row.max ?? undefined
-      }
-    }
-
-    const countRow = this.db
-      .prepare(`SELECT COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`)
-      .get(...caseIds) as { distinctCount: number }
-
-    const entry: ColumnFilterMeta = {
-      key: columnKey,
-      dataType: 'text',
-      distinctCount: countRow.distinctCount ?? 0
-    }
-
-    if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
-      const valRows = this.db
-        .prepare(
-          `SELECT DISTINCT e."${column}" AS v ${scoped}
-             AND e."${column}" IS NOT NULL
-           ORDER BY e."${column}"`
-        )
-        .all(...caseIds) as { v: string | number | null }[]
-      entry.distinctValues = valRows.map((r) => String(r.v))
-    }
-
-    return entry
+    return computeColumnMeta(this.db, scope, columnKey)
   }
 
   /**

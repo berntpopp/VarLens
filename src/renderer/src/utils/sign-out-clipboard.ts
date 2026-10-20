@@ -1,3 +1,5 @@
+import { DEFAULT_STRENGTHS, type EvidenceStrength } from '../../../shared/acmg/acmg-calculator'
+import { parseAcmgEvidence } from '../../../shared/acmg/acmg-evidence'
 import { genotypeZygosity, isAssumedHetGenotype } from '../../../shared/utils/genotype'
 import { escapeDelimitedCell } from '../../../shared/utils/delimited-text'
 import type { Variant, VariantAnnotationsResult } from '../../../shared/types/api'
@@ -28,6 +30,14 @@ export const SIGN_OUT_COLUMNS = [
   'Comment'
 ] as const
 
+const STRENGTH_SUFFIX: Record<EvidenceStrength, string> = {
+  very_strong: 'Very_Strong',
+  strong: 'Strong',
+  moderate: 'Moderate',
+  supporting: 'Supporting',
+  stand_alone: 'Stand_Alone'
+}
+
 function sanitizeCell(val: unknown, format: 'markdown' | 'tsv'): string {
   if (val === null || val === undefined || val === '') return '-'
   const str = String(val)
@@ -35,7 +45,7 @@ function sanitizeCell(val: unknown, format: 'markdown' | 'tsv'): string {
     .trim()
   if (str === '') return '-'
   if (format === 'markdown') {
-    return str.replace(/\|/g, '\\|')
+    return str.replace(/[|<]/g, '\\$&')
   }
   return escapeDelimitedCell(str, '\t')
 }
@@ -52,109 +62,54 @@ export function formatZygosity(gt: string | null | undefined): string | null {
 export function formatSignOutTable(rows: SignOutRow[], format: 'markdown' | 'tsv'): string {
   if (rows.length === 0) return ''
 
+  const cells = (r: SignOutRow): string[] =>
+    [
+      r.gene,
+      r.transcript,
+      r.hgvs_c,
+      r.hgvs_p,
+      r.chr_pos_ref_alt,
+      r.zygosity,
+      r.gnomad_af,
+      r.cadd,
+      r.acmg,
+      r.comment
+    ].map((val) => sanitizeCell(val, format))
+
   if (format === 'tsv') {
-    const header = SIGN_OUT_COLUMNS.join('\t')
-    const lines = rows.map((r) =>
-      [
-        sanitizeCell(r.gene, 'tsv'),
-        sanitizeCell(r.transcript, 'tsv'),
-        sanitizeCell(r.hgvs_c, 'tsv'),
-        sanitizeCell(r.hgvs_p, 'tsv'),
-        sanitizeCell(r.chr_pos_ref_alt, 'tsv'),
-        sanitizeCell(r.zygosity, 'tsv'),
-        sanitizeCell(r.gnomad_af, 'tsv'),
-        sanitizeCell(r.cadd, 'tsv'),
-        sanitizeCell(r.acmg, 'tsv'),
-        sanitizeCell(r.comment, 'tsv')
-      ].join('\t')
-    )
-    return [header, ...lines].join('\n')
+    return [SIGN_OUT_COLUMNS.join('\t'), ...rows.map((r) => cells(r).join('\t'))].join('\n')
   }
 
   const header = `| ${SIGN_OUT_COLUMNS.join(' | ')} |`
   const separator = `| ${SIGN_OUT_COLUMNS.map(() => '---').join(' | ')} |`
-  const lines = rows.map((r) => {
-    const cells = [
-      sanitizeCell(r.gene, 'markdown'),
-      sanitizeCell(r.transcript, 'markdown'),
-      sanitizeCell(r.hgvs_c, 'markdown'),
-      sanitizeCell(r.hgvs_p, 'markdown'),
-      sanitizeCell(r.chr_pos_ref_alt, 'markdown'),
-      sanitizeCell(r.zygosity, 'markdown'),
-      sanitizeCell(r.gnomad_af, 'markdown'),
-      sanitizeCell(r.cadd, 'markdown'),
-      sanitizeCell(r.acmg, 'markdown'),
-      sanitizeCell(r.comment, 'markdown')
-    ]
-    return `| ${cells.join(' | ')} |`
-  })
-  return [header, separator, ...lines].join('\n')
+  return [header, separator, ...rows.map((r) => `| ${cells(r).join(' | ')} |`)].join('\n')
 }
 
 export function extractAcmgCriteria(evidenceJson: string | null | undefined): string[] {
-  if (evidenceJson == null || evidenceJson === '') return []
-  try {
-    const parsed: unknown = JSON.parse(evidenceJson)
-    if (parsed == null) return []
-
-    if (Array.isArray(parsed)) {
-      const criteria: string[] = []
-      for (const item of parsed) {
-        if (typeof item === 'string') {
-          criteria.push(item)
-        } else if (item !== null && typeof item === 'object') {
-          const entry = item as { code?: unknown; confirmed?: unknown }
-          if (entry.confirmed === true && typeof entry.code === 'string') {
-            criteria.push(entry.code)
-          }
-        }
-      }
-      return criteria
-    }
-
-    if (typeof parsed !== 'object') return []
-    const record = parsed as Record<string, unknown>
-
-    const list: unknown[] = []
-    if (Array.isArray(record.pathogenic)) list.push(...record.pathogenic)
-    if (Array.isArray(record.benign)) list.push(...record.benign)
-    if (Array.isArray(record.codes)) list.push(...record.codes)
-    if (Array.isArray(record.items)) list.push(...record.items)
-
-    const criteria: string[] = []
-    for (const item of list) {
-      if (typeof item === 'string') {
-        criteria.push(item)
-      } else if (item !== null && typeof item === 'object') {
-        const entry = item as { code?: unknown; confirmed?: unknown }
-        if (entry.confirmed === true && typeof entry.code === 'string') {
-          criteria.push(entry.code)
-        }
-      }
-    }
-    return criteria
-  } catch {
-    return []
-  }
+  const evidence = parseAcmgEvidence(evidenceJson)
+  if (evidence === null) return []
+  return [...evidence.pathogenic, ...evidence.benign]
+    .filter((c) => c.confirmed === true && typeof c.code === 'string')
+    .map((c) => {
+      const baseCode = c.code.replace(/\d+$/, '')
+      const norm = c.strength?.toLowerCase() as EvidenceStrength | undefined
+      return norm && norm !== DEFAULT_STRENGTHS[baseCode]
+        ? `${c.code}_${STRENGTH_SUFFIX[norm] ?? c.strength}`
+        : c.code
+    })
 }
 
 export function variantToSignOutRow(
   variant: Variant,
   annotation?: VariantAnnotationsResult | null
 ): SignOutRow {
-  const variantRecord = variant as Variant & {
-    acmg_classification?: string | null
-    comment?: string | null
-  }
   const perCase = annotation?.perCase
   const global = annotation?.global
   const usePerCase = perCase?.acmg_classification != null || perCase?.acmg_evidence != null
   const acmgSource = usePerCase ? perCase : global
 
-  const classification =
-    acmgSource?.acmg_classification ?? variantRecord.acmg_classification ?? null
-  const evidenceJson = acmgSource?.acmg_evidence ?? null
-  const criteria = extractAcmgCriteria(evidenceJson)
+  const classification = acmgSource?.acmg_classification ?? null
+  const criteria = extractAcmgCriteria(acmgSource?.acmg_evidence)
 
   let acmg: string | null = null
   if (classification !== null && criteria.length > 0) {
@@ -165,17 +120,14 @@ export function variantToSignOutRow(
     acmg = `(${criteria.join(', ')})`
   }
 
-  const perCaseComment = annotation?.perCase?.per_case_comment?.trim()
-  const globalComment = annotation?.global?.global_comment?.trim()
-  const commentCandidate =
+  const perCaseComment = perCase?.per_case_comment?.trim()
+  const globalComment = global?.global_comment?.trim()
+  const comment =
     perCaseComment !== undefined && perCaseComment !== ''
       ? perCaseComment
       : globalComment !== undefined && globalComment !== ''
         ? globalComment
-        : variantRecord.comment
-  const comment = commentCandidate ?? ''
-
-  const zygosity = formatZygosity(variant.gt_num)
+        : ''
 
   return {
     gene: variant.gene_symbol ?? null,
@@ -183,7 +135,7 @@ export function variantToSignOutRow(
     hgvs_c: variant.cdna ?? null,
     hgvs_p: variant.aa_change ?? null,
     chr_pos_ref_alt: `${variant.chr}:${variant.pos} ${variant.ref}>${variant.alt}`,
-    zygosity,
+    zygosity: formatZygosity(variant.gt_num),
     gnomad_af: variant.gnomad_af ?? null,
     cadd: variant.cadd ?? null,
     acmg,

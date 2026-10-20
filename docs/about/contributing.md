@@ -7,7 +7,7 @@ VarLens welcomes contributions. Here's how to get set up for development.
 ### Prerequisites
 
 - **Node.js** pinned by `.nvmrc` (`24.15.0`)
-- **npm** 11.x or later
+- **npm** 11 (≥ 11.11, < 12)
 - **Git**
 - **Linux/macOS:** Standard build tools
 - **Windows:** [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "Desktop development with C++" workload
@@ -26,8 +26,7 @@ The `postinstall` script automatically rebuilds native modules for Electron 43.
 
 ```bash
 make dev           # Start dev server with hot reload (Electron 43)
-make rebuild-node  # Rebuild native modules for Node (before running tests)
-make test          # Run unit tests
+make test          # Run unit tests (rebuilds native modules for Node)
 make lint          # Lint and auto-fix
 make typecheck     # TypeScript checking
 make ci            # Run all CI checks locally

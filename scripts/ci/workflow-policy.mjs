@@ -39,18 +39,13 @@ export function validateActionPins(source) {
 }
 
 function findYamlFiles(dir, prefix = '') {
-  const results = []
-  if (!existsSync(dir)) return results
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const fullPath = resolve(dir, entry.name)
-    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
-    if (entry.isDirectory()) {
-      results.push(...findYamlFiles(fullPath, relPath))
-    } else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) {
-      results.push({ path: fullPath, label: relPath })
-    }
-  }
-  return results
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { recursive: true })
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => ({
+      path: resolve(dir, name),
+      label: (prefix ? `${prefix}/${name}` : name).replaceAll('\\', '/')
+    }))
 }
 
 function main() {

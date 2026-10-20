@@ -118,6 +118,24 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
     expect(queryMock.mock.calls[1][1]).toMatchObject({ search_query: 'BRCA2' })
   })
 
+  it('reloads the current page in place without resetting to page 1 when hidden', async () => {
+    const { active, data } = setup()
+    await data.loadVariants()
+    data.page.value = 4
+    await data.loadVariants()
+    queryMock.mockClear()
+
+    active.value = false
+    await data.reloadCurrentPage()
+    expect(data.page.value).toBe(4)
+    expect(queryMock).toHaveBeenCalledTimes(1)
+
+    active.value = true
+    await flushPromises()
+    expect(data.page.value).toBe(4)
+    expect(queryMock).toHaveBeenCalledTimes(1)
+  })
+
   it('reports the new case unfiltered total, not the previous case total', async () => {
     const { caseId, data, onCountsUpdate } = setup()
     await data.loadVariants()
@@ -201,7 +219,7 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
       return Promise.resolve(ok({ data: [], total_count: 0, unfiltered_count: 0 }))
     })
 
-    const { caseId, data } = setup()
+    const { caseId, data, onCountsUpdate } = setup()
     void data.loadVariants()
     await nextTick()
 
@@ -212,7 +230,7 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
     // Case B resolves
     resolveCaseB(null)
     await flushPromises()
-    expect(data.unfilteredCount.value).toBe(200)
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 20, total: 200 })
 
     // Switch B -> A
     caseId.value = 1
@@ -221,13 +239,13 @@ describe('useVariantData case switch while hidden (P0-3)', () => {
     // Visit 2 to Case A resolves with unfiltered_count: 250
     resolveVisit2CaseA(null)
     await flushPromises()
-    expect(data.unfilteredCount.value).toBe(250)
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 15, total: 250 })
 
     // Visit 1 to Case A resolves late with stale unfiltered_count: 999
     resolveVisit1CaseA(null)
     await flushPromises()
 
     // unfilteredCount MUST remain 250 (not overwritten by stale 999)
-    expect(data.unfilteredCount.value).toBe(250)
+    expect(onCountsUpdate).toHaveBeenLastCalledWith({ filtered: 15, total: 250 })
   })
 })

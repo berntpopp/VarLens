@@ -134,12 +134,6 @@
   width: 0;
 }
 
-/* Nested carrier subtable in cohort expanded rows: restore auto layout, full width, and unclipped cells */
-.table-container :is(.nested-carriers-table, .carrier-subtable) .v-table__wrapper > table {
-  table-layout: auto !important;
-  width: 100% !important;
-}
-
 /* Stale-while-revalidate: rows stay visible while a refetch runs and are
    dimmed (after a short delay, see useTableLoadingState) instead of being
    replaced by a skeleton. */
@@ -258,6 +252,9 @@
 }
 
 .table-container .bulk-select-checkbox {
+  width: 15px;
+  height: 15px;
   cursor: pointer;
   accent-color: rgb(var(--v-theme-primary));
+  vertical-align: middle;
 }

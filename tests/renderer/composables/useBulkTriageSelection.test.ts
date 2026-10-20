@@ -182,6 +182,26 @@ describe('useBulkTriageSelection', () => {
     expect(onTriageApplied).not.toHaveBeenCalled()
   })
 
+  it('still reports a failed bulk write after the user switched case mid-flight', async () => {
+    const showSnackSpy = vi.fn()
+    const upsertDef = defer()
+    // @ts-expect-error Mock window.api
+    window.api.annotations.batchUpsertPerCase = vi.fn().mockReturnValue(upsertDef.promise)
+    const { bulkInstance } = mountWithBulk(
+      {},
+      { [AppStateKey as symbol]: { showSnack: showSnackSpy } }
+    )
+    bulkInstance.toggleSelect(101)
+    const triagePromise = bulkInstance.applyBulkTriage({ acmg_classification: 'Likely benign' })
+
+    caseId.value = 99
+    await vi.waitFor(() => expect(bulkInstance.selectedCount.value).toBe(0))
+    upsertDef.resolve({ code: 'DB_LOCKED', message: 'database is locked', userMessage: 'Locked' })
+
+    expect(await triagePromise).toBe(0)
+    expect(showSnackSpy).toHaveBeenCalledWith('Locked', 'error')
+  })
+
   it('synchronizes native DOM checkbox .checked state on Shift+Click', () => {
     const bulk = createBulk()
     const cb1 = Object.assign(document.createElement('input'), { type: 'checkbox', checked: false })
@@ -527,13 +547,11 @@ describe('useBulkTriageSelection', () => {
     expect(onTriageApplied).not.toHaveBeenCalled()
   })
 
-  it('hands off to committedWriteListeners and reloads evicted annotations if unmounted during invalidateTags await on same case', async () => {
+  it('hands off to committedWriteListeners and preserves cached annotations on tag-only bulk update when unmounted during invalidateTags await', async () => {
     const invalidateDef = defer<void>()
     vi.mocked(invalidateTags).mockReturnValueOnce(invalidateDef.promise)
 
-    const batchGetSpy = vi.fn().mockResolvedValue({
-      'chr1:1000:A:T': mockCacheEntry(101, { tag_id: 5 })
-    })
+    const batchGetSpy = vi.fn()
     // @ts-expect-error Mock window.api
     window.api.annotations.batchGet = batchGetSpy
 
@@ -544,7 +562,7 @@ describe('useBulkTriageSelection', () => {
     })
 
     const { wrapper, bulkInstance } = mountWithBulk()
-    annotationCache.value.set('chr1:1000:A:T', mockCacheEntry(101, { tag_id: null }))
+    annotationCache.value.set('chr1:1000:A:T', mockCacheEntry(101, { starred: 1 }))
 
     bulkInstance.toggleSelect(101)
     const triagePromise = bulkInstance.applyBulkTriage({ tag_id: 5 })
@@ -559,8 +577,9 @@ describe('useBulkTriageSelection', () => {
 
     expect(count).toBe(2)
     expect(peerOnTriageApplied).toHaveBeenCalledTimes(1)
-    expect(batchGetSpy).toHaveBeenCalled()
-    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.tag_id).toBe(5)
+    expect(invalidateTags).toHaveBeenCalledWith(true)
+    expect(batchGetSpy).not.toHaveBeenCalled()
+    expect(annotationCache.value.get('chr1:1000:A:T')?.perCase?.starred).toBe(1)
     peerScope.stop()
   })
 

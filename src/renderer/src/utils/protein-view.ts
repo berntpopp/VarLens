@@ -20,16 +20,20 @@ const SO_SEVERITY_ORDER: readonly string[] = [
   'splice_donor_variant',
   'stop_gained',
   'frameshift_variant',
+  'frameshift_truncation',
+  'frameshift_elongation',
   'stop_lost',
   'start_lost',
+  'inframe_indel',
   'inframe_insertion',
   'inframe_deletion',
+  'disruptive_inframe_insertion',
+  'disruptive_inframe_deletion',
+  'conservative_inframe_insertion',
+  'conservative_inframe_deletion',
   'missense_variant',
   'splice_region_variant',
-  'synonymous_variant',
-  'HIGH',
-  'MODERATE',
-  'LOW'
+  'synonymous_variant'
 ]
 
 /**
@@ -47,10 +51,8 @@ export function resolveVariantConsequence(v: AnyVariant): string {
       .split(/[&,]/)
       .map((s) => s.trim())
       .filter(Boolean)
-    if (terms.length > 0) {
-      for (const term of SO_SEVERITY_ORDER) {
-        if (terms.includes(term)) return term
-      }
+    for (const term of SO_SEVERITY_ORDER) {
+      if (terms.includes(term)) return term
     }
   }
 

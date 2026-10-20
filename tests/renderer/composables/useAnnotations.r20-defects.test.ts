@@ -597,8 +597,7 @@ describe('Round 20 regression defects', () => {
     vi.mocked(api.annotations.batchGet).mockResolvedValueOnce({
       [key]: {
         global: null,
-        perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' }),
-        perCaseByVariantId: { 12: null }
+        perCase: mockPerCase(11, { acmg_classification: 'Pathogenic' })
       }
     } as never)
 
@@ -684,8 +683,7 @@ describe('Round 20 regression defects', () => {
     dBatch.resolve({
       [key]: {
         global: null,
-        perCase: mockPerCase(11, { starred: 1 }),
-        perCaseByVariantId: { 12: null }
+        perCase: mockPerCase(11, { starred: 1 })
       }
     })
     await pBatch

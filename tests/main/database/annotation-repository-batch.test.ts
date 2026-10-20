@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { AnnotationRepository } from '../../../src/main/database/AnnotationRepository'
 import { createKysely } from '../../../src/main/database/kysely'
+import { InvalidParametersError } from '../../../src/main/ipc/errors'
 
 describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)', () => {
   let db: Database.Database
@@ -225,18 +226,23 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
     it('rejects when variants do not belong to case and performs atomic rollback', () => {
       let thrown: unknown
       try {
-        repo.batchUpsertPerCaseAnnotation(1, [1, 99999], { starred: true })
+        repo.batchUpsertPerCaseAnnotation(1, [1, 99999], {
+          starred: false,
+          per_case_comment: 'mutated comment'
+        })
       } catch (err) {
         thrown = err
       }
-      expect(thrown).toBeInstanceOf(Error)
-      expect((thrown as Error).message).toBe('Transaction failed')
-      expect((thrown as { cause?: Error }).cause?.message).toMatch(/do not belong to case 1/)
+      expect(thrown).toBeInstanceOf(InvalidParametersError)
+      expect((thrown as Error).message).toMatch(/do not belong to case 1/)
 
       // Variant 1's annotation remains unchanged from seed (starred = 1, per_case_comment = null)
       const row = db
-        .prepare('SELECT per_case_comment FROM case_variant_annotations WHERE variant_id = 1')
-        .get() as { per_case_comment: string | null }
+        .prepare(
+          'SELECT starred, per_case_comment FROM case_variant_annotations WHERE variant_id = 1'
+        )
+        .get() as { starred: number; per_case_comment: string | null }
+      expect(row.starred).toBe(1)
       expect(row.per_case_comment).toBeNull()
     })
 
@@ -249,11 +255,12 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
         'INSERT INTO variants (id, case_id, chr, pos, ref, alt) VALUES (?, 1, ?, ?, ?, ?)'
       ).run(61, 'chr4', 40001, 'G', 'C')
 
-      // Attempt to batch-upsert with non-existent tag_id 999999 under PRAGMA foreign_keys = ON
+      // Attempt to batch-upsert [1, 60, 61] (mutating variant 1's starred=1 -> false and per_case_comment)
+      // with non-existent tag_id 999999 under PRAGMA foreign_keys = ON
       let thrown: unknown
       try {
-        repo.batchUpsertPerCaseAnnotation(1, [60, 61], {
-          starred: true,
+        repo.batchUpsertPerCaseAnnotation(1, [1, 60, 61], {
+          starred: false,
           per_case_comment: 'test comment',
           tag_id: 999999
         })
@@ -264,7 +271,16 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
       expect((thrown as Error).message).toBe('Transaction failed')
       expect((thrown as { cause?: Error }).cause?.message).toMatch(/FOREIGN KEY constraint failed/)
 
-      // Verify transaction rollback: 0 rows inserted into case_variant_annotations or variant_tags
+      // Verify transaction rollback: variant 1's mutation was rolled back
+      const v1Row = db
+        .prepare(
+          'SELECT starred, per_case_comment FROM case_variant_annotations WHERE variant_id = 1'
+        )
+        .get() as { starred: number; per_case_comment: string | null }
+      expect(v1Row.starred).toBe(1)
+      expect(v1Row.per_case_comment).toBeNull()
+
+      // And 0 rows inserted into case_variant_annotations or variant_tags for 60, 61
       const cvaCount = db
         .prepare(
           'SELECT count(*) as count FROM case_variant_annotations WHERE variant_id IN (60, 61)'
@@ -273,7 +289,7 @@ describe('AnnotationRepository.getBatch — call-count guarantee (Sprint A A1)',
       expect(cvaCount.count).toBe(0)
 
       const tagCount = db
-        .prepare('SELECT count(*) as count FROM variant_tags WHERE variant_id IN (60, 61)')
+        .prepare('SELECT count(*) as count FROM variant_tags WHERE variant_id IN (1, 60, 61)')
         .get() as { count: number }
       expect(tagCount.count).toBe(0)
     })

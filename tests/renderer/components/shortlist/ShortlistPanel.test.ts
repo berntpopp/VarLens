@@ -93,9 +93,7 @@ import {
   beginAnnotationRequest,
   bumpWriteVersion,
   cacheSet,
-  confirmedBases,
   evictAnnotationCacheKeysForBulkTriage,
-  inFlightMutations,
   isKeyLoading,
   perCaseVersionSlot,
   resetAnnotationState,
@@ -672,35 +670,6 @@ describe('ShortlistPanel', () => {
     await flushPromises()
 
     expect(upsertPerCaseMock).toHaveBeenLastCalledWith(7, 42, { starred: true })
-  })
-
-  it('prunes superseded in-flight star mutation on successful toggle-star in ShortlistPanel', async () => {
-    const row = minimalRow({ id: 42, case_id: 7, is_starred: false })
-    state.result.value = { rows: [row], totalCandidates: 1, presetUsed: null, elapsedMs: 10 }
-    const wrapper = mountPanel({ caseId: 7 })
-    await flushPromises()
-    const table = wrapper.findComponent({ name: 'ShortlistTable' })
-    const key = variantKey(row)
-    const slotKey = `perCase:${key}`
-
-    const writeVer1 = bumpWriteVersion(key, 'perCase:star')
-    inFlightMutations.set(slotKey, [
-      { id: 99, fieldGroup: 'star', writeVer: writeVer1, patch: { starred: 1 } }
-    ])
-    confirmedBases.set(slotKey, { starred: 0 } as never)
-
-    let resolveStar!: (val: unknown) => void
-    upsertPerCaseMock.mockImplementationOnce(() => new Promise((r) => (resolveStar = r)))
-
-    await table.vm.$emit('toggle-star', row)
-    expect(inFlightMutations.get(slotKey)?.length).toBe(1)
-
-    resolveStar({ id: 1, case_id: 7, variant_id: 42, starred: 1 } as CaseVariantAnnotation)
-    await flushPromises()
-
-    expect(inFlightMutations.has(slotKey)).toBe(false)
-    expect(confirmedBases.has(slotKey)).toBe(false)
-    expect(annotationCache.value.get(key)?.perCase?.starred).toBe(1)
   })
 
   it('delayed shortlist star response does not overwrite newer bulk classification', async () => {

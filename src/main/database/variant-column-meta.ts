@@ -4,65 +4,13 @@ import { withOfferedValues } from '../../shared/config'
 import { NUMERIC_COLUMN_FILTER_KEYS } from '../../shared/filters/column-filter-validation'
 import { BASE_SORTABLE_COLUMNS } from './VariantFilterBuilder'
 import { comparedColumnSql } from '../../shared/sql/unsigned-columns'
+import { isExtensionColumnKey, resolveExtensionColumnKey } from './variant-extension-registry'
 
 export const COMPUTED_COLUMNS = new Set(['internal_af'])
 
-const initializedDbs = new WeakSet<DatabaseType>()
-const revStatements = new WeakMap<DatabaseType, Statement>()
+const totalChangesStatements = new WeakMap<DatabaseType, Statement>()
 
-export function ensureCaseMetaRevSchema(db: DatabaseType): void {
-  if (initializedDbs.has(db)) return
-  try {
-    const queryOnly = db.pragma('query_only', { simple: true })
-    if (queryOnly === 1 || queryOnly === true) {
-      initializedDbs.add(db)
-      return
-    }
-  } catch {
-    // Ignore pragma check failures
-  }
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS _case_meta_rev (case_id INTEGER PRIMARY KEY, rev INTEGER NOT NULL DEFAULT 0);
-      CREATE TRIGGER IF NOT EXISTS _variants_case_meta_rev_ai AFTER INSERT ON variants BEGIN
-        INSERT INTO _case_meta_rev(case_id, rev) VALUES (NEW.case_id, 1)
-        ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
-      END;
-      CREATE TRIGGER IF NOT EXISTS _variants_case_meta_rev_ad AFTER DELETE ON variants BEGIN
-        INSERT INTO _case_meta_rev(case_id, rev) VALUES (OLD.case_id, 1)
-        ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
-      END;
-      CREATE TRIGGER IF NOT EXISTS _variants_case_meta_rev_au AFTER UPDATE ON variants BEGIN
-        INSERT INTO _case_meta_rev(case_id, rev) VALUES (NEW.case_id, 1)
-        ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
-        INSERT INTO _case_meta_rev(case_id, rev) SELECT OLD.case_id, 1 WHERE OLD.case_id != NEW.case_id
-        ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;
-      END;
-    `)
-    initializedDbs.add(db)
-  } catch {
-    // If tables variants or cases don't exist yet, retry on next call
-  }
-}
-
-export function bumpCaseMetaRev(db: DatabaseType, caseId?: number): void {
-  ensureCaseMetaRevSchema(db)
-  try {
-    if (caseId !== undefined) {
-      db.prepare(
-        `INSERT INTO _case_meta_rev(case_id, rev) VALUES (?, 1)
-         ON CONFLICT(case_id) DO UPDATE SET rev = rev + 1;`
-      ).run(caseId)
-    } else {
-      db.prepare(`UPDATE _case_meta_rev SET rev = rev + 1;`).run()
-    }
-  } catch {
-    // Ignore
-  }
-}
-
-export function getCaseStamp(db: DatabaseType, caseId: number, mutationSeq: number): string {
-  ensureCaseMetaRevSchema(db)
+export function getCaseStamp(db: DatabaseType, mutationSeq: number): string {
   let dataVersion = 0
   try {
     const dv = db.pragma('data_version', { simple: true })
@@ -73,20 +21,20 @@ export function getCaseStamp(db: DatabaseType, caseId: number, mutationSeq: numb
     // Ignore if pragma fails
   }
 
-  let rev = 0
+  let totalChanges = 0
   try {
-    let stmt = revStatements.get(db)
+    let stmt = totalChangesStatements.get(db)
     if (stmt === undefined) {
-      stmt = db.prepare('SELECT rev FROM _case_meta_rev WHERE case_id = ?')
-      revStatements.set(db, stmt)
+      stmt = db.prepare('SELECT total_changes() AS total_changes')
+      totalChangesStatements.set(db, stmt)
     }
-    const row = stmt.get(caseId) as { rev: number } | undefined
-    rev = row?.rev ?? 0
+    const row = stmt.get() as { total_changes: number } | undefined
+    totalChanges = row?.total_changes ?? 0
   } catch {
     // Ignore
   }
 
-  return `${dataVersion}:${mutationSeq}:${rev}`
+  return `${dataVersion}:${totalChanges}:${mutationSeq}`
 }
 
 export function computeAllColumnMetas(db: DatabaseType, caseId: number): ColumnFilterMeta[] {
@@ -173,6 +121,138 @@ export function computeAllColumnMetas(db: DatabaseType, caseId: number): ColumnF
   return meta.map(withOfferedValues)
 }
 
+export function computeColumnMeta(
+  db: DatabaseType,
+  scope: { caseId: number } | { caseIds: number[] },
+  columnKey: string
+): ColumnFilterMeta {
+  if (isExtensionColumnKey(columnKey)) {
+    return computeExtensionColumnMeta(db, scope, columnKey)
+  }
+  return computeBaseColumnMeta(db, scope, columnKey)
+}
+
+function computeBaseColumnMeta(
+  db: DatabaseType,
+  scope: { caseId: number } | { caseIds: number[] },
+  columnKey: string
+): ColumnFilterMeta {
+  const sqlCol = BASE_SORTABLE_COLUMNS[columnKey]
+  if (sqlCol === undefined || COMPUTED_COLUMNS.has(columnKey)) {
+    return { key: columnKey, dataType: 'text', distinctCount: 0 }
+  }
+
+  const DISTINCT_THRESHOLD = 50
+  const isNumeric = NUMERIC_COLUMN_FILTER_KEYS.has(columnKey)
+  const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
+  if (caseIds.length === 0) {
+    return {
+      key: columnKey,
+      dataType: isNumeric ? 'numeric' : 'text',
+      distinctCount: 0
+    }
+  }
+  const placeholders = caseIds.map(() => '?').join(', ')
+
+  const aggParts = [`COUNT(DISTINCT "${sqlCol}") AS distinctCount`]
+  if (isNumeric) {
+    const compared = comparedColumnSql(columnKey, `"${sqlCol}"`)
+    aggParts.push(`MIN(${compared}) AS min`, `MAX(${compared}) AS max`)
+  }
+  const aggSql = `SELECT ${aggParts.join(', ')} FROM variants WHERE case_id IN (${placeholders})`
+  const aggRow = db.prepare(aggSql).get(...caseIds) as {
+    distinctCount: number | null
+    min?: number | null
+    max?: number | null
+  }
+
+  const entry: ColumnFilterMeta = {
+    key: columnKey,
+    dataType: isNumeric ? 'numeric' : 'text',
+    distinctCount: aggRow.distinctCount ?? 0
+  }
+  if (isNumeric) {
+    entry.min = aggRow.min ?? undefined
+    entry.max = aggRow.max ?? undefined
+  }
+
+  if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
+    // SAFETY: sqlCol comes from hardcoded BASE_SORTABLE_COLUMNS
+    const valRows = db
+      .prepare(
+        `SELECT DISTINCT CAST("${sqlCol}" AS TEXT) AS v
+         FROM variants
+         WHERE case_id IN (${placeholders}) AND "${sqlCol}" IS NOT NULL
+         ORDER BY "${sqlCol}"`
+      )
+      .all(...caseIds) as { v: string }[]
+    entry.distinctValues = valRows.map((r) => r.v)
+  }
+
+  return withOfferedValues(entry)
+}
+
+function computeExtensionColumnMeta(
+  db: DatabaseType,
+  scope: { caseId: number } | { caseIds: number[] },
+  columnKey: string
+): ColumnFilterMeta {
+  const resolved = resolveExtensionColumnKey(columnKey)
+  if (resolved === null) {
+    return { key: columnKey, dataType: 'text', distinctCount: 0 }
+  }
+  const DISTINCT_THRESHOLD = 50
+  const { def, column, columnDef } = resolved
+  const caseIds = 'caseId' in scope ? [scope.caseId] : scope.caseIds
+  if (caseIds.length === 0) {
+    const type = columnDef.kind === 'number' ? 'numeric' : 'text'
+    return { key: columnKey, dataType: type, distinctCount: 0 }
+  }
+  const placeholders = caseIds.map(() => '?').join(', ')
+  // Driven from the small extension table (CROSS JOIN fixes the loop order),
+  // each row's case looked up by primary key (#560).
+  const scoped = `FROM ${def.table} e CROSS JOIN variants v ON v.id = e.variant_id
+         WHERE v.case_id IN (${placeholders})`
+
+  if (columnDef.kind === 'number') {
+    const row = db
+      .prepare(
+        `SELECT MIN(e."${column}") AS min, MAX(e."${column}") AS max, COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`
+      )
+      .get(...caseIds) as { min: number | null; max: number | null; distinctCount: number }
+    return {
+      key: columnKey,
+      dataType: 'numeric',
+      distinctCount: row.distinctCount ?? 0,
+      min: row.min ?? undefined,
+      max: row.max ?? undefined
+    }
+  }
+
+  const countRow = db
+    .prepare(`SELECT COUNT(DISTINCT e."${column}") AS distinctCount ${scoped}`)
+    .get(...caseIds) as { distinctCount: number }
+
+  const entry: ColumnFilterMeta = {
+    key: columnKey,
+    dataType: 'text',
+    distinctCount: countRow.distinctCount ?? 0
+  }
+
+  if (entry.distinctCount > 0 && entry.distinctCount <= DISTINCT_THRESHOLD) {
+    const valRows = db
+      .prepare(
+        `SELECT DISTINCT e."${column}" AS v ${scoped}
+           AND e."${column}" IS NOT NULL
+         ORDER BY e."${column}"`
+      )
+      .all(...caseIds) as { v: string | number | null }[]
+    entry.distinctValues = valRows.map((r) => String(r.v))
+  }
+
+  return entry
+}
+
 export class VariantColumnMetaCache {
   private static readonly MAX_META_CACHE_SIZE = 50
   private readonly cache = new Map<number, { stamp: string; data: ColumnFilterMeta[] }>()
@@ -182,7 +262,6 @@ export class VariantColumnMetaCache {
 
   clear(caseId?: number): void {
     this.mutationSeq++
-    bumpCaseMetaRev(this.db, caseId)
     if (caseId !== undefined) {
       this.cache.delete(caseId)
     } else {
@@ -191,7 +270,7 @@ export class VariantColumnMetaCache {
   }
 
   getAllColumnMetas(caseId: number): ColumnFilterMeta[] {
-    const stamp = getCaseStamp(this.db, caseId, this.mutationSeq)
+    const stamp = getCaseStamp(this.db, this.mutationSeq)
     const cached = this.cache.get(caseId)
     if (cached !== undefined && cached.stamp === stamp) {
       this.cache.delete(caseId)

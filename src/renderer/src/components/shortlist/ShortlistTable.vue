@@ -17,7 +17,7 @@
  * Spec: .planning/specs/2026-04-11-unified-shortlist-ranked-view-design.md (§6)
  */
 
-import { ref, computed, inject, onUnmounted, watch, onActivated, onDeactivated } from 'vue'
+import { ref, computed, inject, watch, onActivated, onDeactivated } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import {
   mdiStar,
@@ -62,6 +62,8 @@ import { AppStateKey } from '../../composables/useAppState'
 import { annotationCache, ACMG_COLORS, ACMG_ABBREV } from '../../composables/useAnnotations'
 import { variantKey, getPerCaseByVariantId } from '../../composables/annotation-cache'
 import { useBulkTriageSelection } from '../../composables/useBulkTriageSelection'
+import { useDetailsLiveSync } from '../../composables/useDetailsLiveSync'
+import { SHORTCUTS } from '../../config/keyboardShortcuts'
 import BulkTriageActionBar from '../variant-table/BulkTriageActionBar.vue'
 
 const props = defineProps<{
@@ -79,7 +81,6 @@ const emit = defineEmits<{
   (e: 'toggle-star', row: ShortlistRow): void
   (e: 'acmg-click', row: ShortlistRow): void
   (e: 'comment-click', row: ShortlistRow): void
-  (e: 'triage-applied'): void
 }>()
 
 // Link-outs resolve exactly like the case/cohort tables (shared resolvers)
@@ -116,7 +117,6 @@ onActivated(() => {
 })
 onDeactivated(() => {
   isComponentActive.value = false
-  clearArrowSyncTimer()
 })
 
 const currentItems = ref<ShortlistRow[] | null>(null)
@@ -148,13 +148,7 @@ function getRowProps({ item }: { item: ShortlistRow }) {
 }
 
 function getAcmgFor(item: ShortlistRow): AcmgClassification | null {
-  const k = variantKey(item)
-  const perCase = getPerCaseByVariantId(item.case_id, item.id, k)
-  return (
-    perCase?.acmg_classification ??
-    annotationCache.value.get(k)?.global?.acmg_classification ??
-    null
-  )
+  return getPerCaseByVariantId(item.case_id, item.id, variantKey(item))?.acmg_classification ?? null
 }
 
 function hasCommentFor(item: ShortlistRow): boolean {
@@ -176,30 +170,13 @@ const caseId = computed(
 const bulkSelection = useBulkTriageSelection({
   items: () => displayedRows.value,
   getItemId: (r) => r.id,
-  caseId,
-  onTriageApplied: () => emit('triage-applied')
+  caseId
 })
 
 watch(
   () => props.readOnly,
   (ro) => {
     if (ro) bulkSelection.clearSelection()
-  }
-)
-
-let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
-let arrowSyncGen = 0
-
-function clearArrowSyncTimer(): void {
-  arrowSyncGen++
-  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
-  arrowSyncTimer = null
-}
-
-watch(
-  () => props.interactive,
-  (ok) => {
-    if (!ok) clearArrowSyncTimer()
   }
 )
 
@@ -217,43 +194,15 @@ if (appState) {
   )
 }
 
-function canSyncDetails(): boolean {
-  return (
-    isComponentActive.value && props.interactive !== false && appState?.panelOpen.value === true
-  )
-}
-
-function triggerDebouncedPanelSync(): void {
-  clearArrowSyncTimer()
-  if (!appState || !canSyncDetails() || !selectedItem.value) return
-  const currentAppState = appState
-  const gen = arrowSyncGen
-  arrowSyncTimer = setTimeout(async () => {
-    arrowSyncTimer = null
-    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
-    const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
-    if (leavePromise !== null) {
-      const ok = await leavePromise
-      if (gen !== arrowSyncGen) return
-      if (!ok) {
-        if (
-          currentAppState.selectedPanelVariant.value &&
-          'id' in currentAppState.selectedPanelVariant.value
-        ) {
-          selectByClick(currentAppState.selectedPanelVariant.value as ShortlistRow)
-        }
-        return
-      }
-    }
-    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
-    emit('row-click', selectedItem.value)
-  }, 100)
-}
-
-onUnmounted(clearArrowSyncTimer)
+const liveSync = useDetailsLiveSync<ShortlistRow>({
+  isActive: () => isComponentActive.value && props.interactive !== false,
+  selectedItem,
+  selectByClick,
+  open: (item) => emit('row-click', item)
+})
 
 function handleRowClick(item: ShortlistRow): void {
-  clearArrowSyncTimer()
+  liveSync.cancel()
   selectByClick(item)
   emit('row-click', item)
 }
@@ -269,14 +218,14 @@ for (const [key, move] of [
       if (isInputFocused() || props.rows.length === 0) return
       e.preventDefault()
       move()
-      triggerDebouncedPanelSync()
+      liveSync.schedule()
     },
     { dedupe: true }
   )
 }
 
 onKeyStroke(
-  ['Enter', 'i'],
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!isComponentActive.value || props.interactive === false) return
     if (isInputFocused() || isControlFocused() || !selectedItem.value) return
@@ -287,12 +236,12 @@ onKeyStroke(
 )
 
 const actionHandlers: Record<string, () => void> = {
-  s: () => {
+  [SHORTCUTS.star.key]: () => {
     if (!selectedItem.value) return
     emit('toggle-star', { ...selectedItem.value, is_starred: isStarredFor(selectedItem.value) })
   },
-  a: () => emit('acmg-click', selectedItem.value!),
-  c: () => emit('comment-click', selectedItem.value!)
+  [SHORTCUTS.acmg.key]: () => emit('acmg-click', selectedItem.value!),
+  [SHORTCUTS.comment.key]: () => emit('comment-click', selectedItem.value!)
 }
 for (const [key, handler] of Object.entries(actionHandlers)) {
   onKeyStroke(
@@ -300,7 +249,8 @@ for (const [key, handler] of Object.entries(actionHandlers)) {
     (e: KeyboardEvent) => {
       if (!isComponentActive.value || props.interactive === false) return
       if (hasCommandModifier(e) || isInputFocused() || !selectedItem.value) return
-      if (props.readOnly === true) return
+      // Viewers may open the (read-only) comment dialog, like the comment button
+      if (props.readOnly === true && key !== SHORTCUTS.comment.key) return
       e.preventDefault()
       handler()
     },
@@ -309,7 +259,7 @@ for (const [key, handler] of Object.entries(actionHandlers)) {
 }
 
 onKeyStroke(
-  'Escape',
+  SHORTCUTS.closeDetails.key,
   (e: KeyboardEvent) => {
     if (
       !isComponentActive.value ||
@@ -365,7 +315,7 @@ onKeyStroke(
       <input
         type="checkbox"
         :checked="bulkSelection.isSelected(item.id)"
-        :aria-label="`Select variant ${item.id}`"
+        :aria-label="`Select ${item.gene_symbol ?? ''} ${item.chr}:${item.pos}`"
         :data-testid="`bulk-select-row-${item.id}`"
         class="bulk-select-checkbox"
         @click.stop="bulkSelection.handleRowCheckboxClick(item.id, $event)"
@@ -481,8 +431,10 @@ onKeyStroke(
       <v-list-item :disabled="props.readOnly === true" @click="emit('acmg-click', actionsRow)">
         <v-list-item-title>Classify ACMG</v-list-item-title>
       </v-list-item>
-      <v-list-item :disabled="props.readOnly === true" @click="emit('comment-click', actionsRow)">
-        <v-list-item-title>Edit comments</v-list-item-title>
+      <v-list-item @click="emit('comment-click', actionsRow)">
+        <v-list-item-title>{{
+          props.readOnly ? 'View comments' : 'Edit comments'
+        }}</v-list-item-title>
       </v-list-item>
       <v-list-item @click="emit('open-in-tab', targetTabFor(actionsRow.variant_type))">
         <v-list-item-title>
@@ -585,6 +537,7 @@ onKeyStroke(
   background-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 18%, transparent) !important;
 }
 
+/* data-table-shared.css scopes this rule to .table-container, which the shortlist is not in */
 .bulk-select-checkbox {
   cursor: pointer;
   accent-color: rgb(var(--v-theme-primary));

@@ -111,7 +111,7 @@ interface WorkerExportHooks {
 
 /**
  * Pre-check variant count and compile export query.
- * If the count exceeds the hard limit, returns an ExportResult with success: false.
+ * Throws a validation {@link AppError} when the count exceeds the hard limit.
  * The count runs in the read pool when one is available (it can be a
  * whole-case `count(*)`); compiling the SQL is cheap and stays on main.
  */
@@ -299,7 +299,7 @@ async function exportRowsToCsv(
     mainLogger.error(`${label} error: ${message}`, 'export')
     // Typed, user-facing: reported as it is rather than as a failed export.
     if (error instanceof CohortSummaryRefreshingError) throw error
-    throw error instanceof Error ? error : new Error(message)
+    throw new AppError(ErrorCode.UNKNOWN, message, message)
   } finally {
     stream.off('error', onStreamError)
   }

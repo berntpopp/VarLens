@@ -14,7 +14,9 @@ import {
 } from '@playwright/test'
 import {
   launchElectronApp,
-  type LaunchElectronAppResult
+  type LaunchElectronAppResult,
+  waitForAppShell,
+  dismissDisclaimerIfPresent
 } from './helpers/electron-app'
 import {
   createPerfDatabase,
@@ -33,14 +35,8 @@ let window: Page
 test.beforeAll(async () => {
   appInstance = await launchElectronApp()
   window = appInstance.window
-  await window.waitForSelector('.v-application', { timeout: 15000 })
-
-  // Dismiss disclaimer dialog if present
-  const disclaimerBtn = window.locator('button:has-text("I Understand")')
-  if ((await disclaimerBtn.count()) > 0) {
-    await disclaimerBtn.click()
-    await window.waitForTimeout(500)
-  }
+  await waitForAppShell(window)
+  await dismissDisclaimerIfPresent(window)
 
   // Seed deterministic database and fixture cases
   await createPerfDatabase(appInstance.app, window, appInstance.userDataDir)
@@ -48,12 +44,8 @@ test.beforeAll(async () => {
 
   // Reload renderer to sync store with raw IPC imported fixture cases
   await window.reload()
-  await window.locator('.v-application').waitFor({ state: 'visible', timeout: 10000 })
-  const disclaimerAfterReload = window.locator('button:has-text("I Understand")')
-  if ((await disclaimerAfterReload.count()) > 0 && (await disclaimerAfterReload.isVisible())) {
-    await disclaimerAfterReload.click()
-    await window.waitForTimeout(300)
-  }
+  await waitForAppShell(window)
+  await dismissDisclaimerIfPresent(window)
 })
 
 test.afterAll(async () => {

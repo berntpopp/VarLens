@@ -6,7 +6,6 @@ import {
   severityFilterSql,
   type SeverityFilterTarget
 } from '../../../shared/filters/severity-filter'
-import { buildNullCheckSql, isNullCheckOperator } from '../../../shared/filters/column-null-check'
 import {
   COHORT_SUMMARY_FILTER_COLUMNS,
   UnsupportedCohortColumnFilterError
@@ -18,11 +17,8 @@ import {
   cohortPhenotypeScoreSql,
   PHENOTYPE_SCORE_KEY
 } from '../../../shared/sql/phenotype-score-sql'
-import {
-  HGVS_TOKEN,
-  hgvsSearchSql,
-  normalizePostgresColumnFilterValue
-} from './postgres-variant-column-filters'
+import { HGVS_TOKEN, hgvsSearchSql } from './postgres-variant-column-filters'
+import { translateBareColumnFilter } from '../../database/variant-filter/column-filters'
 import { booleanSearchSql } from '../../../shared/utils/boolean-search'
 import { escapeLikePattern } from '../../database/search/search-clause-emitter'
 import { cohortOrderByClause } from '../../../shared/sql/chromosome-order'
@@ -170,8 +166,6 @@ export interface BuildSummaryResult {
 const SUMMARY_SORT_COLUMNS: Record<string, string> = {
   chr: 'cvs.chr',
   pos: 'cvs.pos',
-  ref: 'cvs.ref',
-  alt: 'cvs.alt',
   gene_symbol: 'cvs.gene_symbol',
   cdna: 'cvs.cdna',
   aa_change: 'cvs.aa_change',
@@ -331,59 +325,20 @@ function buildColumnFilterCondition(
   addParam: (value: unknown) => string,
   isNumeric = NUMERIC_COLUMN_FILTERS.has(column)
 ): string {
-  const { operator, value } = filter
-
-  if (isNullCheckOperator(operator)) {
-    return buildNullCheckSql(expression, operator, isNumeric, 'postgres')
-  }
-  const severity = isSeverityKey(column) ? severityFilterOperands(operator, value) : null
+  const severity = isSeverityKey(column)
+    ? severityFilterOperands(filter.operator, filter.value)
+    : null
   if (isSeverityKey(column) && severity !== null) {
     const target = summarySeverity(column, addParam)
     return severityFilterSql(column, severity.values, target, severity.negate) ?? ''
   }
-  if (operator === 'in' && Array.isArray(value)) {
-    if (value.length === 0) return ''
-    return `${expression} IN (${value
-      .map((item) => addParam(normalizePostgresColumnFilterValue(item, isNumeric)))
-      .join(', ')})`
-  }
-
-  if (operator === 'like' && typeof value === 'string') {
-    if (value.trim() === '') return ''
-    const pattern = `%${escapeLikePattern(value)}%`
-    if (isNumeric) {
-      return `${expression}::text ILIKE ${addParam(pattern)} ESCAPE '\\'`
-    }
-    return `${expression} ILIKE ${addParam(pattern)} ESCAPE '\\'`
-  }
-
-  if (
-    (operator === '=' || operator === '!=') &&
-    (typeof value === 'string' || typeof value === 'number')
-  ) {
-    return `${expression} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, isNumeric))}`
-  }
-
-  if (
-    (operator === '<' || operator === '>' || operator === '<=' || operator === '>=') &&
-    (typeof value === 'string' || typeof value === 'number')
-  ) {
-    const comparison = `${expression} ${operator} ${addParam(normalizePostgresColumnFilterValue(value, isNumeric))}`
-    // All summary column filters live in WHERE; mirror the live builder's
-    // `includeEmpty` default for base WHERE columns (true).
-    const includeEmpty = filter.includeEmpty ?? true
-    return includeEmpty ? `(${expression} IS NULL OR ${comparison})` : comparison
-  }
-
-  if (operator === 'between' && Array.isArray(value) && value.length === 2) {
-    const low = addParam(normalizePostgresColumnFilterValue(value[0], isNumeric))
-    const high = addParam(normalizePostgresColumnFilterValue(value[1], isNumeric))
-    const comparison = `(${expression} >= ${low} AND ${expression} <= ${high})`
-    const includeEmpty = filter.includeEmpty ?? true
-    return includeEmpty ? `(${expression} IS NULL OR ${comparison})` : comparison
-  }
-
-  return ''
+  return (
+    translateBareColumnFilter(expression, filter, {
+      dialect: 'postgres',
+      numericColumn: isNumeric,
+      bind: addParam
+    }) ?? ''
+  )
 }
 
 /** One search term; the PostgreSQL twin of SQLite's cohort `emitTerm`. */

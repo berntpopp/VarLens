@@ -173,4 +173,19 @@ describe('buildLollipopVariants (cohort carriers)', () => {
     const resUnrecognized = buildLollipopVariants(unrecognizedFunc, [], 'THOC5')
     expect(resUnrecognized[0].consequenceCategory).toBe('truncating')
   })
+
+  it.each([
+    ['inframe_indel', 'inframe'],
+    ['disruptive_inframe_deletion', 'inframe'],
+    ['disruptive_inframe_insertion', 'inframe'],
+    ['conservative_inframe_deletion', 'inframe'],
+    ['conservative_inframe_insertion', 'inframe'],
+    ['frameshift_truncation', 'truncating'],
+    ['frameshift_elongation', 'truncating']
+  ])('maps %s to %s instead of falling back to MODERATE/missense (#664)', (func, expected) => {
+    const v = row({ func, consequence: 'MODERATE' })
+    const res = buildLollipopVariants(v, [], 'THOC5')
+    expect(res[0].consequence).toBe(func)
+    expect(res[0].consequenceCategory).toBe(expected)
+  })
 })

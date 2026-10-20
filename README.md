@@ -53,7 +53,7 @@ See the [installation guide](https://berntpopp.github.io/VarLens/guide/installat
 
 ## Development
 
-Requires [Node.js](https://nodejs.org/) (pinned by `.nvmrc` to `24.15.0`) and npm ≥ 11. On Windows, also install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the C++ workload.
+Requires [Node.js](https://nodejs.org/) (pinned by `.nvmrc` to `24.15.0`) and npm 11 (≥ 11.11, < 12). On Windows, also install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the C++ workload.
 
 ```bash
 npm ci

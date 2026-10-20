@@ -9,8 +9,6 @@ import type { DslNode, DslFilterRule, DslGroup, DslOperator } from './types'
 import type { ColumnFilter } from '../../../shared/types/column-filters'
 import { findColumn } from './column-registry'
 import { contigQueryNames } from '../../../shared/utils/contig'
-import { NUMERIC_COLUMN_FILTER_KEYS } from './parser'
-export { normalizeClinicalPaste } from './clinical-paste'
 
 /** Result of translating a DSL AST */
 export interface TranslationResult {
@@ -59,43 +57,37 @@ function setFilter(
 ): void {
   const existing = result.columnFilters[column]
   if (existing !== undefined) {
-    const def = findColumn(column, 'cohort')
-    const isNumeric =
-      def?.type === 'numeric' ||
-      NUMERIC_COLUMN_FILTER_KEYS.has(column) ||
-      column.toLowerCase().startsWith('info.')
-    if (isNumeric) {
-      const isExistingLower = existing.operator === '>='
-      const isExistingUpper = existing.operator === '<='
-      const isNewLower = filter.operator === '>='
-      const isNewUpper = filter.operator === '<='
+    const isExistingLower = existing.operator === '>='
+    const isExistingUpper = existing.operator === '<='
+    const isNewLower = filter.operator === '>='
+    const isNewUpper = filter.operator === '<='
 
-      if ((isExistingLower && isNewUpper) || (isExistingUpper && isNewLower)) {
-        const lowerVal = Number(isExistingLower ? existing.value : filter.value)
-        const upperVal = Number(isExistingUpper ? existing.value : filter.value)
-        if (Number.isFinite(lowerVal) && Number.isFinite(upperVal)) {
-          if (lowerVal > upperVal) {
-            result.errors.push(
-              `${source}: lower bound (${lowerVal}) cannot exceed upper bound (${upperVal}) for '${column}'`
-            )
-            return
-          }
-          const betweenFilter: ColumnFilter = {
-            operator: 'between',
-            value: [Math.min(lowerVal, upperVal), Math.max(lowerVal, upperVal)]
-          }
-          if (def?.type === 'numeric') {
-            betweenFilter.includeEmpty = def.rangeExcludesEmpty !== true
-          }
-          result.columnFilters[column] = betweenFilter
+    if ((isExistingLower && isNewUpper) || (isExistingUpper && isNewLower)) {
+      const lowerVal = Number(isExistingLower ? existing.value : filter.value)
+      const upperVal = Number(isExistingUpper ? existing.value : filter.value)
+      if (Number.isFinite(lowerVal) && Number.isFinite(upperVal)) {
+        if (lowerVal > upperVal) {
+          result.errors.push(
+            `${source}: lower bound (${lowerVal}) cannot exceed upper bound (${upperVal}) for '${column}'`
+          )
           return
         }
+        const def = findColumn(column, 'cohort')
+        const betweenFilter: ColumnFilter = {
+          operator: 'between',
+          value: [lowerVal, upperVal]
+        }
+        if (def?.type === 'numeric') {
+          betweenFilter.includeEmpty = def.rangeExcludesEmpty !== true
+        }
+        result.columnFilters[column] = betweenFilter
+        return
       }
     }
 
     // A flat map holds one condition per field: overwriting would drop a bound
     result.errors.push(
-      `${source}: only one condition per field is supported ('${column}' is used twice)`
+      `${source}: only one condition per field is supported ('${column}' is used twice) — use >= and <= for a range`
     )
     return
   }

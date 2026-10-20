@@ -22,7 +22,7 @@ type Kind = 'gene' | 'accession'
 /**
  * Protein view data (UniProt mapping, InterPro domains, AlphaFold structure,
  * Ensembl gene structure) in web mode, behind the egress policy (service
- * `protein`, off by default). Parity-fixture mode answers from fixtures.
+ * `protein`, enabled by default). Parity-fixture mode answers from fixtures.
  */
 function proteinMethod(
   method: string,

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { ACMG_CLASSIFICATIONS } from '../../config/domain.config'
 import { GENOME_BUILDS } from '../../config/genome-builds.config'
+import { APP_CONFIG } from '../../config/app.config'
 import { OVERRIDE_REASON_REQUIRED, overrideReasonMissing } from '../../acmg/acmg-evidence'
 import {
   BatchPerCaseAnnotationUpdatesSchema as BatchPerCaseAnnotationFieldsSchema,
@@ -45,7 +46,7 @@ export const BatchPerCaseAnnotationUpdatesSchema = z
 /** Complete input validation for batch per-case annotations. */
 export const BatchPerCaseAnnotationInputSchema = z.object({
   caseId: CaseVariantIdSchema.shape.caseId,
-  variantIds: z.array(CaseVariantIdSchema.shape.variantId).min(1).max(1000),
+  variantIds: z.array(CaseVariantIdSchema.shape.variantId).min(1).max(APP_CONFIG.BULK_TRIAGE_MAX),
   updates: BatchPerCaseAnnotationUpdatesSchema
 })
 

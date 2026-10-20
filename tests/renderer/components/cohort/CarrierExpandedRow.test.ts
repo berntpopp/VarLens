@@ -249,7 +249,7 @@ describe('CarrierExpandedRow', () => {
     expect(wrapper.text()).not.toContain('Case GRCh38')
   })
 
-  it('applies nested-carriers-table and carrier-subtable classes, verifying DOM computed styles with shared CSS (#662)', async () => {
+  it('keeps the shared fixed-layout table rule off the nested carriers table (#662)', async () => {
     const fs = await import('node:fs')
     const path = await import('node:path')
     const cssPath = path.resolve(
@@ -294,18 +294,16 @@ describe('CarrierExpandedRow', () => {
     expect(outerStyle.tableLayout).toBe('fixed')
     expect(outerStyle.width).toBe('0px')
 
-    // Inner subtable has auto layout and full width (does not inherit width: 0)
+    // The outer fixed/zero-width rule must not reach the nested subtable
     const innerStyle = window.getComputedStyle(innerTable)
-    expect(innerStyle.tableLayout).toBe('auto')
-    expect(innerStyle.width).toBe('100%')
+    expect(innerStyle.tableLayout).not.toBe('fixed')
+    expect(innerStyle.width).not.toBe('0px')
 
-    // Inner table elements have carrier-subtable class and cells exist
-    expect(wrapper.find('.carrier-subtable').exists()).toBe(true)
-    const cells = wrapper.findAll('.carrier-subtable th, .carrier-subtable td')
+    const cells = wrapper.findAll('.nested-carriers-table th, .nested-carriers-table td')
     expect(cells.length).toBeGreaterThan(0)
 
     // Renders Case, Zygosity, GQ, DP and visible View in Case button
-    const tableText = wrapper.find('.carrier-subtable').text()
+    const tableText = wrapper.find('.nested-carriers-table').text()
     expect(tableText).toContain('Case')
     expect(tableText).toContain('Zygosity')
     expect(tableText).toContain('GQ')

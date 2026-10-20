@@ -168,6 +168,30 @@ vi.mock('../../../../src/renderer/src/components/AnnotationDialogs.vue', () => (
   }
 }))
 
+const bulkClearSpy = vi.fn()
+vi.mock(
+  '../../../../src/renderer/src/composables/useBulkTriageSelection',
+  async (importOriginal) => {
+    const mod =
+      await importOriginal<
+        typeof import('../../../../src/renderer/src/composables/useBulkTriageSelection')
+      >()
+    return {
+      ...mod,
+      useBulkTriageSelection: (...args: Parameters<typeof mod.useBulkTriageSelection>) => {
+        const bulk = mod.useBulkTriageSelection(...args)
+        return {
+          ...bulk,
+          clearSelection: () => {
+            bulkClearSpy()
+            bulk.clearSelection()
+          }
+        }
+      }
+    }
+  }
+)
+
 import VariantTable from '../../../../src/renderer/src/components/VariantTable.vue'
 
 const vuetify = createVuetify({ components, directives })
@@ -236,11 +260,11 @@ describe('VariantTable live keyboard sync & triage shortcuts', () => {
     }
   })
 
-  it('triggers row-click on "i" shortcut', () => {
+  it('clears the bulk selection when the variant-type tab changes', async () => {
     const wrapper = mountTable()
-    dispatchKey('i')
-    expect(wrapper.emitted('row-click')).toBeTruthy()
-    expect(wrapper.emitted('row-click')![0]).toEqual([fakeSelectedItem.value])
+    bulkClearSpy.mockClear()
+    await wrapper.setProps({ variantType: 'cnv' } as never)
+    expect(bulkClearSpy).toHaveBeenCalled()
   })
 
   it('does NOT live-sync details on arrow key when drawer is closed', () => {

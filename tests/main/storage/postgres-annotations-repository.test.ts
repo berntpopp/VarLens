@@ -813,8 +813,8 @@ describe('PostgresAnnotationsRepository', () => {
           }
         ]
       }) // _upsertPerCaseAnnotationOn
-      .mockResolvedValueOnce({ rows: [] }) // audit.append
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase
+      .mockResolvedValueOnce({ rows: [] }) // audit.appendMany
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
     const pool = {
       connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
@@ -828,10 +828,12 @@ describe('PostgresAnnotationsRepository', () => {
 
     expect(result).toEqual({ updatedCount: 1 })
     expect(query).toHaveBeenNthCalledWith(1, 'BEGIN')
-    // Check variant lookup uses $2::bigint[] and received deduplicated IDs
+    // Check variant lookup uses $2::bigint[] and FOR KEY SHARE, and received deduplicated IDs
     expect(query).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('WHERE case_id = $1 AND id = ANY($2::bigint[])'),
+      expect.stringContaining(
+        'WHERE case_id = $1 AND id = ANY($2::bigint[]) ORDER BY id FOR KEY SHARE'
+      ),
       [1, [bigintId]]
     )
     expect(query).toHaveBeenLastCalledWith('COMMIT')
@@ -850,9 +852,11 @@ describe('PostgresAnnotationsRepository', () => {
     }
     const repository = new PostgresAnnotationsRepository(pool as never, 'public')
 
-    await expect(
-      repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], { starred: true })
-    ).rejects.toThrow('One or more variants do not belong to case 1')
+    const promise = repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      starred: true
+    })
+    await expect(promise).rejects.toBeInstanceOf(InvalidParametersError)
+    await expect(promise).rejects.toThrow('One or more variants do not belong to case 1')
 
     expect(query).toHaveBeenCalledWith('BEGIN')
     expect(query).toHaveBeenCalledWith('ROLLBACK')
@@ -937,7 +941,6 @@ describe('PostgresAnnotationsRepository', () => {
           }
         ]
       }) // upsert 101
-      .mockResolvedValueOnce({ rows: [] }) // audit.append 101
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase 101
       // Variant 102 fails on upsert:
       .mockRejectedValueOnce(dbError) // upsert 102 fails
@@ -957,7 +960,7 @@ describe('PostgresAnnotationsRepository', () => {
     expect(release2).toHaveBeenCalledOnce()
   })
 
-  it('batchUpsertPerCaseAnnotationWithAudit appends both acmg_classify (null) and tag_assign entries for each variant', async () => {
+  it('batchUpsertPerCaseAnnotationWithAudit appends both acmg_classify (null) and tag_assign entries in a single appendMany call', async () => {
     const release = vi.fn()
     const query = vi
       .fn()
@@ -981,8 +984,6 @@ describe('PostgresAnnotationsRepository', () => {
           }
         ]
       }) // upsert for 101
-      .mockResolvedValueOnce({ rows: [] }) // audit.append acmg_classify for 101
-      .mockResolvedValueOnce({ rows: [] }) // audit.append tag_assign for 101
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 101
       // variant 102:
       .mockResolvedValueOnce({
@@ -1000,9 +1001,9 @@ describe('PostgresAnnotationsRepository', () => {
           }
         ]
       }) // upsert for 102
-      .mockResolvedValueOnce({ rows: [] }) // audit.append acmg_classify for 102
-      .mockResolvedValueOnce({ rows: [] }) // audit.append tag_assign for 102
       .mockResolvedValueOnce({ rows: [{ target_resolved: 1 }] }) // applyAnnotationFlagsPerCase for 102
+      // batched audit.appendMany:
+      .mockResolvedValueOnce({ rows: [] })
       // tag inserts:
       .mockResolvedValueOnce({ rows: [] }) // tag insert for 101
       .mockResolvedValueOnce({ rows: [] }) // tag insert for 102
@@ -1022,14 +1023,14 @@ describe('PostgresAnnotationsRepository', () => {
     expect(query).toHaveBeenCalledWith('COMMIT')
     expect(release).toHaveBeenCalledOnce()
 
-    // Find all audit log insert calls
+    // Find all audit log insert calls (must be batched into 1 appendMany call)
     const auditCalls = query.mock.calls.filter(([sql]) =>
       String(sql).includes('varlens_audit."audit_log"')
     )
-    expect(auditCalls).toHaveLength(4)
+    expect(auditCalls).toHaveLength(1)
 
-    // Variant 101: acmg_classify (null) & tag_assign
     expect(auditCalls[0][1]).toEqual([
+      // Variant 101: acmg_classify (null)
       'public',
       'acmg_classify',
       'case_variant_annotation',
@@ -1037,9 +1038,9 @@ describe('PostgresAnnotationsRepository', () => {
       null,
       JSON.stringify({ acmg_classification: null }),
       null,
-      null
-    ])
-    expect(auditCalls[1][1]).toEqual([
+      null,
+      null,
+      // Variant 101: tag_assign
       'public',
       'tag_assign',
       'case_variant_annotation',
@@ -1047,30 +1048,59 @@ describe('PostgresAnnotationsRepository', () => {
       null,
       JSON.stringify({ tag_id: 7 }),
       null,
+      null,
+      null,
+      // Variant 102: acmg_classify (null)
+      'public',
+      'acmg_classify',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ acmg_classification: null }),
+      null,
+      null,
+      null,
+      // Variant 102: tag_assign
+      'public',
+      'tag_assign',
+      'case_variant_annotation',
+      'case:1:variant:102',
+      null,
+      JSON.stringify({ tag_id: 7 }),
+      null,
+      null,
       null
     ])
+  })
 
-    // Variant 102: acmg_classify (null) & tag_assign
-    expect(auditCalls[2][1]).toEqual([
-      'public',
-      'acmg_classify',
-      'case_variant_annotation',
-      'case:1:variant:102',
-      null,
-      JSON.stringify({ acmg_classification: null }),
-      null,
-      null
-    ])
-    expect(auditCalls[3][1]).toEqual([
-      'public',
-      'tag_assign',
-      'case_variant_annotation',
-      'case:1:variant:102',
-      null,
-      JSON.stringify({ tag_id: 7 }),
-      null,
-      null
-    ])
+  it('batchUpsertPerCaseAnnotationWithAudit skips applyAnnotationFlagsPerCase on tag-only updates', async () => {
+    const release = vi.fn()
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 101 }, { id: 102 }] }) // variants lookup
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 101
+      .mockResolvedValueOnce({ rows: [] }) // getPerCaseAnnotation for 102
+      .mockResolvedValueOnce({ rows: [] }) // audit.appendMany
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 101
+      .mockResolvedValueOnce({ rows: [] }) // tag insert for 102
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+    const pool = {
+      connect: vi.fn(async () => ({ query: summaryLockFree(query), release }))
+    }
+    const repository = new PostgresAnnotationsRepository(pool as never, 'public')
+
+    const res = await repository.batchUpsertPerCaseAnnotationWithAudit(1, [101, 102], {
+      tag_id: 7
+    })
+
+    expect(res).toEqual({ updatedCount: 2 })
+    const flagCalls = query.mock.calls.filter(([arg]) => {
+      const name = (arg as { name?: string })?.name ?? ''
+      const text = typeof arg === 'string' ? arg : ((arg as { text?: string })?.text ?? '')
+      return name.includes('annotation_flags') || text.includes('cohort_variant_summary')
+    })
+    expect(flagCalls).toHaveLength(0)
   })
 
   it('sorts batch variantIds ascending and serializes concurrent writes on overlapping targets', async () => {

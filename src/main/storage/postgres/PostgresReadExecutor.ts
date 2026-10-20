@@ -1,4 +1,5 @@
 import type { StorageReadExecutor, StorageReadTask } from '../read-executor'
+import { prewarmHpoIndex } from '../../services/phenotype/hpo-similarity-db'
 import { PostgresHpoWorkerClient } from './postgres-hpo-worker-client'
 import type { PostgresAuditLogRepository } from './PostgresAuditLogRepository'
 import type { PostgresAvailableBuildsRepository } from './PostgresAvailableBuildsRepository'
@@ -183,6 +184,8 @@ export class PostgresReadExecutor implements StorageReadExecutor {
         return await this.repositories.shortlist.getShortlist(task.params[0])
 
       case 'hpo:prewarm':
+        // shortcut: warms both worker and main-thread HPO indexes (~2x 145 MB), remove once PostgresShortlistService scores in the worker
+        prewarmHpoIndex()
         return await this.hpoWorker.prewarm()
 
       case 'hpo:caseScores':

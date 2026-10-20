@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import {
-  translateAst,
-  serializeColumnFilters,
-  normalizeClinicalPaste
-} from '../../../src/renderer/src/dsl/translator'
+import { translateAst, serializeColumnFilters } from '../../../src/renderer/src/dsl/translator'
+import { normalizeClinicalPaste } from '../../../src/renderer/src/dsl/clinical-paste'
 import { parseDsl } from '../../../src/renderer/src/dsl/parser'
 import type { DslNode } from '../../../src/renderer/src/dsl/types'
 
@@ -191,7 +188,7 @@ describe('translateAst Boolean fidelity (#526)', () => {
     const result = translate('pos:>:100 AND pos:<:200')
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0]).toContain(
-      "only one condition per field is supported ('pos' is used twice)"
+      "only one condition per field is supported ('pos' is used twice) — use >= and <= for a range"
     )
   })
 
@@ -221,7 +218,7 @@ describe('translateAst Boolean fidelity (#526)', () => {
     expect(result.columnFilters.carrier_count).toEqual({
       operator: 'between',
       value: [2, 5],
-      includeEmpty: true
+      includeEmpty: false
     })
   })
 })

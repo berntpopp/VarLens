@@ -3,8 +3,8 @@
  *
  * Stored server-side in the project schema's `database_settings` table
  * (key `external_lookups`, JSON value) so it survives restarts and is shared
- * by every server process. Unknown or missing entries are OFF: a fresh
- * deployment makes no outbound lookup until an administrator enables one.
+ * by every server process. A fresh deployment enables `protein` and `gnomad`
+ * by default; other services start off until an administrator enables them.
  */
 import type { Pool } from 'pg'
 
@@ -44,7 +44,7 @@ export function defaultExternalLookupPolicy(): ExternalLookupPolicy {
   }
 }
 
-/** Parse the stored JSON; anything malformed falls back to all-off. */
+/** Parse the stored JSON; anything malformed falls back to {@link defaultExternalLookupPolicy}. */
 export function parseExternalLookupPolicy(raw: string | null | undefined): ExternalLookupPolicy {
   const policy = defaultExternalLookupPolicy()
   if (raw === null || raw === undefined || raw.trim() === '') return policy

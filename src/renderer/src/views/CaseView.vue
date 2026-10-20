@@ -382,8 +382,7 @@ defineExpose({
   selectedVariantType,
   lastNonShortlistType,
   variantTableType,
-  tabItems,
-  typeCounts
+  tabItems
 })
 </script>
 

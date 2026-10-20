@@ -48,7 +48,7 @@ export function coerceColumnFilterComparisonValue(
   return typeof value === 'number' ? value : Number.isFinite(num) ? num : value
 }
 
-export type ParsedBareColumnFilter =
+type ParsedBareColumnFilter =
   | { kind: 'null'; operator: NullCheckOperator; numericColumn: boolean }
   | { kind: 'in'; values: Array<string | number> }
   | { kind: 'like'; pattern: string; numericColumn: boolean }
@@ -70,7 +70,7 @@ export type ParsedBareColumnFilter =
  * Shared bare column filter parser. Normalizes operator and value shapes across
  * Kysely (Path 1), SQLite (Path 2), and PostgreSQL (Path 3).
  */
-export function parseBareColumnFilter(
+function parseBareColumnFilter(
   filterDef: { operator: string; value: unknown; includeEmpty?: boolean },
   numericColumn: boolean,
   includeEmptyDefault = true

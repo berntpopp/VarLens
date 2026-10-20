@@ -120,22 +120,19 @@ describe('SlimFilterToolbar Copy Sign-Out', () => {
     window.innerWidth = orig
     const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
     expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await nextTick()
+    const tsvItem = document.querySelector<HTMLElement>('[data-testid="copy-sign-out-tsv"]')
+    expect(tsvItem).not.toBeNull()
+    tsvItem!.click()
+    await nextTick()
+    expect(wrapper.emitted('copy-sign-out')).toEqual([['tsv']])
     wrapper.unmount()
   })
 
   it('does not render copy-sign-out menu when disabled/omitted', () => {
     const wrapper = mountToolbar({
       ...baseProps
-    })
-    const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
-    expect(btn.exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('does not render copy-sign-out menu when copyingSignOut is passed without showSignOut', () => {
-    const wrapper = mountToolbar({
-      ...baseProps,
-      copyingSignOut: false
     })
     const btn = wrapper.find('[data-testid="copy-sign-out-menu"]')
     expect(btn.exists()).toBe(false)

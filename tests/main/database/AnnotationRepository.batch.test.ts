@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { AnnotationRepository } from '../../../src/main/database/AnnotationRepository'
 import { AuditLogRepository } from '../../../src/main/database/AuditLogRepository'
+import { InvalidParametersError } from '../../../src/main/ipc/errors'
 import {
   executeSqliteWriteTask,
   type SqliteWriteRepositories
@@ -74,7 +75,7 @@ describe('AnnotationRepository.batchUpsertPerCaseAnnotation', () => {
   })
 
   it('updates starred status across multiple variants in a case', () => {
-    const result = repo.batchUpsertPerCaseAnnotation(1, [101, 102], { is_starred: true })
+    const result = repo.batchUpsertPerCaseAnnotation(1, [101, 102], { starred: true })
     expect(result.updatedCount).toBe(2)
 
     const row1 = db
@@ -137,9 +138,9 @@ describe('AnnotationRepository.batchUpsertPerCaseAnnotation', () => {
 
   it('preserves existing unprovided fields on conflict update', () => {
     // First set starred = 1
-    repo.batchUpsertPerCaseAnnotation(1, [101], { is_starred: true })
+    repo.batchUpsertPerCaseAnnotation(1, [101], { starred: true })
 
-    // Now set acmg_classification without specifying is_starred
+    // Now set acmg_classification without specifying starred
     repo.batchUpsertPerCaseAnnotation(1, [101], { acmg_classification: 'Likely pathogenic' })
 
     const row = db
@@ -155,14 +156,13 @@ describe('AnnotationRepository.batchUpsertPerCaseAnnotation', () => {
     // 201 belongs to case 2, not case 1
     let caughtError: unknown
     try {
-      repo.batchUpsertPerCaseAnnotation(1, [101, 201], { is_starred: true })
+      repo.batchUpsertPerCaseAnnotation(1, [101, 201], { starred: true })
     } catch (err) {
       caughtError = err
     }
 
-    expect(caughtError).toBeInstanceOf(Error)
-    expect((caughtError as Error).message).toBe('Transaction failed')
-    expect((caughtError as { cause?: Error }).cause?.message).toContain('do not belong to case 1')
+    expect(caughtError).toBeInstanceOf(InvalidParametersError)
+    expect((caughtError as Error).message).toContain('do not belong to case 1')
 
     // Confirm atomic rollback: 101 was NOT modified
     const row = db.prepare('SELECT * FROM case_variant_annotations WHERE variant_id = 101').get()
@@ -170,7 +170,7 @@ describe('AnnotationRepository.batchUpsertPerCaseAnnotation', () => {
   })
 
   it('returns updatedCount: 0 when variantIds is empty', () => {
-    const result = repo.batchUpsertPerCaseAnnotation(1, [], { is_starred: true })
+    const result = repo.batchUpsertPerCaseAnnotation(1, [], { starred: true })
     expect(result.updatedCount).toBe(0)
   })
 })
@@ -335,9 +335,8 @@ describe('executeSqliteWriteTask annotations:batchUpsertPerCaseWithAudit', () =>
       caughtError = err
     }
 
-    expect(caughtError).toBeInstanceOf(Error)
-    expect((caughtError as Error).message).toBe('Transaction failed')
-    expect((caughtError as { cause?: Error }).cause?.message).toContain('reason')
+    expect(caughtError).toBeInstanceOf(InvalidParametersError)
+    expect((caughtError as Error).message).toContain('reason')
 
     // Variant 101 must not have been created/updated
     const row101 = db

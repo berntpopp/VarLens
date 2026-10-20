@@ -21,6 +21,20 @@ export function resolveGeneRefRunnerCli(appPath: string): string | null {
   return null
 }
 
+function geneRefUpdateRunner(): {
+  appPath: string
+  scriptPath: string
+  runnerCliPath: string
+} | null {
+  if (app.isPackaged) return null
+  const appPath = app.getAppPath()
+  const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
+  if (!existsSync(scriptPath)) return null
+  const runnerCliPath = resolveGeneRefRunnerCli(appPath)
+  if (runnerCliPath === null) return null
+  return { appPath, scriptPath, runnerCliPath }
+}
+
 /**
  * Gene Reference database IPC handlers
  */
@@ -29,13 +43,9 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
     return wrapHandler(async () => {
       const geneRef = getGeneReferenceDb()
       const info = geneRef.getInfo()
-      const appPath = app.getAppPath()
-      const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
-      const canUpdate =
-        !app.isPackaged && existsSync(scriptPath) && resolveGeneRefRunnerCli(appPath) !== null
       return {
         ...info,
-        canUpdate
+        canUpdate: geneRefUpdateRunner() !== null
       }
     })
   })
@@ -58,10 +68,7 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
       const nowMs = Date.now()
       const builtAtMs = info.builtAt * 1000 // builtAt is Unix seconds
       const daysSinceBuilt = Math.floor((nowMs - builtAtMs) / (1000 * 60 * 60 * 24))
-      const appPath = app.getAppPath()
-      const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
-      const canUpdate =
-        !app.isPackaged && existsSync(scriptPath) && resolveGeneRefRunnerCli(appPath) !== null
+      const canUpdate = geneRefUpdateRunner() !== null
       const needsUpdate = canUpdate && daysSinceBuilt > 90
 
       return {
@@ -83,14 +90,10 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
    */
   ipcMain.handle('gene-ref:update', async () => {
     return wrapHandler(async () => {
-      // Resolve the build script path
-      const appPath = app.getAppPath()
-      const scriptPath = resolve(appPath, 'scripts', 'build-gene-reference-db.ts')
-      const runnerCliPath = resolveGeneRefRunnerCli(appPath)
-
-      if (app.isPackaged || !existsSync(scriptPath) || runnerCliPath === null) {
+      const runner = geneRefUpdateRunner()
+      if (runner === null) {
         mainLogger.warn(
-          `Gene ref build script or runner not available (packaged=${app.isPackaged}, path=${scriptPath}, runner=${runnerCliPath})`,
+          `Gene ref build script or runner not available (packaged=${app.isPackaged})`,
           'gene-ref'
         )
         return {
@@ -99,6 +102,7 @@ export function registerGeneRefHandlers({ ipcMain }: HandlerDependencies): void 
             'Gene reference update is not available in the packaged app. A future update will include this feature.'
         }
       }
+      const { appPath, scriptPath, runnerCliPath } = runner
 
       // Destination: always write to userData so it takes precedence on next load
       const userDataDbPath = join(app.getPath('userData'), 'gene_reference.db')

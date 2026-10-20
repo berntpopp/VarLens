@@ -162,10 +162,6 @@ async function mutate(
     const patch = extractFieldGroupPatch(scope, fieldGroup, updated)
     setConfirmedFieldPatch(slotKey, fieldGroup, patch)
     const isOwner = scope.kind === 'case' && isPerCaseSlotOwner(key, scope.caseId, scope.variantId)
-    if (isOwner) {
-      setConfirmedFieldPatch(`perCase:${key}`, fieldGroup, patch)
-      pruneInFlightMutationsOnSuccess(`perCase:${key}`, fieldGroup, writeVer)
-    }
     pruneInFlightMutationsOnSuccess(slotKey, fieldGroup, writeVer)
 
     const remaining = inFlightMutations.get(slotKey)
@@ -181,7 +177,6 @@ async function mutate(
     // prettier-ignore
     if (!remaining || remaining.length === 0) {
       confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
-      if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
     } else {
       confirmedBases.set(slotKey, mergedConfirmed)
     }
@@ -228,7 +223,6 @@ async function mutate(
         const nextSlot = remaining && remaining.length > 0 ? computeOptimisticSlot(base, remaining) : base ? { ...base } : null
         if (!remaining || remaining.length === 0) {
           confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
-          if (isOwner) confirmedFieldPatches.delete(`perCase:${key}`)
         }
         if (scope.kind === 'case') {
           const hasLoaded = hasLoadedPerCaseByVariantId(scope.caseId, scope.variantId)
@@ -281,22 +275,12 @@ async function mutate(
 // prettier-ignore
 async function fetchEntry(client: WindowAPI, scope: AnnotationLoadScope, { chr, pos, ref, alt }: VariantCoords): Promise<AnnotationCache> {
   if (scope.kind === 'case') {
-    if (typeof scope.variantId === 'number' && typeof client.annotations.batchGet === 'function') {
-      const batchRes = await client.annotations.batchGet(scope.caseId, [{ chr, pos, ref, alt, variantId: scope.variantId }], null)
-      if (batchRes !== undefined) {
-        const map = unwrapIpcResult(batchRes) as Record<string, AnnotationCache & { perCaseByVariantId?: Record<number, CaseVariantAnnotation | null> }>
-        const k = variantKey({ chr, pos, ref, alt })
-        if (k in map) {
-          const raw = map[k]
-          if (raw.perCaseByVariantId !== undefined && scope.variantId in raw.perCaseByVariantId) {
-            return { global: raw.global, perCase: raw.perCaseByVariantId[scope.variantId] ?? null }
-          }
-          return raw
-        }
-      }
+    // A row read binds the per-case slot to its own variant id (siblings share coordinates)
+    if (typeof scope.variantId === 'number') {
+      const map = unwrapIpcResult(await client.annotations.batchGet(scope.caseId, [{ chr, pos, ref, alt, variantId: scope.variantId }], null))
+      return map[variantKey({ chr, pos, ref, alt })] ?? { global: null, perCase: null }
     }
-    const singleRes = typeof client.annotations.getForVariant === 'function' ? await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt) : undefined
-    return singleRes !== undefined ? unwrapIpcResult(singleRes) : { global: null, perCase: null }
+    return unwrapIpcResult(await client.annotations.getForVariant(scope.caseId, chr, pos, ref, alt))
   }
   if (scope.build === null) return { global: null, perCase: null }
   const global = unwrapIpcResult(await client.annotations.getGlobal(chr, pos, ref, alt, scope.build))
@@ -325,8 +309,6 @@ function storeLoaded(key: string, scope: AnnotationLoadScope, entry: AnnotationC
       if (owner) setPerCaseByVariantId(owner.caseId, owner.variantId, perCase, key)
     } else {
       confirmedBases.delete(slotKey); inFlightMutations.delete(slotKey); confirmedFieldPatches.delete(slotKey)
-      const hasOther = Array.from(inFlightMutations.keys()).some((k) => k.endsWith(`:${key}`) && k !== slotKey)
-      if (!hasOther) confirmedFieldPatches.delete(`perCase:${key}`)
       cacheSet(key, { global: entry.global, perCase: entry.perCase })
     }
   } else {
@@ -471,7 +453,7 @@ async function loadBatch(
       }
       const targetVid = typeof v.id === 'number' ? v.id : cachedVid
       const vSlotKey = targetVid !== undefined ? perCaseSlotKey(scope.caseId, targetVid, key) : `perCase:${key}`
-      const hasInFlight = inFlightMutations.has(vSlotKey) || inFlightMutations.has(`perCase:${key}`)
+      const hasInFlight = inFlightMutations.has(vSlotKey)
       let starStale = false
       if (typeof v.is_starred === 'boolean' && !hasInFlight) {
         if (typeof v.id === 'number' && hasLoadedPerCaseByVariantId(scope.caseId, v.id)) {

@@ -26,7 +26,6 @@ import {
   getCachedBuild,
   getCachedCaseId,
   getCurrentDbPath,
-  getGeneration,
   hasDbSwitchedSince,
   isKeyLoading,
   isPerCaseSlotOwner,
@@ -38,8 +37,9 @@ import {
 import { invalidateTags } from '../queries/tags'
 import { logService } from '../services/LogService'
 import { AppStateKey } from './useAppState'
+import { APP_CONFIG } from '../../../shared/config/app.config'
 
-export const MAX_BULK_TRIAGE_SELECTION = 1000
+export const MAX_BULK_TRIAGE_SELECTION = APP_CONFIG.BULK_TRIAGE_MAX
 
 type CommittedWriteListener = (
   cid: number,
@@ -60,6 +60,16 @@ export interface UseBulkTriageSelectionOptions<T> {
   caseId: MaybeRefOrGetter<number | null | undefined>
   genomeBuild?: MaybeRefOrGetter<string | null>
   onTriageApplied?: () => void | Promise<void>
+}
+
+function getTouchedFields(
+  updates: BatchPerCaseAnnotationUpdates
+): Array<'star' | 'acmg' | 'comment'> {
+  const touchedFields: Array<'star' | 'acmg' | 'comment'> = []
+  if (updates.starred !== undefined || 'is_starred' in updates) touchedFields.push('star')
+  if ('acmg_classification' in updates || 'acmg_evidence' in updates) touchedFields.push('acmg')
+  if ('per_case_comment' in updates) touchedFields.push('comment')
+  return touchedFields
 }
 
 export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions<T>) {
@@ -217,11 +227,13 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     targetCid,
     targetDbPath,
     notifiedTargetSet,
-    _notifiedUpdates
+    notifiedUpdates
   ) => {
     if (!isStillActiveCase(targetCid, targetDbPath)) return
-    const ok = await reloadAffectedAndPanel(targetCid, targetDbPath, notifiedTargetSet)
-    if (!ok) return
+    if (getTouchedFields(notifiedUpdates).length > 0) {
+      const ok = await reloadAffectedAndPanel(targetCid, targetDbPath, notifiedTargetSet)
+      if (!ok) return
+    }
     if (isStillActiveCase(targetCid, targetDbPath)) {
       await onTriageApplied?.()
     }
@@ -246,37 +258,42 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
   const isSomeSelected = computed(() => selectedCount.value > 0 && !isAllSelected.value)
 
+  function addItemsToSelection(candidates: Iterable<{ id: number; item?: T }>): void {
+    const currentSet = new Set(selectedIds.value)
+    let reachedCap = false
+    const toAdd: Array<{ id: number; item?: T }> = []
+    for (const entry of candidates) {
+      if (!currentSet.has(entry.id)) {
+        if (currentSet.size >= MAX_BULK_TRIAGE_SELECTION) {
+          reachedCap = true
+          break
+        }
+        toAdd.push(entry)
+        currentSet.add(entry.id)
+      }
+    }
+    if (reachedCap) {
+      appState?.showSnack(
+        `Maximum bulk selection of ${MAX_BULK_TRIAGE_SELECTION.toLocaleString('en-US')} variants reached.`,
+        'warning'
+      )
+    }
+    if (toAdd.length > 0) {
+      selectionRev += 1
+      for (const { id, item } of toAdd) {
+        if (item !== undefined) {
+          const coords = extractCoords(item)
+          if (coords !== null) coordsById.set(id, coords)
+        }
+      }
+      selectedIds.value = Array.from(currentSet)
+    }
+  }
+
   function toggleSelectAll(checked: boolean): void {
     const list = currentItems.value
     if (checked) {
-      const currentSet = new Set(selectedIds.value)
-      let reachedCap = false
-      const toAdd: T[] = []
-      for (const item of list) {
-        const id = getItemId(item)
-        if (!currentSet.has(id)) {
-          if (currentSet.size + toAdd.length >= MAX_BULK_TRIAGE_SELECTION) {
-            reachedCap = true
-            break
-          }
-          toAdd.push(item)
-        }
-      }
-      if (reachedCap) {
-        appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
-      }
-      if (toAdd.length > 0) {
-        selectionRev += 1
-        for (const item of toAdd) {
-          const id = getItemId(item)
-          currentSet.add(id)
-          const coords = extractCoords(item)
-          if (coords !== null) {
-            coordsById.set(id, coords)
-          }
-        }
-        selectedIds.value = Array.from(currentSet)
-      }
+      addItemsToSelection(list.map((item) => ({ id: getItemId(item), item })))
     } else {
       const currentIdsSet = new Set(list.map(getItemId))
       const nextIds = selectedIds.value.filter((id) => !currentIdsSet.has(id))
@@ -303,35 +320,9 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
       if (prevIndex !== -1 && currentIndex !== -1) {
         const start = Math.min(prevIndex, currentIndex)
         const end = Math.max(prevIndex, currentIndex)
-        const rangeSlice = list.slice(start, end + 1)
-        const currentSet = new Set(selectedIds.value)
-        let reachedCap = false
-        const toAdd: T[] = []
-        for (const item of rangeSlice) {
-          const rId = getItemId(item)
-          if (!currentSet.has(rId)) {
-            if (currentSet.size + toAdd.length >= MAX_BULK_TRIAGE_SELECTION) {
-              reachedCap = true
-              break
-            }
-            toAdd.push(item)
-          }
-        }
-        if (reachedCap) {
-          appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
-        }
-        if (toAdd.length > 0) {
-          selectionRev += 1
-          for (const item of toAdd) {
-            const rId = getItemId(item)
-            currentSet.add(rId)
-            const coords = extractCoords(item)
-            if (coords !== null) {
-              coordsById.set(rId, coords)
-            }
-          }
-          selectedIds.value = Array.from(currentSet)
-        }
+        addItemsToSelection(
+          list.slice(start, end + 1).map((item) => ({ id: getItemId(item), item }))
+        )
       } else {
         toggleSelect(id)
       }
@@ -347,25 +338,15 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
   }
 
   function toggleSelect(id: number): void {
-    const next = new Set(selectedIds.value)
-    if (next.has(id)) {
+    if (selectedIdSet.value.has(id)) {
       selectionRev += 1
-      next.delete(id)
+      selectedIds.value = selectedIds.value.filter((existing) => existing !== id)
       coordsById.delete(id)
     } else {
-      if (next.size >= MAX_BULK_TRIAGE_SELECTION) {
-        appState?.showSnack('Maximum bulk selection of 1,000 variants reached.', 'warning')
-        return
-      }
-      selectionRev += 1
-      next.add(id)
       const item = currentItems.value.find((it) => getItemId(it) === id)
-      if (item !== undefined) {
-        const coords = extractCoords(item)
-        if (coords !== null) coordsById.set(id, coords)
-      }
+      addItemsToSelection([{ id, item }])
+      if (!selectedIdSet.value.has(id)) return
     }
-    selectedIds.value = Array.from(next)
     lastClickedId.value = id
   }
 
@@ -386,7 +367,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
     const targetSet = new Set(targetIds)
     const myScopeGen = scopeGen
     const mySelectionRev = selectionRev
-    const myCacheGen = getGeneration()
+    const myCacheEpoch = getAnnotationCacheEpoch()
     const myApplyId = ++activeApplyId
 
     isExecuting.value = true
@@ -432,76 +413,77 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         affectedKeys.add(variantKey(initialPanel))
       }
 
-      const touchedFields: Array<'star' | 'acmg' | 'comment'> = []
-      if (updates.starred !== undefined || 'is_starred' in updates) touchedFields.push('star')
-      if ('acmg_classification' in updates || 'acmg_evidence' in updates) touchedFields.push('acmg')
-      if ('per_case_comment' in updates) touchedFields.push('comment')
+      const touchedFields = getTouchedFields(updates)
+      const hasAnnotationUpdates = touchedFields.length > 0
 
       const bulkOwners = new Map<string, Array<{ caseId: number; variantId: number }>>()
-      for (const [id, coords] of targetCoords.entries()) {
-        const k = variantKey(coords)
-        const list = bulkOwners.get(k) ?? []
-        if (!list.some((o) => o.variantId === id)) {
-          const entry = { caseId: cid, variantId: id }
-          if (isPerCaseSlotOwner(k, cid, id)) list.push(entry)
-          else list.unshift(entry)
-          bulkOwners.set(k, list)
-        }
-      }
-      for (const [k, list] of bulkOwners) {
-        const last = list[list.length - 1]
-        if (last !== undefined) ensurePerCaseSlotOwner(k, last.caseId, last.variantId)
-      }
-
       const bulkWriteVersions = new Map<string, Map<string, number>>()
-      for (const k of affectedKeys) {
-        const m = new Map<string, number>()
-        const list = bulkOwners.get(k)
-        for (const fg of touchedFields) {
-          if (list !== undefined && list.length > 0) {
-            for (const o of list) {
-              const vSlot = perCaseVersionSlot(o.caseId, o.variantId, fg)
-              m.set(vSlot, bumpWriteVersion(k, vSlot))
-            }
-          } else {
-            m.set(fg, bumpWriteVersion(k, `perCase:${fg}`))
+      if (hasAnnotationUpdates) {
+        for (const [id, coords] of targetCoords.entries()) {
+          const k = variantKey(coords)
+          const list = bulkOwners.get(k) ?? []
+          if (!list.some((o) => o.variantId === id)) {
+            const entry = { caseId: cid, variantId: id }
+            if (isPerCaseSlotOwner(k, cid, id)) list.push(entry)
+            else list.unshift(entry)
+            bulkOwners.set(k, list)
           }
         }
-        bulkWriteVersions.set(k, m)
+        for (const [k, list] of bulkOwners) {
+          const last = list[list.length - 1]
+          if (last !== undefined) ensurePerCaseSlotOwner(k, last.caseId, last.variantId)
+        }
+
+        for (const k of affectedKeys) {
+          const m = new Map<string, number>()
+          const list = bulkOwners.get(k)
+          for (const fg of touchedFields) {
+            if (list !== undefined && list.length > 0) {
+              for (const o of list) {
+                const vSlot = perCaseVersionSlot(o.caseId, o.variantId, fg)
+                m.set(vSlot, bumpWriteVersion(k, vSlot))
+              }
+            } else {
+              m.set(fg, bumpWriteVersion(k, `perCase:${fg}`))
+            }
+          }
+          bulkWriteVersions.set(k, m)
+        }
       }
 
-      const myCacheEpoch = getAnnotationCacheEpoch()
       const res = unwrapIpcResult(await api.annotations.batchUpsertPerCase(cid, targetIds, updates))
 
       // If active case or database changed away from cid, write has committed in storage
       // but we do not touch the active different case's selection or cache.
       if (!isCacheStillOnCase(cid, myDbPath)) return res.updatedCount
 
-      const postWritePanel = getPanelVariantCoords(cid)
-      if (postWritePanel !== null && targetSet.has(postWritePanel.id)) {
-        targetCoords.set(postWritePanel.id, postWritePanel)
-        const pKey = variantKey(postWritePanel)
-        affectedKeys.add(pKey)
-        const list = (bulkOwners.get(pKey) ?? []).filter((o) => o.variantId !== postWritePanel.id)
-        list.push({ caseId: cid, variantId: postWritePanel.id })
-        bulkOwners.set(pKey, list)
-      }
-
       const preCachedToReload: Array<VariantCoords & { id: number }> = []
-      for (const [id, coords] of targetCoords.entries()) {
-        const k = variantKey(coords)
-        if (annotationCache.value.has(k) || isKeyLoading(k))
-          preCachedToReload.push({ id, ...coords })
-      }
+      if (hasAnnotationUpdates) {
+        const postWritePanel = getPanelVariantCoords(cid)
+        if (postWritePanel !== null && targetSet.has(postWritePanel.id)) {
+          targetCoords.set(postWritePanel.id, postWritePanel)
+          const pKey = variantKey(postWritePanel)
+          affectedKeys.add(pKey)
+          const list = (bulkOwners.get(pKey) ?? []).filter((o) => o.variantId !== postWritePanel.id)
+          list.push({ caseId: cid, variantId: postWritePanel.id })
+          bulkOwners.set(pKey, list)
+        }
 
-      evictAnnotationCacheKeysForBulkTriage(
-        affectedKeys,
-        touchedFields,
-        bulkWriteVersions,
-        updates,
-        bulkOwners,
-        myCacheEpoch === getAnnotationCacheEpoch()
-      )
+        for (const [id, coords] of targetCoords.entries()) {
+          const k = variantKey(coords)
+          if (annotationCache.value.has(k) || isKeyLoading(k))
+            preCachedToReload.push({ id, ...coords })
+        }
+
+        evictAnnotationCacheKeysForBulkTriage(
+          affectedKeys,
+          touchedFields,
+          bulkWriteVersions,
+          updates,
+          bulkOwners,
+          myCacheEpoch === getAnnotationCacheEpoch()
+        )
+      }
 
       if (updates.tag_id !== undefined && getActivePinia()) {
         await invalidateTags(true)
@@ -514,7 +496,7 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
             fn(targetCid, myDbPath, targetSet, updates)
           )
         )
-        if (!isCacheStillOnCase(targetCid, myDbPath)) return
+        if (!hasAnnotationUpdates || !isCacheStillOnCase(targetCid, myDbPath)) return
         const missingMap = new Map<number, VariantCoords & { id: number }>()
         for (const v of preCachedToReload) {
           if (!annotationCache.value.has(variantKey(v))) missingMap.set(v.id, v)
@@ -534,19 +516,21 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
         return res.updatedCount
       }
 
-      const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet, preCachedToReload)
-      if (!ok) {
-        if (isDisposed && isCacheStillOnCase(cid, myDbPath)) {
-          await runDisposedRecovery(cid)
+      if (hasAnnotationUpdates) {
+        const ok = await reloadAffectedAndPanel(cid, myDbPath, targetSet, preCachedToReload)
+        if (!ok) {
+          if (isDisposed && isCacheStillOnCase(cid, myDbPath)) {
+            await runDisposedRecovery(cid)
+          }
+          return res.updatedCount
         }
-        return res.updatedCount
       }
 
       // Only perform selection cleanup if selection was not modified and session is unchanged
       if (
         scopeGen === myScopeGen &&
         selectionRev === mySelectionRev &&
-        getGeneration() === myCacheGen
+        getAnnotationCacheEpoch() === myCacheEpoch
       ) {
         clearSelection()
       }
@@ -563,7 +547,6 @@ export function useBulkTriageSelection<T>(options: UseBulkTriageSelectionOptions
 
       return res.updatedCount
     } catch (error) {
-      if (!isStillActiveCase(cid, myDbPath)) return 0
       const msg = isIpcError(error)
         ? (error.userMessage ?? error.message)
         : error instanceof Error

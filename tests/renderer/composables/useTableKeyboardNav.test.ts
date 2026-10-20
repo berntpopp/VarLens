@@ -355,6 +355,16 @@ describe('useTableKeyboardNav', () => {
       document.body.removeChild(link)
     })
 
+    it('keeps arrow keys for a focused radio but not for a bulk-select checkbox', () => {
+      document.body.innerHTML = '<input type="radio" /><input type="checkbox" />'
+      const [radio, checkbox] = Array.from(document.querySelectorAll('input'))
+      radio.focus()
+      expect(isTextEntryFocused()).toBe(true)
+      checkbox.focus()
+      expect(isTextEntryFocused()).toBe(false)
+      document.body.innerHTML = ''
+    })
+
     it('returns true while a dialog is open, whatever has focus', () => {
       document.body.innerHTML = '' // inputs the tests above left focused
       const dialog = document.createElement('div')

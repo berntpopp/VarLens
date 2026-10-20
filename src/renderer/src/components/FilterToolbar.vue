@@ -582,8 +582,6 @@ const handleCopySignOut = async (format: 'markdown' | 'tsv'): Promise<void> => {
       return
     }
     emit('export-success', { filePath: `clipboard (${res.count} variants)` })
-  } catch (err) {
-    emit('export-error', formatError(err))
   } finally {
     copyingSignOut.value = false
   }

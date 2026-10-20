@@ -1,10 +1,10 @@
 // Gene → cross-validation fold (spec §5.2): sort, seeded Fisher–Yates shuffle, round-robin.
-import { mulberry32, shuffle } from '../common/rng'
+import { rng, shuffle } from '../common/rng'
 
 export function geneFolds(genes: Iterable<string>, k: number, seed: number): Map<string, number> {
   if (!Number.isInteger(k) || k < 1)
     throw new Error(`fold count must be a positive integer, got ${k}`)
-  const shuffled = shuffle([...new Set(genes)].sort(), mulberry32(seed))
+  const shuffled = shuffle([...new Set(genes)].sort(), rng(seed))
   return new Map(shuffled.map((g, i) => [g, i % k]))
 }
 

@@ -519,30 +519,21 @@ export function reconcileBulkTriageKey(
       const hasCurrentActivity =
         !fromCurrentEpoch &&
         (getConfirmedWriteVersion(key, vSlot) > 0 ||
-          (inFlightMutations.get(slotKey)?.some((m) => m.fieldGroup === fg) ?? false) ||
-          (inFlightMutations.get(`perCase:${key}`)?.some((m) => m.fieldGroup === fg) ?? false))
+          (inFlightMutations.get(slotKey)?.some((m) => m.fieldGroup === fg) ?? false))
       if (hasCurrentActivity) continue
       const verMap = bulkWriteVersions.get(key)
       const bulkVer = verMap?.get(vSlot) ?? verMap?.get(fg) ?? bumpWriteVersion(key, vSlot)
       const prevConfirmed = getConfirmedWriteVersion(key, vSlot)
       if (bulkVer > prevConfirmed) {
         setConfirmedWriteVersion(key, vSlot, bulkVer)
-        if (!o) setConfirmedWriteVersion(key, `perCase:${fg}`, bulkVer)
         pruneInFlightMutationsOnSuccess(slotKey, fg, bulkVer)
-        if (!o) pruneInFlightMutationsOnSuccess(`perCase:${key}`, fg, bulkVer)
-        if (
-          updates &&
-          (inFlightMutations.has(slotKey) || inFlightMutations.has(`perCase:${key}`))
-        ) {
+        if (updates && inFlightMutations.has(slotKey)) {
           applyBulkUpdatesPatch(slotKey, fg, updates)
-          if (slotKey !== `perCase:${key}`) applyBulkUpdatesPatch(`perCase:${key}`, fg, updates)
         } else {
-          for (const sk of [slotKey, `perCase:${key}`]) {
-            const patches = confirmedFieldPatches.get(sk)
-            if (patches) {
-              delete patches[fg]
-              if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(sk)
-            }
+          const patches = confirmedFieldPatches.get(slotKey)
+          if (patches) {
+            delete patches[fg]
+            if (Object.keys(patches).length === 0) confirmedFieldPatches.delete(slotKey)
           }
         }
       }

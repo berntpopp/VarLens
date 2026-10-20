@@ -314,7 +314,7 @@ interface Props {
   exportBlockedReason?: string | null
   /** Offer a CSV / Excel choice (web: the browser download has no save dialog). */
   exportFormats?: boolean
-  /** Whether copying sign-out table is in progress (also enables sign-out copy menu) */
+  /** Whether copying sign-out table is in progress */
   copyingSignOut?: boolean
   showSignOut?: boolean
 }

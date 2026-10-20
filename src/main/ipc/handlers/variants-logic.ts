@@ -10,6 +10,7 @@ import type { DatabaseService } from '../../database/DatabaseService'
 import type { DbPool } from '../../database/DbPool'
 import type { StorageSession } from '../../storage/session'
 import type { ColumnFilterMeta } from '../../../shared/types/column-filters'
+import { panelStatusGenomeBuild } from '../../../shared/filters/panel-intervals'
 import { computePanelIntervals } from './panelIntervalHelper'
 
 type GetSession = () => StorageSession
@@ -87,22 +88,11 @@ export function buildVariantFilter(
     }
 
     const pool = getDbPool?.()
-    if (pool) {
-      // Pool path: let the worker resolve intervals and genome_build off the main thread.
-      const genomeBuild = (filters as { genome_build?: string }).genome_build
-      if (genomeBuild !== undefined) {
-        ;(fullFilter as VariantFilter & { genome_build?: string }).genome_build = genomeBuild
-      }
-      // active_panel_ids and panel_padding_bp are forwarded as-is
-    } else {
+    if (!pool) {
       // Fallback (no pool): compute on the main thread synchronously
-      let genomeBuild = (filters as { genome_build?: string }).genome_build
       const dbRef = getDb()
-      if (genomeBuild === undefined) {
-        const caseData = dbRef.cases.getCase(fullFilter.case_id)
-        genomeBuild = caseData?.genome_build
-      }
-      genomeBuild = genomeBuild ?? 'GRCh38'
+      const caseData = dbRef.cases.getCase(fullFilter.case_id)
+      const genomeBuild = panelStatusGenomeBuild(undefined, caseData?.genome_build)
 
       // Throws if the computation itself fails — never treat that as "no
       // panel configured" (see panelIntervalHelper.ts for the contract).

@@ -104,41 +104,6 @@ describe('variants:query — pool available path', () => {
     expect(passedFilter.panel_intervals).toBeUndefined()
   })
 
-  it('forwards explicitly supplied genome_build when pool is available (#674)', async () => {
-    const caseId = 1
-    const fakePool = { run: poolRunSpy } as unknown as DbPool
-    const deps: HandlerDependencies = {
-      ipcMain: { handle: vi.fn() } as unknown as IpcMain,
-      getDb: () => dbService,
-      getDbManager: vi.fn() as unknown as () => DatabaseManager,
-      getDbPool: () => fakePool
-    }
-
-    const { registerVariantHandlers } = await import('../../../src/main/ipc/handlers/variants')
-
-    let capturedHandler: ((...args: unknown[]) => Promise<unknown>) | null = null
-    ;(deps.ipcMain.handle as ReturnType<typeof vi.fn>).mockImplementation(
-      (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => {
-        if (channel === 'variants:query') capturedHandler = handler
-      }
-    )
-    registerVariantHandlers(deps)
-
-    const filter = {
-      consequences: [],
-      active_panel_ids: [1, 2],
-      panel_padding_bp: 10000,
-      genome_build: 'GRCh37'
-    }
-    await capturedHandler!({} as Electron.IpcMainInvokeEvent, caseId, filter, 0, 50, undefined)
-
-    expect(poolRunSpy).toHaveBeenCalledOnce()
-    const task = poolRunCalls[0]
-    const passedFilter = task.params[0] as Record<string, unknown>
-    expect(passedFilter.active_panel_ids).toEqual([1, 2])
-    expect(passedFilter.genome_build).toBe('GRCh37')
-  })
-
   it('does not attach genome_build when no active panels are provided', async () => {
     const caseId = dbService.database
       .prepare(

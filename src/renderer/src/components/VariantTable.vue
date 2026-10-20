@@ -45,7 +45,7 @@
         <input
           type="checkbox"
           :checked="bulkSelection.isSelected(item.id)"
-          :aria-label="`Select variant ${item.id}`"
+          :aria-label="`Select ${item.gene_symbol ?? ''} ${item.chr}:${item.pos}`"
           :data-testid="`bulk-select-row-${item.id}`"
           class="bulk-select-checkbox"
           @click.stop="bulkSelection.handleRowCheckboxClick(item.id, $event)"
@@ -166,7 +166,7 @@
       </template>
 
       <template #[`item.gt_num`]="{ item, value }">
-        <GenotypeCell :item="item" :value="value" />
+        <GenotypeCell :value="value" :phase="item.comphet_phase" />
       </template>
 
       <template
@@ -292,6 +292,7 @@ import * as phenotype from './variant-table/usePhenotypeColumn'
 import { useVariantData } from './variant-table/useVariantData'
 import { useApiService } from '../composables/useApiService'
 import { useBulkTriageSelection } from '../composables/useBulkTriageSelection'
+import { useDetailsLiveSync } from '../composables/useDetailsLiveSync'
 import { AppStateKey } from '../composables/useAppState'
 import { isWebRuntime } from '../utils/runtime-mode'
 import {
@@ -405,18 +406,16 @@ const canBulkWrite = computed(() => canWrite.value && props.annotationScope !== 
 watch(canBulkWrite, (can) => {
   if (!can) bulkSelection.clearSelection()
 })
+watch(
+  () => props.variantType,
+  () => bulkSelection.clearSelection()
+)
 
 const bulkSelection = useBulkTriageSelection<Variant>({
   items: () => variants.value,
   getItemId: (v) => v.id,
   caseId: toRef(props, 'caseId'),
-  onTriageApplied: async () => {
-    await reloadCurrentPage()
-    if (variants.value.length > 0 && props.caseId) {
-      annotationActions.invalidateAnnotationGeneration()
-      await annotationActions.loadAnnotationsBatch(props.caseId, variants.value)
-    }
-  }
+  onTriageApplied: () => reloadCurrentPage()
 })
 
 // Page size incl. "Auto (fit)": as many rows as fit the visible table body
@@ -514,52 +513,16 @@ if (appState) {
   )
 }
 
-let arrowSyncTimer: ReturnType<typeof setTimeout> | null = null
-let arrowSyncGen = 0
-
-function clearArrowSyncTimer(): void {
-  arrowSyncGen++
-  if (arrowSyncTimer !== null) clearTimeout(arrowSyncTimer)
-  arrowSyncTimer = null
-}
-
-watch(
-  () => props.interactive,
-  (ok) => {
-    if (!ok) clearArrowSyncTimer()
-  }
-)
-
-function canSyncDetails(): boolean {
-  return viewActive.value && props.interactive && appState?.panelOpen.value === true
-}
-
-function triggerDebouncedPanelSync(): void {
-  clearArrowSyncTimer()
-  if (!appState || !canSyncDetails() || selectedItem.value === null) return
-  const currentAppState = appState
-  const gen = arrowSyncGen
-  arrowSyncTimer = setTimeout(async () => {
-    arrowSyncTimer = null
-    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
-    const leavePromise = currentAppState.confirmPanelLeave?.() ?? null
-    if (leavePromise !== null) {
-      const ok = await leavePromise
-      if (gen !== arrowSyncGen) return
-      if (!ok) {
-        const panelVar = currentAppState.selectedPanelVariant.value
-        if (panelVar && 'id' in panelVar) selectByClick(panelVar as Variant)
-        return
-      }
-    }
-    if (!canSyncDetails() || selectedItem.value === null || gen !== arrowSyncGen) return
-    emit('row-click', selectedItem.value)
-  }, 100)
-}
+const liveSync = useDetailsLiveSync<Variant>({
+  isActive: () => viewActive.value && props.interactive,
+  selectedItem,
+  selectByClick,
+  open: (item) => emit('row-click', item)
+})
 
 // Row click handler
 const handleRowClick = (_event: unknown, { item }: { item: Variant }): void => {
-  clearArrowSyncTimer()
+  liveSync.cancel()
   pendingScrollBehavior.value = 'smooth'
   lastKeyboardMoveAtMs.value = null
   const panelVar = appState?.selectedPanelVariant.value
@@ -577,7 +540,6 @@ onActivated(() => {
 })
 onDeactivated(() => {
   viewActive.value = false
-  clearArrowSyncTimer()
 })
 
 // Keyboard navigation handlers
@@ -597,14 +559,14 @@ for (const [key, move] of [
       pendingScrollBehavior.value = getAdaptiveRowScrollBehavior(lastKeyboardMoveAtMs.value, now)
       lastKeyboardMoveAtMs.value = now
       move()
-      triggerDebouncedPanelSync()
+      liveSync.schedule()
     },
     { dedupe: true }
   )
 }
 
 onKeyStroke(
-  [SHORTCUTS.openDetails.key, 'i', 'I'],
+  SHORTCUTS.openDetails.key,
   (e: KeyboardEvent) => {
     if (!props.interactive || !viewActive.value || isInputFocused()) return
     if (selectedItem.value === null || isControlFocused()) return
@@ -682,7 +644,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  clearArrowSyncTimer()
   cleanupAnnotationChanged?.()
 })
 

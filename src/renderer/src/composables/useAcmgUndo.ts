@@ -11,14 +11,7 @@
 import { inject } from 'vue'
 import type { AcmgClassification } from '../../../shared/config/domain.config'
 import { useAnnotations, type UseAnnotationsOptions } from './useAnnotations'
-import {
-  annotationCache,
-  getCachedVariantId,
-  getPerCaseByVariantId,
-  getPerCaseSlotOwner,
-  hasPerCaseByVariantId,
-  variantKey
-} from './annotation-cache'
+import { getPerCaseByVariantId, variantKey } from './annotation-cache'
 import { AppStateKey } from './useAppState'
 import { planAcmgUndo, type AcmgState } from '../utils/acmg/acmg-undo'
 import { logService } from '../services/LogService'
@@ -40,44 +33,42 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     ref: string,
     alt: string,
     withEvidence: boolean
-  ): Promise<AcmgState> {
+  ): Promise<AcmgState | null> {
     const key = variantKey({ chr, pos, ref, alt })
     let rowPc = getPerCaseByVariantId(caseId, variantId, key)
-    if (rowPc === undefined && typeof annotations.loadAnnotations === 'function') {
+    if (rowPc === undefined) {
       await annotations.loadAnnotations(caseId, chr, pos, ref, alt, variantId)
       rowPc = getPerCaseByVariantId(caseId, variantId, key)
     }
-    const cached = annotationCache.value.get(key)
-    const cachedVid = getCachedVariantId(key)
-    const owner = getPerCaseSlotOwner(key)
-    const hasCoordOrRowState =
-      rowPc !== undefined ||
-      hasPerCaseByVariantId(caseId, variantId) ||
-      cached !== undefined ||
-      cachedVid !== undefined ||
-      owner !== undefined
-    if (hasCoordOrRowState) {
-      return {
-        classification: rowPc?.acmg_classification ?? null,
-        ...(withEvidence ? { evidenceJson: rowPc?.acmg_evidence ?? null } : {})
-      }
-    }
+    if (rowPc === undefined) return null
     return {
-      classification: annotations.getAcmgClassification(chr, pos, ref, alt),
-      ...(withEvidence ? { evidenceJson: annotations.getAcmgEvidence(chr, pos, ref, alt) } : {})
+      classification: rowPc?.acmg_classification ?? null,
+      ...(withEvidence ? { evidenceJson: rowPc?.acmg_evidence ?? null } : {})
     }
   }
 
-  function offerUndo(previous: AcmgState, next: AcmgState, restore: () => Promise<boolean>): void {
+  function offerUndo(
+    previous: AcmgState | null,
+    next: AcmgState,
+    restore: (prev: AcmgState) => Promise<boolean>
+  ): void {
+    if (appState === null) return
+    if (previous === null) {
+      const msg =
+        next.classification === null
+          ? 'ACMG classification cleared'
+          : `Classified as ${next.classification}`
+      return appState.showSnack(msg, 'success')
+    }
     const plan = planAcmgUndo(previous, next)
-    if (plan === null || appState === null) return
+    if (plan === null) return
     if (plan.restore === null) return appState.showSnack(plan.message, 'success')
     appState.showSnack(plan.message, 'success', {
       timeout: UNDO_SNACKBAR_MS,
       action: {
         text: 'Undo',
         callback: () => {
-          restore()
+          restore(previous)
             .then((undone) => {
               // A failed undo was rolled back and reported by useAnnotations.
               if (undone) appState.showSnack('ACMG change undone', 'info')
@@ -111,16 +102,8 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
       ))
     )
       return false
-    offerUndo(previous, { classification }, () =>
-      annotations.setAcmgClassification(
-        caseId,
-        variantId,
-        chr,
-        pos,
-        ref,
-        alt,
-        previous.classification
-      )
+    offerUndo(previous, { classification }, (prev) =>
+      annotations.setAcmgClassification(caseId, variantId, chr, pos, ref, alt, prev.classification)
     )
     return true
   }
@@ -135,8 +118,8 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
     // Nothing was saved (rolled back and reported): no success message, no Undo.
     if (!(await annotations.setGlobalAcmgClassification(chr, pos, ref, alt, classification)))
       return false
-    offerUndo(previous, { classification }, () =>
-      annotations.setGlobalAcmgClassification(chr, pos, ref, alt, previous.classification)
+    offerUndo(previous, { classification }, (prev) =>
+      annotations.setGlobalAcmgClassification(chr, pos, ref, alt, prev.classification)
     )
     return true
   }
@@ -159,7 +142,7 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
       evidenceJson
     )
     if (!saved) return false
-    offerUndo(previous, { classification, evidenceJson }, () =>
+    offerUndo(previous, { classification, evidenceJson }, (prev) =>
       annotations.setAcmgClassificationWithEvidence(
         caseId,
         variantId,
@@ -167,8 +150,8 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
         pos,
         ref,
         alt,
-        previous.classification,
-        previous.evidenceJson ?? ''
+        prev.classification,
+        prev.evidenceJson ?? ''
       )
     )
     return true
@@ -191,14 +174,14 @@ export function useAcmgUndo(options: UseAnnotationsOptions = {}) {
       evidenceJson
     )
     if (!saved) return false
-    offerUndo(previous, { classification, evidenceJson }, () =>
+    offerUndo(previous, { classification, evidenceJson }, (prev) =>
       annotations.setGlobalAcmgClassificationWithEvidence(
         chr,
         pos,
         ref,
         alt,
-        previous.classification,
-        previous.evidenceJson ?? ''
+        prev.classification,
+        prev.evidenceJson ?? ''
       )
     )
     return true

@@ -12,7 +12,7 @@ describe('normalizeClinicalPaste', () => {
     expect(normalizeClinicalPaste('chrMT:1234')).toBe('chr:=:MT AND pos:=:1234')
   })
 
-  it('normalizes genomic intervals with hyphen, dashes, and ..', () => {
+  it('normalizes genomic intervals with hyphen, dashes, and .. to start-pos bounds', () => {
     expect(normalizeClinicalPaste('chr17:43,044,295-43,125,483')).toBe(
       'chr:=:17 AND pos:>=:43044295 AND pos:<=:43125483'
     )
@@ -45,9 +45,12 @@ describe('normalizeClinicalPaste', () => {
     )
   })
 
-  it('normalizes multi-symbol uppercase gene lists separated by commas, semicolons, whitespace', () => {
+  it('normalizes multi-symbol gene lists separated by commas, semicolons, whitespace, including C#orf# symbols', () => {
     expect(normalizeClinicalPaste('BRCA1, BRCA2, PALB2, ATM')).toBe(
       '(gene_symbol:=:BRCA1 OR gene_symbol:=:BRCA2 OR gene_symbol:=:PALB2 OR gene_symbol:=:ATM)'
+    )
+    expect(normalizeClinicalPaste('C9orf72, SOD1, TARDBP, FUS')).toBe(
+      '(gene_symbol:=:C9orf72 OR gene_symbol:=:SOD1 OR gene_symbol:=:TARDBP OR gene_symbol:=:FUS)'
     )
     expect(normalizeClinicalPaste('BRCA1 BRCA2 PALB2')).toBe(
       '(gene_symbol:=:BRCA1 OR gene_symbol:=:BRCA2 OR gene_symbol:=:PALB2)'
@@ -66,8 +69,10 @@ describe('normalizeClinicalPaste', () => {
     )
   })
 
-  it('leaves single gene symbols, free text, HGVS, and rsIDs unchanged', () => {
+  it('leaves single gene symbols, boolean NOT/AND/OR queries, free text, HGVS, and rsIDs unchanged', () => {
     expect(normalizeClinicalPaste('BRCA1')).toBe('BRCA1')
+    expect(normalizeClinicalPaste('BRCA1 NOT BRCA2')).toBe('BRCA1 NOT BRCA2')
+    expect(normalizeClinicalPaste('BRCA1 AND BRCA2')).toBe('BRCA1 AND BRCA2')
     expect(normalizeClinicalPaste('pathogenic variant')).toBe('pathogenic variant')
     expect(normalizeClinicalPaste('c.123A>G')).toBe('c.123A>G')
     expect(normalizeClinicalPaste('p.Val600Glu')).toBe('p.Val600Glu')

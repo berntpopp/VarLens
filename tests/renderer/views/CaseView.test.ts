@@ -131,6 +131,10 @@ import { installCapabilities } from '../helpers/capabilities'
 
 const vuetify = createVuetify({ components, directives })
 
+/** Per-type counts as the tabs show them (the shortlist tab has no count). */
+const tabCounts = (vm: { tabItems: Array<{ type: string; count: number | null }> }) =>
+  Object.fromEntries(vm.tabItems.filter((t) => t.count !== null).map((t) => [t.type, t.count]))
+
 /**
  * Mount CaseView with a fresh AppState provide. Returns the wrapper and
  * the provided state so tests can drive `selectedCaseId` and observe
@@ -546,10 +550,10 @@ describe('CaseView — Shortlist tab integration', () => {
     await flushPromises()
 
     const vm = wrapper.vm as unknown as {
-      typeCounts: Record<string, number>
+      tabItems: Array<{ type: string; count: number | null }>
       selectedVariantType: string
     }
-    expect(vm.typeCounts).toEqual({ sv: 5 })
+    expect(tabCounts(vm)).toEqual({ sv: 5 })
 
     const expectedVariantType = vm.selectedVariantType
 
@@ -558,7 +562,7 @@ describe('CaseView — Shortlist tab integration', () => {
     await flushPromises()
 
     // Stale Case 1 response must NOT overwrite Case 2 counts or change active tab!
-    expect(vm.typeCounts).toEqual({ sv: 5 })
+    expect(tabCounts(vm)).toEqual({ sv: 5 })
     expect(vm.selectedVariantType).toBe(expectedVariantType)
   })
 
@@ -600,14 +604,14 @@ describe('CaseView — Shortlist tab integration', () => {
     resolveCase1a({ snv: 999 })
     await flushPromises()
 
-    const vm = wrapper.vm as unknown as { typeCounts: Record<string, number> }
+    const vm = wrapper.vm as unknown as { tabItems: Array<{ type: string; count: number | null }> }
     // Must NOT accept 1a
-    expect(vm.typeCounts).not.toEqual({ snv: 999 })
+    expect(tabCounts(vm)).not.toEqual({ snv: 999 })
 
     // Second request 1b resolves
     resolveCase1b({ snv: 12, sv: 3 })
     await flushPromises()
-    expect(vm.typeCounts).toEqual({ snv: 12, sv: 3 })
+    expect(tabCounts(vm)).toEqual({ snv: 12, sv: 3 })
   })
 
   it('resets countsLoading to false when switching from in-flight case to null or 0 (#665)', async () => {

@@ -261,7 +261,7 @@ import {
   provide,
   type AsyncComponentLoader
 } from 'vue'
-import { useVariantAcmgPreview } from '../utils/acmg/acmg-variant-data'
+import { useVariantAcmgPreview } from '../composables/useVariantAcmgPreview'
 import { AppStateKey } from '../composables/useAppState'
 import { usePanelResize } from '../composables/usePanelResize'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'
@@ -302,12 +302,7 @@ import {
   type AcmgClassification
 } from '../../../shared/config/domain.config'
 import { ACMG_COLORS, ACMG_ABBREV, ACMG_CLASSIFICATIONS } from '../composables/useAnnotations'
-import {
-  annotationCache,
-  getPerCaseByVariantId,
-  hasPerCaseByVariantId,
-  variantKey as toCoordKey
-} from '../composables/annotation-cache'
+import { getPerCaseByVariantId, variantKey as toCoordKey } from '../composables/annotation-cache'
 import { mdiClipboardCheckOutline, mdiClose, mdiHistory } from '@mdi/js'
 import { isWebRuntime } from '../utils/runtime-mode'
 import { useCapabilityStore } from '../stores/capabilityStore'
@@ -433,15 +428,15 @@ const auditEntityKeys = computed<string[]>(() => {
 
 const hasGlobalAcmg = computed(() => globalAcmgClassification.value !== null)
 
-// prettier-ignore
 const currentAcmgEvidence = computed(() => {
   if (!props.variant) return null
   const { chr, pos, ref: r, alt: a } = props.variant
   const vid = 'id' in props.variant ? props.variant.id : undefined
   if (props.mode === 'case') {
-    const coordKey = toCoordKey(props.variant)
-    if (props.caseId !== null && typeof vid === 'number' && (annotationCache.value.has(coordKey) || hasPerCaseByVariantId(props.caseId, vid))) {
-      return getPerCaseByVariantId(props.caseId, vid, coordKey)?.acmg_evidence ?? null
+    if (props.caseId !== null && typeof vid === 'number') {
+      return (
+        getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_evidence ?? null
+      )
     }
     return getAcmgEvidence(chr, pos, r, a)
   }
@@ -464,18 +459,19 @@ const {
   spliceAiFallback: spliceaiMaxDelta
 })
 
-// prettier-ignore
 const currentQuickClassification = computed<AcmgClassification | null>(() => {
   if (!props.variant) return null
   const { chr, pos, ref: r, alt: a } = props.variant
   const vid = 'id' in props.variant ? props.variant.id : undefined
   if (props.mode === 'case' && props.caseId !== null && typeof vid === 'number') {
-    const coordKey = toCoordKey(props.variant)
-    if (annotationCache.value.has(coordKey) || hasPerCaseByVariantId(props.caseId, vid)) {
-      return getPerCaseByVariantId(props.caseId, vid, coordKey)?.acmg_classification ?? null
-    }
+    return (
+      getPerCaseByVariantId(props.caseId, vid, toCoordKey(props.variant))?.acmg_classification ??
+      null
+    )
   }
-  return props.mode === 'case' ? getAcmgClassification(chr, pos, r, a) : getGlobalAcmgClassification(chr, pos, r, a)
+  return props.mode === 'case'
+    ? getAcmgClassification(chr, pos, r, a)
+    : getGlobalAcmgClassification(chr, pos, r, a)
 })
 
 const handleQuickClassify = async (classification: AcmgClassification | null): Promise<void> => {
@@ -489,25 +485,50 @@ const handleQuickClassify = async (classification: AcmgClassification | null): P
   }
 }
 
-// prettier-ignore
-const handleAcmgEvidenceChange = async (payload: { classification: AcmgClassification | null; evidenceJson: string }): Promise<boolean> => {
+const handleAcmgEvidenceChange = async (payload: {
+  classification: AcmgClassification | null
+  evidenceJson: string
+}): Promise<boolean> => {
   if (props.variant === null) return false
   const { chr, pos, ref: r, alt: a } = props.variant
   return props.mode === 'case' && props.caseId !== null
-    ? setAcmgClassificationWithEvidence(props.caseId, (props.variant as Variant).id, chr, pos, r, a, payload.classification, payload.evidenceJson)
-    : setGlobalAcmgClassificationWithEvidence(chr, pos, r, a, payload.classification, payload.evidenceJson)
+    ? setAcmgClassificationWithEvidence(
+        props.caseId,
+        (props.variant as Variant).id,
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
+    : setGlobalAcmgClassificationWithEvidence(
+        chr,
+        pos,
+        r,
+        a,
+        payload.classification,
+        payload.evidenceJson
+      )
 }
 
 // Load annotations when variant changes
-// prettier-ignore
 watch(
   () => props.variant,
   async (newVariant) => {
     if (newVariant !== null) {
       clearVepData()
-      const vid = 'id' in newVariant && typeof newVariant.id === 'number' ? newVariant.id : undefined
+      const vid =
+        'id' in newVariant && typeof newVariant.id === 'number' ? newVariant.id : undefined
       if (props.mode === 'case' && props.caseId !== null) {
-        await loadAnnotations(props.caseId, newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt, vid)
+        await loadAnnotations(
+          props.caseId,
+          newVariant.chr,
+          newVariant.pos,
+          newVariant.ref,
+          newVariant.alt,
+          vid
+        )
       } else {
         await loadGlobalAnnotations(newVariant.chr, newVariant.pos, newVariant.ref, newVariant.alt)
       }

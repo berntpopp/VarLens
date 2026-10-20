@@ -26,12 +26,12 @@ vi.mock('../../../src/renderer/src/utils/backend-capabilities', () => ({
   getCurrentUnsupportedReason: async () => null
 }))
 
+import { useFilterExport } from '../../../src/renderer/src/composables/useFilterExport'
 import {
-  useFilterExport,
   formatSignOutTable,
-  variantToSignOutRow
-} from '../../../src/renderer/src/composables/useFilterExport'
-import type { SignOutRow } from '../../../src/renderer/src/utils/sign-out-clipboard'
+  variantToSignOutRow,
+  type SignOutRow
+} from '../../../src/renderer/src/utils/sign-out-clipboard'
 import type {
   Variant,
   VariantAnnotation,
@@ -115,8 +115,14 @@ describe('useFilterExport', () => {
       )
     })
 
-    it('escapes pipe, newlines, and tabs in Markdown table comments', () => {
-      const md = formatSignOutTable([row1], 'markdown')
+    it('escapes pipe, < (SV/CNV symbolic alleles), newlines, and tabs in Markdown table', () => {
+      const svRow: SignOutRow = {
+        ...row1,
+        chr_pos_ref_alt: 'chr1:1000000 N><DEL>',
+        comment: 'Line 1\nLine 2 | with pipe\tand tab'
+      }
+      const md = formatSignOutTable([svRow], 'markdown')
+      expect(md).toContain('chr1:1000000 N>\\<DEL>')
       expect(md).toContain('Line 2 \\| with pipe')
       expect(md).not.toContain('\nLine 2')
       expect(md).not.toContain('\tand')
@@ -266,35 +272,44 @@ describe('useFilterExport', () => {
       expect(variantToSignOutRow(v3).zygosity).toBe('het')
     })
 
-    it('handles legacy array format and excludes unconfirmed criteria without confirmed: true (#682)', () => {
+    it('formats modified ACMG strengths (e.g. PM2_Supporting, PVS1_Strong) and excludes unconfirmed criteria (#682)', () => {
       const v = {
         id: 1,
         chr: '1',
         pos: 100,
         ref: 'A',
-        alt: 'T',
-        acmg_classification: 'Pathogenic'
+        alt: 'T'
       } as unknown as Variant
 
-      // Legacy string array
+      // Modified strength vs prefix default: PM2 at supporting -> PM2_Supporting, PVS1 at strong -> PVS1_Strong
+      const rowModifiedStrength = variantToSignOutRow(v, {
+        perCase: {
+          acmg_classification: 'Likely pathogenic',
+          acmg_evidence: JSON.stringify({
+            pathogenic: [
+              { code: 'PVS1', strength: 'strong', confirmed: true },
+              { code: 'PM1', strength: 'moderate', confirmed: true },
+              { code: 'PM2', strength: 'supporting', confirmed: true }
+            ],
+            benign: []
+          })
+        } as unknown as CaseVariantAnnotation
+      })
+      expect(rowModifiedStrength.acmg).toBe('Likely pathogenic (PVS1_Strong, PM1, PM2_Supporting)')
+
+      // Legacy string array inside pathogenic uses getDefaultStrength (PM2 -> supporting -> PM2_Supporting)
       const rowLegacyStrings = variantToSignOutRow(v, {
         perCase: {
-          acmg_evidence: JSON.stringify(['PVS1', 'PM2'])
+          acmg_classification: 'Pathogenic',
+          acmg_evidence: JSON.stringify({ pathogenic: ['PVS1', 'PM2'], benign: [] })
         } as unknown as CaseVariantAnnotation
       })
-      expect(rowLegacyStrings.acmg).toBe('Pathogenic (PVS1, PM2)')
-
-      // Structured items array
-      const rowLegacyItems = variantToSignOutRow(v, {
-        perCase: {
-          acmg_evidence: JSON.stringify({ items: [{ code: 'PVS1', confirmed: true }] })
-        } as unknown as CaseVariantAnnotation
-      })
-      expect(rowLegacyItems.acmg).toBe('Pathogenic (PVS1)')
+      expect(rowLegacyStrings.acmg).toBe('Pathogenic (PVS1, PM2_Supporting)')
 
       // Structured AcmgEvidenceState with missing confirmed: true (should be excluded)
       const rowUnconfirmed = variantToSignOutRow(v, {
         perCase: {
+          acmg_classification: 'Pathogenic',
           acmg_evidence: JSON.stringify({
             pathogenic: [{ code: 'PVS1', confirmed: true }, { code: 'PP3' }],
             benign: []
@@ -352,6 +367,21 @@ describe('useFilterExport', () => {
       const result = await copySignOutTable(1, 'markdown')
       expect(result.success).toBe(true)
       expect(result.count).toBe(2)
+      expect(queryVariants).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ starred_only: true, annotation_scope: 'all' }),
+        0,
+        500
+      )
+      expect(queryVariants).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          acmg_classifications: ['Pathogenic', 'Likely pathogenic'],
+          annotation_scope: 'all'
+        }),
+        0,
+        500
+      )
       expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
       const written = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0]
       expect(written).toContain('BRCA1')

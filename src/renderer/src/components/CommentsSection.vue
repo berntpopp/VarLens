@@ -88,12 +88,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAnnotations } from '../composables/useAnnotations'
-import {
-  annotationCache,
-  getPerCaseByVariantId,
-  hasPerCaseByVariantId,
-  variantKey
-} from '../composables/annotation-cache'
+import { getPerCaseByVariantId, variantKey } from '../composables/annotation-cache'
 import InlineEditableText from './InlineEditableText.vue'
 import { COMMENT_PLACEHOLDERS } from '../config/commentConfig'
 import type { Variant } from '../../../shared/types/api'
@@ -138,10 +133,7 @@ const globalComment = computed(() => {
 const perCaseEntry = computed(() => {
   const vid = 'id' in props.variant ? props.variant.id : undefined
   if (props.mode === 'case' && props.caseId !== null && typeof vid === 'number') {
-    const coordKey = variantKey(props.variant)
-    if (annotationCache.value.has(coordKey) || hasPerCaseByVariantId(props.caseId, vid)) {
-      return getPerCaseByVariantId(props.caseId, vid, coordKey) ?? null
-    }
+    return getPerCaseByVariantId(props.caseId, vid, variantKey(props.variant)) ?? null
   }
   const annotations = getAnnotations(
     props.variant.chr,

@@ -1,13 +1,30 @@
 /* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { defineAsyncComponent, defineComponent, h } from 'vue'
+import { defineAsyncComponent, defineComponent, h, ref } from 'vue'
 import { VLayout } from 'vuetify/components'
 import { createPinia, setActivePinia } from 'pinia'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { installCapabilities } from '../helpers/capabilities'
+
+const mockRevelScore = ref<number | null>(null)
+const mockSpliceaiMaxDelta = ref<number | null>(null)
+
+vi.mock('../../../src/renderer/src/composables/useVepEnrichment', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../src/renderer/src/composables/useVepEnrichment')>()
+  return {
+    ...actual,
+    useVepEnrichment: () => ({
+      ...actual.useVepEnrichment(),
+      revelScore: mockRevelScore,
+      spliceaiMaxDelta: mockSpliceaiMaxDelta
+    })
+  }
+})
+
 import VariantDetailsPanel from '../../../src/renderer/src/components/VariantDetailsPanel.vue'
 
 const vuetify = createVuetify({ components, directives })
@@ -60,15 +77,15 @@ function mountPanelWithVariant(
     customStubs?: Record<string, unknown>
   } = {}
 ): VueWrapper {
+  const mode = options.mode ?? 'case'
   const variant = {
-    id: 1,
+    ...(mode === 'cohort' ? {} : { id: 1 }),
     chr: '1',
     pos: 100,
     ref: 'A',
     alt: 'G',
     ...variantDataOverrides
   }
-  const mode = options.mode ?? 'case'
   const caseId = options.caseId !== undefined ? options.caseId : mode === 'case' ? 10 : null
   const props = { open: true, variant, caseId, mode }
   const Host = defineComponent(() => () => h(VLayout, () => [h(VariantDetailsPanel, props)]))
@@ -93,6 +110,8 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     installCapabilities({ runtime: 'desktop', role: 'user' })
     mockApplySuggestions.mockClear()
     mockConfirmLeave.mockClear()
+    mockRevelScore.value = null
+    mockSpliceaiMaxDelta.value = null
     capturedPanelProps = {}
   })
 
@@ -133,21 +152,23 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     expect(panel.find('[data-testid="apply-acmg-suggestions-btn"]').exists()).toBe(false)
   })
 
-  it('forwards revel and spliceai_max from variant into suggestions preview (#685)', async () => {
-    const revelHigh = mountPanelWithVariant({ revel: 0.85 })
+  it('forwards revel and spliceai_max from useVepEnrichment into suggestions preview (#685)', async () => {
+    const panel = mountPanelWithVariant({})
     await flushPromises()
-    expect(revelHigh.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
-    wrapper?.unmount()
+    expect(panel.find('[data-testid="acmg-suggested-preview"]').exists()).toBe(false)
 
-    const revelLow = mountPanelWithVariant({ revel: 0.15 })
+    mockRevelScore.value = 0.85
     await flushPromises()
-    expect(revelLow.find('[data-testid="acmg-suggested-preview"]').text()).toContain('BP4')
-    wrapper?.unmount()
+    expect(panel.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
 
-    const spliceAi = mountPanelWithVariant({ spliceai_max: 0.7 })
+    mockRevelScore.value = 0.15
     await flushPromises()
-    expect(spliceAi.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
-    wrapper?.unmount()
+    expect(panel.find('[data-testid="acmg-suggested-preview"]').text()).toContain('BP4')
+
+    mockRevelScore.value = null
+    mockSpliceaiMaxDelta.value = 0.7
+    await flushPromises()
+    expect(panel.find('[data-testid="acmg-suggested-preview"]').text()).toContain('PP3')
   })
 
   it('variantKey on a case variant does not change when async case build resolves (#660)', async () => {
@@ -164,11 +185,30 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     await flushPromises()
 
     const initialKey = capturedPanelProps.variantKey
-    expect(initialKey).toBe('10::1:100:A:G')
+    expect(initialKey).toBe('10:1::1:100:A:G')
 
     // Stays stable because it does not depend on async genomeBuild
     await flushPromises()
     expect(capturedPanelProps.variantKey).toBe(initialKey)
+  })
+
+  it('includes variant.id in variantKey so two rows at the same position do not share a draft (#660)', async () => {
+    const panelA = mountPanelWithVariant({ id: 101, chr: '1', pos: 100, ref: 'A', alt: 'G' })
+    await flushPromises()
+    await panelA.find('.v-expansion-panel-title').trigger('click')
+    await flushPromises()
+    const keyA = capturedPanelProps.variantKey
+    wrapper?.unmount()
+
+    const panelB = mountPanelWithVariant({ id: 102, chr: '1', pos: 100, ref: 'A', alt: 'G' })
+    await flushPromises()
+    await panelB.find('.v-expansion-panel-title').trigger('click')
+    await flushPromises()
+    const keyB = capturedPanelProps.variantKey
+
+    expect(keyA).toBe('10:101::1:100:A:G')
+    expect(keyB).toBe('10:102::1:100:A:G')
+    expect(keyA).not.toBe(keyB)
   })
 
   it('passes variantKey containing genome_build to AcmgClassificationPanel (#660)', async () => {
@@ -185,7 +225,7 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     await panel.find('.v-expansion-panel-title').trigger('click')
     await flushPromises()
 
-    expect(capturedPanelProps.variantKey).toBe('10:GRCh38:chr12:500:C:T')
+    expect(capturedPanelProps.variantKey).toBe('10:1:GRCh38:chr12:500:C:T')
   })
 
   it('includes genome_build in variantKey for cohort variants (#660)', async () => {
@@ -223,8 +263,8 @@ describe('VariantDetailsPanel ACMG suggestions preview (#685, #660, #669)', () =
     await flushPromises()
     const key38 = capturedPanelProps.variantKey
 
-    expect(key37).toBe(':GRCh37:1:100:A:G')
-    expect(key38).toBe(':GRCh38:1:100:A:G')
+    expect(key37).toBe('::GRCh37:1:100:A:G')
+    expect(key38).toBe('::GRCh38:1:100:A:G')
     expect(key37).not.toBe(key38)
   })
 

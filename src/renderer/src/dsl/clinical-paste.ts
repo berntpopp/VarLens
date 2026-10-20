@@ -8,7 +8,7 @@
 const INTERVAL_REGEX = /^(?:chr)?([0-9]{1,2}|[XYM]|MT):([0-9,]+)(?:[-–—]|\.\.)([0-9,]+)$/i
 const SINGLE_COORD_REGEX = /^(?:chr)?([0-9]{1,2}|[XYM]|MT):([0-9,]+)$/i
 const VCF_KEY_REGEX = /^(?:chr)?([0-9]{1,2}|[XYM]|MT)[-:](\d+)[-:]([ACGTN*]+)[-:]([ACGTN*]+)$/i
-const GENE_SYMBOL_REGEX = /^[A-Z][A-Z0-9-]{1,14}$/
+const GENE_SYMBOL_REGEX = /^(?:[A-Z][A-Z0-9-]{1,14}|C(?:\d{1,2}|X|Y)orf\d+)$/
 
 export function normalizeClinicalPaste(raw: string): string {
   const trimmed = raw.trim()
@@ -22,6 +22,7 @@ export function normalizeClinicalPaste(raw: string): string {
     const p2 = Number(intervalMatch[3].replace(/,/g, ''))
     const min = Math.min(p1, p2)
     const max = Math.max(p1, p2)
+    // shortcut: (ponytail) filters start pos only (pos >= start AND pos <= end), upgrade to panel_intervals for CNV overlap
     return `chr:=:${chr} AND pos:>=:${min} AND pos:<=:${max}`
   }
 
@@ -43,7 +44,7 @@ export function normalizeClinicalPaste(raw: string): string {
     return `chr:=:${chr} AND pos:=:${pos} AND ref:=:${ref} AND alt:=:${alt}`
   }
 
-  // 4. Gene list: 2 or more uppercase symbols separated by comma, semicolon, whitespace, newline
+  // 4. Gene list: 2 or more gene symbols separated by comma, semicolon, whitespace, newline
   // Check if already contains DSL operators or presets
   if (trimmed.includes(':') || trimmed.startsWith('@')) {
     return trimmed
@@ -56,7 +57,7 @@ export function normalizeClinicalPaste(raw: string): string {
 
   if (
     tokens.length >= 2 &&
-    tokens.every((token) => GENE_SYMBOL_REGEX.test(token) && token !== 'AND' && token !== 'OR')
+    tokens.every((token) => GENE_SYMBOL_REGEX.test(token) && !/^(AND|OR|NOT)$/.test(token))
   ) {
     const deduped = [...new Set(tokens)]
     return `(${deduped.map((g) => `gene_symbol:=:${g}`).join(' OR ')})`

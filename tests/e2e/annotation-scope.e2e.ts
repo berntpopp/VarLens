@@ -37,18 +37,7 @@ test.beforeAll(async () => {
   launched = await launchElectronApp({ perfMode: true })
   window = launched.window
   await waitForAppShell(window)
-
-  // Unconditionally verify initial DisclaimerDialog axe check before dismissing (#669)
-  const disclaimerDialog = window.locator('.v-overlay--active.v-dialog')
-  await expect(disclaimerDialog).toBeVisible({ timeout: 5000 })
-  const results = await new AxeBuilder({ page: window })
-    .include('.v-overlay--active.v-dialog')
-    .withTags(WCAG_TAGS)
-    .analyze()
-  expect(results.violations).toEqual([])
-
-  await disclaimerDialog.locator('button:has-text("I Understand")').click()
-  await expect(disclaimerDialog).toBeHidden({ timeout: 5000 })
+  await dismissDisclaimerIfPresent(window)
 
   // Seed isolated database with frozen perf fixture (perf-case-a, perf-case-b, perf-case-c)
   await createPerfDatabase(launched.app, window, launched.userDataDir)
@@ -231,7 +220,7 @@ test.describe('Annotation Scope - Cohort View', () => {
     await expect(expandBtn).toBeVisible({ timeout: 5000 })
     await expandBtn.click()
 
-    const subtable = window.locator('.carrier-subtable')
+    const subtable = window.locator('.nested-carriers-table')
     await expect(subtable).toBeVisible({ timeout: 5000 })
 
     const carrierRows = subtable.locator('tbody tr')
