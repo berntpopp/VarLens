@@ -128,6 +128,11 @@ describe('useFilterExport', () => {
       expect(md).not.toContain('\tand')
     })
 
+    it('escapes backslashes so a trailing \\ cannot unescape the cell pipe', () => {
+      const md = formatSignOutTable([{ ...row1, comment: 'a\\|b' }], 'markdown')
+      expect(md).toContain('a\\\\\\|b')
+    })
+
     it('formats a TSV table across all 10 columns and escapes newlines/tabs', () => {
       const tsv = formatSignOutTable([row1], 'tsv')
       const lines = tsv.split('\n')

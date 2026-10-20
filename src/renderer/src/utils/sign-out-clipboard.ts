@@ -45,7 +45,7 @@ function sanitizeCell(val: unknown, format: 'markdown' | 'tsv'): string {
     .trim()
   if (str === '') return '-'
   if (format === 'markdown') {
-    return str.replace(/[|<]/g, '\\$&')
+    return str.replace(/[\\|<]/g, '\\$&')
   }
   return escapeDelimitedCell(str, '\t')
 }
