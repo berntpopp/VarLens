@@ -10,13 +10,14 @@ import { closeSync, openSync, readSync } from 'node:fs'
 import { DatabaseService } from '../database/DatabaseService'
 import { DatabaseError, WrongPasswordError } from '../database/errors'
 import { isNotADatabaseError } from '../database/sqlite-error'
-import { InvalidParametersError } from '../ipc/errors'
+import { AppError, InvalidParametersError } from '../ipc/errors'
 import { DATABASE_CONFIG } from '../../shared/config'
 import { RecentDatabasesService, type RecentDatabase } from './RecentDatabasesService'
 import { mainLogger } from './MainLogger'
 import { createSqliteStorageSession } from '../storage/sqlite/createSqliteStorageSession'
+import { SqliteStorageSession } from '../storage/sqlite/SqliteStorageSession'
 import { migrateSqliteOffThread } from '../database/migrate-off-thread'
-import { assertNoActiveDatabaseWork } from './jobs/database-activity'
+import { assertNoActiveDatabaseWork, listActiveDatabaseWork } from './jobs/database-activity'
 import type { StorageSession } from '../storage/session'
 
 /**
@@ -30,6 +31,17 @@ export class DatabaseManager {
   private recentDatabases: RecentDatabasesService
   /** Tail of the lifecycle queue: open/switch/create/close run one at a time (#561). */
   private lifecycleTail: Promise<unknown> = Promise.resolve()
+  /** Desktop sign-in (#295): checks every session before it becomes active. */
+  private openGuard: OpenGuard | undefined
+
+  setOpenGuard(guard: OpenGuard): void {
+    this.openGuard = guard
+  }
+
+  /** With a guard, an AppError (a refusal among them) keeps its code and message. */
+  private keepsOwnMessage(error: unknown): boolean {
+    return this.openGuard !== undefined && error instanceof AppError
+  }
 
   /**
    * Create a DatabaseManager
@@ -63,7 +75,7 @@ export class DatabaseManager {
       this.currentSession = newSession
       this.recentDatabases.addRecent(dbPath)
     } catch (error) {
-      if (error instanceof WrongPasswordError) {
+      if (error instanceof WrongPasswordError || this.keepsOwnMessage(error)) {
         throw error
       }
 
@@ -131,6 +143,7 @@ export class DatabaseManager {
     try {
       await this.switchDatabaseUnlocked(dbPath, key)
     } catch (error) {
+      if (this.keepsOwnMessage(error)) throw error
       throw new DatabaseError(
         `Failed to create database at ${dbPath}`,
         error instanceof Error ? error : undefined
@@ -181,7 +194,7 @@ export class DatabaseManager {
     } catch (error) {
       this.currentSession = previousSession
 
-      if (error instanceof WrongPasswordError) {
+      if (error instanceof WrongPasswordError || this.keepsOwnMessage(error)) {
         throw error
       }
 
@@ -218,6 +231,7 @@ export class DatabaseManager {
 
     return this.serialize(async () => {
       assertNoActiveDatabaseWork('switch database')
+      await this.openGuard?.checkSession(session)
       await this.closeUnlocked()
       this.currentSession = session
     })
@@ -231,6 +245,18 @@ export class DatabaseManager {
    */
   async close(): Promise<void> {
     return this.serialize(() => this.closeUnlocked())
+  }
+
+  /** Desktop sign-in lock (#295): close and drop the key; false while work runs. */
+  async lock(): Promise<boolean> {
+    return this.serialize(async () => {
+      if (listActiveDatabaseWork().length > 0) return false
+      const session = this.currentSession
+      this.currentSession = null
+      if (session instanceof SqliteStorageSession) await session.closeForLock()
+      else await session?.close()
+      return true
+    })
   }
 
   private async closeUnlocked(): Promise<void> {
@@ -362,6 +388,8 @@ export class DatabaseManager {
   }
 
   private async createSqliteSession(dbPath: string, key?: string): Promise<StorageSession> {
+    // A refusal here never opens the file.
+    this.openGuard?.checkKey(key)
     // Schema + migrations run in a worker first (main stays responsive); the
     // constructor's own pass is then a no-op. On worker failure the main-thread
     // pass below runs as before and raises the canonical error.
@@ -372,8 +400,26 @@ export class DatabaseManager {
         'DatabaseManager'
       )
     }
-    return createSqliteStorageSession(dbPath, key)
+    const session = createSqliteStorageSession(dbPath, key)
+    try {
+      await this.openGuard?.checkSession(session)
+    } catch (error) {
+      await session.closeForLock().catch((closeError: unknown) => {
+        const reason = closeError instanceof Error ? closeError.message : String(closeError)
+        mainLogger.warn(`Closing a refused database failed: ${reason}`, 'DatabaseManager')
+      })
+      throw error
+    }
+    return session
   }
+}
+
+/** Desktop sign-in checks (#295): each throws an AppError to refuse. */
+export interface OpenGuard {
+  /** Before the file is touched; `key` is undefined for a plaintext database. */
+  checkKey(key: string | undefined): void
+  /** On a new session, before it becomes current. */
+  checkSession(session: StorageSession): Promise<void>
 }
 
 /** "Not a database" from a file with a known plaintext header: damaged, not encrypted. */

@@ -465,7 +465,10 @@ export function createMockApi(): MockApi {
       setRole: vi.fn().mockResolvedValue(undefined),
       resetPassword: vi.fn().mockResolvedValue(undefined),
       changePassword: vi.fn().mockResolvedValue(undefined),
-      desktopStatus: vi.fn().mockResolvedValue({ mode: 'none' })
+      desktopStatus: vi.fn().mockResolvedValue({ mode: 'none' }),
+      desktopSignIn: vi.fn().mockResolvedValue({ outcome: 'cancelled' }),
+      desktopCancelSignIn: vi.fn().mockResolvedValue(undefined),
+      desktopLock: vi.fn().mockResolvedValue(undefined)
     },
 
     analysisGroups: {

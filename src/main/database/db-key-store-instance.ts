@@ -15,13 +15,26 @@ import { DbKeyStore, DEFAULT_DB_KEY_REGISTRY_FILENAME } from './db-key-store'
 import type { SafeStorageLike } from './db-key-store'
 
 let instance: DbKeyStore | null = null
+let osKeyWrapAllowed = true
+
+/**
+ * The desktop sign-in's `requirePassphrase` (#295): no key gets a new OS
+ * wrap, so new and migrated databases need a passphrase, as on a system
+ * without a keyring. Existing wraps still unwrap.
+ */
+export function setOsKeyWrapAllowed(allowed: boolean): void {
+  osKeyWrapAllowed = allowed
+}
 
 const electronSafeStorage: SafeStorageLike = {
   isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
   ...(process.platform === 'linux'
     ? { getSelectedStorageBackend: () => safeStorage.getSelectedStorageBackend() }
     : {}),
-  encryptString: (plainText) => safeStorage.encryptString(plainText),
+  encryptString: (plainText) => {
+    if (!osKeyWrapAllowed) throw new Error('this computer requires passphrase-protected databases')
+    return safeStorage.encryptString(plainText)
+  },
   decryptString: (encrypted) => safeStorage.decryptString(encrypted)
 }
 

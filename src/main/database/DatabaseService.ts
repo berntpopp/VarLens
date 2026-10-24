@@ -350,6 +350,15 @@ export class DatabaseService {
   }
 
   /**
+   * Drop this service's copy of the encryption key (desktop sign-in lock,
+   * #295). JavaScript cannot zero a string; dropping the last reference is
+   * what discarding means.
+   */
+  discardKey(): void {
+    this._encryptionKey = undefined
+  }
+
+  /**
    * Close the database connection
    */
   close(): void {

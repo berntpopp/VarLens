@@ -25,6 +25,23 @@ describe('DesktopSignIn', () => {
     expect(wrapper.find('[data-testid="desktop-sign-in-problem"]').exists()).toBe(false)
   })
 
+  it('offers the sign-in, and says what an outcome means', async () => {
+    const store = useDesktopAuthStore()
+    store.status = { mode: 'platform', state: 'locked', issuer: 'https://keycloak.example.org' }
+    const wrapper = mount(DesktopSignIn, { global: { plugins: [vuetify] } })
+    expect(wrapper.find('[data-testid="desktop-sign-in-button"]').exists()).toBe(true)
+    store.lastResult = { outcome: 'enrolled' }
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="desktop-sign-in-notice"]').text()).toContain('once more')
+    store.lastResult = { outcome: 'no-access' }
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="desktop-sign-in-notice"]').text()).toContain('administrator')
+    store.signingIn = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="desktop-sign-in-waiting"]').text()).toContain('browser')
+    expect(wrapper.find('[data-testid="desktop-sign-in-button"]').exists()).toBe(false)
+  })
+
   it('explains a refused configuration', () => {
     useDesktopAuthStore().status = {
       mode: 'platform',

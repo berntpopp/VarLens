@@ -236,14 +236,15 @@ export class JobRunner {
     }
   }
 
-  private pruneTerminalJobs(): void {
+  /** Forget finished jobs beyond the newest `keep`; the desktop sign-in lock keeps none (#295). */
+  pruneTerminalJobs(keep = this.maxTerminalJobs): void {
     const terminalIds: string[] = []
     for (const [id, job] of this.jobs) {
       if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
         terminalIds.push(id)
       }
     }
-    const excess = terminalIds.length - this.maxTerminalJobs
+    const excess = terminalIds.length - keep
     if (excess <= 0) return
     for (let i = 0; i < excess; i++) {
       const id = terminalIds[i]

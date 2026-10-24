@@ -17,3 +17,13 @@ export type DesktopAuthStatus =
       /** Why the admin config file was refused; shown to the user. */
       problem: string
     }
+
+/** How one desktop sign-in ended (`auth:desktopSignIn`). */
+export type DesktopSignInResult =
+  | { outcome: 'signed-in' }
+  /** The first sign-in set up the authenticator app; one more sign-in proves it. */
+  | { outcome: 'enrolled' }
+  /** The account may not use VarLens Desktop. */
+  | { outcome: 'no-access' }
+  | { outcome: 'cancelled' }
+  | { outcome: 'failed'; message: string }

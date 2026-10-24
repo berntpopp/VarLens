@@ -151,6 +151,14 @@ describe('desktop auth config', () => {
     }
   })
 
+  it('refuses the sign-in together with a server workspace backend', () => {
+    const withPostgres = linux(json(VALID))
+    withPostgres.env = { VARLENS_EXPERIMENTAL_STORAGE_BACKEND: ' postgres ' }
+    const result = readDesktopAuthConfig(withPostgres)
+    expect(result.kind).toBe('invalid')
+    expect(result.kind === 'invalid' && result.problem).toContain('postgres')
+  })
+
   it('fails closed on a file that is not JSON or cannot be read', () => {
     expect(readDesktopAuthConfig(linux('{ mode: platform')).kind).toBe('invalid')
     const unreadable = source({

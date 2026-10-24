@@ -224,6 +224,31 @@ export class SqliteStorageSession implements StorageSession {
     this.databaseService.close()
   }
 
+  /**
+   * Desktop sign-in lock (#295): close and drop every copy of the key. The
+   * key goes first and new reads wait, so a writer or read pool that a late
+   * call respawns finds no key (a re-key already queued may still hand the
+   * readers its new key until the pool ends a moment later). Every step runs
+   * even when an earlier one fails.
+   */
+  async closeForLock(): Promise<void> {
+    this.databaseService.discardKey()
+    let failure: unknown
+    for (const step of [
+      () => this.dbPool?.suspend(),
+      () => this.writeExecutor.close(),
+      () => this.dbPool?.destroy(),
+      () => this.databaseService.close()
+    ]) {
+      try {
+        await step()
+      } catch (error) {
+        failure ??= error
+      }
+    }
+    if (failure !== undefined) throw failure
+  }
+
   async health(): Promise<StorageHealth> {
     const startedAt = Date.now()
 

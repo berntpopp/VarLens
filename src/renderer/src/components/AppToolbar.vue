@@ -209,6 +209,7 @@
         </v-list-item>
       </v-list>
     </v-menu>
+    <DesktopLockButton />
     <AccountMenu />
   </v-app-bar>
   <ExternalLookupsDialog v-if="externalLookupsOpen" v-model="externalLookupsOpen" />
@@ -222,6 +223,7 @@ import DatabasePicker from './DatabasePicker.vue'
 import CaseStatusIcons from './CaseStatusIcons.vue'
 import ImportStatusChip from './ImportStatusChip.vue'
 import AccountMenu from './account/AccountMenu.vue'
+import DesktopLockButton from './auth/DesktopLockButton.vue'
 import IconButton from './common/IconButton.vue'
 import { useAppState } from '../composables/useAppState'
 import { useResponsiveLayout } from '../composables/useResponsiveLayout'

@@ -1,5 +1,5 @@
 import type { UserRole } from '../../auth/auth-constants'
-import type { DesktopAuthStatus } from '../../auth/desktop-auth-status'
+import type { DesktopAuthStatus, DesktopSignInResult } from '../../auth/desktop-auth-status'
 import type { IpcResult } from '../../types/errors'
 
 /**
@@ -58,4 +58,10 @@ export interface AuthDomainContract {
   changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
   /** Desktop platform sign-in state; `{ mode: 'none' }` without the admin config file. */
   desktopStatus: () => Promise<IpcResult<DesktopAuthStatus>>
+  /** Sign in through the system browser; resolves when the sign-in ends. */
+  desktopSignIn: () => Promise<IpcResult<DesktopSignInResult>>
+  /** Stop waiting for the browser. */
+  desktopCancelSignIn: () => Promise<IpcResult<void>>
+  /** Lock the signed-in session now; the window returns to the sign-in screen. */
+  desktopLock: () => Promise<IpcResult<void>>
 }

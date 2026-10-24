@@ -2,7 +2,7 @@
 
 **Status:** In progress.
 **Scope:** Electron main process and the renderer's boot. Web and the hosted server are unchanged.
-**Relates to:** #295. On 2026-10-08 the upstream owner agreed to the desktop platform sign-in, on condition that without the admin config file the desktop behaves exactly as today, and asked for `platform-jwt` to move to `src/shared/` first and for small PRs. User-facing setup: `docs/guide/desktop-sign-in.md` (PR 3).
+**Relates to:** #295. On 2026-10-08 the upstream owner agreed to the desktop platform sign-in, on condition that without the admin config file the desktop behaves exactly as today, and asked for `platform-jwt` to move to `src/shared/` first and for small PRs. User-facing setup: `docs/guide/desktop-sign-in.md`.
 
 ## Setups
 
@@ -71,7 +71,7 @@ The tests of all three PRs; each arrives with its PR.
 
 | Level | What | Where |
 |---|---|---|
-| L5 E2E | built app, windows hidden: startup smoke, interaction gates, the sign-in screen and refusals; opt-in against a real Keycloak: enrolment, sign-in, lock, a second account kept off the first one's database, an account outside the group refused |
+| L5 E2E | built app, windows hidden: startup smoke, interaction gates, the sign-in screen and refusals; opt-in against a real Keycloak: enrolment, sign-in, lock, a second account kept off the first one's database, an account outside the group refused | `tests/e2e/desktop-sign-in.e2e.ts`, `tests/e2e/desktop-sign-in-keycloak.e2e.ts` |
 | L4 Artifacts | `out/` hashed file by file against `main` | evidence run |
 | L3 Suite | full Vitest run on `main` and the branch, compared test by test | evidence run |
 | L2 Integration | every channel the real `registerIpcHandlers` registers is refused while locked except the allowlist, and only `jobs`/`debug` answer before the database opens; the registrars against `main`'s composition over generated channels, arguments, results and errors; binding, passphrase-only and lock against a real `DatabaseManager` and `DbKeyStore`; open failures wrapped without a guard as before; the key-wrap switch on the real instance | `tests/main/ipc/ipc-access.test.ts`, `tests/main/ipc/registrars.test.ts`, `tests/main/auth/desktop-data-binding.test.ts`, `tests/main/auth/database-manager-guard.test.ts`, `tests/main/auth/os-key-wrap.test.ts` |
@@ -82,13 +82,13 @@ The tests of all three PRs; each arrives with its PR.
 
 Recorded on 2026-10-24 on macOS (arm64), Node 24.15.0, Electron 43, against `main` at `779a6d25` (v0.91.0), with Electron windows hidden (`VARLENS_E2E_HIDE_WINDOW=1`).
 
-| | PR 1 | PR 2 |
-|---|---|---|
-| L3 Vitest, `main` and `renderer` projects, compared test by test with `main` | no test changes status | no test changes status; 66 new tests pass |
-| L4 `out/`, SHA-256 per file; differing files compared with chunk hashes masked | identical: 55 of 55 files in `out/main`, 1 of 1 in `out/preload`, 114 of 114 in `out/renderer` | `out/main`: only `index.js` carries changed code, 8 shared chunks are only renamed. `out/preload`: the new method. `out/renderer`: new lazy chunks `SignInApp` and `VContainer`; the other chunks differ only in the minified aliases of the names they import from the shared index chunk |
-| L5 E2E | | startup smoke, the four interaction gates, the sign-in screen and its refusals: pass |
+| | PR 1 | PR 2 | PR 3 |
+|---|---|---|---|
+| L3 Vitest, `main` and `renderer` projects, compared test by test with `main` | no test changes status | no test changes status; 66 new tests pass | no test changes status; 136 new tests pass (six `DbPool` tests skip in a checkout without a built `out/`, on `main` too) |
+| L4 `out/`, SHA-256 per file; differing files compared with chunk hashes masked | identical: 55 of 55 files in `out/main`, 1 of 1 in `out/preload`, 114 of 114 in `out/renderer` | `out/main`: only `index.js` carries changed code, 8 shared chunks are only renamed. `out/preload`: the new method. `out/renderer`: new lazy chunks `SignInApp` and `VContainer`; the other chunks differ only in the minified aliases of the names they import from the shared index chunk | as PR 2; in `out/main` also the shared chunk with the auth write operations (the write worker runs `bindPlatformIdentity` too) and one chunk whose `require` lines of Node built-ins change order and gain `http` |
+| L5 E2E | | startup smoke, the four interaction gates, the sign-in screen and its refusals: pass | as PR 2, and the Keycloak flow against a local Keycloak: pass |
 
-`make lint-check`, `make format-check`, `make typecheck` and `make agent-check` pass on PR 2; `make web-gate-static` gives 1131 passed and 1 expected failure, as recorded for `main`.
+`make lint-check`, `make format-check`, `make typecheck` and `make agent-check` pass on PR 2 and PR 3; `make web-gate-static` gives 1131 passed and 1 expected failure on both, as recorded for `main`.
 
 ## Not covered yet
 

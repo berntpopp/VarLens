@@ -128,5 +128,8 @@ export const authManifest = {
   setRole: sharedExempt(AUTH_SERVICE_AUDIT, { authz: 'admin', capability: 'userAdmin' }),
   resetPassword: sharedExempt(AUTH_SERVICE_AUDIT, { authz: 'admin', capability: 'userAdmin' }),
   changePassword: sharedExempt(AUTH_SERVICE_AUDIT),
-  desktopStatus: desktopOnly('desktopSignIn', 'Hidden: the web signs in through its server.')
+  desktopStatus: desktopOnly('desktopSignIn', 'Hidden: the web signs in through its server.'),
+  desktopSignIn: desktopOnly('desktopSignIn', 'Hidden: the web signs in through its server.'),
+  desktopCancelSignIn: desktopOnly('desktopSignIn', 'Hidden: the web signs in through its server.'),
+  desktopLock: desktopOnly('desktopSignIn', 'Hidden: the web signs out through its server.')
 } satisfies DomainManifest<'auth'>
