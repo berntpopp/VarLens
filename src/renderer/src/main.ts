@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import { useCapabilityStore } from './stores/capabilityStore'
+import { useDesktopAuthStore } from './stores/desktopAuthStore'
 import { installQueryCache } from './queries/client'
 import { installFocusRefetch } from './queries/focus-refetch'
 import vuetify from './plugins/vuetify'
@@ -38,6 +39,18 @@ async function bootstrap(): Promise<void> {
   // Load the per-session capability document before the shell renders: the
   // store fails closed, so gated UI never flashes an action it then refuses.
   await useCapabilityStore(pinia).load()
+  // A desktop that requires sign-in gets the sign-in screen instead of the
+  // app, so no app code runs that would ask for data. Loaded only then.
+  const desktopAuth = useDesktopAuthStore(pinia)
+  await desktopAuth.load()
+  if (desktopAuth.required) {
+    const { default: SignInApp } = await import('./SignInApp.vue')
+    const signIn = createApp(SignInApp)
+    signIn.use(pinia)
+    signIn.use(vuetify)
+    signIn.mount('#app')
+    return
+  }
   installFocusRefetch()
   app.use(router)
   app.use(vuetify)

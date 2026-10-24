@@ -96,6 +96,10 @@ export const CAPABILITY_FEATURES = {
     label: 'desktop diagnostics',
     unavailableInWeb: 'Desktop diagnostics are not available in the web version.'
   },
+  desktopSignIn: {
+    label: 'desktop sign-in',
+    unavailableInWeb: 'The web version signs in through its server.'
+  },
   mainProcessLogs: {
     label: 'application log stream',
     unavailableInWeb: 'Server logs go to the operator log pipeline in the web version.'

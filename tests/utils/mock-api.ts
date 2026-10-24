@@ -464,7 +464,8 @@ export function createMockApi(): MockApi {
       reactivateUser: vi.fn().mockResolvedValue(undefined),
       setRole: vi.fn().mockResolvedValue(undefined),
       resetPassword: vi.fn().mockResolvedValue(undefined),
-      changePassword: vi.fn().mockResolvedValue(undefined)
+      changePassword: vi.fn().mockResolvedValue(undefined),
+      desktopStatus: vi.fn().mockResolvedValue({ mode: 'none' })
     },
 
     analysisGroups: {

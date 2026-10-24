@@ -1117,7 +1117,8 @@ export const mockApi: WindowAPI = {
     reactivateUser: async () => {},
     setRole: async () => {},
     resetPassword: async () => {},
-    changePassword: async () => {}
+    changePassword: async () => {},
+    desktopStatus: async () => ({ mode: 'none' as const })
   },
 
   presets: mockPresetsApi,

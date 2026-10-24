@@ -1,4 +1,5 @@
 import type { UserRole } from '../../auth/auth-constants'
+import type { DesktopAuthStatus } from '../../auth/desktop-auth-status'
 import type { IpcResult } from '../../types/errors'
 
 /**
@@ -55,4 +56,6 @@ export interface AuthDomainContract {
     newPassword: string
   ) => Promise<IpcResult<PasswordResetAck | void>>
   changePassword: (oldPassword: string, newPassword: string) => Promise<IpcResult<void>>
+  /** Desktop platform sign-in state; `{ mode: 'none' }` without the admin config file. */
+  desktopStatus: () => Promise<IpcResult<DesktopAuthStatus>>
 }

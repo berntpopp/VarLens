@@ -1,5 +1,5 @@
 import { ipcMain as rawIpcMain } from 'electron'
-import { gateIpcMainOnDatabaseStartup } from '../database/startup-gate'
+import { createIpcRegistrars } from './registrars'
 import { mainLogger } from '../services/MainLogger'
 import type { HandlerDependencies } from './types'
 import { getDatabaseService, getDatabaseManager } from '../database'
@@ -56,8 +56,9 @@ import { registerUpdaterHandlers } from './handlers/updater'
  */
 export function registerIpcHandlers(): void {
   // Handlers are registered before the default database is opened (the
-  // window is shown first); every invoke waits for the startup gate.
-  const ipcMain = gateIpcMainOnDatabaseStartup(rawIpcMain)
+  // window is shown first); every invoke asks the access gate (desktop
+  // sign-in, #295), and all but jobs and debug first wait for the startup gate.
+  const { startupGated: ipcMain, accessOnly } = createIpcRegistrars(rawIpcMain)
 
   setActiveSessionResolver(() => {
     try {
@@ -86,7 +87,7 @@ export function registerIpcHandlers(): void {
   registerCasesDomain(ipcMain)
   registerCohortDomain(ipcMain)
   registerDatabaseDomain(ipcMain)
-  registerDebugHandlers()
+  registerDebugHandlers(accessOnly)
   registerExportDomain(ipcMain)
   registerFilterPresetsDomain(ipcMain)
   registerGeneListsDomain(ipcMain)
@@ -95,7 +96,7 @@ export function registerIpcHandlers(): void {
   registerHpoDomain(ipcMain)
   registerHpoDataDomain(ipcMain)
   registerImportDomain(ipcMain)
-  registerJobsHandlers()
+  registerJobsHandlers(accessOnly)
   registerMyvariantDomain(ipcMain)
   registerPanelsDomain(ipcMain)
   registerProteinDomain(ipcMain)

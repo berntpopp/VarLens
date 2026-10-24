@@ -646,7 +646,7 @@ describe('jobs domain — Sprint A PR-4 Gate 11', () => {
   it('main process registers the jobs handlers', () => {
     const source = readFileSync(resolve(ROOT, 'src/main/ipc/index.ts'), 'utf-8')
     expect(source).toContain("import { registerJobsHandlers } from './domains/jobs'")
-    expect(source).toContain('registerJobsHandlers()')
+    expect(source).toContain('registerJobsHandlers(accessOnly)')
   })
 
   // Compile-time checks (jobs list/get/progress return IpcResult; the

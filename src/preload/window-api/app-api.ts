@@ -168,7 +168,8 @@ export function createAppApi(domains: PreloadDomainApis): AppWindowApi {
       setRole: (username, role) => authDomain.setRole(username, role),
       resetPassword: (username, newPassword) => authDomain.resetPassword(username, newPassword),
       changePassword: (oldPassword, newPassword) =>
-        authDomain.changePassword(oldPassword, newPassword)
+        authDomain.changePassword(oldPassword, newPassword),
+      desktopStatus: () => authDomain.desktopStatus()
     },
 
     analysisGroups: {

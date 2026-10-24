@@ -4,6 +4,7 @@
  * account / audit domains. See ../parity-manifest.ts for how to flip an entry.
  */
 import {
+  desktopOnly,
   sharedExempt,
   sharedRead,
   sharedWrite,
@@ -126,5 +127,6 @@ export const authManifest = {
   reactivateUser: sharedExempt(AUTH_SERVICE_AUDIT, { authz: 'admin', capability: 'userAdmin' }),
   setRole: sharedExempt(AUTH_SERVICE_AUDIT, { authz: 'admin', capability: 'userAdmin' }),
   resetPassword: sharedExempt(AUTH_SERVICE_AUDIT, { authz: 'admin', capability: 'userAdmin' }),
-  changePassword: sharedExempt(AUTH_SERVICE_AUDIT)
+  changePassword: sharedExempt(AUTH_SERVICE_AUDIT),
+  desktopStatus: desktopOnly('desktopSignIn', 'Hidden: the web signs in through its server.')
 } satisfies DomainManifest<'auth'>

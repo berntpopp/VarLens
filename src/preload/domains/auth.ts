@@ -16,6 +16,7 @@ export function createAuthApi(): AuthDomainContract {
     resetPassword: (username, newPassword) =>
       ipcRenderer.invoke('auth:resetPassword', username, newPassword),
     changePassword: (oldPassword, newPassword) =>
-      ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword)
+      ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword),
+    desktopStatus: () => ipcRenderer.invoke('auth:desktopStatus')
   }
 }

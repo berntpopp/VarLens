@@ -30,6 +30,7 @@ import { isMainWindowNavigationAllowed } from './window-navigation-policy'
 import { createContentSecurityPolicyHeaderHandler } from './security/csp-header'
 import { installWebContentsSecurityGuards } from './security/web-contents-guard'
 import { beginDatabaseStartup, completeDatabaseStartup } from './database/startup-gate'
+import { installDesktopAuth } from './auth/desktop-auth'
 import { openDefaultDatabaseAfterWindow, startSqliteHousekeeping } from './startup-sequence'
 import { triggerStartupRebuildIfNeeded } from './ipc/handlers/cohort'
 import { installQuitCleanup } from './quit-cleanup'
@@ -249,6 +250,9 @@ if (gotTheLock !== true) {
     // registered now but every invoke waits on the startup gate until the
     // default database is open, so the renderer can paint its loading state
     // while schema checks / migrations / key derivation run.
+    // The admin config file decides the auth mode before any channel answers
+    // (#295); without the file nothing is installed and nothing changes.
+    const desktopAuth = installDesktopAuth()
     beginDatabaseStartup()
     registerIpcHandlers()
 
@@ -309,7 +313,9 @@ if (gotTheLock !== true) {
 
     await openDefaultDatabaseAfterWindow(mainWindow, {
       openDefault: async () => {
-        await initDatabaseManager()
+        // With the desktop sign-in the data opens only after sign-in.
+        if (desktopAuth !== undefined) desktopAuth.startWithoutData()
+        else await initDatabaseManager()
       },
       // A corrupted/locked default DB must not keep the app from starting:
       // create the manager without a database; the user can pick or create
