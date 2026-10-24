@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { mdiEye, mdiEyeOff } from '@mdi/js'
+import { formatError } from '../utils/ipc-result'
 
 // Component state
 const dialogOpen = ref(false)
@@ -68,6 +69,9 @@ async function submit(): Promise<void> {
     } else {
       errorMessage.value = result.error ?? 'Failed to unlock database'
     }
+  } catch (error) {
+    // An open that throws (not just one that reports failure) says why too.
+    errorMessage.value = formatError(error, 'Failed to unlock database')
   } finally {
     submitting.value = false
   }
