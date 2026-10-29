@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain as electronIpcMain, type IpcMain } from 'electron'
 import { JOBS_CHANNELS } from '../../../shared/ipc/domains/jobs'
 import {
   JobsCancelParamsSchema,
@@ -44,7 +44,7 @@ function cloneableOrNull(value: unknown): unknown {
  * Job ids are in-memory JobRunner Map keys (not filesystem paths), but every
  * IPC arg is still validated at the boundary per repo convention.
  */
-export function registerJobsHandlers(): void {
+export function registerJobsHandlers(ipcMain: IpcMain = electronIpcMain): void {
   unsubscribeLifecycle?.()
   unsubscribeLifecycle = jobRunner.onLifecycle((job) => {
     safeEmit(JOBS_CHANNELS.changed, toJobSnapshot(job))
