@@ -38,6 +38,7 @@ vi.mock('electron', () => {
     dialog: {},
     shell: {},
     net: {},
+    powerMonitor: { on: () => undefined, off: () => undefined },
     safeStorage: { isEncryptionAvailable: () => false }
   }
 })
@@ -45,6 +46,7 @@ vi.mock('electron', () => {
 import {
   CHANNELS_WITHOUT_SESSION,
   LOCAL_ACCOUNT_CHANNELS,
+  SERVER_WORKSPACE_CHANNELS,
   passThroughProvider,
   setAccessProvider
 } from '../../../src/main/auth/access-gate'
@@ -88,7 +90,9 @@ describe('IPC registration behind the access gate', () => {
     }
     expect(answered).toEqual([])
     // Platform mode refuses these even signed in, and they all exist.
-    expect(forbidden.sort()).toEqual([...LOCAL_ACCOUNT_CHANNELS].sort())
+    expect(forbidden.sort()).toEqual(
+      [...LOCAL_ACCOUNT_CHANNELS, ...SERVER_WORKSPACE_CHANNELS].sort()
+    )
     for (const channel of CHANNELS_WITHOUT_SESSION) expect(registered.has(channel)).toBe(true)
   })
 

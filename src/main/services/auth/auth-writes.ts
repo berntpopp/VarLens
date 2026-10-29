@@ -42,6 +42,8 @@ export type AuthWriteOp =
   | { op: 'setRole'; username: string; role: UserRole }
   | { op: 'resetPassword'; username: string; passwordHash: string }
   | { op: 'changePassword'; username: string; passwordHash: string }
+  /** Desktop sign-in (#295): the identity (issuer and subject) this database belongs to; never overwritten. */
+  | { op: 'bindPlatformIdentity'; identity: string }
 
 /** Result shapes: `{ id }` for inserts, `{ changes }` for updates. */
 export type AuthWriteResult = { id: number } | { changes: number }
@@ -179,6 +181,12 @@ export function applyAuthWrite(db: DatabaseType, op: AuthWriteOp): AuthWriteResu
          WHERE username = ?`,
         op.passwordHash,
         op.username
+      )
+    case 'bindPlatformIdentity':
+      return changes(
+        db,
+        "INSERT OR IGNORE INTO database_settings (key, value) VALUES ('platform_identity', ?)",
+        op.identity
       )
     case 'changePassword':
       return changes(

@@ -3,6 +3,7 @@ import type { IpcMain } from 'electron'
 import {
   CHANNELS_WITHOUT_SESSION,
   LOCAL_ACCOUNT_CHANNELS,
+  SERVER_WORKSPACE_CHANNELS,
   gateIpcMainOnAccess,
   getAccessGate,
   passThroughProvider,
@@ -33,10 +34,10 @@ function capture(): {
 describe('access gate', () => {
   beforeEach(() => setAccessProvider(passThroughProvider))
 
-  it('refuses the local accounts in platform mode, signed in or not', () => {
+  it('refuses local accounts and server workspaces in platform mode, signed in or not', () => {
     for (const unlocked of [false, true]) {
       setAccessProvider(provider(unlocked))
-      for (const channel of LOCAL_ACCOUNT_CHANNELS) {
+      for (const channel of [...LOCAL_ACCOUNT_CHANNELS, ...SERVER_WORKSPACE_CHANNELS]) {
         let error: unknown
         try {
           getAccessGate().assertAllowed(channel)
@@ -101,7 +102,9 @@ describe('access gate', () => {
 
   it('keeps the allowlist free of data channels', () => {
     for (const channel of CHANNELS_WITHOUT_SESSION) {
-      expect(channel).toMatch(/^(system:(capabilities|version)|auth:desktopStatus)$/)
+      expect(channel).toMatch(
+        /^(system:(capabilities|version)|auth:desktop(Status|SignIn|CancelSignIn))$/
+      )
     }
   })
 })

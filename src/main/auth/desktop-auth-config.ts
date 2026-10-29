@@ -85,7 +85,7 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
  * machine in a development build only, since on a shared computer another
  * account could take the port.
  */
-function isTrustedIdpUrl(url: URL, development: boolean): boolean {
+export function isTrustedIdpUrl(url: URL, development: boolean): boolean {
   if (url.protocol === 'https:') return true
   return development && url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)
 }
@@ -255,6 +255,18 @@ function read(source: ConfigSource, path: string, machineWide: boolean): Desktop
 }
 
 export function readDesktopAuthConfig(source: ConfigSource): DesktopAuthConfigResult {
+  const result = findConfig(source)
+  // A server workspace would open data the sign-in cannot bind to an account.
+  const backend = source.env.VARLENS_EXPERIMENTAL_STORAGE_BACKEND?.trim()
+  if (result.kind === 'platform' && backend === 'postgres') {
+    const problem =
+      'VARLENS_EXPERIMENTAL_STORAGE_BACKEND=postgres cannot be combined with the desktop sign-in'
+    return { kind: 'invalid', path: result.path, problem }
+  }
+  return result
+}
+
+function findConfig(source: ConfigSource): DesktopAuthConfigResult {
   for (const machinePath of machineConfigPaths(source.platform, source.env)) {
     const probe = source.fs.probe(machinePath)
     if (probe.state === 'absent') continue

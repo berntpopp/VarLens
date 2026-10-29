@@ -36,7 +36,9 @@ export const passThroughProvider: AccessProvider = {
 export const CHANNELS_WITHOUT_SESSION: ReadonlySet<string> = new Set([
   'system:capabilities',
   'system:version',
-  'auth:desktopStatus'
+  'auth:desktopStatus',
+  'auth:desktopSignIn',
+  'auth:desktopCancelSignIn'
 ])
 
 /**
@@ -58,6 +60,15 @@ export const LOCAL_ACCOUNT_CHANNELS: readonly string[] = [
   'auth:changePassword'
 ]
 
+/**
+ * The channels that connect to a server workspace. Platform mode refuses them
+ * before any connection: the sign-in cannot bind server data to an account.
+ */
+export const SERVER_WORKSPACE_CHANNELS: readonly string[] = [
+  'database:postgresProfileTest',
+  'database:postgresProfileOpen'
+]
+
 /** What platform mode refuses, signed in or not, and why. */
 const PLATFORM_MODE_REFUSALS: ReadonlyMap<string, string> = new Map([
   ...LOCAL_ACCOUNT_CHANNELS.map(
@@ -65,6 +76,13 @@ const PLATFORM_MODE_REFUSALS: ReadonlyMap<string, string> = new Map([
       [
         channel,
         'This VarLens signs in through your organisation; local accounts are switched off.'
+      ] as const
+  ),
+  ...SERVER_WORKSPACE_CHANNELS.map(
+    (channel) =>
+      [
+        channel,
+        'Server workspaces cannot be opened while this VarLens signs in through your organisation.'
       ] as const
   )
 ])

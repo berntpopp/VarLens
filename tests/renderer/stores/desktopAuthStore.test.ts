@@ -9,14 +9,19 @@ type TestWindow = Window & { api?: unknown }
 
 function stubApi(
   desktopStatus: () => Promise<unknown>,
-  runtime: 'desktop' | 'web' = 'desktop'
+  runtime: 'desktop' | 'web' = 'desktop',
+  signIn: {
+    desktopSignIn?: () => Promise<unknown>
+    desktopCancelSignIn?: () => Promise<unknown>
+    desktopLock?: () => Promise<unknown>
+  } = {}
 ): void {
   ;(window as TestWindow).api = {
     system: {
       getCapabilities: () =>
         Promise.resolve(computeCapabilityDocument({ runtime, role: 'admin', storage: null }))
     },
-    auth: { desktopStatus }
+    auth: { desktopStatus, ...signIn }
   }
 }
 
@@ -57,6 +62,47 @@ describe('desktopAuthStore', () => {
     const store = useDesktopAuthStore()
     await store.load()
     expect(store.required).toBe(false)
+  })
+
+  it('keeps the outcome of a sign-in and shows waiting meanwhile', async () => {
+    let finish: (value: unknown) => void = () => undefined
+    const locked = { mode: 'platform', state: 'locked', issuer: 'https://k' }
+    stubApi(() => Promise.resolve(locked), 'desktop', {
+      desktopSignIn: () => new Promise((resolve) => (finish = resolve))
+    })
+    await useCapabilityStore().load()
+    const store = useDesktopAuthStore()
+    const running = store.signIn()
+    expect(store.signingIn).toBe(true)
+    finish({ outcome: 'enrolled' })
+    await running
+    expect(store.signingIn).toBe(false)
+    expect(store.lastResult).toEqual({ outcome: 'enrolled' })
+  })
+
+  it('turns an IPC failure into a failed outcome', async () => {
+    const locked = { mode: 'platform', state: 'locked', issuer: 'https://k' }
+    stubApi(() => Promise.resolve(locked), 'desktop', {
+      desktopSignIn: () =>
+        Promise.resolve({ code: 'INTERNAL', message: 'x', userMessage: 'Broken' })
+    })
+    await useCapabilityStore().load()
+    const store = useDesktopAuthStore()
+    await store.signIn()
+    expect(store.lastResult).toMatchObject({ outcome: 'failed' })
+  })
+
+  it('logs a failed lock or cancel instead of rejecting', async () => {
+    const failure = () => Promise.resolve({ code: 'INTERNAL', message: 'x', userMessage: 'Broken' })
+    const locked = { mode: 'platform', state: 'signed-in', issuer: 'https://k' }
+    stubApi(() => Promise.resolve(locked), 'desktop', {
+      desktopLock: failure,
+      desktopCancelSignIn: () => Promise.reject(new Error('gone'))
+    })
+    await useCapabilityStore().load()
+    const store = useDesktopAuthStore()
+    await expect(store.lock()).resolves.toBeUndefined()
+    await expect(store.cancelSignIn()).resolves.toBeUndefined()
   })
 
   it('never asks on the web', async () => {

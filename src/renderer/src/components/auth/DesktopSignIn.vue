@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * The full-window sign-in screen of the desktop platform sign-in (#295).
- * main.ts mounts it instead of the app while signing in is required.
+ * main.ts mounts it instead of the app while signing in is required; after a
+ * successful sign-in the main process opens the data and reloads the window.
  */
 import { computed } from 'vue'
-import { mdiAlertCircleOutline, mdiLockOutline } from '@mdi/js'
+import { mdiAlertCircleOutline, mdiLockOutline, mdiOpenInNew } from '@mdi/js'
 
 import { useDesktopAuthStore } from '../../stores/desktopAuthStore'
 
@@ -23,6 +24,30 @@ const issuerHost = computed(() => {
     return new URL(desktopAuth.status.issuer).host
   } catch {
     return desktopAuth.status.issuer
+  }
+})
+
+/** What the last sign-in asks the user to do next. */
+const notice = computed((): { type: 'info' | 'warning' | 'error'; text: string } | null => {
+  const result = desktopAuth.lastResult
+  if (result === null) return null
+  switch (result.outcome) {
+    case 'signed-in':
+      return { type: 'info', text: 'Signed in. Opening VarLens…' }
+    case 'enrolled':
+      return {
+        type: 'info',
+        text: 'Your authenticator app is set up. Sign in once more with your password and a code.'
+      }
+    case 'no-access':
+      return {
+        type: 'warning',
+        text: 'Your account may not use VarLens Desktop. Ask your administrator for access.'
+      }
+    case 'cancelled':
+      return null
+    case 'failed':
+      return { type: 'error', text: result.message }
   }
 })
 </script>
@@ -53,6 +78,52 @@ const issuerHost = computed(() => {
               <div v-if="issuerHost" class="text-body-medium text-medium-emphasis mt-1">
                 You sign in at {{ issuerHost }}.
               </div>
+              <v-alert
+                v-if="notice"
+                :type="notice.type"
+                variant="tonal"
+                density="compact"
+                class="mt-4 text-left"
+                data-testid="desktop-sign-in-notice"
+              >
+                {{ notice.text }}
+              </v-alert>
+              <div
+                v-if="desktopAuth.signingIn"
+                class="mt-4"
+                role="status"
+                data-testid="desktop-sign-in-waiting"
+              >
+                <v-progress-circular
+                  indeterminate
+                  size="24"
+                  class="mb-2"
+                  aria-label="Waiting for the browser"
+                />
+                <div class="text-body-medium">Continue in your browser.</div>
+                <v-btn variant="text" class="mt-2" @click="desktopAuth.cancelSignIn()">
+                  Cancel
+                </v-btn>
+              </div>
+              <v-btn
+                v-if="!desktopAuth.signingIn && desktopAuth.lastResult?.outcome === 'failed'"
+                variant="text"
+                class="mt-4 mr-2"
+                data-testid="desktop-sign-in-cancel-other"
+                @click="desktopAuth.cancelSignIn()"
+              >
+                Cancel a waiting sign-in
+              </v-btn>
+              <v-btn
+                v-if="!desktopAuth.signingIn"
+                color="primary"
+                class="mt-4"
+                :prepend-icon="mdiOpenInNew"
+                data-testid="desktop-sign-in-button"
+                @click="desktopAuth.signIn()"
+              >
+                Sign in with your browser
+              </v-btn>
             </div>
           </v-card-text>
         </v-card>

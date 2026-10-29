@@ -52,7 +52,8 @@ export default defineConfig({
             { text: 'App Layout', link: '/guide/app-layout' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Importing Data', link: '/guide/importing-data' },
-            { text: 'Database Encryption', link: '/guide/database-encryption' }
+            { text: 'Database Encryption', link: '/guide/database-encryption' },
+            { text: 'Desktop Sign-in', link: '/guide/desktop-sign-in' }
           ]
         }
       ],

@@ -206,6 +206,19 @@ export class AuthService {
     return true
   }
 
+  /** The identity a desktop sign-in bound this database to, if any (#295). */
+  platformIdentity(): string | undefined {
+    const setting = this.db
+      .prepare("SELECT value FROM database_settings WHERE key = 'platform_identity'")
+      .get() as { value: string } | undefined
+    return setting?.value
+  }
+
+  /** Bind this database to an identity; a binding that already exists stays. */
+  async bindPlatformIdentity(identity: string): Promise<void> {
+    await this.writer({ op: 'bindPlatformIdentity', identity })
+  }
+
   isAccountsEnabled(): boolean {
     const setting = this.db
       .prepare("SELECT value FROM database_settings WHERE key = 'accounts_enabled'")
