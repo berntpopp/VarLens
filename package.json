@@ -79,7 +79,7 @@
     "@vueuse/core": "^15.0.0",
     "colorjs.io": "0.7.1",
     "d3": "^7.9.0",
-    "electron": "^43.8.0",
+    "electron": "^43.8.6",
     "electron-builder": "^26.15.2",
     "electron-vite": "^6.0.0",
     "eslint": "^10.12.0",
